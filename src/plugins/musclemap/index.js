@@ -18,3 +18,5 @@ export const musclemapPlugin = definePlugin({
     run: { requestType: 'run', outputStages: ['segmentation'], events: ['detectedLabels', 'metrics'] }
   }
 });
+
+export const muscleMapPlugin = musclemapPlugin;

@@ -35,7 +35,9 @@
     "build:showcase": "node scripts/build-showcase.mjs",
     "serve": "node scripts/serve-showcase.mjs",
     "start": "node scripts/serve-showcase.mjs",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js && node scripts/test-showcase-browser.mjs",
+    "test:unit": "node --test test/*.test.js",
+    "test:showcase:browser": "node scripts/test-showcase-browser.mjs",
     "check": "node scripts/check-syntax.mjs"
   },
   "engines": {

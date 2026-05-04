@@ -33,3 +33,5 @@ export const vesselboostPlugin = definePlugin({
     }
   ]
 });
+
+export const vesselBoostPlugin = vesselboostPlugin;

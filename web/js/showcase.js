@@ -258,8 +258,8 @@ function renderFiles(mode) {
   output.innerHTML = '';
   if (mode === 'simple') {
     const controller = new FileIOController({ mode: 'simple' });
-    controller.addFiles([{ name: 'sub-001_T1w.nii.gz' }]);
-    output.appendChild(renderFileCard('input', controller.getFiles().map(file => file.name)));
+    controller.setFile({ name: 'sub-001_T1w.nii.gz' });
+    output.appendChild(renderFileCard('input', [controller.getActiveFile()?.name].filter(Boolean)));
     app.console.log('FileIOController(simple): accepted one NIfTI input.');
     return;
   }
