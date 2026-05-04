@@ -57,7 +57,20 @@ const executor = new PipelineExecutor({
 ## Development
 
 ```bash
+npm install
 npm test
+npm run check
+npm run build:showcase
+npm run serve
 ```
 
-No install step is required for the included tests because they use Node's built-in test runner.
+The showcase app runs at `http://127.0.0.1:8080/` by default and demonstrates the app shell, sidebar sections, file triage, viewer controls, stage results, plugin catalog, QSM command preview, echo navigation, and validation report rendering.
+
+## Release And Staging
+
+GitHub Actions are adapted from `neurodesk/lesion-network-mapping-webapp`:
+
+- `.github/workflows/release.yml` is manual-only, validates the package, bumps the patch version, tags `vX.Y.Z`, and creates the GitHub release.
+- `.github/workflows/deploy-pages.yml` deploys production from the latest release tag and `/staging/` from `main`.
+
+The Pages artifact is the static showcase built by `npm run build:showcase`.

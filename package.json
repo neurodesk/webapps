@@ -6,8 +6,10 @@
   "license": "MIT",
   "files": [
     "src",
+    "web",
     "templates",
     "docs",
+    "index.html",
     "README.md"
   ],
   "exports": {
@@ -30,6 +32,9 @@
     "./styles/base.css": "./src/styles/base.css"
   },
   "scripts": {
+    "build:showcase": "node scripts/build-showcase.mjs",
+    "serve": "node scripts/serve-showcase.mjs",
+    "start": "node scripts/serve-showcase.mjs",
     "test": "node --test test/*.test.js",
     "check": "node scripts/check-syntax.mjs"
   },

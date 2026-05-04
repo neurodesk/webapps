@@ -11,6 +11,9 @@ export function renderSidebarSection(config = {}, doc = globalThis.document) {
   if (config.content?.nodeType) content.appendChild(config.content);
   else if (Array.isArray(config.content)) content.append(...config.content.filter(Boolean));
   else if (config.content) content.textContent = String(config.content);
+  if (config.badge != null) {
+    title.appendChild(createElement('span', { className: `nd-step-badge ${config.badgeClassName || ''}`.trim(), text: config.badge, ownerDocument: doc }));
+  }
   title.addEventListener('click', () => root.classList.toggle('collapsed'));
   root.append(title, content);
   return {
