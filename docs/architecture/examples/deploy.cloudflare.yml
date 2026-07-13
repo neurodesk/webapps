@@ -1,0 +1,110 @@
+# .github/workflows/deploy.cloudflare.yml
+# Deploys each app to its OWN Cloudflare Pages project via Direct Upload (wrangler).
+# - push main          -> staging (preview) deploy for AFFECTED deployable apps
+# - push tag <app>-v*  -> production deploy for that one app
+# - workflow_dispatch  -> manual production deploy of a chosen, registry-validated app
+# Each project's PRODUCTION branch is "production" (normally no commits), so main deploys
+# are previews and production is reached only via --branch=production from a tag / manual run.
+name: deploy-cloudflare
+
+on:
+  push:
+    branches: [main]
+    tags: ["*-v*"]
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "app id (must exist in registry/apps.yml) to deploy to production"
+        required: true
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  # ---------- STAGING: affected deployable apps on main ----------
+  discover:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.list.outputs.apps }}
+    env:
+      # Full push range (not just HEAD^1), so shared-package fixes fan out to dependents.
+      TURBO_SCM_BASE: ${{ github.event.before }}
+      TURBO_SCM_HEAD: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - id: list
+        run: |
+          set -euo pipefail
+          # `--affected` includes DEPENDENTS: a change in packages/components marks every
+          # consuming app affected. Intersect with the deployable-app registry.
+          affected=$(pnpm exec turbo run build --affected --dry=json | jq -r '.tasks[].package' | sort -u)
+          deployable=$(grep -oE '^[[:space:]]*-[[:space:]]*id:[[:space:]]*\S+' registry/apps.yml \
+            | awk '{print $NF}' | sort -u)
+          apps=$(comm -12 <(printf '%s\n' "$affected") <(printf '%s\n' "$deployable") \
+            | jq -R -s -c 'split("\n") | map(select(length>0))')
+          echo "apps=${apps:-[]}" >> "$GITHUB_OUTPUT"
+
+  stage:
+    needs: discover
+    if: needs.discover.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.discover.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=${{ matrix.app }}
+      # wrangler is a ROOT dev dependency, so `pnpm exec` resolves it from the repo root.
+      - name: Deploy ${{ matrix.app }} (staging)
+        run: >
+          pnpm exec wrangler pages deploy apps/${{ matrix.app }}/dist
+          --project-name=${{ matrix.app }} --branch=main
+
+  # ---------- PRODUCTION: one app, on its tag or manual dispatch ----------
+  production:
+    if: >
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - name: Resolve + validate app
+        id: app
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            app="${{ github.event.inputs.app }}"
+          else
+            app="${GITHUB_REF_NAME%-v*}"   # musclemap-v1.2.3 -> musclemap
+          fi
+          # Central-registry check BEFORE building/deploying.
+          grep -qE "^[[:space:]]*-[[:space:]]*id:[[:space:]]*${app}[[:space:]]*$" registry/apps.yml \
+            || { echo "::error::app '${app}' is not in registry/apps.yml"; exit 1; }
+          echo "id=${app}" >> "$GITHUB_OUTPUT"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec turbo run build --filter=${{ steps.app.outputs.id }}
+      - name: Deploy ${{ steps.app.outputs.id }} (production)
+        run: >
+          pnpm exec wrangler pages deploy apps/${{ steps.app.outputs.id }}/dist
+          --project-name=${{ steps.app.outputs.id }} --branch=production

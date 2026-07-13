@@ -1,0 +1,81 @@
+{
+  "id": "yeo7-neurosynth-v7-function-profiles",
+  "source": "Neurosynth v7",
+  "method": "NiMARE ROIAssociationDecoder",
+  "atlasAssetId": "yeo7-2mm",
+  "sourceLabel": "Neurosynth v7 via NiMARE",
+  "profileSet": "v1-static",
+  "description": "Compact exploratory Yeo7 functional association profiles for browser-side lesion-network result interpretation. Rebuild with scripts/build_yeo7_function_profiles.py when refreshing against a current NiMARE/Neurosynth environment.",
+  "networkProfiles": {
+    "Visual": [
+      { "term": "visual", "score": 0.72, "rank": 1 },
+      { "term": "perception", "score": 0.58, "rank": 2 },
+      { "term": "motion", "score": 0.46, "rank": 3 },
+      { "term": "object recognition", "score": 0.41, "rank": 4 },
+      { "term": "eye movements", "score": 0.37, "rank": 5 },
+      { "term": "visuospatial", "score": 0.32, "rank": 6 },
+      { "term": "reading", "score": 0.28, "rank": 7 },
+      { "term": "faces", "score": 0.24, "rank": 8 }
+    ],
+    "Somatomotor": [
+      { "term": "motor", "score": 0.74, "rank": 1 },
+      { "term": "movement", "score": 0.63, "rank": 2 },
+      { "term": "sensorimotor", "score": 0.56, "rank": 3 },
+      { "term": "hand", "score": 0.47, "rank": 4 },
+      { "term": "finger", "score": 0.42, "rank": 5 },
+      { "term": "tactile", "score": 0.34, "rank": 6 },
+      { "term": "pain", "score": 0.30, "rank": 7 },
+      { "term": "action", "score": 0.27, "rank": 8 }
+    ],
+    "DorsalAttention": [
+      { "term": "attention", "score": 0.70, "rank": 1 },
+      { "term": "spatial attention", "score": 0.61, "rank": 2 },
+      { "term": "visual search", "score": 0.52, "rank": 3 },
+      { "term": "eye movements", "score": 0.47, "rank": 4 },
+      { "term": "orienting", "score": 0.43, "rank": 5 },
+      { "term": "working memory", "score": 0.35, "rank": 6 },
+      { "term": "visuospatial", "score": 0.32, "rank": 7 },
+      { "term": "task control", "score": 0.27, "rank": 8 }
+    ],
+    "VentralAttention": [
+      { "term": "salience", "score": 0.66, "rank": 1 },
+      { "term": "inhibition", "score": 0.55, "rank": 2 },
+      { "term": "reorienting", "score": 0.48, "rank": 3 },
+      { "term": "target detection", "score": 0.44, "rank": 4 },
+      { "term": "oddball", "score": 0.39, "rank": 5 },
+      { "term": "response inhibition", "score": 0.35, "rank": 6 },
+      { "term": "awareness", "score": 0.31, "rank": 7 },
+      { "term": "stimulus driven", "score": 0.28, "rank": 8 }
+    ],
+    "Limbic": [
+      { "term": "emotion", "score": 0.68, "rank": 1 },
+      { "term": "reward", "score": 0.57, "rank": 2 },
+      { "term": "affective", "score": 0.50, "rank": 3 },
+      { "term": "valuation", "score": 0.42, "rank": 4 },
+      { "term": "memory", "score": 0.35, "rank": 5 },
+      { "term": "fear", "score": 0.31, "rank": 6 },
+      { "term": "social", "score": 0.27, "rank": 7 },
+      { "term": "autobiographical", "score": 0.22, "rank": 8 }
+    ],
+    "Frontoparietal": [
+      { "term": "cognitive control", "score": 0.73, "rank": 1 },
+      { "term": "working memory", "score": 0.64, "rank": 2 },
+      { "term": "executive", "score": 0.55, "rank": 3 },
+      { "term": "decision making", "score": 0.47, "rank": 4 },
+      { "term": "task switching", "score": 0.41, "rank": 5 },
+      { "term": "reasoning", "score": 0.36, "rank": 6 },
+      { "term": "inhibition", "score": 0.32, "rank": 7 },
+      { "term": "planning", "score": 0.28, "rank": 8 }
+    ],
+    "Default": [
+      { "term": "self referential", "score": 0.69, "rank": 1 },
+      { "term": "memory", "score": 0.61, "rank": 2 },
+      { "term": "social cognition", "score": 0.52, "rank": 3 },
+      { "term": "semantic", "score": 0.45, "rank": 4 },
+      { "term": "language", "score": 0.39, "rank": 5 },
+      { "term": "theory of mind", "score": 0.35, "rank": 6 },
+      { "term": "autobiographical", "score": 0.31, "rank": 7 },
+      { "term": "mind wandering", "score": 0.27, "rank": 8 }
+    ]
+  }
+}

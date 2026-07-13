@@ -1,0 +1,34 @@
+{
+  "id": "validate_image_slices",
+  "name": "Matching Magnitude/Phase Slices",
+  "description": "Each magnitude and phase image should have the same number of slices.",
+  "category": "Image Type",
+  "fields": ["ImageType", "EchoTime"],
+  "requiredSystemFields": ["Count"],
+  "parameters": null,
+  "implementation": "num_slices = value['Count']\nif not all(num_slices == num_slices.iloc[0]):\n    raise ValidationError(f\"Magnitude and phase images do not have the same number of slices. Found {list(num_slices)}.\")",
+  "testCases": [
+    {
+      "id": "matching_slices",
+      "name": "Matching Slices Test",
+      "description": "Should pass when all images have same slice count",
+      "expectedResult": "pass",
+      "data": {
+        "ImageType": [["M"], ["P"], ["M"], ["P"]],
+        "EchoTime": [5.0, 5.0, 10.0, 10.0],
+        "Count": [64, 64, 64, 64]
+      }
+    },
+    {
+      "id": "mismatched_slices",
+      "name": "Mismatched Slices Test",
+      "description": "Should fail when slice counts differ",
+      "expectedResult": "fail",
+      "data": {
+        "ImageType": [["M"], ["P"], ["M"], ["P"]],
+        "EchoTime": [5.0, 5.0, 10.0, 10.0],
+        "Count": [64, 64, 32, 32]
+      }
+    }
+  ]
+}

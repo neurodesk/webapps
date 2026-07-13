@@ -1,0 +1,203 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* One-shot green flash to highlight items that were just updated
+   (e.g. an acquisition that received diffusion gradient descriptors). */
+@keyframes flash-green {
+  0%   { background-color: rgb(34 197 94 / 0.30); box-shadow: 0 0 0 2px rgb(34 197 94 / 0.70); }
+  100% { background-color: transparent;           box-shadow: 0 0 0 2px transparent; }
+}
+.animate-flash-green {
+  animation: flash-green 1.5s ease-out;
+}
+
+/* Theme color variables */
+:root {
+  /* Surfaces */
+  --color-surface: 249 250 251; /* gray-50 */
+  --color-surface-primary: 255 255 255; /* white */
+  --color-surface-secondary: 243 244 246; /* gray-100 */
+  --color-surface-hover: 239 246 255; /* blue-50 */
+  --color-surface-alt: 249 250 251; /* gray-50 for alternating rows */
+
+  /* Text */
+  --color-text-primary: 17 24 39; /* gray-900 */
+  --color-text-secondary: 75 85 99; /* gray-600 */
+  --color-text-tertiary: 107 114 128; /* gray-500 */
+  --color-text-muted: 156 163 175; /* gray-400 */
+  --color-text-inverted: 255 255 255; /* white */
+
+  /* Borders */
+  --color-border: 229 231 235; /* gray-200 */
+  --color-border-secondary: 209 213 219; /* gray-300 */
+
+  /* Brand/Medical colors */
+  --color-brand-50: 240 249 255;
+  --color-brand-100: 224 242 254;
+  --color-brand-500: 14 165 233;
+  --color-brand-600: 2 132 199;
+  --color-brand-700: 3 105 161;
+
+  /* Status colors */
+  --color-success: 22 163 74; /* green-600 */
+  --color-success-bg: 240 253 244; /* green-50 */
+  --color-error: 220 38 38; /* red-600 */
+  --color-error-bg: 254 242 242; /* red-50 */
+  --color-warning: 217 119 6; /* amber-600 */
+  --color-warning-bg: 255 251 235; /* amber-50 */
+}
+
+.dark {
+  /* Surfaces */
+  --color-surface: 17 24 39; /* gray-900 */
+  --color-surface-primary: 31 41 55; /* gray-800 */
+  --color-surface-secondary: 55 65 81; /* gray-700 */
+  --color-surface-hover: 7 89 133; /* sky-800 - more visible blue hover */
+  --color-surface-alt: 24 32 48; /* slightly lighter than surface */
+
+  /* Text */
+  --color-text-primary: 243 244 246; /* gray-100 */
+  --color-text-secondary: 209 213 219; /* gray-300 */
+  --color-text-tertiary: 156 163 175; /* gray-400 */
+  --color-text-muted: 107 114 128; /* gray-500 */
+  --color-text-inverted: 17 24 39; /* gray-900 */
+
+  /* Borders */
+  --color-border: 55 65 81; /* gray-700 */
+  --color-border-secondary: 75 85 99; /* gray-600 */
+
+  /* Brand/Medical colors - slightly brighter for dark mode */
+  --color-brand-50: 23 37 53;
+  --color-brand-100: 30 48 66;
+  --color-brand-500: 56 189 248;
+  --color-brand-600: 14 165 233;
+  --color-brand-700: 2 132 199;
+
+  /* Status colors - adjusted for dark mode */
+  --color-success: 74 222 128; /* green-400 */
+  --color-success-bg: 20 44 32;
+  --color-error: 248 113 113; /* red-400 */
+  --color-error-bg: 50 20 20;
+  --color-warning: 251 191 36; /* amber-400 */
+  --color-warning-bg: 50 40 15;
+}
+
+/* Custom utility classes */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* Custom scrollbar styling */
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-border-secondary)) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-border-secondary));
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-text-muted));
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Hide scrollbar corner */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dual-range slider for DICOM viewer windowing */
+.range-slider {
+  position: absolute;
+  width: 100%;
+  height: 20px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  margin: 0;
+}
+
+.range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: rgb(var(--color-brand-500));
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.range-slider::-webkit-slider-runnable-track {
+  height: 0;
+  background: transparent;
+}
+
+.range-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: rgb(var(--color-brand-500));
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.range-slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+}
+
+.range-slider::-moz-range-track {
+  height: 0;
+  background: transparent;
+}

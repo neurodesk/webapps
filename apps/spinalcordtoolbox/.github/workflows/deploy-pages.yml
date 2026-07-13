@@ -1,0 +1,216 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-production:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Check out latest release tag
+        run: |
+          git fetch --force --tags origin
+          TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+          if [[ -n "$TAG" ]]; then
+            echo "Building production from ${TAG}."
+            git checkout "$TAG"
+          else
+            echo "No release tag found; building production from main."
+            git checkout origin/main
+          fi
+          git lfs pull
+
+      - name: Download ONNX Runtime WASM files
+        run: |
+          cd web
+          bash setup.sh
+
+      - name: Verify deployed model assets
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          min_size_bytes = 100_000
+          lfs_pointer_prefix = b"version https://git-lfs.github.com/spec/"
+
+          def verify_local(path, expected_size=None):
+              data = path.read_bytes()
+              if data.startswith(lfs_pointer_prefix):
+                  raise SystemExit(f"{path} is a Git LFS pointer, not a deployed binary")
+              if str(path).endswith((".onnx", ".nii.gz")) and len(data) <= min_size_bytes:
+                  raise SystemExit(f"{path} is unexpectedly small: {len(data)} bytes")
+              if expected_size and len(data) != expected_size:
+                  raise SystemExit(f"{path} size mismatch: {len(data)} != {expected_size}")
+
+          def verify_remote(url, filename, expected_size=None):
+              request = urllib.request.Request(url, method="HEAD")
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{filename} hosted asset returned HTTP {response.status}")
+                  content_length = response.headers.get("Content-Length")
+                  if expected_size and content_length and int(content_length) != expected_size:
+                      raise SystemExit(f"{filename} hosted size mismatch: {content_length} != {expected_size}")
+
+          manifest = json.loads(Path("web/models/manifest.json").read_text(encoding="utf-8"))
+          checked = 0
+          for task in manifest.get("tasks", []):
+              for asset in [*task.get("modelAssets", []), *task.get("templateAssets", [])]:
+                  filename = asset.get("filename")
+                  if not filename:
+                      continue
+                  local_path = Path("web/models") / filename
+                  expected_size = asset.get("sizeBytes")
+                  if asset.get("downloadUrl"):
+                      verify_remote(asset["downloadUrl"], filename, expected_size)
+                      checked += 1
+                  elif local_path.exists():
+                      verify_local(local_path, expected_size)
+                      checked += 1
+                  elif asset.get("conversionStatus") in {"native", "converted"}:
+                      raise SystemExit(f"{filename} has no local file and no hosted downloadUrl")
+          print(f"Verified {checked} deployed asset reference(s).")
+          PY
+
+      - name: Upload production artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-build
+          path: web
+          retention-days: 1
+
+  build-staging:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          lfs: true
+
+      - name: Mark staging build version
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BASE_VERSION="$(bash scripts/get_version.sh)"
+          STAGING_VERSION="${BASE_VERSION}-staging+${SHORT_SHA}"
+          sed -i -E "s/^export const VERSION = '[^']+';$/export const VERSION = '${STAGING_VERSION}';/" web/js/app/config.js
+          echo "Building staging as ${STAGING_VERSION}."
+
+      - name: Download ONNX Runtime WASM files
+        run: |
+          cd web
+          bash setup.sh
+
+      - name: Verify deployed model assets
+        run: |
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          min_size_bytes = 100_000
+          lfs_pointer_prefix = b"version https://git-lfs.github.com/spec/"
+
+          def verify_local(path, expected_size=None):
+              data = path.read_bytes()
+              if data.startswith(lfs_pointer_prefix):
+                  raise SystemExit(f"{path} is a Git LFS pointer, not a deployed binary")
+              if str(path).endswith((".onnx", ".nii.gz")) and len(data) <= min_size_bytes:
+                  raise SystemExit(f"{path} is unexpectedly small: {len(data)} bytes")
+              if expected_size and len(data) != expected_size:
+                  raise SystemExit(f"{path} size mismatch: {len(data)} != {expected_size}")
+
+          def verify_remote(url, filename, expected_size=None):
+              request = urllib.request.Request(url, method="HEAD")
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  if response.status != 200:
+                      raise SystemExit(f"{filename} hosted asset returned HTTP {response.status}")
+                  content_length = response.headers.get("Content-Length")
+                  if expected_size and content_length and int(content_length) != expected_size:
+                      raise SystemExit(f"{filename} hosted size mismatch: {content_length} != {expected_size}")
+
+          manifest = json.loads(Path("web/models/manifest.json").read_text(encoding="utf-8"))
+          checked = 0
+          for task in manifest.get("tasks", []):
+              for asset in [*task.get("modelAssets", []), *task.get("templateAssets", [])]:
+                  filename = asset.get("filename")
+                  if not filename:
+                      continue
+                  local_path = Path("web/models") / filename
+                  expected_size = asset.get("sizeBytes")
+                  if asset.get("downloadUrl"):
+                      verify_remote(asset["downloadUrl"], filename, expected_size)
+                      checked += 1
+                  elif local_path.exists():
+                      verify_local(local_path, expected_size)
+                      checked += 1
+                  elif asset.get("conversionStatus") in {"native", "converted"}:
+                      raise SystemExit(f"{filename} has no local file and no hosted downloadUrl")
+          print(f"Verified {checked} deployed asset reference(s).")
+          PY
+
+      - name: Upload staging artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-build
+          path: web
+          retention-days: 1
+
+  deploy:
+    needs: [build-production, build-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download production build
+        uses: actions/download-artifact@v8
+        with:
+          name: production-build
+          path: deploy-root
+
+      - name: Download staging build
+        uses: actions/download-artifact@v8
+        with:
+          name: staging-build
+          path: deploy-root/staging
+
+      - name: Inject staging banner
+        run: |
+          sed -i 's|<body>|<body><div style="background:#f59e0b;color:#000;text-align:center;padding:6px;font-size:13px;font-weight:600;z-index:9999;position:relative;">⚠ STAGING — This is a preview version. <a href="../" style="color:#000;text-decoration:underline;">Go to production</a></div>|' deploy-root/staging/index.html
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: deploy-root
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

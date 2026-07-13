@@ -1,5 +1,35 @@
+# Dependencies
 node_modules/
-coverage/
 dist/
+
+# Build output
+dist/
+**/dist/
+.turbo/
+playwright-report/
+test-results/
+
+# WASM files (downloaded by per-app setup.sh)
+apps/*/web/wasm/
+
+# Vendored shared components (generated from packages/components by each app's vendor script)
+apps/*/web/vendor/
+apps/qsmbly/data/example/
+apps/qsmbly/rust-wasm/pkg/
+apps/qsmbly/wasm/qsm_wasm*
+
+# OS files
 .DS_Store
-*.log
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary model weights
+.tmp_weights/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/

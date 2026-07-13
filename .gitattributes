@@ -1,0 +1,9 @@
+# Preserve imported/generated third-party snapshots without treating their
+# upstream formatting as a first-party whitespace error.
+apps/**/dcm2niix/** whitespace=-trailing-space,-blank-at-eof
+apps/qsmbly/niivue/** whitespace=-trailing-space,-blank-at-eof
+
+# These SCT planning assets intentionally use Markdown hard-break whitespace.
+apps/spinalcordtoolbox/.agents/** whitespace=-trailing-space,-blank-at-eof
+apps/spinalcordtoolbox/.specify/** whitespace=-trailing-space,-blank-at-eof
+apps/spinalcordtoolbox/specs/** whitespace=-trailing-space,-blank-at-eof

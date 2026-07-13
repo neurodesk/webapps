@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Resolve shared @neurodesk/webapp-components (workspace package) for the browser without a
+       bundler; vendored into web/vendor/ by `pnpm vendor` (prebuild). Leaves the app's worker
+       and relative asset paths untouched. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
+      "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
+    }
+  }
+  </script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+  <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
+  <title>CALMaR | Co-designed Automated Lesion Mapping and Reporting</title>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.js"></script>
+  <script src="https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"></script>
+  <!-- nifti-reader-js UMD; populates window.nifti, used by atlas-loader.js for atlas + lesion decode. -->
+  <script src="nifti-js/index.js"></script>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<section class="start-page" id="startPage" aria-label="CALMaR start page">
+  <header class="start-header">
+    <div class="start-brand">
+      <strong>CALMaR</strong>
+      <span>Co-designed Automated Lesion Mapping and Reporting</span>
+    </div>
+    <div class="start-links">
+      <button class="header-link" id="startPrivacyButton" type="button" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <button class="header-link" id="startCitationsButton" type="button" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/lesion-network-mapping-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="start-main">
+    <section class="start-hero">
+      <div class="start-hero-copy">
+        <p class="start-kicker">Lesion mapping and reporting in the browser</p>
+        <h2>Process stroke lesion maps locally in your browser.</h2>
+        <p class="start-intro">
+          CALMaR guides a structural T1 through brain extraction, editable lesion-mask review,
+          MNI registration, atlas overlap, functional-connectivity mapping, and reportable tables.
+        </p>
+        <div class="start-actions">
+          <button class="btn btn-primary start-primary" id="enterAppButton" type="button">Start analysis</button>
+          <button class="btn btn-secondary start-secondary" id="startPrivacyInlineButton" type="button">How privacy works</button>
+        </div>
+        <p class="start-local-badge">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Patient images, masks, voxel values, screenshots, and generated outputs stay on this computer.
+        </p>
+      </div>
+
+      <div class="start-local-panel" aria-label="Local processing summary">
+        <h3>Local-first workflow</h3>
+        <ul>
+          <li>Files are read into browser memory for viewing and analysis.</li>
+          <li>Atlas and model assets may be downloaded when a workflow needs them.</li>
+          <li>Patient-derived files and generated results are not uploaded by the app.</li>
+          <li>Background execution is possible if this site is added under "Always keep these sites active" in your browser settings.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="start-how" aria-labelledby="startHowHeading">
+      <h3 id="startHowHeading">How It Works</h3>
+      <div class="start-steps">
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+          </div>
+          <h4>1. Load T1 data</h4>
+          <p>Choose a structural T1. Loading only displays the scan; processing starts when you run analysis.</p>
+        </article>
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </div>
+          <h4>2. Review the mask</h4>
+          <p>Use an automatic seed, blank manual mask, or uploaded mask, then edit and confirm before downstream analysis continues.</p>
+        </article>
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
+          </div>
+          <h4>3. Map and report</h4>
+          <p>Register to MNI, compute selected-atlas overlap, generate a connectivity map, and export CSV/NIfTI outputs locally.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</section>
+
+<div class="app-container">
+
+  <header class="app-header">
+    <div class="logo">
+      <h1>CALMaR</h1>
+      <span class="tagline">Co-designed Automated Lesion Mapping and Reporting</span>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div class="header-links">
+      <button class="header-link" id="aboutButton" title="About">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>About</span>
+      </button>
+      <button class="header-link" id="citationsButton" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <button class="header-link" id="privacyButton" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/lesion-network-mapping-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <aside class="app-sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- 1. INPUT — choose a structural T1 or an atlas-aligned lesion mask. -->
+      <section class="sidebar-section" id="stepLoadSection">
+        <h2 class="section-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          1. Input
+        </h2>
+        <div class="section-content">
+          <div class="param-group">
+            <div class="param-label-row">
+              <label class="param-label" for="structuralFileInput">Structural T1 (.nii / .nii.gz)</label>
+              <button type="button" class="help-icon" aria-label="Structural T1 help">i
+                <span class="help-popover" role="tooltip">
+                  Choose a structural T1. Loading the image only displays it; processing starts when you click Run analysis.
+                </span>
+              </button>
+            </div>
+            <input type="file" id="structuralFileInput" accept=".nii,.gz">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (.nii / .nii.gz)</label>
+            <input type="file" id="deepIslesDwiFileInput" accept=".nii,.gz">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="deepIslesAdcFileInput">ADC (.nii / .nii.gz)</label>
+            <input type="file" id="deepIslesAdcFileInput" accept=".nii,.gz">
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. RUN — primary one-click action. Per-stage controls hidden in
+           Advanced disclosure to avoid overwhelming clinicians. -->
+      <section class="sidebar-section" id="stepLesionSection">
+        <h2 class="section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          2. Run analysis
+          <button type="button" class="help-icon" aria-label="Run analysis help">i
+            <span class="help-popover" role="tooltip">
+              Runs the selected chain: brain extraction, prealign when needed, lesion segmentation, registration, atlas overlap, FC map, and thresholding.
+            </span>
+          </button>
+        </h2>
+        <div class="section-content">
+          <div class="param-group">
+            <label class="param-label" for="atlasSelect">Atlas</label>
+            <select id="atlasSelect" class="select-input">
+              <option value="schaefer400" selected>Schaefer 400 parcels</option>
+              <option value="yeo7">Yeo 7 networks</option>
+            </select>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary" id="runFullPipelineButton">
+              Run analysis
+            </button>
+          </div>
+
+          <details id="advancedStageControls" class="compact-disclosure">
+            <summary>Advanced controls</summary>
+            <div class="disclosure-content">
+              <input type="file" id="lesionFileInput" class="hidden" accept=".nii,.gz" aria-hidden="true" tabindex="-1">
+              <div class="advanced-workflow" aria-label="Advanced workflow order">
+                <button class="btn btn-secondary btn-sm" id="runBrainExtractionButton">1 Brain extraction</button>
+                <button class="btn btn-secondary btn-sm" id="prealignToMniButton" title="Pre-align T1 to the MNI160 1 mm grid">2 Pre-align T1</button>
+                <div class="workflow-choice" aria-label="Lesion mask source choice">
+                  <span class="param-label">3 Lesion mask</span>
+                  <input type="file" id="manualMaskFileInput" class="hidden" accept=".nii,.nii.gz" aria-hidden="true" tabindex="-1">
+                  <button class="btn btn-secondary btn-sm" id="runLesionSegmentationButton" title="Run auto segmentation as an editable seed">Auto seed mask</button>
+                  <button class="btn btn-secondary btn-sm" id="runDeepIslesSegmentationButton" title="Run DeepISLES on DWI/TRACE and ADC as an editable seed">DeepISLES DWI/ADC seed</button>
+                  <button class="btn btn-secondary btn-sm" id="startManualMaskButton" title="Start a blank editable lesion mask">Manual mask</button>
+                  <button class="btn btn-secondary btn-sm" id="uploadManualMaskButton" title="Load a native-space lesion mask as an editable seed">Upload mask</button>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="runRegistrationButton">4 MNI registration (SynthMorph)</button>
+                <div class="param-group workflow-control">
+                  <label class="param-label" for="registrationQcMode">Registration QC view</label>
+                  <select id="registrationQcMode" class="select-input">
+                    <option value="mni" selected>MNI space</option>
+                    <option value="patient">Patient space</option>
+                    <option value="checkerboard">Checkerboard</option>
+                    <option value="displacement">Displacement</option>
+                  </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="checkAtlasAlignmentButton" disabled>5 Check atlas alignment</button>
+                <div class="param-group workflow-control">
+                  <div class="param-label-row">
+                    <label class="param-label" for="registrationBlendValue">Patient/MNI blend</label>
+                    <span id="registrationBlendLabel" class="param-value">50% patient</span>
+                  </div>
+                  <input
+                    type="range"
+                    id="registrationBlendValue"
+                    class="param-input"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.5"
+                    title="Slide from fixed MNI template to registered patient T1"
+                    aria-label="Registered patient opacity over fixed MNI template"
+                  >
+                </div>
+                <button class="btn btn-secondary btn-sm" id="applyRegistrationToLesionButton">6 Warp lesion → atlas grid</button>
+                <button class="btn btn-secondary btn-sm" id="computeOverlapButton">7 Compute atlas overlap</button>
+                <button class="btn btn-secondary btn-sm" id="computeNetworkMapButton">8 Compute network map</button>
+              </div>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <!-- 3. RESULTS — overlap table, threshold panel, primary downloads.
+           Intermediate masks (brain / lesion) hidden under Advanced. -->
+      <section class="sidebar-section" id="resultsSection">
+        <h2 class="section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
+          3. Results
+        </h2>
+        <div class="section-content">
+          <div class="results-filter-controls">
+            <div class="param-row">
+              <label for="networkThresholdMinCluster">Min cluster size (voxels)</label>
+              <input type="number" id="networkThresholdMinCluster" class="param-input" min="0" step="1" value="30">
+            </div>
+          </div>
+          <div class="panel-title-row">
+            <h3>Direct lesion overlap</h3>
+            <button type="button" class="help-icon" aria-label="Direct lesion overlap help">i
+              <span class="help-popover" role="tooltip">
+                Atlas labels listed here contain lesion voxels directly. Lesion % is the share of lesion voxels in each label.
+              </span>
+            </button>
+          </div>
+          <div id="outsideAtlasWarning" class="warning hidden"></div>
+          <table id="networkOverlapTable" class="results-table">
+            <thead>
+              <tr>
+                <th>Atlas label</th>
+                <th>Voxels</th>
+                <th>Lesion %</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div id="directFunctionProfileResults" class="function-profile-results hidden">
+            <div class="panel-title-row">
+              <h3>Functional associations from direct lesion overlap</h3>
+              <button type="button" class="help-icon" aria-label="Direct functional associations help">i
+                <span class="help-popover" role="tooltip">
+                  Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
+                </span>
+              </button>
+            </div>
+            <table id="directFunctionProfileTable" class="results-table function-profile-table">
+              <thead>
+                <tr>
+                  <th>Term</th>
+                  <th>Score</th>
+                  <th>Atlas label drivers</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="threshold-controls" id="thresholdControls">
+            <div class="panel-title-row">
+              <h3>Threshold connectivity map</h3>
+              <button type="button" class="help-icon" aria-label="Threshold connectivity map help">i
+                <span class="help-popover" role="tooltip">
+                  The connectivity map is a group-FC weighted t-map derived from the direct lesion-overlap profile. The slider keeps the chosen top percentage of voxels; use magnitude to rank by t-map strength.
+                </span>
+              </button>
+            </div>
+            <div class="param-row">
+              <div class="param-label-row">
+                <label for="networkThresholdValue">Top voxels</label>
+                <span id="networkThresholdValueLabel" class="param-value">5%</span>
+              </div>
+              <input type="range" id="networkThresholdValue" class="param-input" min="0" max="10" step="0.1" value="5">
+            </div>
+            <div class="param-row">
+              <label><input type="checkbox" id="networkThresholdSymmetric" checked> Use |t| magnitude</label>
+            </div>
+            <p class="threshold-summary" id="networkThresholdSummary">Run analysis first to enable thresholding.</p>
+            <div id="affectedNetworkResults" class="affected-network-results hidden">
+              <div class="panel-title-row">
+                <h3>Connectivity-map effects</h3>
+                <button type="button" class="help-icon" aria-label="Connectivity-map effects help">i
+                  <span class="help-popover" role="tooltip">
+                    Atlas labels listed here contain voxels surviving the thresholded connectivity map. Map % is the share of thresholded map voxels in each label.
+                  </span>
+                </button>
+              </div>
+              <table id="affectedNetworkTable" class="results-table">
+                <thead>
+                  <tr>
+                    <th>Atlas label</th>
+                    <th>Voxels</th>
+                    <th>Map %</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <div id="mapFunctionProfileResults" class="function-profile-results hidden">
+                <div class="panel-title-row">
+                  <h3>Functional associations from connectivity-map effects</h3>
+                  <button type="button" class="help-icon" aria-label="Connectivity-map functional associations help">i
+                    <span class="help-popover" role="tooltip">
+                      Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
+                    </span>
+                  </button>
+                </div>
+                <table id="mapFunctionProfileTable" class="results-table function-profile-table">
+                  <thead>
+                    <tr>
+                      <th>Term</th>
+                      <th>Score</th>
+                      <th>Atlas label drivers</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-buttons results-actions">
+            <button class="btn btn-primary btn-sm" id="downloadOverlapCsv" disabled>Download overlap CSV</button>
+            <button class="btn btn-secondary btn-sm" id="downloadNetworkMapButton" disabled>Download network map</button>
+            <button class="btn btn-secondary btn-sm" id="downloadThresholdedNetworkMapButton" disabled>Download thresholded mask</button>
+            <button class="btn btn-secondary btn-sm" id="showSubjectAtlasButton" disabled>Show subject atlas</button>
+            <button class="btn btn-secondary btn-sm" id="downloadSubjectAtlasButton" disabled>Download subject atlas</button>
+            <button class="btn btn-secondary btn-sm" id="clearResultsButton" title="Clear intermediate pipeline state">Start over</button>
+          </div>
+
+          <details class="compact-disclosure">
+            <summary>Intermediate downloads</summary>
+            <div class="step-buttons disclosure-content">
+              <button class="btn btn-secondary btn-sm" id="downloadBrainMaskButton" disabled>Brain mask</button>
+              <button class="btn btn-secondary btn-sm" id="downloadLesionMaskButton" disabled>Lesion mask (native)</button>
+            </div>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <div class="sidebar-status">
+      <div class="status-header">
+        <span class="status-label">Status</span>
+        <div class="status-right">
+          <span class="status-value" id="statusText">Ready</span>
+          <button class="btn-status-cancel" id="cancelButton" title="Cancel current step" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="app-main">
+    <div class="viewer-toolbar">
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="multiplanar">3-Plane</button>
+        <button class="view-tab" data-view="axial">Axial</button>
+        <button class="view-tab" data-view="coronal">Coronal</button>
+        <button class="view-tab" data-view="sagittal">Sagittal</button>
+        <button class="view-tab" data-view="render">3D</button>
+      </div>
+
+      <div class="mask-drawing-toolbar hidden" id="maskDrawingToolbar" aria-label="Lesion mask drawing tools">
+        <span class="mask-review-status" id="maskReviewStatus"></span>
+        <div class="mask-toolbar-group mask-draw-group" role="group" aria-label="Draw lesion mask">
+          <div class="segmented-control" role="group" aria-label="Mask drawing mode">
+            <button class="tool-button active" id="maskPaintButton" type="button" title="Paint lesion voxels">Paint</button>
+            <button class="tool-button" id="maskEraseButton" type="button" title="Erase lesion voxels">Erase</button>
+            <button class="tool-button" id="maskEraseClusterButton" type="button" title="Erase the connected lesion cluster under the cursor">Erase cluster</button>
+          </div>
+          <label class="compact-control" for="maskBrushSize">
+            <span>Brush</span>
+            <input type="range" id="maskBrushSize" min="1" max="15" step="1" value="3">
+            <span id="maskBrushSizeLabel">3 vox</span>
+          </label>
+          <select class="tool-select" id="maskShapeSelect" title="Drawing shape">
+            <option value="pen">Pen</option>
+            <option value="rectangle">Rectangle</option>
+            <option value="ellipse">Ellipse</option>
+          </select>
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="maskFilledToggle">
+            <span>Fill</span>
+          </label>
+        </div>
+        <div class="mask-toolbar-group mask-edit-group" role="group" aria-label="Mask edit actions">
+          <button class="tool-button" id="maskUndoButton" type="button" title="Undo mask edit">Undo</button>
+          <button class="tool-button" id="maskBlankButton" type="button" title="Start a blank mask">Blank</button>
+          <button class="tool-button" id="maskSmoothButton" type="button" title="Smooth the 3D mask volume">Smooth</button>
+        </div>
+        <div class="mask-toolbar-group mask-interp-group" role="group" aria-label="Mask slice interpolation">
+          <select class="tool-select" id="maskInterpolateAxis" title="Interpolate between drawn slices">
+            <option value="0">Axial</option>
+            <option value="1">Coronal</option>
+            <option value="2">Sagittal</option>
+          </select>
+          <button class="tool-button" id="maskInterpolateButton" type="button" title="Interpolate mask between boundary slices">Interp</button>
+          <button type="button" class="help-icon mask-interp-help" id="maskInterpolateHelp" aria-label="Interpolate mask help">i
+            <span class="help-popover" role="tooltip">
+              Draw the lesion on at least two slices in the selected orientation. Interp finds the first and last non-empty slices, fills the slices between them with NiiVue mask interpolation, and thresholds the result back to lesion voxels.
+            </span>
+          </button>
+        </div>
+        <div class="mask-toolbar-group mask-review-actions" role="group" aria-label="Mask review actions">
+          <button class="tool-button tool-confirm" id="confirmLesionMaskButton" type="button" title="Confirm edited lesion mask and continue analysis">Confirm mask</button>
+          <div class="mask-file-actions" role="group" aria-label="Mask file actions">
+            <button class="tool-button" id="uploadReviewMaskButton" type="button" title="Upload a native-space lesion mask into this review">Upload</button>
+            <button class="tool-button" id="downloadEditedLesionMaskButton" type="button" title="Download the edited native-space mask" disabled>Download</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="viewer-actions">
+        <!-- Phase 32 toolbar trim: removed dead controls (window-controls
+             block, downloadCurrentVolume, screenshotViewer, resetWindow,
+             inputVisibilityToggle) — none had JS bindings. The opacity
+             control wrapper is now visible-by-default since the slider
+             is wired through ViewerController. -->
+        <div class="opacity-control" id="overlayControl">
+          <label>Overlay opacity</label>
+          <input type="range" id="overlayOpacity" min="0" max="1" step="0.05" value="0.7">
+          <span id="overlayOpacityValue">70%</span>
+        </div>
+
+        <div class="layer-controls" aria-label="Viewer layers">
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="layerToggleT1" checked disabled>
+            <span>T1</span>
+          </label>
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="layerToggleBrainMask" checked disabled>
+            <span>Brain mask</span>
+          </label>
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="layerToggleLesionMask" checked disabled>
+            <span>Lesion mask</span>
+          </label>
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="layerToggleThresholdMap" checked disabled>
+            <span>Threshold map</span>
+          </label>
+          <label class="viewer-checkbox">
+            <input type="checkbox" id="layerToggleAtlasQc" checked disabled>
+            <span>Atlas</span>
+          </label>
+        </div>
+
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="crosshairToggle" checked>
+          <span>Crosshair</span>
+        </label>
+
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="interpolation">
+          <span>Smooth</span>
+        </label>
+
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="colorbarToggle">
+          <span>Colorbar</span>
+        </label>
+
+        <select class="colormap-select" id="colormapSelect" title="Base-volume colormap">
+          <option value="gray">Gray</option>
+          <option value="hot">Hot</option>
+          <option value="cool">Cool</option>
+          <option value="viridis">Viridis</option>
+          <option value="plasma">Plasma</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="mask-approval-banner hidden" id="maskApprovalBanner" role="status" aria-live="polite">
+      <div class="mask-approval-copy">
+        <strong>Mask approval required</strong>
+        <span>Review the lesion mask before analysis continues.</span>
+      </div>
+    </div>
+
+    <div class="viewer-canvas-wrapper">
+      <canvas id="gl1"></canvas>
+    </div>
+
+    <div class="viewer-info">
+      <span class="viewer-info-primary" id="viewerInfoPrimary"></span>
+      <span class="viewer-info-label" id="viewerInfoLabel"></span>
+    </div>
+
+    <div class="console-stack">
+      <section class="console-container console-primary-log" aria-label="Analysis log">
+        <div class="console-header">
+          <span class="console-title">Analysis log</span>
+          <div class="console-actions">
+            <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
+            <button class="console-clear" id="clearConsole">Clear</button>
+          </div>
+        </div>
+        <div class="console-output" id="consoleOutput"></div>
+      </section>
+
+      <details class="technical-log" id="technicalLogDetails">
+        <summary class="technical-log-summary">
+          <span>Technical log</span>
+          <span>Copy this when reporting a problem.</span>
+        </summary>
+        <section class="console-container console-technical-log" aria-label="Technical debug log">
+          <div class="console-header">
+            <span class="console-title">Model and processing details</span>
+            <div class="console-actions">
+              <button class="console-clear" id="copyTechnicalConsole" title="Copy technical log to clipboard">Copy</button>
+              <button class="console-clear" id="clearTechnicalConsole">Clear</button>
+            </div>
+          </div>
+          <div class="console-output" id="technicalConsoleOutput"></div>
+        </section>
+      </details>
+    </div>
+  </main>
+
+  <footer class="app-footer">
+    <span>CALMaR <span id="footerVersion"></span></span>
+    <span>Patient image data stays local in the browser.</span>
+    <a href="https://github.com/neurodesk/lesion-network-mapping-webapp" target="_blank" style="color: var(--color-text-dim);">GitHub</a>
+  </footer>
+
+</div>
+
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal about-modal">
+    <div class="modal-header">
+      <h3>About CALMaR</h3>
+      <button class="modal-close" id="closeAbout">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="about-highlight">
+        <div>
+          <strong>CALMaR</strong>
+          <p>Co-designed Automated Lesion Mapping and Reporting.</p>
+        </div>
+      </div>
+      <p>This app loads a structural T1 (or a manual MNI-aligned lesion mask) locally, runs the CALMaR lesion mapping chain in the browser, and never uploads patient data.</p>
+      <p>The pipeline: SynthStrip brain extraction &rarr; SynthStroke baseline lesion segmentation &rarr; SynthMorph deformable registration to MNI152 (160<sup>3</sup> 1mm) &rarr; affine-aware resample to the selected atlas grid &rarr; atlas overlap &rarr; group-FC weighted-sum &rarr; threshold + cluster cleanup. All stages are exposed as individual buttons; "Run full pipeline" chains them in one click.</p>
+      <h4>Version</h4>
+      <div class="about-version-table">
+        <div class="about-version-row">
+          <span class="about-version-label">Application</span>
+          <span class="about-version-value" id="aboutAppVersion"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="privacyModal">
+  <div class="modal privacy-modal">
+    <div class="modal-header">
+      <h3>Privacy</h3>
+      <button class="modal-close" id="closePrivacy">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="privacy-highlight">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <div>
+          <strong>Your data remains on your device.</strong>
+          <p>Uploaded images and masks are read into browser memory for local viewing and analysis.</p>
+        </div>
+      </div>
+      <h4>What this means</h4>
+      <ul class="privacy-list">
+        <li>No patient image data, lesion masks, voxel values, screenshots, or generated outputs are uploaded by the app.</li>
+        <li>Atlas and model assets may be fetched by the browser when a workflow needs them.</li>
+        <li>Downloaded result files are created locally from browser memory.</li>
+      </ul>
+      <h4>Third-party services</h4>
+      <p>Static app files and public atlas assets may be served from external hosting, but patient-derived files are not sent to those services by the analysis code. Google Analytics collects aggregate page usage and performance metrics without patient images, masks, voxel values, screenshots, generated outputs, filenames, or analysis results. If your browser's Do Not Track setting is enabled, Google Analytics tracking is not configured.</p>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="citationsModal">
+  <div class="modal citations-modal">
+    <div class="modal-header">
+      <h3>Citations</h3>
+      <button class="modal-close" id="closeCitations">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="citations-intro">Please cite the atlas, segmentation, registration, connectome, visualization, and runtime methods used in your analysis.</p>
+      <div class="citation-section citation-primary">
+        <div class="citation-item">
+          <strong>Yeo 7-network atlas</strong>
+          <p>Yeo BTT, Krienen FM, Sepulcre J, et al. The organization of the human cerebral cortex estimated by intrinsic functional connectivity. Journal of Neurophysiology. 2011;106(3):1125-65.</p>
+        </div>
+        <div class="citation-item">
+          <strong>Schaefer 400-parcel atlas</strong>
+          <p>Schaefer A, Kong R, Gordon EM, et al. Local-global parcellation of the human cerebral cortex from intrinsic functional connectivity MRI. Cerebral Cortex. 2018;28(9):3095-3114.</p>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Brain extraction</h4>
+        <div class="citation-item">
+          <strong>SynthStrip brain extraction model</strong>
+          <p>CALMaR uses manifest asset <code>lnm-synthstrip</code>, runtime file <code>models/synthstrip.onnx</code>, source version <code>SynthStrip-Hoopes2022-Apache-2.0</code>. The ONNX asset was converted from FreeSurfer's official main SynthStrip model v1 checkpoint, <code>synthstrip.1.pt</code>; it is not the no-CSF or pediatric variant. The browser runs the ONNX FP32 export through the fast WASM wrapper with no final dilation.</p>
+          <p>Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: skull-stripping for any brain image. NeuroImage. 2022;260:119474.</p>
+          <a href="https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/" target="_blank" rel="noopener">https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/</a>
+          <a href="https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/synthstrip/models/synthstrip.1.pt" target="_blank" rel="noopener">Original FreeSurfer checkpoint</a>
+          <a href="https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/synthstrip.onnx" target="_blank" rel="noopener">Hosted ONNX asset</a>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Lesion segmentation</h4>
+        <div class="citation-item">
+          <strong>SynthStroke baseline lesion model</strong>
+          <p>CALMaR uses manifest asset <code>lnm-stroke-lesion</code>, runtime file <code>models/lnm-stroke-lesion.onnx</code>, source version <code>SynthStroke-baseline-MELBA2025-MIT</code>. The ONNX asset was converted from <code>liamchalcroft/synthstroke-baseline</code> <code>config.json</code> and <code>model.safetensors</code>, not SynthStroke SynthPlus. The browser runs 128<sup>3</sup> sliding-window patches with no TTA, then collapses background/stroke logits to stroke probability before thresholding.</p>
+          <p>Chalcroft L, Pereira S, Reinke A, et al. SynthStroke: synthetic chronic stroke lesion segmentation models. MELBA. 2025.</p>
+          <a href="https://huggingface.co/liamchalcroft/synthstroke-baseline" target="_blank" rel="noopener">Upstream SynthStroke baseline model</a>
+          <a href="https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-stroke-lesion.onnx" target="_blank" rel="noopener">Hosted ONNX asset</a>
+        </div>
+        <div class="citation-item">
+          <strong>ATLAS v2.0</strong>
+          <p>Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320.</p>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Registration</h4>
+        <div class="citation-item">
+          <strong>SynthMorph</strong>
+          <p>Hoffmann M, Billot B, Greve DN, Iglesias JE, Fischl B, Dalca AV. SynthMorph: learning contrast-invariant registration without acquired images. IEEE Trans Med Imaging. 2022;41(3):543-58.</p>
+          <a href="https://martinos.org/~malte/synthmorph/" target="_blank" rel="noopener">https://martinos.org/~malte/synthmorph/</a>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Functional connectivity</h4>
+        <div class="citation-item">
+          <strong>ADHD-200 (group FC source)</strong>
+          <p>ADHD-200 Consortium. The ADHD-200 Consortium: a model to advance the translational potential of neuroimaging in clinical neuroscience. Frontiers in Systems Neuroscience. 2012;6:62.</p>
+          <a href="http://fcon_1000.projects.nitrc.org/indi/adhd200/" target="_blank" rel="noopener">http://fcon_1000.projects.nitrc.org/indi/adhd200/</a>
+        </div>
+        <div class="citation-item">
+          <strong>Lesion network mapping (method)</strong>
+          <p>Boes AD, Prasad S, Liu H, et al. Network localization of neurological symptoms from focal brain lesions. Brain. 2015;138(10):3061-75.</p>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Visualization</h4>
+        <div class="citation-item">
+          <strong>NiiVue</strong>
+          <p>NiiVue Contributors. NiiVue: a WebGL2 medical image viewer.</p>
+          <a href="https://github.com/niivue/niivue" target="_blank" rel="noopener">https://github.com/niivue/niivue</a>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>Browser Runtime</h4>
+        <div class="citation-item">
+          <strong>ONNX Runtime Web</strong>
+          <p>Microsoft. ONNX Runtime: cross-platform, high performance inferencing and training accelerator.</p>
+          <a href="https://onnxruntime.ai" target="_blank" rel="noopener">https://onnxruntime.ai</a>
+        </div>
+      </div>
+      <div class="citation-section">
+        <h4>DICOM Conversion</h4>
+        <div class="citation-item">
+          <strong>dcm2niix</strong>
+          <p>Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56.</p>
+          <a href="https://github.com/rordenlab/dcm2niix" target="_blank" rel="noopener">https://github.com/rordenlab/dcm2niix</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="coi-serviceworker.js"></script>
+<script src="js/lnm-app.js" type="module"></script>
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4Z9774J59Y"></script>
+<script>
+  var doNotTrack = false;
+  var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+  doNotTrack = dnt === '1' || dnt === 'yes';
+  if (!doNotTrack) {
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-4Z9774J59Y');
+  }
+</script>
+
+</body>
+</html>

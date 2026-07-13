@@ -1,0 +1,101 @@
+name: Deploy to GitHub Pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g. 0.1.0)'
+        required: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(grep -oP "^export const VERSION = '\K[^']+" web/js/app/config.js || echo "0.0.0")
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Update version in config.js
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" web/js/app/config.js
+          echo "Updated config.js:"
+          head -3 web/js/app/config.js
+
+      - name: Commit version bump
+        if: github.event_name == 'release'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/js/app/config.js
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          git push origin main
+
+      - name: Download ONNX Runtime WASM
+        run: bash web/setup.sh
+
+      - name: Download ONNX models from OSF
+        run: |
+          mkdir -p web/models
+          OSF_BASE="https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage"
+          echo "Downloading ONNX models from OSF..."
+          curl -L -o web/models/seedseg-model-seed42.onnx   "$OSF_BASE/69a7b3b11bb961e0a3e7d1d3"
+          curl -L -o web/models/seedseg-model-seed123.onnx  "$OSF_BASE/69a7b3b0a32ec43a2279789d"
+          curl -L -o web/models/seedseg-model-seed456.onnx  "$OSF_BASE/69a7b3b13233e4a733e7d719"
+          curl -L -o web/models/seedseg-model-seed789.onnx  "$OSF_BASE/69a7b3b1a32ec43a2279789f"
+          echo "Models downloaded:"
+          ls -lh web/models/
+
+      - name: Prepare deployment
+        run: |
+          mkdir -p deploy
+          cp web/index.html deploy/
+          cp web/coi-serviceworker.js deploy/
+          cp web/LICENSE deploy/
+          cp -r web/css deploy/
+          cp -r web/js deploy/
+          cp -r web/wasm deploy/
+          cp -r web/dcm2niix deploy/
+          cp -r web/nifti-js deploy/
+          cp -r web/models deploy/
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

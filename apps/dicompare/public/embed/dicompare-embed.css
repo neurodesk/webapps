@@ -1,0 +1,303 @@
+/**
+ * dicompare embed CSS
+ *
+ * Styles for the DicompareReportRenderer component.
+ * Uses CSS custom properties so host apps can theme via their own variables.
+ * Fallback values are provided for standalone use.
+ *
+ * Provided by dicompare-web for embedding in third-party tools.
+ * See: https://github.com/astewartau/dicompare-web
+ */
+
+/* --- Modal (optional — only needed if using a modal container) --- */
+
+.dicompare-modal {
+  max-width: 800px;
+  max-height: 85vh;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.dicompare-modal .modal-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* --- Loading state --- */
+
+.dicompare-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+}
+
+.dicompare-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--color-border, #e5e7eb);
+  border-top-color: var(--color-primary, #2563eb);
+  border-radius: 50%;
+  animation: dicompare-spin 0.8s linear infinite;
+}
+
+@keyframes dicompare-spin {
+  to { transform: rotate(360deg); }
+}
+
+.dicompare-loading-text {
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #6b7280);
+  text-align: center;
+}
+
+.dicompare-progress-bar {
+  width: 100%;
+  max-width: 300px;
+  height: 4px;
+  background: var(--color-border, #e5e7eb);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.dicompare-progress-fill {
+  height: 100%;
+  background: var(--color-primary, #2563eb);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* --- Error --- */
+
+.dicompare-error {
+  padding: 16px;
+  color: var(--color-error, #dc2626);
+  text-align: center;
+}
+
+/* --- Schema header --- */
+
+.dicompare-schema-header {
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.dicompare-schema-header h4 {
+  font-size: 0.95rem;
+  color: var(--color-text, #1a1a1a);
+  margin: 0 0 4px;
+}
+
+.dicompare-schema-version {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #6b7280);
+  font-weight: 400;
+}
+
+.dicompare-schema-header p {
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #6b7280);
+  margin: 4px 0 0;
+}
+
+.dicompare-schema-authors {
+  font-size: 0.75rem;
+  color: var(--color-text-dim, #9ca3af);
+}
+
+/* --- Summary badges --- */
+
+.dicompare-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.dicompare-summary-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dicompare-summary-badge.pass {
+  background: var(--color-success-bg, #dff0d8);
+  color: var(--color-success, #3c763d);
+  border: 1px solid var(--color-success, #3c763d);
+}
+
+.dicompare-summary-badge.fail {
+  background: var(--color-error-bg, #f2dede);
+  color: var(--color-error, #dc2626);
+  border: 1px solid var(--color-error, #dc2626);
+}
+
+.dicompare-summary-badge.warning {
+  background: var(--color-warning-bg, #fcf8e3);
+  color: var(--color-warning, #ca8a04);
+  border: 1px solid var(--color-warning, #ca8a04);
+}
+
+.dicompare-summary-badge.na {
+  background: rgba(100, 100, 100, 0.1);
+  color: var(--color-text-dim, #9ca3af);
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+/* --- Acquisition sections --- */
+
+.dicompare-acquisition {
+  margin-bottom: 16px;
+}
+
+.dicompare-acquisition h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-primary, #2563eb);
+  margin: 0 0 8px;
+}
+
+.dicompare-section-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #6b7280);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+/* --- Tables --- */
+
+.dicompare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  margin-bottom: 12px;
+}
+
+.dicompare-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #6b7280);
+  border-bottom: 2px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, #f9fafb);
+}
+
+.dicompare-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+  color: var(--color-text, #1a1a1a);
+  vertical-align: top;
+}
+
+.dicompare-table tr:hover td {
+  background: var(--color-surface-elevated, #f3f4f6);
+}
+
+.dicompare-field-name {
+  font-weight: 500;
+}
+
+.dicompare-field-tag {
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--color-text-dim, #9ca3af);
+}
+
+/* --- Status badges --- */
+
+.dicompare-status {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dicompare-status-pass {
+  color: var(--color-success, #16a34a);
+  background: var(--color-success-bg, #dff0d8);
+}
+
+.dicompare-status-fail {
+  color: var(--color-error, #dc2626);
+  background: var(--color-error-bg, #f2dede);
+}
+
+.dicompare-status-warning {
+  color: var(--color-warning, #ca8a04);
+  background: var(--color-warning-bg, #fcf8e3);
+}
+
+.dicompare-status-na,
+.dicompare-status-unknown {
+  color: var(--color-text-dim, #9ca3af);
+  background: rgba(100, 100, 100, 0.1);
+}
+
+.dicompare-status-message {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #6b7280);
+  margin-top: 2px;
+}
+
+.dicompare-rule-description {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #6b7280);
+  margin-top: 2px;
+}
+
+/* --- Empty state --- */
+
+.dicompare-empty {
+  color: var(--color-text-muted, #6b7280);
+  text-align: center;
+  padding: 16px;
+  font-style: italic;
+}
+
+/* --- Unchecked fields (collapsible) --- */
+
+.dicompare-unchecked {
+  margin-top: 12px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.dicompare-unchecked-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--color-surface, #f9fafb);
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.dicompare-unchecked-toggle:hover {
+  background: var(--color-border, #e5e7eb);
+}
+
+.dicompare-chevron {
+  font-size: 0.6rem;
+  transition: transform 0.2s ease;
+}
+
+.dicompare-unchecked-content {
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}

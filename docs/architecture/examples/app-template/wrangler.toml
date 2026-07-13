@@ -1,0 +1,5 @@
+# Cloudflare Pages project config for this app (Direct Upload).
+# Lets `wrangler pages deploy` resolve the project + output dir without CLI flags.
+name = "APP_NAME"                 # must match the Cloudflare Pages project name
+pages_build_output_dir = "dist"
+compatibility_date = "2026-07-11"

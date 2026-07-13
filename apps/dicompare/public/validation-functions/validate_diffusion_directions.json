@@ -1,0 +1,42 @@
+{
+  "id": "validate_diffusion_directions",
+  "name": "Diffusion Directions Count",
+  "description": "Validates that the acquisition has at least 30 unique diffusion gradient directions (excluding b0 images where b < 50).",
+  "category": "Diffusion",
+  "fields": ["DiffusionGradientOrientation", "DiffusionBValue"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Count unique diffusion gradient directions for non-b0 images\n# b0 images have arbitrary/meaningless orientation values\n\nb_values = value[\"DiffusionBValue\"]\norientations = value[\"DiffusionGradientOrientation\"]\n\n# Filter to non-b0 images (b > 50)\nnon_b0_mask = b_values > 50\nnon_b0_orientations = orientations[non_b0_mask]\n\nn_actual = non_b0_orientations.nunique()\n\nif n_actual < 30:\n    raise ValidationError(f\"Expected at least 30 unique diffusion gradient directions, but found {n_actual}.\")",
+  "testCases": [
+    {
+      "id": "test_directions_pass",
+      "name": "Sufficient directions",
+      "description": "Should pass with 30+ unique directions",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionGradientOrientation": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+        "DiffusionBValue": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000]
+      }
+    },
+    {
+      "id": "test_directions_with_b0",
+      "name": "Directions with b0 images",
+      "description": "Should pass - b0 images excluded from direction count",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionGradientOrientation": [0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
+        "DiffusionBValue": [5, 5, 5, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000]
+      }
+    },
+    {
+      "id": "test_directions_fail",
+      "name": "Insufficient directions",
+      "description": "Should fail with fewer than 30 directions",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionGradientOrientation": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        "DiffusionBValue": [1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000]
+      }
+    }
+  ]
+}

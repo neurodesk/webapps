@@ -1,0 +1,51 @@
+{
+  "scripts": {
+    "lint": "node scripts/check-syntax.mjs",
+    "test": "npm run test:fast && npm run test:inference:e2e && npm run test:worker:protocol && npm run test:server",
+    "test:fast": "npm run lint && npm run test:manifest && npm run test:routing && npm run test:labels && npm run test:ui && npm run test:compat && npm run test:viewer && npm run test:processing && npm run test:vertebrae && npm run test:totalspineseg && npm run test:lesion-analysis && npm run test:inference:postprocessing && npm run test:batch:webapp && npm run test:fixtures && npm run test:controllers && npm run test:ui:modules && npm run test:ci-summary",
+    "test:manifest": "node --no-warnings scripts/test_manifest_consistency.mjs",
+    "test:routing": "node --no-warnings scripts/test_task_routing.mjs",
+    "test:labels": "node --no-warnings scripts/test_labels.mjs",
+    "test:ui": "node scripts/test_ui_coverage.cjs",
+    "test:compat": "node scripts/test_coi_serviceworker.cjs && node --no-warnings scripts/test_viewer_fallback.mjs",
+    "test:viewer": "node --no-warnings scripts/test_viewer_controller.mjs",
+    "test:processing": "node scripts/test_sct_processing.cjs",
+    "test:vertebrae": "node scripts/test_vertebrae.cjs",
+    "test:totalspineseg": "node scripts/test_totalspineseg.cjs",
+    "test:totalspineseg:worker": "node scripts/test_totalspineseg_worker_smoke.cjs",
+    "test:lesion-analysis": "node scripts/test_lesion_analysis.cjs",
+    "test:inference:postprocessing": "node scripts/test_inference_multiclass.cjs",
+    "test:batch:webapp": "node scripts/test_batch_processing_cases.cjs",
+    "test:fixtures": "node scripts/test_fixture_parity_outputs.cjs",
+    "test:fixtures:download": "node scripts/huggingface-fixtures.cjs",
+    "test:fixtures:generate": "node scripts/run_browser_fixture_outputs.cjs",
+    "test:controllers": "node --no-warnings scripts/test_file_io_controller.mjs && node --no-warnings scripts/test_dicom_controller.mjs && node --no-warnings scripts/test_inference_executor.mjs",
+    "test:ui:modules": "node --no-warnings scripts/test_ui_modules.mjs && node --no-warnings scripts/test_fallback_nifti_preview.mjs",
+    "test:inference:e2e": "node scripts/test_inference_worker_e2e.cjs",
+    "test:worker:protocol": "node scripts/test_inference_worker_protocol.cjs",
+    "test:server": "bash scripts/test_run_server_restart.sh",
+    "test:ci-summary": "node scripts/test_summarize_test_failures.cjs",
+    "vendor": "node ../../scripts/vendor-components.mjs",
+    "predev": "pnpm vendor",
+    "dev": "bash web/run.sh",
+    "prebuild": "pnpm vendor && bash web/setup.sh",
+    "build": "node ../../scripts/build-static.mjs",
+    "pretest:e2e": "pnpm vendor",
+    "test:e2e": "playwright test",
+    "test:shared": "node --test test/shared-components-parity.test.js"
+  },
+  "dependencies": {
+    "nifti-reader-js": "^0.8.0",
+    "onnxruntime-node": "^1.24.3",
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "devDependencies": {
+    "acorn": "^8.16.0",
+    "@playwright/test": "^1.44.0",
+    "jsdom": "^24.0.0"
+  },
+  "name": "spinalcordtoolbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module"
+}

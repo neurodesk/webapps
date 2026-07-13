@@ -1,0 +1,102 @@
+{
+  "ASL_Clinical_Guidelines_v1.0": {
+    "checksum": "sha256:81e5da7b11390656d21d49306d41025a89523127cad813abf299051e198aa100",
+    "concept_doi": "10.5072/zenodo.521284",
+    "concept_recid": "521284",
+    "record_id": "521285",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521285",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521285"
+  },
+  "Generic_Spine_v1.0": {
+    "checksum": "sha256:e164d3eb9a42292b8c77fd65fcfa67477ca4082e80b07959a6719e637940d625",
+    "concept_doi": "10.5072/zenodo.521294",
+    "concept_recid": "521294",
+    "record_id": "521295",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "r20210521",
+    "version_doi": "10.5072/zenodo.521295",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521295"
+  },
+  "MS_CMSC_Guidelines_v1.0": {
+    "checksum": "sha256:f80cff5375b577bbebc25b6c3bd9ac0c0d89f495b4a1f6dbb12fa00c8c9dd19e",
+    "concept_doi": "10.5072/zenodo.521282",
+    "concept_recid": "521282",
+    "record_id": "521283",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521283",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521283"
+  },
+  "MY-RADS_Myeloma_v1.0": {
+    "checksum": "sha256:f634637938f43490e43c3391920e46e1cba973ccb2a082d58497c1714f69b9b3",
+    "concept_doi": "10.5072/zenodo.521288",
+    "concept_recid": "521288",
+    "record_id": "521289",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521289",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521289"
+  },
+  "QSM_Consensus_Guidelines_v1.0": {
+    "checksum": "sha256:151070e92963a19ff2e7ce022d13a710ba0378cfee0b2804d79c6ee78435967a",
+    "concept_doi": "10.5072/zenodo.521286",
+    "concept_recid": "521286",
+    "record_id": "521287",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521287",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521287"
+  },
+  "SeedSeg_Prostate_T1w_v1.0": {
+    "checksum": "sha256:c8813ffb9779f7e021c56be3b0ad67f6d5b4e35bcbef9c42819c9dad1d8d9274",
+    "concept_doi": "10.5072/zenodo.521300",
+    "concept_recid": "521300",
+    "record_id": "521301",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521301",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521301"
+  },
+  "UK_Biobank_v1.0": {
+    "checksum": "sha256:62e5dfb65143981a52e74e70a94f0f4907d5a45aae6d6c11cecc559e4261aaa5",
+    "concept_doi": "10.5072/zenodo.521290",
+    "concept_recid": "521290",
+    "record_id": "521291",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521291",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521291"
+  },
+  "UMMS_Ping_v1.0": {
+    "checksum": "sha256:f2f687b2d5986a9f349cccb5c47508854d8a307908805652ec4c4bc558525335",
+    "concept_doi": "10.5072/zenodo.521292",
+    "concept_recid": "521292",
+    "record_id": "521293",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521293",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521293"
+  },
+  "abcd_schema_cleaned": {
+    "checksum": "sha256:5963e710c787ceee0baf9bcef778289ea56e92c48adfbef38472a554559f0c5e",
+    "concept_doi": "10.5072/zenodo.521298",
+    "concept_recid": "521298",
+    "record_id": "521299",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.1",
+    "version_doi": "10.5072/zenodo.521299",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521299"
+  },
+  "hcp_schema": {
+    "checksum": "sha256:2dbec991140a40fc1cff668f30c18fb10a0bda88aebaa88219f7f33ec19b5a6a",
+    "concept_doi": "10.5072/zenodo.521296",
+    "concept_recid": "521296",
+    "record_id": "521297",
+    "updated_at": "2026-06-22T23:08:42Z",
+    "version": "1.0",
+    "version_doi": "10.5072/zenodo.521297",
+    "zenodo_url": "https://sandbox.zenodo.org/record/521297"
+  }
+}

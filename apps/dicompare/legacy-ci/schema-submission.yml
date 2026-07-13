@@ -1,0 +1,113 @@
+name: Process Schema Submission
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  process-schema:
+    if: >
+      github.event.label.name == 'approved' &&
+      contains(join(github.event.issue.labels.*.name, ','), 'schema-submission')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract and validate schema
+        id: extract
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+
+            // Extract JSON from ```json ... ``` code fence
+            const match = body.match(/```json\s*\n([\s\S]*?)\n\s*```/);
+            if (!match) {
+              core.setFailed('No JSON code block found in issue body.');
+              return;
+            }
+
+            const jsonStr = match[1].trim();
+            let schema;
+            try {
+              schema = JSON.parse(jsonStr);
+            } catch (e) {
+              core.setFailed(`Invalid JSON: ${e.message}`);
+              return;
+            }
+
+            // Validate required fields
+            const errors = [];
+            if (!schema.name || typeof schema.name !== 'string') errors.push('Missing or invalid "name"');
+            if (!schema.version) errors.push('Missing "version"');
+            if (!schema.authors || !Array.isArray(schema.authors) || schema.authors.length === 0) errors.push('Missing or empty "authors"');
+            if (!schema.acquisitions || typeof schema.acquisitions !== 'object' || Object.keys(schema.acquisitions).length === 0) errors.push('Missing or empty "acquisitions"');
+
+            if (errors.length > 0) {
+              core.setFailed(`Schema validation failed:\n- ${errors.join('\n- ')}`);
+              return;
+            }
+
+            // Generate filename from schema name
+            const slug = schema.name
+              .replace(/[^a-zA-Z0-9\s_-]/g, '')
+              .replace(/\s+/g, '_');
+            const filename = `${slug}_v${schema.version}.json`;
+
+            // Write schema file
+            const fs = require('fs');
+            const path = require('path');
+
+            const schemaPath = path.join('public', 'schemas', filename);
+            fs.writeFileSync(schemaPath, JSON.stringify(schema, null, 2) + '\n');
+
+            // Update index.json
+            const indexPath = path.join('public', 'schemas', 'index.json');
+            const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+            const schemaRef = `/schemas/${filename}`;
+            if (!index.includes(schemaRef)) {
+              index.push(schemaRef);
+              fs.writeFileSync(indexPath, JSON.stringify(index, null, 2) + '\n');
+            }
+
+            core.setOutput('schema_name', schema.name);
+            core.setOutput('filename', filename);
+            core.setOutput('slug', slug);
+
+      - name: Create Pull Request
+        id: create-pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: "Add schema: ${{ steps.extract.outputs.schema_name }}"
+          branch: "schema/${{ steps.extract.outputs.slug }}"
+          commit-message: "Add schema: ${{ steps.extract.outputs.schema_name }}"
+          body: |
+            Adds the **${{ steps.extract.outputs.schema_name }}** schema to the public library.
+
+            Auto-generated from issue #${{ github.event.issue.number }}.
+
+      - name: Comment on issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = '${{ steps.create-pr.outputs.pull-request-number }}';
+            const prUrl = '${{ steps.create-pr.outputs.pull-request-url }}';
+            let comment;
+            if (prNumber) {
+              comment = `Schema validated successfully! A pull request has been created: ${prUrl}`;
+            } else {
+              comment = `Schema validated but no changes were detected (the schema may already exist).`;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });

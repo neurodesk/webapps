@@ -1,0 +1,30 @@
+{
+  "id": "validate_temporal_positions",
+  "name": "Temporal Positions (fMRI Volumes)",
+  "description": "Validates that an fMRI acquisition has at least 100 temporal positions (volumes).",
+  "category": "fMRI",
+  "fields": ["NumberOfTemporalPositions"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Validate temporal positions (fMRI volumes)\nn_volumes = value[\"NumberOfTemporalPositions\"].iloc[0]\n\nif n_volumes < 100:\n    raise ValidationError(f\"Expected at least 100 temporal positions for fMRI, found {n_volumes}.\")",
+  "testCases": [
+    {
+      "id": "test_volumes_pass",
+      "name": "Sufficient volumes",
+      "description": "Should pass with 100+ volumes",
+      "expectedResult": "pass",
+      "data": {
+        "NumberOfTemporalPositions": [200]
+      }
+    },
+    {
+      "id": "test_volumes_fail",
+      "name": "Insufficient volumes",
+      "description": "Should fail with fewer than 100 volumes",
+      "expectedResult": "fail",
+      "data": {
+        "NumberOfTemporalPositions": [50]
+      }
+    }
+  ]
+}

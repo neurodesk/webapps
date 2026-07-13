@@ -1,0 +1,39 @@
+{
+  "id": "validate_phase_encoding_polarity",
+  "name": "Phase Encoding Direction Present",
+  "description": "Validates that phase encoding direction information is present in the acquisition.",
+  "category": "Geometry",
+  "fields": ["InPlanePhaseEncodingDirection"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Validate phase encoding direction is present\npe_dir = value[\"InPlanePhaseEncodingDirection\"].iloc[0]\n\nif pe_dir is None or (isinstance(pe_dir, float) and pd.isna(pe_dir)):\n    raise ValidationError(\"Phase encoding direction information is missing.\")\n\nvalid_directions = [\"ROW\", \"COL\", \"COLUMN\"]\nif str(pe_dir).upper() not in valid_directions:\n    raise ValidationError(f\"Unexpected phase encoding direction: {pe_dir}. Expected one of: {valid_directions}\")",
+  "testCases": [
+    {
+      "id": "test_pe_row_pass",
+      "name": "ROW direction",
+      "description": "Should pass with ROW direction",
+      "expectedResult": "pass",
+      "data": {
+        "InPlanePhaseEncodingDirection": ["ROW"]
+      }
+    },
+    {
+      "id": "test_pe_col_pass",
+      "name": "COL direction",
+      "description": "Should pass with COL direction",
+      "expectedResult": "pass",
+      "data": {
+        "InPlanePhaseEncodingDirection": ["COL"]
+      }
+    },
+    {
+      "id": "test_pe_invalid",
+      "name": "Invalid direction",
+      "description": "Should fail with invalid direction",
+      "expectedResult": "fail",
+      "data": {
+        "InPlanePhaseEncodingDirection": ["INVALID"]
+      }
+    }
+  ]
+}

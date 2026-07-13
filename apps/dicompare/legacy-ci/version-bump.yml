@@ -1,0 +1,66 @@
+name: Version Bump
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to set (without v prefix, e.g., 0.5.2)'
+        required: false
+        default: ''
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=$(grep -oP '"version": "\K[^"]+' package.json || echo "0.0.0")
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Update package.json
+        run: |
+          sed -i 's/"version": "[^"]*"/"version": "${{ steps.version.outputs.VERSION }}"/' package.json
+
+      - name: Update src/version.ts
+        run: |
+          sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '${{ steps.version.outputs.VERSION }}'/" src/version.ts
+
+      - name: Update embed worker dicompare version
+        run: |
+          DICOMPARE_VERSION=$(sed -n "s/.*DICOMPARE_VERSION = '\([^']*\)'.*/\1/p" src/version.ts)
+          sed -i "s/const DICOMPARE_PACKAGE = 'dicompare==[^']*'/const DICOMPARE_PACKAGE = 'dicompare==$DICOMPARE_VERSION'/" public/embed/dicompare-worker.js
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json src/version.ts public/embed/dicompare-worker.js
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git push
+
+      - name: Move tag to include version bump commit
+        if: github.event_name == 'release'
+        run: |
+          TAG="v${{ steps.version.outputs.VERSION }}"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force

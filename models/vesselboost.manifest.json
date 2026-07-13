@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "app": "vesselboost",
+  "repository": "sbollmann/neurodesk-webapps-assets",
+  "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
+  "base_url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/vesselboost/",
+  "license": "NOASSERTION",
+  "preprocessing_contract": {
+    "patch_size": [64, 64, 64],
+    "source": "apps/vesselboost/web/js/inference-worker.js"
+  },
+  "assets": [
+    {"filename":"vesselboost.onnx","bytes":26334432,"sha256":"8ebf3547bd2318963e7080af74244b2478cd1938a35cd8eace5ddd8edff460d9"},
+    {"filename":"vesselboost-omelette1.onnx","bytes":26334432,"sha256":"412ce4209467321af08174fbbb3d39acd41bbb3e8d6744bae2c6a8f30c6605af"},
+    {"filename":"vesselboost-omelette2.onnx","bytes":26334432,"sha256":"ed06b35b6579134237341cce3433421113b8c728ca37b50aae0394728b8eace6"},
+    {"filename":"vesselboost-t2s.onnx","bytes":26334432,"sha256":"f61975162968f927f091a4333962edeeb6177528e5aa89d96295d511aca1d038"},
+    {"filename":"synthstrip.onnx","bytes":10294211,"sha256":"7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074","license":"Apache-2.0"}
+  ]
+}

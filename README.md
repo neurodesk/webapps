@@ -1,76 +1,85 @@
-# Neurodesk Webapp Components
+# Neurodesk Webapps
 
-Reusable, framework-free ESM components for static, privacy-preserving neuroimaging webapps.
+One monorepo and one composite static site for the browser-native apps listed at
+[neurodesk.org/getting-started/hosted/webapps](https://neurodesk.org/getting-started/hosted/webapps/).
+Imaging data is processed locally in the browser and is not uploaded.
 
-This package extracts the shared architecture from:
+| Path | App | Upstream snapshot |
+| --- | --- | --- |
+| `/calmar/` | CALMaR | `neurodesk/calmar-webapp` |
+| `/dicompare/` | dicompare | `astewartau/dicompare-web` |
+| `/musclemap/` | MuscleMap | `neurodesk/musclemap-webapp` |
+| `/qsmbly/` | QSMbly | `astewartau/qsmbly` |
+| `/seedseg/` | SeedSeg | `astewartau/prostate` |
+| `/sct/` | Spinal Cord Toolbox | `neurodesk/spinalcordtoolbox-webapp` |
+| `/vesselboost/` | VesselBoost | `neurodesk/vesselboost-webapp` |
 
-- `neurodesk/lesion-network-mapping-webapp`
-- `neurodesk/spinalcordtoolbox-webapp`
-- `neurodesk/vesselboost-webapp`
-- `neurodesk/musclemap-webapp`
-- `astewartau/qsmbly`
-
-The library is intentionally static-host friendly. It does not require React, a bundler, or a backend. Consumers can import individual modules from `src/` directly or through package exports.
+The exact source commits, licences, public paths, runtime adapters, and scientific
+asset manifests live in `registry/apps.yml`.
 
 ## Architecture
 
-Two app tracks are supported:
+- `apps/*` keeps app-specific scientific workers, workflows, and interfaces local.
+- `packages/components` is the framework-free shared browser-imaging library.
+- `packages/analytics` provides privacy-gated, allow-listed telemetry.
+- `scripts/lib/apps-registry.mjs` is the validated catalog interface used by builds,
+  tests, scaffolding, and deployment.
+- `scripts/build-static.mjs` supports the native static apps; dicompare remains a
+  React/Vite app and QSMbly retains its Rust/WASM build.
+- `scripts/build-site.mjs` assembles every app into one `dist/` site.
+- Large model weights are never committed or copied into `dist/`. They are fetched
+  from `sbollmann/neurodesk-webapps-assets` on Hugging Face and cached by each app.
 
-- Browser segmentation apps: upload NIfTI/DICOM, view in NiiVue, run ONNX inference in a worker, emit stage NIfTI outputs, download results.
-- Browser algorithm pipelines: bucketed multi-input workflows, Rust/WASM or ONNX workers, mask preparation/editing, parameter-heavy settings, command preview, and validation reports.
-
-See [docs/architecture/overview.md](docs/architecture/overview.md) and [docs/components/catalog.md](docs/components/catalog.md).
-
-## Quick Start
-
-```js
-import { createNeuroWebapp } from '@neurodesk/webapp-components';
-import { ConsoleOutput, ProgressManager } from '@neurodesk/webapp-components/ui';
-import { FileIOController } from '@neurodesk/webapp-components/file-io';
-import { PipelineExecutor } from '@neurodesk/webapp-components/inference';
-
-const app = createNeuroWebapp({
-  root: document.body,
-  title: 'My Neurodesk App',
-  subtitle: 'Browser inference',
-  version: '0.1.0'
-});
-
-const consoleOutput = new ConsoleOutput({ element: app.refs.consoleOutput });
-const progress = new ProgressManager({
-  barElement: app.refs.progressBar,
-  textElement: app.refs.statusText
-});
-
-const files = new FileIOController({
-  mode: 'simple',
-  updateOutput: message => consoleOutput.log(message)
-});
-
-const executor = new PipelineExecutor({
-  workerUrl: './worker.js',
-  updateOutput: message => consoleOutput.log(message),
-  setProgress: (value, text) => progress.setProgress(value, text)
-});
-```
+The shared library is adopted incrementally behind parity tests. Scientific workers,
+preprocessing contracts, app-specific metrics, and pipeline definitions are not
+forced into a generic abstraction.
 
 ## Development
 
+Requirements: Node.js 22+, pnpm 10, Rust, and `wasm-pack` (for QSMbly).
+
 ```bash
-npm install
-npm test
-npm run check
-npm run build:showcase
-npm run serve
+pnpm install
+pnpm test:registry
+pnpm build
+pnpm audit:artifacts
 ```
 
-The showcase app runs at `http://127.0.0.1:8080/` by default and demonstrates the app shell, sidebar sections, file triage, viewer controls, stage results, plugin catalog, QSM command preview, echo navigation, and validation report rendering.
+`pnpm build` produces:
 
-## Release And Staging
+```text
+dist/
+  index.html
+  calmar/ dicompare/ musclemap/ qsmbly/ seedseg/ sct/ vesselboost/
+```
 
-GitHub Actions are adapted from `neurodesk/lesion-network-mapping-webapp`:
+Individual packages use `pnpm --filter <id> dev|build|test`.
 
-- `.github/workflows/release.yml` is manual-only, validates the package, bumps the patch version, tags `vX.Y.Z`, and creates the GitHub release.
-- `.github/workflows/deploy-pages.yml` deploys production from the latest release tag and `/staging/` from `main`.
+## Deployment
 
-The Pages artifact is the static showcase built by `npm run build:showcase`.
+`.github/workflows/deploy-pages.yml` builds and deploys the single artifact to
+GitHub Pages. Configure the custom domain `webapps.neurodesk.org` in repository
+Pages settings and point its DNS CNAME at the GitHub Pages hostname.
+
+`.github/workflows/deploy-cloudflare.yml` is a manual alternative that uploads the
+same artifact to one Cloudflare Pages project (`neurodesk-webapps`). Cloudflare can
+apply the generated `_headers` file directly; GitHub Pages uses each imaging app's
+COI service-worker fallback for cross-origin isolation.
+
+## Releases
+
+The manual `release-apps` workflow reruns the complete test, build, artifact-audit,
+and browser-smoke suite before publishing independent GitHub releases for all seven
+apps. Tags use `<app>-v<version>` and all point to the same validated monorepo commit.
+Each release includes that app's static browser bundle; large model weights remain
+on Hugging Face and are fetched at runtime.
+
+## Adding an app
+
+Use `pnpm new-app <id>`, then add its runtime adapter and complete its catalog entry.
+CI requires every catalog app to have a workspace package and any declared scientific
+asset manifest to exist.
+
+## Licensing
+
+This is a mixed-licence monorepo. See each app/package licence and [LICENSES.md](LICENSES.md).

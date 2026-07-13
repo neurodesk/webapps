@@ -1,0 +1,32 @@
+# registry/apps.yml - single source of truth for deployable apps.
+# Consumed by: deploy workflow (which package names are deployable + Cloudflare project
+# + domain), the statistics pipeline (analytics IDs), and model fetching (manifest path).
+# Written by: scripts/new-app.mjs appends a stub entry when scaffolding an app.
+#
+# `id` == workspace package name == apps/<id> directory == Cloudflare project name.
+apps:
+  - id: musclemap
+    domain: musclemap.neurodesk.org
+    cloudflare_project: musclemap
+    ga4_measurement_id: G-XXXXXX01
+    model_manifest: models/musclemap.manifest.json
+    owner: neurodesk
+  - id: vesselboost
+    domain: vesselboost.neurodesk.org
+    cloudflare_project: vesselboost
+    ga4_measurement_id: G-XXXXXX02
+    model_manifest: models/vesselboost.manifest.json
+    owner: neurodesk
+  - id: spinalcordtoolbox
+    domain: spinalcordtoolbox.neurodesk.org
+    cloudflare_project: spinalcordtoolbox
+    ga4_measurement_id: G-XXXXXX03
+    model_manifest: models/spinalcordtoolbox.manifest.json
+    owner: neurodesk
+  - id: calmar
+    domain: calmar.neurodesk.org
+    cloudflare_project: calmar
+    ga4_measurement_id: G-XXXXXX04
+    model_manifest: models/calmar.manifest.json
+    owner: neurodesk
+  # qsmbly / seedseg / dicompare join after Phase 0 ownership + licensing (collaborator-owned).

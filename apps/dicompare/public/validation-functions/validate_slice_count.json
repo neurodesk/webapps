@@ -1,0 +1,30 @@
+{
+  "id": "validate_slice_count",
+  "name": "Minimum Slice Count",
+  "description": "Validates that the acquisition has at least 20 slices for adequate brain coverage.",
+  "category": "Geometry",
+  "fields": ["NumberOfSlices"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Validate minimum slice count\nn_slices = value[\"NumberOfSlices\"].iloc[0]\n\nif n_slices < 20:\n    raise ValidationError(f\"Expected at least 20 slices for adequate coverage, found {n_slices}.\")",
+  "testCases": [
+    {
+      "id": "test_slices_pass",
+      "name": "Sufficient slices",
+      "description": "Should pass with 20+ slices",
+      "expectedResult": "pass",
+      "data": {
+        "NumberOfSlices": [72]
+      }
+    },
+    {
+      "id": "test_slices_fail",
+      "name": "Too few slices",
+      "description": "Should fail with fewer than 20 slices",
+      "expectedResult": "fail",
+      "data": {
+        "NumberOfSlices": [10]
+      }
+    }
+  ]
+}

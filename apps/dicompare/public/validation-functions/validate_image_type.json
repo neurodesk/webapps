@@ -1,0 +1,32 @@
+{
+  "id": "validate_image_type",
+  "name": "Valid Magnitude/Phase Pairs",
+  "description": "Each EchoTime must have at least one magnitude and phase image.",
+  "category": "Image Type",
+  "fields": ["ImageType", "EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "magnitude_counts = []\nphase_counts = []\n\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n    \n    # Count occurrences of 'M' and 'P' in ImageType tuples\n    magnitude_counts.append(sum('M' in image for image in image_types))\n    phase_counts.append(sum('P' in image for image in image_types))\n\nif not all(m >= 1 for m in magnitude_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one magnitude image. Found {magnitude_counts}.\")\nif not all(p >= 1 for p in phase_counts):\n    raise ValidationError(f\"Each EchoTime must have at least one phase image. Found {phase_counts}.\")\n",
+  "testCases": [
+    {
+      "id": "valid_magnitude_phase",
+      "name": "Valid M/P Pairs Test",
+      "description": "Should pass with magnitude and phase for each echo",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [5.0, 5.0, 10.0, 10.0],
+        "ImageType": [["M"], ["P"], ["M"], ["P"]]
+      }
+    },
+    {
+      "id": "missing_phase",
+      "name": "Missing Phase Test",
+      "description": "Should fail when phase images are missing",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [5.0, 5.0, 10.0],
+        "ImageType": [["M"], ["M"], ["M"]]
+      }
+    }
+  ]
+}

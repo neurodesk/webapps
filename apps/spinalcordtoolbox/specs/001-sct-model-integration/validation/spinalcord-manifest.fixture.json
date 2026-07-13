@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "1.0.0",
+  "sctStableSource": "https://spinalcordtoolbox.com/stable/user_section/command-line/sct_deepseg.html",
+  "generatedAt": "2026-04-27T00:00:00Z",
+  "tasks": [
+    {
+      "id": "spinalcord",
+      "displayName": "Spinal cord",
+      "category": "spinal-cord",
+      "inputContrasts": ["T1w", "T2w"],
+      "requiredInputs": [{ "role": "image", "contrast": "any supported spinal cord MRI contrast" }],
+      "outputType": "binary-mask",
+      "labels": [
+        { "index": 0, "name": "Background", "rgba": [0, 0, 0, 0], "meaning": "No spinal cord" },
+        { "index": 1, "name": "Spinal cord", "rgba": [68, 128, 255, 255], "meaning": "Spinal cord segmentation" }
+      ],
+      "modelAssets": [
+        {
+          "id": "sct-spinalcord",
+          "sourceUrl": "https://spinalcordtoolbox.com/stable/user_section/command-line/deepseg/spinalcord.html",
+          "sourceVersion": "stable",
+          "sourceFormat": "SCT model package",
+          "browserFormat": "onnx",
+          "filename": "sct-spinalcord.onnx",
+          "conversionStatus": "failed",
+          "failureReason": "No browser-runnable ONNX model has been validated."
+        }
+      ],
+      "supportStatus": "unvalidated",
+      "validationStatus": "not-run"
+    }
+  ]
+}

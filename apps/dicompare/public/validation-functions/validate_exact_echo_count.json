@@ -1,0 +1,39 @@
+{
+  "id": "validate_exact_echo_count",
+  "name": "Dual Echo Validation",
+  "description": "Validates that an acquisition has exactly 2 unique echo times (for dual-echo sequences like SWI).",
+  "category": "Echo Timing",
+  "fields": ["EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Validate exact echo count (for dual-echo sequences)\nactual = value[\"EchoTime\"].nunique()\n\nif actual != 2:\n    raise ValidationError(f\"Expected exactly 2 echoes for dual-echo acquisition, found {actual}.\")",
+  "testCases": [
+    {
+      "id": "test_two_echoes_pass",
+      "name": "Two echoes (pass)",
+      "description": "Should pass with exactly 2 echoes",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [9.42, 9.42, 19.7, 19.7]
+      }
+    },
+    {
+      "id": "test_one_echo_fail",
+      "name": "Single echo (fail)",
+      "description": "Should fail with only 1 echo",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [9.42, 9.42, 9.42, 9.42]
+      }
+    },
+    {
+      "id": "test_three_echoes_fail",
+      "name": "Three echoes (fail)",
+      "description": "Should fail with 3 echoes",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [9.42, 15.0, 19.7]
+      }
+    }
+  ]
+}

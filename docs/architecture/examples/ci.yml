@@ -1,0 +1,65 @@
+# .github/workflows/ci.yml
+# Affected-only lint/test/build, plus the generator + browser contract tests.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    # Correct affected range per event. On PRs, diff against the base branch; on push,
+    # diff the actual push range (event.before..sha) — NOT origin/main, which equals HEAD
+    # on a push and would yield an empty set (revision-3 bug).
+    env:
+      TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      TURBO_SCM_HEAD: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 } # full history so the SCM range resolves.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # `--affected` uses TURBO_SCM_BASE/HEAD and includes dependents, so a change to
+      # packages/components rebuilds+tests every app that consumes it. Each package runs
+      # its OWN test task (pytest / jest+cargo / node), so nothing is silently skipped.
+      - run: pnpm exec turbo run lint test build --affected
+
+  generator-contract:
+    # Prove `pnpm new-app` produces an installable, buildable, testable app.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/new-app.mjs ci-scaffold-check
+      - run: pnpm install --frozen-lockfile # picks up the new workspace package
+      - run: pnpm --filter ci-scaffold-check lint
+      - run: pnpm --filter ci-scaffold-check test
+      - run: pnpm --filter ci-scaffold-check build
+      - run: git diff --exit-code registry/apps.yml || echo "registry updated as expected"
+
+  browser:
+    # Real browser contract: app boot, crossOriginIsolated, worker load — for affected apps.
+    runs-on: ubuntu-latest
+    env:
+      TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+      TURBO_SCM_HEAD: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Chromium is preinstalled in this environment; do NOT run `playwright install`.
+      - run: pnpm exec turbo run test:e2e --affected

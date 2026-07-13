@@ -1,0 +1,42 @@
+{
+  "id": "validate_bvalue_shells",
+  "name": "B-value Shell Presence",
+  "description": "Validates that the acquisition includes both b0 images (b < 50) and at least one diffusion-weighted shell (b > 500).",
+  "category": "Diffusion",
+  "fields": ["DiffusionBValue"],
+  "requiredSystemFields": ["Count"],
+  "parameters": null,
+  "implementation": "# Validate b-value shell presence\nb_values = value[\"DiffusionBValue\"]\ncounts = value[\"Count\"]\n\n# Check for b0 images (b < 50)\nb0_count = counts[b_values < 50].sum()\nif b0_count < 1:\n    raise ValidationError(f\"Expected at least 1 b0 image (b < 50), found {b0_count}.\")\n\n# Check for diffusion-weighted images (b > 500)\ndw_count = counts[b_values > 500].sum()\nif dw_count < 1:\n    raise ValidationError(f\"Expected at least 1 diffusion-weighted image (b > 500), found {dw_count}.\")",
+  "testCases": [
+    {
+      "id": "test_shells_pass",
+      "name": "Valid b0 and DW shells",
+      "description": "Should pass with b0 and diffusion-weighted images",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionBValue": [5, 1000],
+        "Count": [10, 50]
+      }
+    },
+    {
+      "id": "test_shells_fail_no_b0",
+      "name": "Missing b0 images",
+      "description": "Should fail without b0 images",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [1000, 2000],
+        "Count": [50, 50]
+      }
+    },
+    {
+      "id": "test_shells_fail_no_dw",
+      "name": "Missing DW images",
+      "description": "Should fail without diffusion-weighted images",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [5],
+        "Count": [10]
+      }
+    }
+  ]
+}

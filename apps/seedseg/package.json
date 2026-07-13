@@ -1,0 +1,17 @@
+{
+  "name": "seedseg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-based prostate fiducial marker segmentation.",
+  "scripts": {
+    "dev": "bash web/run.sh",
+    "prebuild": "bash web/setup.sh",
+    "build": "node ../../scripts/build-static.mjs",
+    "lint": "node ../../scripts/check-app-js.mjs web",
+    "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "// note": "Stub. Populate url/sha256/bytes/license/preprocessing_contract from the deployed calmar worker. Binaries currently still ship in apps/calmar/web/models/ (externalization is Phase 1).",
+  "app": "calmar",
+  "models": []
+}

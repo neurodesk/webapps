@@ -1,0 +1,205 @@
+{
+  "name": "SeedSeg Prostate T1-Weighted Protocol",
+  "description": "T1-weighted gradient echo (FLASH) protocol for prostate MRI optimized for gold fiducial marker (seed) segmentation using the SeedSeg tool. Designed for radiation therapy planning on Siemens 3T systems with high in-plane resolution (0.7\u00d70.7 mm\u00b2) and thin slices (2 mm) to enable accurate localization of implanted gold markers (1\u00d73 mm cylindrical, Riverpoint Medical). T1-weighted MRI data were acquired using a MAGNETOM 3.0T XQ scanner (Siemens Healthcare, Erlangen, Germany; Numaris/X VA60A) with a 32-channel spine coil and 18-channel body coil. Ground truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.",
+  "version": "1.0",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "T1-Weighted Gradient Echo (Seed)": {
+      "description": "2D T1-weighted gradient echo (FLASH) acquisition for gold fiducial marker segmentation in prostate radiation therapy planning",
+      "detailed_description": "## T1-Weighted Gradient Echo for Gold Seed Segmentation\n\n### Overview\nHigh-resolution 2D T1-weighted gradient echo acquisition optimized for visualizing and segmenting implanted gold fiducial markers (seeds) in the prostate. This sequence is part of an RT planning protocol and is designed for compatibility with the SeedSeg automated segmentation tool.\n\n### Clinical Context\n- **Application:** Radiation therapy (RT) planning for prostate cancer (PCa)\n- **Target:** Implanted gold fiducial markers (Riverpoint Medical, Portland, Oregon, US)\n- **Marker Dimensions:** 1\u00d73 mm cylindrical gold markers (3 per patient)\n- **Patient Cohort:** 127 PCa patients, each with 3 implanted gold markers\n- **Coils:** 32-channel spine coil + 18-channel body coil\n- **Scanner:** Siemens MAGNETOM 3.0T XQ (Numaris/X VA60A)\n\n### Sequence Details\n- **Sequence Name:** `fl_r` (FLASH \u2013 Fast Low Angle Shot)\n- **Dimension:** 2D multi-slice\n- **Orientation:** Transversal (axial)\n- **Phase Encoding:** R >> L\n- **Multi-Slice Mode:** Interleaved, ascending\n- **RF Spoiling:** Enabled\n- **Flow Compensation:** Slice/Read\n- **Gradient Mode:** Fast\n- **Acceleration:** GRAPPA factor 2 with 24 integrated reference lines\n\n### Key Parameters\n- **TR:** 600 ms\n- **TE:** 6.66 ms\n- **Flip Angle:** 80\u00b0\n- **Voxel Size:** 0.7\u00d70.7\u00d72.0 mm\u00b3\n- **FOV:** 220\u00d7220 mm\u00b2\n- **Base Resolution:** 320\n- **Phase Resolution:** 80%\n- **Slices:** 40\n- **Slice Thickness:** 2.0 mm (no gap)\n- **Bandwidth:** 400 Hz/Px\n- **Averages:** 1\n- **Scan Duration:** ~2:42 min\n\n### Why T1-Weighted GRE for Gold Seeds?\nGold fiducial markers produce characteristic signal voids on MRI due to their strong magnetic susceptibility. The T1-weighted gradient echo sequence with a relatively long TE (6.66 ms) and high flip angle (80\u00b0) enhances the susceptibility artifact around the gold markers while maintaining sufficient anatomical contrast for prostate delineation. The high in-plane resolution (0.7 mm) is critical for accurate localization of the small 1\u00d73 mm markers.\n\n### Ground Truth Segmentation\nGround truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.\n\n### SeedSeg Compatibility\nThis protocol is designed to produce images compatible with the SeedSeg tool for automated segmentation of gold fiducial markers in prostate MRI.",
+      "tags": ["analysis:segmentation", "prostate", "T1-weighted", "RT-planning", "fiducial-markers"],
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D",
+          "vr": "CS",
+          "dataType": "string"
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "vr": "CS",
+          "dataType": "string",
+          "contains": "GR"
+        },
+        {
+          "field": "SequenceVariant",
+          "tag": "0018,0021",
+          "vr": "CS",
+          "dataType": "string",
+          "contains": "SP"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 600,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 60
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 6.66,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 1
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 80,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 5
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.0,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 0.5
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "value": 3,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 0.3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [0.6875, 0.6875],
+          "vr": "DS",
+          "dataType": "list_number",
+          "tolerance": 0.1
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "min": 320,
+          "vr": "US",
+          "dataType": "number"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "min": 320,
+          "vr": "US",
+          "dataType": "number"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 400,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 50
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "vr": "DS",
+          "dataType": "number"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "vr": "FD",
+          "dataType": "number",
+          "tolerance": 0.5
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW",
+          "vr": "CS",
+          "dataType": "string"
+        },
+        {
+          "field": "SpacingBetweenSlices",
+          "tag": "0018,0088",
+          "value": 2.0,
+          "vr": "DS",
+          "dataType": "number",
+          "tolerance": 0.5
+        },
+        {
+          "field": "Manufacturer",
+          "tag": "0008,0070",
+          "value": "SIEMENS",
+          "vr": "LO",
+          "dataType": "string"
+        },
+        {
+          "field": "ImageType",
+          "tag": "0008,0008",
+          "vr": "CS",
+          "dataType": "string",
+          "contains": "M"
+        },
+        {
+          "field": "BodyPartExamined",
+          "tag": "0018,0015",
+          "value": "PELVIS",
+          "vr": "CS",
+          "dataType": "string"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "validate_seed_slice_coverage",
+          "name": "Adequate Slice Coverage",
+          "description": "Sufficient slices are needed to cover the prostate and all implanted gold markers. Protocol specifies 40 slices with 2 mm thickness (80 mm coverage).",
+          "implementation": "if 'SliceThickness' in value.columns and 'Count' in value.columns:\n    slice_thickness = value['SliceThickness'].iloc[0]\n    num_slices = value['Count'].iloc[0]\n    coverage = slice_thickness * num_slices\n    if coverage < 60:\n        raise ValidationError(f\"Insufficient slice coverage for prostate imaging. Coverage: {coverage:.0f} mm (need \u226560 mm). Found {num_slices} slices \u00d7 {slice_thickness} mm.\")\n    elif coverage < 70:\n        raise ValidationWarning(f\"Slice coverage may be marginal for full prostate + marker coverage. Coverage: {coverage:.0f} mm. Target: ~80 mm (40 slices \u00d7 2 mm).\")",
+          "fields": [
+            "SliceThickness",
+            "Count"
+          ],
+          "testCases": [
+            {
+              "id": "test_seed_coverage_pass",
+              "name": "40 slices x 2mm",
+              "data": {
+                "SliceThickness": [2.0],
+                "Count": [40]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_seed_coverage_warning",
+              "name": "35 slices x 2mm",
+              "data": {
+                "SliceThickness": [2.0],
+                "Count": [35]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "test_seed_coverage_fail",
+              "name": "20 slices x 2mm",
+              "data": {
+                "SliceThickness": [2.0],
+                "Count": [20]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "rules": []
+}

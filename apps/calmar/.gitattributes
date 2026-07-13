@@ -1,0 +1,2 @@
+web/models/*.onnx filter=lfs diff=lfs merge=lfs -text
+web/models/templates/**/*.nii.gz filter=lfs diff=lfs merge=lfs -text

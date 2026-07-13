@@ -1,0 +1,36 @@
+{
+  "name": "qsmbly",
+  "version": "0.18.0",
+  "description": "Quantitative Susceptibility Mapping in WebAssembly",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 8080",
+    "prebuild": "bash build.sh",
+    "build": "node ../../scripts/build-static.mjs",
+    "lint": "node ../../scripts/check-app-js.mjs .",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "neurodeskWebapp": {
+    "static": {
+      "include": ["index.html", "css", "js", "dcm2niix", "nifti-js", "niivue", "wasm", "data", "QSMbly.png", "favicon.ico"]
+    }
+  },
+  "private": true,
+  "keywords": [
+    "qsm",
+    "mri",
+    "webassembly",
+    "wasm",
+    "medical-imaging"
+  ],
+  "license": "MIT"
+}

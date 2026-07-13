@@ -1,0 +1,200 @@
+name: Build and Deploy
+
+on:
+  # Build and deploy on release
+  release:
+    types: [published]
+  # Also allow manual trigger
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (without v prefix, e.g., 0.3.0)'
+        required: false
+        default: ''
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: write  # Need write to commit version updates
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Extract version from release tag (remove 'v' prefix)
+            TAG="${{ github.event.release.tag_name }}"
+            VERSION="${TAG#v}"
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
+            # Use manually provided version
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Fallback: read from config.js
+            VERSION=$(grep -oP "^export const VERSION = '\K[^']+" js/app/config.js || echo "0.0.0")
+          fi
+
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: Could not determine version"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deploying version: $VERSION"
+
+      - name: Update version in source files
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+
+          if [ -z "$VERSION" ]; then
+            echo "ERROR: VERSION is empty"
+            exit 1
+          fi
+
+          # Update config.js
+          sed -i "s/^export const VERSION = '[^']*'/export const VERSION = '$VERSION'/" js/app/config.js
+
+          # Update package.json
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" package.json
+
+          # Update Cargo.toml
+          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" rust-wasm/Cargo.toml
+
+          # Extract QSM.rs version from Cargo.toml dependency tag and update config.js
+          QSM_RS_VERSION=$(grep 'qsm-core' rust-wasm/Cargo.toml | grep -oP 'tag = "v\K[^"]+' || echo "")
+          if [ -n "$QSM_RS_VERSION" ]; then
+            sed -i "s/^export const QSM_RS_VERSION = '[^']*'/export const QSM_RS_VERSION = '$QSM_RS_VERSION'/" js/app/config.js
+            echo "Updated QSM.rs version to $QSM_RS_VERSION"
+          fi
+
+          echo "Updated version to $VERSION in all files"
+
+      - name: Commit version update and move tag
+        if: github.event_name == 'release'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add js/app/config.js package.json rust-wasm/Cargo.toml
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: bump version to ${{ steps.version.outputs.VERSION }}"
+          git push
+          TAG="v${{ steps.version.outputs.VERSION }}"
+          git tag -f "$TAG"
+          git push origin "$TAG" --force
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build WASM
+        working-directory: rust-wasm
+        run: wasm-pack build --target web --release
+
+      - name: Generate algorithm defaults from QSM.rs
+        run: node scripts/generate-defaults.mjs
+
+      - name: Upload WASM to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            rust-wasm/pkg/qsm_wasm.js \
+            rust-wasm/pkg/qsm_wasm_bg.wasm \
+            --clobber
+
+      - name: Download example data from OSF
+        run: |
+          mkdir -p data/example
+          OSF_BASE="https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage"
+          echo "Downloading example data from OSF..."
+          curl -L -o data/example/sub-1_echo-1_part-mag_MEGRE.json      "$OSF_BASE/6a031592f1ede34d5380d7bf"
+          curl -L -o data/example/sub-1_echo-1_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d064a982ca5fec727c"
+          curl -L -o data/example/sub-1_echo-1_part-phase_MEGRE.json    "$OSF_BASE/6a031594d9869f43beec7017"
+          curl -L -o data/example/sub-1_echo-1_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d369675bd488fdf827"
+          curl -L -o data/example/sub-1_echo-2_part-mag_MEGRE.json      "$OSF_BASE/6a031594f1ede34d5380d7c2"
+          curl -L -o data/example/sub-1_echo-2_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d469675bd488fdf828"
+          curl -L -o data/example/sub-1_echo-2_part-phase_MEGRE.json    "$OSF_BASE/6a031591ca0aa1330880d636"
+          curl -L -o data/example/sub-1_echo-2_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d369675bd488fdf825"
+          curl -L -o data/example/sub-1_echo-3_part-mag_MEGRE.json      "$OSF_BASE/6a03159071aec37958ec71a4"
+          curl -L -o data/example/sub-1_echo-3_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d37bd2b1503380d819"
+          curl -L -o data/example/sub-1_echo-3_part-phase_MEGRE.json    "$OSF_BASE/6a0315917bd2b1503380d7d1"
+          curl -L -o data/example/sub-1_echo-3_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d542632a6310ec7522"
+          curl -L -o data/example/sub-1_echo-4_part-mag_MEGRE.json      "$OSF_BASE/6a03159442632a6310ec74a2"
+          curl -L -o data/example/sub-1_echo-4_part-mag_MEGRE.nii.gz    "$OSF_BASE/6a0315d5a6ee1f1cc6fdf838"
+          curl -L -o data/example/sub-1_echo-4_part-phase_MEGRE.json    "$OSF_BASE/6a03159442632a6310ec74a1"
+          curl -L -o data/example/sub-1_echo-4_part-phase_MEGRE.nii.gz  "$OSF_BASE/6a0315d571aec37958ec71c0"
+          echo "Example data downloaded:"
+          ls -lh data/example/
+
+      - name: Prepare deployment directory
+        run: |
+          mkdir -p deploy/wasm
+
+          # Copy static files
+          cp index.html deploy/
+          cp -r js deploy/
+          cp -r css deploy/
+
+          # Copy favicon/logo files if they exist
+          cp QSMbly.png deploy/ 2>/dev/null || true
+          cp favicon.ico deploy/ 2>/dev/null || true
+
+          # Copy niivue and nifti-js
+          cp -r niivue deploy/
+          cp -r nifti-js deploy/
+
+          # Copy dcm2niix WASM module (DICOM conversion)
+          cp -r dcm2niix deploy/
+
+          # Copy example data
+          cp -r data deploy/
+
+          # Copy built WASM
+          cp rust-wasm/pkg/qsm_wasm.js deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm_bg.wasm deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm.d.ts deploy/wasm/
+          cp rust-wasm/pkg/qsm_wasm_bg.wasm.d.ts deploy/wasm/
+
+          cp wasm/package.json deploy/wasm/ 2>/dev/null || true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

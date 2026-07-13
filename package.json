@@ -1,46 +1,30 @@
 {
-  "name": "@neurodesk/webapp-components",
-  "version": "0.1.2",
-  "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
+  "name": "neurodesk-webapps",
+  "private": true,
   "type": "module",
-  "license": "MIT",
-  "files": [
-    "src",
-    "web",
-    "templates",
-    "docs",
-    "index.html",
-    "README.md"
-  ],
-  "exports": {
-    ".": "./src/index.js",
-    "./core": "./src/core/index.js",
-    "./ui": "./src/ui/index.js",
-    "./file-io": "./src/file-io/index.js",
-    "./viewer": "./src/viewer/index.js",
-    "./inference": "./src/inference/index.js",
-    "./pipeline": "./src/pipeline/index.js",
-    "./volume": "./src/volume/index.js",
-    "./mask": "./src/mask/index.js",
-    "./plugins": "./src/plugins/index.js",
-    "./plugins/synthstrip": "./src/plugins/synthstrip/index.js",
-    "./plugins/sct": "./src/plugins/sct/index.js",
-    "./plugins/vesselboost": "./src/plugins/vesselboost/index.js",
-    "./plugins/musclemap": "./src/plugins/musclemap/index.js",
-    "./plugins/lesion-network-mapping": "./src/plugins/lesion-network-mapping/index.js",
-    "./plugins/qsm": "./src/plugins/qsm/index.js",
-    "./styles/base.css": "./src/styles/base.css"
-  },
-  "scripts": {
-    "build:showcase": "node scripts/build-showcase.mjs",
-    "serve": "node scripts/serve-showcase.mjs",
-    "start": "node scripts/serve-showcase.mjs",
-    "test": "node --test test/*.test.js && node scripts/test-showcase-browser.mjs",
-    "test:unit": "node --test test/*.test.js",
-    "test:showcase:browser": "node scripts/test-showcase-browser.mjs",
-    "check": "node scripts/check-syntax.mjs"
-  },
+  "packageManager": "pnpm@11.7.0",
   "engines": {
     "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build && node scripts/build-site.mjs",
+    "build:apps": "turbo run build",
+    "build:site": "node scripts/build-site.mjs",
+    "audit:artifacts": "node scripts/audit-artifacts.mjs",
+    "test": "node --test test/*.test.mjs && turbo run test",
+    "test:registry": "node --test test/registry.test.mjs",
+    "test:smoke": "node test/composite-site.smoke.mjs",
+    "lint": "turbo run lint",
+    "new-app": "node scripts/new-app.mjs",
+    "release": "changeset version && pnpm install --lockfile-only"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "@playwright/test": "^1.44.0",
+    "turbo": "^2.0.0",
+    "wrangler": "^3.0.0",
+    "jsdom": "^24.0.0",
+    "yaml": "^2.8.1"
   }
 }

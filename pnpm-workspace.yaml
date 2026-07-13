@@ -1,0 +1,10 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+allowBuilds:
+  electron: false
+  electron-winstaller: false
+  esbuild: true
+  onnxruntime-node: true
+  sharp: false
+  workerd: true

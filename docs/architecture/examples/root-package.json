@@ -1,0 +1,21 @@
+{
+  "name": "neurodesk-webapps",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "new-app": "node scripts/new-app.mjs",
+    "release": "changeset version && pnpm install --lockfile-only"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.0",
+    "@playwright/test": "^1.44.0",
+    "turbo": "^2.0.0",
+    "wrangler": "^3.0.0"
+  }
+}

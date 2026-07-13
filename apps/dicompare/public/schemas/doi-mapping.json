@@ -1,0 +1,102 @@
+{
+  "ASL_Clinical_Guidelines_v1.0": {
+    "checksum": "sha256:81e5da7b11390656d21d49306d41025a89523127cad813abf299051e198aa100",
+    "concept_doi": "10.5281/zenodo.20805042",
+    "concept_recid": "20805042",
+    "record_id": "20805043",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805043",
+    "zenodo_url": "https://zenodo.org/record/20805043"
+  },
+  "Generic_Spine_v1.0": {
+    "checksum": "sha256:e164d3eb9a42292b8c77fd65fcfa67477ca4082e80b07959a6719e637940d625",
+    "concept_doi": "10.5281/zenodo.20805053",
+    "concept_recid": "20805053",
+    "record_id": "20805054",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "r20210521",
+    "version_doi": "10.5281/zenodo.20805054",
+    "zenodo_url": "https://zenodo.org/record/20805054"
+  },
+  "MS_CMSC_Guidelines_v1.0": {
+    "checksum": "sha256:f80cff5375b577bbebc25b6c3bd9ac0c0d89f495b4a1f6dbb12fa00c8c9dd19e",
+    "concept_doi": "10.5281/zenodo.20805040",
+    "concept_recid": "20805040",
+    "record_id": "20805041",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805041",
+    "zenodo_url": "https://zenodo.org/record/20805041"
+  },
+  "MY-RADS_Myeloma_v1.0": {
+    "checksum": "sha256:f634637938f43490e43c3391920e46e1cba973ccb2a082d58497c1714f69b9b3",
+    "concept_doi": "10.5281/zenodo.20805046",
+    "concept_recid": "20805046",
+    "record_id": "20805047",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805047",
+    "zenodo_url": "https://zenodo.org/record/20805047"
+  },
+  "QSM_Consensus_Guidelines_v1.0": {
+    "checksum": "sha256:151070e92963a19ff2e7ce022d13a710ba0378cfee0b2804d79c6ee78435967a",
+    "concept_doi": "10.5281/zenodo.20805044",
+    "concept_recid": "20805044",
+    "record_id": "20805045",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805045",
+    "zenodo_url": "https://zenodo.org/record/20805045"
+  },
+  "SeedSeg_Prostate_T1w_v1.0": {
+    "checksum": "sha256:c8813ffb9779f7e021c56be3b0ad67f6d5b4e35bcbef9c42819c9dad1d8d9274",
+    "concept_doi": "10.5281/zenodo.20805059",
+    "concept_recid": "20805059",
+    "record_id": "20805060",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805060",
+    "zenodo_url": "https://zenodo.org/record/20805060"
+  },
+  "UK_Biobank_v1.0": {
+    "checksum": "sha256:62e5dfb65143981a52e74e70a94f0f4907d5a45aae6d6c11cecc559e4261aaa5",
+    "concept_doi": "10.5281/zenodo.20805048",
+    "concept_recid": "20805048",
+    "record_id": "20805049",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805049",
+    "zenodo_url": "https://zenodo.org/record/20805049"
+  },
+  "UMMS_Ping_v1.0": {
+    "checksum": "sha256:f2f687b2d5986a9f349cccb5c47508854d8a307908805652ec4c4bc558525335",
+    "concept_doi": "10.5281/zenodo.20805050",
+    "concept_recid": "20805050",
+    "record_id": "20805051",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805051",
+    "zenodo_url": "https://zenodo.org/record/20805051"
+  },
+  "abcd_schema_cleaned": {
+    "checksum": "sha256:5963e710c787ceee0baf9bcef778289ea56e92c48adfbef38472a554559f0c5e",
+    "concept_doi": "10.5281/zenodo.20805057",
+    "concept_recid": "20805057",
+    "record_id": "20805058",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.1",
+    "version_doi": "10.5281/zenodo.20805058",
+    "zenodo_url": "https://zenodo.org/record/20805058"
+  },
+  "hcp_schema": {
+    "checksum": "sha256:2dbec991140a40fc1cff668f30c18fb10a0bda88aebaa88219f7f33ec19b5a6a",
+    "concept_doi": "10.5281/zenodo.20805055",
+    "concept_recid": "20805055",
+    "record_id": "20805056",
+    "updated_at": "2026-06-22T23:59:57Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.20805056",
+    "zenodo_url": "https://zenodo.org/record/20805056"
+  }
+}

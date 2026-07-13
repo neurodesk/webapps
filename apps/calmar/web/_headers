@@ -1,0 +1,6 @@
+# Cloudflare Pages headers. Production COOP/COEP so SharedArrayBuffer / multi-threaded
+# ONNX Runtime works (coi-serviceworker.js remains a fallback for other hosts).
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin

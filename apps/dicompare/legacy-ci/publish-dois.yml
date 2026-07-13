@@ -1,0 +1,111 @@
+name: Publish Schema DOIs
+
+# Mints / updates Zenodo DOIs for the library schemas under public/schemas and
+# commits the resulting DOI mapping back to main. The frontend reads the
+# production mapping (public/schemas/doi-mapping.json) to display each schema's
+# DOI. See .github/scripts/publish-zenodo.py.
+#
+# Sandbox and production records are tracked in SEPARATE mapping files so their
+# (incompatible) record IDs never collide:
+#   - production -> public/schemas/doi-mapping.json          (shown on the site)
+#   - sandbox    -> public/schemas/doi-mapping.sandbox.json  (testing only)
+#
+# This runs on the same cadence as the deploy: only when a release triggers the
+# "Version Bump" workflow (automatic runs publish to PRODUCTION), or on demand
+# via workflow_dispatch (default sandbox).
+
+on:
+  workflow_run:
+    workflows: ["Version Bump"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      zenodo_target:
+        description: 'Zenodo target environment'
+        required: true
+        default: 'sandbox'
+        type: choice
+        options:
+          - sandbox
+          - production
+
+concurrency:
+  group: 'publish-dois'
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Skip if the triggering Version Bump run failed.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Always operate on the tip of main (includes the version-bump commit
+          # that triggered this run) so we read the latest schemas and our
+          # mapping commit fast-forwards cleanly.
+          ref: main
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve Zenodo target
+        id: target
+        run: |
+          # Automatic runs (release -> Version Bump) publish to production.
+          # Manual runs use the chosen input (default sandbox).
+          target="${{ github.event.inputs.zenodo_target }}"
+          if [ -z "$target" ]; then target="production"; fi
+          if [ "$target" = "production" ]; then
+            base_url="https://zenodo.org"
+            mapping="public/schemas/doi-mapping.json"
+          else
+            base_url="https://sandbox.zenodo.org"
+            mapping="public/schemas/doi-mapping.sandbox.json"
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "base_url=$base_url" >> "$GITHUB_OUTPUT"
+          echo "mapping=$mapping" >> "$GITHUB_OUTPUT"
+          echo "Publishing to $target ($base_url) -> $mapping"
+
+      - name: Publish schemas to Zenodo
+        env:
+          ZENODO_TOKEN: ${{ steps.target.outputs.target == 'production' && secrets.ZENODO_TOKEN || secrets.ZENODO_SANDBOX_TOKEN }}
+        run: |
+          python3 .github/scripts/publish-zenodo.py \
+            --zenodo-token "$ZENODO_TOKEN" \
+            --zenodo-base-url "${{ steps.target.outputs.base_url }}" \
+            --mapping "${{ steps.target.outputs.mapping }}" \
+            --site-base-url "https://dicompare.neurodesk.org"
+
+      - name: Commit updated DOI mapping
+        id: commit
+        env:
+          MAPPING: ${{ steps.target.outputs.mapping }}
+        run: |
+          if git diff --quiet -- "$MAPPING"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No DOI mapping changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$MAPPING"
+          git commit -m "chore: update schema DOI mapping [skip ci]"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      # Only the production mapping is read by the site, so only redeploy when it
+      # changed (sandbox runs never affect the live site).
+      - name: Redeploy site with new DOIs
+        if: ${{ steps.commit.outputs.changed == 'true' && steps.target.outputs.target == 'production' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml --ref main

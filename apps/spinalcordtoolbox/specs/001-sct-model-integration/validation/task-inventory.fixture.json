@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "1.0.0",
+  "sctStableSource": "https://spinalcordtoolbox.com/stable/user_section/command-line/sct_deepseg.html",
+  "generatedAt": "2026-04-27T00:00:00Z",
+  "tasks": [
+    {
+      "id": "supported_example",
+      "displayName": "Supported example",
+      "category": "spinal-cord",
+      "inputContrasts": ["T2w"],
+      "requiredInputs": [{ "role": "image", "contrast": "T2w" }],
+      "outputType": "binary-mask",
+      "labels": [
+        { "index": 0, "name": "Background", "rgba": [0, 0, 0, 0], "meaning": "Background" },
+        { "index": 1, "name": "Foreground", "rgba": [68, 128, 255, 255], "meaning": "Foreground" }
+      ],
+      "modelAssets": [
+        {
+          "id": "supported-example",
+          "sourceUrl": "https://example.invalid/model.onnx",
+          "sourceVersion": "test",
+          "sourceFormat": "onnx",
+          "browserFormat": "onnx",
+          "filename": "missing-test.onnx",
+          "conversionStatus": "native",
+          "checksum": "fixture"
+        }
+      ],
+      "supportStatus": "supported",
+      "validationStatus": "passed"
+    },
+    {
+      "id": "unsupported_example",
+      "displayName": "Unsupported example",
+      "category": "unsupported",
+      "inputContrasts": [],
+      "requiredInputs": [],
+      "outputType": "unsupported",
+      "modelAssets": [],
+      "supportStatus": "unsupported",
+      "unsupportedReason": "Fixture unsupported state.",
+      "validationStatus": "not-run"
+    }
+  ]
+}

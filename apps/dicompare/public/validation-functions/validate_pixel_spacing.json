@@ -1,0 +1,32 @@
+{
+  "id": "validate_pixel_spacing",
+  "name": "Voxel Size Limit",
+  "description": "Use a combined voxel size of at most 1 mm³ to reduce partial volume-related estimation errors.",
+  "category": "Spatial",
+  "fields": ["PixelSpacing", "SliceThickness"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\n\nif voxel_size_mm3 > 1:\n    raise ValidationError(f\"Voxel size should be ≤1 mm³. Got {voxel_size_mm3:.2f} mm³.\")\n",
+  "testCases": [
+    {
+      "id": "small_voxels",
+      "name": "Small Voxels Test",
+      "description": "Should pass with 0.512 mm³ voxels",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [[0.8, 0.8]],
+        "SliceThickness": [0.8]
+      }
+    },
+    {
+      "id": "large_voxels",
+      "name": "Large Voxels Test",
+      "description": "Should fail with 3.375 mm³ voxels",
+      "expectedResult": "fail",
+      "data": {
+        "PixelSpacing": [[1.5, 1.5]],
+        "SliceThickness": [1.5]
+      }
+    }
+  ]
+}

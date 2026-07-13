@@ -1,0 +1,157 @@
+# Python Virtual Environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+env.bak/
+venv.bak/
+virtualenv/
+.virtualenv/
+/env_julia
+/test_algo
+/qsm_env
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Development
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+*.pyc
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+site-packages/
+
+# Python testing and coverage
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE and Editors
+.vs/
+*.swp
+*.swo
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Temporary files
+*.tmp
+*.temp
+*~
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.dylib
+
+# Archives
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Large datasets (exclude from git but keep examples)
+*.nii
+*.nii.gz
+*.nifti
+*.hdf5
+*.h5
+*.mat
+*.npz
+*.npy
+!assets/MNI_mask.nii*
+!demo/*.nii
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Environment variables and secrets
+.env
+.env.*
+*.pem
+*.key
+*.cert
+*.crt
+
+QSM.jl/
+ROMEO.jl/
+MriResearchTools.jl/
+
+# Rust build artifacts
+rust-wasm/target/
+rust-wasm/pkg/
+
+# Example data (downloaded from OSF by build.sh / CI)
+data/
+
+# WASM binaries (built by CI)
+wasm/*.wasm
+
+paper/

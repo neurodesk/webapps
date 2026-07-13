@@ -1,0 +1,32 @@
+{
+  "id": "validate_repetition_time",
+  "name": "Short Repetition Time",
+  "description": "RepetitionTime should be as short as possible.",
+  "category": "Timing",
+  "fields": ["RepetitionTime", "MagneticFieldStrength"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "repetition_time = value[\"RepetitionTime\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nT1_MIN_MAX = {\n    1.5: {\"min\": 600, \"max\": 1200},\n    3.0: {\"min\": 900, \"max\": 1650},\n    7.0: {\"min\": 1100, \"max\": 1900},\n}\n\nif field_strength not in T1_MIN_MAX:\n    raise ValidationError(f\"Unsupported MagneticFieldStrength for TR validation: {field_strength}T.\")\n\nt1_min, t1_max = T1_MIN_MAX[field_strength][\"min\"], T1_MIN_MAX[field_strength][\"max\"]\nif repetition_time > 0.5 * t1_max:\n    raise ValidationError(f\"TR may not be as short as possible (≤0.5*T1≈{0.5*t1_max} ms).\")",
+  "testCases": [
+    {
+      "id": "short_tr",
+      "name": "Short TR Test",
+      "description": "Should pass with TR <= 0.5*T1max (825ms at 3T)",
+      "expectedResult": "pass",
+      "data": {
+        "RepetitionTime": [600],
+        "MagneticFieldStrength": [3.0]
+      }
+    },
+    {
+      "id": "long_tr",
+      "name": "Long TR Test",
+      "description": "Should fail with TR > 0.5*T1max",
+      "expectedResult": "fail",
+      "data": {
+        "RepetitionTime": [1000],
+        "MagneticFieldStrength": [3.0]
+      }
+    }
+  ]
+}

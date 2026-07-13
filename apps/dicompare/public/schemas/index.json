@@ -1,0 +1,12 @@
+[
+  "/schemas/MS_CMSC_Guidelines_v1.0.json",
+  "/schemas/ASL_Clinical_Guidelines_v1.0.json",
+  "/schemas/QSM_Consensus_Guidelines_v1.0.json",
+  "/schemas/MY-RADS_Myeloma_v1.0.json",
+  "/schemas/UK_Biobank_v1.0.json",
+  "/schemas/UMMS_Ping_v1.0.json",
+  "/schemas/Generic_Spine_v1.0.json",
+  "/schemas/hcp_schema.json",
+  "/schemas/abcd_schema_cleaned.json",
+  "/schemas/SeedSeg_Prostate_T1w_v1.0.json"
+]

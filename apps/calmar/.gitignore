@@ -1,0 +1,51 @@
+# WASM files (downloaded by setup.sh)
+web/wasm/
+
+# Built preprocessing WASM (built from rust-preprocessing/)
+web/preprocessing-wasm/
+
+# Model files
+# web/models/*.onnx
+
+# Node-side parity-test model cache (downloaded from HF on first run)
+web/models/_dev_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary model weights
+.tmp_weights/
+.tmp_sct_models/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Rust
+rust-preprocessing/target/
+rust-preprocessing/pkg/
+
+# Node.js
+node_modules/
+dist/
+build/
+*.log
+.env*
+
+# Dev server runtime files
+web/.dev-server-*.pid
+
+# Phase 40: build metadata (commit SHA + branch + dirty flag) written
+# by web/run.sh on dev-server start and by .github/workflows/ at deploy.
+web/build-info.json
+
+node_modules
+test_data

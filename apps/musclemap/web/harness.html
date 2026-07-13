@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MuscleMap e2e harness (test-only)</title>
+  <!-- Same import map as index.html: resolve the shared workspace package for the browser. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
+      "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="progressBar" style="width:0%"></div>
+  <script type="module">
+    import { ProgressManager } from '@neurodesk/webapp-components/ui';
+    import { isNiftiFile, downloadBlob } from '@neurodesk/webapp-components/file-io';
+    const pm = new ProgressManager({ animationSpeed: 0.5 });
+    pm.setProgress(0.5); // MuscleMap's used surface: value in [0,1] -> "#progressBar" width
+    window.__fromSharedPackage = pm instanceof ProgressManager;
+    // Prove the file-io import-map entry resolves in-browser too.
+    window.__fileIoOk = typeof isNiftiFile === 'function'
+      && typeof downloadBlob === 'function'
+      && isNiftiFile('scan.nii.gz') === true;
+    window.__ready = true;
+  </script>
+</body>
+</html>

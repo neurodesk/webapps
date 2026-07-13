@@ -1,0 +1,50 @@
+name: CI
+
+# Builds the wasm crate and runs the Rust + JS test suites on every PR/push.
+# The wasm build is the important guard: it catches qsm-core / qsmxt-config API
+# breakage — including on the automated qsmxt-config pin-bump PRs.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wasm:
+    name: Build (wasm32) + Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-wasm
+
+      - name: Build for wasm32
+        working-directory: rust-wasm
+        run: cargo build --target wasm32-unknown-unknown
+
+      - name: Rust tests (native)
+        working-directory: rust-wasm
+        run: cargo test
+
+  js:
+    name: JS tests (jest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test

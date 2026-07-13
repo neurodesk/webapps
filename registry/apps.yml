@@ -1,0 +1,70 @@
+# Canonical catalog for the composite webapps site. Parsed and validated only
+# through scripts/lib/apps-registry.mjs; callers must not grep this file.
+site:
+  domain: webapps.neurodesk.org
+  cloudflare_project: neurodesk-webapps
+
+apps:
+  - id: musclemap
+    path: musclemap
+    title: MuscleMap
+    description: Browser-based muscle segmentation and fat metrics.
+    legacy_domain: musclemap.neurodesk.org
+    runtime: static-esm
+    model_manifest: models/musclemap.manifest.json
+    source: neurodesk/musclemap-webapp@8b5012b488bdf7727001c92b79eae826366ec1f0
+    license: MIT
+  - id: vesselboost
+    path: vesselboost
+    title: VesselBoost
+    description: Browser-based blood-vessel segmentation.
+    legacy_domain: vesselboost.neurodesk.org
+    runtime: static-esm-rust
+    model_manifest: models/vesselboost.manifest.json
+    source: neurodesk/vesselboost-webapp@6ba7d073941744343399a039ea2609b385e5a9ff
+    license: NOASSERTION
+  - id: spinalcordtoolbox
+    path: sct
+    title: Spinal Cord Toolbox
+    description: Browser-native spinal cord MRI segmentation workflows.
+    legacy_domain: sct.neurodesk.org
+    runtime: static-esm
+    model_manifest: models/spinalcordtoolbox.manifest.json
+    source: neurodesk/spinalcordtoolbox-webapp@5135c2d95814c2fa4c90f52aa74ba91f2651c920
+    license: NOASSERTION
+  - id: calmar
+    path: calmar
+    title: CALMaR
+    description: Co-designed Automated Lesion Mapping and Reporting.
+    legacy_domain: calmar.neurodesk.org
+    runtime: static-esm
+    model_manifest: apps/calmar/web/models/manifest.json
+    source: neurodesk/calmar-webapp@646b2d9b412fd57af3ba8942cd3f83e2fced5653
+    license: NOASSERTION
+  - id: qsmbly
+    path: qsmbly
+    title: QSMbly
+    description: Quantitative Susceptibility Mapping in the browser.
+    legacy_domain: qsmbly.neurodesk.org
+    runtime: rust-wasm
+    model_manifest: models/qsmbly.manifest.json
+    source: astewartau/qsmbly@6d3a7a984a5af4e57625a6bcf60d5bac11c6873d
+    license: MIT
+  - id: seedseg
+    path: seedseg
+    title: SeedSeg
+    description: Prostate fiducial-marker segmentation in the browser.
+    legacy_domain: seedseg.neurodesk.org
+    runtime: static-esm
+    model_manifest: models/seedseg.manifest.json
+    source: astewartau/prostate@3354f6cc3cf750ada5bd3e25bd0ab6e1712662ab
+    license: MIT
+  - id: dicompare
+    path: dicompare
+    title: dicompare
+    description: DICOM protocol comparison, validation, and schema tooling.
+    legacy_domain: dicompare.neurodesk.org
+    runtime: react-vite
+    model_manifest: null
+    source: astewartau/dicompare-web@f0462e2b514f79eb1b32078f682f339c050897cd
+    license: NOASSERTION

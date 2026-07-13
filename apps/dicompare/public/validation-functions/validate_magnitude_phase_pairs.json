@@ -1,0 +1,42 @@
+{
+  "id": "validate_magnitude_phase_pairs",
+  "name": "Magnitude/Phase Pairs per Echo",
+  "description": "Validates that each unique echo time has at least one magnitude and one phase image.",
+  "category": "Image Type",
+  "fields": ["ImageType", "EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "# Validate magnitude/phase pairs per echo\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n    \n    # Count magnitude and phase images\n    has_magnitude = any('M' in str(it) for it in image_types)\n    has_phase = any('P' in str(it) for it in image_types)\n    \n    if not has_magnitude:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing magnitude image.\")\n    \n    if not has_phase:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing phase image.\")",
+  "testCases": [
+    {
+      "id": "test_mag_phase_pass",
+      "name": "Valid pairs",
+      "description": "Should pass with M and P at each echo",
+      "expectedResult": "pass",
+      "data": {
+        "ImageType": [["ORIGINAL", "PRIMARY", "M"], ["ORIGINAL", "PRIMARY", "P"], ["ORIGINAL", "PRIMARY", "M"], ["ORIGINAL", "PRIMARY", "P"]],
+        "EchoTime": [9.42, 9.42, 19.7, 19.7]
+      }
+    },
+    {
+      "id": "test_missing_phase",
+      "name": "Missing phase",
+      "description": "Should fail when phase is missing at one echo",
+      "expectedResult": "fail",
+      "data": {
+        "ImageType": [["ORIGINAL", "PRIMARY", "M"], ["ORIGINAL", "PRIMARY", "P"], ["ORIGINAL", "PRIMARY", "M"]],
+        "EchoTime": [9.42, 9.42, 19.7]
+      }
+    },
+    {
+      "id": "test_missing_magnitude",
+      "name": "Missing magnitude",
+      "description": "Should fail when magnitude is missing",
+      "expectedResult": "fail",
+      "data": {
+        "ImageType": [["ORIGINAL", "PRIMARY", "P"], ["ORIGINAL", "PRIMARY", "M"], ["ORIGINAL", "PRIMARY", "P"]],
+        "EchoTime": [9.42, 19.7, 19.7]
+      }
+    }
+  ]
+}

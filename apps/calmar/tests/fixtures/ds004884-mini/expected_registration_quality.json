@@ -1,0 +1,55 @@
+{
+  "description": "Real ds004884 T1 -> lnm-mni160 registration quality metrics. Values are rounded gate baselines for the active browser SynthMorph grid.",
+  "models": {
+    "48x48x64": {
+      "prealign": {
+        "brainDice": 0.7429,
+        "maskedNcc": 0.1595,
+        "maxCentroidDrift": 3.71
+      },
+      "registered": {
+        "brainDice": 0.7655,
+        "maskedNcc": 0.2697,
+        "maxCentroidDrift": 2.32
+      },
+      "displacement": {
+        "maxMagnitude": 13.98
+      },
+      "minimumGains": {
+        "brainDice": 0.015,
+        "maskedNcc": 0.08
+      },
+      "tolerances": {
+        "brainDice": 0.01,
+        "maskedNcc": 0.03,
+        "centroidVoxels": 1.0,
+        "displacementMagnitude": 2.0
+      }
+    },
+    "48x64x80": {
+      "prealign": {
+        "brainDice": 0.7429,
+        "maskedNcc": 0.1595,
+        "maxCentroidDrift": 3.71
+      },
+      "registered": {
+        "brainDice": 0.758,
+        "maskedNcc": 0.2665,
+        "maxCentroidDrift": 2.7
+      },
+      "displacement": {
+        "maxMagnitude": 16.72
+      },
+      "minimumGains": {
+        "brainDice": 0.015,
+        "maskedNcc": 0.08
+      },
+      "tolerances": {
+        "brainDice": 0.01,
+        "maskedNcc": 0.03,
+        "centroidVoxels": 1.0,
+        "displacementMagnitude": 2.0
+      }
+    }
+  }
+}

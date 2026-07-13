@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Resolve shared @neurodesk/webapp-components (workspace package) for the browser without a
+       bundler; vendored into web/vendor/ by `pnpm vendor` (prebuild). Leaves the app's worker
+       and relative asset paths untouched. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
+      "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
+    }
+  }
+  </script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VesselBoost - Blood Vessel Segmentation</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-4Z9774J59Y"></script>
+  <script>
+    var doNotTrack = false;
+    var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+    doNotTrack = dnt == "1" || dnt == "yes";
+    if (!doNotTrack) {
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-4Z9774J59Y');
+    }
+  </script>
+</head>
+<body>
+
+<section class="start-page" id="startPage" aria-label="VesselBoost start page">
+  <header class="start-header">
+    <div class="start-brand">
+      <strong>VesselBoost</strong>
+      <span>Blood Vessel Segmentation</span>
+    </div>
+    <div class="start-links">
+      <button class="header-link" id="startPrivacyButton" type="button" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <button class="header-link" id="startCitationsButton" type="button" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/vesselboost-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="start-main">
+    <section class="start-hero">
+      <div class="start-hero-copy">
+        <p class="start-kicker">Vessel segmentation and review in the browser</p>
+        <h2>Process brain vessel maps locally in your browser.</h2>
+        <p class="start-intro">
+          VesselBoost guides NIfTI or DICOM angiography data through optional preprocessing,
+          3D UNet vessel segmentation, brain masking, interactive review, and reportable local outputs.
+        </p>
+        <div class="start-actions">
+          <button class="btn btn-primary start-primary" id="enterAppButton" type="button">Start analysis</button>
+          <button class="btn btn-secondary start-secondary" id="startPrivacyInlineButton" type="button">How privacy works</button>
+        </div>
+        <p class="start-local-badge">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Patient images, masks, voxel values, screenshots, and generated outputs stay on this computer.
+        </p>
+      </div>
+
+      <div class="start-local-panel" aria-label="Local processing summary">
+        <h3>Local-first workflow</h3>
+        <ul>
+          <li>Files are read into browser memory for viewing and analysis.</li>
+          <li>Model, runtime, and preprocessing assets may be downloaded when a workflow needs them.</li>
+          <li>Patient-derived files and generated results are not uploaded by the app.</li>
+          <li>Background execution is possible if this site is added under "Always keep these sites active" in your browser settings.</li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+</section>
+
+<div class="app-container">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo">
+      <h1>VesselBoost</h1>
+      <span>Blood Vessel Segmentation</span>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div class="header-links">
+      <button class="header-link" id="aboutButton" title="About">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>About</span>
+      </button>
+      <button class="header-link" id="citationsButton" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <button class="header-link" id="privacyButton" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/vesselboost-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="app-sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- Input Section -->
+      <section class="sidebar-section">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Input
+        </h2>
+        <div class="section-content">
+          <div class="file-upload-group">
+            <div class="upload-group">
+              <div class="file-upload-zone file-drop" id="inputDropZone">
+                <input type="file" id="fileInput" multiple>
+                <svg class="upload-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p class="upload-text file-drop-label"><span>Drop NIfTI or DICOM files</span></p>
+              </div>
+              <div class="file-list" id="fileList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Optional: Downsample -->
+      <section class="sidebar-section step-section step-disabled" id="stepDownsampleSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m6 6v-4.8m0 4.8h-4.8"/><path d="M3 3l6 6M3 3v4.8M3 3h4.8"/></svg>
+          <span>Downsample (Optional)</span>
+          <span class="step-badge" id="stepDownsampleBadge"></span>
+        </h2>
+        <div class="section-content">
+          <p class="step-description" id="downsampleInfo">Loading volume info...</p>
+          <div class="param-group">
+            <label class="param-label" for="downsampleFactor">Downsample Factor <span class="info-icon">i<span class="info-tooltip">Reduce the volume resolution by this factor. 2x halves the resolution in each dimension (8x fewer voxels). Useful for large volumes to speed up processing.</span></span></label>
+            <select id="downsampleFactor">
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+              <option value="4">4x</option>
+            </select>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary btn-sm" id="runDownsampleBtn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary btn-sm" id="skipDownsampleBtn" disabled>Skip</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 1: Bias Field Correction -->
+      <section class="sidebar-section step-section step-disabled" id="stepN4Section">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>Step 1: Bias Field Correction (Optional)</span>
+          <span class="step-badge" id="stepN4Badge"></span>
+        </h2>
+        <div class="section-content">
+          <p class="step-description">N4ITK bias field correction. Recommended for raw MRI data.</p>
+          <div class="step-buttons">
+            <button class="btn btn-primary btn-sm" id="runN4Btn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary btn-sm" id="skipN4Btn" disabled>Skip</button>
+            <button class="btn btn-secondary btn-sm hidden" id="abortN4Btn">Abort</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 2: Denoising -->
+      <section class="sidebar-section step-section step-disabled" id="stepDenoiseSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446A9 9 0 1 1 12 3z"/></svg>
+          <span>Step 2: Denoising (Optional)</span>
+          <span class="step-badge" id="stepDenoiseBadge"></span>
+        </h2>
+        <div class="section-content">
+          <p class="step-description">Denoise the volume to improve segmentation quality. <span class="info-icon">i<span class="info-tooltip">Bilateral is fast with good edge preservation. NLM variants are slower but may produce better results. Processing time depends on volume size.</span></span></p>
+          <div class="param-group">
+            <label class="param-label" for="denoiseMethodSelect">Method <span class="info-icon">i<span class="info-tooltip">Bilateral: fast edge-preserving filter (~10-20x faster than NLM). NLM Fast: non-local means with reduced search window. NLM: full non-local means (slowest, highest quality).</span></span></label>
+            <select id="denoiseMethodSelect">
+              <option value="bilateral">Bilateral (fast)</option>
+              <option value="nlm-fast">NLM Fast</option>
+              <option value="nlm">NLM</option>
+            </select>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary btn-sm" id="runDenoiseBtn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary btn-sm" id="skipDenoiseBtn" disabled>Skip</button>
+            <button class="btn btn-secondary btn-sm hidden" id="abortDenoiseBtn">Abort</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 3: Vessel Segmentation -->
+      <section class="sidebar-section step-section step-disabled" id="stepInferenceSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Step 3: Vessel Segmentation</span>
+          <span class="step-badge" id="stepInferenceBadge"></span>
+        </h2>
+        <div class="section-content">
+          <div class="param-group">
+            <label class="param-label" for="modelSelect">Model <span class="info-icon">i<span class="info-tooltip">Select the VesselBoost model variant. Default is recommended for TOF MRA. Boosted models have higher sensitivity. T2*/SWI is for T2*-weighted or susceptibility-weighted data.</span></span></label>
+            <select id="modelSelect">
+              <option value="manual" selected>Default (TOF MRA)</option>
+              <option value="omelette1">Boosted (Sensitive)</option>
+              <option value="omelette2">Boosted (Moderate)</option>
+              <option value="t2s">T2* / SWI</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="overlapSelect">Sliding Window Overlap <span class="info-icon">i<span class="info-tooltip">Higher overlap improves segmentation quality but takes longer. 50% is fast, 90% produces the highest quality.</span></span></label>
+            <select id="overlapSelect">
+              <option value="0" selected>0% (No Overlap)</option>
+              <option value="0.5">50% (Fast)</option>
+              <option value="0.75">75% (Balanced)</option>
+              <option value="0.9">90% (High Quality)</option>
+            </select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="thresholdInput">Probability Threshold <span class="info-icon">i<span class="info-tooltip">Minimum probability to classify a voxel as vessel. Lower values detect more vessels but may include false positives.</span></span></label>
+            <input type="number" id="thresholdInput" value="0.1" min="0.01" max="0.5" step="0.01">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="minSizeInput">Min Component Size <span class="info-icon">i<span class="info-tooltip">Connected components with fewer voxels than this are removed as noise.</span></span></label>
+            <input type="number" id="minSizeInput" value="10" min="1" max="1000" step="1">
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary" id="runSegmentation" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary hidden" id="abortInferenceBtn">Abort</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Step 4: Brain Extraction (post-segmentation masking) -->
+      <section class="sidebar-section step-section step-disabled" id="stepBETSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/></svg>
+          <span>Step 4: Brain Extraction</span>
+          <span class="step-badge" id="stepBETBadge"></span>
+        </h2>
+        <div class="section-content">
+          <p class="step-description">Mask segmentation to brain region. Removes false positives outside the brain.</p>
+          <div class="param-group">
+            <label class="param-label" for="betMethodSelect">Method <span class="info-icon">i<span class="info-tooltip">BET: traditional brain extraction (recommended, requires WASM). SynthStrip: deep learning skull-stripping (1mm). SynthStrip Fast: coarser resolution (2mm).</span></span></label>
+            <select id="betMethodSelect">
+              <option value="bet">BET (traditional)</option>
+              <option value="synthstrip" selected>SynthStrip</option>
+              <option value="synthstrip-fast">SynthStrip Fast</option>
+            </select>
+          </div>
+          <div id="betFiGroup" class="param-group" style="display:none">
+            <label class="param-label" for="betFiInput">Fractional Intensity <span class="info-icon">i<span class="info-tooltip">BET fractional intensity threshold (0.0-1.0). Smaller values give larger brain outlines. Default: 0.5.</span></span></label>
+            <input type="number" id="betFiInput" value="0.5" min="0.0" max="1.0" step="0.05">
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary btn-sm" id="runBETBtn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary btn-sm" id="skipBETBtn" disabled>Skip</button>
+            <button class="btn btn-secondary btn-sm hidden" id="abortBETBtn">Abort</button>
+          </div>
+          <div class="step-buttons hidden" id="applyBETGroup">
+            <button class="btn btn-secondary btn-sm" id="dilateBETBtn">Dilate</button>
+            <button class="btn btn-secondary btn-sm" id="erodeBETBtn">Erode</button>
+            <button class="btn btn-primary btn-sm" id="applyBETBtn">Apply brain extraction to vessel segmentation</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results Section -->
+      <section class="sidebar-section hidden" id="resultsSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Results
+        </h2>
+        <div class="section-content">
+          <div class="stage-buttons-grid" id="stageButtons"></div>
+          <button class="btn btn-secondary btn-sm" id="clearResults" style="width: 100%; margin-top: var(--space-sm);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Clear All
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Status bar -->
+    <div class="sidebar-status">
+      <div class="status-header">
+        <span class="status-label">Status</span>
+        <div class="status-right">
+          <span class="status-value" id="statusText">Ready</span>
+          <button class="btn-status-cancel" id="cancelButton" title="Abort current step" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="app-main">
+    <!-- Viewer toolbar -->
+    <div class="viewer-toolbar">
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="multiplanar">3-Plane</button>
+        <button class="view-tab" data-view="axial">Axial</button>
+        <button class="view-tab" data-view="coronal">Coronal</button>
+        <button class="view-tab" data-view="sagittal">Sagittal</button>
+        <button class="view-tab" data-view="render">3D</button>
+      </div>
+
+      <div class="viewer-actions">
+        <!-- Window/Range Controls -->
+        <div class="window-controls">
+          <input type="number" id="windowMin" class="window-input" placeholder="min" step="any" title="Window minimum">
+          <div class="range-slider-container">
+            <input type="range" id="rangeMin" class="range-slider range-min" min="0" max="100" value="0">
+            <input type="range" id="rangeMax" class="range-slider range-max" min="0" max="100" value="100">
+            <div class="range-track"></div>
+            <div class="range-selected" id="rangeSelected"></div>
+          </div>
+          <input type="number" id="windowMax" class="window-input" placeholder="max" step="any" title="Window maximum">
+          <button class="btn btn-sm" id="resetWindow" title="Reset to full range">Auto</button>
+        </div>
+
+        <!-- Overlay opacity -->
+        <div class="opacity-control hidden" id="overlayControl">
+          <label>Overlay</label>
+          <input type="range" id="overlayOpacity" min="0" max="1" step="0.05" value="0.5">
+          <span id="overlayOpacityValue">50%</span>
+        </div>
+
+        <!-- Interpolation -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="interpolation">
+          <span>Interp</span>
+        </label>
+
+        <!-- Colorbar -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="colorbarToggle">
+          <span>Colorbar</span>
+        </label>
+
+        <!-- Crosshair -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="crosshairToggle" checked>
+          <span>Crosshair</span>
+        </label>
+
+        <!-- Colormap -->
+        <select class="colormap-select" id="colormapSelect">
+          <option value="gray">Gray</option>
+          <option value="hot">Hot</option>
+          <option value="cool">Cool</option>
+          <option value="viridis">Viridis</option>
+          <option value="plasma">Plasma</option>
+        </select>
+
+        <!-- Download -->
+        <button class="btn btn-sm btn-icon" id="downloadCurrentVolume" title="Download current image as NIfTI" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+
+        <!-- Screenshot -->
+        <button class="btn btn-sm btn-icon" id="screenshotViewer" title="Save screenshot as PNG">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- NiiVue canvas -->
+    <div class="viewer-canvas-wrapper">
+      <canvas id="gl1"></canvas>
+    </div>
+
+    <!-- Intensity info -->
+    <div class="viewer-info">
+      <span class="viewer-info-primary" id="viewerInfoPrimary"></span>
+      <span class="viewer-info-label" id="viewerInfoLabel"></span>
+    </div>
+
+    <!-- Console -->
+    <div class="console-container">
+      <div class="console-header">
+        <span class="console-title">Console</span>
+        <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
+        <button class="console-clear" id="clearConsole">Clear</button>
+      </div>
+      <div class="console-output" id="consoleOutput"></div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <span>VesselBoost <span id="footerVersion"></span></span>
+    <span>All image processing happens locally in your browser. Patient-derived data is not uploaded.</span>
+    <a href="https://github.com/neurodesk/vesselboost-webapp" target="_blank" style="color: var(--color-text-dim);">GitHub</a>
+  </footer>
+
+</div>
+
+<!-- About Modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal about-modal">
+    <div class="modal-header">
+      <h3>About VesselBoost</h3>
+      <button class="modal-close" id="closeAbout">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="about-highlight">
+        <div>
+          <strong>VesselBoost</strong>
+          <p>Blood vessel segmentation in the browser</p>
+        </div>
+      </div>
+
+      <p>VesselBoost is a browser-based tool for automatic segmentation of blood vessels from MRI angiography using a 3D UNet model.</p>
+      <p>Image processing runs locally in your browser using ONNX Runtime Web. Patient image data and generated outputs are not uploaded by the analysis code.</p>
+
+      <h4>Version</h4>
+      <div class="about-version-table">
+        <div class="about-version-row">
+          <span class="about-version-label">VesselBoost</span>
+          <span class="about-version-value" id="aboutAppVersion"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Privacy Modal -->
+<div class="modal-overlay" id="privacyModal">
+  <div class="modal privacy-modal">
+    <div class="modal-header">
+      <h3>Privacy</h3>
+      <button class="modal-close" id="closePrivacy">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="privacy-highlight">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <div>
+          <strong>Your patient data never leaves your device.</strong>
+          <p>VesselBoost image processing runs in your web browser using WebAssembly and ONNX Runtime. Patient-derived files stay local to your machine.</p>
+        </div>
+      </div>
+
+      <h4>What this means</h4>
+      <ul class="privacy-list">
+        <li>Patient images, voxel values, screenshots, and generated outputs are not uploaded by the app</li>
+        <li>Model, runtime, and preprocessing assets may be fetched by the browser when needed</li>
+        <li>Sensitive patient data remains on your computer during analysis</li>
+        <li>There is no need to anonymise or de-identify your data before use</li>
+      </ul>
+
+      <h4>How it works</h4>
+      <p>VesselBoost uses ONNX Runtime Web to run deep learning models directly in the browser via WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without network transfer of patient data.</p>
+
+      <h4>Third-party services</h4>
+      <p>Static app files and public model assets may be served from external hosting, but patient-derived files are not sent to those services by the analysis code. Google Analytics collects page usage metrics without patient images, voxel values, screenshots, generated outputs, filenames, or analysis results. Analytics tracking is disabled when your browser sends a Do Not Track value of "1" or "yes".</p>
+    </div>
+  </div>
+</div>
+
+<!-- Citations Modal -->
+<div class="modal-overlay" id="citationsModal">
+  <div class="modal citations-modal">
+    <div class="modal-header">
+      <h3>Citations</h3>
+      <button class="modal-close" id="closeCitations">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="citation-section citation-primary">
+        <div class="citation-item">
+          <strong>VesselBoost</strong>
+          <span class="citation-ref">Code: <a href="https://github.com/KMarshallX/VesselBoost/" target="_blank" rel="noopener">GitHub</a></span>
+          <p>Marshall K, et al. VesselBoost: A Python Toolbox for Small Blood Vessel Segmentation.</p>
+          <a href="https://github.com/KMarshallX/VesselBoost/" target="_blank" rel="noopener">https://github.com/KMarshallX/VesselBoost/</a>
+        </div>
+      </div>
+
+      <p class="citations-intro">VesselBoost uses the following methods and tools:</p>
+
+      <div class="citation-section">
+        <h4>Deep Learning Framework</h4>
+        <div class="citation-item">
+          <strong>PyTorch</strong>
+          <p>Paszke A, et al. PyTorch: An Imperative Style, High-Performance Deep Learning Library. NeurIPS 2019.</p>
+          <a href="https://pytorch.org" target="_blank" rel="noopener">https://pytorch.org</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>Browser Inference</h4>
+        <div class="citation-item">
+          <strong>ONNX Runtime Web</strong>
+          <p>Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator.</p>
+          <a href="https://onnxruntime.ai" target="_blank" rel="noopener">https://onnxruntime.ai</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>DICOM Conversion</h4>
+        <div class="citation-item">
+          <strong>dcm2niix</strong>
+          <p>Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56.</p>
+          <a href="https://github.com/rordenlab/dcm2niix" target="_blank" rel="noopener">https://github.com/rordenlab/dcm2niix</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>Brain Extraction</h4>
+        <div class="citation-item">
+          <strong>QSM.rs (BET)</strong>
+          <p>Stewart A. QSM.rs: Quantitative Susceptibility Mapping in Rust. FSL-BET2 brain extraction algorithm.</p>
+          <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener">https://github.com/astewartau/QSM.rs</a>
+        </div>
+        <div class="citation-item">
+          <strong>FSL BET</strong>
+          <p>Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143-155.</p>
+          <a href="https://doi.org/10.1002/hbm.10062" target="_blank" rel="noopener">https://doi.org/10.1002/hbm.10062</a>
+        </div>
+        <div class="citation-item">
+          <strong>SynthStrip</strong>
+          <p>Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: Skull-Stripping for Any Brain Image. NeuroImage. 2022;260:119474.</p>
+          <a href="https://doi.org/10.1016/j.neuroimage.2022.119474" target="_blank" rel="noopener">https://doi.org/10.1016/j.neuroimage.2022.119474</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>Visualization</h4>
+        <div class="citation-item">
+          <strong>NiiVue</strong>
+          <p>NiiVue Contributors. NiiVue: a WebGL2 medical image viewer.</p>
+          <a href="https://github.com/niivue/niivue" target="_blank" rel="noopener">https://github.com/niivue/niivue</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section toggle function -->
+<script>
+function toggleSection(section) {
+  section.classList.toggle('collapsed');
+}
+</script>
+
+<!-- COOP/COEP service worker for cross-origin isolation (enables multi-threaded WASM) -->
+<script src="coi-serviceworker.js"></script>
+
+<!-- NiiVue -->
+<script src="https://unpkg.com/@niivue/niivue@0.68.1/dist/niivue.umd.js"></script>
+
+<!-- Main app -->
+<script type="module" src="js/vesselboost-app.js"></script>
+
+</body>
+</html>

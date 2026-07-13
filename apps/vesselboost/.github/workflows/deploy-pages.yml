@@ -1,0 +1,281 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+# Production is built from the latest vX.Y.Z release tag. Staging is
+# built from main and published under /staging/ with a visible version
+# suffix. VesselBoost ships ONNX model files in the Pages artifact, so
+# both builds verify model, ONNX Runtime, and preprocessing WASM assets.
+
+jobs:
+  build-production:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check out latest release tag
+        run: |
+          git fetch --force --tags origin
+          TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1 || true)"
+          if [[ -n "$TAG" ]]; then
+            echo "Building production from ${TAG}."
+            git checkout "$TAG"
+          else
+            echo "No release tag found; building production from main."
+            git checkout origin/main
+          fi
+
+      - name: Write build-info.json (production)
+        run: |
+          SHA="$(git rev-parse --short HEAD)"
+          TAG="$(git describe --tags --exact-match 2>/dev/null || true)"
+          BRANCH="${TAG:-detached}"
+          cat > web/build-info.json <<EOF
+          {
+            "sha": "${SHA}",
+            "branch": "${BRANCH}",
+            "dirty": false,
+            "buildEnv": "production"
+          }
+          EOF
+          cat web/build-info.json
+
+      - name: Setup Rust toolchain
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            source "$HOME/.cargo/env"
+          fi
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-preprocessing/target
+          key: ${{ runner.os }}-rust-preprocessing-${{ hashFiles('rust-preprocessing/Cargo.lock', 'rust-preprocessing/Cargo.toml', 'rust-preprocessing/build.sh', 'rust-preprocessing/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-preprocessing-
+
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null; then
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Download ONNX Runtime WASM files and build preprocessing
+        run: |
+          cd web
+          bash setup.sh
+
+      - name: Verify deploy artifacts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def check_file(path, min_size):
+              p = Path(path)
+              if not p.exists():
+                  raise SystemExit(f"{p} not found")
+              data = p.read_bytes()
+              if data.startswith(b"version https://git-lfs.github.com/spec"):
+                  raise SystemExit(f"{p} is a Git LFS pointer, not a deployed binary")
+              if len(data) < min_size:
+                  raise SystemExit(f"{p} unexpectedly small: {len(data)} bytes")
+              print(f"OK {p} ({len(data):,} bytes)")
+
+          for model in (
+              "web/models/vesselboost.onnx",
+              "web/models/vesselboost-omelette1.onnx",
+              "web/models/vesselboost-omelette2.onnx",
+              "web/models/vesselboost-t2s.onnx",
+          ):
+              check_file(model, 20_000_000)
+          check_file("web/models/synthstrip.onnx", 5_000_000)
+
+          ort_dir = Path("web/wasm")
+          if not ort_dir.exists():
+              raise SystemExit(f"{ort_dir} not found; did web/setup.sh run?")
+          wasms = sorted(ort_dir.glob("ort-wasm*.wasm"))
+          if not wasms:
+              raise SystemExit(f"No ort-wasm*.wasm files in {ort_dir}")
+          for wasm in wasms:
+              check_file(wasm, 1_000_000)
+
+          check_file("web/preprocessing-wasm/preprocessing.js", 1_000)
+          check_file("web/preprocessing-wasm/preprocessing_bg.wasm", 50_000)
+          PY
+
+      - name: Upload production artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: production-build
+          path: web
+          retention-days: 1
+
+  build-staging:
+    if: >-
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Mark staging build version
+        run: |
+          SHORT_SHA="$(git rev-parse --short HEAD)"
+          BASE_VERSION="$(bash scripts/get_version.sh)"
+          STAGING_VERSION="${BASE_VERSION}-staging+${SHORT_SHA}"
+          sed -i -E "s/^export const VERSION = '[^']+';$/export const VERSION = '${STAGING_VERSION}';/" web/js/app/config.js
+          echo "Building staging as ${STAGING_VERSION}."
+
+      - name: Write build-info.json (staging)
+        run: |
+          SHA="$(git rev-parse --short HEAD)"
+          BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+          cat > web/build-info.json <<EOF
+          {
+            "sha": "${SHA}",
+            "branch": "${BRANCH}",
+            "dirty": false,
+            "buildEnv": "staging"
+          }
+          EOF
+          cat web/build-info.json
+
+      - name: Setup Rust toolchain
+        run: |
+          if ! command -v rustup >/dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            source "$HOME/.cargo/env"
+          fi
+          rustup target add wasm32-unknown-unknown
+
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust-preprocessing/target
+          key: ${{ runner.os }}-rust-preprocessing-${{ hashFiles('rust-preprocessing/Cargo.lock', 'rust-preprocessing/Cargo.toml', 'rust-preprocessing/build.sh', 'rust-preprocessing/src/**/*.rs') }}
+          restore-keys: |
+            ${{ runner.os }}-rust-preprocessing-
+
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null; then
+            curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+          fi
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Download ONNX Runtime WASM files and build preprocessing
+        run: |
+          cd web
+          bash setup.sh
+
+      - name: Verify deploy artifacts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def check_file(path, min_size):
+              p = Path(path)
+              if not p.exists():
+                  raise SystemExit(f"{p} not found")
+              data = p.read_bytes()
+              if data.startswith(b"version https://git-lfs.github.com/spec"):
+                  raise SystemExit(f"{p} is a Git LFS pointer, not a deployed binary")
+              if len(data) < min_size:
+                  raise SystemExit(f"{p} unexpectedly small: {len(data)} bytes")
+              print(f"OK {p} ({len(data):,} bytes)")
+
+          for model in (
+              "web/models/vesselboost.onnx",
+              "web/models/vesselboost-omelette1.onnx",
+              "web/models/vesselboost-omelette2.onnx",
+              "web/models/vesselboost-t2s.onnx",
+          ):
+              check_file(model, 20_000_000)
+          check_file("web/models/synthstrip.onnx", 5_000_000)
+
+          ort_dir = Path("web/wasm")
+          if not ort_dir.exists():
+              raise SystemExit(f"{ort_dir} not found; did web/setup.sh run?")
+          wasms = sorted(ort_dir.glob("ort-wasm*.wasm"))
+          if not wasms:
+              raise SystemExit(f"No ort-wasm*.wasm files in {ort_dir}")
+          for wasm in wasms:
+              check_file(wasm, 1_000_000)
+
+          check_file("web/preprocessing-wasm/preprocessing.js", 1_000)
+          check_file("web/preprocessing-wasm/preprocessing_bg.wasm", 50_000)
+          PY
+
+      - name: Upload staging artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: staging-build
+          path: web
+          retention-days: 1
+
+  deploy:
+    needs: [build-production, build-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download production build
+        uses: actions/download-artifact@v8
+        with:
+          name: production-build
+          path: deploy-root
+
+      - name: Download staging build
+        uses: actions/download-artifact@v8
+        with:
+          name: staging-build
+          path: deploy-root/staging
+
+      - name: Inject staging banner
+        run: |
+          sed -i 's|<body>|<body><div style="background:#f59e0b;color:#000;text-align:center;padding:6px;font-size:13px;font-weight:600;z-index:9999;position:relative;">⚠ STAGING — This is a preview version. <a href="../" style="color:#000;text-decoration:underline;">Go to production</a></div>|' deploy-root/staging/index.html
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: deploy-root
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

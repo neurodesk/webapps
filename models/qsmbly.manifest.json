@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "app": "qsmbly",
+  "assets": [],
+  "notes": "QSMbly compiles its Rust scientific implementation to WebAssembly during the site build; it does not ship model weights."
+}

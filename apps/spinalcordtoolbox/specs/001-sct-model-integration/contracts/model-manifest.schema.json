@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SCT Browser Model Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "sctStableSource", "generatedAt", "tasks"],
+  "properties": {
+    "schemaVersion": { "type": "string", "pattern": "^1\\.0\\.0$" },
+    "sctStableSource": { "type": "string", "format": "uri" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/task" }
+    }
+  },
+  "$defs": {
+    "task": {
+      "type": "object",
+      "required": [
+        "id",
+        "displayName",
+        "category",
+        "inputContrasts",
+        "requiredInputs",
+        "outputType",
+        "supportStatus",
+        "validationStatus"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "displayName": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["spinal-cord", "gray-matter", "pathology", "other-structure", "unsupported", "retired"]
+        },
+        "description": { "type": "string" },
+        "inputContrasts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiredInputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["role", "contrast"],
+            "properties": {
+              "role": { "type": "string" },
+              "contrast": { "type": "string" }
+            }
+          }
+        },
+        "outputType": {
+          "type": "string",
+          "enum": ["binary-mask", "multi-label-mask", "soft-mask", "unsupported"]
+        },
+        "labels": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/label" }
+        },
+        "modelAssets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modelAsset" }
+        },
+        "supportStatus": {
+          "type": "string",
+          "enum": ["supported", "unsupported", "unvalidated", "retired"]
+        },
+        "unsupportedReason": { "type": "string" },
+        "validationStatus": {
+          "type": "string",
+          "enum": ["not-run", "passed", "failed", "manual-only"]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "supportStatus": { "const": "supported" } }
+          },
+          "then": {
+            "required": ["labels", "modelAssets"],
+            "properties": {
+              "labels": { "minItems": 2 },
+              "modelAssets": { "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "supportStatus": {
+                "enum": ["unsupported", "retired"]
+              }
+            }
+          },
+          "then": { "required": ["unsupportedReason"] }
+        }
+      ]
+    },
+    "label": {
+      "type": "object",
+      "required": ["index", "name", "rgba", "meaning"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "name": { "type": "string" },
+        "rgba": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "integer", "minimum": 0, "maximum": 255 },
+            { "type": "integer", "minimum": 0, "maximum": 255 },
+            { "type": "integer", "minimum": 0, "maximum": 255 },
+            { "type": "integer", "minimum": 0, "maximum": 255 }
+          ],
+          "items": false
+        },
+        "meaning": { "type": "string" }
+      }
+    },
+    "modelAsset": {
+      "type": "object",
+      "required": ["id", "sourceUrl", "sourceVersion", "sourceFormat", "conversionStatus"],
+      "properties": {
+        "id": { "type": "string" },
+        "sourceUrl": { "type": "string", "format": "uri" },
+        "sourceVersion": { "type": "string" },
+        "sourceFormat": { "type": "string" },
+        "browserFormat": { "type": "string" },
+        "filename": { "type": "string" },
+        "sizeBytes": { "type": "integer", "minimum": 0 },
+        "checksum": { "type": "string" },
+        "conversionStatus": {
+          "type": "string",
+          "enum": ["native", "converted", "failed", "not-needed"]
+        },
+        "cacheKey": { "type": "string" },
+        "validationReport": { "type": "string" },
+        "failureReason": { "type": "string" }
+      }
+    }
+  }
+}

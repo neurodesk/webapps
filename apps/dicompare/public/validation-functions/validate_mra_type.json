@@ -1,0 +1,30 @@
+{
+  "id": "validate_mra_type",
+  "name": "3D Acquisition Type",
+  "description": "Use 3D acquisition instead of 2D acquisition to avoid potential slice-to-slice phase discontinuities in 2D phase maps.",
+  "category": "Acquisition",
+  "fields": ["MRAcquisitionType"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "acquisition_type = value[\"MRAcquisitionType\"].iloc[0]  # Assuming consistent within group\nif acquisition_type != \"3D\":\n    raise ValidationError(f\"The input data is not 3D. Found {acquisition_type}.\")",
+  "testCases": [
+    {
+      "id": "3d_acquisition",
+      "name": "3D Acquisition Test",
+      "description": "Should pass with 3D acquisition",
+      "expectedResult": "pass",
+      "data": {
+        "MRAcquisitionType": ["3D"]
+      }
+    },
+    {
+      "id": "2d_acquisition",
+      "name": "2D Acquisition Test",
+      "description": "Should fail with 2D acquisition",
+      "expectedResult": "fail",
+      "data": {
+        "MRAcquisitionType": ["2D"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "access": "restricted",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+
+  "// versioning note": "Independent per-app releases. No single global v* tag.",
+  "fixed": [],
+  "linked": [],
+
+  "// privatePackages": "Version private apps too, but Changesets does NOT git-tag them;",
+  "// privatePackages ": "per-app production tags (musclemap-v*) are created by the release workflow.",
+  "privatePackages": { "version": true, "tag": false },
+
+  "ignore": []
+}

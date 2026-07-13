@@ -1,0 +1,32 @@
+{
+  "id": "validate_pixel_bandwidth",
+  "name": "Readout Bandwidth",
+  "description": "Use the minimum readout bandwidth which generates acceptable distortions.",
+  "category": "Acquisition",
+  "fields": ["PixelBandwidth", "MagneticFieldStrength"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nif field_strength == 3.0 and pixel_bandwidth > 220:\n    raise ValidationError(f\"PixelBandwidth should be ≤220 Hz/pixel at 3T. Found {pixel_bandwidth} Hz/pixel.\")\nelif field_strength != 3.0:\n    raise ValidationError(\"PixelBandwidth recommendations are not available for this field strength.\")",
+  "testCases": [
+    {
+      "id": "acceptable_bandwidth",
+      "name": "Acceptable Bandwidth Test",
+      "description": "Should pass with bandwidth <= 220 Hz/pixel at 3T",
+      "expectedResult": "pass",
+      "data": {
+        "PixelBandwidth": [180],
+        "MagneticFieldStrength": [3.0]
+      }
+    },
+    {
+      "id": "high_bandwidth",
+      "name": "High Bandwidth Test",
+      "description": "Should fail with bandwidth > 220 Hz/pixel at 3T",
+      "expectedResult": "fail",
+      "data": {
+        "PixelBandwidth": [300],
+        "MagneticFieldStrength": [3.0]
+      }
+    }
+  ]
+}

@@ -1,0 +1,515 @@
+/**
+ * Landing page + guided tutorial styles.
+ *
+ * Reuses the design tokens defined in modern-styles.css (:root custom
+ * properties). Kept in its own file so the welcome/onboarding layer stays
+ * separate from the tool's UI.
+ */
+
+/* ==========================================================================
+   Landing overlay
+   ========================================================================== */
+
+.landing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  overflow: hidden;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgba(59, 130, 246, 0.18), transparent 60%),
+    radial-gradient(1000px 500px at 100% 0%, rgba(139, 92, 246, 0.16), transparent 55%),
+    var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Hidden once the user has launched the app (set via the head script on
+   returning visits, and by LandingPage.hide() after Launch). */
+html.landing-seen .landing-overlay {
+  display: none;
+}
+
+.landing-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.landing-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-xl) var(--space-2xl);
+}
+
+/* --- Top nav ------------------------------------------------------------- */
+
+.landing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0 var(--space-xl);
+}
+
+.landing-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.landing-brand img {
+  border-radius: var(--radius-sm);
+}
+
+.landing-nav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.landing-nav-links a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color var(--transition-fast);
+}
+
+.landing-nav-links a:hover {
+  color: var(--color-text);
+}
+
+/* --- Hero ---------------------------------------------------------------- */
+
+.landing-hero {
+  text-align: center;
+  padding: var(--space-xl) 0 var(--space-2xl);
+}
+
+.landing-hero-logo {
+  width: 84px;
+  height: 84px;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg), 0 0 40px rgba(59, 130, 246, 0.25);
+  margin-bottom: var(--space-lg);
+}
+
+.landing-hero h1 {
+  font-size: clamp(2.4rem, 6vw, 3.6rem);
+  line-height: 1.05;
+  margin: 0 0 var(--space-md);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.landing-hero h1 .grad {
+  background: linear-gradient(100deg, var(--color-primary), var(--color-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-tagline {
+  font-size: clamp(1.05rem, 2.4vw, 1.4rem);
+  color: var(--color-text);
+  margin: 0 auto var(--space-sm);
+  max-width: 640px;
+  font-weight: 500;
+}
+
+.landing-sub {
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  max-width: 620px;
+  margin: 0 auto var(--space-xl);
+  line-height: 1.6;
+}
+
+.landing-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  justify-content: center;
+  margin-bottom: var(--space-lg);
+}
+
+.landing-btn-primary,
+.landing-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 0.85rem 1.6rem;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+    background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.landing-btn-primary {
+  color: #fff;
+  background: linear-gradient(100deg, var(--color-primary), var(--color-accent));
+  box-shadow: var(--shadow-md), 0 0 24px rgba(59, 130, 246, 0.35);
+}
+
+.landing-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lg), 0 0 32px rgba(59, 130, 246, 0.5);
+}
+
+.landing-btn-ghost {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border-light);
+}
+
+.landing-btn-ghost:hover {
+  background: var(--color-surface-elevated);
+  border-color: var(--color-primary);
+}
+
+.landing-badges {
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  letter-spacing: 0.01em;
+}
+
+/* --- Section shells ------------------------------------------------------ */
+
+.landing-section {
+  margin-top: var(--space-2xl);
+}
+
+.landing-section h2 {
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-xl);
+}
+
+/* --- Feature cards ------------------------------------------------------- */
+
+.landing-features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-lg);
+}
+
+.landing-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.landing-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-border-light);
+}
+
+.landing-card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-md);
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--color-primary);
+}
+
+.landing-card h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-sm);
+}
+
+.landing-card p {
+  color: var(--color-text-muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* --- How it works -------------------------------------------------------- */
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+  counter-reset: landing-step;
+}
+
+.landing-step {
+  position: relative;
+  padding: var(--space-lg);
+  padding-top: var(--space-xl);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.landing-step::before {
+  counter-increment: landing-step;
+  content: counter(landing-step);
+  position: absolute;
+  top: calc(-1 * var(--space-md));
+  left: var(--space-lg);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  box-shadow: var(--shadow-sm);
+}
+
+.landing-step h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-xs);
+}
+
+.landing-step p {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* --- Sibling-project callout -------------------------------------------- */
+
+.landing-sibling {
+  margin-top: var(--space-2xl);
+  padding: var(--space-xl);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background:
+    linear-gradient(120deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.06)),
+    var(--color-surface);
+  text-align: center;
+}
+
+.landing-sibling h2 {
+  margin-bottom: var(--space-sm);
+}
+
+.landing-sibling p {
+  color: var(--color-text-muted);
+  max-width: 680px;
+  margin: 0 auto var(--space-md);
+  line-height: 1.6;
+}
+
+.landing-sibling a {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.landing-sibling a:hover {
+  text-decoration: underline;
+}
+
+/* --- Footer -------------------------------------------------------------- */
+
+.landing-footer {
+  margin-top: var(--space-2xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+}
+
+.landing-footer a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.landing-footer a:hover {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Welcome-tour modal (reuses .modal-overlay / .modal from index.html)
+   ========================================================================== */
+
+.welcome-modal {
+  max-width: 440px;
+  text-align: center;
+}
+
+.welcome-modal .modal-body {
+  padding-top: var(--space-xl);
+}
+
+.welcome-modal-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-md);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+  color: #fff;
+}
+
+.welcome-modal h3 {
+  margin: 0 0 var(--space-sm);
+  font-size: 1.25rem;
+}
+
+.welcome-modal p {
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  margin: 0 auto var(--space-lg);
+  max-width: 340px;
+}
+
+.welcome-modal-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+}
+
+.welcome-dontshow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  margin-top: var(--space-lg);
+  color: var(--color-text-dim);
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ==========================================================================
+   Guided tutorial (spotlight + tooltip)
+   ========================================================================== */
+
+.tour-spotlight {
+  position: fixed;
+  z-index: 2500;
+  border-radius: var(--radius-md);
+  box-shadow: 0 0 0 9999px rgba(9, 12, 18, 0.68);
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  pointer-events: none; /* let the user interact with the highlighted element */
+  transition: all 180ms ease;
+}
+
+.tour-tooltip {
+  position: fixed;
+  z-index: 2600;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-lg);
+  color: var(--color-text);
+}
+
+.tour-tooltip h4 {
+  margin: 0 0 var(--space-xs);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.tour-tooltip p {
+  margin: 0 0 var(--space-md);
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--color-text-muted);
+}
+
+.tour-tooltip-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.tour-step-count {
+  font-size: 0.8rem;
+  color: var(--color-text-dim);
+}
+
+.tour-tooltip-buttons {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.tour-btn {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tour-btn-primary {
+  color: #fff;
+  background: var(--color-primary);
+}
+
+.tour-btn-primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.tour-btn-ghost {
+  color: var(--color-text-muted);
+  background: transparent;
+  border-color: var(--color-border-light);
+}
+
+.tour-btn-ghost:hover {
+  color: var(--color-text);
+  border-color: var(--color-primary);
+}
+
+.tour-skip {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tour-skip:hover {
+  color: var(--color-text-muted);
+  text-decoration: underline;
+}
+
+/* Small-screen tweaks */
+@media (max-width: 640px) {
+  .landing-nav-links a:not(.landing-nav-launch) {
+    display: none;
+  }
+  .tour-tooltip {
+    width: calc(100vw - 32px);
+  }
+}

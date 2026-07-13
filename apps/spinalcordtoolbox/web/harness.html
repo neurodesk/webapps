@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>e2e harness (test-only)</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
+      "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="progressBar" style="width:0%"></div>
+  <script type="module">
+    import { ProgressManager } from '@neurodesk/webapp-components/ui';
+    import { downloadBlob } from '@neurodesk/webapp-components/file-io';
+    const pm = new ProgressManager({ animationSpeed: 0.5 });
+    pm.setProgress(0.5);
+    window.__fromSharedPackage = pm instanceof ProgressManager;
+    window.__fileIoOk = typeof downloadBlob === 'function';
+    window.__ready = true;
+  </script>
+</body>
+</html>

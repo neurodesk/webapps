@@ -1,0 +1,45 @@
+# WASM files (downloaded by setup.sh)
+web/wasm/
+
+# Built preprocessing WASM (built from rust-preprocessing/)
+web/preprocessing-wasm/
+
+# Hosted model/template files (downloaded from Hugging Face)
+web/models/*.onnx
+web/models/templates/**/*.nii.gz
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary model weights
+.tmp_weights/
+.tmp_sct_models/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+venv/
+
+# Rust
+rust-preprocessing/target/
+rust-preprocessing/pkg/
+
+# Node.js
+node_modules/
+dist/
+build/
+*.log
+.env*
+
+# Dev server runtime files
+web/.dev-server-*.pid
+
+node_modules
+test_data

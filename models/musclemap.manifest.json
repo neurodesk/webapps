@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "app": "musclemap",
+  "repository": "sbollmann/neurodesk-webapps-assets",
+  "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
+  "base_url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/",
+  "license": "NOASSERTION",
+  "preprocessing_contract": {
+    "mode": "2d-slicewise",
+    "in_plane_spacing_mm": [1, 1],
+    "z_spacing": "native",
+    "source": "apps/musclemap/web/js/inference-worker.js"
+  },
+  "assets": [
+    {"filename":"musclemap-wholebody.onnx","bytes":26888722,"sha256":"3bff6e22e54d3d7399247d5e71d6423c91bb636d86ab21e0dd929524afbc2bc7"},
+    {"filename":"musclemap-abdomen.onnx","bytes":38999828,"sha256":"f2e64dd67104422f94c29382136aa438835aaea7aadc91a917178732cfc15d41"},
+    {"filename":"musclemap-forearm.onnx","bytes":26364376,"sha256":"48517f2aadc19183025dfe1a1952c24ae79d9a33fa5dd8154b46cf47fd87d3dd"},
+    {"filename":"musclemap-leg.onnx","bytes":39028867,"sha256":"3ad1c902998849ea66942863d157e1f8e608fb2c9d6b3230ee56de0e0840bcb4"},
+    {"filename":"musclemap-pelvis.onnx","bytes":39023986,"sha256":"34babe3b30a587dc4f67f44da44a6f89f7f66dcd2d128351ecf9356cbc0c32e4"},
+    {"filename":"musclemap-thigh.onnx","bytes":39099153,"sha256":"2d1a607adfa0758516069e039717079a2340811e3d3c70a7e9621aa1564399f2"}
+  ]
+}

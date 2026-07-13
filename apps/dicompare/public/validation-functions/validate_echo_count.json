@@ -1,0 +1,39 @@
+{
+  "id": "validate_echo_count",
+  "name": "Multi-echo Validation",
+  "description": "While QSM can be achieved with one echo, two is the minimum number of echoes needed to separate the intrinsic transmit RF phase from the magnetic field-induced phase.",
+  "category": "Echo Timing",
+  "fields": ["EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "echo_times = value[\"EchoTime\"].dropna().unique()\nif len(echo_times) == 1:\n    raise ValidationError(\"Found single-echo acquisition.\")\nelif len(echo_times) < 3:\n    raise ValidationError(f\"Found {len(echo_times)} echoes, but at least 3 are recommended.\")",
+  "testCases": [
+    {
+      "id": "single_echo",
+      "name": "Single Echo Test",
+      "description": "Should fail with single echo",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [5.0]
+      }
+    },
+    {
+      "id": "two_echo",
+      "name": "Two Echo Test",
+      "description": "Should fail with only two echoes",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [5.0, 10.0]
+      }
+    },
+    {
+      "id": "three_echo",
+      "name": "Three Echo Test",
+      "description": "Should pass with three echoes",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [5.0, 10.0, 15.0]
+      }
+    }
+  ]
+}

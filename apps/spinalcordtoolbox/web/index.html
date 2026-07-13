@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Resolve shared @neurodesk/webapp-components (workspace package) for the browser without a
+       bundler; vendored into web/vendor/ by `pnpm vendor` (prebuild). Leaves the app's worker
+       and relative asset paths untouched. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
+      "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
+      "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
+    }
+  }
+  </script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpinalCordToolbox - Spinal Cord MRI Segmentation</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<section class="start-page" id="startPage" aria-label="SpinalCordToolbox start page">
+  <header class="start-header">
+    <div class="start-brand">
+      <strong>SpinalCordToolbox</strong>
+      <span>Spinal cord MRI segmentation in the browser</span>
+    </div>
+    <div class="start-links">
+      <button class="header-link" id="startPrivacyButton" type="button" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <button class="header-link" id="startCitationsButton" type="button" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/spinalcordtoolbox-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="start-main">
+    <section class="start-hero">
+      <div class="start-hero-copy">
+        <p class="start-kicker">SCT segmentation in the browser</p>
+        <h2>Segment spinal cord MRI locally in your browser.</h2>
+        <p class="start-intro">
+          Load NIfTI or DICOM spinal cord MRI, run browser-compatible SCT segmentation tasks,
+          inspect overlays, and download outputs without uploading patient data.
+        </p>
+        <div class="start-actions">
+          <button class="btn btn-primary start-primary" id="enterAppButton" type="button">Start segmentation</button>
+          <button class="btn btn-secondary start-secondary" id="startPrivacyInlineButton" type="button">How privacy works</button>
+        </div>
+        <p class="start-local-badge">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Patient images, DICOM metadata, voxel values, segmentations, screenshots, and generated outputs stay on this computer.
+        </p>
+      </div>
+
+      <div class="start-local-panel" aria-label="Local processing summary">
+        <h3>Local-first workflow</h3>
+        <ul>
+          <li>Files are read into browser memory for viewing and analysis.</li>
+          <li>Public runtime and model assets may be downloaded when needed.</li>
+          <li>Patient-derived files and generated results are not uploaded by the app.</li>
+          <li>Long runs can continue if this site is allowed to stay active in your browser.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="start-how" aria-labelledby="startHowHeading">
+      <h3 id="startHowHeading">How It Works</h3>
+      <div class="start-steps">
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+          </div>
+          <h4>1. Load MRI data</h4>
+          <p>Drop NIfTI or DICOM files. Loading only displays the scan; processing starts when you run a task.</p>
+        </article>
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+          </div>
+          <h4>2. Choose an SCT task</h4>
+          <p>Select a supported segmentation task and adjust threshold or cleanup settings if needed.</p>
+        </article>
+        <article class="start-step">
+          <div class="start-step-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
+          </div>
+          <h4>3. Inspect and export</h4>
+          <p>Review overlays in NiiVue, toggle label stages, download NIfTI outputs, and run supported post-processing.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+</section>
+
+<div class="app-container">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="logo">
+      <h1>SpinalCordToolbox</h1>
+      <span>Spinal Cord MRI Segmentation</span>
+      <span class="version" id="appVersion"></span>
+    </div>
+    <div class="header-links">
+      <button class="header-link" id="aboutButton" title="About">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>About</span>
+      </button>
+      <button class="header-link" id="citationsButton" title="Citations">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+        <span>Cite</span>
+      </button>
+      <button class="header-link" id="privacyButton" title="Privacy">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Privacy</span>
+      </button>
+      <a href="https://neurodesk.org/getting-started/hosted/webapps/" target="_blank" rel="noopener noreferrer" class="header-link" id="moreAppsLink" title="More Neurodesk web apps">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span>More Apps</span>
+      </a>
+      <a href="https://github.com/neurodesk/spinalcordtoolbox-webapp" target="_blank" rel="noopener noreferrer" class="header-link" title="GitHub">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="white"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="app-sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- Input Section -->
+      <section class="sidebar-section">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Input
+        </h2>
+        <div class="section-content">
+          <div class="file-upload-group">
+            <div class="upload-group">
+              <div class="file-upload-zone file-drop" id="inputDropZone">
+                <input type="file" id="fileInput" multiple>
+                <svg class="upload-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <p class="upload-text file-drop-label"><span>Drop NIfTI or DICOM files</span></p>
+              </div>
+              <div class="file-list" id="fileList"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCT Segmentation -->
+      <section class="sidebar-section step-section step-disabled" id="stepInferenceSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>SCT Segmentation</span>
+          <span class="step-badge" id="stepInferenceBadge"></span>
+        </h2>
+        <div class="section-content">
+          <div class="param-group">
+            <label class="param-label" for="modelSelect">SCT Task <span class="info-icon">i<span class="info-tooltip">Select the segmentation task to run.</span></span></label>
+            <select id="modelSelect">
+              <option value="spinalcord" selected>Spinal cord</option>
+            </select>
+            <p class="step-description" id="taskDetails">SCT task metadata loading...</p>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="thresholdInput">Probability Threshold <span class="info-icon">i<span class="info-tooltip">Minimum probability to classify a voxel as the selected SCT output label. Lower values increase sensitivity but may include false positives.</span></span></label>
+            <input type="number" id="thresholdInput" value="0.1" min="0.01" max="0.5" step="0.01">
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="minSizeInput">Min Component Size <span class="info-icon">i<span class="info-tooltip">Connected components with fewer voxels than this are removed as noise.</span></span></label>
+            <input type="number" id="minSizeInput" value="10" min="0" max="1000" step="1">
+          </div>
+          <div class="param-group">
+            <label class="param-label" style="cursor: pointer;">
+              <input type="checkbox" id="ttaToggle" style="margin-right: 6px;">
+              Test-Time Augmentation
+              <span class="info-icon">i<span class="info-tooltip">Average predictions over 8 axis-flipped versions of the volume. Improves quality slightly but multiplies inference time by 8x.</span></span>
+            </label>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary" id="runSegmentation" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+            <button class="btn btn-secondary hidden" id="abortInferenceBtn">Abort</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCT Processing Utilities -->
+      <section class="sidebar-section step-section step-disabled" id="stepProcessingSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
+          <span>SCT Processing</span>
+          <span class="step-badge" id="stepProcessingBadge"></span>
+        </h2>
+        <div class="section-content">
+          <div class="param-group">
+            <label class="param-label" for="processingOperationSelect">Operation</label>
+            <select id="processingOperationSelect">
+              <option value="vertebrae">Vertebral labeling</option>
+            </select>
+          </div>
+          <div class="step-buttons">
+            <button class="btn btn-primary btn-sm" id="runProcessingBtn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Run
+            </button>
+          </div>
+          <pre class="console-output" id="processingOutput" style="max-height: 140px;"></pre>
+        </div>
+      </section>
+
+      <!-- Results Section -->
+      <section class="sidebar-section hidden" id="resultsSection">
+        <h2 class="section-title" onclick="toggleSection(this.parentElement)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          Results
+        </h2>
+        <div class="section-content">
+          <div class="stage-buttons-grid" id="stageButtons"></div>
+          <div class="metrics-results hidden" id="metricsResults"></div>
+          <button class="btn btn-secondary btn-sm" id="clearResults" style="width: 100%; margin-top: var(--space-sm);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            Clear All
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Status bar -->
+    <div class="sidebar-status">
+      <div class="status-header">
+        <span class="status-label">Status</span>
+        <div class="status-right">
+          <span class="status-value" id="statusText">Ready</span>
+          <button class="btn-status-cancel" id="cancelButton" title="Abort current step" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="app-main">
+    <!-- Viewer toolbar -->
+    <div class="viewer-toolbar">
+      <div class="viewer-mode-tabs" aria-label="Viewer mode">
+        <button class="view-tab active" id="singleViewButton" type="button" data-viewer-mode="single">Single</button>
+        <button class="view-tab" id="compareViewButton" type="button" data-viewer-mode="compare" disabled>Compare</button>
+      </div>
+
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="multiplanar">3-Plane</button>
+        <button class="view-tab" data-view="axial">Axial</button>
+        <button class="view-tab" data-view="coronal">Coronal</button>
+        <button class="view-tab" data-view="sagittal">Sagittal</button>
+        <button class="view-tab" data-view="render">3D</button>
+      </div>
+
+      <div class="viewer-actions">
+        <!-- Window/Range Controls -->
+        <div class="window-controls">
+          <input type="number" id="windowMin" class="window-input" placeholder="min" step="any" title="Window minimum">
+          <div class="range-slider-container">
+            <input type="range" id="rangeMin" class="range-slider range-min" min="0" max="100" value="0">
+            <input type="range" id="rangeMax" class="range-slider range-max" min="0" max="100" value="100">
+            <div class="range-track"></div>
+            <div class="range-selected" id="rangeSelected"></div>
+          </div>
+          <input type="number" id="windowMax" class="window-input" placeholder="max" step="any" title="Window maximum">
+          <button class="btn btn-sm" id="resetWindow" title="Reset to full range">Auto</button>
+        </div>
+
+        <!-- Overlay opacity -->
+        <div class="opacity-control hidden" id="overlayControl">
+          <label>Overlay</label>
+          <input type="range" id="overlayOpacity" min="0" max="1" step="0.05" value="0.7">
+          <span id="overlayOpacityValue">70%</span>
+        </div>
+
+        <!-- Input visibility -->
+        <label class="viewer-checkbox" title="Show input image">
+          <input type="checkbox" id="inputVisibilityToggle" checked>
+          <span>Input</span>
+        </label>
+
+        <!-- Interpolation -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="interpolation">
+          <span>Interp</span>
+        </label>
+
+        <!-- Colorbar -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="colorbarToggle">
+          <span>Colorbar</span>
+        </label>
+
+        <!-- Crosshair -->
+        <label class="viewer-checkbox">
+          <input type="checkbox" id="crosshairToggle" checked>
+          <span>Crosshair</span>
+        </label>
+
+        <!-- Colormap -->
+        <select class="colormap-select" id="colormapSelect">
+          <option value="gray">Gray</option>
+          <option value="hot">Hot</option>
+          <option value="cool">Cool</option>
+          <option value="viridis">Viridis</option>
+          <option value="plasma">Plasma</option>
+        </select>
+
+        <!-- Download -->
+        <button class="btn btn-sm btn-icon" id="downloadCurrentVolume" title="Download current image as NIfTI" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+
+        <!-- Screenshot -->
+        <button class="btn btn-sm btn-icon" id="screenshotViewer" title="Save screenshot as PNG">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- NiiVue canvas -->
+    <div class="viewer-canvas-wrapper">
+      <canvas id="gl1"></canvas>
+      <canvas id="fallbackCanvas2d" class="fallback-canvas"></canvas>
+      <div class="comparison-grid" id="comparisonGrid" data-count="0" aria-label="Loaded image comparison grid"></div>
+      <div class="viewer-unavailable-message" id="viewerUnavailableMessage" hidden>
+        Image preview unavailable: WebGL2 could not initialize. You can still load images, run analysis, and download results. To restore the interactive 3D viewer, enable hardware acceleration in your browser (Chrome: Settings › System; details at chrome://gpu), then reload.
+      </div>
+    </div>
+
+    <!-- Intensity info -->
+    <div class="viewer-info">
+      <span class="viewer-info-primary" id="viewerInfoPrimary"></span>
+      <span class="viewer-info-label" id="viewerInfoLabel"></span>
+    </div>
+
+    <!-- Console -->
+    <div class="console-container">
+      <div class="console-header">
+        <span class="console-title">Console</span>
+        <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
+        <button class="console-clear" id="clearConsole">Clear</button>
+      </div>
+      <div class="console-output" id="consoleOutput"></div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <span>SpinalCordToolbox <span id="footerVersion"></span></span>
+    <span>Patient image data stays local; telemetry is limited to non-patient usage statistics.</span>
+    <a href="https://github.com/neurodesk/spinalcordtoolbox-webapp" target="_blank" style="color: var(--color-text-dim);">GitHub</a>
+  </footer>
+
+</div>
+
+<!-- About Modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal about-modal">
+    <div class="modal-header">
+      <h3>About SpinalCordToolbox</h3>
+      <button class="modal-close" id="closeAbout">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="about-highlight">
+        <div>
+          <strong>SpinalCordToolbox</strong>
+          <p>Spinal cord MRI segmentation in the browser</p>
+        </div>
+      </div>
+
+      <p>SpinalCordToolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows.</p>
+      <p>All image computation runs locally in your browser using ONNX Runtime Web. Patient image data is not uploaded to any server.</p>
+
+      <h4>Version</h4>
+      <div class="about-version-table">
+        <div class="about-version-row">
+          <span class="about-version-label">SpinalCordToolbox</span>
+          <span class="about-version-value" id="aboutAppVersion"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Privacy Modal -->
+<div class="modal-overlay" id="privacyModal">
+  <div class="modal privacy-modal">
+    <div class="modal-header">
+      <h3>Privacy</h3>
+      <button class="modal-close" id="closePrivacy">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="privacy-highlight">
+        <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <div>
+          <strong>Your data never leaves your device.</strong>
+          <p>SpinalCordToolbox runs entirely in your web browser using WebAssembly and ONNX Runtime. All processing occurs locally on your machine.</p>
+        </div>
+      </div>
+
+      <h4>What this means</h4>
+      <ul class="privacy-list">
+        <li>No patient image data, metadata, masks, segmentations, or outputs are uploaded to any server or cloud service</li>
+        <li>No internet connection is required after the page loads</li>
+        <li>Sensitive patient data remains on your computer at all times</li>
+        <li>There is no need to anonymise or de-identify your data before use</li>
+      </ul>
+
+      <h4>How it works</h4>
+      <p>SpinalCordToolbox uses ONNX Runtime Web to run browser-compatible deep learning models directly in the browser via WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without patient-data network transfer.</p>
+
+      <h4>Third-party services</h4>
+      <p>Google Analytics collects aggregate page usage and performance metrics when your browser's Do Not Track setting is not enabled. Those statistics must not include patient image data, DICOM metadata, filenames, voxel values, masks, segmentations, screenshots, free-text patient-derived logs, or downloaded outputs.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Citations Modal -->
+<div class="modal-overlay" id="citationsModal">
+  <div class="modal citations-modal">
+    <div class="modal-header">
+      <h3>Citations</h3>
+      <button class="modal-close" id="closeCitations">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="citation-section citation-primary">
+        <div class="citation-item">
+          <strong>SpinalCordToolbox</strong>
+          <span class="citation-ref">Stable documentation: <a href="https://spinalcordtoolbox.com/stable/" target="_blank" rel="noopener">spinalcordtoolbox.com</a></span>
+          <p>De Leener B, Levy S, Dupont SM, Fonov VS, Stikov N, Louis Collins D, Callot V, Cohen-Adad J. SCT: Spinal Cord Toolbox, an open-source software for processing spinal cord MRI data. NeuroImage. 2017.</p>
+          <a href="https://spinalcordtoolbox.com/stable/" target="_blank" rel="noopener">https://spinalcordtoolbox.com/stable/</a>
+        </div>
+      </div>
+
+      <p class="citations-intro">SpinalCordToolbox uses the following methods and tools:</p>
+
+      <div class="citation-section">
+        <h4>Deep Learning Framework</h4>
+        <div class="citation-item">
+          <strong>PyTorch</strong>
+          <p>Paszke A, et al. PyTorch: An Imperative Style, High-Performance Deep Learning Library. NeurIPS 2019.</p>
+          <a href="https://pytorch.org" target="_blank" rel="noopener">https://pytorch.org</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>Browser Inference</h4>
+        <div class="citation-item">
+          <strong>ONNX Runtime Web</strong>
+          <p>Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator.</p>
+          <a href="https://onnxruntime.ai" target="_blank" rel="noopener">https://onnxruntime.ai</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>DICOM Conversion</h4>
+        <div class="citation-item">
+          <strong>dcm2niix</strong>
+          <p>Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56.</p>
+          <a href="https://github.com/rordenlab/dcm2niix" target="_blank" rel="noopener">https://github.com/rordenlab/dcm2niix</a>
+        </div>
+      </div>
+
+      <div class="citation-section">
+        <h4>Visualization</h4>
+        <div class="citation-item">
+          <strong>NiiVue</strong>
+          <p>NiiVue Contributors. NiiVue: a WebGL2 medical image viewer.</p>
+          <a href="https://github.com/niivue/niivue" target="_blank" rel="noopener">https://github.com/niivue/niivue</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Section toggle function -->
+<script>
+function toggleSection(section) {
+  section.classList.toggle('collapsed');
+}
+</script>
+
+<!-- COOP/COEP service worker for cross-origin isolation (enables multi-threaded WASM) -->
+<script src="coi-serviceworker.js"></script>
+
+<!-- NiiVue -->
+<script src="https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"></script>
+
+<!-- NIfTI parsing for non-WebGL preview fallback -->
+<script src="nifti-js/index.js"></script>
+
+<!-- Main app -->
+<script type="module" src="js/spinalcordtoolbox-app.js"></script>
+<!-- Google Analytics (same property and Do Not Track behavior as neurodesk.org) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-4Z9774J59Y"></script>
+<script>
+  var doNotTrack = false;
+  var dnt = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+  doNotTrack = dnt === '1' || dnt === 'yes';
+  if (!doNotTrack) {
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+    gtag('config', 'G-4Z9774J59Y');
+  }
+</script>
+
+</body>
+</html>

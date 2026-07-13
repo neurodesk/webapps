@@ -1,0 +1,30 @@
+{
+  "id": "uniform_echo_spacing",
+  "name": "Uniform Echo Spacing",
+  "description": "The spacing between echoes (ΔTE) should be uniform.",
+  "category": "Echo Timing",
+  "fields": ["EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nspacings = echo_times.diff().iloc[1:]\nif not all(abs(spacings.iloc[0] - s) < 0.01 for s in spacings):\n    raise ValidationError(f\"Echo spacing is not uniform. Found spacings: {spacings}.\")",
+  "testCases": [
+    {
+      "id": "uniform_spacing",
+      "name": "Uniform Spacing Test",
+      "description": "Should pass with uniform 5ms spacing",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [5.0, 10.0, 15.0, 20.0]
+      }
+    },
+    {
+      "id": "non_uniform_spacing",
+      "name": "Non-uniform Spacing Test",
+      "description": "Should fail with non-uniform spacing",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [5.0, 10.0, 17.0, 20.0]
+      }
+    }
+  ]
+}

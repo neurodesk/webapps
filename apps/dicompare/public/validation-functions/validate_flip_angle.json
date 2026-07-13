@@ -1,0 +1,34 @@
+{
+  "id": "validate_flip_angle",
+  "name": "Ernst Flip Angle",
+  "description": "FlipAngle should be close to the Ernst angle.",
+  "category": "RF",
+  "fields": ["FlipAngle", "RepetitionTime", "MagneticFieldStrength"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "tr = value[\"RepetitionTime\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\nflip_angle = value[\"FlipAngle\"].iloc[0]\n\nT1_MIN_MAX = {\n    1.5: {\"min\": 600, \"max\": 1200},\n    3.0: {\"min\": 900, \"max\": 1650},\n    7.0: {\"min\": 1100, \"max\": 1900},\n}\n\nif field_strength not in T1_MIN_MAX:\n    raise ValidationError(f\"Unsupported MagneticFieldStrength {field_strength}T for Ernst angle validation.\")\n\nt1_min, t1_max = T1_MIN_MAX[field_strength][\"min\"], T1_MIN_MAX[field_strength][\"max\"]\nernst_min = math.acos(math.exp(-tr / t1_max)) * (180 / math.pi)\nernst_max = math.acos(math.exp(-tr / t1_min)) * (180 / math.pi)\n\ntolerance = 0.1\n\nif flip_angle < ernst_min - tolerance or flip_angle > ernst_max + tolerance:\n    raise ValidationError(f\"FlipAngle should be between {ernst_min:.2f}° and {ernst_max:.2f}° at {field_strength}T with TR={tr} ms. Found {flip_angle:.2f}°.\")",
+  "testCases": [
+    {
+      "id": "valid_ernst_angle",
+      "name": "Valid Ernst Angle Test",
+      "description": "Should pass with flip angle within Ernst angle range",
+      "expectedResult": "pass",
+      "data": {
+        "FlipAngle": [15],
+        "RepetitionTime": [50],
+        "MagneticFieldStrength": [3.0]
+      }
+    },
+    {
+      "id": "invalid_ernst_angle",
+      "name": "Invalid Ernst Angle Test",
+      "description": "Should fail with flip angle outside Ernst angle range",
+      "expectedResult": "fail",
+      "data": {
+        "FlipAngle": [45],
+        "RepetitionTime": [50],
+        "MagneticFieldStrength": [3.0]
+      }
+    }
+  ]
+}

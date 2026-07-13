@@ -1,0 +1,25 @@
+{
+  "name": "musclemap",
+  "version": "1.2.37",
+  "private": true,
+  "type": "module",
+  "description": "MuscleMap — in-browser muscle segmentation and fat metrics.",
+  "scripts": {
+    "vendor": "node ../../scripts/vendor-components.mjs",
+    "predev": "pnpm vendor",
+    "dev": "bash web/run.sh",
+    "prebuild": "pnpm vendor && bash web/setup.sh",
+    "build": "node ../../scripts/build-static.mjs",
+    "pretest:e2e": "pnpm vendor",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "test:python": "python3 -m pytest tests/ -q"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "jsdom": "^24.0.0"
+  }
+}

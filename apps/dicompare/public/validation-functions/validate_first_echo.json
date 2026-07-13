@@ -1,0 +1,30 @@
+{
+  "id": "validate_first_echo",
+  "name": "Short First Echo",
+  "description": "The first TE (TE1) should be as short as possible.",
+  "category": "Echo Timing",
+  "fields": ["EchoTime"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "first_echo_time = value[\"EchoTime\"].min()\nif first_echo_time > 10:\n    raise ValidationError(f\"The first TE is overly long. Found {first_echo_time} ms.\")",
+  "testCases": [
+    {
+      "id": "short_first_echo",
+      "name": "Short First Echo Test",
+      "description": "Should pass with first echo <= 10ms",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [8.0, 16.0, 24.0]
+      }
+    },
+    {
+      "id": "long_first_echo",
+      "name": "Long First Echo Test",
+      "description": "Should fail with first echo > 10ms",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [15.0, 25.0, 35.0]
+      }
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "validate_voxel_shape",
+  "name": "Isotropic Voxels",
+  "description": "Use isotropic voxels.",
+  "category": "Spatial",
+  "fields": ["PixelSpacing", "SliceThickness"],
+  "requiredSystemFields": [],
+  "parameters": null,
+  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\n\ntolerance = 0.1\nif not all(abs(p - pixel_spacing[0]) < tolerance for p in pixel_spacing) or abs(pixel_spacing[0] - slice_thickness) > tolerance:\n    raise ValidationError(f\"Voxel shape is not isotropic. Found PixelSpacing: {pixel_spacing}, SliceThickness: {slice_thickness}.\")\n",
+  "testCases": [
+    {
+      "id": "isotropic_voxels",
+      "name": "Isotropic Voxels Test",
+      "description": "Should pass with 1x1x1mm isotropic voxels",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [[1.0, 1.0]],
+        "SliceThickness": [1.0]
+      }
+    },
+    {
+      "id": "anisotropic_voxels",
+      "name": "Anisotropic Voxels Test",
+      "description": "Should fail with anisotropic voxels",
+      "expectedResult": "fail",
+      "data": {
+        "PixelSpacing": [[1.0, 1.0]],
+        "SliceThickness": [3.0]
+      }
+    }
+  ]
+}
