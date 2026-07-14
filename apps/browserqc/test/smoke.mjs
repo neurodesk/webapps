@@ -18,6 +18,16 @@ const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
 const PORT = 4173
 const URL = `http://localhost:${PORT}/browserqc/`
+const webGpuArgs = process.platform === 'linux'
+  ? [
+      '--use-gl=angle',
+      '--use-angle=vulkan',
+      '--enable-features=Vulkan',
+      '--disable-vulkan-surface',
+      '--enable-unsafe-webgpu',
+      '--enable-unsafe-swiftshader',
+    ]
+  : ['--use-gl=angle', '--enable-unsafe-swiftshader']
 
 // --- boot vite preview ---
 // detached so the child is its own process-group leader; killing -pid then reaps
@@ -99,7 +109,11 @@ try {
   browser = await chromium.launch({
     headless: true,
     channel: 'chrome',
-    args: ['--use-gl=angle', '--enable-unsafe-swiftshader', '--window-size=1280,960'],
+    // Chrome on Linux CI has no physical GPU. These are Chrome's documented
+    // headless WebGPU flags: ANGLE over Vulkan selects bundled SwiftShader,
+    // unsafe-webgpu enables the software adapter, and disabling the Vulkan
+    // surface lets headless rendering present without a window-system swapchain.
+    args: [...webGpuArgs, '--window-size=1280,960'],
   })
   const page = await browser.newPage()
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
@@ -118,13 +132,19 @@ try {
   // tfjs runs on the SwiftShader WebGL2 backend here (~15 s). Wiring-only: it asserts
   // the path runs clean and the panel populates, not the segmentation/QC *values*.
   await page.waitForFunction(
-    () => /Segmentation \+ QC complete|QC unavailable/.test(document.getElementById('statusMsg')?.textContent || ''),
+    () => /Segmentation \+ QC complete|QC unavailable|can.t initialize WebGPU/.test(
+      document.getElementById('statusMsg')?.textContent || '',
+    ),
     undefined,
     // GitHub's software-rendered WebGL runner is substantially slower than a
     // developer workstation. Keep this a real segmentation/QC assertion, but
     // allow enough time for the 256³ model to finish without a false timeout.
     { timeout: 600000 },
   ).catch(() => fail('auto segmentation + QC did not complete (NiiVue attach / model / niimath?)', page))
+  const terminalStatus = await page.$eval('#statusMsg', (el) => el.textContent || '')
+  if (/can.t initialize WebGPU/.test(terminalStatus)) {
+    await fail('WebGPU adapter initialization failed', page)
+  }
   if (!/CJV/.test(await qcText())) await fail('QC panel did not populate after segmentation', page)
   console.log('✓ auto segmentation + niimath QC ran, panel populated')
 
