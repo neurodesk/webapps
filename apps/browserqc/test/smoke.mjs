@@ -75,8 +75,16 @@ async function waitForServer(timeoutMs = 15000) {
 }
 
 let browser
+const consoleErrors = []
+const pageErrors = []
 const fail = async (msg, page) => {
   console.error('\n❌ SMOKE FAIL:', msg)
+  if (page) {
+    const status = await page.$eval('#statusMsg', (el) => el.textContent || '').catch(() => '')
+    if (status) console.error('Last BrowserQC status:', status)
+    if (pageErrors.length) console.error('Page errors:\n  ' + pageErrors.join('\n  '))
+    if (consoleErrors.length) console.error('Console errors:\n  ' + consoleErrors.join('\n  '))
+  }
   if (page) await page.screenshot({ path: join(here, 'smoke-fail.png') }).catch(() => {})
   if (browser) await browser.close().catch(() => {})
   cleanup()
@@ -94,8 +102,6 @@ try {
     args: ['--use-gl=angle', '--enable-unsafe-swiftshader', '--window-size=1280,960'],
   })
   const page = await browser.newPage()
-  const consoleErrors = []
-  const pageErrors = []
   page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text()) })
   page.on('pageerror', (e) => pageErrors.push(e.message))
 
@@ -114,7 +120,10 @@ try {
   await page.waitForFunction(
     () => /Segmentation \+ QC complete|QC unavailable/.test(document.getElementById('statusMsg')?.textContent || ''),
     undefined,
-    { timeout: 240000 },
+    // GitHub's software-rendered WebGL runner is substantially slower than a
+    // developer workstation. Keep this a real segmentation/QC assertion, but
+    // allow enough time for the 256³ model to finish without a false timeout.
+    { timeout: 600000 },
   ).catch(() => fail('auto segmentation + QC did not complete (NiiVue attach / model / niimath?)', page))
   if (!/CJV/.test(await qcText())) await fail('QC panel did not populate after segmentation', page)
   console.log('✓ auto segmentation + niimath QC ran, panel populated')
