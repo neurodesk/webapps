@@ -128,7 +128,8 @@ assert.ok(appJs.includes("bindModalButton('startPrivacyButton', this.privacyModa
 assert.ok(appJs.includes("bindModalButton('startPrivacyInlineButton', this.privacyModal)"), 'start page Privacy body button is wired');
 assert.ok(appJs.includes("bindModalButton('startCitationsButton', this.citationsModal)"), 'start page Citations button is wired');
 assert.ok(indexHtml.includes('id="moreAppsLink"'), 'main app header More Apps link exists');
-assert.ok(indexHtml.includes('https://neurodesk.org/getting-started/hosted/webapps/'), 'More Apps links target the Neurodesk hosted web apps index');
+assert.ok(indexHtml.includes('href="../"'), 'More Apps links return to the composite webapps start page');
+assert.ok(!indexHtml.includes('https://neurodesk.org/getting-started/hosted/webapps/'), 'More Apps links do not leave the composite site');
 assert.ok(indexHtml.includes('Google Analytics (same property and Do Not Track behavior as neurodesk.org)'), 'Google Analytics marker exists');
 assert.ok(
   indexHtml.includes('https://www.googletagmanager.com/gtag/js?id=G-4Z9774J59Y') &&

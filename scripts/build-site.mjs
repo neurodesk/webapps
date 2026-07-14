@@ -35,7 +35,7 @@ h1{font-size:clamp(2.4rem,7vw,5rem);margin:.2em 0}.lede{max-width:48rem;color:#b
 .app h2{margin:0 0 .5rem;color:#8bd57c}.app p{margin:0;color:#c6d5df;line-height:1.5}footer{margin-top:3rem;color:#8fa6b5}
 </style></head><body><main><p>NEURODESK</p><h1>Webapps</h1><p class="lede">Privacy-preserving neuroimaging tools that run locally in your browser. Your imaging data is not uploaded.</p>
 <section class="grid" aria-label="Available webapps">${cards}
-</section></main><footer>Models and large scientific assets are delivered from Hugging Face and cached in your browser.</footer></body></html>`;
+</section></main></body></html>`;
 
 await writeFile(join(siteDist, 'index.html'), html);
 await writeFile(join(siteDist, '.nojekyll'), '');

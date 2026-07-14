@@ -75,7 +75,11 @@ try {
   const landing = await browser.newPage();
   await landing.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
   const cards = await landing.locator('a.app').count();
+  const landingText = await landing.locator('body').innerText();
   if (cards !== registry.apps.length) failures.push(`landing page has ${cards} app cards, expected ${registry.apps.length}`);
+  if (landingText.includes('Models and large scientific assets are delivered from Hugging Face')) {
+    failures.push('landing page still contains the removed scientific-assets message');
+  }
   await landing.close();
 
   for (const app of registry.apps) {
@@ -83,6 +87,7 @@ try {
     const pageErrors = [];
     const responseErrors = [];
     const subpathLeaks = [];
+    let returningHome = false;
 
     page.on('pageerror', (error) => pageErrors.push(error.message));
     page.on('response', (response) => {
@@ -94,6 +99,7 @@ try {
     page.on('request', (request) => {
       const url = new URL(request.url());
       if (url.origin !== origin || url.pathname === `/favicon.ico`) return;
+      if (returningHome && url.pathname === '/') return;
       if (url.pathname !== `/${app.path}/` && !url.pathname.startsWith(`/${app.path}/`)) {
         subpathLeaks.push(url.pathname);
       }
@@ -113,6 +119,20 @@ try {
     if (app.id === 'seedseg') {
       const consoleText = await page.locator('#consoleOutput').innerText();
       if (!consoleText.includes('ONNX Runtime ready')) failures.push(`seedseg: worker did not initialize: ${consoleText.trim()}`);
+    }
+
+    const moreApps = page.locator('[title="More Neurodesk web apps"]').first();
+    if (await moreApps.count() !== 1) {
+      failures.push(`${app.id}: More Apps link is missing`);
+    } else {
+      returningHome = true;
+      await Promise.all([
+        page.waitForURL(`${origin}/`),
+        moreApps.click(),
+      ]);
+      if (await page.title() !== 'Neurodesk Webapps') {
+        failures.push(`${app.id}: More Apps did not render the composite start page`);
+      }
     }
 
     console.log(`PASS /${app.path}/ — ${title}`);

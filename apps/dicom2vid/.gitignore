@@ -1,0 +1,37 @@
+# Subject data (PHI) never belongs in this repo. Keep real data outside it.
+/data/
+*.dcm
+*.ima
+*.nii
+*.nii.gz
+*.mgz
+*.mgh
+*.IMA
+
+# Generated golden fixtures and synthetic phantoms (regenerate with tools/)
+/tools/golden/
+/tools/phantom_out/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# Vendor build scratch (bundles are committed under web/js/vendor)
+/tools/vendor/
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# Video output from local testing
+*.mp4
+*.webm
+*.avi
+
+# Local editor and dropped screenshots
+.vscode/
+Screenshot*.png

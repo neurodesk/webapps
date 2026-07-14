@@ -24,6 +24,223 @@
   --nd-transition-fast: 150ms ease;
 }
 
+/* Shared chrome for applications that own their scientific UI and viewer.
+   Whole regions are moved into this layout without recreating their contents. */
+nd-imaging-workspace,
+nd-imaging-app-header,
+nd-imaging-brand {
+  box-sizing: border-box;
+}
+
+.nd-imaging-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  color: var(--nd-color-text);
+  background: var(--nd-color-bg);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.nd-imaging-app-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nd-space-md);
+  padding: var(--nd-space-sm) var(--nd-space-lg);
+  background: var(--nd-color-surface);
+  border-bottom: 1px solid var(--nd-color-border);
+}
+
+.nd-imaging-brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: var(--nd-space-sm);
+}
+
+.nd-imaging-mark {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: var(--nd-radius-md);
+  color: white;
+  background: linear-gradient(135deg, var(--nd-color-primary), var(--nd-color-accent));
+  font-weight: 700;
+}
+
+.nd-imaging-brand-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nd-imaging-brand-copy strong {
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.nd-imaging-brand-copy small {
+  color: var(--nd-color-text-muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nd-imaging-navigation {
+  display: flex;
+  align-items: center;
+  gap: var(--nd-space-sm);
+}
+
+.nd-imaging-navigation .nd-header-link {
+  color: var(--nd-color-text);
+  text-decoration: none;
+}
+
+.nd-imaging-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--nd-space-xs) var(--nd-space-sm);
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--nd-space-md);
+  background: var(--nd-color-surface);
+  border-right: 1px solid var(--nd-color-border);
+  margin: 0 !important;
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.nd-imaging-controls > label {
+  display: block;
+  width: 100%;
+  margin-top: var(--nd-space-sm);
+  color: var(--nd-color-text-muted) !important;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nd-imaging-controls > .row { flex: 1 1 100%; }
+
+.nd-imaging-controls > label:first-child { margin-top: 0; }
+
+.nd-imaging-controls button,
+.nd-imaging-controls select,
+.nd-imaging-controls input:not([type="checkbox"]):not([type="range"]) {
+  min-height: 34px;
+  margin: var(--nd-space-xs) 0;
+  padding: var(--nd-space-sm);
+  color: var(--nd-color-text);
+  background: var(--nd-color-surface-elevated);
+  border: 1px solid var(--nd-color-border-light);
+  border-radius: var(--nd-radius-sm);
+  font: inherit;
+}
+
+.nd-imaging-controls > select,
+.nd-imaging-controls > input:not([type="checkbox"]):not([type="range"]) {
+  width: 100%;
+}
+
+.nd-imaging-controls button {
+  cursor: pointer;
+  transition: background var(--nd-transition-fast), border-color var(--nd-transition-fast);
+}
+
+.nd-imaging-controls button:hover:not(:disabled) {
+  background: var(--nd-color-border);
+  border-color: var(--nd-color-primary);
+}
+
+.nd-imaging-controls button:disabled { opacity: 0.45; cursor: not-allowed; }
+.nd-imaging-controls #applyBtn,
+.nd-imaging-controls #processButton {
+  color: white;
+  background: var(--nd-color-primary);
+  border-color: var(--nd-color-primary);
+  font-weight: 600;
+}
+
+.nd-imaging-controls > label[for="overlayCheck"],
+.nd-imaging-controls > label[for="overlayOpacity"],
+.nd-imaging-controls > label[for="overlayColor"] {
+  width: auto;
+  margin-right: var(--nd-space-xs);
+}
+
+.nd-imaging-controls > input[type="range"] {
+  width: min(100%, 150px);
+  accent-color: var(--nd-color-primary);
+}
+
+.nd-imaging-viewer {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: #000;
+}
+
+.nd-imaging-status {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+  padding: var(--nd-space-xs) var(--nd-space-lg);
+  background: var(--nd-color-surface);
+  border-top: 1px solid var(--nd-color-border);
+  color: var(--nd-color-text-muted);
+  margin: 0 !important;
+}
+
+.nd-imaging-status #images {
+  display: flex;
+  gap: var(--nd-space-xs);
+  overflow-x: auto;
+}
+
+.nd-imaging-status button {
+  flex: 0 0 auto;
+  padding: var(--nd-space-xs) var(--nd-space-sm);
+  color: var(--nd-color-text);
+  background: var(--nd-color-surface-elevated);
+  border: 1px solid var(--nd-color-border);
+  border-radius: var(--nd-radius-sm);
+  cursor: pointer;
+}
+
+@media (max-width: 780px) {
+  .nd-imaging-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+  }
+
+  .nd-imaging-controls {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--nd-color-border);
+  }
+
+  .nd-imaging-viewer { grid-column: 1; grid-row: 3; }
+  .nd-imaging-status { grid-column: 1; grid-row: 4; }
+}
+
 .nd-app-container {
   display: grid;
   grid-template-columns: 320px 1fr;

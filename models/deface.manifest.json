@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "app": "deface",
+  "repository": "sbollmann/neurodesk-webapps-assets",
+  "revision": "49b12b87f4e5def9672cf582b93ecd4a54273608",
+  "base_url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/deface/",
+  "license": "NOASSERTION",
+  "assets": [
+    {"filename":"avg152T1.nii.gz","bytes":567546,"sha256":"e8f5440f0dcec1a4d44384acbdf19c8e6cf94c032c3356ef91c4441fee3aaea8"},
+    {"filename":"avg152T1mask.nii.gz","bytes":7149,"sha256":"adc275e26e5217189d70acfd43311bc3f66f316321ac61defc88505d2f91a0aa"},
+    {"filename":"t1_crop.nii.gz","bytes":3068922,"sha256":"9f5708dd1980fe0017ad70f63d895bae66bd9f5487eb1c38d129591116113613"},
+    {"filename":"models/net_mindgrab.safetensors","bytes":587404,"sha256":"aba8754c83fce20e35c41ce2c4db205250ca84737e6b73cf0faf809fdc3884ef"}
+  ]
+}

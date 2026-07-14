@@ -1,0 +1,4 @@
+@niivue/niivue 0.69.0
+mp4-muxer 5.2.2
+webm-muxer 5.1.4
+esbuild 0.28.1

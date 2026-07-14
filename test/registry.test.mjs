@@ -8,7 +8,8 @@ import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 test('catalog contains every currently published Neurodesk webapp', async () => {
   const registry = await loadAppsRegistry();
   assert.deepEqual(registry.apps.map(({ id }) => id).sort(), [
-    'calmar', 'dicompare', 'musclemap', 'qsmbly', 'seedseg', 'spinalcordtoolbox', 'vesselboost',
+    'calmar', 'deface', 'dicom2vid', 'dicompare', 'easy-mp2rage', 'musclemap', 'niimath',
+    'qsmbly', 'seedseg', 'spinalcordtoolbox', 'vesselboost',
   ]);
 });
 

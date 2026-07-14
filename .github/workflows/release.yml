@@ -31,6 +31,11 @@ jobs:
           targets: wasm32-unknown-unknown
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install DICOM2Vid reference dependencies
+        run: pip install -r apps/dicom2vid/requirements.txt nibabel
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - name: Run all unit and integration tests
@@ -77,6 +82,14 @@ jobs:
             path: seedseg
           - app: dicompare
             path: dicompare
+          - app: deface
+            path: deface
+          - app: easy-mp2rage
+            path: easy-mp2rage
+          - app: niimath
+            path: niimath
+          - app: dicom2vid
+            path: dicom2vid
     steps:
       - uses: actions/checkout@v4
         with:

@@ -1,0 +1,14 @@
+[workspace]
+resolver = "2"
+members = ["crates/mp2rage-core", "crates/mp2rage-cli", "crates/mp2rage-wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+authors = ["T. Shaw <t.shaw@uq.edu.au>"]
+repository = "https://github.com/thomshaw92/Easy-MP2RAGE-T1-Map"
+
+[profile.release]
+opt-level = 3
+lto = true

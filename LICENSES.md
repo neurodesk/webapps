@@ -8,6 +8,10 @@ for each app are recorded in `registry/apps.yml`.
 - `apps/musclemap`: MIT (`apps/musclemap/web/LICENSE`)
 - `apps/qsmbly`: MIT (`apps/qsmbly/LICENSE`)
 - `apps/seedseg` web application: MIT (`apps/seedseg/web/LICENSE`)
+- `apps/deface`: BSD-2-Clause (`apps/deface/LICENSE`)
+- `apps/easy-mp2rage`: GPL-3.0-or-later (`apps/easy-mp2rage/LICENSE`)
+- `apps/niimath`: BSD-2-Clause (`apps/niimath/LICENSE`)
+- `apps/dicom2vid`: BSD-3-Clause (`apps/dicom2vid/LICENSE`)
 - `apps/vesselboost`, `apps/spinalcordtoolbox`, `apps/calmar`, and `apps/dicompare`:
   no machine-detectable top-level licence was present in the imported upstream
   snapshot; these are recorded as `NOASSERTION` until their maintainers add one.

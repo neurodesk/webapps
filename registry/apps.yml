@@ -68,3 +68,39 @@ apps:
     model_manifest: null
     source: astewartau/dicompare-web@f0462e2b514f79eb1b32078f682f339c050897cd
     license: NOASSERTION
+  - id: deface
+    path: deface
+    title: Deface
+    description: Privacy-preserving MRI defacing entirely in the browser.
+    legacy_domain: niivue.github.io/deface
+    runtime: vite-webgpu
+    model_manifest: models/deface.manifest.json
+    source: niivue/deface@a27d54264256531db1cb17019a01319e78506e76
+    license: BSD-2-Clause
+  - id: easy-mp2rage
+    path: easy-mp2rage
+    title: Easy MP2RAGE T1 Map
+    description: Browser-native MP2RAGE T1 mapping, B1 correction, and UNI denoising.
+    legacy_domain: thomshaw92.github.io/Easy-MP2RAGE-T1-Map
+    runtime: rust-wasm
+    model_manifest: null
+    source: thomshaw92/Easy-MP2RAGE-T1-Map@f421f4a946523ad88a936b939d3bc4c967df9ea5
+    license: GPL-3.0-or-later
+  - id: niimath
+    path: niimath
+    title: NiiMath
+    description: Interactive browser-native neuroimaging maths and visualization.
+    legacy_domain: niivue.github.io/niivue-niimath
+    runtime: vite-wasm
+    model_manifest: models/niimath.manifest.json
+    source: niivue/niivue-niimath@96d2b49d2b7afdf4bcc5ebdb78a959f622185bfb
+    license: BSD-2-Clause
+  - id: dicom2vid
+    path: dicom2vid
+    title: DICOM2Vid
+    description: Convert DICOM, NIfTI, or MGZ volumes into scrolling videos in the browser.
+    legacy_domain: thomshaw92.github.io/DICOM2Vid
+    runtime: static-esm
+    model_manifest: null
+    source: thomshaw92/DICOM2Vid@4e117e7b0c703a2f3f7dcc80818b51aafe3c56a4
+    license: BSD-3-Clause

@@ -1,0 +1,7 @@
+{
+  "name": "easy-mp2rage-t1map-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Static in-browser MP2RAGE T1-mapping app (Rust/WASM core)"
+}

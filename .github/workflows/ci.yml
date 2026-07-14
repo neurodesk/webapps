@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Validate the seven-app registry
+      - name: Validate the eleven-app registry
         run: pnpm test:registry
       - name: Lint every workspace package
         run: pnpm lint
@@ -41,6 +41,10 @@ jobs:
           - qsmbly
           - seedseg
           - dicompare
+          - deface
+          - easy-mp2rage
+          - niimath
+          - dicom2vid
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -49,6 +53,20 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.app == 'easy-mp2rage'
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack for Easy MP2RAGE
+        if: matrix.app == 'easy-mp2rage'
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - uses: actions/setup-python@v5
+        if: matrix.app == 'dicom2vid'
+        with:
+          python-version: '3.13'
+      - name: Install DICOM2Vid reference dependencies
+        if: matrix.app == 'dicom2vid'
+        run: pip install -r apps/dicom2vid/requirements.txt nibabel
       - name: Test ${{ matrix.app }}
         run: pnpm --filter ${{ matrix.app }} test
 

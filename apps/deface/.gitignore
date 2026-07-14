@@ -1,0 +1,9 @@
+node_modules
+dist
+*.local
+.DS_Store
+test/smoke-*.png
+audit_*.md
+# Loose NIfTI outputs in the repo root (privacy hygiene); public/ fixtures stay tracked.
+/*.nii
+/*.nii.gz

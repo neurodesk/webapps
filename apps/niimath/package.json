@@ -1,0 +1,22 @@
+{
+  "name": "niimath",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "BSD-2-Clause",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "node ../../scripts/check-app-js.mjs .",
+    "test": "node ../../scripts/check-app-js.mjs ."
+  },
+  "devDependencies": {
+    "vite": "^5.4.6"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "^1.2.0",
+    "@niivue/niivue": "^0.62.1"
+  }
+}

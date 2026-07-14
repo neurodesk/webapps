@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the original MP2RAGE/SA2RAGE method papers listed below."
+title: "mp2rage-t1: B1-corrected T1 mapping from MP2RAGE + SA2RAGE"
+authors:
+  - family-names: Shaw
+    given-names: Thomas
+    email: t.shaw@uq.edu.au
+    affiliation: University of Queensland
+license: GPL-3.0-or-later
+repository-code: "https://github.com/thomshaw92/Easy-MP2RAGE-T1-Map"
+references:
+  - type: article
+    authors:
+      - family-names: Marques
+        given-names: José P.
+    title: "MP2RAGE, a self bias-field corrected sequence for improved segmentation and T1-mapping at high field"
+    journal: NeuroImage
+    volume: 49
+    year: 2010
+    start: 1271
+    end: 1281
+    doi: 10.1016/j.neuroimage.2009.10.002
+  - type: article
+    authors:
+      - family-names: Marques
+        given-names: José P.
+      - family-names: Gruetter
+        given-names: Rolf
+    title: "New developments and applications of the MP2RAGE sequence - focusing the contrast and high spatial resolution R1 mapping"
+    journal: PLoS ONE
+    volume: 8
+    year: 2013
+    doi: 10.1371/journal.pone.0069294
+  - type: article
+    authors:
+      - family-names: Eggenschwiler
+        given-names: Florent
+    title: "SA2RAGE: a new sequence for fast B1+-mapping"
+    journal: Magnetic Resonance in Medicine
+    volume: 67
+    year: 2012
+    start: 1609
+    end: 1619
+    doi: 10.1002/mrm.23145
+  - type: article
+    authors:
+      - family-names: O'Brien
+        given-names: Kieran R.
+    title: "Robust T1-weighted structural brain imaging and morphometry at 7T using MP2RAGE"
+    journal: PLoS ONE
+    volume: 9
+    year: 2014
+    start: e99676
+    doi: 10.1371/journal.pone.0099676

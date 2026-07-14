@@ -1,0 +1,14 @@
+[package]
+name = "mp2rage-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Pure-Rust MP2RAGE/SA2RAGE T1-mapping core (port of the validated Python pipeline)"
+
+[dependencies]
+ndarray = "0.16"
+
+[dev-dependencies]
+ndarray-npy = "0.9"

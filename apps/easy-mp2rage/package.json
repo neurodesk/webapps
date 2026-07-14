@@ -1,0 +1,16 @@
+{
+  "name": "easy-mp2rage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "description": "Browser-native MP2RAGE T1 mapping, B1 correction, and UNI denoising.",
+  "scripts": {
+    "dev": "python3 -m http.server 8080 --directory web",
+    "prebuild": "bash tools/build_wasm.sh",
+    "build": "node ../../scripts/build-static.mjs",
+    "lint": "node ../../scripts/check-app-js.mjs web",
+    "pretest": "bash tools/build_wasm.sh",
+    "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs"
+  }
+}

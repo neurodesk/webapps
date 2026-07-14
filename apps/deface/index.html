@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <!-- empty favicon: suppress the browser's default /favicon.ico request (404) -->
+  <link rel="icon" href="data:," />
+  <title>Deface | Neurodesk Webapps</title>
+</head>
+
+<body>
+  <header>
+    <div class="row">
+      <label for="methodSelect">Method</label>
+      <select id="methodSelect" title="niimath affine defacing (BSD allineate: fast or Hellinger engine) or MindGrab brain extraction (WebGPU)">
+        <option value="allineate" selected>allineate (fast)</option>
+        <option value="allineate_robustfov">allineate (fast, robustfov)</option>
+        <option value="allineate_hel">allineate (Hellinger)</option>
+        <option value="allineate_hel_robustfov">allineate (Hellinger, robustfov)</option>
+        <option value="mindgrab">mindgrab (WebGPU)</option>
+        <option value="mindgrab_robust">mindgrab robustfov (WebGPU)</option>
+        <option value="mindgrab8">mindgrab 8mm border (WebGPU)</option>
+        <option value="mindgrab_robust8">mindgrab robustfov + 8mm (WebGPU)</option>
+      </select>
+      <button id="applyBtn">Apply</button>
+      <button disabled id="saveBtn">Save Image</button>
+      <button id="aboutBtn">About</button>
+    </div>
+  </header>
+
+  <main id="canvas-container">
+    <canvas id="gl1"></canvas>
+  </main>
+
+  <footer>
+    <div class="footer">
+      <table class="footer">
+        <tr>
+          <th id="location">Drag &amp; drop a NIfTI image or a folder of DICOM files</th>
+          <th>
+            <div id="loadingCircle" class="loading-circle"></div>
+            <label id="statusMsg" class="hidden"></label>
+          </th>
+        </tr>
+      </table>
+    </div>
+  </footer>
+
+  <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
+
+  <dialog id="aboutDialog">
+    <form method="dialog">
+      <h3><a href="https://github.com/niivue/deface" target="_blank" rel="noopener">deface</a></h3>
+      <p>Remove facial features from a brain MRI for anonymization — entirely in your browser.
+        <strong>No data is sent to any server.</strong>
+      </p>
+      <p>Defacing runs <a href="https://github.com/rordenlab/niimath" target="_blank" rel="noopener">niimath</a>,
+        which registers a bundled MNI template (affine, BSD) and zeros the face voxels:</p>
+      <ul>
+        <li><strong>allineate (fast)</strong> — fast affine registration engine (Hellinger MI,
+          with a robust Hellinger fallback) — the default</li>
+        <li><strong>allineate (fast, robustfov)</strong> — same fast engine after a
+          <code>-robustfov</code> crop of the neck/inferior slices for a tighter face mask</li>
+        <li><strong>allineate (Hellinger)</strong> — the exhaustive Hellinger engine
+          (<code>-cost hel</code>): slower, reference-quality fit (also offered with a
+          <code>-robustfov</code> crop)</li>
+        <li><strong>mindgrab</strong> — deep-learning brain extraction (skull-strip): a
+          <a href="https://github.com/neuroneural/brainchop" target="_blank" rel="noopener">brainchop</a>-style
+          model runs entirely on the GPU (<strong>WebGPU, shader-f16</strong>) to mask out everything but the brain</li>
+      </ul>
+      <p>Visualization uses <a href="https://niivue.com/" target="_blank" rel="noopener">NiiVue</a>;
+        DICOM import uses <a href="https://github.com/rordenlab/dcm2niix" target="_blank" rel="noopener">dcm2niix</a>.
+      </p>
+      <p><small>Defacing uses the BSD-2 build of
+        <a href="https://github.com/rordenlab/niimath" target="_blank" rel="noopener">niimath</a>
+        (<code>@niivue/niimath</code>), so this app is licensed <strong>BSD-2-Clause</strong> ·
+        thread-deterministic registration, fails closed on out-of-memory. Requires a browser with
+        WebGPU (recent desktop Chrome, Edge, or Safari).</small></p>
+      <button autofocus id="closeAboutBtn" value="default">Close</button>
+    </form>
+  </dialog>
+
+  <dialog id="webgpuDialog">
+    <form method="dialog">
+      <h3>MindGrab needs WebGPU</h3>
+      <p>The <strong>mindgrab</strong> brain-extraction method runs a neural network on the GPU and needs
+        <strong>WebGPU with the <code>shader-f16</code> feature</strong> (recent desktop Chrome, Edge, or Safari).
+        This browser doesn't provide it.</p>
+      <p>Use an <strong>allineate</strong> method instead — they run in WebAssembly and need no WebGPU.</p>
+      <button autofocus value="default">Close</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

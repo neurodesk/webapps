@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "app": "niimath",
+  "repository": "sbollmann/neurodesk-webapps-assets",
+  "revision": "49b12b87f4e5def9672cf582b93ecd4a54273608",
+  "base_url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/",
+  "license": "NOASSERTION",
+  "assets": [
+    {"filename":"T1w7T.nii.gz","bytes":9886098,"sha256":"a2266104739ff6b847417119e85c51ceb1fcc57afd34ce2e836f738462bd4aca"},
+    {"filename":"T2w7T.nii.gz","bytes":10538962,"sha256":"3aedeea9ea188be8d48b871cae687966e9381e304d30e0f113f10575b4cfcc43"},
+    {"filename":"asl64.nii.gz","bytes":29202,"sha256":"71bade4d4803eeb9d1934499b42eb24abb94fceebf790cae73b703622fd7e5d2"},
+    {"filename":"aslU16.nii.gz","bytes":24624,"sha256":"677cf7d1f17e2ef9e75e58e5092e4bbbc9119468357e5c6aa0c0bb590c07840d"},
+    {"filename":"bold7T.nii.gz","bytes":680640,"sha256":"4b69290de551fadcbdfcec51e53d1d6b052343e78878e0ad5529ac314ec007ad"},
+    {"filename":"dwi16.nii.gz","bytes":79481,"sha256":"e8f471bc32bfe4d47e2f0b94593be41dc46fb5903c54ae22266b0c6226787c2f"},
+    {"filename":"fa8.nii.gz","bytes":151035,"sha256":"537ed819bfb07a39fcd41f166f25f6f39f575f5f65f7fc129cbdcf32a6020149"},
+    {"filename":"fmri32.nii.gz","bytes":83131,"sha256":"59a18d7661de78a1c8eb21286530c890f1d659c7fb05c10e70e62bc072d04e7e"}
+  ]
+}

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Allow only same-origin, blob:, and the Google Analytics hosts. Images and
+       results never leave the browser; the sole external requests are anonymous
+       page-view analytics. GitHub Pages cannot set headers, so this meta CSP is
+       the only layer (no 'unsafe-inline' for scripts). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.google-analytics.com https://*.googletagmanager.com; media-src 'self' blob:; connect-src 'self' blob: https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'">
+  <title>MRI2Vid</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Anonymous usage analytics (Google Analytics 4): page views only. It never
+       has access to your images, files, or results, which are processed entirely
+       in this browser tab and never uploaded. To disable analytics, delete these
+       two tags and web/js/analytics.js. -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-4Z9774J59Y"></script>
+  <script src="js/analytics.js"></script>
+</head>
+<body>
+  <header>
+    <div class="head-in">
+      <div class="mark"><span>▶</span></div>
+      <div>
+        <h1>MRI<span class="g">2Vid</span></h1>
+        <div class="tag">Turn a DICOM, NIfTI, or MGZ volume into a scrolling video, entirely in your browser.</div>
+      </div>
+      <span class="badge" title="Your images and all processing stay in this browser tab and are never uploaded. Only anonymous usage stats (page views) are collected.">Your images never leave your browser</span>
+      <a href="../" class="header-link" title="More Neurodesk web apps">More Apps</a>
+      <button class="tutbtn" id="tutorialBtn" type="button" title="Step-by-step walkthrough of the app.">Tutorial</button>
+    </div>
+  </header>
+
+  <div class="intro">
+    <p><strong>Runs in your browser.</strong> Your images and all processing stay on your computer and
+      are never uploaded; the video is made right here in this tab. The only external request is
+      anonymous page-view analytics (Google Analytics), which never sees your images.</p>
+  </div>
+
+  <main>
+    <div class="col">
+      <div class="card">
+        <h2>Input</h2>
+        <div id="dropZone">
+          <p><strong>Drop a DICOM folder here.</strong></p>
+          <p class="small">A full DICOMDIR export (a CD/DVD folder with a DICOMDIR index and
+            extensionless files) works too, as does an entire BIDS subject-session directory, or a
+            single .nii / .nii.gz / .mgz file.</p>
+          <div class="pick-row">
+            <label class="btn secondary">Choose folder
+              <input id="pickDir" type="file" webkitdirectory directory multiple hidden>
+            </label>
+            <label class="btn secondary">Choose files
+              <input id="pickFiles" type="file" multiple hidden>
+            </label>
+          </div>
+          <p class="small">Nothing is uploaded. Compressed DICOM (JPEG/JPEG2000) is not supported; convert it locally first.</p>
+        </div>
+      </div>
+
+      <div id="seriesPanel" class="card hidden">
+        <h2>Series <span class="i" tabindex="0" role="button" aria-label="info about series"
+          data-tip="Files are grouped by SeriesInstanceUID. The most likely structural scan (for example a T1w) is selected first; pick any other.">i</span></h2>
+        <div id="seriesList" class="series-list"></div>
+      </div>
+
+      <div id="optionsPanel" class="card hidden">
+        <h2>Video options</h2>
+        <div class="grid2">
+          <label>Orientation
+            <span class="i" tabindex="0" role="button" aria-label="info about orientation"
+              data-tip="How the stack is resliced. Same as MRI2vid.py: sagittal, coronal, axial and their flipped variants. You can also set this with the buttons in Preview.">i</span>
+            <select id="orientation"></select>
+          </label>
+          <label>Frames per second
+            <span class="i" tabindex="0" role="button" aria-label="info about fps" data-tip="Playback speed of the output video. Default 20.">i</span>
+            <input id="fps" type="number" min="1" max="120" step="1" value="20">
+          </label>
+          <label>Start slice
+            <span class="i" tabindex="0" role="button" aria-label="info about start slice" data-tip="First slice to include (0-based). Blank means the first slice. Negative counts from the end.">i</span>
+            <input id="startSlice" type="number" step="1" placeholder="0">
+          </label>
+          <label>End slice (exclusive)
+            <span class="i" tabindex="0" role="button" aria-label="info about end slice" data-tip="Stop before this slice. Blank means all slices. Negative counts from the end.">i</span>
+            <input id="endSlice" type="number" step="1" placeholder="all">
+          </label>
+          <label>Slice step
+            <span class="i" tabindex="0" role="button" aria-label="info about slice step" data-tip="Take every Nth slice. Use values above 1 to subsample a long stack.">i</span>
+            <input id="sliceStep" type="number" min="1" step="1" value="1">
+          </label>
+          <label>Format
+            <span class="i" tabindex="0" role="button" aria-label="info about format" data-tip="MP4 (H.264) or WebM (VP9). The app falls back automatically if your browser lacks one.">i</span>
+            <select id="format">
+              <option value="mp4">MP4 (H.264)</option>
+              <option value="webm">WebM (VP9)</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="check"><input id="annotate" type="checkbox"> Overlay slice numbers
+          <span class="i" tabindex="0" role="button" aria-label="info about annotation" data-tip="Draw 'Slice N/total' in the corner of each frame, like the --annotate-slices option.">i</span>
+        </label>
+
+        <label id="colorNormRow" class="check hidden"><input id="colorNormalize" type="checkbox"> Normalize color channels (per channel)
+          <span class="i" tabindex="0" role="button" aria-label="info about color normalize" data-tip="For RGB inputs such as color-FA. Off keeps the original 8-bit colors; on rescales each channel.">i</span>
+        </label>
+
+        <div class="actions">
+          <button id="previewBtn" class="secondary" type="button">Preview</button>
+          <button id="generate" type="button">Generate video</button>
+          <button id="stop" class="secondary hidden" type="button">Stop</button>
+        </div>
+        <div id="progressWrap" class="progress hidden"><div id="progressBar"></div></div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <div id="resultPanel" class="result hidden">
+          <video id="resultVideo" controls loop playsinline></video>
+          <a id="downloadLink" class="btn" download>Download video</a>
+          <p id="resultInfo" class="small note"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="col viewer-col">
+      <div id="viewerCard" class="card">
+        <h2>Volume viewer
+          <span class="i" tabindex="0" role="button" aria-label="info about the viewer"
+            data-tip="A NiiVue view of the loaded volume for quality control. Set the display window below with the histogram; it applies to the output video too.">i</span>
+        </h2>
+        <div class="nv-wrap"><canvas id="nvCanvas"></canvas></div>
+        <p id="nvNote" class="small note"></p>
+
+        <div class="win-head">
+          <h3>Window
+            <span class="i" tabindex="0" role="button" aria-label="info about windowing"
+              data-tip="Drag the two handles on the histogram to set the intensity window. It maps to 0-255 in the output. Grayscale only.">i</span>
+          </h3>
+          <button id="resetWindow" class="secondary small" type="button">Reset windowing</button>
+        </div>
+        <canvas id="hist"></canvas>
+        <div class="win-readout"><span id="winLoOut">-</span><span id="winHiOut">-</span></div>
+      </div>
+    </div>
+  </main>
+
+  <section class="credits">
+    <div class="card">
+      <h2>Credits</h2>
+      <p>Developed by <a href="https://about.uq.edu.au/experts/30967" target="_blank" rel="noopener noreferrer">Thomas Shaw</a>, University of Queensland, in part with Claude.</p>
+      <p>Based on <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">QSMbly</a>, Ashley Stewart's in-browser quantitative susceptibility mapping tool.</p>
+      <p>Open source under the BSD 3-Clause license at <a href="https://github.com/thomshaw92/DICOM2Vid" target="_blank" rel="noopener noreferrer">github.com/thomshaw92/DICOM2Vid</a>.</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Based on <code>MRI2vid.py</code>. Runs in your browser; your images never leave it. Uses anonymous page-view analytics (Google Analytics).</p>
+  </footer>
+
+  <!-- Preview modal: the actual video frames, reconstruction choice, and rotation. -->
+  <div id="previewModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Video preview">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2>Video preview</h2>
+        <button id="previewClose" class="secondary small" type="button">Close</button>
+      </div>
+      <div class="recon-row">
+        <span class="recon-label">Reconstruction:</span>
+        <button class="btn small ori" data-ori="axial" type="button">Axial</button>
+        <button class="btn small ori" data-ori="sagittal" type="button">Sagittal</button>
+        <button class="btn small ori" data-ori="coronal" type="button">Coronal</button>
+        <label class="check inline"><input id="flipOri" type="checkbox"> Flip</label>
+        <button id="rotateBtn" class="secondary small" type="button" title="Rotate the frames 90 degrees clockwise">Rotate 90&deg;</button>
+      </div>
+      <div class="recon-row">
+        <span class="recon-label">Stretch
+          <span class="i" tabindex="0" role="button" aria-label="info about stretch"
+            data-tip="Resize the frames along X and Y. Use it to correct a squished aspect ratio (for example anisotropic slice spacing). Applies to the video too.">i</span>
+        </span>
+        <label class="stretch">X <input id="scaleX" type="range" min="0.25" max="4" step="0.05" value="1"><span id="scaleXOut">1.00x</span></label>
+        <label class="stretch">Y <input id="scaleY" type="range" min="0.25" max="4" step="0.05" value="1"><span id="scaleYOut">1.00x</span></label>
+        <button id="resetScale" class="secondary small" type="button">Reset</button>
+      </div>
+      <div class="scrub-wrap">
+        <canvas id="scrubCanvas" class="scrub"></canvas>
+      </div>
+      <div class="scrub-controls">
+        <button id="playBtn" class="secondary small" type="button">Play</button>
+        <input id="scrubSlider" type="range" min="0" max="0" value="0" step="1">
+        <span id="scrubLabel" class="small note"></span>
+      </div>
+      <p class="small note">This is exactly what the video will contain. Set the reconstruction and rotation, then Generate.</p>
+    </div>
+  </div>
+
+  <!-- Guided tour. -->
+  <div id="tour" class="hidden">
+    <div id="tourBlock"></div>
+    <div id="tourPop" role="dialog" aria-modal="true" aria-label="Tutorial step">
+      <div id="tourStepNo"></div>
+      <h3 id="tourTitle"></h3>
+      <div id="tourBody"></div>
+      <div id="tourBtns">
+        <button id="tourBack" class="secondary" type="button">Back</button>
+        <button id="tourNext" type="button">Next</button>
+        <button id="tourSkip" class="secondary" type="button">Skip</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

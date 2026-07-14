@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "easy-mp2rage-t1-map"
+version = "0.1.0"
+description = "B1-corrected T1 mapping from MP2RAGE (3T/7T) using SA2RAGE or a generic B1 map (Python port of Marques' scripts)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "GPL-3.0-or-later" }
+authors = [{ name = "T. Shaw", email = "t.shaw@uq.edu.au" }]
+keywords = ["MRI", "MP2RAGE", "SA2RAGE", "T1 mapping", "B1", "3T", "7T", "quantitative"]
+dependencies = [
+    "numpy>=1.21",
+    "scipy>=1.7",
+    "nibabel>=3.2",
+    "pydicom>=2.2",
+]
+
+[project.optional-dependencies]
+qc = ["matplotlib>=3.4"]
+
+[project.scripts]
+easy-mp2rage-t1map = "mp2rage_t1.cli:main"
+
+[project.urls]
+"Repository" = "https://github.com/thomshaw92/Easy-MP2RAGE-T1-Map"
+"Original MATLAB" = "https://github.com/JosePMarques/MP2RAGE-related-scripts"
+
+[tool.setuptools]
+packages = ["mp2rage_t1"]

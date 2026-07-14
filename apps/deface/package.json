@@ -1,0 +1,29 @@
+{
+  "name": "deface",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "license": "BSD-2-Clause",
+  "description": "Remove facial features from brain MRI for anonymization, entirely in the browser. No data leaves your machine. Uses niimath (BSD affine defacing, fast engine) + NiiVue.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "tsc --noEmit",
+    "test:e2e": "npm run build && node test/smoke.mjs"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/dcm2niix": "^1.2.0",
+    "@niivue/niivue": "1.0.0-rc.9",
+    "gl-matrix": "^3.4.4"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.52",
+    "playwright": "^1.57.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.2"
+  }
+}

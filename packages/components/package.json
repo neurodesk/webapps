@@ -3,6 +3,7 @@
   "version": "0.1.2",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
+  "types": "./src/index.d.ts",
   "license": "MIT",
   "files": [
     "src",
@@ -15,6 +16,10 @@
   "exports": {
     ".": "./src/index.js",
     "./core": "./src/core/index.js",
+    "./core/mount-imaging-workspace": {
+      "types": "./src/core/mountImagingWorkspace.d.ts",
+      "default": "./src/core/mountImagingWorkspace.js"
+    },
     "./ui": "./src/ui/index.js",
     "./file-io": "./src/file-io/index.js",
     "./viewer": "./src/viewer/index.js",

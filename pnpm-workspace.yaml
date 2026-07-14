@@ -2,6 +2,7 @@ packages:
   - "packages/*"
   - "apps/*"
 allowBuilds:
+  cbor-extract: false
   electron: false
   electron-winstaller: false
   esbuild: true

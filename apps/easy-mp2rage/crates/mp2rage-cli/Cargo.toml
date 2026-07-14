@@ -1,0 +1,20 @@
+[package]
+name = "mp2rage-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Native CLI for the MP2RAGE T1-mapping pipeline (NIfTI in/out); mirrors pipeline.py"
+
+[[bin]]
+name = "mp2rage-t1map"
+path = "src/main.rs"
+
+[dependencies]
+mp2rage-core = { path = "../mp2rage-core" }
+ndarray = "0.16"
+flate2 = "1.0"
+
+[dev-dependencies]
+ndarray-npy = "0.9"

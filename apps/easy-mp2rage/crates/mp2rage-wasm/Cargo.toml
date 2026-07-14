@@ -1,0 +1,23 @@
+[package]
+name = "mp2rage-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "WebAssembly bindings for the MP2RAGE T1-mapping core (flat Float32Array API)"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mp2rage-core = { path = "../mp2rage-core" }
+ndarray = "0.16"
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+ndarray-npy = "0.9"
+ndarray = "0.16"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O3"]

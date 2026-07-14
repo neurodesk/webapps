@@ -7,7 +7,14 @@ export const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url)))
 export const registryPath = join(repoRoot, 'registry', 'apps.yml');
 
 const ID = /^[a-z][a-z0-9-]*$/;
-const RUNTIMES = new Set(['static-esm', 'static-esm-rust', 'rust-wasm', 'react-vite']);
+const RUNTIMES = new Set([
+  'static-esm',
+  'static-esm-rust',
+  'rust-wasm',
+  'react-vite',
+  'vite-wasm',
+  'vite-webgpu',
+]);
 
 export async function loadAppsRegistry(path = registryPath) {
   const registry = parse(await readFile(path, 'utf8'));

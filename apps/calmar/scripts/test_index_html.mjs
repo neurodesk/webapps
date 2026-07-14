@@ -161,11 +161,13 @@ assert.match(css, /\.start-step h4,\s*\.start-step p\s*\{[^}]*grid-column:\s*2;/
 assert.match(css, /@media\s*\(max-width:\s*540px\)[\s\S]*\.start-links\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/,
   'mobile start-page header links must use a compact two-column grid');
 const moreAppsLinks = [
-  ...html.matchAll(/<a\b(?=[^>]*href=["']https:\/\/neurodesk\.org\/getting-started\/hosted\/webapps\/["'])(?=[^>]*target=["']_blank["'])(?=[^>]*rel=["']noopener noreferrer["'])(?=[^>]*class=["'][^"']*\bheader-link\b[^"']*["'])(?=[^>]*title=["']More Neurodesk web apps["'])[^>]*>[\s\S]*?<span>More Apps<\/span>[\s\S]*?<\/a>/g)
+  ...html.matchAll(/<a\b(?=[^>]*href=["']\.\.\/["'])(?=[^>]*class=["'][^"']*\bheader-link\b[^"']*["'])(?=[^>]*title=["']More Neurodesk web apps["'])[^>]*>[\s\S]*?<span>More Apps<\/span>[\s\S]*?<\/a>/g)
 ];
 assert.equal(moreAppsLinks.length, 2,
-  'start page and workspace headers must expose the Neurodesk More Apps link');
+  'start page and workspace headers must return to the composite More Apps page');
 for (const link of moreAppsLinks) {
+  assert.doesNotMatch(link[0], /target=["']_blank["']/,
+    'More Apps must navigate in the current tab');
   assert.match(link[0], /<rect x=["']3["'] y=["']3["'] width=["']7["'] height=["']7["']\/>/,
     'More Apps link must use the shared 2x2 grid icon pattern');
 }

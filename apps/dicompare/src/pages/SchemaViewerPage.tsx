@@ -358,9 +358,7 @@ const SchemaViewerPage: React.FC = () => {
               <span className="hidden sm:inline">Cite</span>
             </button>
             <a
-              href="https://neurodesk.org/getting-started/hosted/webapps/"
-              target="_blank"
-              rel="noopener noreferrer"
+              href={`${import.meta.env.BASE_URL}../`}
               className="inline-flex items-center gap-1.5 px-2 py-2 rounded-lg text-sm text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
               title="More Neurodesk web apps"
             >
