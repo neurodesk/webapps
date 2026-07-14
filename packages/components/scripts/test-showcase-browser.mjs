@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,7 +126,13 @@ async function inspectShowcase(chrome, url) {
     };
   } finally {
     browser.kill('SIGKILL');
-    await rm(userDataDir, { recursive: true, force: true });
+    if (browser.exitCode === null) await once(browser, 'exit');
+    await rm(userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   }
 }
 
