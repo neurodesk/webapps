@@ -54,6 +54,7 @@ jobs:
           pnpm --filter vesselboost test:e2e
           pnpm --filter spinalcordtoolbox test:e2e
           pnpm --filter calmar test:e2e
+          pnpm --filter browserqc test:e2e
       - uses: actions/upload-artifact@v4
         with:
           name: composite-site
@@ -90,6 +91,8 @@ jobs:
             path: niimath
           - app: dicom2vid
             path: dicom2vid
+          - app: browserqc
+            path: browserqc
     steps:
       - uses: actions/checkout@v4
         with:

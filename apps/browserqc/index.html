@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <!-- empty favicon: suppress the browser's default /favicon.ico request (404) -->
+  <link rel="icon" href="data:," />
+  <title>BrowserQC | Neurodesk Webapps</title>
+</head>
+
+<body>
+  <aside id="qcPanel" aria-label="Image quality metrics">
+    <div class="qc-head">
+      <h3 class="qc-title">Image Quality
+        <span class="qc-titlesub">MRIQC-style</span>
+      </h3>
+      <button id="aboutBtn" class="qc-about" type="button">About</button>
+    </div>
+    <div class="qc-opacity">
+      <label for="ovlSlider">Opacity</label>
+      <input type="range" min="0" max="255" value="128" id="ovlSlider" aria-label="Segmentation overlay opacity" />
+    </div>
+    <div id="qcBody">
+      <p class="qc-empty">No QC values yet — metrics appear automatically once an image loads.</p>
+    </div>
+  </aside>
+
+  <main id="canvas-container">
+    <canvas id="gl1"></canvas>
+  </main>
+
+  <footer>
+    <div class="footer">
+      <table class="footer">
+        <tr>
+          <th id="location">Drag &amp; drop a NIfTI image or a folder of DICOM files</th>
+          <th>
+            <div id="loadingCircle" class="loading-circle"></div>
+            <label id="statusMsg" class="hidden"></label>
+          </th>
+        </tr>
+      </table>
+    </div>
+  </footer>
+
+  <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
+
+  <dialog id="aboutDialog">
+    <form method="dialog">
+      <h3>BrowserQC</h3>
+      <p>Automated MRI quality control, <strong>entirely in your browser</strong> — no upload, no server.
+        Drag in a NIfTI image (or a folder of DICOM files) and it runs automatically.</p>
+      <ul>
+        <li><strong>Segmentation</strong> — a
+          <a href="https://github.com/neuroneural/brainchop" target="_blank" rel="noopener">brainchop</a>
+          deep-learning model (TensorFlow.js) parcellates the brain into 17 gray/white-matter and
+          subcortical regions, shown as a colour overlay on your scan (adjust with the <strong>Opacity</strong>
+          slider)</li>
+        <li><strong>Quality metrics</strong> — <a href="https://github.com/rordenlab/niimath" target="_blank"
+            rel="noopener">niimath</a> computes MRIQC-style image-quality metrics (CJV, CNR, SNR, WM2MAX, EFC,
+          tissue composition) from the scan and its segmentation</li>
+      </ul>
+      <p>Rendering uses <a href="https://niivue.com/" target="_blank" rel="noopener">NiiVue</a>;
+        DICOM import uses <a href="https://github.com/rordenlab/dcm2niix" target="_blank" rel="noopener">dcm2niix</a>.
+      </p>
+      <p><small>The image-quality metrics follow <strong>MRIQC</strong>: Esteban et al. (2017)
+        <em>MRIQC: Advancing the automatic prediction of image quality in MRI from unseen sites.</em>
+        PLoS One 12(9):e0184661.
+        <a href="https://pubmed.ncbi.nlm.nih.gov/28945803/" target="_blank" rel="noopener">PMID: 28945803</a>.
+        With a masked background the CNR omits the air-noise term, so values are relative, not
+        comparable to MRIQC normative data.</small></p>
+      <p><small>Licensed <strong>BSD-2-Clause</strong>. Requires a browser with WebGPU (recent desktop
+        Chrome, Edge, or Safari).</small></p>
+      <button autofocus id="closeAboutBtn" value="default">Close</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+
+</html>

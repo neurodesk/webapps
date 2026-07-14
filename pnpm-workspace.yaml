@@ -3,6 +3,7 @@ packages:
   - "apps/*"
 allowBuilds:
   cbor-extract: false
+  core-js: false
   electron: false
   electron-winstaller: false
   esbuild: true

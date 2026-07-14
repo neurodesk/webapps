@@ -104,3 +104,12 @@ apps:
     model_manifest: null
     source: thomshaw92/DICOM2Vid@4e117e7b0c703a2f3f7dcc80818b51aafe3c56a4
     license: BSD-3-Clause
+  - id: browserqc
+    path: browserqc
+    title: BrowserQC
+    description: Automated browser-native MRI segmentation and image-quality metrics.
+    legacy_domain: neurolabusc.github.io/BrowserQC
+    runtime: vite-webgpu
+    model_manifest: models/browserqc.manifest.json
+    source: neurolabusc/BrowserQC@142559971a3f8fa697dcb0998aa09920b0c8ddd3
+    license: BSD-2-Clause

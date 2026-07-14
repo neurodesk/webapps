@@ -36,6 +36,7 @@ test('static app More Apps links return to the composite start page', async () =
 
 test('shared imaging-workspace apps return to the composite start page', async () => {
   const files = [
+    'apps/browserqc/src/main.ts',
     'apps/deface/src/main.ts',
     'apps/niimath/main.js',
   ];

@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Validate the eleven-app registry
+      - name: Validate the twelve-app registry
         run: pnpm test:registry
       - name: Lint every workspace package
         run: pnpm lint
@@ -45,6 +45,7 @@ jobs:
           - easy-mp2rage
           - niimath
           - dicom2vid
+          - browserqc
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -98,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [musclemap, vesselboost, spinalcordtoolbox, calmar]
+        app: [musclemap, vesselboost, spinalcordtoolbox, calmar, browserqc]
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
