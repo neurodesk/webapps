@@ -21,9 +21,8 @@ const URL = `http://localhost:${PORT}/browserqc/`
 const webGpuArgs = process.platform === 'linux'
   ? [
       '--use-gl=angle',
-      '--use-angle=vulkan',
-      '--enable-features=Vulkan',
-      '--disable-vulkan-surface',
+      '--use-angle=swiftshader',
+      '--use-webgpu-adapter=swiftshader',
       '--enable-unsafe-webgpu',
       '--enable-unsafe-swiftshader',
     ]
@@ -110,9 +109,8 @@ try {
     headless: true,
     channel: 'chrome',
     // Chrome on Linux CI has no physical GPU. These are Chrome's documented
-    // headless WebGPU flags: ANGLE over Vulkan selects bundled SwiftShader,
-    // unsafe-webgpu enables the software adapter, and disabling the Vulkan
-    // surface lets headless rendering present without a window-system swapchain.
+    // headless WebGPU flags: Dawn selects the bundled SwiftShader adapter,
+    // while ANGLE selects SwiftShader for TensorFlow.js' WebGL2 backend.
     args: [...webGpuArgs, '--window-size=1280,960'],
   })
   const page = await browser.newPage()
@@ -132,7 +130,7 @@ try {
   // tfjs runs on the SwiftShader WebGL2 backend here (~15 s). Wiring-only: it asserts
   // the path runs clean and the panel populates, not the segmentation/QC *values*.
   await page.waitForFunction(
-    () => /Segmentation \+ QC complete|QC unavailable|can.t initialize WebGPU/.test(
+    () => /Segmentation \+ QC complete|QC unavailable|can.t initialize WebGPU|^Failed:/.test(
       document.getElementById('statusMsg')?.textContent || '',
     ),
     undefined,
@@ -145,6 +143,7 @@ try {
   if (/can.t initialize WebGPU/.test(terminalStatus)) {
     await fail('WebGPU adapter initialization failed', page)
   }
+  if (/^Failed:/.test(terminalStatus)) await fail(terminalStatus, page)
   if (!/CJV/.test(await qcText())) await fail('QC panel did not populate after segmentation', page)
   console.log('✓ auto segmentation + niimath QC ran, panel populated')
 
