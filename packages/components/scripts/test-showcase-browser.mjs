@@ -139,7 +139,10 @@ async function inspectShowcase(chrome, url) {
 function waitForDevTools(browser) {
   return new Promise((resolve, reject) => {
     let stderr = '';
-    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for Chrome DevTools.\n${stderr}`)), 10_000);
+    // The aggregate release suite starts this browser while Turbo is exercising
+    // every app in parallel. Chrome can take well over ten seconds to publish its
+    // DevTools socket on a busy two-core Actions runner, even though it is healthy.
+    const timeout = setTimeout(() => reject(new Error(`Timed out waiting for Chrome DevTools.\n${stderr}`)), 60_000);
     browser.stderr.on('data', chunk => {
       stderr += chunk.toString();
       const match = stderr.match(/DevTools listening on (ws:\/\/[^\s]+)/);
