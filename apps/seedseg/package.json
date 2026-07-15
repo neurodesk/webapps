@@ -1,17 +1,25 @@
 {
   "name": "seedseg",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Browser-based prostate fiducial marker segmentation.",
   "scripts": {
+    "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
+    "predev": "pnpm runtime-support",
     "dev": "bash web/run.sh",
-    "prebuild": "bash web/setup.sh",
+    "prebuild": "pnpm runtime-support && bash web/setup.sh",
     "build": "node ../../scripts/build-static.mjs",
     "lint": "node ../../scripts/check-app-js.mjs web",
+    "pretest": "pnpm runtime-support",
     "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*"
+  },
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
   }
 }

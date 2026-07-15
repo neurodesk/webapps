@@ -46,6 +46,6 @@
     "check": "node scripts/check-syntax.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

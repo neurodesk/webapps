@@ -1,5 +1,6 @@
 {
-  "// note": "Stub. Populate url/sha256/bytes/license/preprocessing_contract from the deployed calmar worker. Binaries currently still ship in apps/calmar/web/models/ (externalization is Phase 1).",
+  "schema_version": 1,
+  "notes": "The deployed CALMaR pipeline registry is apps/calmar/web/models/manifest.json.",
   "app": "calmar",
-  "models": []
+  "assets": []
 }

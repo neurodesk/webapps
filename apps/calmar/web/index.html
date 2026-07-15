@@ -10,6 +10,7 @@
       "@neurodesk/webapp-components": "./vendor/webapp-components/src/index.js",
       "@neurodesk/webapp-components/ui": "./vendor/webapp-components/src/ui/index.js",
       "@neurodesk/webapp-components/file-io": "./vendor/webapp-components/src/file-io/index.js",
+      "@neurodesk/webapp-components/volume": "./vendor/webapp-components/src/volume/index.js",
       "@neurodesk/webapp-components/": "./vendor/webapp-components/src/"
     }
   }
@@ -20,7 +21,7 @@
   <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
   <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
   <title>CALMaR | Co-designed Automated Lesion Mapping and Reporting</title>
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.24.3/dist/ort.min.js"></script>
+  <script src="wasm/ort.min.js"></script>
   <script src="https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"></script>
   <!-- nifti-reader-js UMD; populates window.nifti, used by atlas-loader.js for atlas + lesion decode. -->
   <script src="nifti-js/index.js"></script>

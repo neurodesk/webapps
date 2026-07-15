@@ -6,6 +6,7 @@ export class DicomController {
     this.updateOutput = options.updateOutput || (() => {});
     this.onConversionComplete = options.onConversionComplete || (() => {});
     this.onDicomFiles = options.onDicomFiles || null;
+    this.throwOnError = options.throwOnError ?? true;
     this.dcm2niixModule = null;
     this.converting = false;
   }
@@ -24,7 +25,8 @@ export class DicomController {
       return output;
     } catch (error) {
       this.updateOutput(`DICOM conversion failed: ${error.message}`);
-      throw error;
+      if (this.throwOnError) throw error;
+      return null;
     } finally {
       this.converting = false;
     }
@@ -32,6 +34,10 @@ export class DicomController {
 
   async convertDropItems(items) {
     const files = await filesFromDataTransferItems(items);
+    if (!files.length) {
+      if (items?.length) this.updateOutput('No DICOM files found in dropped items.');
+      return null;
+    }
     return this.convertFiles(files);
   }
 

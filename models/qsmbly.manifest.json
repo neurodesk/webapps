@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
   "app": "qsmbly",
-  "assets": [],
-  "notes": "QSMbly compiles its Rust scientific implementation to WebAssembly during the site build; it does not ship model weights."
+  "assets": [
+    {"filename":"sub-1_echo-1_part-mag_MEGRE.nii.gz","bytes":3510840,"sha256":"62f817c1d5556f25485438bf6f1d3ff3156cfd11609304519c3e753305dec01f","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c"},
+    {"filename":"sub-1_echo-1_part-phase_MEGRE.nii.gz","bytes":3668449,"sha256":"e5dbd8b9641eaa4fe12917feccdb49f350df3d04f54008631fcfcfda7a093969","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf827"},
+    {"filename":"sub-1_echo-2_part-mag_MEGRE.nii.gz","bytes":3505501,"sha256":"aa2bb366ebf3dce34b355a62666e19e8e254f238569f89d4b59de0c5bb5a3b9e","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d469675bd488fdf828"},
+    {"filename":"sub-1_echo-2_part-phase_MEGRE.nii.gz","bytes":3666524,"sha256":"cca10c0802055165ed30a2292f0bd024668e93315fef8608701792596a5b1e15","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf825"},
+    {"filename":"sub-1_echo-3_part-mag_MEGRE.nii.gz","bytes":3513321,"sha256":"3934f306e1475a31f74cbdbbe62fa5c36369617e256beb9c7cf8d5cf5e0d40ee","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d37bd2b1503380d819"},
+    {"filename":"sub-1_echo-3_part-phase_MEGRE.nii.gz","bytes":3664119,"sha256":"cd9574df6ecca0e53500276eb40ab65574cc7686fe7a0f2b0e52bb4e7ada08ff","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522"},
+    {"filename":"sub-1_echo-4_part-mag_MEGRE.nii.gz","bytes":3508647,"sha256":"c61d0b10df4ccea650d27b97ed21260c8fb68460b7eac22ac94cf46562503752","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838"},
+    {"filename":"sub-1_echo-4_part-phase_MEGRE.nii.gz","bytes":3664573,"sha256":"03f790fd832d0d1c6a9338493ecb6c0a8b8f31f51415787fcc6a2502283ca431","url":"https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0"}
+  ],
+  "notes": "QSMbly compiles its Rust implementation to WebAssembly; example imaging data remains on immutable OSF object URLs."
 }

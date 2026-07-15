@@ -1,0 +1,7 @@
+{
+  "name": "@neurodesk/runtime-support",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generated browser-host support files shared by Neurodesk webapps.",
+  "license": "MIT"
+}

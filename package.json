@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.7.0",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "turbo run dev",
@@ -14,7 +14,9 @@
     "audit:artifacts": "node scripts/audit-artifacts.mjs",
     "test": "node --test test/*.test.mjs && turbo run test",
     "test:registry": "node --test test/registry.test.mjs",
+    "app-plan": "node scripts/app-plan.mjs",
     "test:smoke": "node test/composite-site.smoke.mjs",
+    "test:deployed": "node test/deployed-site.smoke.mjs",
     "lint": "turbo run lint",
     "new-app": "node scripts/new-app.mjs",
     "release": "changeset version && pnpm install --lockfile-only"

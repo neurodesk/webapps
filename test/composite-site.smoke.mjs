@@ -99,6 +99,7 @@ try {
     page.on('request', (request) => {
       const url = new URL(request.url());
       if (url.origin !== origin || url.pathname === `/favicon.ico`) return;
+      if (url.pathname.startsWith('/_runtime/')) return;
       if (returningHome && url.pathname === '/') return;
       if (url.pathname !== `/${app.path}/` && !url.pathname.startsWith(`/${app.path}/`)) {
         subpathLeaks.push(url.pathname);

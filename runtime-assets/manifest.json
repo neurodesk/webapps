@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "families": [
+    {
+      "id": "ort-web",
+      "version": "1.21.0",
+      "target": "ort-web/1.21.0",
+      "files": [
+        {"name":"ort-wasm-simd-threaded.jsep.mjs","source_app":"calmar","source":"wasm/ort-wasm-simd-threaded.jsep.mjs","sha256":"b69c8812bf2d8356dd248fef0abb35e22d1f05f9c593ca34d4b942f35ea93592"},
+        {"name":"ort-wasm-simd-threaded.jsep.wasm","source_app":"calmar","source":"wasm/ort-wasm-simd-threaded.jsep.wasm","sha256":"0663b902fb3937883a34375926bdfe3e1c86cd4c99cbc04c06a7cdf46c78bdde"},
+        {"name":"ort-wasm-simd-threaded.mjs","source_app":"calmar","source":"wasm/ort-wasm-simd-threaded.mjs","sha256":"e9ba2350c370278fc90108f1514fb9ce6a4051341ab977b5b0dca7eca9e78dfa"},
+        {"name":"ort-wasm-simd-threaded.wasm","source_app":"calmar","source":"wasm/ort-wasm-simd-threaded.wasm","sha256":"06b3f98e5aa2fffec1e3ac57a48bf1073828c6624e14d210750bc596c2e35d65"},
+        {"name":"ort.webgpu.bundle.min.mjs","source_app":"calmar","source":"wasm/ort.webgpu.bundle.min.mjs","sha256":"74cf72f9a2b7befc115acca04ae3974735ebd30b802d11ac5097a59ad34ae526"},
+        {"name":"ort.webgpu.min.js","source_app":"musclemap","source":"wasm/ort.webgpu.min.js","sha256":"4f397348ce6919c6787a798e228d529a0f0f97af6d65ffa4c51787fcd5d7d314"},
+        {"name":"ort.min.js","source_app":"seedseg","source":"wasm/ort.min.js","sha256":"95c6f6611837cb50449cb6a0c092145bf493ac64cd0d004033cefc977366e7cb"}
+      ]
+    },
+    {
+      "id": "dcm2niix",
+      "version": "1",
+      "target": "dcm2niix/1",
+      "files": [
+        {"name":"dcm2niix.js","source_app":"calmar","source":"dcm2niix/dcm2niix.js","sha256":"0e7165cf346a5a78c17ca0568230f459e3f33fdd468fff52e46c835dd268e7a8"},
+        {"name":"dcm2niix.wasm","source_app":"calmar","source":"dcm2niix/dcm2niix.wasm","sha256":"c522e5627fee4a4abca0609ec438e3098efb8f972c3b6452f320c528b69045be"},
+        {"name":"index.js","source_app":"calmar","source":"dcm2niix/index.js","sha256":"7107d091fc3fae5697edce7cd6cef4d28e3b158a67a435c6c13766fdd40829a3"},
+        {"name":"worker.js","source_app":"calmar","source":"dcm2niix/worker.js","sha256":"8cafd33fbc8a75f3bc72384e393e10c7aef7c7aa01ad309e0a08760b5655e863"}
+      ]
+    },
+    {
+      "id": "nifti-reader",
+      "version": "0.8.0",
+      "target": "nifti-reader/0.8.0",
+      "files": [
+        {"name":"index.js","source_app":"calmar","source":"nifti-js/index.js","sha256":"10e748285d8867c08f2e72f6a4215c433d353c9961aed8fd75a9571f3b1235a6"}
+      ]
+    }
+  ]
+}

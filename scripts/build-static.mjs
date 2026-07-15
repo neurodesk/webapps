@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { writeCoiServiceWorker } from "./lib/runtime-support.mjs";
 
 // pnpm preserves the outer shell's INIT_CWD for `pnpm --filter app build`,
 // while the lifecycle process cwd is always the package being built.
@@ -15,10 +16,10 @@ const appDir = process.cwd();
 const dist = join(appDir, "dist");
 const manifest = JSON.parse(await readFile(join(appDir, "package.json"), "utf8"));
 const config = { source: "web", ...(manifest.neurodeskWebapp?.static ?? {}) };
-const forbiddenScientificWeight = /\.(?:onnx|pt|pth|safetensors)$/i;
+const forbiddenScientificAsset = /\.(?:onnx|pt|pth|safetensors|nii(?:\.gz)?|mgh|mgz)$/i;
 const copyOptions = {
   recursive: true,
-  filter: (source) => !forbiddenScientificWeight.test(basename(source)),
+  filter: (source) => !forbiddenScientificAsset.test(basename(source)),
 };
 
 await rm(dist, { recursive: true, force: true });
@@ -46,5 +47,12 @@ if (config.buildInfo) {
     dirty,
     buildEnv: process.env.CI ? 'production' : 'local',
   }, null, 2)}\n`);
+}
+if (config.coiServiceWorker) {
+  await writeCoiServiceWorker({
+    repoRoot: join(appDir, '..', '..'),
+    destination: join(dist, 'coi-serviceworker.js'),
+    config: config.coiServiceWorker,
+  });
 }
 console.log(`Assembled static site -> ${join(appDir, "dist")}`);

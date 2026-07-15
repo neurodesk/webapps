@@ -2,6 +2,7 @@
 import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { assembleRuntimeAssetStore } from './lib/runtime-assets.mjs';
 
 const registry = await loadAppsRegistry();
 const siteDist = join(repoRoot, 'dist');
@@ -13,6 +14,8 @@ for (const app of registry.apps) {
   const destination = join(siteDist, app.path);
   await cp(source, destination, { recursive: true });
 }
+
+await assembleRuntimeAssetStore({ repoRoot, siteDist, registry });
 
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')

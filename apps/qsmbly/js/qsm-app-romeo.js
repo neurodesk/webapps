@@ -972,7 +972,8 @@ class QSMApp {
    */
   async _loadExampleData() {
     const btn = document.getElementById('loadExampleData');
-    const { baseUrl, files } = QSMConfig.EXAMPLE_DATA;
+    const { baseUrl, files, urls = {} } = QSMConfig.EXAMPLE_DATA;
+    const assetUrl = (name) => urls[name] || `${baseUrl}/${name}`;
 
     btn.disabled = true;
     btn.textContent = 'Downloading example data...';
@@ -982,7 +983,7 @@ class QSMApp {
     try {
       // First, issue HEAD requests in parallel to learn total size
       const headResponses = await Promise.all(files.map(async (name) => {
-        const resp = await fetch(`${baseUrl}/${name}`, { method: 'HEAD' });
+        const resp = await fetch(assetUrl(name), { method: 'HEAD' });
         const len = parseInt(resp.headers.get('Content-Length') || '0', 10);
         return { name, size: len };
       }));
@@ -999,7 +1000,7 @@ class QSMApp {
       };
 
       const fetched = await Promise.all(files.map(async (name, i) => {
-        const resp = await fetch(`${baseUrl}/${name}`);
+        const resp = await fetch(assetUrl(name));
         if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
 
         const reader = resp.body.getReader();

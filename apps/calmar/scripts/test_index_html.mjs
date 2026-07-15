@@ -353,9 +353,9 @@ assert.match(serviceWorker, /__lnm_downloads/,
   'service worker must serve staged mask downloads from the same-origin route');
 assert.match(serviceWorker, /lnm-mask-downloads-v1/,
   'service worker must use the mask download Cache Storage bucket');
-assert.match(serviceWorker, /r\.method\s*!==\s*["']GET["'][\s\S]*event\.respondWith\(fetch\(r\)\)/,
+assert.match(serviceWorker, /request\.method\s*!==\s*["']GET["'][\s\S]*event\.respondWith\(fetch\(request\)\)/,
   'service worker must let localhost download POSTs reach the dev server');
-assert.match(serviceWorker, /if\s*\(!response\)\s*return\s+fetch\(r\)/,
+assert.match(serviceWorker, /if\s*\(!response\)\s*return\s+fetch\(request\)/,
   'service worker must let uncached localhost download GETs reach the dev server');
 assert.doesNotMatch(serviceWorker, /window\.crossOriginIsolated\s*!==\s*false\s*\|\|\s*!coi\.shouldRegister\(\)/,
   'service worker registration must not be skipped when server COOP/COEP already makes the page isolated');

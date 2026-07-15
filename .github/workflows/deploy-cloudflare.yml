@@ -20,6 +20,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-cloudflare-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-cloudflare-${{ runner.os }}-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown

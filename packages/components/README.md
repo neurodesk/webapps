@@ -27,7 +27,6 @@ See [docs/architecture/overview.md](docs/architecture/overview.md) and [docs/com
 import { createNeuroWebapp } from '@neurodesk/webapp-components';
 import { ConsoleOutput, ProgressManager } from '@neurodesk/webapp-components/ui';
 import { FileIOController } from '@neurodesk/webapp-components/file-io';
-import { PipelineExecutor } from '@neurodesk/webapp-components/inference';
 
 const app = createNeuroWebapp({
   root: document.body,
@@ -47,30 +46,27 @@ const files = new FileIOController({
   updateOutput: message => consoleOutput.log(message)
 });
 
-const executor = new PipelineExecutor({
-  workerUrl: './worker.js',
-  updateOutput: message => consoleOutput.log(message),
-  setProgress: (value, text) => progress.setProgress(value, text)
-});
 ```
+
+The `inference`, `pipeline`, `mask`, and `plugins` subpaths are experimental. They
+are kept outside the stable app-shell, file-ingestion, viewer, volume, and UI seams
+until multiple production apps consume the same contract. Scientific worker
+protocols and scientific defaults remain app-owned.
 
 ## Development
 
 ```bash
-npm install
-npm test
-npm run check
-npm run build:showcase
-npm run serve
+pnpm install
+pnpm --filter @neurodesk/webapp-components test
+pnpm --filter @neurodesk/webapp-components check
+pnpm --filter @neurodesk/webapp-components build:showcase
+pnpm --filter @neurodesk/webapp-components serve
 ```
 
 The showcase app runs at `http://127.0.0.1:8080/` by default and demonstrates the app shell, sidebar sections, file triage, viewer controls, stage results, plugin catalog, QSM command preview, echo navigation, and validation report rendering.
 
 ## Release And Staging
 
-GitHub Actions are adapted from `neurodesk/lesion-network-mapping-webapp`:
-
-- `.github/workflows/release.yml` is manual-only, validates the package, bumps the patch version, tags `vX.Y.Z`, and creates the GitHub release.
-- `.github/workflows/deploy-pages.yml` deploys production from the latest release tag and `/staging/` from `main`.
-
-The Pages artifact is the static showcase built by `npm run build:showcase`.
+This workspace is versioned, tested, and released by the monorepo root workflows.
+The showcase is a contract test and demonstration surface, not a separate Pages
+deployment.

@@ -1,16 +1,22 @@
 import assert from 'node:assert/strict';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse } from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { validateAssetManifest } from '../scripts/lib/scientific-assets.mjs';
 
-test('catalog contains every currently published Neurodesk webapp', async () => {
+test('catalog contains every app workspace without a repeated inventory', async () => {
   const registry = await loadAppsRegistry();
-  assert.deepEqual(registry.apps.map(({ id }) => id).sort(), [
-    'browserqc', 'calmar', 'deface', 'dicom2vid', 'dicompare', 'easy-mp2rage', 'musclemap', 'niimath',
-    'qsmbly', 'seedseg', 'spinalcordtoolbox', 'vesselboost',
-  ]);
+  const workspaceIds = [];
+  for (const entry of await readdir(join(repoRoot, 'apps'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      await access(join(repoRoot, 'apps', entry.name, 'package.json'));
+      workspaceIds.push(entry.name);
+    } catch {}
+  }
+  assert.deepEqual(registry.apps.map(({ id }) => id).sort(), workspaceIds.sort());
 });
 
 test('every catalog entry has a workspace and declared manifest', async () => {
@@ -40,10 +46,31 @@ test('BrowserQC scientific assets are pinned to Hugging Face and not embedded', 
 });
 
 test('CI app-test matrix covers the complete catalog', async () => {
-  const registry = await loadAppsRegistry();
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
-  assert.deepEqual(
-    [...workflow.jobs['app-tests'].strategy.matrix.app].sort(),
-    registry.apps.map(({ id }) => id).sort(),
-  );
+  assert.equal(workflow.jobs['app-tests'].needs, 'app-plan');
+  assert.match(workflow.jobs['app-tests'].if, /has_apps/);
+  assert.match(workflow.jobs['app-tests'].strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.apps\)/);
+});
+
+test('every declared scientific asset manifest satisfies its selected schema', async () => {
+  const registry = await loadAppsRegistry();
+  const errors = [];
+  for (const app of registry.apps) {
+    for (const error of await validateAssetManifest(repoRoot, app)) errors.push(`${app.id}: ${error}`);
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('pnpm is the only workspace lockfile authority', async () => {
+  const found = [];
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) await visit(path);
+      else if (entry.name === 'package-lock.json') found.push(path.slice(repoRoot.length + 1));
+    }
+  }
+  await visit(repoRoot);
+  assert.deepEqual(found, []);
 });

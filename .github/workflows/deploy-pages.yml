@@ -24,6 +24,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-pages-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-pages-${{ runner.os }}-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -47,3 +52,15 @@ jobs:
       - name: Deploy composite site
         id: deployment
         uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify deployed cross-origin isolation
+        run: pnpm test:deployed
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url }}

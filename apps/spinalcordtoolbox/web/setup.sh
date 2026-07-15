@@ -25,23 +25,6 @@ done
 
 echo "Done. Files saved to wasm/"
 
-# Vertebral labeling assets
-HF_DATASET_ASSET_REVISION="55c9462a14bc9c84cf093c348cffda9148099df9"
-HF_DATASET_ASSET_BASE="https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/${HF_DATASET_ASSET_REVISION}"
-mkdir -p "$SCRIPT_DIR/models/templates/PAM50"
-echo "Downloading PAM50 vertebral labeling assets..."
-for f in PAM50_t2.nii.gz PAM50_levels.nii.gz; do
-  echo "  $f"
-  curl -sL -o "$SCRIPT_DIR/models/templates/PAM50/$f" "$HF_DATASET_ASSET_BASE/web/models/templates/PAM50/$f"
-done
-
-mkdir -p "$SCRIPT_DIR/models/c2c3_disc_models"
-SCT_DATA_BASE="https://raw.githubusercontent.com/spinalcordtoolbox/spinalcordtoolbox/master/data/c2c3_disc_models"
-for f in t1_model.yml t2_model.yml; do
-  echo "  $f"
-  curl -sL -o "$SCRIPT_DIR/models/c2c3_disc_models/$f" "$SCT_DATA_BASE/$f"
-done
-
 echo ""
 echo "Note: SCT task metadata is recorded in: $SCRIPT_DIR/models/manifest.json"
-echo "      Browser-runnable SCT model assets must be converted and validated before tasks are enabled."
+echo "      Scientific assets are fetched on demand from immutable manifest URLs."

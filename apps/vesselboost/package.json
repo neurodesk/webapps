@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "lint": "node scripts/check-syntax.mjs",
+    "lint": "node ../../scripts/check-app-js.mjs web",
     "test": "npm run lint && npm run test:analytics && npm run test:spatial-file && npm run test:pipeline-graph && npm run test:viewer-controller && npm run test:result-display && npm run test:n4-shrink-policy",
     "test:analytics": "node --no-warnings scripts/test_analytics.mjs",
     "test:spatial-file": "node --no-warnings scripts/test_spatial_file.mjs",
@@ -9,11 +9,13 @@
     "test:result-display": "node --no-warnings scripts/test_result_display.mjs",
     "test:n4-shrink-policy": "node --no-warnings scripts/test_n4_shrink_policy.mjs",
     "vendor": "node ../../scripts/vendor-components.mjs",
-    "predev": "pnpm vendor",
+    "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
+    "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "bash web/run.sh",
-    "prebuild": "pnpm vendor && bash web/setup.sh",
+    "prebuild": "pnpm vendor && pnpm runtime-support && bash web/setup.sh",
     "build": "node ../../scripts/build-static.mjs",
-    "pretest:e2e": "pnpm vendor",
+    "pretest": "pnpm runtime-support",
+    "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
     "test:shared": "node --test test/shared-components-parity.test.js"
   },
@@ -23,12 +25,16 @@
     "@neurodesk/webapp-components": "workspace:*"
   },
   "devDependencies": {
-    "acorn": "^8.14.0",
     "@playwright/test": "^1.44.0",
     "jsdom": "^24.0.0"
   },
   "name": "vesselboost",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  }
 }

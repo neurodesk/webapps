@@ -1,5 +1,6 @@
 {
-  "// note": "Stub. Populate url/sha256/bytes/license/preprocessing_contract from the deployed spinalcordtoolbox worker. Binaries currently still ship in apps/spinalcordtoolbox/web/models/ (externalization is Phase 1).",
+  "schema_version": 1,
+  "notes": "SCT task-level model and template metadata remains in apps/spinalcordtoolbox/web/models/manifest.json.",
   "app": "spinalcordtoolbox",
-  "models": []
+  "assets": []
 }

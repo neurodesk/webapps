@@ -14,6 +14,7 @@ ORT_BASE="https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist"
 echo "Downloading ONNX Runtime Web v${ORT_VERSION}..."
 
 ORT_FILES=(
+  ort.min.js
   ort.webgpu.bundle.min.mjs
   ort-wasm-simd-threaded.mjs
   ort-wasm-simd-threaded.wasm

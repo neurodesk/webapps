@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
@@ -13,6 +15,31 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  app-plan:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+      has_apps: ${{ steps.plan.outputs.has_apps }}
+      shared_apps: ${{ steps.plan.outputs.shared_apps }}
+      has_shared_apps: ${{ steps.plan.outputs.has_shared_apps }}
+      all_apps: ${{ steps.plan.outputs.all_apps }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate affected app plan
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
+
   workspace-contracts:
     runs-on: ubuntu-latest
     steps:
@@ -23,29 +50,18 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Validate the twelve-app registry
-        run: pnpm test:registry
+      - name: Validate the app catalog and generated plans
+        run: pnpm test:registry && node --test test/app-plan.test.mjs
       - name: Lint every workspace package
         run: pnpm lint
 
   app-tests:
+    needs: app-plan
+    if: needs.app-plan.outputs.has_apps == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        app:
-          - musclemap
-          - vesselboost
-          - spinalcordtoolbox
-          - calmar
-          - qsmbly
-          - seedseg
-          - dicompare
-          - deface
-          - easy-mp2rage
-          - niimath
-          - dicom2vid
-          - browserqc
+      matrix: ${{ fromJSON(needs.app-plan.outputs.apps) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -53,25 +69,29 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
-        if: matrix.app == 'easy-mp2rage'
+        if: matrix.rust_wasm
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-pack for Easy MP2RAGE
-        if: matrix.app == 'easy-mp2rage'
+      - name: Install wasm-pack
+        if: matrix.rust_wasm
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
       - uses: actions/setup-python@v5
-        if: matrix.app == 'dicom2vid'
+        if: matrix.python_reference
         with:
           python-version: '3.13'
-      - name: Install DICOM2Vid reference dependencies
-        if: matrix.app == 'dicom2vid'
-        run: pip install -r apps/dicom2vid/requirements.txt nibabel
+      - run: pnpm install --frozen-lockfile
+      - name: Install Python reference dependencies
+        if: matrix.python_reference
+        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
       - name: Test ${{ matrix.app }}
         run: pnpm --filter ${{ matrix.app }} test
+      - name: Build ${{ matrix.app }}
+        run: pnpm --filter ${{ matrix.app }} build
 
   composite-site:
+    needs: app-plan
+    if: github.event_name != 'pull_request' || needs.app-plan.outputs.all_apps == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,6 +100,11 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: turbo-${{ runner.os }}-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
@@ -89,17 +114,20 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - name: Build the composite site
         run: pnpm build
-      - name: Reject embedded models and oversized assets
+      - name: Enforce scientific-asset and hosting budgets
         run: pnpm audit:artifacts
+      - name: Test shared runtime assembly
+        run: node --test test/runtime-assets.test.mjs
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
 
-  shared-component-e2e:
+  shared-runtime-e2e:
+    needs: app-plan
+    if: needs.app-plan.outputs.has_shared_apps == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        app: [musclemap, vesselboost, spinalcordtoolbox, calmar, browserqc]
+      matrix: ${{ fromJSON(needs.app-plan.outputs.shared_apps) }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -109,5 +137,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - name: Test shared-component integration in ${{ matrix.app }}
+      - name: Test shared-runtime integration in ${{ matrix.app }}
         run: pnpm --filter ${{ matrix.app }} test:e2e

@@ -6,13 +6,13 @@
 // (git-ignored) and refreshed on predev/prebuild.
 //
 // Run via each app's `vendor` script: `node ../../scripts/vendor-components.mjs`
-// (pnpm sets INIT_CWD to the app package directory).
+// pnpm runs lifecycle scripts with cwd set to the selected app package.
 import { cp, rm, access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const appDir = process.env.INIT_CWD || process.cwd();
+const appDir = process.cwd();
 const src = join(repoRoot, "packages", "components", "src");
 const dest = join(appDir, "web", "vendor", "webapp-components", "src");
 

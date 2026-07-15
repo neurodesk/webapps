@@ -15,7 +15,7 @@ import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
 import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, getTaskTemplateAssetUrl, isTaskRunnable } from './app/sct-tasks.js';
-import { computeAutoWindow } from './modules/ui/percentile.js';
+import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import './modules/sct-processing.js';
 
 export class SpinalCordToolboxApp {

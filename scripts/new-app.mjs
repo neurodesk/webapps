@@ -79,8 +79,16 @@ const entry =
   `    legacy_domain: null\n` +
   `    runtime: react-vite\n` +
   `    model_manifest: null\n` +
+  `    asset_manifest_schema: null\n` +
   `    source: neurodesk/webapps@local\n` +
-  `    license: NOASSERTION\n`;
+  `    license: NOASSERTION\n` +
+  `    maintainers: [neurodesk]\n` +
+  `    support_status: experimental\n` +
+  `    shell: imaging-workspace\n` +
+  `    ci:\n` +
+  `      toolchains: [node]\n` +
+  `      shared_runtime: true\n` +
+  `      release: false\n`;
 await appendFile(registry, entry);
 
 console.log(`Created apps/${name} and registered it in registry/apps.yml. Next:`);

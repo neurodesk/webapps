@@ -12,8 +12,16 @@ apps:
     legacy_domain: musclemap.neurodesk.org
     runtime: static-esm
     model_manifest: models/musclemap.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: neurodesk/musclemap-webapp@8b5012b488bdf7727001c92b79eae826366ec1f0
     license: MIT
+    maintainers: [neurodesk]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node]
+      shared_runtime: true
+      release: true
   - id: vesselboost
     path: vesselboost
     title: VesselBoost
@@ -21,8 +29,16 @@ apps:
     legacy_domain: vesselboost.neurodesk.org
     runtime: static-esm-rust
     model_manifest: models/vesselboost.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: neurodesk/vesselboost-webapp@6ba7d073941744343399a039ea2609b385e5a9ff
     license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: true
+      release: true
   - id: spinalcordtoolbox
     path: sct
     title: Spinal Cord Toolbox
@@ -30,8 +46,16 @@ apps:
     legacy_domain: sct.neurodesk.org
     runtime: static-esm
     model_manifest: models/spinalcordtoolbox.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: neurodesk/spinalcordtoolbox-webapp@5135c2d95814c2fa4c90f52aa74ba91f2651c920
     license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node]
+      shared_runtime: true
+      release: true
   - id: calmar
     path: calmar
     title: CALMaR
@@ -39,8 +63,16 @@ apps:
     legacy_domain: calmar.neurodesk.org
     runtime: static-esm
     model_manifest: apps/calmar/web/models/manifest.json
+    asset_manifest_schema: pipeline-assets-v1
     source: neurodesk/calmar-webapp@646b2d9b412fd57af3ba8942cd3f83e2fced5653
     license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node]
+      shared_runtime: true
+      release: true
   - id: qsmbly
     path: qsmbly
     title: QSMbly
@@ -48,8 +80,16 @@ apps:
     legacy_domain: qsmbly.neurodesk.org
     runtime: rust-wasm
     model_manifest: models/qsmbly.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: astewartau/qsmbly@6d3a7a984a5af4e57625a6bcf60d5bac11c6873d
     license: MIT
+    maintainers: [astewartau]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      release: true
   - id: seedseg
     path: seedseg
     title: SeedSeg
@@ -57,8 +97,16 @@ apps:
     legacy_domain: seedseg.neurodesk.org
     runtime: static-esm
     model_manifest: models/seedseg.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: astewartau/prostate@3354f6cc3cf750ada5bd3e25bd0ab6e1712662ab
     license: MIT
+    maintainers: [astewartau]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      release: true
   - id: dicompare
     path: dicompare
     title: dicompare
@@ -66,8 +114,16 @@ apps:
     legacy_domain: dicompare.neurodesk.org
     runtime: react-vite
     model_manifest: null
+    asset_manifest_schema: null
     source: astewartau/dicompare-web@f0462e2b514f79eb1b32078f682f339c050897cd
     license: NOASSERTION
+    maintainers: [astewartau]
+    support_status: active
+    shell: react
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      release: true
   - id: deface
     path: deface
     title: Deface
@@ -75,8 +131,16 @@ apps:
     legacy_domain: niivue.github.io/deface
     runtime: vite-webgpu
     model_manifest: models/deface.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: niivue/deface@a27d54264256531db1cb17019a01319e78506e76
     license: BSD-2-Clause
+    maintainers: [niivue]
+    support_status: active
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      release: true
   - id: easy-mp2rage
     path: easy-mp2rage
     title: Easy MP2RAGE T1 Map
@@ -84,8 +148,16 @@ apps:
     legacy_domain: thomshaw92.github.io/Easy-MP2RAGE-T1-Map
     runtime: rust-wasm
     model_manifest: null
+    asset_manifest_schema: null
     source: thomshaw92/Easy-MP2RAGE-T1-Map@f421f4a946523ad88a936b939d3bc4c967df9ea5
     license: GPL-3.0-or-later
+    maintainers: [thomshaw92]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      release: true
   - id: niimath
     path: niimath
     title: NiiMath
@@ -93,8 +165,16 @@ apps:
     legacy_domain: niivue.github.io/niivue-niimath
     runtime: vite-wasm
     model_manifest: models/niimath.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: niivue/niivue-niimath@96d2b49d2b7afdf4bcc5ebdb78a959f622185bfb
     license: BSD-2-Clause
+    maintainers: [niivue]
+    support_status: active
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      release: true
   - id: dicom2vid
     path: dicom2vid
     title: DICOM2Vid
@@ -102,8 +182,16 @@ apps:
     legacy_domain: thomshaw92.github.io/DICOM2Vid
     runtime: static-esm
     model_manifest: null
+    asset_manifest_schema: null
     source: thomshaw92/DICOM2Vid@4e117e7b0c703a2f3f7dcc80818b51aafe3c56a4
     license: BSD-3-Clause
+    maintainers: [thomshaw92]
+    support_status: active
+    shell: static-html
+    ci:
+      toolchains: [node, python-reference]
+      shared_runtime: false
+      release: true
   - id: browserqc
     path: browserqc
     title: BrowserQC
@@ -111,5 +199,13 @@ apps:
     legacy_domain: neurolabusc.github.io/BrowserQC
     runtime: vite-webgpu
     model_manifest: models/browserqc.manifest.json
+    asset_manifest_schema: scientific-assets-v1
     source: neurolabusc/BrowserQC@142559971a3f8fa697dcb0998aa09920b0c8ddd3
     license: BSD-2-Clause
+    maintainers: [neurolabusc]
+    support_status: active
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: true
+      release: true

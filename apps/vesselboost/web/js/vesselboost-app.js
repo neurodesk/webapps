@@ -13,7 +13,7 @@ import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
 import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
-import { computeAutoWindow } from './modules/ui/percentile.js';
+import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import {
   buildResultVolumeStack,
   defaultResultVisibility,

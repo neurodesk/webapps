@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "lint": "node scripts/check-syntax.mjs",
+    "lint": "node ../../scripts/check-app-js.mjs web",
     "test": "npm run test:fast && npm run test:inference:e2e && npm run test:worker:protocol && npm run test:server",
     "test:fast": "npm run lint && npm run test:manifest && npm run test:routing && npm run test:labels && npm run test:ui && npm run test:compat && npm run test:viewer && npm run test:processing && npm run test:vertebrae && npm run test:totalspineseg && npm run test:lesion-analysis && npm run test:inference:postprocessing && npm run test:batch:webapp && npm run test:fixtures && npm run test:controllers && npm run test:ui:modules && npm run test:ci-summary",
     "test:manifest": "node --no-warnings scripts/test_manifest_consistency.mjs",
@@ -26,11 +26,13 @@
     "test:server": "bash scripts/test_run_server_restart.sh",
     "test:ci-summary": "node scripts/test_summarize_test_failures.cjs",
     "vendor": "node ../../scripts/vendor-components.mjs",
-    "predev": "pnpm vendor",
+    "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
+    "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "bash web/run.sh",
-    "prebuild": "pnpm vendor && bash web/setup.sh",
+    "prebuild": "pnpm vendor && pnpm runtime-support && bash web/setup.sh",
     "build": "node ../../scripts/build-static.mjs",
-    "pretest:e2e": "pnpm vendor",
+    "pretest": "pnpm runtime-support",
+    "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
     "test:shared": "node --test test/shared-components-parity.test.js"
   },
@@ -40,12 +42,16 @@
     "@neurodesk/webapp-components": "workspace:*"
   },
   "devDependencies": {
-    "acorn": "^8.16.0",
     "@playwright/test": "^1.44.0",
     "jsdom": "^24.0.0"
   },
   "name": "spinalcordtoolbox",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  }
 }

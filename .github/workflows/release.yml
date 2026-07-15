@@ -2,6 +2,15 @@ name: release-apps
 
 on:
   workflow_dispatch:
+    inputs:
+      apps:
+        description: Comma-separated app ids, or "affected"
+        required: true
+        default: affected
+      base_sha:
+        description: Base commit used when apps=affected
+        required: false
+        default: HEAD~1
 
 permissions:
   contents: write
@@ -10,13 +19,41 @@ concurrency:
   group: neurodesk-webapps-release
   cancel-in-progress: false
 
-# All app tags point to the same validated monorepo commit. Each GitHub release
-# carries a self-contained browser bundle for its app; model weights remain on
-# Hugging Face and are fetched at runtime.
 jobs:
-  build-and-verify:
+  app-plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    outputs:
+      release_apps: ${{ steps.plan.outputs.release_apps }}
+      has_release_apps: ${{ steps.plan.outputs.has_release_apps }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate release plan from the app catalog
+        id: plan
+        env:
+          APPS: ${{ inputs.apps }}
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          if [[ "$APPS" == "affected" ]]; then
+            node scripts/app-plan.mjs --base "${BASE_SHA:-HEAD~1}" --head HEAD
+          else
+            node scripts/app-plan.mjs --only "$APPS"
+          fi
+
+  verify:
+    needs: app-plan
+    if: needs.app-plan.outputs.has_release_apps == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,103 +64,78 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+        if: matrix.rust_wasm
         with:
           targets: wasm32-unknown-unknown
       - name: Install wasm-pack
+        if: matrix.rust_wasm
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
       - uses: actions/setup-python@v5
+        if: matrix.python_reference
         with:
           python-version: '3.13'
-      - name: Install DICOM2Vid reference dependencies
-        run: pip install -r apps/dicom2vid/requirements.txt nibabel
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Run all unit and integration tests
-        run: pnpm test
-      - name: Lint every workspace package
-        run: pnpm lint
-      - name: Build the composite site
-        run: pnpm build
-      - name: Reject embedded models and oversized assets
-        run: pnpm audit:artifacts
-      - name: Smoke test every deployed subpath
-        run: pnpm test:smoke
-      - name: Test shared-component browser integrations
+      - name: Install Python reference dependencies
+        if: matrix.python_reference
+        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
+      - name: Test app
+        run: pnpm --filter ${{ matrix.app }} test
+      - name: Build standalone app bundle
+        run: pnpm --filter ${{ matrix.app }} build
+      - name: Enforce standalone artifact budgets
+        run: node scripts/audit-artifacts.mjs --app ${{ matrix.app }}
+      - name: Install browser
+        if: matrix.shared_runtime
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Test shared runtime in a browser
+        if: matrix.shared_runtime
+        run: pnpm --filter ${{ matrix.app }} test:e2e
+      - name: Package standalone app bundle
+        env:
+          APP: ${{ matrix.app }}
         run: |
-          pnpm --filter musclemap test:e2e
-          pnpm --filter vesselboost test:e2e
-          pnpm --filter spinalcordtoolbox test:e2e
-          pnpm --filter calmar test:e2e
-          pnpm --filter browserqc test:e2e
+          VERSION="$(node -p "require('./apps/${APP}/package.json').version")"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version for ${APP}: ${VERSION}"
+            exit 1
+          fi
+          (cd "apps/${APP}/dist" && zip -qr "${GITHUB_WORKSPACE}/${APP}-${VERSION}-web.zip" .)
       - uses: actions/upload-artifact@v4
         with:
-          name: composite-site
-          path: dist
+          name: release-${{ matrix.app }}
+          path: ${{ matrix.app }}-*-web.zip
           if-no-files-found: error
           retention-days: 7
 
   release:
-    needs: build-and-verify
+    needs: [app-plan, verify]
+    if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - app: musclemap
-            path: musclemap
-          - app: vesselboost
-            path: vesselboost
-          - app: spinalcordtoolbox
-            path: sct
-          - app: calmar
-            path: calmar
-          - app: qsmbly
-            path: qsmbly
-          - app: seedseg
-            path: seedseg
-          - app: dicompare
-            path: dicompare
-          - app: deface
-            path: deface
-          - app: easy-mp2rage
-            path: easy-mp2rage
-          - app: niimath
-            path: niimath
-          - app: dicom2vid
-            path: dicom2vid
-          - app: browserqc
-            path: browserqc
+      matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
-          name: composite-site
-          path: dist
+          name: release-${{ matrix.app }}
+          path: release-bundle
       - name: Create app release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP: ${{ matrix.app }}
-          APP_PATH: ${{ matrix.path }}
         run: |
           VERSION="$(node -p "require('./apps/${APP}/package.json').version")"
-          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid semantic version for ${APP}: ${VERSION}"
-            exit 1
-          fi
-
           TAG="${APP}-v${VERSION}"
-          ARCHIVE="${APP}-${VERSION}-web.zip"
-          (cd "dist/${APP_PATH}" && zip -qr "${GITHUB_WORKSPACE}/${ARCHIVE}" .)
-
-          if gh release view "${TAG}" >/dev/null 2>&1; then
-            echo "Release ${TAG} already exists; replacing its browser bundle."
-            gh release upload "${TAG}" "${ARCHIVE}" --clobber
+          ARCHIVE="release-bundle/${APP}-${VERSION}-web.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" --clobber
           else
-            gh release create "${TAG}" \
-              --target "${GITHUB_SHA}" \
+            gh release create "$TAG" \
+              --target "$GITHUB_SHA" \
               --title "${APP} v${VERSION}" \
               --generate-notes \
-              "${ARCHIVE}"
+              "$ARCHIVE"
           fi
