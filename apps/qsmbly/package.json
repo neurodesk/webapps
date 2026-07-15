@@ -21,7 +21,7 @@
   },
   "neurodeskWebapp": {
     "static": {
-      "include": ["index.html", "css", "js", "dcm2niix", "nifti-js", "niivue", "wasm", "data", "QSMbly.png", "favicon.ico"]
+      "include": ["index.html", "css", "js", "dcm2niix", "nifti-js", "niivue", "wasm", "QSMbly.png", "favicon.ico"]
     }
   },
   "private": true,

@@ -45,6 +45,13 @@ test('BrowserQC scientific assets are pinned to Hugging Face and not embedded', 
   }
 });
 
+test('QSMbly example data stays outside the static release artifact', async () => {
+  const packageJson = JSON.parse(
+    await readFile(join(repoRoot, 'apps', 'qsmbly', 'package.json'), 'utf8'),
+  );
+  assert.ok(!packageJson.neurodeskWebapp.static.include.includes('data'));
+});
+
 test('CI app-test matrix covers the complete catalog', async () => {
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
   assert.equal(workflow.jobs['app-tests'].needs, 'app-plan');
