@@ -24,10 +24,58 @@
           <label class="field" for="source">
             <span>Source</span>
             <select id="source">
-              <option value="dandi" selected>DANDI LEC SPIM example</option>
-              <option value="custom">Custom OME-Zarr URL</option>
+              <option value="dandi" selected>DANDI Archive</option>
+              <option value="custom">OME-Zarr URL</option>
             </select>
           </label>
+
+          <div class="field" id="dandiArchiveControl">
+            <details class="dandi-browser" open>
+              <summary>Browse the DANDI Archive</summary>
+              <div class="dandi-search-grid">
+                <label for="dandisetId">
+                  <span>Dandiset</span>
+                  <input
+                    id="dandisetId"
+                    type="text"
+                    inputmode="numeric"
+                    value="000108"
+                    pattern="[0-9]{6}"
+                    maxlength="6"
+                    autocomplete="off"
+                  />
+                </label>
+                <label for="dandiVersion">
+                  <span>Version</span>
+                  <input id="dandiVersion" type="text" value="draft" autocomplete="off" />
+                </label>
+              </div>
+              <label for="dandiQuery">
+                <span>Find OME-Zarr assets</span>
+                <div class="dandi-search-row">
+                  <input
+                    id="dandiQuery"
+                    type="search"
+                    placeholder="sample-127 LEC chunk-1"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button id="searchDandi" type="button">Search</button>
+                </div>
+              </label>
+              <output id="dandiSearchStatus" role="status" aria-live="polite">
+                Search paths in dandiset 000108.
+              </output>
+              <div id="dandiResults" class="dandi-results" aria-label="DANDI OME-Zarr results"></div>
+              <button id="addDandiSelection" type="button" disabled>Add selected stores</button>
+              <div
+                id="dandiSelectedStores"
+                class="selected-store-list"
+                aria-label="Selected DANDI stores"
+                hidden
+              ></div>
+            </details>
+          </div>
 
           <div class="field custom-url" id="zarrUrlControl" hidden>
             <span>Store URLs</span>
@@ -42,6 +90,13 @@
                   autocomplete="off"
                   spellcheck="false"
                 />
+                <button
+                  id="removeZarrUrl"
+                  class="remove-url-button"
+                  type="button"
+                  aria-label="Remove OME-Zarr store 1"
+                  disabled
+                >Remove</button>
               </div>
             </div>
             <button id="addZarrUrl" class="add-url-button" type="button">+ Add another URL</button>
@@ -86,7 +141,7 @@
               id="zoom"
               type="range"
               min="0.1"
-              max="10"
+              max="128"
               step="0.01"
               value="1"
               aria-describedby="zoomValue"
@@ -94,6 +149,28 @@
             <output id="zoomValue" for="zoom" aria-live="polite">1.00×</output>
             <button id="applyZoom" type="button" disabled>Apply</button>
           </div>
+
+          <label class="field" id="zarrLevelControl" for="zarrLevel">
+            <span>Zarr level</span>
+            <select id="zarrLevel" disabled>
+              <option value="auto" selected>Auto</option>
+            </select>
+            <small>Auto adapts detail while zooming; choose a level to lock it.</small>
+          </label>
+
+          <label class="slider-field" for="scrollZoomSpeed">
+            <span>Scroll zoom speed</span>
+            <input
+              id="scrollZoomSpeed"
+              type="range"
+              min="0.25"
+              max="4"
+              step="0.25"
+              value="2"
+              aria-describedby="scrollZoomSpeedValue"
+            />
+            <output id="scrollZoomSpeedValue" for="scrollZoomSpeed">2×</output>
+          </label>
 
           <div class="axis-grid" aria-label="Pan controls">
             <label class="slider-field" for="panX">
@@ -162,6 +239,37 @@
             <output id="windowWidthValue" for="windowWidth">6,500</output>
           </label>
 
+          <div
+            class="window-range-field"
+            role="group"
+            aria-labelledby="windowRangeLabel"
+          >
+            <div class="window-range-heading">
+              <span id="windowRangeLabel">Visible min–max</span>
+              <output id="windowRangeValue" aria-live="polite">0–6,500</output>
+            </div>
+            <div class="dual-range" id="windowRangeTrack">
+              <input
+                id="windowMin"
+                type="range"
+                min="0"
+                max="65535"
+                step="1"
+                value="0"
+                aria-label="Visible minimum"
+              />
+              <input
+                id="windowMax"
+                type="range"
+                min="0"
+                max="65535"
+                step="1"
+                value="6500"
+                aria-label="Visible maximum"
+              />
+            </div>
+          </div>
+
           <div class="toggle-grid">
             <label><input id="showCrosshair" type="checkbox" checked /> Crosshair</label>
             <label><input id="showScaleBar" type="checkbox" checked /> Scale bar</label>
@@ -178,27 +286,39 @@
             </div>
           </div>
 
-          <label class="field" for="interactionTool">
+          <div class="field pointer-tool-field">
             <span>Pointer tool</span>
-            <select id="interactionTool">
-              <option value="navigate" selected>Move crosshair</option>
-              <option value="measure">Measure distance</option>
-            </select>
-          </label>
+            <button
+              id="interactionTool"
+              class="pointer-tool-button"
+              type="button"
+              aria-pressed="false"
+            >Measure distance</button>
+          </div>
           <div class="inline-status">
-            <output id="measurementStatus" role="status" aria-live="polite">Select measure distance</output>
+            <output id="measurementStatus" role="status" aria-live="polite">Crosshair movement active</output>
             <button id="clearMeasurements" type="button" disabled>Clear</button>
           </div>
 
           <button class="secondary-button" id="downloadNifti" type="button" disabled>
             Download NIfTI
           </button>
+          <button class="secondary-button" id="copyShareLink" type="button">
+            Copy share link
+          </button>
+          <output id="shareStatus" class="download-status" role="status" aria-live="polite" hidden></output>
           <output id="downloadStatus" class="download-status" role="status" aria-live="polite" hidden></output>
         </section>
       </aside>
 
       <main id="viewer" aria-label="OME-Zarr volume viewer">
         <canvas id="nv-canvas" aria-label="Interactive streamed volume"></canvas>
+        <output
+          id="visibleLevel"
+          class="visible-level"
+          aria-label="Currently displayed Zarr level"
+          hidden
+        ></output>
         <div class="hud" id="hud" hidden aria-hidden="true">Loading…</div>
         <div class="strip" id="chunkStrip" hidden aria-hidden="true"></div>
         <div class="fallback" id="fallback" aria-hidden="true"></div>

@@ -97,37 +97,17 @@ export function layoutTranslatedBlocks(
     Math.min(...inputs.map((block) => block.translation[axis])),
   ) as Shape3
   const blocks = inputs.map((block): MosaicBlockLayout => {
-    const voxelOrigin = block.translation.map((translation, axis) => {
-      const exact = (translation - worldOrigin[axis]) / spacing[axis]
-      const rounded = Math.round(exact)
-      if (!close(exact, rounded)) {
-        throw new Error(
-          `Store ${block.id} translation ${block.translation.join(', ')} mm is not aligned to the ${spacing.join(' x ')} mm voxel grid`,
-        )
-      }
-      return rounded
-    }) as Shape3
+    const voxelOrigin = block.translation.map(
+      (translation, axis) => (translation - worldOrigin[axis]) / spacing[axis],
+    ) as Shape3
     return { ...block, voxelOrigin }
   })
-  for (let left = 0; left < blocks.length; left++) {
-    for (let right = left + 1; right < blocks.length; right++) {
-      const a = blocks[left]
-      const b = blocks[right]
-      if (!a || !b) continue
-      const overlaps = [0, 1, 2].every(
-        (axis) =>
-          a.voxelOrigin[axis] < b.voxelOrigin[axis] + b.shape[axis] &&
-          b.voxelOrigin[axis] < a.voxelOrigin[axis] + a.shape[axis],
-      )
-      if (overlaps) {
-        throw new Error(
-          `Stores ${a.id} and ${b.id} overlap after applying their NGFF translations`,
-        )
-      }
-    }
-  }
   const shape = [0, 1, 2].map((axis) =>
-    Math.max(...blocks.map((block) => block.voxelOrigin[axis] + block.shape[axis])),
+    Math.ceil(
+      Math.max(
+        ...blocks.map((block) => block.voxelOrigin[axis] + block.shape[axis]),
+      ),
+    ),
   ) as Shape3
   return { shape, spacing: [...spacing], worldOrigin, blocks }
 }

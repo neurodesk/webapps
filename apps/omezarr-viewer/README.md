@@ -7,7 +7,11 @@ complete dataset.
 
 ## Features
 
-- A verified public DANDI SPIM dataset is ready to explore on first load.
+- The source menu keeps DANDI Archive search and direct OME-Zarr URLs as
+  separate workflows.
+- Public OME-Zarr assets can be searched by path directly from any Dandiset and
+  selected without copying S3 identifiers by hand. The browser defaults to
+  dandiset `000108`, version `draft`.
 - Custom OME-Zarr v2 and v3 stores can be opened from `https://`, `http://`, or
   `s3://` store-root URLs when the host permits browser CORS requests.
 - Multiple stores can be added to one viewer. ZARRo composes them on a shared
@@ -15,10 +19,29 @@ complete dataset.
   resulting physical world origin in the rendered volume and NIfTI export.
 - Zoom selections are applied explicitly, avoiding expensive pyramid replanning
   while the slider is still moving; pan retains coarser context automatically.
+- The Zarr level menu can keep zoom-adaptive detail on Auto or lock the visible
+  field of view to an explicit pyramid level.
 - Multiplanar, single-slice, and cropped 3D rendering layouts are available.
-- Windowing, colour maps, physical scale bars, crosshairs, and distance
-  measurements are handled in the browser.
+- Window level/width and a synchronized dual-thumb visible min/max control,
+  colour maps, physical scale bars, crosshairs, and distance measurements are
+  handled in the browser.
 - The current field of view can be exported as NIfTI.
+- Share links reopen the selected store or translated store collection and
+  restore layout, camera, crosshair, pan, zoom, Zarr level, scroll zoom speed,
+  contrast, colour map, and overlay visibility.
+
+## Opening data by URL
+
+The **Copy share link** button is the recommended way to generate a link. Store
+roots use repeatable `url` parameters, so a minimal direct link also works:
+
+```text
+https://webapps.neurodesk.org/omezarr-viewer/?source=custom&url=https%3A%2F%2Fdandiarchive.s3.amazonaws.com%2Fzarr%2F<zarr-id>%2F
+```
+
+Repeat `url` to open translated stores together. Optional viewer parameters are
+added automatically by **Copy share link** and remain human-inspectable in the
+query string.
 
 ## Development
 
@@ -41,7 +64,3 @@ app-owned because they are specific to cloud-native multiscale volumes.
 NiiVue's chunked-volume API requests visible viewer bricks and uploads completed
 bricks to the GPU under bounded cache and residency budgets. Spatial Z/Y/X axes
 are mapped to viewer X/Y/Z, and source units are converted to millimetres.
-
-The built-in example is the public DANDI store
-`e8633ce6-0922-4de1-a453-8ffbed48f1d2`, starting at pyramid level 4 with an
-intensity window of 0–6500.

@@ -16,6 +16,14 @@ import * as zarr from 'zarrita'
 import './styles.css'
 import { getBackendFromUrl } from './backend'
 import {
+  searchDandiZarrAssets,
+  type DandiZarrAsset,
+} from './dandi_archive'
+import {
+  IntensityWindowEstimator,
+  isGenericDtypeWindow,
+} from './intensity_window'
+import {
   buildLogicalVolume,
   niftiDatatype,
   type Shape3,
@@ -26,13 +34,26 @@ import {
   type MosaicBlockLayout,
 } from './mosaic_layout'
 import {
+  compositeMosaicBlocks,
+  mosaicSamplingWindow,
+  type FetchedMosaicBlock,
+} from './mosaic_composite'
+import {
   absoluteCropOrigin,
   fovCropGeometry,
   renderCropGrid,
 } from './render_crop'
 import {
+  readShareState,
+  writeShareState,
+  type ShareableViewState,
+} from './share_state'
+import {
   crosshairAppearanceForSpacing,
+  clampViewerZoom,
+  detailLevelForZoom,
   lodFocusTracksInteraction,
+  rangeBoundsForWindow,
   updateAdaptiveLodDetail,
   wheelZoomValue,
   windowFromLevelWidth,
@@ -53,18 +74,26 @@ mountImagingWorkspace({
 
 const BACKEND = getBackendFromUrl()
 const MANIFEST_URL = assetUrl('range-poc/synthetic-volume.json')
-const DEFAULT_RESIDENCY_BYTES = 256 * 1024 * 1024
+const DEFAULT_RESIDENCY_BYTES = 512 * 1024 * 1024
+// NiiVue's planner accounts for eight bytes per voxel regardless of source
+// dtype. ZARRo supports one- and two-byte data, so this corrects that estimate
+// while the stream manager still enforces DEFAULT_RESIDENCY_BYTES at runtime.
+const ADAPTIVE_PLANNER_BUDGET_BYTES = DEFAULT_RESIDENCY_BYTES * 4
 const STREAMING_CHUNK_EDGE = 256
 const STREAMING_CHUNK_HALO: Shape3 = [3, 3, 3]
 const ZARR_BYTE_CACHE_BYTES = 512 * 1024 * 1024
 const LOD_DEBOUNCE_MS = 180
-const ADAPTIVE_MAX_BRICKS = 192
+const ADAPTIVE_MAX_BRICKS = 512
 const ADAPTIVE_CELL_EDGE = 128
+// Keep the finest data local to the viewport focus. NiiVue's automatic radius
+// is based on the full 3D diagonal, which overestimates the visible footprint
+// for long, thin microscopy volumes and exhausts the brick budget before L2/L1.
+const ADAPTIVE_FINE_RADIUS = ADAPTIVE_CELL_EDGE / 2
 const MAX_IN_MEMORY_NIFTI_BYTES = 256 * 1024 * 1024
+const AUTO_WINDOW_CHUNK_LIMIT = 8
 
 type SourceKind = 'synthetic' | 'omezarr'
 type OmezarrSourceId = 'dandi' | 'custom'
-type ConfiguredOmezarrSourceId = Exclude<OmezarrSourceId, 'custom'>
 type SupportedDtype = 'uint8' | 'uint16'
 type ZarrFetchArray = zarr.Array<zarr.DataType, zarr.AsyncReadable>
 
@@ -75,18 +104,7 @@ interface OmezarrProfile {
   defaultLevel: number
   defaultWindow: DisplayWindow
   transportLabel: string
-}
-
-const OMEZARR_PROFILES: Record<ConfiguredOmezarrSourceId, OmezarrProfile> = {
-  dandi: {
-    id: 'e8633ce6-0922-4de1-a453-8ffbed48f1d2',
-    name: 'DANDI LEC SPIM OME-Zarr',
-    storeUrl: () =>
-      'https://dandiarchive.s3.amazonaws.com/zarr/e8633ce6-0922-4de1-a453-8ffbed48f1d2',
-    defaultLevel: 4,
-    defaultWindow: { min: 0, max: 6500 },
-    transportLabel: 'DANDI S3 OME-Zarr chunk objects',
-  },
+  preferCoarsestLevel?: boolean
 }
 
 interface RangeManifest {
@@ -264,6 +282,10 @@ const els = {
   zoom: el<HTMLInputElement>('zoom'),
   zoomValue: el<HTMLOutputElement>('zoomValue'),
   applyZoom: el<HTMLButtonElement>('applyZoom'),
+  zarrLevel: el<HTMLSelectElement>('zarrLevel'),
+  zarrLevelControl: el<HTMLElement>('zarrLevelControl'),
+  scrollZoomSpeed: el<HTMLInputElement>('scrollZoomSpeed'),
+  scrollZoomSpeedValue: el<HTMLOutputElement>('scrollZoomSpeedValue'),
   pan: [
     el<HTMLInputElement>('panX'),
     el<HTMLInputElement>('panY'),
@@ -279,23 +301,40 @@ const els = {
   windowLevelValue: el<HTMLOutputElement>('windowLevelValue'),
   windowWidth: el<HTMLInputElement>('windowWidth'),
   windowWidthValue: el<HTMLOutputElement>('windowWidthValue'),
-  interactionTool: el<HTMLSelectElement>('interactionTool'),
+  windowMin: el<HTMLInputElement>('windowMin'),
+  windowMax: el<HTMLInputElement>('windowMax'),
+  windowRangeTrack: el<HTMLDivElement>('windowRangeTrack'),
+  windowRangeValue: el<HTMLOutputElement>('windowRangeValue'),
+  interactionTool: el<HTMLButtonElement>('interactionTool'),
   showScaleBar: el<HTMLInputElement>('showScaleBar'),
   clearMeasurements: el<HTMLButtonElement>('clearMeasurements'),
   measurementStatus: el<HTMLOutputElement>('measurementStatus'),
   zarrUrl: el<HTMLInputElement>('zarrUrl'),
+  removeZarrUrl: el<HTMLButtonElement>('removeZarrUrl'),
   zarrUrls: el<HTMLDivElement>('zarrUrls'),
   addZarrUrl: el<HTMLButtonElement>('addZarrUrl'),
+  dandiArchiveControl: el<HTMLDivElement>('dandiArchiveControl'),
   zarrUrlControl: el<HTMLDivElement>('zarrUrlControl'),
+  dandisetId: el<HTMLInputElement>('dandisetId'),
+  dandiVersion: el<HTMLInputElement>('dandiVersion'),
+  dandiQuery: el<HTMLInputElement>('dandiQuery'),
+  searchDandi: el<HTMLButtonElement>('searchDandi'),
+  dandiSearchStatus: el<HTMLOutputElement>('dandiSearchStatus'),
+  dandiResults: el<HTMLDivElement>('dandiResults'),
+  addDandiSelection: el<HTMLButtonElement>('addDandiSelection'),
+  dandiSelectedStores: el<HTMLDivElement>('dandiSelectedStores'),
   showCrosshair: el<HTMLInputElement>('showCrosshair'),
   showStats: el<HTMLInputElement>('showStats'),
   reload: el<HTMLButtonElement>('reload'),
   downloadNifti: el<HTMLButtonElement>('downloadNifti'),
+  copyShareLink: el<HTMLButtonElement>('copyShareLink'),
+  shareStatus: el<HTMLOutputElement>('shareStatus'),
   downloadStatus: el<HTMLOutputElement>('downloadStatus'),
   canvas: el<HTMLCanvasElement>('nv-canvas'),
   hud: el<HTMLDivElement>('hud'),
   chunkStrip: el<HTMLDivElement>('chunkStrip'),
   fallback: el<HTMLDivElement>('fallback'),
+  visibleLevel: el<HTMLOutputElement>('visibleLevel'),
 }
 
 let nv: NiiVue | null = null
@@ -305,7 +344,9 @@ let chunkedVolume: NVChunkedVolume | null = null
 let stats: RangeStats = freshStats()
 let pollHandle = 0
 let shouldInitializeCustomSource = true
+let selectedDandiStoreUrls: string[] = []
 let requestedBaseLevel: number | null = null
+let fixedZarrLevel: number | null = null
 let focusFraction: Shape3 = [0.5, 0.5, 0.5]
 let lastPanForFocus: Shape3 = [0, 0, 0]
 let suppressAdaptiveEvents = false
@@ -314,6 +355,27 @@ let renderCropGeometry: ExportGeometry | null = null
 let sliceViewBeforeRender: ViewState | null = null
 let windowUpdateHandle = 0
 let pendingZoom: number | null = null
+let dandiSearchController: AbortController | null = null
+let mosaicLodHandle = 0
+let mosaicLodRevision = 0
+
+function cancelMosaicLodReload(): void {
+  mosaicLodRevision++
+  window.clearTimeout(mosaicLodHandle)
+  mosaicLodHandle = 0
+}
+let initialSharedView: ViewState | null = null
+let initialSharedSettings: ShareableViewState | null = null
+let manualWindowRevision = 0
+let autoWindowSession: AutoWindowSession | null = null
+
+interface AutoWindowSession {
+  source: OmezarrSource | OmezarrMosaicSource
+  estimator: IntensityWindowEstimator
+  manualRevision: number
+  observedChunks: number
+  lastMaximum: number | null
+}
 
 interface ViewState {
   azimuth: number
@@ -331,6 +393,60 @@ interface CameraView {
   crosshairPos: ArrayLike<number>
   pan2Dxyzmm: ArrayLike<number>
   renderPan: ArrayLike<number>
+}
+
+function defaultShareState(): ShareableViewState {
+  return {
+    layout: Number(els.layout.value),
+    azimuth: 110,
+    elevation: 15,
+    scale: 1,
+    crosshair: [0.5, 0.5, 0.5],
+    pan2D: [0, 0, 0, 1],
+    renderPan: [0, 0],
+    colormap: els.colormap.value,
+    windowLevel: Number(els.windowLevel.value),
+    windowWidth: Number(els.windowWidth.value),
+    scrollZoomSpeed: Number(els.scrollZoomSpeed.value),
+    showCrosshair: els.showCrosshair.checked,
+    showScaleBar: els.showScaleBar.checked,
+    showStats: els.showStats.checked,
+  }
+}
+
+function applySharedControlSettings(
+  settings: ShareableViewState,
+  applyWindow = true,
+): void {
+  els.layout.value = String(settings.layout)
+  if (
+    [...els.colormap.options].some(
+      (option) => option.value === settings.colormap,
+    )
+  ) {
+    els.colormap.value = settings.colormap
+  }
+  if (applyWindow) {
+    els.windowLevel.value = String(settings.windowLevel)
+    els.windowWidth.value = String(Math.max(1, settings.windowWidth))
+  }
+  els.scrollZoomSpeed.value = String(settings.scrollZoomSpeed)
+  els.showCrosshair.checked = settings.showCrosshair
+  els.showScaleBar.checked = settings.showScaleBar
+  els.showStats.checked = settings.showStats
+  syncWindowControlValues()
+  syncScrollZoomSpeed()
+}
+
+function viewFromShareState(settings: ShareableViewState): ViewState {
+  return {
+    azimuth: settings.azimuth,
+    elevation: settings.elevation,
+    scale: settings.scale,
+    crosshair: settings.crosshair,
+    pan2D: settings.pan2D,
+    renderPan: settings.renderPan,
+  }
 }
 
 function assetUrl(path: string): string {
@@ -363,7 +479,13 @@ function relativeUrl(baseUrl: string, relative: string): string {
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+  if (bytes < 1024 * 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+  return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(2)} TB`
 }
 
 interface ExportGeometry {
@@ -491,10 +613,35 @@ function syncWindowControlValues(): void {
     Number(els.windowLevel.value),
     Number(els.windowWidth.value),
   )
+  const bounds = rangeBoundsForWindow(
+    win,
+    Number(els.windowMin.min) || 0,
+    Number(els.windowMax.max) || 1,
+  )
+  els.windowMin.min = String(bounds.min)
+  els.windowMax.min = String(bounds.min)
+  els.windowMin.max = String(bounds.max)
+  els.windowMax.max = String(bounds.max)
+  els.windowLevel.min = String(bounds.min)
+  els.windowLevel.max = String(bounds.max)
+  const rangeMin = win.min
+  const rangeMax = win.max
+  const rangeSpan = bounds.max - bounds.min
   els.windowLevelValue.value = formatIntensity(Number(els.windowLevel.value))
   els.windowWidthValue.value = formatIntensity(Number(els.windowWidth.value))
   els.windowLevelValue.title = `Visible range ${win.min} to ${win.max}`
   els.windowWidthValue.title = `Visible range ${win.min} to ${win.max}`
+  els.windowMin.value = String(rangeMin)
+  els.windowMax.value = String(rangeMax)
+  els.windowRangeValue.value = `${formatIntensity(rangeMin)}–${formatIntensity(rangeMax)}`
+  els.windowRangeTrack.style.setProperty(
+    '--range-start',
+    `${((rangeMin - bounds.min) / rangeSpan) * 100}%`,
+  )
+  els.windowRangeTrack.style.setProperty(
+    '--range-end',
+    `${((rangeMax - bounds.min) / rangeSpan) * 100}%`,
+  )
 }
 
 function setWindowControls(win: DisplayWindow, dtype: SupportedDtype): void {
@@ -504,11 +651,86 @@ function setWindowControls(win: DisplayWindow, dtype: SupportedDtype): void {
     dtypeMaximum,
     Math.max(dtype === 'uint8' ? 255 : 4095, values.width, win.max * 2),
   )
+  const usefulMinimum = Math.min(0, win.min)
+  els.windowLevel.min = String(usefulMinimum)
   els.windowLevel.max = String(usefulMaximum)
   els.windowWidth.max = String(usefulMaximum)
+  els.windowMin.max = String(usefulMaximum)
+  els.windowMax.max = String(usefulMaximum)
+  els.windowMin.min = String(usefulMinimum)
+  els.windowMax.min = String(usefulMinimum)
   els.windowLevel.value = String(values.level)
   els.windowWidth.value = String(values.width)
   syncWindowControlValues()
+}
+
+function prepareAutoWindow(source: LoadedSource): void {
+  autoWindowSession = null
+  if (source.kind === 'synthetic') return
+  const currentWindow = parseWindow(source.defaultWindow)
+  if (!isGenericDtypeWindow(source.dtype, currentWindow)) return
+  autoWindowSession = {
+    source,
+    estimator: new IntensityWindowEstimator(source.dtype),
+    manualRevision: manualWindowRevision,
+    observedChunks: 0,
+    lastMaximum: null,
+  }
+}
+
+function observeChunkForAutoWindow(
+  source: OmezarrSource | OmezarrMosaicSource,
+  bytes: Uint8Array,
+): void {
+  const session = autoWindowSession
+  if (
+    !session ||
+    session.source !== source ||
+    session.manualRevision !== manualWindowRevision
+  ) {
+    return
+  }
+  session.observedChunks++
+  const estimated = session.estimator.observe(bytes)
+  if (estimated && estimated.max !== session.lastMaximum) {
+    session.lastMaximum = estimated.max
+    source.defaultWindow = estimated
+    setWindowControls(estimated, source.dtype)
+    window.setTimeout(() => {
+      if (!nv || activeSource !== source || nv.volumes.length === 0) return
+      void nv
+        .setVolume(0, { calMin: estimated.min, calMax: estimated.max })
+        .catch((error: unknown) => {
+          showFallback(
+            `Automatic contrast failed: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        })
+    }, 0)
+  }
+  if (session.observedChunks >= AUTO_WINDOW_CHUNK_LIMIT) {
+    autoWindowSession = null
+  }
+}
+
+function handleWindowInput(): void {
+  manualWindowRevision++
+  autoWindowSession = null
+  scheduleWindowUpdate()
+}
+
+function handleWindowRangeInput(changed: 'min' | 'max'): void {
+  const lower = Number(els.windowMin.min) || 0
+  const upper = Math.max(lower + 1, Number(els.windowMax.max) || 1)
+  let min = Math.min(upper - 1, Math.max(lower, Number(els.windowMin.value)))
+  let max = Math.min(upper, Math.max(lower + 1, Number(els.windowMax.value)))
+  if (min >= max) {
+    if (changed === 'min') min = Math.max(lower, max - 1)
+    else max = Math.min(upper, min + 1)
+  }
+  const values = windowLevelWidth({ min, max })
+  els.windowLevel.value = String(values.level)
+  els.windowWidth.value = String(values.width)
+  handleWindowInput()
 }
 
 function scheduleWindowUpdate(): void {
@@ -551,18 +773,14 @@ function customProfile(rawUrl: string): OmezarrProfile {
     defaultLevel: 0,
     defaultWindow: { min: 0, max: 65535 },
     transportLabel: 'custom S3 OME-Zarr chunk objects',
+    preferCoarsestLevel: true,
   }
 }
 
-function currentOmezarrProfile(): OmezarrProfile {
-  const value = els.source.value
-  if (!isOmezarrSourceId(value)) {
-    throw new Error(`Source '${value}' is not an OME-Zarr profile`)
-  }
-  if (value === 'custom') {
-    return customProfile(customStoreUrls()[0] ?? '')
-  }
-  return OMEZARR_PROFILES[value]
+function currentStoreUrls(): string[] {
+  return els.source.value === 'dandi'
+    ? selectedDandiStoreUrls
+    : customStoreUrls()
 }
 
 function syncUrlRowControls(): void {
@@ -570,11 +788,55 @@ function syncUrlRowControls(): void {
   rows.forEach((row, index) => {
     const input = row.querySelector<HTMLInputElement>('input[type="url"]')
     if (input) input.setAttribute('aria-label', `OME-Zarr store URL ${index + 1}`)
-    row.querySelector<HTMLButtonElement>('.remove-url-button')?.toggleAttribute(
-      'hidden',
-      rows.length === 1,
-    )
+    const remove = row.querySelector<HTMLButtonElement>('.remove-url-button')
+    if (remove) {
+      remove.hidden = false
+      remove.disabled = rows.length === 1 && !input?.value.trim()
+      remove.setAttribute('aria-label', `Remove OME-Zarr store ${index + 1}`)
+    }
   })
+}
+
+function createStoreRemoveButton(
+  accessibleLabel: string,
+  onRemove: () => void,
+): HTMLButtonElement {
+  const remove = document.createElement('button')
+  remove.type = 'button'
+  remove.className = 'remove-url-button'
+  remove.textContent = 'Remove'
+  remove.setAttribute('aria-label', accessibleLabel)
+  remove.addEventListener('click', onRemove)
+  return remove
+}
+
+async function reloadAfterStoreRemoval(): Promise<void> {
+  updateUrlFromControls()
+  if (currentStoreUrls().length > 0) {
+    await reloadVolume({ reloadSource: true, preserveView: true })
+    return
+  }
+  cancelMosaicLodReload()
+  await disposeChunkedVolume()
+  activeSource = null
+  chunkPlan = null
+  syncZarrLevelControl()
+  syncActiveLodIndicator(null)
+  syncDownloadControl()
+  showFallback(
+    els.source.value === 'dandi'
+      ? 'Search DANDI and select an OME-Zarr asset, then press Load volume'
+      : 'Add an OME-Zarr store URL, then press Load volume',
+  )
+}
+
+function removeCustomUrlRow(row: HTMLElement, input: HTMLInputElement): void {
+  const rows = [...els.zarrUrls.querySelectorAll<HTMLElement>('.zarr-url-row')]
+  if (rows.length === 1) input.value = ''
+  else row.remove()
+  shouldInitializeCustomSource = true
+  syncUrlRowControls()
+  void reloadAfterStoreRemoval()
 }
 
 function addCustomUrlInput(value = ''): HTMLInputElement {
@@ -587,17 +849,12 @@ function addCustomUrlInput(value = ''): HTMLInputElement {
   input.autocomplete = 'off'
   input.spellcheck = false
   input.value = value
-  const remove = document.createElement('button')
-  remove.type = 'button'
-  remove.className = 'remove-url-button'
-  remove.textContent = 'Remove'
-  remove.addEventListener('click', () => {
-    row.remove()
-    shouldInitializeCustomSource = true
-    syncUrlRowControls()
+  const remove = createStoreRemoveButton('Remove OME-Zarr store', () => {
+    removeCustomUrlRow(row, input)
   })
   input.addEventListener('input', () => {
     shouldInitializeCustomSource = true
+    syncUrlRowControls()
   })
   input.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
@@ -608,6 +865,132 @@ function addCustomUrlInput(value = ''): HTMLInputElement {
   els.zarrUrls.append(row)
   syncUrlRowControls()
   return input
+}
+
+function setCustomStoreUrls(urls: string[]): void {
+  const uniqueUrls = [...new Set(urls.map((url) => url.trim()).filter(Boolean))]
+  const rows = [...els.zarrUrls.querySelectorAll<HTMLElement>('.zarr-url-row')]
+  for (const row of rows.slice(1)) row.remove()
+  els.zarrUrl.value = uniqueUrls[0] ?? ''
+  for (const url of uniqueUrls.slice(1)) addCustomUrlInput(url)
+  shouldInitializeCustomSource = true
+  syncUrlRowControls()
+}
+
+function syncDandiSelection(): void {
+  const selected = els.dandiResults.querySelectorAll<HTMLInputElement>(
+    'input[type="checkbox"]:checked',
+  ).length
+  els.addDandiSelection.disabled = selected === 0
+  els.addDandiSelection.textContent =
+    selected === 0
+      ? 'Add selected stores'
+      : `Add ${selected} selected store${selected === 1 ? '' : 's'}`
+}
+
+function renderSelectedDandiStores(): void {
+  els.dandiSelectedStores.replaceChildren()
+  els.dandiSelectedStores.hidden = selectedDandiStoreUrls.length === 0
+  if (selectedDandiStoreUrls.length === 0) return
+
+  const heading = document.createElement('strong')
+  heading.className = 'selected-store-heading'
+  heading.textContent = 'Selected stores'
+  els.dandiSelectedStores.append(heading)
+
+  selectedDandiStoreUrls.forEach((storeUrl, index) => {
+    const row = document.createElement('div')
+    row.className = 'selected-store-row'
+    const name = document.createElement('span')
+    name.textContent = customStoreName(storeUrl)
+    name.title = storeUrl
+    const remove = createStoreRemoveButton(`Remove DANDI store ${index + 1}`, () => {
+      selectedDandiStoreUrls = selectedDandiStoreUrls.filter(
+        (selectedUrl) => selectedUrl !== storeUrl,
+      )
+      const matchingResult = [...els.dandiResults.querySelectorAll<HTMLInputElement>(
+        'input[type="checkbox"]',
+      )].find((input) => input.value === storeUrl)
+      if (matchingResult) matchingResult.checked = false
+      shouldInitializeCustomSource = true
+      renderSelectedDandiStores()
+      syncDandiSelection()
+      els.dandiSearchStatus.value = 'Store removed. Updating the viewer…'
+      void reloadAfterStoreRemoval().then(() => {
+        els.dandiSearchStatus.value = 'Store removed.'
+      })
+    })
+    row.append(name, remove)
+    els.dandiSelectedStores.append(row)
+  })
+}
+
+function renderDandiResults(assets: DandiZarrAsset[]): void {
+  els.dandiResults.replaceChildren()
+  for (const asset of assets) {
+    const label = document.createElement('label')
+    label.className = 'dandi-result'
+    const checkbox = document.createElement('input')
+    checkbox.type = 'checkbox'
+    checkbox.value = asset.storeUrl
+    checkbox.addEventListener('change', syncDandiSelection)
+    const copy = document.createElement('span')
+    const title = document.createElement('strong')
+    title.textContent = asset.path.split('/').at(-1) ?? asset.path
+    const metadata = document.createElement('small')
+    metadata.textContent = `${formatBytes(asset.size)} · ${asset.path}`
+    copy.append(title, metadata)
+    label.append(checkbox, copy)
+    els.dandiResults.append(label)
+  }
+  syncDandiSelection()
+}
+
+async function searchDandiAssets(): Promise<void> {
+  dandiSearchController?.abort()
+  const controller = new AbortController()
+  dandiSearchController = controller
+  els.searchDandi.disabled = true
+  els.dandiSearchStatus.value = 'Searching DANDI…'
+  els.dandiResults.replaceChildren()
+  syncDandiSelection()
+  try {
+    const result = await searchDandiZarrAssets(
+      els.dandisetId.value.trim(),
+      els.dandiVersion.value.trim(),
+      els.dandiQuery.value,
+      { signal: controller.signal },
+    )
+    if (controller.signal.aborted) return
+    renderDandiResults(result.assets)
+    els.dandiSearchStatus.value =
+      result.count === 0
+        ? 'No matching OME-Zarr assets.'
+        : `Showing ${result.assets.length} of ${result.count.toLocaleString()} matching OME-Zarr assets.`
+  } catch (error) {
+    if (controller.signal.aborted) return
+    els.dandiSearchStatus.value =
+      error instanceof Error ? error.message : String(error)
+  } finally {
+    if (dandiSearchController === controller) {
+      dandiSearchController = null
+      els.searchDandi.disabled = false
+    }
+  }
+}
+
+function addSelectedDandiAssets(): void {
+  const selectedUrls = [
+    ...els.dandiResults.querySelectorAll<HTMLInputElement>(
+      'input[type="checkbox"]:checked',
+    ),
+  ].map((input) => input.value)
+  if (selectedUrls.length === 0) return
+  selectedDandiStoreUrls = [...new Set([...selectedDandiStoreUrls, ...selectedUrls])]
+  shouldInitializeCustomSource = true
+  renderSelectedDandiStores()
+  updateUrlFromControls()
+  els.dandiSearchStatus.value = `${selectedUrls.length} store${selectedUrls.length === 1 ? '' : 's'} selected. Press Load volume when ready.`
 }
 
 function normalizeZarrStoreUrl(rawUrl: string): string {
@@ -661,14 +1044,44 @@ function syncSourceControls(): void {
   ) {
     setActiveLodLoading()
   }
+  els.dandiArchiveControl.hidden = els.source.value !== 'dandi'
   els.zarrUrlControl.hidden = els.source.value !== 'custom'
+  syncZarrLevelControl()
+}
+
+function pyramidLevels(source: LoadedSource | null): OmezarrLevel[] {
+  if (source?.kind === 'omezarr') return source.levels
+  if (source?.kind === 'omezarr-mosaic') {
+    return source.blocks[0]?.source.levels ?? []
+  }
+  return []
+}
+
+function syncZarrLevelControl(): void {
+  const isOmezarr = currentSourceKind() === 'omezarr'
+  els.zarrLevelControl.hidden = !isOmezarr
+  const levels = pyramidLevels(activeSource)
+  const options = [new Option('Auto — adapt while zooming', 'auto')]
+  for (const level of levels) {
+    const suffix =
+      level.level === 0
+        ? ' — finest'
+        : level.level === levels.length - 1
+          ? ' — overview'
+          : ''
+    options.push(new Option(`L${level.level}${suffix}`, String(level.level)))
+  }
+  els.zarrLevel.replaceChildren(...options)
+  const fixedIsAvailable =
+    fixedZarrLevel !== null && levels.some((level) => level.level === fixedZarrLevel)
+  els.zarrLevel.value = fixedIsAvailable ? String(fixedZarrLevel) : 'auto'
+  els.zarrLevel.disabled = !isOmezarr || levels.length === 0
 }
 
 function setDefaultWindowForSelectedSource(): void {
   setWindowControls({ min: 24, max: 210 }, 'uint8')
   if (currentSourceKind() === 'omezarr') {
-    const profile = currentOmezarrProfile()
-    setWindowControls(profile.defaultWindow, 'uint16')
+    setWindowControls({ min: 0, max: 65535 }, 'uint16')
   }
 }
 
@@ -680,17 +1093,51 @@ function initControlsFromUrl(): void {
   }
   const storeUrls = params.getAll('url').filter(Boolean)
   if (storeUrls.length > 0) {
-    els.source.value = 'custom'
-    els.zarrUrl.value = storeUrls[0] ?? ''
-    for (const storeUrl of storeUrls.slice(1)) addCustomUrlInput(storeUrl)
+    if (els.source.value === 'dandi') {
+      selectedDandiStoreUrls = [...new Set(storeUrls)]
+      renderSelectedDandiStores()
+    } else {
+      els.source.value = 'custom'
+      setCustomStoreUrls(storeUrls)
+    }
   }
+  els.dandisetId.value = params.get('dandiset') || '000108'
+  els.dandiVersion.value = params.get('dandiVersion') || 'draft'
+  els.dandiQuery.value = params.get('dandiQuery') || ''
   const level = params.get('level')
   if (level && /^\d+$/.test(level)) {
     requestedBaseLevel = Number(level)
   } else if (currentSourceKind() === 'omezarr') {
-    requestedBaseLevel = currentOmezarrProfile().defaultLevel
+    requestedBaseLevel = null
+  }
+  const zarrLevel = params.get('zarrLevel')
+  if (zarrLevel && /^\d+$/.test(zarrLevel)) {
+    fixedZarrLevel = Number(zarrLevel)
+    requestedBaseLevel = fixedZarrLevel
   }
   setDefaultWindowForSelectedSource()
+  const shareKeys = [
+    'layout',
+    'zoom',
+    'pan',
+    'crosshair',
+    'azimuth',
+    'elevation',
+    'scale',
+    'renderPan',
+    'colormap',
+    'wl',
+    'ww',
+    'scrollZoomSpeed',
+    'crosshairVisible',
+    'scaleBar',
+    'stats',
+  ]
+  if (shareKeys.some((key) => params.has(key))) {
+    initialSharedSettings = readShareState(params, defaultShareState())
+    applySharedControlSettings(initialSharedSettings)
+    initialSharedView = viewFromShareState(initialSharedSettings)
+  }
   syncSourceControls()
 }
 
@@ -699,14 +1146,33 @@ function updateUrlFromControls(): void {
   const kind = currentSourceKind()
   url.searchParams.set('source', els.source.value)
   if (kind === 'omezarr') {
-    const level = requestedBaseLevel ?? currentOmezarrProfile().defaultLevel
+    const level = requestedBaseLevel ?? 0
     url.searchParams.set('level', String(level))
+    if (fixedZarrLevel === null) {
+      url.searchParams.delete('zarrLevel')
+    } else {
+      url.searchParams.set('zarrLevel', String(fixedZarrLevel))
+    }
   } else {
     url.searchParams.delete('level')
+    url.searchParams.delete('zarrLevel')
   }
   url.searchParams.delete('url')
-  if (els.source.value === 'custom') {
-    for (const storeUrl of customStoreUrls()) url.searchParams.append('url', storeUrl)
+  if (kind === 'omezarr') {
+    for (const storeUrl of currentStoreUrls()) url.searchParams.append('url', storeUrl)
+  }
+  if (els.source.value === 'dandi') {
+    url.searchParams.set('dandiset', els.dandisetId.value.trim() || '000108')
+    url.searchParams.set('dandiVersion', els.dandiVersion.value.trim() || 'draft')
+    if (els.dandiQuery.value.trim()) {
+      url.searchParams.set('dandiQuery', els.dandiQuery.value.trim())
+    } else {
+      url.searchParams.delete('dandiQuery')
+    }
+  } else {
+    url.searchParams.delete('dandiset')
+    url.searchParams.delete('dandiVersion')
+    url.searchParams.delete('dandiQuery')
   }
   window.history.replaceState(null, '', url)
 }
@@ -915,9 +1381,9 @@ async function openOmezarrSource(
   const attrs = group.attrs as OmezarrRootAttributes
   const multiscale = multiscalesFromAttrs(attrs)[0]
   const levelCount = multiscale?.datasets?.length ?? 0
-  const requestedLevel = isInitialCustomLoad
-    ? levelCount - 1
-    : (requestedLevelInput ?? profile.defaultLevel)
+  const requestedLevel =
+    requestedLevelInput ??
+    (profile.preferCoarsestLevel ? levelCount - 1 : profile.defaultLevel)
   const level = Number.isInteger(requestedLevel)
     ? Math.min(Math.max(requestedLevel, 0), Math.max(levelCount - 1, 0))
     : profile.defaultLevel
@@ -997,21 +1463,22 @@ async function openOmezarrSource(
 }
 
 async function loadOmezarrSource(): Promise<OmezarrSource | OmezarrMosaicSource> {
-  const isCustom = els.source.value === 'custom'
-  const urls = isCustom ? customStoreUrls() : []
-  const profiles = isCustom
-    ? urls.map(customProfile)
-    : [currentOmezarrProfile()]
+  const profiles = currentStoreUrls().map(customProfile)
   if (profiles.length === 0) {
-    throw new Error('Add at least one OME-Zarr store URL before loading')
+    throw new Error(
+      els.source.value === 'dandi'
+        ? 'Search DANDI and select at least one OME-Zarr asset before loading'
+        : 'Add at least one OME-Zarr store URL before loading',
+    )
   }
-  const initializeWindow = isCustom && shouldInitializeCustomSource
+  const initializeWindow = shouldInitializeCustomSource
   const first = await openOmezarrSource(
     profiles[0] as OmezarrProfile,
     requestedBaseLevel,
     initializeWindow,
   )
   requestedBaseLevel = first.baseLevel
+  if (fixedZarrLevel !== null) fixedZarrLevel = first.baseLevel
   updateUrlFromControls()
   shouldInitializeCustomSource = false
   if (profiles.length === 1) return first
@@ -1181,48 +1648,35 @@ async function fetchMosaicRegion(
   dims: Shape3,
   bytesPerVoxel: number,
 ): Promise<Uint8Array> {
-  const output = new Uint8Array(dims[0] * dims[1] * dims[2] * bytesPerVoxel)
-  for (const block of source.blocks) {
-    const lo = [0, 1, 2].map((axis) =>
-      Math.max(origin[axis], block.voxelOrigin[axis]),
-    ) as Shape3
-    const hi = [0, 1, 2].map((axis) =>
-      Math.min(
-        origin[axis] + dims[axis],
-        block.voxelOrigin[axis] + block.shape[axis],
-      ),
-    ) as Shape3
-    if (lo.some((value, axis) => value >= hi[axis])) continue
-    const copyDims = hi.map((value, axis) => value - lo[axis]) as Shape3
-    const localOrigin = lo.map(
-      (value, axis) => value - block.voxelOrigin[axis],
-    ) as Shape3
-    const bytes = await fetchOmezarrRegion(block.level, {
-      levelIndex: block.level.level,
-      texOrigin: localOrigin,
-      texDims: copyDims,
-      bytesPerVoxel,
-    })
-    const destinationOrigin = lo.map(
-      (value, axis) => value - origin[axis],
-    ) as Shape3
-    const rowBytes = copyDims[0] * bytesPerVoxel
-    for (let z = 0; z < copyDims[2]; z++) {
-      for (let y = 0; y < copyDims[1]; y++) {
-        const sourceOffset = (z * copyDims[1] + y) * rowBytes
-        const destinationOffset =
-          ((destinationOrigin[2] + z) * dims[1] * dims[0] +
-            (destinationOrigin[1] + y) * dims[0] +
-            destinationOrigin[0]) *
-          bytesPerVoxel
-        output.set(
-          bytes.subarray(sourceOffset, sourceOffset + rowBytes),
-          destinationOffset,
-        )
+  const fetched = await Promise.all(
+    source.blocks.map(async (block): Promise<FetchedMosaicBlock | null> => {
+      const window = mosaicSamplingWindow(
+        block.voxelOrigin,
+        block.shape,
+        origin,
+        dims,
+      )
+      if (!window) return null
+      const bytes = await fetchOmezarrRegion(block.level, {
+        levelIndex: block.level.level,
+        texOrigin: window.sourceOrigin,
+        texDims: window.sourceDims,
+        bytesPerVoxel,
+      })
+      return {
+        voxelOrigin: block.voxelOrigin,
+        shape: block.shape,
+        ...window,
+        bytes,
       }
-    }
-  }
-  return output
+    }),
+  )
+  return compositeMosaicBlocks(
+    origin,
+    dims,
+    bytesPerVoxel,
+    fetched.filter((block): block is FetchedMosaicBlock => block !== null),
+  )
 }
 
 function createMosaicVolume(
@@ -1259,6 +1713,7 @@ function createMosaicVolume(
           dims,
           request.bytesPerVoxel,
         )
+        observeChunkForAutoWindow(source, bytes)
         stats.completed.add(key)
         stats.decodedBytes += bytes.byteLength
         renderHud()
@@ -1301,6 +1756,7 @@ function createOmezarrPyramidSource(
       renderHud()
       try {
         const bytes = await fetchOmezarrRegion(level, request)
+        observeChunkForAutoWindow(source, bytes)
         stats.completed.add(key)
         stats.decodedBytes += bytes.byteLength
         renderHud()
@@ -1362,6 +1818,7 @@ function createOmezarrRenderCropVolume(
           texDims,
           bytesPerVoxel: request.bytesPerVoxel,
         })
+        observeChunkForAutoWindow(source, bytes)
         stats.completed.add(key)
         stats.decodedBytes += bytes.byteLength
         renderHud()
@@ -1798,6 +2255,13 @@ function setActiveLodLoading(target?: number): void {
   els.activeLevel.removeAttribute('data-fov-levels')
 }
 
+function setVisibleLevel(level: number | null): void {
+  els.visibleLevel.hidden = level === null
+  els.visibleLevel.value = level === null ? '' : `L${level}`
+  els.visibleLevel.title =
+    level === null ? '' : `Finest Zarr level currently visible: L${level}`
+}
+
 function syncActiveLodIndicator(plan: ChunkPlan | null): void {
   if (activeSource?.kind === 'omezarr-mosaic') {
     els.activeLevelControl.hidden = false
@@ -1805,6 +2269,7 @@ function syncActiveLodIndicator(plan: ChunkPlan | null): void {
     els.activeLevel.dataset.levels = String(activeSource.baseLevel)
     els.activeLevel.dataset.fovLevels = String(activeSource.baseLevel)
     els.activeLevel.title = `One composite volume positioned from ${activeSource.blocks.length} OME-NGFF translation transforms`
+    setVisibleLevel(activeSource.baseLevel)
     return
   }
   if (activeSource?.kind !== 'omezarr') {
@@ -1812,6 +2277,7 @@ function syncActiveLodIndicator(plan: ChunkPlan | null): void {
     els.activeLevel.value = ''
     els.activeLevel.removeAttribute('data-levels')
     els.activeLevel.removeAttribute('data-fov-levels')
+    setVisibleLevel(null)
     return
   }
   const counts = lodCounts(plan)
@@ -1830,6 +2296,7 @@ function syncActiveLodIndicator(plan: ChunkPlan | null): void {
     : `FOV ${fovLabel}`
   els.activeLevel.dataset.levels = levels.join(',')
   els.activeLevel.dataset.fovLevels = fovLevels.join(',')
+  setVisibleLevel(fovLevels[0] ?? currentDetailLevel)
   els.activeLevel.title = `Visible FOV: ${fovLabel}. Whole plan: ${counts
     .map(([level, count]) => `L${level}: ${count} bricks`)
     .join(', ')}`
@@ -1919,28 +2386,35 @@ function formatMeasuredDistance(distanceMM: number): string {
 function syncInteractionTool(): void {
   if (!nv) return
   const isRender = nv.sliceType === SLICE_TYPE.RENDER
-  const isMeasuring = els.interactionTool.value === 'measure' && !isRender
+  const measureRequested = els.interactionTool.getAttribute('aria-pressed') === 'true'
+  const isMeasuring = measureRequested && !isRender
   nv.primaryDragMode = isMeasuring
     ? DRAG_MODE.measurement
-    : DRAG_MODE.crosshair
+    : DRAG_MODE.crosshairPan
   els.interactionTool.disabled = isRender
   els.canvas.style.cursor = isMeasuring ? 'crosshair' : 'default'
   if (isRender) {
     els.measurementStatus.value = 'measure in a slice view'
   } else if (isMeasuring && els.clearMeasurements.disabled) {
     els.measurementStatus.value = 'drag across a structure'
-  } else if (!isMeasuring && els.clearMeasurements.disabled) {
-    els.measurementStatus.value = 'select measure distance'
+  } else if (!isMeasuring) {
+    els.measurementStatus.value = 'crosshair movement active'
   }
+}
+
+function toggleInteractionTool(): void {
+  const isMeasuring = els.interactionTool.getAttribute('aria-pressed') === 'true'
+  els.interactionTool.setAttribute('aria-pressed', String(!isMeasuring))
+  syncInteractionTool()
 }
 
 function clearMeasurements(): void {
   nv?.clearMeasurements()
   els.clearMeasurements.disabled = true
   els.measurementStatus.value =
-    els.interactionTool.value === 'measure'
+    els.interactionTool.getAttribute('aria-pressed') === 'true'
       ? 'drag across a structure'
-      : 'select measure distance'
+      : 'crosshair movement active'
 }
 
 function resetRenderCropForSourceChange(): void {
@@ -2084,14 +2558,78 @@ function captureView(): ViewState | null {
   }
 }
 
+function currentShareState(): ShareableViewState {
+  const view = captureView()
+  const defaults = defaultShareState()
+  return {
+    ...defaults,
+    layout: nv?.sliceType ?? Number(els.layout.value),
+    azimuth: view?.azimuth ?? defaults.azimuth,
+    elevation: view?.elevation ?? defaults.elevation,
+    scale: view?.scale ?? defaults.scale,
+    crosshair: view?.crosshair ?? defaults.crosshair,
+    pan2D: view?.pan2D ?? defaults.pan2D,
+    renderPan: view?.renderPan ?? defaults.renderPan,
+    colormap: els.colormap.value,
+    windowLevel: Number(els.windowLevel.value),
+    windowWidth: Number(els.windowWidth.value),
+    scrollZoomSpeed: currentScrollZoomSpeed(),
+    showCrosshair: els.showCrosshair.checked,
+    showScaleBar: els.showScaleBar.checked,
+    showStats: els.showStats.checked,
+  }
+}
+
+function setShareStatus(message: string): void {
+  els.shareStatus.value = message
+  els.shareStatus.hidden = message.length === 0
+}
+
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return
+  } catch {
+    const input = document.createElement('textarea')
+    input.value = text
+    input.setAttribute('readonly', '')
+    input.style.position = 'fixed'
+    input.style.opacity = '0'
+    document.body.append(input)
+    input.select()
+    const copied = document.execCommand('copy')
+    input.remove()
+    if (!copied) throw new Error('The browser blocked clipboard access')
+  }
+}
+
+async function copyShareLink(): Promise<void> {
+  updateUrlFromControls()
+  const url = writeShareState(new URL(window.location.href), currentShareState())
+  window.history.replaceState(null, '', url)
+  try {
+    await writeClipboard(url.toString())
+    setShareStatus('Link copied — opening it restores these stores and viewer settings.')
+  } catch (error) {
+    setShareStatus(
+      error instanceof Error ? error.message : 'Unable to copy the share link',
+    )
+  }
+}
+
 function restoreView(view: ViewState | null): void {
   if (!nv || !view) return
   const camera = nv as unknown as CameraView
   camera.azimuth = view.azimuth
   camera.elevation = view.elevation
-  camera.scaleMultiplier = view.scale
+  camera.scaleMultiplier = clampViewerZoom(view.scale)
   camera.crosshairPos = view.crosshair
-  camera.pan2Dxyzmm = view.pan2D
+  camera.pan2Dxyzmm = [
+    view.pan2D[0],
+    view.pan2D[1],
+    view.pan2D[2],
+    clampViewerZoom(view.pan2D[3]),
+  ]
   camera.renderPan = view.renderPan
 }
 
@@ -2129,7 +2667,7 @@ function syncFocusFromPan(): boolean {
 function syncViewControls(): void {
   const zoom = viewerZoom()
   const zoomDisplay = zoomControlDisplay(zoom, pendingZoom)
-  els.zoom.value = String(Math.min(10, Math.max(0.1, zoomDisplay.value)))
+  els.zoom.value = String(clampViewerZoom(zoomDisplay.value))
   els.zoomValue.value = zoomDisplay.label
   const isRender = nv?.sliceType === SLICE_TYPE.RENDER
   const pan = isRender ? nv?.renderPan : nv?.pan2Dxyzmm
@@ -2155,6 +2693,17 @@ function syncViewControls(): void {
   els.applyZoom.disabled = zoomDisabled || !zoomDisplay.canApply
 }
 
+function currentScrollZoomSpeed(): number {
+  const speed = Number(els.scrollZoomSpeed.value)
+  return Number.isFinite(speed) ? Math.min(4, Math.max(0.25, speed)) : 2
+}
+
+function syncScrollZoomSpeed(): void {
+  const speed = currentScrollZoomSpeed()
+  els.scrollZoomSpeed.value = String(speed)
+  els.scrollZoomSpeedValue.value = `${Number(speed.toFixed(2))}×`
+}
+
 function updateZoomSelection(): void {
   const zoom = Number(els.zoom.value)
   pendingZoom = Number.isFinite(zoom) && zoom > 0 ? zoom : null
@@ -2177,6 +2726,15 @@ function applyZoomControl(): void {
   syncViewControls()
   syncDownloadControl()
   scheduleAdaptiveLod()
+}
+
+async function applyZarrLevelControl(): Promise<void> {
+  const selected = els.zarrLevel.value
+  fixedZarrLevel = /^\d+$/.test(selected) ? Number(selected) : null
+  requestedBaseLevel = fixedZarrLevel
+  updateUrlFromControls()
+  els.zarrLevel.disabled = true
+  await reloadVolume({ reloadSource: true, preserveView: true })
 }
 
 function applyPanControls(): void {
@@ -2226,6 +2784,7 @@ function handleWheelZoom(event: WheelEvent): void {
       event.deltaY,
       event.deltaMode,
       els.canvas.clientHeight,
+      currentScrollZoomSpeed(),
     )
   } else {
     const current = nv.pan2Dxyzmm[3] || 1
@@ -2234,6 +2793,7 @@ function handleWheelZoom(event: WheelEvent): void {
       event.deltaY,
       event.deltaMode,
       els.canvas.clientHeight,
+      currentScrollZoomSpeed(),
     )
     const pan = zoom > 1 ? panForCrosshair() : ([0, 0, 0] as Shape3)
     nv.pan2Dxyzmm = [pan[0], pan[1], pan[2], zoom]
@@ -2245,33 +2805,47 @@ function handleWheelZoom(event: WheelEvent): void {
   scheduleAdaptiveLod()
 }
 
-function detailLevelForZoom(
-  baseLevel: number,
-  zoom: number,
-  levelCount: number,
-): number {
-  const zoomStops = Math.round(Math.log2(Math.max(0.1, zoom)))
-  return Math.min(levelCount - 1, Math.max(0, baseLevel - zoomStops))
+function detailLevelForView(source: OmezarrSource, zoom: number): number {
+  if (fixedZarrLevel !== null) {
+    return Math.min(
+      source.levels.length - 1,
+      Math.max(0, fixedZarrLevel),
+    )
+  }
+  return detailLevelForZoom(source.baseLevel, zoom, source.levels.length)
 }
 
 let currentDetailLevel: number | null = null
 
 function scheduleAdaptiveLod(focusMoved = false): void {
   if (suppressAdaptiveEvents) return
-  if (!chunkedVolume || activeSource?.kind !== 'omezarr') return
-  const target = detailLevelForZoom(
-    activeSource.baseLevel,
-    viewerZoom(),
-    activeSource.levels.length,
-  )
-  const targetChanged = updateAdaptiveLodDetail(
-    chunkedVolume,
-    currentDetailLevel,
-    target,
-  )
-  currentDetailLevel = target
-  if (targetChanged) setActiveLodLoading(target)
-  if (focusMoved) chunkedVolume.setFocus(focusFraction)
+  if (activeSource?.kind === 'omezarr' && chunkedVolume) {
+    const target = detailLevelForView(activeSource, viewerZoom())
+    const targetChanged = updateAdaptiveLodDetail(
+      chunkedVolume,
+      currentDetailLevel,
+      target,
+    )
+    currentDetailLevel = target
+    if (targetChanged) setActiveLodLoading(target)
+    if (focusMoved) chunkedVolume.setFocus(focusFraction)
+    return
+  }
+  if (activeSource?.kind !== 'omezarr-mosaic' || fixedZarrLevel !== null) return
+  const firstBlock = activeSource.blocks[0]
+  const levelCount = firstBlock?.source.levels.length ?? 0
+  if (levelCount === 0) return
+  const target = detailLevelForZoom(levelCount - 1, viewerZoom(), levelCount)
+  cancelMosaicLodReload()
+  if (target === activeSource.baseLevel) return
+  const revision = mosaicLodRevision
+  mosaicLodHandle = window.setTimeout(() => {
+    if (revision !== mosaicLodRevision) return
+    mosaicLodHandle = 0
+    requestedBaseLevel = target
+    setActiveLodLoading(target)
+    void reloadVolume({ reloadSource: true, preserveView: true })
+  }, LOD_DEBOUNCE_MS)
 }
 
 async function disposeChunkedVolume(): Promise<void> {
@@ -2292,11 +2866,7 @@ async function loadOmezarrVolume(
       ? view.scale
       : view.pan2D[3]
     : viewerZoom()
-  const minLevel = detailLevelForZoom(
-    source.baseLevel,
-    zoom,
-    source.levels.length,
-  )
+  const minLevel = detailLevelForView(source, zoom)
   currentDetailLevel = minLevel
   chunkedVolume = await nv.loadChunkedVolume(
     createOmezarrPyramidSource(source),
@@ -2307,9 +2877,9 @@ async function loadOmezarrVolume(
       calMax: win.max,
       colormap: els.colormap.value,
       focus: focusFraction,
-      radius: 'auto',
+      radius: ADAPTIVE_FINE_RADIUS,
       minLevel,
-      budgetBytes: DEFAULT_RESIDENCY_BYTES,
+      budgetBytes: ADAPTIVE_PLANNER_BUDGET_BYTES,
       maxBricks: ADAPTIVE_MAX_BRICKS,
       cellEdge: ADAPTIVE_CELL_EDGE,
       halo: STREAMING_CHUNK_HALO,
@@ -2361,6 +2931,7 @@ async function reloadVolume(
   } = {},
 ): Promise<void> {
   if (!nv) return
+  if (options.reloadSource) cancelMosaicLodReload()
   hideFallback()
   setDownloadStatus('')
   stats = freshStats()
@@ -2375,10 +2946,13 @@ async function reloadVolume(
   try {
     if (options.reloadSource || !activeSource) {
       activeSource = null
+      autoWindowSession = null
       chunkPlan = null
       syncDownloadControl()
       const source = await loadActiveSource()
       activeSource = source
+      syncZarrLevelControl()
+      prepareAutoWindow(source)
       if (cropGeometry?.level && source.kind === 'omezarr') {
         const level = source.levels[cropGeometry.level.level]
         if (!level) {
@@ -2414,6 +2988,11 @@ async function reloadVolume(
     applyLayout()
     syncViewControls()
   } catch (err) {
+    if (!activeSource) {
+      await disposeChunkedVolume()
+      chunkPlan = null
+      setVisibleLevel(null)
+    }
     if (currentSourceKind() === 'omezarr') {
       els.activeLevel.value = 'unavailable'
       els.activeLevel.title = 'The OME-Zarr volume did not load'
@@ -2422,6 +3001,7 @@ async function reloadVolume(
   } finally {
     suppressAdaptiveEvents = false
     syncDownloadControl()
+    syncZarrLevelControl()
   }
 }
 
@@ -2434,11 +3014,11 @@ async function main(): Promise<void> {
     backend: BACKEND,
     backgroundColor: [0.02, 0.03, 0.03, 1],
     isColorbarVisible: true,
-    is3DCrosshairVisible: true,
-    isRulerVisible: true,
+    is3DCrosshairVisible: els.showCrosshair.checked,
+    isRulerVisible: els.showScaleBar.checked,
     crosshairWidth: 0.5,
-    primaryDragMode: DRAG_MODE.crosshair,
-    sliceType: SLICE_TYPE.MULTIPLANAR,
+    primaryDragMode: DRAG_MODE.crosshairPan,
+    sliceType: Number(els.layout.value),
     maxTextureDimension3D: STREAMING_CHUNK_EDGE,
     maxChunkResidencyBytes: DEFAULT_RESIDENCY_BYTES,
   })
@@ -2465,22 +3045,37 @@ async function main(): Promise<void> {
     els.measurementStatus.value = `${formatMeasuredDistance(event.detail.distance)} · right-click to remove`
     els.clearMeasurements.disabled = false
   })
+  const measurementEvents = nv as unknown as EventTarget
+  measurementEvents.addEventListener(
+    'measurementRemoved',
+    (event) => {
+      const { remaining } = (event as CustomEvent<{ remaining: number }>).detail
+      els.clearMeasurements.disabled = remaining === 0
+      els.measurementStatus.value =
+        remaining === 0
+          ? 'drag across a structure'
+          : `${remaining} measurement${remaining === 1 ? '' : 's'} · right-click to remove`
+    },
+  )
   // Crosshair locationChange events intentionally do not refocus LOD. A click
   // moves the marker without moving the viewport; following it would shift the
   // fine box away from the visible field and expose coarse context rectangles.
 
   els.source.addEventListener('change', () => {
+    cancelMosaicLodReload()
     resetRenderCropForSourceChange()
-    if (els.source.value === 'custom') {
-      shouldInitializeCustomSource = true
-    } else if (currentSourceKind() === 'omezarr') {
-      requestedBaseLevel = currentOmezarrProfile().defaultLevel
-    }
+    fixedZarrLevel = null
+    shouldInitializeCustomSource = true
+    requestedBaseLevel = null
     setDefaultWindowForSelectedSource()
     syncSourceControls()
     updateUrlFromControls()
-    if (els.source.value === 'custom' && customStoreUrls().length === 0) {
-      showFallback('Add an OME-Zarr store URL, then press Load volume')
+    if (currentStoreUrls().length === 0) {
+      showFallback(
+        els.source.value === 'dandi'
+          ? 'Search DANDI and select an OME-Zarr asset, then press Load volume'
+          : 'Add an OME-Zarr store URL, then press Load volume',
+      )
       return
     }
     void reloadVolume({ reloadSource: true })
@@ -2489,6 +3084,10 @@ async function main(): Promise<void> {
     void applyLayoutControl()
   })
   els.zoom.addEventListener('input', updateZoomSelection)
+  els.zarrLevel.addEventListener('change', () => {
+    void applyZarrLevelControl()
+  })
+  els.scrollZoomSpeed.addEventListener('input', syncScrollZoomSpeed)
   els.zoom.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
     event.preventDefault()
@@ -2501,9 +3100,15 @@ async function main(): Promise<void> {
   els.colormap.addEventListener('change', () => {
     void reloadVolume()
   })
-  els.windowLevel.addEventListener('input', scheduleWindowUpdate)
-  els.windowWidth.addEventListener('input', scheduleWindowUpdate)
-  els.interactionTool.addEventListener('change', syncInteractionTool)
+  els.windowLevel.addEventListener('input', handleWindowInput)
+  els.windowWidth.addEventListener('input', handleWindowInput)
+  els.windowMin.addEventListener('input', () => {
+    handleWindowRangeInput('min')
+  })
+  els.windowMax.addEventListener('input', () => {
+    handleWindowRangeInput('max')
+  })
+  els.interactionTool.addEventListener('click', toggleInteractionTool)
   els.showScaleBar.addEventListener('change', () => {
     if (nv) nv.isRulerVisible = els.showScaleBar.checked
   })
@@ -2512,6 +3117,7 @@ async function main(): Promise<void> {
   els.showStats.addEventListener('change', syncStatsVisibility)
   els.zarrUrl.addEventListener('input', () => {
     shouldInitializeCustomSource = true
+    syncUrlRowControls()
   })
   els.zarrUrl.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
@@ -2521,14 +3127,57 @@ async function main(): Promise<void> {
   els.addZarrUrl.addEventListener('click', () => {
     addCustomUrlInput().focus()
   })
+  els.removeZarrUrl.addEventListener('click', () => {
+    removeCustomUrlRow(els.zarrUrl.closest<HTMLElement>('.zarr-url-row')!, els.zarrUrl)
+  })
+  els.searchDandi.addEventListener('click', () => {
+    void searchDandiAssets()
+  })
+  for (const input of [els.dandisetId, els.dandiVersion, els.dandiQuery]) {
+    input.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return
+      event.preventDefault()
+      void searchDandiAssets()
+    })
+  }
+  els.addDandiSelection.addEventListener('click', addSelectedDandiAssets)
   els.reload.addEventListener('click', () => {
     void reloadVolume({ reloadSource: true })
   })
   els.downloadNifti.addEventListener('click', () => {
     void downloadNifti()
   })
+  els.copyShareLink.addEventListener('click', () => {
+    void copyShareLink()
+  })
 
-  await reloadVolume({ reloadSource: true })
+  await reloadVolume({ reloadSource: true, view: initialSharedView })
+  if (initialSharedSettings && nv.volumes.length > 0) {
+    const sharedWindow = windowFromLevelWidth(
+      initialSharedSettings.windowLevel,
+      initialSharedSettings.windowWidth,
+    )
+    const preserveSharedWindow =
+      !activeSource ||
+      activeSource.kind === 'synthetic' ||
+      !isGenericDtypeWindow(activeSource.dtype, sharedWindow)
+    applySharedControlSettings(initialSharedSettings, preserveSharedWindow)
+    nv.isRulerVisible = initialSharedSettings.showScaleBar
+    syncCrosshairVisibility()
+    if (preserveSharedWindow) {
+      manualWindowRevision++
+      autoWindowSession = null
+      if (activeSource) activeSource.defaultWindow = sharedWindow
+      await nv.setVolume(0, {
+        calMin: sharedWindow.min,
+        calMax: sharedWindow.max,
+      })
+    }
+    restoreView(initialSharedView)
+    applyLayout()
+    const focusMoved = syncFocusFromPan()
+    scheduleAdaptiveLod(focusMoved)
+  }
   startHudPolling()
 }
 

@@ -2,5 +2,5 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: 'omezarr-viewer',
-  version: '0.1.0',
+  version: '0.1.1',
 });

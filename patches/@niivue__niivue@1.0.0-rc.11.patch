@@ -1,7 +1,30 @@
+diff --git a/dist/NVConstants.d.ts b/dist/NVConstants.d.ts
+index 7e65858379bcb0eb58cde7ef98137ce8716e7bfd..65287eeebcb502e0a7c029b7e0daa7ed36a3e4bf 100644
+--- a/dist/NVConstants.d.ts
++++ b/dist/NVConstants.d.ts
+@@ -16,7 +16,8 @@ export declare enum DRAG_MODE {
+     roiSelection = 6,
+     angle = 7,
+     crosshair = 8,
+-    windowing = 9
++    windowing = 9,
++    crosshairPan = 10
+ }
+ export declare enum SHOW_RENDER {
+     NEVER = 0,
 diff --git a/dist/NVControlBase-Cq7vd-TD.js b/dist/NVControlBase-Cq7vd-TD.js
-index 233eaa4b018793ea685dedebbd73c0c8a6417728..d8b330784d0bb69d5264c34a34e2fd519ac70cf1 100644
+index 233eaa4b018793ea685dedebbd73c0c8a6417728..41efa24975404df039129d87322b0b43ce244756 100644
 --- a/dist/NVControlBase-Cq7vd-TD.js
 +++ b/dist/NVControlBase-Cq7vd-TD.js
+@@ -1836,7 +1836,7 @@ function $e(t, e, n = !1) {
+   ]);
+ }
+ const ln = 6, Fp = [0, 0, 0, 2];
+-var We = /* @__PURE__ */ ((t) => (t[t.MIN_TO_MAX = 0] = "MIN_TO_MAX", t[t.ZERO_TO_MAX_TRANSPARENT_BELOW_MIN = 1] = "ZERO_TO_MAX_TRANSPARENT_BELOW_MIN", t[t.ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN = 2] = "ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN", t))(We || {}), ge = /* @__PURE__ */ ((t) => (t[t.none = 0] = "none", t[t.contrast = 1] = "contrast", t[t.measurement = 2] = "measurement", t[t.pan = 3] = "pan", t[t.slicer3D = 4] = "slicer3D", t[t.callbackOnly = 5] = "callbackOnly", t[t.roiSelection = 6] = "roiSelection", t[t.angle = 7] = "angle", t[t.crosshair = 8] = "crosshair", t[t.windowing = 9] = "windowing", t))(ge || {}), nn = /* @__PURE__ */ ((t) => (t[t.NEVER = 0] = "NEVER", t[t.ALWAYS = 1] = "ALWAYS", t[t.AUTO = 2] = "AUTO", t))(nn || {});
++var We = /* @__PURE__ */ ((t) => (t[t.MIN_TO_MAX = 0] = "MIN_TO_MAX", t[t.ZERO_TO_MAX_TRANSPARENT_BELOW_MIN = 1] = "ZERO_TO_MAX_TRANSPARENT_BELOW_MIN", t[t.ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN = 2] = "ZERO_TO_MAX_TRANSLUCENT_BELOW_MIN", t))(We || {}), ge = /* @__PURE__ */ ((t) => (t[t.none = 0] = "none", t[t.contrast = 1] = "contrast", t[t.measurement = 2] = "measurement", t[t.pan = 3] = "pan", t[t.slicer3D = 4] = "slicer3D", t[t.callbackOnly = 5] = "callbackOnly", t[t.roiSelection = 6] = "roiSelection", t[t.angle = 7] = "angle", t[t.crosshair = 8] = "crosshair", t[t.windowing = 9] = "windowing", t[t.crosshairPan = 10] = "crosshairPan", t))(ge || {}), nn = /* @__PURE__ */ ((t) => (t[t.NEVER = 0] = "NEVER", t[t.ALWAYS = 1] = "ALWAYS", t[t.AUTO = 2] = "AUTO", t))(nn || {});
+ const Pr = Object.freeze({
+   NIFTI_INTENT_NONE: 0,
+   NIFTI_INTENT_CORREL: 2,
 @@ -12279,63 +12279,18 @@ function xS(t) {
        return { lengthMM: n, label: `${n} mm` };
    return null;
@@ -100,6 +123,115 @@ index 233eaa4b018793ea685dedebbd73c0c8a6417728..d8b330784d0bb69d5264c34a34e2fd51
          );
          N && (h.push(...N.labels), P.push(...N.lines));
        }
+@@ -32599,6 +32558,11 @@ function to(t, e) {
+   }
+   return i.length > 0 && n.push({ ...e, polygons: i }), n;
+ }
++const crosshairPanThresholdCssPx = 4;
++function isCrosshairPanDrag(t, e, n) {
++  const i = e[0] - t[0], r = e[1] - t[1];
++  return i * i + r * r >= n * n;
++}
+ function V4(t, e) {
+   return e === 0 ? t.model.interaction.primaryDragMode : e === 2 ? t.model.interaction.secondaryDragMode : ge.none;
+ }
+@@ -32776,6 +32740,10 @@ function $4(t) {
+ }
+ function Sl(t) {
+   const e = t._activeDragMode;
++  if (e === ge.crosshairPan && !t._crosshairPanDidDrag) {
++    const n = Je(t, t.dragEndXY[0], t.dragEndXY[1]);
++    n && t.setCrosshairPos(n);
++  }
+   if (e === ge.angle) {
+     if (t._angleState === "drawing_first_line") {
+       t._angleFirstLine = [
+@@ -32849,7 +32817,7 @@ function Al(t) {
+   e && t.emit("dragRelease", e);
+ }
+ function Ml(t) {
+-  t._activeDragMode = ge.none, t._pan2DxyzmmAtDragStart = null, t.model._dragOverlay = null, t.drawScene();
++  t._activeDragMode = ge.none, t._pan2DxyzmmAtDragStart = null, t._crosshairPanDidDrag = !1, t.model._dragOverlay = null, t.drawScene();
+ }
+ function X4(t) {
+   const e = t._pan2DxyzmmAtDragStart;
+@@ -32859,7 +32827,7 @@ function X4(t) {
+     t.dragStartXY[0],
+     t.dragStartXY[1]
+   ), i = Je(t, t.dragEndXY[0], t.dragEndXY[1]);
+-  !n || !i || (t.model.scene.pan2Dxyzmm[0] = e[0] + (i[0] - n[0]), t.model.scene.pan2Dxyzmm[1] = e[1] + (i[1] - n[1]), t.model.scene.pan2Dxyzmm[2] = e[2] + (i[2] - n[2]));
++  !n || !i || (t.model.scene.pan2Dxyzmm[0] = e[0] + (i[0] - n[0]), t.model.scene.pan2Dxyzmm[1] = e[1] + (i[1] - n[1]), t.model.scene.pan2Dxyzmm[2] = e[2] + (i[2] - n[2]), t.emit("change", { property: "pan2Dxyzmm", value: t.model.scene.pan2Dxyzmm }));
+ }
+ function W4(t) {
+   const e = t._pan2DxyzmmAtDragStart;
+@@ -33796,7 +33764,7 @@ function k2(t) {
+       }
+       if (t.isDragging = !0, t.activeButton = n.button, t.activeTileHit && !t.activeTileHit.isRender) {
+         const l = V4(t, n.button);
+-        if (t._activeDragMode = l, t.dragStartXY = [r, s], t.dragEndXY = [r, s], t.model._dragOverlay = null, l !== ge.angle && (t._angleState = "none"), l === ge.crosshair) {
++        if (t._activeDragMode = l, t._crosshairPanDidDrag = !1, t.dragStartXY = [r, s], t.dragEndXY = [r, s], t.model._dragOverlay = null, l !== ge.angle && (t._angleState = "none"), l === ge.crosshair) {
+           const c = at(
+             t.view?.screenSlices ?? [],
+             t.model,
+@@ -33805,7 +33773,7 @@ function k2(t) {
+             t.activeTileHit
+           );
+           c && t.setCrosshairPos(c);
+-        } else if (l === ge.pan || l === ge.slicer3D) {
++        } else if (l === ge.pan || l === ge.slicer3D || l === ge.crosshairPan) {
+           const c = t.model.scene.pan2Dxyzmm;
+           t._pan2DxyzmmAtDragStart = [c[0], c[1], c[2], c[3]];
+         } else l === ge.angle && t._angleState !== "drawing_second_line" && (t._angleState = "drawing_first_line");
+@@ -33973,7 +33941,7 @@ function k2(t) {
+       button: n.button
+     });
+   }, t._eventListeners.pointercancel = (e) => {
+-    t._activeDragMode !== ge.none && Sl(t);
++    t._activeDragMode !== ge.none && (t._activeDragMode === ge.crosshairPan && (t._crosshairPanDidDrag = !0), Sl(t));
+     try {
+       t._annotation3DActive && Fl(t);
+     } finally {
+@@ -34295,6 +34263,11 @@ function k2(t) {
+         case ge.pan:
+           X4(t), t.drawScene();
+           break;
++        case ge.crosshairPan: {
++          const c = t.canvas, h = c ? c.width / Math.max(c.getBoundingClientRect().width, 1) : 1, d = crosshairPanThresholdCssPx * h;
++          (t._crosshairPanDidDrag || isCrosshairPanDrag(t.dragStartXY, t.dragEndXY, d)) && (t._crosshairPanDidDrag = !0, X4(t), t.drawScene());
++          break;
++        }
+         case ge.slicer3D:
+           W4(t), t.drawScene();
+           break;
+@@ -37700,7 +37673,7 @@ function $R(t, e) {
+ }
+ let fD = class extends EventTarget {
+   constructor(e = {}, n, i = "both") {
+-    super(), this.canvas = null, this._isDraggingFlag = !1, this.view = null, this._settingsSavePolicy = {}, this._slidePlane = null, this._slidePlaneSlide = null, this._slidePlaneOnChange = null, this._slideDrawing = null, this._slideVector = null, this._slideLastRasterPt = null, this._slideTool = "pen", this._slideWandTolerance = 40, this._slideFillPts = [], this._slideVecPts = [], this._dprMediaQuery = null, this._updating = !1, this._pendingUpdate = !1, this._deferredReloads = /* @__PURE__ */ new Set(), this._destroyed = !1, this._deferredVolumes = null, this._deferredMeshes = null, this._drawPenLocation = [NaN, NaN, NaN], this._drawPenAxCorSag = -1, this._drawPenFillPts = [], this._draw3DActive = !1, this._draw3DLastVoxel = null, this._draw3DLastChunk = null, this._draw3DNeedsUndo = !1, this._draw3DSampleCache = null, this._drawLut = null, this._drawingDirty = !1, this._drawDirtyBox = null, this.drawPenAutoClose = !1, this.drawPenFilled = !1, this.drawUndoBitmaps = [], this.currentDrawUndoBitmap = -1, this.maxDrawUndoBitmaps = 8, this.dragStartXY = [0, 0], this.dragEndXY = [0, 0], this._activeDragMode = ge.none, this._angleState = "none", this._angleFirstLine = [0, 0, 0, 0], this._pan2DxyzmmAtDragStart = null, this._annotationUndoStack = new k4(), this._annotationBrushPath = [], this._frozenLoopPoints = null, this._annotationSliceType = 0, this._annotationSlicePosition = 0, this._annotationAnchorMM = [0, 0, 0], this._annotation3DActive = !1, this._annotation3DMMPath = [], this._annotation3DFace = null, this._annotationShapeStart = null, this._resizingControlPoint = -1, this._resizeOriginalShape = null, this._resizingAnnotation = null, this._syncTargets = [], this._syncOpts = {}, this._syncDirty = !1, this._rafId = null, this._perf = null, V.setLogLevel(e.logLevel ?? "info"), this.activeClipPlaneIndex = 0, this.currentClipPlaneIndex = 0;
++    super(), this.canvas = null, this._isDraggingFlag = !1, this.view = null, this._settingsSavePolicy = {}, this._slidePlane = null, this._slidePlaneSlide = null, this._slidePlaneOnChange = null, this._slideDrawing = null, this._slideVector = null, this._slideLastRasterPt = null, this._slideTool = "pen", this._slideWandTolerance = 40, this._slideFillPts = [], this._slideVecPts = [], this._dprMediaQuery = null, this._updating = !1, this._pendingUpdate = !1, this._deferredReloads = /* @__PURE__ */ new Set(), this._destroyed = !1, this._deferredVolumes = null, this._deferredMeshes = null, this._drawPenLocation = [NaN, NaN, NaN], this._drawPenAxCorSag = -1, this._drawPenFillPts = [], this._draw3DActive = !1, this._draw3DLastVoxel = null, this._draw3DLastChunk = null, this._draw3DNeedsUndo = !1, this._draw3DSampleCache = null, this._drawLut = null, this._drawingDirty = !1, this._drawDirtyBox = null, this.drawPenAutoClose = !1, this.drawPenFilled = !1, this.drawUndoBitmaps = [], this.currentDrawUndoBitmap = -1, this.maxDrawUndoBitmaps = 8, this.dragStartXY = [0, 0], this.dragEndXY = [0, 0], this._activeDragMode = ge.none, this._angleState = "none", this._angleFirstLine = [0, 0, 0, 0], this._pan2DxyzmmAtDragStart = null, this._crosshairPanDidDrag = !1, this._annotationUndoStack = new k4(), this._annotationBrushPath = [], this._frozenLoopPoints = null, this._annotationSliceType = 0, this._annotationSlicePosition = 0, this._annotationAnchorMM = [0, 0, 0], this._annotation3DActive = !1, this._annotation3DMMPath = [], this._annotation3DFace = null, this._annotationShapeStart = null, this._resizingControlPoint = -1, this._resizeOriginalShape = null, this._resizingAnnotation = null, this._syncTargets = [], this._syncOpts = {}, this._syncDirty = !1, this._rafId = null, this._perf = null, V.setLogLevel(e.logLevel ?? "info"), this.activeClipPlaneIndex = 0, this.currentClipPlaneIndex = 0;
+     const r = e.backend ?? "webgpu";
+     if (this.opts = {
+       backend: r,
+@@ -40186,6 +40159,7 @@ let fD = class extends EventTarget {
+         roiSelection: ge.roiSelection,
+         angle: ge.angle,
+         crosshair: ge.crosshair,
++        crosshairPan: ge.crosshairPan,
+         windowing: ge.windowing
+       }[e];
+       i !== void 0 ? this.model.interaction.secondaryDragMode = i : V.warn(`Unknown drag mode: ${e}`);
+diff --git a/dist/NVControlBase.d.ts b/dist/NVControlBase.d.ts
+index e06d564ce9e6464e8d161031563abafcc8deb0c3..a57460dad2dce1da5a513117e35da9440d14aa2a 100644
+--- a/dist/NVControlBase.d.ts
++++ b/dist/NVControlBase.d.ts
+@@ -172,6 +172,7 @@ export default class NiiVue extends EventTarget {
+     _angleState: 'none' | 'drawing_first_line' | 'drawing_second_line';
+     _angleFirstLine: number[];
+     _pan2DxyzmmAtDragStart: [number, number, number, number] | null;
++    _crosshairPanDidDrag: boolean;
+     _annotationUndoStack: AnnotationUndoStack;
+     _annotationBrushPath: AnnotationPoint[];
+     _frozenLoopPoints: AnnotationPoint[] | null;
 diff --git a/dist/view/NVRuler.d.ts b/dist/view/NVRuler.d.ts
 index d38eac8cbc65f11cfaf87bddd594f72e0076e95d..5233235c5685bf63e7d28291f22a56194b5e9c26 100644
 --- a/dist/view/NVRuler.d.ts

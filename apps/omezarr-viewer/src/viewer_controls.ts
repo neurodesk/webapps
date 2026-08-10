@@ -27,6 +27,8 @@ export interface AdaptiveLodController {
 
 const WHEEL_ZOOM_SENSITIVITY = 0.00075
 const MAX_WHEEL_DELTA_PX = 120
+export const MIN_VIEWER_ZOOM = 0.1
+export const MAX_VIEWER_ZOOM = 128
 
 export function zoomControlDisplay(
   appliedZoom: number,
@@ -84,14 +86,44 @@ export function wheelZoomValue(
   deltaY: number,
   deltaMode: number,
   pageHeight: number,
+  speed = 1,
 ): number {
   const pixelsPerUnit = deltaMode === 1 ? 16 : deltaMode === 2 ? pageHeight : 1
   const pixelDelta = Math.min(
     MAX_WHEEL_DELTA_PX,
     Math.max(-MAX_WHEEL_DELTA_PX, deltaY * pixelsPerUnit),
   )
-  const zoom = current * Math.exp(-pixelDelta * WHEEL_ZOOM_SENSITIVITY)
-  return Math.min(10, Math.max(0.1, zoom))
+  const safeSpeed = Number.isFinite(speed)
+    ? Math.min(4, Math.max(0.25, speed))
+    : 1
+  const zoom =
+    current * Math.exp(-pixelDelta * WHEEL_ZOOM_SENSITIVITY * safeSpeed)
+  return clampViewerZoom(zoom)
+}
+
+export function clampViewerZoom(zoom: number): number {
+  const finiteZoom = Number.isFinite(zoom) ? zoom : 1
+  return Math.min(MAX_VIEWER_ZOOM, Math.max(MIN_VIEWER_ZOOM, finiteZoom))
+}
+
+export function detailLevelForZoom(
+  baseLevel: number,
+  zoom: number,
+  levelCount: number,
+): number {
+  const zoomStops = Math.round(Math.log2(Math.max(MIN_VIEWER_ZOOM, zoom)))
+  return Math.min(levelCount - 1, Math.max(0, baseLevel - zoomStops))
+}
+
+export function rangeBoundsForWindow(
+  window: ContrastWindow,
+  configuredMinimum: number,
+  configuredMaximum: number,
+): { min: number; max: number } {
+  return {
+    min: Math.min(0, configuredMinimum, window.min),
+    max: Math.max(1, configuredMaximum, window.max),
+  }
 }
 
 export function crosshairAppearanceForSpacing(
