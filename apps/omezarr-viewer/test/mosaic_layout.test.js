@@ -3,7 +3,24 @@ import test from 'node:test'
 import {
   layoutTranslatedBlocks,
   spatialTransformMm,
+  translatedMosaicId,
+  translatedMosaicVolumeId,
 } from '../src/mosaic_layout.ts'
+
+test('gives each store set and pyramid level an independent cache identity', () => {
+  const chunksEightAndNine = translatedMosaicId(['chunk-8', 'chunk-9'])
+  const chunksEightAndTen = translatedMosaicId(['chunk-8', 'chunk-10'])
+
+  assert.notEqual(chunksEightAndNine, chunksEightAndTen)
+  assert.notEqual(
+    translatedMosaicVolumeId(chunksEightAndNine, 3),
+    translatedMosaicVolumeId(chunksEightAndNine, 6),
+  )
+  assert.equal(
+    translatedMosaicId(['a|b', 'c']),
+    'translated-mosaic:3:a|b|1:c',
+  )
+})
 
 test('composes dataset and multiscale transforms into X/Y/Z millimetres', () => {
   assert.deepEqual(

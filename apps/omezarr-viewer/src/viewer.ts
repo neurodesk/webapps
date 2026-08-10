@@ -28,9 +28,12 @@ import {
   niftiDatatype,
   type Shape3,
 } from './logical_volume'
+import { LatestTaskQueue } from './latest_task_queue'
 import {
   layoutTranslatedBlocks,
   spatialTransformMm,
+  translatedMosaicId,
+  translatedMosaicVolumeId,
   type MosaicBlockLayout,
 } from './mosaic_layout'
 import {
@@ -350,6 +353,8 @@ let fixedZarrLevel: number | null = null
 let focusFraction: Shape3 = [0.5, 0.5, 0.5]
 let lastPanForFocus: Shape3 = [0, 0, 0]
 let suppressAdaptiveEvents = false
+let deferredAdaptiveLod = false
+let deferredAdaptiveFocusMoved = false
 let downloadInProgress = false
 let renderCropGeometry: ExportGeometry | null = null
 let sliceViewBeforeRender: ViewState | null = null
@@ -358,6 +363,7 @@ let pendingZoom: number | null = null
 let dandiSearchController: AbortController | null = null
 let mosaicLodHandle = 0
 let mosaicLodRevision = 0
+const reloadQueue = new LatestTaskQueue()
 
 function cancelMosaicLodReload(): void {
   mosaicLodRevision++
@@ -1522,7 +1528,7 @@ async function loadOmezarrSource(): Promise<OmezarrSource | OmezarrMosaicSource>
   })
   return {
     kind: 'omezarr-mosaic',
-    id: `translated-${sources.length}-store-mosaic`,
+    id: translatedMosaicId(sources.map((source) => source.id)),
     name: `${sources.length}-store translated OME-Zarr mosaic`,
     shape: layout.shape,
     spacing: layout.spacing,
@@ -1690,7 +1696,7 @@ function createMosaicVolume(
   )
   const win = parseWindow(source.defaultWindow)
   const volume = buildLogicalVolume({
-    id: source.name,
+    id: translatedMosaicVolumeId(source.id, source.baseLevel),
     url: `client-zarr-mosaic://${source.id}?level=${source.baseLevel}`,
     shape: source.shape,
     spacing: source.spacing,
@@ -2818,7 +2824,11 @@ function detailLevelForView(source: OmezarrSource, zoom: number): number {
 let currentDetailLevel: number | null = null
 
 function scheduleAdaptiveLod(focusMoved = false): void {
-  if (suppressAdaptiveEvents) return
+  if (suppressAdaptiveEvents) {
+    deferredAdaptiveLod = true
+    deferredAdaptiveFocusMoved ||= focusMoved
+    return
+  }
   if (activeSource?.kind === 'omezarr' && chunkedVolume) {
     const target = detailLevelForView(activeSource, viewerZoom())
     const targetChanged = updateAdaptiveLodDetail(
@@ -2923,24 +2933,35 @@ async function loadOmezarrRenderCrop(
   nv.drawScene()
 }
 
-async function reloadVolume(
-  options: {
-    reloadSource?: boolean
-    preserveView?: boolean
-    view?: ViewState | null
-  } = {},
-): Promise<void> {
+interface ReloadOptions {
+  reloadSource?: boolean
+  preserveView?: boolean
+  view?: ViewState | null
+}
+
+function reloadVolume(options: ReloadOptions = {}): Promise<void> {
+  const requestState = {
+    requestedBaseLevel,
+    fixedZarrLevel,
+    shouldInitializeCustomSource,
+  }
+  return reloadQueue
+    .run(async () => {
+      requestedBaseLevel = requestState.requestedBaseLevel
+      fixedZarrLevel = requestState.fixedZarrLevel
+      shouldInitializeCustomSource = requestState.shouldInitializeCustomSource
+      await performReloadVolume(options)
+    })
+    .then(() => undefined)
+}
+
+async function performReloadVolume(options: ReloadOptions): Promise<void> {
   if (!nv) return
   if (options.reloadSource) cancelMosaicLodReload()
   hideFallback()
   setDownloadStatus('')
   stats = freshStats()
-  const view =
-    options.view !== undefined
-      ? options.view
-      : options.preserveView
-        ? captureView()
-        : null
+  let view = options.view !== undefined ? options.view : null
   const cropGeometry = renderCropGeometry
   suppressAdaptiveEvents = true
   try {
@@ -2966,6 +2987,10 @@ async function reloadVolume(
     if (!activeSource) {
       throw new Error('No active source selected')
     }
+    // Metadata reads can take long enough for the user to move the crosshair.
+    // Preserve the newest camera state immediately before swapping volumes,
+    // rather than restoring the stale state captured when the reload started.
+    if (options.view === undefined && options.preserveView) view = captureView()
     const crosshair = crosshairAppearanceForSpacing(activeSource.spacing)
     nv.crosshairWidth = crosshair.width
     nv.crosshairGap = crosshair.gap
@@ -3002,6 +3027,12 @@ async function reloadVolume(
     suppressAdaptiveEvents = false
     syncDownloadControl()
     syncZarrLevelControl()
+    if (deferredAdaptiveLod) {
+      const focusMoved = deferredAdaptiveFocusMoved
+      deferredAdaptiveLod = false
+      deferredAdaptiveFocusMoved = false
+      scheduleAdaptiveLod(focusMoved)
+    }
   }
 }
 

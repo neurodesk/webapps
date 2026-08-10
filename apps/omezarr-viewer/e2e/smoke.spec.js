@@ -82,6 +82,9 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
 
   let leftChunkRequests = 0;
   let rightChunkRequests = 0;
+  const chunkRequestsByLevel = new Map();
+  let delayLevelMetadata = false;
+  let delayedMetadataRequests = 0;
   const group = JSON.stringify({ zarr_format: 2 });
   await page.route("**/test-mosaic/**", async (route) => {
     const url = new URL(route.request().url());
@@ -112,6 +115,10 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
       });
     } else if (/\/\d+\/\.zarray$/.test(path)) {
       const level = Number(path.match(/\/(\d+)\/\.zarray$/)?.[1] ?? 0);
+      if (delayLevelMetadata) {
+        delayedMetadataRequests++;
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
       const size = 16 / 2 ** level;
       await route.fulfill({
         contentType: "application/json",
@@ -131,6 +138,10 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
     } else if (/\/\d+\/0\.0\.0$/.test(path)) {
       const level = Number(path.match(/\/(\d+)\/0\.0\.0$/)?.[1] ?? 0);
       const size = 16 / 2 ** level;
+      chunkRequestsByLevel.set(
+        level,
+        (chunkRequestsByLevel.get(level) ?? 0) + 1,
+      );
       if (isRight) rightChunkRequests++;
       else leftChunkRequests++;
       await route.fulfill({
@@ -298,10 +309,46 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
 
   await page.locator("#zarrLevel").selectOption("auto");
   await expect(page.locator("#activeLevel")).toContainText("L3 · 2 translated stores");
+  await expect.poll(() => chunkRequestsByLevel.get(3) ?? 0).toBeGreaterThan(0);
+  delayLevelMetadata = true;
   await page.locator("#zoom").fill("4");
   await page.getByRole("button", { name: "Apply" }).click();
-  await expect(page.locator("#activeLevel")).toContainText("L1 · 2 translated stores");
-  await expect(page.locator("#visibleLevel")).toHaveText("L1");
+  await expect(page.locator("#activeLevel")).toContainText("target L1");
+  await expect.poll(() => delayedMetadataRequests).toBeGreaterThan(0);
+
+  // Start a newer LOD request while L1 metadata is still delayed. The latest
+  // request must win, and a crosshair click made during the swap must survive.
+  await page.locator("#zoom").fill("8");
+  await page.getByRole("button", { name: "Apply" }).click();
+  await expect(page.locator("#activeLevel")).toContainText("target L0");
+  const locationChangesBeforeReloadClick = await page.evaluate(
+    () => window.__locationChangeCount,
+  );
+  await page.mouse.click(startX + 36, startY + 28);
+  await expect.poll(
+    () => page.evaluate(() => window.__locationChangeCount),
+  ).toBeGreaterThan(locationChangesBeforeReloadClick);
+  await page.getByRole("button", { name: "Copy share link" }).click();
+  const clickedCrosshair = new URL(
+    await page.evaluate(() => window.__copiedText),
+  ).searchParams.get("crosshair");
+
+  await expect(page.locator("#activeLevel")).toContainText(
+    "L0 · 2 translated stores",
+  );
+  await page.waitForTimeout(900);
+  await expect(page.locator("#activeLevel")).toContainText(
+    "L0 · 2 translated stores",
+  );
+  await expect(page.locator("#visibleLevel")).toHaveText("L0");
+  await page.getByLabel("Stream details").check();
+  await expect(page.locator("#hud")).toContainText("30 x 16 x 16 uint8");
+  expect(chunkRequestsByLevel.get(0)).toBeGreaterThan(0);
+  await page.getByRole("button", { name: "Copy share link" }).click();
+  const settledCrosshair = new URL(
+    await page.evaluate(() => window.__copiedText),
+  ).searchParams.get("crosshair");
+  expect(settledCrosshair).toBe(clickedCrosshair);
 
   await page.getByRole("button", { name: "Remove OME-Zarr store 2" }).click();
   await expect(page.getByLabel("OME-Zarr store URL 2")).toHaveCount(0);

@@ -23,6 +23,24 @@ export interface MosaicLayout {
   blocks: MosaicBlockLayout[]
 }
 
+/**
+ * Return a collision-free identity for the exact ordered set of mosaic stores.
+ * Length prefixes avoid ambiguous joins while retaining the full store URLs.
+ */
+export function translatedMosaicId(storeIds: readonly string[]): string {
+  return `translated-mosaic:${storeIds
+    .map((storeId) => `${storeId.length}:${storeId}`)
+    .join('|')}`
+}
+
+/** NiiVue's streamed-brick cache must not share bricks between pyramid levels. */
+export function translatedMosaicVolumeId(
+  sourceId: string,
+  level: number,
+): string {
+  return `${sourceId}:L${level}`
+}
+
 function close(left: number, right: number): boolean {
   return Math.abs(left - right) <= Math.max(1e-9, Math.abs(right) * 1e-6)
 }
