@@ -66,13 +66,6 @@
                 Search paths or leave blank to browse by subject, sample, and stain.
               </output>
               <div id="dandiResults" class="dandi-results" aria-label="DANDI OME-Zarr results"></div>
-              <button id="clearDandiSelection" type="button" disabled>Clear all selected stores</button>
-              <div
-                id="dandiSelectedStores"
-                class="selected-store-list"
-                aria-label="Selected DANDI stores"
-                hidden
-              ></div>
             </details>
           </div>
 
@@ -102,16 +95,17 @@
             <small>Each store is placed from its OME-NGFF translation coordinates. All selected-level voxel spacings must match.</small>
           </div>
 
-          <div class="source-meta" id="activeLevelControl" hidden>
-            <span>Active detail</span>
-            <output
-              id="activeLevel"
-              aria-live="polite"
-              title="Pyramid levels currently represented in the GPU brick plan"
-            >Loading…</output>
+          <div class="source-actions">
+            <button class="primary-button" id="reload" type="button">Load volume</button>
+            <button id="clearDandiSelection" type="button" disabled>Clear all selected stores</button>
           </div>
-
-          <button class="primary-button" id="reload" type="button">Load volume</button>
+          <div
+            id="dandiSelectedStores"
+            class="selected-store-list"
+            aria-label="Selected DANDI stores"
+            hidden
+          ></div>
+          <output id="activeLevel" hidden aria-hidden="true"></output>
         </section>
 
         <section class="control-panel" aria-labelledby="view-heading">

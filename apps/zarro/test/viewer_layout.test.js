@@ -20,12 +20,12 @@ test('equal slices uses three horizontal thirds without a render tile', () => {
   assert.equal(layout.customLayout, null)
 })
 
-test('vertical equal slices uses one column without a render tile', () => {
+test('vertical equal slices uses real plane aspects to fill the available width', () => {
   const layout = viewerLayoutConfig(LAYOUT_PRESET.EQUAL_SLICES_VERTICAL)
 
   assert.equal(layout.sliceType, SLICE_TYPE.MULTIPLANAR)
   assert.equal(layout.showRender, SHOW_RENDER.NEVER)
   assert.equal(layout.multiplanarType, MULTIPLANAR_TYPE.COLUMN)
-  assert.equal(layout.isEqualSize, true)
+  assert.equal(layout.isEqualSize, false)
   assert.equal(layout.customLayout, null)
 })

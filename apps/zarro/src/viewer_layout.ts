@@ -50,7 +50,10 @@ export function viewerLayoutConfig(selected: number): ViewerLayoutConfig {
       sliceType: SLICE_TYPE.MULTIPLANAR,
       showRender: SHOW_RENDER.NEVER,
       multiplanarType: MULTIPLANAR_TYPE.COLUMN,
-      isEqualSize: true,
+      // Preserve each plane's physical aspect. Equal-size mode pads all three
+      // planes to the volume's largest extent, which makes thin volumes render
+      // as narrow, centred squares with mostly empty space in a tall column.
+      isEqualSize: false,
       customLayout: null,
     }
   }

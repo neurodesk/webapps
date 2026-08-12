@@ -55,7 +55,15 @@ pnpm install
 pnpm --filter zarro dev
 pnpm --filter zarro test
 pnpm --filter zarro build
+pnpm --filter zarro preview
 ```
+
+Open <http://127.0.0.1:5173/zarro/> for the live Vite development server.
+The dev server injects the same shared green Neurodesk palette as the deployed
+app. To verify the exact standalone artifact—including the Neurodesk app bar,
+theme switcher, analytics adapter, and source links—run `build` followed by
+`preview` and open <http://127.0.0.1:4173/zarro/>. Do not use a bare `vite`
+command from the repository root; it does not select ZARRo's app configuration.
 
 The app uses the shared `@neurodesk/webapp-components` imaging workspace and
 theme tokens. OME-Zarr metadata, chunk selection, caching, and export logic stay

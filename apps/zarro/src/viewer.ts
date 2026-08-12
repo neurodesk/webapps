@@ -35,6 +35,7 @@ import {
   DecodedChunkCache,
   withDecodedChunkCaching,
 } from './decoded_chunk_cache'
+import { anchoredSlicePan, pointOnSlicePlane } from './cursor_zoom'
 import {
   buildLogicalVolume,
   niftiDatatype,
@@ -322,7 +323,6 @@ function el<T extends Element>(id: string): T {
 const els = {
   source: el<HTMLSelectElement>('source'),
   activeLevel: el<HTMLOutputElement>('activeLevel'),
-  activeLevelControl: el<HTMLSpanElement>('activeLevelControl'),
   layout: el<HTMLSelectElement>('layout'),
   zoom: el<HTMLInputElement>('zoom'),
   zoomValue: el<HTMLOutputElement>('zoomValue'),
@@ -1029,7 +1029,8 @@ function syncDandiGroupActions(): void {
 
 function renderSelectedDandiStores(): void {
   els.dandiSelectedStores.replaceChildren()
-  els.dandiSelectedStores.hidden = selectedDandiStoreUrls.length === 0
+  els.dandiSelectedStores.hidden =
+    els.source.value !== 'dandi' || selectedDandiStoreUrls.length === 0
   els.clearDandiSelection.disabled = selectedDandiStoreUrls.length === 0
   if (selectedDandiStoreUrls.length === 0) return
 
@@ -1037,6 +1038,10 @@ function renderSelectedDandiStores(): void {
   heading.className = 'selected-store-heading'
   heading.textContent = 'Selected stores'
   els.dandiSelectedStores.append(heading)
+
+  const scroll = document.createElement('div')
+  scroll.className = 'selected-store-scroll'
+  els.dandiSelectedStores.append(scroll)
 
   selectedDandiStoreUrls.forEach((storeUrl, index) => {
     const row = document.createElement('div')
@@ -1059,7 +1064,7 @@ function renderSelectedDandiStores(): void {
       })
     })
     row.append(name, remove)
-    els.dandiSelectedStores.append(row)
+    scroll.append(row)
   })
 }
 
@@ -1314,7 +1319,7 @@ function hideFallback(): void {
 
 function syncSourceControls(): void {
   const isOmezarr = currentSourceKind() === 'omezarr'
-  els.activeLevelControl.hidden = !isOmezarr
+  const isDandi = els.source.value === 'dandi'
   if (!isOmezarr) {
     els.activeLevel.value = ''
     els.activeLevel.removeAttribute('data-levels')
@@ -1324,8 +1329,11 @@ function syncSourceControls(): void {
   ) {
     setActiveLodLoading()
   }
-  els.dandiArchiveControl.hidden = els.source.value !== 'dandi'
+  els.dandiArchiveControl.hidden = !isDandi
   els.zarrUrlControl.hidden = els.source.value !== 'custom'
+  els.clearDandiSelection.hidden = !isDandi
+  els.dandiSelectedStores.hidden =
+    !isDandi || selectedDandiStoreUrls.length === 0
   syncZarrLevelControl()
 }
 
@@ -2631,7 +2639,6 @@ function visibleFovLevels(plan: ChunkPlan | null): number[] {
 
 function setActiveLodLoading(target?: number): void {
   if (currentSourceKind() !== 'omezarr') return
-  els.activeLevelControl.hidden = false
   els.activeLevel.value =
     typeof target === 'number' ? `target L${target}...` : 'loading...'
   els.activeLevel.title =
@@ -2665,7 +2672,6 @@ function syncActiveLodIndicator(plan: ChunkPlan | null): void {
     activeSource?.kind !== 'omezarr' &&
     activeSource?.kind !== 'omezarr-mosaic'
   ) {
-    els.activeLevelControl.hidden = true
     els.activeLevel.value = ''
     els.activeLevel.removeAttribute('data-levels')
     els.activeLevel.removeAttribute('data-fov-levels')
@@ -2688,7 +2694,6 @@ function syncActiveLodIndicator(plan: ChunkPlan | null): void {
     fovLevels,
     contextLevels,
   )
-  els.activeLevelControl.hidden = false
   els.activeLevel.value = display.visibleLabel
   els.activeLevel.dataset.levels = levels.join(',')
   els.activeLevel.dataset.fovLevels = fovLevels.join(',')
@@ -3346,7 +3351,14 @@ function syncFocusFromPan(): boolean {
 }
 
 function axialSliceCount(): number {
-  const count = activeSource?.shape[2] ?? 0
+  let count = activeSource?.shape[2] ?? 0
+  if (
+    activeSource?.kind === 'omezarr' ||
+    activeSource?.kind === 'omezarr-mosaic'
+  ) {
+    const level = detailLevelForView(activeSource, viewerZoom())
+    count = activeSource.levels[level]?.shape[2] ?? count
+  }
   return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
 }
 
@@ -3365,7 +3377,7 @@ function syncAxialSliceControl(): void {
   els.axialSlice.disabled = !axialSliceNavigationEnabled()
   els.axialSliceValue.value = count > 0 ? `${index + 1} / ${count}` : '—'
   els.axialSliceHelp.textContent =
-    'Use the slider or arrow keys in the viewer to move through axial slices.'
+    'Use the slider or arrow keys to move one slice at the current Zarr level.'
 }
 
 function setAxialSlice(index: number): void {
@@ -3570,6 +3582,38 @@ function panForCrosshair(): Shape3 {
   ]
 }
 
+function cursorAnchoredPan(
+  event: WheelEvent,
+  zoom: number,
+): [number, number, number, number] | null {
+  if (!nv || !nv.view) return null
+  const rect = els.canvas.getBoundingClientRect()
+  if (!(rect.width > 0) || !(rect.height > 0)) return null
+  const canvasX =
+    (event.clientX - rect.left) * (els.canvas.width / rect.width)
+  const canvasY =
+    (event.clientY - rect.top) * (els.canvas.height / rect.height)
+  const hit = nv.view.hitTest(canvasX, canvasY)
+  if (!hit || hit.isRender) return null
+  const slice = nv.view.screenSlices[hit.tileIndex]
+  if (
+    !slice?.mvpMatrix ||
+    !slice.planeNormal ||
+    !slice.planePoint
+  ) {
+    return null
+  }
+  const anchorMM = pointOnSlicePlane(
+    hit.normalizedX,
+    hit.normalizedY,
+    slice.mvpMatrix,
+    slice.planeNormal,
+    slice.planePoint,
+  )
+  if (!anchorMM) return null
+  return anchoredSlicePan(nv.pan2Dxyzmm, slice, anchorMM, zoom)
+}
+
 function handleWheelZoom(event: WheelEvent): void {
   if (!nv) return
   event.preventDefault()
@@ -3596,8 +3640,13 @@ function handleWheelZoom(event: WheelEvent): void {
       els.canvas.clientHeight,
       currentScrollZoomSpeed(),
     )
-    const pan = zoom > 1 ? panForCrosshair() : ([0, 0, 0] as Shape3)
-    nv.pan2Dxyzmm = [pan[0], pan[1], pan[2], zoom]
+    const anchoredPan = cursorAnchoredPan(event, zoom)
+    const currentPan = nv.pan2Dxyzmm
+    nv.pan2Dxyzmm = anchoredPan ?? (
+      zoom > 1
+        ? [currentPan[0], currentPan[1], currentPan[2], zoom]
+        : [0, 0, 0, zoom]
+    )
     nv.scaleMultiplier = zoom
   }
   syncCrosshairAppearance()

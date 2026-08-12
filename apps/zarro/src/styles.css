@@ -294,6 +294,15 @@ a:focus-visible {
   width: 100%;
 }
 
+.source-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.source-actions > button {
+  flex: 1 1 0;
+}
+
 #dandiSearchStatus {
   display: block;
   color: var(--nd-color-text-dim);
@@ -473,11 +482,21 @@ a:focus-visible {
   font-size: 0.68rem;
 }
 
+.selected-store-scroll {
+  display: grid;
+  gap: 0.35rem;
+  max-height: calc(3 * 34px + 2 * 0.35rem);
+  overflow-y: auto;
+  padding-right: 0.2rem;
+  scrollbar-color: var(--nd-color-border-light) transparent;
+}
+
 .selected-store-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.4rem;
   align-items: center;
+  min-height: 34px;
 }
 
 .selected-store-row span {

@@ -81,6 +81,7 @@ test("app boots", async ({ page }) => {
   await expect(page.getByText("Volume data stays in this browser tab.")).toHaveCount(0);
   await expect(page.getByText("Chunk spacing", { exact: true })).toHaveCount(0);
   await expect(page.locator("#status")).toBeHidden();
+  await expect(page.getByText("Active detail", { exact: true })).toHaveCount(0);
 });
 
 test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
@@ -227,7 +228,42 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.locator("#activeLevel")).toHaveText("L0");
   await expect(page.locator("#axialSlice")).toHaveAttribute("min", "0");
   await expect(page.locator("#axialSlice")).toHaveAttribute("max", "15");
-  await expect(page.locator("#axialSliceHelp")).toContainText("arrow keys in the viewer");
+  await expect(page.locator("#axialSliceHelp")).toContainText("current Zarr level");
+  const axialTile = await page.locator("#nv-canvas").evaluate((canvas) => {
+    const tile = (canvas.dataset.streamingScreenLayout ?? "")
+      .split(";")
+      .find((entry) => entry.startsWith("0:"));
+    const values = tile?.slice(2).split(",").map(Number) ?? [];
+    return {
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      left: values[0],
+      top: values[1],
+      width: values[2],
+      height: values[3],
+    };
+  });
+  const hoverCanvasBox = await page.locator("#nv-canvas").boundingBox();
+  expect(hoverCanvasBox).not.toBeNull();
+  const cursorX = hoverCanvasBox.x +
+    ((axialTile.left + axialTile.width * 0.75) / axialTile.canvasWidth) * hoverCanvasBox.width;
+  const cursorY = hoverCanvasBox.y +
+    ((axialTile.top + axialTile.height * 0.5) / axialTile.canvasHeight) * hoverCanvasBox.height;
+  await page.locator("#nv-canvas").dispatchEvent("wheel", {
+    clientX: cursorX,
+    clientY: cursorY,
+    deltaY: -120,
+    deltaMode: 0,
+  });
+  await expect(page.locator("#panX")).not.toHaveValue("0");
+  await expect(page.locator("#panY")).toHaveValue("0");
+  await page.locator("#nv-canvas").dispatchEvent("wheel", {
+    clientX: cursorX,
+    clientY: cursorY,
+    deltaY: 120,
+    deltaMode: 0,
+  });
+  await expect(page.locator("#panX")).toHaveValue("0");
   for (let index = 0; index < 4; index++) {
     await page.locator("#nv-canvas").dispatchEvent("wheel", {
       deltaY: -120,
@@ -263,6 +299,14 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.locator("#axialSlice")).toBeEnabled();
   await page.locator("#layout").selectOption("2");
   await expect(page.locator("#axialSlice")).toBeEnabled();
+  await page.locator("#layout").selectOption("33");
+  await expect.poll(async () => page.locator("#nv-canvas").evaluate((canvas) => {
+    const widths = (canvas.dataset.streamingScreenLayout ?? "")
+      .split(";")
+      .filter(Boolean)
+      .map((tile) => Number(tile.split(":")[1]?.split(",")[2] ?? 0));
+    return Math.max(...widths, 0) / Math.max(1, Math.min(...widths));
+  })).toBeGreaterThan(1.5);
   await page.locator("#layout").selectOption("31");
   await expect(page.locator("#nv-canvas")).toHaveAttribute(
     "data-crosshair-visible",
@@ -546,6 +590,9 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
     "56509720-870c-4f43-ae41-7b75f9590722",
     "b2802fac-cb30-4c25-bd16-09666706c91a",
     "e8633ce6-0922-4de1-a453-8ffbed48f1d2",
+    "27ad3056-c777-43ec-92be-c8438fc19941",
+    "d2babd63-9274-4c92-85be-e2b4fca6d28f",
+    "bcb68179-4c76-422d-b292-7e2a214b27ad",
   ];
   let requestedGlob = "";
   await page.route("https://api.dandiarchive.org/api/dandisets/000108/versions/draft/assets/**", async (route) => {
@@ -553,10 +600,10 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
-        count: 3,
+        count: 6,
         next: null,
         previous: null,
-        results: [10, 2, 1].map((chunk, index) => ({
+        results: [10, 2, 1, 6, 5, 4].map((chunk, index) => ({
           asset_id: `asset-${chunk}`,
           path: `sub-MITU01/ses-test/micr/sub-MITU01_ses-test_sample-127_stain-LEC_run-1_chunk-${chunk}_SPIM.ome.zarr`,
           size: 37_700_000_000,
@@ -570,27 +617,48 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
   await expect(page.locator("#dandiArchiveControl")).toBeVisible();
   await expect(page.locator("#zarrUrlControl")).toBeHidden();
   await expect(page.getByRole("button", { name: "Clear all selected stores" })).toBeDisabled();
+  const clearButtonBox = await page.getByRole("button", { name: "Clear all selected stores" }).boundingBox();
+  const loadButtonBox = await page.getByRole("button", { name: "Load volume" }).boundingBox();
+  expect(clearButtonBox).not.toBeNull();
+  expect(loadButtonBox).not.toBeNull();
+  expect(Math.abs(loadButtonBox.y - clearButtonBox.y)).toBeLessThan(2);
   await page.locator("#dandiQuery").fill("sample-127 LEC");
   await page.getByRole("button", { name: "Search" }).click();
-  await expect(page.locator("#dandiSearchStatus")).toContainText("Showing 3 OME-Zarr stores in 1 stain group");
+  await expect(page.locator("#dandiSearchStatus")).toContainText("Showing 6 OME-Zarr stores in 1 stain group");
   expect(requestedGlob).toBe("*sample-127*LEC*.ome.zarr");
   await expect(page.getByText("Subject MITU01", { exact: true })).toBeVisible();
   await expect(page.getByText("Sample 127", { exact: true })).toBeVisible();
   await expect(page.locator(".dandi-stain-group")).toContainText("LEC");
-  await page.getByText("Review 3 chunks", { exact: true }).click();
+  await page.getByText("Review 6 chunks", { exact: true }).click();
   await expect(page.locator(".dandi-result strong")).toHaveText([
     "Chunk 1",
     "Chunk 2",
+    "Chunk 4",
+    "Chunk 5",
+    "Chunk 6",
     "Chunk 10",
   ]);
   await expect(page.getByRole("button", { name: "Add selected stores" })).toHaveCount(0);
-  await expect(page.locator(".dandi-add-store")).toHaveCount(3);
+  await expect(page.locator(".dandi-add-store")).toHaveCount(6);
   await page.getByRole("button", { name: "Add Chunk 1 store" }).click();
   await expect(page.locator("#dandiSelectedStores .selected-store-row")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Add Chunk 1 store" })).toBeDisabled();
-  await page.getByRole("button", { name: "Add all 3 LEC chunks from sample 127" }).click();
-  await expect(page.locator("#source")).toHaveValue("dandi");
+  await page.getByRole("button", { name: "Add Chunk 2 store" }).click();
+  await page.getByRole("button", { name: "Add Chunk 4 store" }).click();
   await expect(page.locator("#dandiSelectedStores .selected-store-row")).toHaveCount(3);
+  await expect.poll(async () => page.locator(".selected-store-scroll").evaluate(
+    (list) => list.scrollHeight <= list.clientHeight,
+  )).toBe(true);
+  await page.getByRole("button", { name: "Add all 6 LEC chunks from sample 127" }).click();
+  await expect(page.locator("#source")).toHaveValue("dandi");
+  await expect(page.locator("#dandiSelectedStores .selected-store-row")).toHaveCount(6);
+  await expect.poll(async () => page.locator(".selected-store-scroll").evaluate(
+    (list) => list.scrollHeight > list.clientHeight,
+  )).toBe(true);
+  const selectedListBox = await page.locator("#dandiSelectedStores").boundingBox();
+  expect(selectedListBox).not.toBeNull();
+  expect(loadButtonBox.y + loadButtonBox.height).toBeLessThanOrEqual(selectedListBox.y);
+  expect(clearButtonBox.y + clearButtonBox.height).toBeLessThanOrEqual(selectedListBox.y);
   await expect(page.locator("#dandiSelectedStores")).toContainText("chunk-1_SPIM.ome.zarr");
   await expect(page.getByRole("button", { name: "Clear all selected stores" })).toBeEnabled();
   await expect(page).toHaveURL(new RegExp(`url=.*${zarrIds[0]}`));
@@ -770,12 +838,19 @@ test("zoom control represents OME-Zarr levels directly", async ({ page }) => {
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-fov-levels", "6");
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-requested-level", "6");
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-delivered-level", "6");
+  await expect(page.locator("#axialSlice")).toHaveAttribute("max", "31");
+  await expect(page.locator("#axialSliceValue")).toHaveText("17 / 32");
+  await page.locator("#axialSlice").fill("10");
+  await expect(page.locator("#axialSliceValue")).toHaveText("11 / 32");
   await page.locator("#zoom").fill("4");
   await expect(page.locator("#zoomValue")).toHaveText("L4 · pending");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-fov-levels", "4");
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-requested-level", "4");
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-delivered-level", "4");
+  await expect(page.locator("#axialSlice")).toHaveAttribute("max", "127");
+  await expect(page.locator("#axialSlice")).toHaveValue("41");
+  await expect(page.locator("#axialSliceValue")).toHaveText("42 / 128");
   await expect(page.locator("#visibleLevel")).toHaveText("L4");
   await expect(page.locator("#zoomValue")).toHaveText("L4");
   await page.getByRole("button", { name: "Copy share link" }).click();
