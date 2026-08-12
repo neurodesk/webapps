@@ -39,7 +39,7 @@ The **Copy share link** button is the recommended way to generate a link. Store
 roots use repeatable `url` parameters, so a minimal direct link also works:
 
 ```text
-https://webapps.neurodesk.org/omezarr-viewer/?source=custom&url=https%3A%2F%2Fdandiarchive.s3.amazonaws.com%2Fzarr%2F<zarr-id>%2F
+https://webapps.neurodesk.org/zarro/?source=custom&url=https%3A%2F%2Fdandiarchive.s3.amazonaws.com%2Fzarr%2F<zarr-id>%2F
 ```
 
 Repeat `url` to open translated stores together. Optional viewer parameters are
@@ -52,9 +52,9 @@ From the repository root:
 
 ```bash
 pnpm install
-pnpm --filter omezarr-viewer dev
-pnpm --filter omezarr-viewer test
-pnpm --filter omezarr-viewer build
+pnpm --filter zarro dev
+pnpm --filter zarro test
+pnpm --filter zarro build
 ```
 
 The app uses the shared `@neurodesk/webapp-components` imaging workspace and

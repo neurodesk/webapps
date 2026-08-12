@@ -269,8 +269,8 @@ apps:
       toolchains: [node]
       shared_runtime: true
       release: true
-  - id: omezarr-viewer
-    path: omezarr-viewer
+  - id: zarro
+    path: zarro
     title: ZARRo
     description: Stream and explore multiscale OME-Zarr volumes directly in the browser.
     category: quality-annotation

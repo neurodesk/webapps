@@ -3,7 +3,7 @@ import test from 'node:test'
 import { readShareState, writeShareState } from '../src/share_state.ts'
 
 const state = {
-  layout: 3,
+  layout: 31,
   azimuth: 120.5,
   elevation: 22,
   scale: 1.75,
@@ -22,16 +22,33 @@ const state = {
 
 test('round-trips viewer settings through a share URL', () => {
   const url = writeShareState(
-    new URL('https://webapps.neurodesk.org/omezarr-viewer/?url=https://example.test/a'),
+    new URL('https://webapps.neurodesk.org/zarro/?url=https://example.test/a'),
     state,
   )
   assert.equal(url.searchParams.get('url'), 'https://example.test/a')
   assert.equal(url.searchParams.get('scrollZoomSpeed'), '5')
   assert.equal(url.searchParams.get('detailBudget'), '8')
+  assert.equal(url.searchParams.get('layout'), '31')
+  assert.equal(url.searchParams.has('equalViews'), false)
   assert.deepEqual(readShareState(url.searchParams, state), state)
 })
 
 test('ignores invalid shared camera and detail budget values', () => {
   const params = new URLSearchParams('layout=99&zoom=nope&pan=1,2&detailBudget=99')
   assert.deepEqual(readShareState(params, state), state)
+})
+
+test('maps legacy multiplanar links onto the new layout presets', () => {
+  assert.equal(
+    readShareState(new URLSearchParams('layout=3&equalViews=0'), state).layout,
+    30,
+  )
+  assert.equal(
+    readShareState(new URLSearchParams('layout=3&equalViews=1'), state).layout,
+    31,
+  )
+})
+
+test('restores the vertical equal-slices preset', () => {
+  assert.equal(readShareState(new URLSearchParams('layout=33'), state).layout, 33)
 })

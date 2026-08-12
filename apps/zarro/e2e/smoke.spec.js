@@ -263,7 +263,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.locator("#axialSlice")).toBeEnabled();
   await page.locator("#layout").selectOption("2");
   await expect(page.locator("#axialSlice")).toBeEnabled();
-  await page.locator("#layout").selectOption("3");
+  await page.locator("#layout").selectOption("31");
   await expect(page.locator("#nv-canvas")).toHaveAttribute(
     "data-crosshair-visible",
     "1",
@@ -464,7 +464,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   const sharedUrl = await page.evaluate(() => window.__copiedText);
   const sharedParams = new URL(sharedUrl).searchParams;
   expect(sharedParams.getAll("url")).toHaveLength(2);
-  expect(sharedParams.get("layout")).toBe("3");
+  expect(sharedParams.get("layout")).toBe("31");
   expect(sharedParams.get("zoom")).toBe("2");
   expect(sharedParams.get("wl")).toBe("60");
   expect(sharedParams.get("ww")).toBe("20");
@@ -583,6 +583,11 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
     "Chunk 2",
     "Chunk 10",
   ]);
+  await expect(page.getByRole("button", { name: "Add selected stores" })).toHaveCount(0);
+  await expect(page.locator(".dandi-add-store")).toHaveCount(3);
+  await page.getByRole("button", { name: "Add Chunk 1 store" }).click();
+  await expect(page.locator("#dandiSelectedStores .selected-store-row")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Add Chunk 1 store" })).toBeDisabled();
   await page.getByRole("button", { name: "Add all 3 LEC chunks from sample 127" }).click();
   await expect(page.locator("#source")).toHaveValue("dandi");
   await expect(page.locator("#dandiSelectedStores .selected-store-row")).toHaveCount(3);
@@ -655,7 +660,7 @@ test("generic uint16 share contrast is replaced from streamed signal", async ({ 
 
   const storeUrl = encodeURIComponent("http://localhost:4173/test-auto-window/store");
   await page.goto(
-    `/?source=custom&level=0&url=${storeUrl}&wl=32768&ww=65535&layout=3`,
+    `/?source=custom&level=0&url=${storeUrl}&wl=32768&ww=65535&layout=31`,
   );
 
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-fov-levels", "0", {
@@ -668,7 +673,7 @@ test("generic uint16 share contrast is replaced from streamed signal", async ({ 
   await expect(page.locator("#fallback")).toHaveAttribute("aria-hidden", "true");
 
   await page.goto(
-    `/?source=custom&level=0&url=${storeUrl}&wl=1000&ww=500&layout=3`,
+    `/?source=custom&level=0&url=${storeUrl}&wl=1000&ww=500&layout=31`,
   );
   await expect(page.locator("#activeLevel")).toHaveAttribute("data-fov-levels", "0");
   await page.waitForTimeout(500);

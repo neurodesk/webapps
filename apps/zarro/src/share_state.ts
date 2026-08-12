@@ -46,6 +46,7 @@ export function writeShareState(url: URL, state: ShareableViewState): URL {
   url.searchParams.set('ww', compactNumber(state.windowWidth))
   url.searchParams.set('scrollZoomSpeed', compactNumber(state.scrollZoomSpeed))
   url.searchParams.set('detailBudget', compactNumber(state.detailBudgetGiB))
+  url.searchParams.delete('equalViews')
   url.searchParams.set('crosshairVisible', state.showCrosshair ? '1' : '0')
   url.searchParams.set('scaleBar', state.showScaleBar ? '1' : '0')
   url.searchParams.set('stats', state.showStats ? '1' : '0')
@@ -63,9 +64,18 @@ export function readShareState(
   const renderPan = numberList(params.get('renderPan'), 2)
   const scrollZoomSpeed = finiteNumber(params.get('scrollZoomSpeed'))
   const detailBudgetGiB = finiteNumber(params.get('detailBudget'))
+  const legacyEqualViews = params.get('equalViews')
+  const resolvedLayout =
+    layout === 3 || (layout === null && legacyEqualViews !== null)
+      ? legacyEqualViews === '0'
+        ? 30
+        : 31
+      : layout !== null && [0, 1, 2, 4, 30, 31, 32, 33].includes(layout)
+        ? layout
+        : defaults.layout
   return {
     ...defaults,
-    layout: layout !== null && [0, 1, 2, 3, 4].includes(layout) ? layout : defaults.layout,
+    layout: resolvedLayout,
     azimuth: finiteNumber(params.get('azimuth')) ?? defaults.azimuth,
     elevation: finiteNumber(params.get('elevation')) ?? defaults.elevation,
     scale: finiteNumber(params.get('scale')) ?? defaults.scale,

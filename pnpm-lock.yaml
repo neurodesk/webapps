@@ -293,7 +293,7 @@ importers:
         specifier: ^5.4.6
         version: 5.4.21(@types/node@24.13.3)
 
-  apps/omezarr-viewer:
+  apps/zarro:
     dependencies:
       '@neurodesk/webapp-components':
         specifier: workspace:*

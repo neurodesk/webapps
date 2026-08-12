@@ -1,14 +1,15 @@
 {
-  "name": "omezarr-viewer",
-  "version": "0.1.6",
+  "name": "zarro",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "license": "BSD-2-Clause",
   "description": "Stream and explore multiscale OME-Zarr volumes directly in the browser.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node ../../scripts/theme-app-dist.mjs --app omezarr-viewer",
+    "build": "tsc --noEmit && vite build && node ../../scripts/theme-app-dist.mjs --app zarro",
     "preview": "vite preview",
+    "prototype:fov": "node scripts/fov_framing_prototype.mjs",
     "test": "node --test test/*.test.js && tsc --noEmit",
     "test:e2e": "playwright test",
     "lint": "tsc --noEmit"

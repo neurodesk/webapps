@@ -279,7 +279,6 @@ a:focus-visible {
 }
 
 #controls .dandi-search-row button,
-#controls #addDandiSelection,
 #controls #clearDandiSelection {
   min-height: 38px;
   margin: 0;
@@ -291,7 +290,6 @@ a:focus-visible {
   font-size: 0.7rem;
 }
 
-#controls #addDandiSelection,
 #controls #clearDandiSelection {
   width: 100%;
 }
@@ -431,22 +429,26 @@ a:focus-visible {
 
 .dandi-result {
   display: grid !important;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.45rem !important;
-  align-items: start;
+  align-items: center;
   padding: 0.5rem;
   color: var(--nd-color-text-muted) !important;
   background: var(--nd-color-surface-elevated);
   border: 1px solid var(--nd-color-border);
   border-radius: var(--nd-radius-sm);
-  cursor: pointer;
 }
 
-.dandi-result input {
-  width: auto !important;
-  min-height: 0 !important;
-  margin-top: 0.15rem !important;
-  accent-color: var(--nd-color-primary);
+#controls .dandi-add-store {
+  min-height: 28px;
+  margin: 0;
+  padding: 0.25rem 0.45rem;
+  color: var(--nd-color-text);
+  background: var(--nd-color-bg);
+  border: 1px solid var(--nd-color-border-light);
+  border-radius: var(--nd-radius-sm);
+  font-size: 0.62rem;
+  white-space: nowrap;
 }
 
 .dandi-result strong,

@@ -10,7 +10,7 @@ const isolationHeaders = {
 
 export default defineConfig({
   // Every app is served below the composite webapps.neurodesk.org site.
-  base: "/omezarr-viewer/",
+  base: "/zarro/",
   build: { target: "es2022", outDir: "dist", assetsInlineLimit: 0 },
   worker: { format: "es" },
   // Dev-server COOP/COEP ONLY. Production isolation comes from public/_headers or the COI SW.

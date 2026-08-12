@@ -14,8 +14,13 @@ import '@neurodesk/webapp-components/styles/base.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import * as zarr from 'zarrita'
 import './styles.css'
+import {
+  prototypeStreamingFovBoundsFromScreenSlices,
+  type PrototypeFovBounds,
+} from './adaptive_streaming_fov_prototype.ts'
 import { AbortableTaskPool } from './abortable_task_pool'
 import { getBackendFromUrl } from './backend'
+import { LAYOUT_PRESET, viewerLayoutConfig } from './viewer_layout'
 import {
   buildDandiZarrAssetHierarchy,
   searchDandiZarrAssets,
@@ -117,7 +122,6 @@ const ADAPTIVE_CELL_EDGE = 128
 const ADAPTIVE_FINE_RADIUS = ADAPTIVE_CELL_EDGE / 2
 const MAX_IN_MEMORY_NIFTI_BYTES = 256 * 1024 * 1024
 const AUTO_WINDOW_CHUNK_LIMIT = 8
-
 type SourceKind = 'synthetic' | 'omezarr'
 type OmezarrSourceId = 'dandi' | 'custom'
 type SupportedDtype = 'uint8' | 'uint16'
@@ -367,7 +371,6 @@ const els = {
   searchDandi: el<HTMLButtonElement>('searchDandi'),
   dandiSearchStatus: el<HTMLOutputElement>('dandiSearchStatus'),
   dandiResults: el<HTMLDivElement>('dandiResults'),
-  addDandiSelection: el<HTMLButtonElement>('addDandiSelection'),
   clearDandiSelection: el<HTMLButtonElement>('clearDandiSelection'),
   dandiSelectedStores: el<HTMLDivElement>('dandiSelectedStores'),
   showCrosshair: el<HTMLInputElement>('showCrosshair'),
@@ -404,6 +407,7 @@ let requestedBaseLevel: number | null = null
 let fixedZarrLevel: number | null = null
 let focusFraction: Shape3 = [0.5, 0.5, 0.5]
 let lastPanForFocus: Shape3 = [0, 0, 0]
+let lastAdaptiveRequestKey: string | null = null
 let suppressAdaptiveEvents = false
 let deferredAdaptiveLod = false
 let deferredAdaptiveFocusMoved = false
@@ -477,7 +481,13 @@ function applySharedControlSettings(
   settings: ShareableViewState,
   applyWindow = true,
 ): void {
-  els.layout.value = String(settings.layout)
+  if (
+    [...els.layout.options].some(
+      (option) => option.value === String(settings.layout),
+    )
+  ) {
+    els.layout.value = String(settings.layout)
+  }
   if (
     [...els.colormap.options].some(
       (option) => option.value === settings.colormap,
@@ -990,19 +1000,15 @@ function setCustomStoreUrls(urls: string[]): void {
   syncUrlRowControls()
 }
 
-function syncDandiSelection(): void {
-  const selected = els.dandiResults.querySelectorAll<HTMLInputElement>(
-    'input[type="checkbox"]:checked',
-  ).length
-  els.addDandiSelection.disabled = selected === 0
-  els.addDandiSelection.textContent =
-    selected === 0
-      ? 'Add selected stores'
-      : `Add ${selected} selected store${selected === 1 ? '' : 's'}`
-}
-
 function syncDandiGroupActions(): void {
   const selectedUrls = new Set(selectedDandiStoreUrls)
+  for (const button of els.dandiResults.querySelectorAll<HTMLButtonElement>(
+    '.dandi-add-store',
+  )) {
+    const added = selectedUrls.has(button.dataset.storeUrl ?? '')
+    button.disabled = added
+    button.textContent = added ? 'Added' : 'Add'
+  }
   for (const button of els.dandiResults.querySelectorAll<HTMLButtonElement>(
     '.dandi-add-group',
   )) {
@@ -1044,13 +1050,8 @@ function renderSelectedDandiStores(): void {
       selectedDandiStoreUrls = selectedDandiStoreUrls.filter(
         (selectedUrl) => selectedUrl !== storeUrl,
       )
-      const matchingResult = [...els.dandiResults.querySelectorAll<HTMLInputElement>(
-        'input[type="checkbox"]',
-      )].find((input) => input.value === storeUrl)
-      if (matchingResult) matchingResult.checked = false
       shouldInitializeCustomSource = true
       renderSelectedDandiStores()
-      syncDandiSelection()
       syncDandiGroupActions()
       els.dandiSearchStatus.value = 'Store removed. Updating the viewer…'
       void reloadAfterStoreRemoval().then(() => {
@@ -1065,14 +1066,8 @@ function renderSelectedDandiStores(): void {
 async function clearSelectedDandiAssets(): Promise<void> {
   if (selectedDandiStoreUrls.length === 0) return
   selectedDandiStoreUrls = []
-  for (const input of els.dandiResults.querySelectorAll<HTMLInputElement>(
-    'input[type="checkbox"]:checked',
-  )) {
-    input.checked = false
-  }
   shouldInitializeCustomSource = true
   renderSelectedDandiStores()
-  syncDandiSelection()
   syncDandiGroupActions()
   els.dandiSearchStatus.value = 'All selected stores cleared. Updating the viewer…'
   await reloadAfterStoreRemoval()
@@ -1082,13 +1077,9 @@ async function clearSelectedDandiAssets(): Promise<void> {
 function createDandiChunkResult(
   asset: DandiZarrAsset,
   chunk: number | null = null,
-): HTMLLabelElement {
-  const label = document.createElement('label')
-  label.className = 'dandi-result'
-  const checkbox = document.createElement('input')
-  checkbox.type = 'checkbox'
-  checkbox.value = asset.storeUrl
-  checkbox.addEventListener('change', syncDandiSelection)
+): HTMLElement {
+  const row = document.createElement('div')
+  row.className = 'dandi-result'
   const copy = document.createElement('span')
   const title = document.createElement('strong')
   title.textContent =
@@ -1096,8 +1087,15 @@ function createDandiChunkResult(
   const metadata = document.createElement('small')
   metadata.textContent = `${formatBytes(asset.size)} · ${asset.path.split('/').at(-1) ?? asset.path}`
   copy.append(title, metadata)
-  label.append(checkbox, copy)
-  return label
+  const add = document.createElement('button')
+  add.type = 'button'
+  add.className = 'dandi-add-store'
+  add.dataset.storeUrl = asset.storeUrl
+  add.textContent = 'Add'
+  add.setAttribute('aria-label', `Add ${title.textContent} store`)
+  add.addEventListener('click', () => addDandiAssets([asset]))
+  row.append(copy, add)
+  return row
 }
 
 function addDandiAssets(assets: DandiZarrAsset[]): void {
@@ -1234,7 +1232,6 @@ function renderDandiResults(assets: DandiZarrAsset[]): {
     els.dandiResults.append(ungrouped)
   }
 
-  syncDandiSelection()
   syncDandiGroupActions()
   return {
     groupCount: hierarchy.groups.length,
@@ -1249,7 +1246,6 @@ async function searchDandiAssets(): Promise<void> {
   els.searchDandi.disabled = true
   els.dandiSearchStatus.value = 'Searching DANDI…'
   els.dandiResults.replaceChildren()
-  syncDandiSelection()
   try {
     const result = await searchDandiZarrAssets(
       els.dandisetId.value.trim(),
@@ -1275,19 +1271,6 @@ async function searchDandiAssets(): Promise<void> {
       els.searchDandi.disabled = false
     }
   }
-}
-
-function addSelectedDandiAssets(): void {
-  const selectedAssets = [
-    ...els.dandiResults.querySelectorAll<HTMLInputElement>(
-      'input[type="checkbox"]:checked',
-    ),
-  ].flatMap((input) => {
-    const asset = dandiAssetByStoreUrl.get(input.value)
-    return asset ? [asset] : []
-  })
-  if (selectedAssets.length === 0) return
-  addDandiAssets(selectedAssets)
 }
 
 function normalizeZarrStoreUrl(rawUrl: string): string {
@@ -1429,6 +1412,7 @@ function initControlsFromUrl(): void {
     'ww',
     'scrollZoomSpeed',
     'detailBudget',
+    'equalViews',
     'crosshairVisible',
     'scaleBar',
     'stats',
@@ -1446,6 +1430,8 @@ function updateUrlFromControls(): void {
   const kind = currentSourceKind()
   url.searchParams.set('source', els.source.value)
   url.searchParams.set('detailBudget', String(currentDetailBudgetGiB()))
+  url.searchParams.set('layout', String(Number(els.layout.value)))
+  url.searchParams.delete('equalViews')
   if (kind === 'omezarr') {
     const level = requestedBaseLevel ?? 0
     url.searchParams.set('level', String(level))
@@ -2929,7 +2915,7 @@ function resetRenderCropForSourceChange(): void {
   renderCropGeometry = null
   sliceViewBeforeRender = null
   if (!nv || nv.sliceType !== SLICE_TYPE.RENDER) return
-  els.layout.value = String(SLICE_TYPE.MULTIPLANAR)
+  els.layout.value = String(LAYOUT_PRESET.AXIAL_FOCUS)
   nv.renderPivotMM = null
   nv.sliceType = SLICE_TYPE.MULTIPLANAR
 }
@@ -2971,9 +2957,27 @@ function startHudPolling(): void {
   pollHandle = requestAnimationFrame(tick)
 }
 
+function selectedLayoutConfig() {
+  return viewerLayoutConfig(Number(els.layout.value))
+}
+
+function selectedSliceType(): number {
+  return selectedLayoutConfig().sliceType
+}
+
 function applyLayout(): void {
   if (!nv) return
-  nv.sliceType = Number(els.layout.value)
+  const layout = selectedLayoutConfig()
+  nv.customLayout = null
+  nv.showRender = layout.showRender
+  nv.multiplanarType = layout.multiplanarType
+  nv.isEqualSize = layout.isEqualSize
+  nv.sliceType = layout.sliceType
+  nv.customLayout = layout.customLayout
+  requestAnimationFrame(() => {
+    syncPrototypeStreamingState()
+    scheduleAdaptiveLod(true)
+  })
   syncCrosshairVisibility()
   syncViewControls()
   syncInteractionTool()
@@ -3022,7 +3026,7 @@ async function leaveOmezarrRenderCrop(targetLayout: number): Promise<void> {
 
 async function applyLayoutControl(): Promise<void> {
   if (!nv) return
-  const targetLayout = Number(els.layout.value)
+  const targetLayout = selectedSliceType()
   els.layout.disabled = true
   try {
     if (
@@ -3038,12 +3042,11 @@ async function applyLayoutControl(): Promise<void> {
       return
     }
     applyLayout()
-    scheduleAdaptiveLod(true)
   } catch (error) {
     const view = sliceViewBeforeRender
     renderCropGeometry = null
     sliceViewBeforeRender = null
-    els.layout.value = String(SLICE_TYPE.MULTIPLANAR)
+    els.layout.value = String(LAYOUT_PRESET.AXIAL_FOCUS)
     nv.sliceType = SLICE_TYPE.MULTIPLANAR
     await reloadVolume({ view })
     showFallback(
@@ -3074,7 +3077,7 @@ function currentShareState(): ShareableViewState {
   const defaults = defaultShareState()
   return {
     ...defaults,
-    layout: nv?.sliceType ?? Number(els.layout.value),
+    layout: Number(els.layout.value),
     azimuth: view?.azimuth ?? defaults.azimuth,
     elevation: view?.elevation ?? defaults.elevation,
     scale: view?.scale ?? defaults.scale,
@@ -3153,7 +3156,7 @@ function viewerZoom(): number {
 }
 
 function visibleSliceAxes(): number[] | null {
-  const sliceType = nv?.sliceType ?? Number(els.layout.value)
+  const sliceType = nv?.sliceType ?? selectedSliceType()
   if (sliceType === SLICE_TYPE.MULTIPLANAR) return [0, 1, 2]
   if (sliceType === SLICE_TYPE.SAGITTAL) return [0]
   if (sliceType === SLICE_TYPE.CORONAL) return [1]
@@ -3166,7 +3169,81 @@ function currentVisibleFovBounds(
   focus: Shape3 = focusFraction,
   zoom = viewerZoom(),
 ) {
-  return visibleFovBounds(shape, focus, zoom, visibleSliceAxes())
+  const sliceAxes = visibleSliceAxes()
+  if ((nv?.sliceType ?? selectedSliceType()) !== SLICE_TYPE.MULTIPLANAR) {
+    return visibleFovBounds(shape, focus, zoom, sliceAxes)
+  }
+  return screenSliceStreamingBounds(shape, focus, zoom) ??
+    visibleFovBounds(shape, focus, zoom, sliceAxes)
+}
+
+function screenSliceStreamingBounds(
+  shape: Shape3,
+  focus: Shape3 = focusFraction,
+  zoom = viewerZoom(),
+): PrototypeFovBounds[] | null {
+  if (!nv || nv.sliceType !== SLICE_TYPE.MULTIPLANAR) return null
+  const screenSlices = nv.view?.screenSlices ?? []
+  const pan = nv.pan2Dxyzmm
+  const volume = nv.volumes[0]
+  const volumeMin = volume?.extentsMin
+  const volumeMax = volume?.extentsMax
+  if (!volumeMin || !volumeMax) return null
+  const crosshair = nv.crosshairPos
+  const sliceFractions = [0, 1, 2].map((axis) => {
+    const fraction = crosshair[axis]
+    return Number.isFinite(fraction) ? fraction : focus[axis]
+  }) as Shape3
+  const bounds = prototypeStreamingFovBoundsFromScreenSlices(
+    shape,
+    [volumeMin[0], volumeMin[1], volumeMin[2]],
+    [volumeMax[0], volumeMax[1], volumeMax[2]],
+    sliceFractions,
+    [pan[0] ?? 0, pan[1] ?? 0, pan[2] ?? 0, zoom],
+    screenSlices,
+  )
+  return bounds.length === 3 ? bounds : null
+}
+
+function syncPrototypeStreamingState(): void {
+  if (!activeSource) return
+  const bounds = screenSliceStreamingBounds(activeSource.shape)
+  els.canvas.dataset.streamingFovMode = bounds ? 'screen-slices' : 'fallback'
+  els.canvas.dataset.streamingSlabSpans = (bounds ?? [])
+    .map((slab) =>
+      slab.max
+        .map((maximum, axis) =>
+          Number((maximum - slab.min[axis]).toFixed(3)),
+        )
+        .join('x'),
+    )
+    .join(';')
+  els.canvas.dataset.streamingSlabBounds = (bounds ?? [])
+    .map(
+      (slab) =>
+        `${slab.min.map((value) => Number(value.toFixed(3))).join(',')}:` +
+        slab.max.map((value) => Number(value.toFixed(3))).join(','),
+    )
+    .join(';')
+  els.canvas.dataset.streamingScreenRects = (nv?.view?.screenSlices ?? [])
+    .filter((tile) => tile.axCorSag !== SLICE_TYPE.RENDER)
+    .map((tile) =>
+      (tile.leftTopWidthHeight ?? [])
+        .map((value) => Number(value.toFixed(1)))
+        .join(','),
+    )
+    .join(';')
+  els.canvas.dataset.streamingScreenLayout = (nv?.view?.screenSlices ?? [])
+    .map(
+      (tile) =>
+        `${tile.axCorSag}:` +
+        (tile.leftTopWidthHeight ?? [])
+          .map((value) => Number(value.toFixed(1)))
+          .join(','),
+    )
+    .join(';')
+  delete els.canvas.dataset.streamingPrimaryPlane
+  delete els.canvas.dataset.streamingAxisZooms
 }
 
 function syncCrosshairAppearance(): void {
@@ -3305,6 +3382,7 @@ function setAxialSlice(index: number): void {
   const pan = nv.pan2Dxyzmm
   const centeredZ = pan[3] > 1 ? panForCrosshair()[2] : 0
   nv.pan2Dxyzmm = [pan[0], pan[1], centeredZ, pan[3]]
+  syncPrototypeStreamingState()
   syncViewControls()
   syncDownloadControl()
   scheduleAdaptiveLod(true)
@@ -3439,6 +3517,7 @@ function applyZoomControl(): void {
     nv.scaleMultiplier = zoom
   }
   syncCrosshairAppearance()
+  syncPrototypeStreamingState()
   nv.drawScene()
   updateUrlFromControls()
   syncViewControls()
@@ -3522,6 +3601,7 @@ function handleWheelZoom(event: WheelEvent): void {
     nv.scaleMultiplier = zoom
   }
   syncCrosshairAppearance()
+  syncPrototypeStreamingState()
   nv.drawScene()
   syncViewControls()
   syncDownloadControl()
@@ -3547,6 +3627,22 @@ function detailLevelForView(
 
 let currentDetailLevel: number | null = null
 
+function adaptiveRequestKey(
+  targetLevel: number,
+  focus: Shape3,
+  bounds: PrototypeFovBounds[],
+): string {
+  const roundedFocus = focus.map((value) => value.toFixed(6)).join(',')
+  const roundedBounds = bounds
+    .map((slab) =>
+      [...slab.min, ...slab.max]
+        .map((value) => value.toFixed(3))
+        .join(','),
+    )
+    .join(';')
+  return `${targetLevel}|${roundedFocus}|${roundedBounds}`
+}
+
 function scheduleAdaptiveLod(focusMoved = false): void {
   if (suppressAdaptiveEvents) {
     deferredAdaptiveLod = true
@@ -3558,8 +3654,12 @@ function scheduleAdaptiveLod(focusMoved = false): void {
       activeSource?.kind === 'omezarr-mosaic') &&
     chunkedVolume
   ) {
-    activeReadSession?.renew()
     const target = detailLevelForView(activeSource, viewerZoom())
+    const bounds = currentVisibleFovBounds(activeSource.shape)
+    const requestKey = adaptiveRequestKey(target, focusFraction, bounds)
+    if (requestKey === lastAdaptiveRequestKey) return
+    lastAdaptiveRequestKey = requestKey
+    activeReadSession?.renew()
     const targetChanged = updateAdaptiveLodDetail(
       chunkedVolume,
       currentDetailLevel,
@@ -3569,7 +3669,7 @@ function scheduleAdaptiveLod(focusMoved = false): void {
     if (targetChanged) setActiveLodLoading(target)
     chunkedVolume.setFocus(
       focusFraction,
-      currentVisibleFovBounds(activeSource.shape),
+      bounds,
     )
     return
   }
@@ -3579,6 +3679,7 @@ async function disposeChunkedVolume(): Promise<void> {
   chunkedVolume?.dispose()
   chunkedVolume = null
   currentDetailLevel = null
+  lastAdaptiveRequestKey = null
   if (nv && nv.volumes.length > 0) await nv.removeAllVolumes()
 }
 
@@ -3818,6 +3919,7 @@ async function main(): Promise<void> {
   updateUrlFromControls()
   syncStatsVisibility()
 
+  const initialLayout = selectedLayoutConfig()
   nv = new NiiVue({
     backend: BACKEND,
     backgroundColor: [0.02, 0.03, 0.03, 1],
@@ -3827,7 +3929,11 @@ async function main(): Promise<void> {
     isRulerVisible: els.showScaleBar.checked,
     crosshairWidth: 0.5,
     primaryDragMode: DRAG_MODE.crosshairPan,
-    sliceType: Number(els.layout.value),
+    sliceType: initialLayout.sliceType,
+    showRender: initialLayout.showRender,
+    multiplanarType: initialLayout.multiplanarType,
+    isEqualSize: initialLayout.isEqualSize,
+    customLayout: initialLayout.customLayout,
     maxTextureDimension3D: STREAMING_CHUNK_EDGE,
     maxChunkResidencyBytes: DEFAULT_RESIDENCY_BYTES,
   })
@@ -3861,10 +3967,11 @@ async function main(): Promise<void> {
     els.measurementStatus.value = `${formatMeasuredDistance(event.detail.distance)} · right-click to remove`
     els.clearMeasurements.disabled = false
   })
-  nv.addEventListener('locationChange', syncAxialSliceControl)
-  // Crosshair locationChange events intentionally do not refocus LOD. A click
-  // moves the marker without moving the viewport; following it would shift the
-  // fine box away from the visible field and expose coarse context rectangles.
+  nv.addEventListener('locationChange', () => {
+    syncAxialSliceControl()
+    syncPrototypeStreamingState()
+    scheduleAdaptiveLod(true)
+  })
 
   els.source.addEventListener('change', () => {
     resetRenderCropForSourceChange()
@@ -3885,6 +3992,7 @@ async function main(): Promise<void> {
     void reloadVolume({ reloadSource: true })
   })
   els.layout.addEventListener('change', () => {
+    updateUrlFromControls()
     void applyLayoutControl()
   })
   els.zoom.addEventListener('input', updateZoomSelection)
@@ -3947,7 +4055,6 @@ async function main(): Promise<void> {
       void searchDandiAssets()
     })
   }
-  els.addDandiSelection.addEventListener('click', addSelectedDandiAssets)
   els.clearDandiSelection.addEventListener('click', () => {
     void clearSelectedDandiAssets()
   })
