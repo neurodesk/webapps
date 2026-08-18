@@ -173,6 +173,23 @@
           <ul class="layer-list" id="overlayList" aria-label="Overlays on the shown surface"></ul>
           <p class="hint">Curvature, thickness, .annot, .label.gii, .shape.gii, CIFTI .dscalar.nii.</p>
 
+          <!-- One mask for the whole surface, not per overlay: it answers "where
+               is there data at all", which is a property of the subject. -->
+          <div class="row mask-row">
+            <label class="file-field mask-field">
+              <input type="file" id="maskInput" disabled />
+              <span class="mask-browse">Choose a mask</span>
+            </label>
+            <button type="button" id="maskClear" class="mini" disabled
+                    title="Show every overlay everywhere again">Clear</button>
+          </div>
+          <!-- Replaced by syncMaskControls once a mask is loaded. -->
+          <p class="hint" id="maskHint">
+            Optional. Every overlay is drawn only where the mask is non-zero;
+            curvature is always shown. A file with "mask" in its name can just be
+            dropped on the viewer.
+          </p>
+
           <p class="hint" id="overlaySelectedHint" hidden></p>
           <div class="row">
             <label for="overlayColormap">Colour map</label>
@@ -186,6 +203,9 @@
               <option value="hot">hot</option>
               <option value="jet">jet</option>
               <option value="gist_rainbow">gist_rainbow</option>
+              <!-- Picking either also sets the display window. -->
+              <option value="eccentricity">eccentricity</option>
+              <option value="polar_angle">polar angle</option>
             </select>
           </div>
           <div class="row">
@@ -200,6 +220,14 @@
             <button type="button" id="overlayRangeReset" class="mini" disabled
                     title="Back to the 2nd-98th percentile of the data">Auto</button>
           </div>
+          <label class="check">
+            <input type="checkbox" id="overlayIgnoreMask" disabled />
+            <span>Always show this overlay (ignore the mask)</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="showLegend" checked />
+            <span>Show the colour scale on the view</span>
+          </label>
         </section>
 
         <section class="panel workflow-panel tool-panel">
@@ -233,6 +261,9 @@
             <div class="button-row" id="edgeRow" hidden>
               <button type="button" id="closeOnEdge" disabled>Close on surface edge</button>
             </div>
+            <!-- Both texts are replaced by syncControls to name whichever edge
+                 exists right now: the mesh's own cut, a finished ROI's rim, or
+                 both. See EDGE_LABELS in main.js. -->
             <p class="hint" id="edgeHint" hidden>
               Draw only the part of the border crossing the flat surface: both ends are extended
               to the nearest edge, which closes the region. Two points are enough.
@@ -247,13 +278,24 @@
               <span>Include boundary vertices</span>
             </label>
             <div class="row">
-              <label for="fillStyle">Fill style</label>
-              <select id="fillStyle">
-                <option value="solid">Solid</option>
-                <option value="hatched">Hatched</option>
-                <option value="outline">Outline only</option>
+              <label for="markerShape">Point marker</label>
+              <select id="markerShape">
+                <option value="circle" selected>Circle</option>
+                <option value="dot">Dot</option>
+                <option value="cross">Cross</option>
+              </select>
+              <select id="markerColor" aria-label="Point marker colour">
+                <option value="white" selected>White</option>
+                <option value="black">Black</option>
+                <option value="magenta">Magenta</option>
+                <option value="yellow">Yellow</option>
               </select>
             </div>
+            <p class="hint">
+              Markers are drawn on top of the view at a fixed size, each with a
+              contrasting outline so it stays visible over any surface or overlay.
+              Landmarks use the same colour and the other shape.
+            </p>
             <div class="row">
               <label for="roiOpacity">ROI opacity</label>
               <input type="range" id="roiOpacity" min="0.05" max="1" step="0.05" value="0.55" />
@@ -262,6 +304,11 @@
             <p class="hint">
               The interior is detected automatically; if it is ambiguous you are asked to
               click inside the region you want. Closing on the edge takes the smaller side.
+            </p>
+            <p class="hint">
+              With <strong>Include boundary vertices</strong> off, a saved ROI does not
+              own the row it was drawn along, so the next ROI drawn against it claims
+              that row. Tick it before saving to keep the border where you clicked it.
             </p>
           </div>
 
@@ -325,6 +372,10 @@
 
       <div id="viewer">
         <canvas id="gl"></canvas>
+        <!-- Border points and landmarks, projected onto the render rather than
+             painted into the mesh. See src/niivue/markers.js. Never takes a
+             pointer event: every click on the viewer belongs to the picker. -->
+        <canvas id="markerOverlay" aria-hidden="true"></canvas>
         <div id="dropHint" class="drop-hint">
           <span class="drop-icon" aria-hidden="true">
             <svg viewBox="0 0 48 48">
@@ -335,6 +386,18 @@
           <span>FreeSurfer, GIfTI and MZ3 files are supported.</span>
           <small>Processed locally in this browser — nothing is uploaded.</small>
         </div>
+        <!-- The scale for whichever overlay the controls are editing. A wheel for
+             the two retinotopy maps, a bar for the rest; the ticks are text so the
+             values can be read and selected. -->
+        <figure id="colorLegend" class="color-legend" hidden>
+          <button type="button" id="colorLegendClose" class="color-legend-close"
+                  aria-label="Hide the colour scale">&times;</button>
+          <div class="color-legend-plot">
+            <canvas id="colorLegendCanvas" aria-hidden="true"></canvas>
+            <div id="colorLegendTicks" class="color-legend-ticks"></div>
+          </div>
+          <figcaption id="colorLegendCaption"></figcaption>
+        </figure>
       </div>
 
       <div id="status">

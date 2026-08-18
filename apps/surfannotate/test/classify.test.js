@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { existsSync } from 'node:fs';
 
-import { classifyFile, SNIFF_BYTES, SURFACE, OVERLAY, UNKNOWN } from '../src/io/classify.js';
+import {
+  classifyFile, SNIFF_BYTES, SURFACE, OVERLAY, MASK, UNKNOWN
+} from '../src/io/classify.js';
 
 /** First bytes of a file, the way the app hands them to the classifier. */
 function head(bytes) {
@@ -64,6 +66,40 @@ test('MZ3 is classified from its attribute bitfield', () => {
   const scalarsOnly = head([0x4d, 0x5a, 0b1000, 0x00, 0, 0, 0, 0]);
   assert.equal(classifyFile('mesh', withVertices), SURFACE);
   assert.equal(classifyFile('values', scalarsOnly), OVERLAY);
+});
+
+test('a mask is recognised by name, because nothing else can tell', () => {
+  // A mask is the same per-vertex formats as any overlay, so no magic number
+  // separates "where is there data" from the data. These are the names people
+  // actually have.
+  assert.equal(classifyFile('lh.V1.mask', freeSurferCurv), MASK);
+  assert.equal(classifyFile('lh.cortex_mask.gii'), MASK);
+  assert.equal(classifyFile('sub-01_hemi-L_desc-brain_mask.nii.gz'), MASK);
+  // BIDS runs the word together, which is why this is a substring match and not
+  // a delimited token.
+  assert.equal(classifyFile('sub-01_desc-brainmask.nii.gz'), MASK);
+  // And without any bytes at all: `.mask` is in no extension list, so this was
+  // UNKNOWN before the name was consulted.
+  assert.equal(classifyFile('lh.V1.mask'), MASK);
+});
+
+test('a masked overlay is not a mask', () => {
+  // The one false positive worth guarding: these are overlays that have HAD a
+  // mask applied, which is the opposite of a mask. Checked with the bytes and
+  // extensions a real drop has, since that is the path the promotion runs in.
+  assert.equal(classifyFile('lh.thickness.masked.shape.gii'), OVERLAY);
+  assert.equal(classifyFile('lh.curv.masked', freeSurferCurv), OVERLAY);
+  // With nothing to go on these stay unknown, as they did before — the point is
+  // that "masked" never buys them a promotion to MASK.
+  assert.equal(classifyFile('lh.thickness.masked.gii'), UNKNOWN);
+});
+
+test('geometry named "mask" is still geometry', () => {
+  // The mask question is only ever asked of files that are not surfaces, so a
+  // drop cannot be talked out of loading a surface by its name.
+  assert.equal(classifyFile('lh.mask.surf.gii'), SURFACE);
+  assert.equal(classifyFile('brainmask.mz3'), SURFACE);
+  assert.equal(classifyFile('lh.pial.mask', freeSurferSurface), SURFACE);
 });
 
 test('an unrecognised file is reported as unknown rather than guessed', () => {

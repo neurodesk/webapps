@@ -9,7 +9,9 @@
 // 0.68.x (the versions the rest of this monorepo pins), so nothing here
 // conflicts with the shared runtime.
 
-import { NVMesh, NVMeshLayerDefaults, NVMeshLoaders, cmapper } from '@niivue/niivue';
+import {
+  NVMesh, NVMeshLayerDefaults, NVMeshLoaders, NVMeshUtilities, cmapper
+} from '@niivue/niivue';
 import { niivueTranslation } from '../io/geometryOffset.js';
 
 /** A miss returns a far-away vertex; anything past this is treated as no hit. */
@@ -104,6 +106,42 @@ export function pickWorldMm(nv, offsetX, offsetY, memo = null) {
   const point = [mm[0], mm[1], mm[2]];
   if (memo) { memo.x = offsetX; memo.y = offsetY; memo.mm = point; }
   return point;
+}
+
+/**
+ * The matrices NiiVue is about to draw the 3D view with.
+ *
+ * Taken from NiiVue rather than rebuilt, so a marker drawn from them cannot
+ * drift from the surface it is meant to sit on: `drawMesh3D` calls this same
+ * method with these same arguments when no matrix is handed to it. The
+ * viewport defaults to the whole canvas in device pixels, which is what the
+ * render view occupies.
+ *
+ * @param {import('@niivue/niivue').Niivue} nv
+ * @returns {{mvp: Float32Array, model: Float32Array, normal: Float32Array}}
+ *   all column-major mat4
+ */
+export function renderMatrices(nv) {
+  const [mvp, model, normal] = nv.calculateMvpMatrix(
+    null, undefined, nv.scene.renderAzimuth, nv.scene.renderElevation
+  );
+  return { mvp, model, normal };
+}
+
+/**
+ * Per-vertex normals for a loaded mesh.
+ *
+ * NiiVue generates these inside `updateMesh` and packs them straight into the
+ * vertex buffer, so there is no array on the mesh to read back — but the
+ * generator itself is exported, and calling it gives exactly the normals the
+ * shader is shading with. Costly enough on a 160k-vertex hemisphere to be
+ * worth caching per surface; it does not change unless the geometry does.
+ *
+ * @param {object} mesh
+ * @returns {Float32Array} 3 per vertex
+ */
+export function vertexNormals(mesh) {
+  return NVMeshUtilities.generateNormals(mesh.pts, mesh.tris);
 }
 
 /**
@@ -246,11 +284,44 @@ export async function loadOverlay(nv, mesh, file, options = {}) {
 }
 
 /**
+ * Read a file's per-vertex values without attaching anything to the mesh.
+ *
+ * For a mask, which is read for its numbers rather than to be drawn. Note that
+ * FreeSurfer curv-format files must NOT come through here — `readLayer` sniffs
+ * the magic bytes and sends them to `readCURV`, which min-max normalises and
+ * inverts. See io/freesurferCurv.js.
+ *
+ * @param {object} mesh
+ * @param {File|Blob} file
+ * @returns {Promise<Float32Array>} one value per vertex
+ */
+export async function readLayerValues(mesh, file) {
+  const layer = await NVMeshLoaders.readLayer(
+    file.name, await file.arrayBuffer(), mesh, 1.0, 'gray', 'winter', false
+  );
+  if (!layer?.values) {
+    throw new Error(
+      'NiiVue could not read this as per-vertex data. Supported: .curv, .annot, ' +
+      '.shape.gii, .func.gii, .label.gii, .mgh/.mgz, .mz3, CIFTI .dscalar.nii, ' +
+      'and FreeSurfer .label.'
+    );
+  }
+  const vertexCount = mesh.pts.length / 3;
+  if (layer.values.length !== vertexCount) {
+    throw new Error(
+      `it has ${layer.values.length} values but the surface has ${vertexCount} ` +
+      'vertices — it belongs to a different mesh'
+    );
+  }
+  return layer.values;
+}
+
+/**
  * 2nd–98th percentile, so a handful of outliers cannot flatten the display.
  * Sampled rather than fully sorted: 20k samples is plenty to place a percentile
  * and keeps this well under a millisecond on a 160k-vertex overlay.
  */
-export function robustRange(values, lowPercentile = 0.02, highPercentile = 0.98) {
+function robustRange(values, lowPercentile = 0.02, highPercentile = 0.98) {
   const total = values.length;
   if (!total) return { low: 0, high: 1 };
 

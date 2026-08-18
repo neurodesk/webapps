@@ -1,6 +1,6 @@
 {
   "name": "surfannotate",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Browser-based cortical surface viewer with manual ROI delineation and vertex selection.",

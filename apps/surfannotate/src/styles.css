@@ -214,7 +214,8 @@ summary:focus-visible {
 
 .upload-field { position: relative; }
 
-#controls .upload-field > input[type="file"] {
+#controls .upload-field > input[type="file"],
+#controls .mask-field > input[type="file"] {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -339,6 +340,34 @@ summary:focus-visible {
 .range-row { grid-template-columns: 48px minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 6px; }
 .range-row input[type="number"] { min-width: 0; font-size: 0.75rem; }
 .range-sep { color: var(--nd-ink-muted); font-size: 0.72rem; }
+
+.mask-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+
+/* The same hidden-input pattern .upload-field uses, at the size of one row
+   rather than a drop target: a mask is picked once and then forgotten. */
+.mask-field { position: relative; }
+
+.mask-browse {
+  display: grid;
+  min-height: 36px;
+  padding: 7px 11px;
+  color: var(--nd-brand-selection);
+  background: var(--nd-brand-pale);
+  border: 1px solid var(--nd-brand-light);
+  border-radius: 7px;
+  font-size: 0.78rem;
+  place-items: center;
+  cursor: pointer;
+}
+
+.mask-field:hover .mask-browse { border-color: var(--nd-brand-primary); }
+
+.mask-field:has(input:disabled) .mask-browse {
+  color: #64705f;
+  background: #f1f4ef;
+  border-color: #d8ded4;
+  cursor: not-allowed;
+}
 
 #controls button {
   min-height: 36px;
@@ -567,6 +596,16 @@ summary:focus-visible {
   touch-action: none;
 }
 
+/* Over the render, under the badge (2) and the colour scale (3). Transparent
+   except where a marker is, and never interactive — a pointer event here would
+   be one the vertex picker never sees. */
+#markerOverlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+}
+
 #viewer.dragging::after {
   content: "";
   position: absolute;
@@ -618,6 +657,103 @@ summary:focus-visible {
 .drop-hint strong { font-size: 1.2rem; font-weight: 700; }
 .drop-hint > span:not(.drop-icon) { color: var(--nd-brand-light); font-size: 0.88rem; }
 .drop-hint small { max-width: 32rem; color: var(--nd-brand-hover); font-size: 0.74rem; }
+
+/* The overlay's colour scale, in the corner opposite the #viewer::before badge.
+   Below the z-index 4 drag overlay, and click-through everywhere but the close
+   button, so it never swallows a click meant for the surface. */
+.color-legend {
+  position: absolute;
+  z-index: 3;
+  bottom: 18px;
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 15px 26px 12px;
+  color: var(--nd-brand-light);
+  background: rgb(12 14 10 / 74%);
+  border: 1px solid rgb(79 123 56 / 72%);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.color-legend-close {
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  padding: 0 4px;
+  color: var(--nd-brand-hover);
+  font-size: 0.95rem;
+  line-height: 1.4;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.color-legend-close:hover { color: var(--nd-brand-pale); }
+
+.color-legend-plot { position: relative; }
+.color-legend-plot canvas { display: block; }
+
+/* Room under a wheel for the tick that hangs below it, or it lands on the
+   caption. The bar's ticks get their own space further down. */
+.color-legend:not([data-kind="bar"]) .color-legend-plot { margin-bottom: 13px; }
+
+.color-legend-ticks {
+  position: absolute;
+  inset: 0;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Placed by main.js from the unit coordinates legendTicks returns, so the CSS
+   only has to centre each label on the point it was given. */
+.color-legend-tick {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+/* Two of the three eccentricity labels sit on saturated colour, exactly as in
+   the reference figure — the shadow is what keeps them readable there. */
+.color-legend[data-kind="eccentricity"] .color-legend-tick {
+  color: var(--nd-brand-white);
+  font-weight: 700;
+  text-shadow: 0 0 4px rgb(0 0 0 / 95%), 0 0 2px rgb(0 0 0 / 95%);
+}
+
+.color-legend-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgb(255 255 255 / 40%);
+  border-radius: 50%;
+  aspect-ratio: 1;
+}
+
+/* A bar's ticks hang below it rather than over it. */
+.color-legend[data-kind="bar"] .color-legend-ticks {
+  inset: 100% 0 auto;
+  height: 0;
+}
+
+.color-legend[data-kind="bar"] .color-legend-tick { top: 11px; }
+
+.color-legend figcaption {
+  max-width: 15rem;
+  overflow: hidden;
+  color: var(--nd-brand-hover);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.color-legend[data-kind="bar"] figcaption { margin-top: 8px; }
 
 #status {
   display: flex;

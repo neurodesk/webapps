@@ -27,7 +27,8 @@ async function loadSurface(page) {
 
 test('the shell mounts with the shared workspace and a link back to the catalog', async ({ page }) => {
   await expect(page.locator('#controls')).toBeVisible();
-  await expect(page.locator('#viewer canvas')).toBeVisible();
+  // #gl, not "#viewer canvas": the colour legend puts a second canvas in there.
+  await expect(page.locator('#gl')).toBeVisible();
   // Required of every app in the composite site. Scoped to the shell: the start
   // page carries its own copy of the link, so the page has two.
   const moreApps = page.locator('#app [title="More Neurodesk web apps"]');
@@ -397,12 +398,60 @@ test('a curvature overlay loads with a usable display window', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test('border markers hide once filled and return after undo', async ({ page }) => {
+test('border markers are drawn on the overlay, survive a fill, and are culled when facing away', async ({ page }) => {
   await loadSurface(page);
 
-  const countMarkers = () => page.evaluate(() =>
-    Array.from(window.__surfannotate.labelValues).filter((v) => v === 4).length);
+  // Painted pixels on the marker canvas, not label values on the mesh: the
+  // markers are no longer on the surface at all.
+  const countMarkers = () => page.evaluate(() => {
+    window.__surfannotateUi.renderMarkers();
+    const canvas = document.getElementById('markerOverlay');
+    const { data } = canvas.getContext('2d')
+      .getImageData(0, 0, canvas.width, canvas.height);
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 0) painted++;
+    return painted;
+  });
 
+  // A real press in the middle of the brain, not a synthesised addClick. This
+  // is the assertion that matters: the depth picker returns the FRONT-MOST
+  // surface point, so the vertex it hands back necessarily faces the camera and
+  // its marker must be drawn. An earlier version of this test hunted through
+  // azimuths for one that painted something, which an inverted facing test
+  // satisfies just as well by finding the opposite view — it passed against a
+  // build where clicking drew nothing at all.
+  const canvas = await page.locator('#gl').boundingBox();
+  await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(page.locator('#statusText')).toContainText('1 point(s) on the border.');
+
+  const clicked = await countMarkers();
+  expect(clicked).toBeGreaterThan(0);
+
+  // Where the pointer was, give or take the marker's own radius — a marker
+  // painted somewhere else entirely would still pass a plain "is anything
+  // painted" count.
+  const offset = await page.evaluate(() => {
+    const overlay = document.getElementById('markerOverlay');
+    const { data } = overlay.getContext('2d')
+      .getImageData(0, 0, overlay.width, overlay.height);
+    let sumX = 0, sumY = 0, n = 0;
+    for (let i = 3; i < data.length; i += 4) {
+      if (!data[i]) continue;
+      const pixel = (i - 3) / 4;
+      sumX += pixel % overlay.width;
+      sumY += Math.floor(pixel / overlay.width);
+      n++;
+    }
+    return { x: sumX / n - overlay.width / 2, y: sumY / n - overlay.height / 2 };
+  });
+  expect(Math.hypot(offset.x, offset.y)).toBeLessThan(20);
+
+  // Now a border, to check the marker set survives being filled. The old
+  // vertex-label markers were painted with their 1-ring, which made them wider
+  // than the ROI and forced them to be hidden once a region existed; a
+  // screen-space marker is a fixed few pixels and cannot overstate anything.
   await page.evaluate(() => {
     const { graph, session } = window.__surfannotate;
     const step = (from) => {
@@ -421,20 +470,86 @@ test('border markers hide once filled and return after undo', async ({ page }) =
       }
       return frontier[0];
     };
-    let v = 60000;
-    for (let i = 0; i < 8; i++) { session.addClick(v); v = step(v); }
+    let v = session.clicks[0];
+    for (let i = 0; i < 7; i++) { v = step(v); session.addClick(v); }
     session.closePath();
+    window.__surfannotateUi.repaint();
+  });
+  const drawn = await countMarkers();
+  expect(drawn).toBeGreaterThan(clicked);
+
+  await page.evaluate(() => window.__surfannotateUi.runFill(-1));
+  expect(await countMarkers()).toBe(drawn);
+
+  // Culling is asserted on ONE point, not on the border: those clicks are twelve
+  // hops apart and wander far enough round the hemisphere that some of them
+  // genuinely still face any given camera. A single vertex is exact — at
+  // elevation 0, half a turn of azimuth negates the facing test — and the point
+  // used is the clicked one, which is known to be on the near surface.
+  await page.evaluate(() => {
+    const first = window.__surfannotate.session.clicks[0];
+    window.__surfannotate.session.clearRoi();
+    window.__surfannotate.session.addClick(first);
     window.__surfannotateUi.repaint();
   });
   expect(await countMarkers()).toBeGreaterThan(0);
 
-  // The markers are painted with their 1-ring so they are visible, which makes
-  // them wider than the ROI itself — misleading once a region exists.
-  await page.evaluate(() => window.__surfannotateUi.runFill(-1));
+  await page.evaluate(() => {
+    const nv = window.__surfannotate.nv;
+    nv.setRenderAzimuthElevation(nv.scene.renderAzimuth + 180, 0);
+  });
   expect(await countMarkers()).toBe(0);
+});
 
-  await page.evaluate(() => { window.__surfannotate.session.undoClick(); window.__surfannotateUi.repaint(); });
-  expect(await countMarkers()).toBeGreaterThan(0);
+test('a finished ROI offers itself as an edge to the next one', async ({ page }) => {
+  await loadSurface(page);
+
+  // A closed hemisphere: there is no surface edge here, so before any ROI is
+  // saved the edge row has nothing to offer and stays hidden.
+  await expect(page.locator('#edgeRow')).toBeHidden();
+
+  const saveRoiAround = (seed) => page.evaluate((from) => {
+    const { graph, session } = window.__surfannotate;
+    const step = (start) => {
+      let frontier = [start];
+      const seen = new Uint8Array(graph.V);
+      seen[start] = 1;
+      for (let h = 0; h < 14; h++) {
+        const next = [];
+        for (const u of frontier)
+          for (let e = graph.adjOffset[u]; e < graph.adjOffset[u + 1]; e++) {
+            const w = graph.adjNeighbor[e];
+            if (!seen[w]) { seen[w] = 1; next.push(w); }
+          }
+        if (!next.length) break;
+        frontier = next;
+      }
+      return frontier[0];
+    };
+    let v = from;
+    for (let i = 0; i < 8; i++) { session.addClick(v); v = step(v); }
+    session.closePath();
+    window.__surfannotateUi.runFill(-1);
+    document.getElementById('saveRoi').click();
+  }, seed);
+
+  await saveRoiAround(60000);
+  expect(await page.evaluate(() => window.__surfannotateUi.savedRois().length)).toBe(1);
+
+  // Its rim is now an edge, so the row appears — and says so. Naming this
+  // "surface edge" is what hid the whole abutment workflow: on a hemisphere
+  // there is no visible edge, so the button read as inapplicable.
+  await expect(page.locator('#edgeRow')).toBeVisible();
+  await expect(page.locator('#closeOnEdge')).toHaveText('Close on ROI edge');
+  await expect(page.locator('#edgeHint')).toContainText('A finished ROI acts as an edge');
+
+  // And clicking inside it is refused with the remedy, not just the diagnosis.
+  await page.evaluate(() => {
+    const { rois } = window.__surfannotate;
+    const inside = rois[0].mask.indexOf(1);
+    window.__surfannotateUi.handleVertexClick(inside);
+  });
+  await expect(page.locator('#statusText')).toContainText('Close on ROI edge');
 });
 
 test('gist_rainbow is registered and the colour range is adjustable', async ({ page }) => {
@@ -461,6 +576,178 @@ test('gist_rainbow is registered and the colour range is adjustable', async ({ p
 
   await page.click('#overlayRangeReset');
   expect(await page.inputValue('#overlayMin')).toBe(auto);
+});
+
+test('the retinotopy colour maps set the window their scale needs', async ({ page }) => {
+  await loadSurface(page);
+  expect(await page.evaluate(() => {
+    const maps = window.__surfannotate.nv.colormaps();
+    return ['eccentricity', 'polar_angle'].every((key) => maps.includes(key));
+  })).toBe(true);
+
+  await page.setInputFiles('#overlayInput', join(FIXTURES, 'lh.curv'));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.curv loaded', {
+    timeout: 60_000
+  });
+  const auto = {
+    min: await page.inputValue('#overlayMin'),
+    max: await page.inputValue('#overlayMax')
+  };
+
+  // NiiVue's .curv reader min-max normalises into 0..1, so this reads as radians.
+  await page.selectOption('#overlayColormap', 'polar_angle');
+  await expect(page.locator('#statusText')).toContainText('one full cycle');
+  expect(await page.evaluate(() => {
+    const layer = window.__surfannotate.overlayLayer;
+    return { colormap: layer.colormap, min: layer.cal_min, max: layer.cal_max };
+  })).toEqual({ colormap: 'polar_angle', min: 0, max: 2 * Math.PI });
+
+  // Anchored at zero, keeping the robust maximum. Read through the boxes, which
+  // round the stored value and the recorded one identically.
+  await page.selectOption('#overlayColormap', 'eccentricity');
+  expect(await page.inputValue('#overlayMin')).toBe('0');
+  expect(await page.inputValue('#overlayMax')).toBe(auto.max);
+  expect(await page.evaluate(() => window.__surfannotate.overlayLayer.cal_min)).toBe(0);
+
+  // Auto is the way back: the percentile range is never overwritten.
+  await page.click('#overlayRangeReset');
+  expect(await page.inputValue('#overlayMin')).toBe(auto.min);
+  expect(await page.inputValue('#overlayMax')).toBe(auto.max);
+});
+
+test('the colour scale on the view follows the map, the range and the overlay', async ({ page }) => {
+  const legend = page.locator('#colorLegend');
+  const ticks = page.locator('#colorLegend .color-legend-tick');
+
+  await loadSurface(page);
+  await expect(legend).toBeHidden();
+
+  await page.setInputFiles('#overlayInput', join(FIXTURES, 'lh.curv'));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.curv loaded', {
+    timeout: 60_000
+  });
+
+  // An ordinary map gets a bar, ticked with the window the boxes report.
+  await expect(legend).toBeVisible();
+  await expect(legend).toHaveAttribute('data-kind', 'bar');
+  await expect(ticks).toHaveCount(3);
+  await expect(ticks.first()).toHaveText(await page.inputValue('#overlayMin'));
+  await expect(ticks.last()).toHaveText(await page.inputValue('#overlayMax'));
+  await expect(page.locator('#colorLegendCaption')).toHaveText('lh.curv');
+
+  // The retinotopy maps get their wheel. The four quarter turns are labelled in
+  // the unit the window is in, counter-clockwise from the right.
+  await page.selectOption('#overlayColormap', 'polar_angle');
+  await expect(legend).toHaveAttribute('data-kind', 'polar_angle');
+  await expect(ticks).toHaveText(['0', 'π/2', 'π', '3π/2']);
+
+  await page.selectOption('#overlayColormap', 'eccentricity');
+  await expect(legend).toHaveAttribute('data-kind', 'eccentricity');
+  await expect(ticks).toHaveCount(3);
+  await expect(page.locator('#colorLegend .color-legend-ring')).toHaveCount(2);
+
+  // A typed range re-ticks it; the wheel is not a picture of the data's own range.
+  await page.fill('#overlayMax', '9');
+  await page.press('#overlayMax', 'Enter');
+  await expect(ticks.last()).toHaveText('9');
+  await page.click('#overlayRangeReset');
+  await expect(ticks.last()).not.toHaveText('9');
+
+  // Nothing to describe once the overlay is hidden.
+  const shown = page.locator('#overlayList input[aria-label="Show lh.curv"]');
+  await shown.uncheck();
+  await expect(legend).toBeHidden();
+  await shown.check();
+  await expect(legend).toBeVisible();
+
+  // Dismissing leaves the way back visible in the panel rather than stranding
+  // the user with a control they cannot find again.
+  await page.click('#colorLegendClose');
+  await expect(legend).toBeHidden();
+  await expect(page.locator('#showLegend')).not.toBeChecked();
+  await page.check('#showLegend');
+  await expect(legend).toBeVisible();
+});
+
+/** A FreeSurfer "new format" curv file over `count` vertices. */
+function curvFile(name, count, valueAt) {
+  const buffer = Buffer.alloc(15 + count * 4);
+  buffer[0] = 255; buffer[1] = 255; buffer[2] = 255;
+  buffer.writeUInt32BE(count, 3);
+  buffer.writeUInt32BE(count * 2, 7);
+  buffer.writeUInt32BE(1, 11);
+  for (let v = 0; v < count; v++) buffer.writeFloatBE(valueAt(v), 15 + v * 4);
+  return { name, mimeType: 'application/octet-stream', buffer };
+}
+
+test('a binary mask limits every overlay but the curvature', async ({ page }) => {
+  await loadSurface(page);
+  const count = await page.evaluate(() => window.__surfannotate.geometry.vertexCount);
+
+  // Curvature first, then data — the order that already works. The reverse is
+  // covered by the restacking assertion further down.
+  await page.setInputFiles('#overlayInput', join(FIXTURES, 'lh.curv'));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.curv loaded', {
+    timeout: 60_000
+  });
+  await page.setInputFiles('#overlayInput',
+    curvFile('lh.thickness', count, (v) => 1 + (v % 100) / 100));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.thickness loaded', {
+    timeout: 60_000
+  });
+
+  // A mask keeping only the first 1000 vertices, written in the format NiiVue
+  // would invert. That is the point of the assertion below: read through
+  // readCURV this file would keep the other 162,842 vertices instead.
+  await page.setInputFiles('#maskInput',
+    curvFile('lh.firstThousand.mask', count, (v) => (v < 1000 ? 1 : 0)));
+  await expect(page.locator('#statusText')).toContainText('limited to 1,000', {
+    timeout: 60_000
+  });
+
+  const values = () => page.evaluate(() => {
+    const overlays = window.__surfannotateUi.activeSurface().overlays;
+    const read = (name) => {
+      const layer = overlays.find((o) => o.name === name).layer;
+      return {
+        inside: layer.values[0],
+        outside: layer.values[layer.values.length - 1]
+      };
+    };
+    return {
+      curv: read('lh.curv'),
+      data: read('lh.thickness'),
+      // Bottom-to-top: the exempt overlay has to sit under the masked one, or
+      // it would cover the holes the mask opens. Matched by identity — NiiVue's
+      // readLayer does not name the layers it returns.
+      order: window.__surfannotate.mesh.layers.map(
+        (layer) => overlays.find((o) => o.layer === layer)?.name || layer.name
+      )
+    };
+  });
+
+  const masked = await values();
+  expect(Number.isFinite(masked.data.inside)).toBe(true);
+  expect(masked.data.outside).toBe(-Infinity);
+  // Curvature is what the mask is meant to reveal, so it is never cut.
+  expect(Number.isFinite(masked.curv.inside)).toBe(true);
+  expect(Number.isFinite(masked.curv.outside)).toBe(true);
+  expect(masked.order).toEqual(['lh.curv', 'lh.thickness', 'surfannotate-roi']);
+
+  // The exemption is a default, not a rule.
+  await page.locator('#overlayList .layer-name', { hasText: 'lh.curv' }).click();
+  await expect(page.locator('#overlayIgnoreMask')).toBeChecked();
+  await page.uncheck('#overlayIgnoreMask');
+  expect((await values()).curv.outside).toBe(-Infinity);
+  await page.check('#overlayIgnoreMask');
+  expect(Number.isFinite((await values()).curv.outside)).toBe(true);
+
+  // Clearing puts every overlay back exactly as it was.
+  await page.click('#maskClear');
+  await expect(page.locator('#statusText')).toContainText('Mask cleared');
+  const cleared = await values();
+  expect(Number.isFinite(cleared.data.outside)).toBe(true);
+  expect(cleared.data.inside).toBe(masked.data.inside);
 });
 
 test('a surface dropped on the viewer loads', async ({ page }) => {
@@ -500,6 +787,51 @@ test('a surface dropped on the viewer loads', async ({ page }) => {
   });
   expect(await page.evaluate(() => window.__surfannotate.geometry.vertexCount)).toBe(163842);
   expect(await page.locator('#dropHint').isVisible()).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('a dropped file with "mask" in its name is loaded as the mask, not an overlay', async ({ page }) => {
+  await loadSurface(page);
+  const count = await page.evaluate(() => window.__surfannotate.geometry.vertexCount);
+
+  await page.setInputFiles('#overlayInput',
+    curvFile('lh.thickness', count, (v) => 1 + (v % 100) / 100));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.thickness loaded', {
+    timeout: 60_000
+  });
+  const before = await page.evaluate(() =>
+    window.__surfannotateUi.activeSurface().overlays.length);
+
+  // The same curv-format mask the picker test uses, but dropped. Nothing in the
+  // bytes says "mask" — it is the same format as any overlay — so the name is
+  // the only thing that can route this.
+  const mask = curvFile('lh.firstThousand.mask', count, (v) => (v < 1000 ? 1 : 0));
+  await page.evaluate(async ({ name, base64 }) => {
+    const binary = atob(base64);
+    const buffer = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([buffer], name, { type: 'application/octet-stream' }));
+    const canvas = document.getElementById('gl');
+    const rect = canvas.getBoundingClientRect();
+    const clientX = Math.round(rect.left + rect.width / 2);
+    const clientY = Math.round(rect.top + rect.height / 2);
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      canvas.dispatchEvent(new DragEvent(type, {
+        dataTransfer: transfer, bubbles: true, cancelable: true, clientX, clientY
+      }));
+    }
+  }, { name: mask.name, base64: mask.buffer.toString('base64') });
+
+  await expect(page.locator('#statusText')).toContainText('limited to 1,000', {
+    timeout: 60_000
+  });
+  // The half that catches a mask arriving as an overlay: it would report a
+  // loaded overlay, leave the clear button disabled, and lengthen the list.
+  await expect(page.locator('#maskClear')).toBeEnabled();
+  expect(await page.evaluate(() =>
+    window.__surfannotateUi.activeSurface().overlays.length)).toBe(before);
   expect(errors).toEqual([]);
 });
 
@@ -1375,7 +1707,7 @@ test.describe('start page', () => {
     await page.locator('#enterAppButton').click();
     await expect(start).toBeHidden();
     await expect(page.locator('#controls')).toBeVisible();
-    await expect(page.locator('#viewer canvas')).toBeVisible();
+    await expect(page.locator('#gl')).toBeVisible();
 
     // The app was behind it all along, so the canvas is already sized.
     const canvas = await page.evaluate(() => {

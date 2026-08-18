@@ -11,6 +11,38 @@ overlay: curvature, thickness, `.annot`, `.label.gii`, `.shape.gii`, `.mgz`, or 
 `.dscalar.nii`. Colour map, opacity and display window are adjustable, including
 `gist_rainbow`, which NiiVue does not ship.
 
+Two are retinotopy conventions contributed by DL: **eccentricity** (matplotlib's
+`rainbow_r`) and **polar angle** (yellow, blue, green, red, yellow). Picking
+either also sets the display window, because for these two the window is part of
+the map — polar angle is cyclic and only truthful across exactly one turn, and
+eccentricity has to start at zero for the fovea to sit at the bottom of the
+scale. The turn is read off the data: a maximum at or below 2π is radians,
+anything larger is degrees, and negative values take the signed variant.
+
+**Masking.** Load a binary mask — a FreeSurfer `.label`, a curv-format file, a
+`.mgz`, a GIfTI, anything with one value per vertex — and every overlay is drawn
+only where it is non-zero. Everywhere else the overlay is fully transparent, so
+the curvature underneath shows through as if nothing were loaded. This is what
+makes a retinotopy map readable: polar angle means nothing outside the region it
+was fitted in. Curvature is exempt by default (`lh.curv`, `rh.curv`), since it is
+the anatomy the mask exists to reveal, and any overlay can be exempted by hand
+with *Always show this overlay*. The mask follows the vertex indexing, so it
+carries across a subject's `white`, `pial` and `inflated`.
+
+Masks are parsed rather than handed to NiiVue: its FreeSurfer curv reader
+min-max normalises and inverts, which would silently keep exactly the vertices
+the file excludes.
+
+The scale is drawn on the view itself, bottom left, so a colour can be read back
+as a number without leaving the picture. Eccentricity and polar angle get a
+colour wheel — rings at a third, two thirds and the full window for one, the four
+quarter turns labelled in the data's own unit for the other — and every other
+colour map gets a ticked bar. Polar angle is measured the standard way,
+counter-clockwise from the right horizontal meridian, so the upper visual field
+is at the top of the wheel. The panel's *Show the colour scale on the view*
+hides it.
+**Auto** puts the percentile window back.
+
 **Closed ROIs.** Click border points around a region — nothing is traced while you
 click, so you can rotate freely. Press *Close ROI* to join the points with shortest
 paths along the surface and close the loop, then *Fill region*. Points are joined **in

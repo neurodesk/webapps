@@ -293,28 +293,6 @@ importers:
         specifier: ^5.4.6
         version: 5.4.21(@types/node@24.13.3)
 
-  apps/zarro:
-    dependencies:
-      '@neurodesk/webapp-components':
-        specifier: workspace:*
-        version: link:../../packages/components
-      '@niivue/niivue':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=708bc571eefde20b036e118604b41c5f128246616d9d9d8beb8887b15f51e9ae)
-      zarrita:
-        specifier: ^0.7.3
-        version: 0.7.4
-    devDependencies:
-      '@playwright/test':
-        specifier: ^1.44.0
-        version: 1.61.1
-      typescript:
-        specifier: ^5.8.3
-        version: 5.8.3
-      vite:
-        specifier: ^6.3.2
-        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
-
   apps/qsmbly:
     dependencies:
       '@neurodesk/webapp-components':
@@ -387,6 +365,28 @@ importers:
       jsdom:
         specifier: ^24.0.0
         version: 24.1.3(supports-color@8.1.1)
+
+  apps/zarro:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.11
+        version: 1.0.0-rc.11(patch_hash=708bc571eefde20b036e118604b41c5f128246616d9d9d8beb8887b15f51e9ae)
+      zarrita:
+        specifier: ^0.7.3
+        version: 0.7.4
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      typescript:
+        specifier: ^5.8.3
+        version: 5.8.3
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
 
   packages/analytics: {}
 

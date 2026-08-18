@@ -3,7 +3,13 @@ import './styles.css';
 
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { Niivue } from '@niivue/niivue';
-import { registerExtraColormaps } from './niivue/colormaps.js';
+import { registerExtraColormaps, colormapWindow } from './niivue/colormaps.js';
+import {
+  legendKind, legendTicks, paintLegend, rangeDecimals
+} from './niivue/colorLegend.js';
+import {
+  toBinaryMask, maskedInCount, maskedValues, isCurvatureName
+} from './niivue/overlayMask.js';
 
 import { buildAdjacency, findBoundaryVertices, isIsolated } from './surface/adjacency.js';
 import { excludeVertices, unionMasks } from './surface/exclude.js';
@@ -16,34 +22,46 @@ import {
   RoiSession, MODE_ROI, MODE_POINTS, SESSION_ERRORS, CLOSURE_EDGE
 } from './surface/roiSession.js';
 import { FILL_ERRORS, maskToIndices } from './surface/fill.js';
-import { hatchMask, FILL_STYLES } from './surface/hatch.js';
 import {
   loadMeshFromFile, loadOverlay, getGeometry, pickWorldMm, resolveVertex,
-  attachLabelLayer, commitLayer, setOverlayDisplay, makeLabelLut, attachValueLayer
+  attachLabelLayer, commitLayer, setOverlayDisplay, makeLabelLut, attachValueLayer,
+  readLayerValues, renderMatrices, vertexNormals
 } from './niivue/meshAdapter.js';
+import {
+  projectMarkers, markerSprite, surfaceOrientation, MARKER_COLORS,
+  MARKER_CIRCLE, MARKER_CROSS
+} from './niivue/markers.js';
 
 import { writeFreeSurferLabel, labelToValues } from './io/freesurferLabel.js';
 import { writeGiftiLabel, maskToLabelArray } from './io/gifti.js';
 import { writePointsJson, hashTriangles } from './io/points.js';
+import { isCurvFormat, readCurvValues } from './io/freesurferCurv.js';
 import {
   exportStem as buildExportStem, hasAnatomicalCoordinates, surfaceKind, FLAT
 } from './io/naming.js';
-import { classifyFile, SNIFF_BYTES, SURFACE, OVERLAY, UNKNOWN } from './io/classify.js';
+import { classifyFile, SNIFF_BYTES, SURFACE, OVERLAY, MASK, UNKNOWN } from './io/classify.js';
 
-// Label keys painted into the ROI layer.
+// Label keys painted into the ROI layer. The clicked border points and the
+// landmarks are NOT here: they are screen-space markers now, because a vertex
+// label cannot have a crisp edge and its 1-ring overstated the ROI. See
+// niivue/markers.js. The traced chain stays a label — it genuinely is a path
+// over the surface, and it should follow the folds.
 const LABEL_NONE = 0;
 const LABEL_BOUNDARY = 1;
 const LABEL_REGION = 2;
-const LABEL_POINT = 3;
-const LABEL_CLICK = 4;
 
 const LABEL_TABLE = [
   { key: LABEL_NONE, name: 'unlabelled', rgba: [0, 0, 0, 0] },
   { key: LABEL_BOUNDARY, name: 'boundary', rgba: [1, 0.85, 0.1, 1] },
-  { key: LABEL_REGION, name: 'roi', rgba: [0.9, 0.2, 0.2, 0.55] },
-  { key: LABEL_POINT, name: 'landmark', rgba: [0.2, 0.85, 0.9, 1] },
-  { key: LABEL_CLICK, name: 'border point', rgba: [1, 0.55, 0.1, 1] }
+  { key: LABEL_REGION, name: 'roi', rgba: [0.9, 0.2, 0.2, 0.55] }
 ];
+
+/** Marker geometry, in CSS pixels before the device-pixel ratio is applied. */
+const MARKER_RADIUS = 4.5;
+const MARKER_STROKE = 1.8;
+const MARKER_HALO = 1.6;
+/** How far off-canvas a marker may sit and still be drawn. */
+const MARKER_MARGIN = 24;
 
 // Completed ROIs are painted from a palette, starting well clear of the keys
 // above so the two sets never collide.
@@ -84,6 +102,16 @@ const ui = {
   overlayMin: el('overlayMin'),
   overlayMax: el('overlayMax'),
   overlayRangeReset: el('overlayRangeReset'),
+  overlayIgnoreMask: el('overlayIgnoreMask'),
+  maskInput: el('maskInput'),
+  maskClear: el('maskClear'),
+  maskHint: el('maskHint'),
+  showLegend: el('showLegend'),
+  colorLegend: el('colorLegend'),
+  colorLegendCanvas: el('colorLegendCanvas'),
+  colorLegendTicks: el('colorLegendTicks'),
+  colorLegendCaption: el('colorLegendCaption'),
+  colorLegendClose: el('colorLegendClose'),
   modeRoi: el('modeRoi'),
   modePoints: el('modePoints'),
   roiControls: el('roiControls'),
@@ -97,7 +125,9 @@ const ui = {
   flipRegion: el('flipRegion'),
   clearRoi: el('clearRoi'),
   includeBoundary: el('includeBoundary'),
-  fillStyle: el('fillStyle'),
+  markerShape: el('markerShape'),
+  markerColor: el('markerColor'),
+  markerOverlay: el('markerOverlay'),
   roiOpacity: el('roiOpacity'),
   roiOpacityValue: el('roiOpacityValue'),
   undoPointSelection: el('undoPointSelection'),
@@ -146,6 +176,11 @@ const state = {
   // switching to the folded one. See RoiSession.rebind.
   sessions: new Map(),
 
+  // And so is the overlay mask, for the same reason: it is one value per vertex,
+  // so it describes the subject rather than any one surface file. Keyed by
+  // topologyKey, holding { name, mask } where mask is a Uint8Array.
+  masks: new Map(),
+
   // Completed ROIs, each tied to a topology like the sessions. Ticking one as an
   // edge cuts it out of the working graph — see bindSession.
   // ROIs are *definitions* — border points, how they were closed, which side
@@ -166,6 +201,11 @@ const state = {
   parcellationVersion: 0,
   excluded: null,
   boundKey: '',
+  // What the session's open edge is currently made of. The two sources close a
+  // region identically, but they are worth telling apart in the UI: "surface
+  // edge" read as flat-patches-only and hid the fact that a finished ROI's rim
+  // closes just as well, which is the whole of the abutment workflow.
+  edgeSources: { mesh: false, roi: false },
 
   // Mirrors of the active surface. The rest of the app reads these rather than
   // reaching into the list, which keeps this change off every call site.
@@ -181,12 +221,19 @@ const state = {
   hasOpenBoundary: false,
   overlayLayer: null,
   overlayAutoRange: null,
+  legendVisible: true,
 
   pressOrigin: null,
   hoverPending: false,
   pickMemo: { x: -1, y: -1, mm: null },
   awaitingSeed: false,
-  roiOpacity: 0.55
+  roiOpacity: 0.55,
+
+  // The marker overlay. `spriteCache` is keyed by shape|colour|ratio and holds
+  // a small canvas each, because drawImage blends where putImageData would
+  // punch the sprite's transparent corners through whatever it overlaps.
+  markersPending: false,
+  spriteCache: new Map()
 };
 
 /** Completed ROIs of the shown surface's topology, in the order they were saved. */
@@ -231,6 +278,7 @@ function bindSession(entry, session) {
 
   const excluded = exclusionMask();
   const base = entry.openEdge;
+  state.edgeSources = { mesh: Boolean(base), roi: Boolean(excluded) };
   if (!excluded) {
     session.rebind(entry.graph, entry.finder, entry.geometry.positions, { openEdge: base });
     state.graph = entry.graph;
@@ -547,6 +595,15 @@ async function init() {
   registerExtraColormaps(state.nv);
   state.nv.setSliceType(state.nv.sliceTypeRender);
 
+  // The markers live on their own canvas, so nothing redraws them when the
+  // camera moves unless we ask. These two callbacks are every way the render
+  // view can change without the app already calling repaint.
+  state.nv.onAzimuthElevationChange = () => scheduleMarkers();
+  state.nv.onZoom3DChange = () => scheduleMarkers();
+  // The overlay is sized from its own clientWidth, so a resize has to re-measure
+  // as well as redraw.
+  window.addEventListener('resize', scheduleMarkers);
+
   ui.surfaceInput.addEventListener('change', (event) => {
     const files = Array.from(event.target.files || []);
     // Clear it now, not after loading: picking the same file twice in a row
@@ -564,6 +621,13 @@ async function init() {
       for (const file of files) await addOverlay(file);
     });
   });
+
+  ui.maskInput.addEventListener('change', (event) => {
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (file) enqueueLoad(() => loadMask(file));
+  });
+  ui.maskClear.addEventListener('click', clearMask);
 
   // These MUST be capture-phase. NiiVue's own drop listener lives on the canvas
   // and calls stopPropagation()/preventDefault() before it consults
@@ -689,7 +753,42 @@ async function init() {
     });
   };
   ui.overlayOpacity.addEventListener('input', applyOverlayDisplay);
-  ui.overlayColormap.addEventListener('change', applyOverlayDisplay);
+  // Deliberately NOT inside applyOverlayDisplay: the opacity slider shares it
+  // and fires per frame of a drag, which would re-snap a window typed over.
+  ui.overlayColormap.addEventListener('change', () => {
+    applyOverlayDisplay();
+    const snapped = applyColormapWindow();
+    if (snapped) setStatus(snapped.note);
+    // applyColormapWindow only redraws the legend when it had a window to apply.
+    renderColorLegend();
+  });
+
+  ui.overlayIgnoreMask.addEventListener('change', () => {
+    const entry = activeSurface();
+    const overlay = activeOverlay();
+    if (!entry || !overlay) return;
+    overlay.ignoreMask = ui.overlayIgnoreMask.checked;
+    applyOverlayMask(entry, overlay);
+    // Exempt overlays belong under the masked ones, so this changes the stack.
+    restackLayers(entry);
+    commitLayer(state.nv, entry.mesh);
+    renderLayerLists();
+    repaint();
+    setStatus(overlay.ignoreMask
+      ? `${overlay.name} is now always shown, mask or not.`
+      : `${overlay.name} now follows the mask.`);
+  });
+
+  ui.showLegend.addEventListener('change', () => {
+    state.legendVisible = ui.showLegend.checked;
+    renderColorLegend();
+  });
+  ui.colorLegendClose.addEventListener('click', () => {
+    // Through the checkbox rather than straight to the flag, so the way back is
+    // visible in the panel instead of being a state the user cannot undo.
+    ui.showLegend.checked = false;
+    ui.showLegend.dispatchEvent(new Event('change'));
+  });
 
   const applyOverlayRange = () => {
     const layer = state.overlayLayer;
@@ -702,7 +801,8 @@ async function init() {
     }
     layer.cal_min = low;
     layer.cal_max = high;
-    commitLayer(state.nv, state.mesh);
+    commitOverlay();
+    renderColorLegend();
     setStatus(`Colour range set to ${low} – ${high}.`);
   };
   ui.overlayMin.addEventListener('change', applyOverlayRange);
@@ -713,11 +813,14 @@ async function init() {
     layer.cal_min = state.overlayAutoRange.low;
     layer.cal_max = state.overlayAutoRange.high;
     showOverlayRange(layer);
-    commitLayer(state.nv, state.mesh);
+    commitOverlay();
+    renderColorLegend();
     setStatus('Colour range reset to the data\'s 2nd–98th percentile.');
   });
 
-  ui.fillStyle.addEventListener('change', () => repaint());
+  // Only the overlay changes, so there is no need to recomposite the mesh.
+  ui.markerShape.addEventListener('change', scheduleMarkers);
+  ui.markerColor.addEventListener('change', scheduleMarkers);
   ui.roiOpacity.addEventListener('input', () => {
     state.roiOpacity = Number(ui.roiOpacity.value);
     ui.roiOpacityValue.textContent = state.roiOpacity.toFixed(2);
@@ -808,13 +911,19 @@ function bindStartPage() {
 }
 
 /**
- * Route each dropped file to the surface list or the overlay list.
+ * Route each dropped file to the surface list, the overlay list, or the mask.
  *
  * The old rule was positional — first drop is the surface, everything after is
  * an overlay — which cannot express "add a second surface". So each file is
  * classified from its own magic number and name instead. Files that cannot be
  * identified fall back to the positional rule, which is right often enough and
  * is what the user was already used to.
+ *
+ * The mask is the only destination that cannot be told from the bytes — it is
+ * the same per-vertex formats as any overlay — so it is recognised by name.
+ * That inference belongs to the drop path alone: `#overlayInput` still loads
+ * whatever it is handed as an overlay, which is both the explicit statement the
+ * button makes and the way to look at a mask as data.
  */
 async function handleDroppedFiles(files) {
   for (const file of files) {
@@ -828,8 +937,11 @@ async function handleDroppedFiles(files) {
     if (kind === UNKNOWN) kind = activeSurface() ? OVERLAY : SURFACE;
 
     if (kind === SURFACE) await loadSurface(file);
-    else if (activeSurface()) await addOverlay(file);
-    else setStatus(`${file.name} looks like an overlay — load a surface first.`);
+    else if (!activeSurface()) {
+      setStatus(`${file.name} looks like ${kind === MASK ? 'a mask' : 'an overlay'} — ` +
+        'load a surface first.');
+    } else if (kind === MASK) await loadMask(file);
+    else await addOverlay(file);
   }
 }
 
@@ -852,6 +964,13 @@ async function loadSurface(file) {
     for (let v = 0; v < openBoundary.length; v++) if (openBoundary[v]) openCount++;
 
     const triangleHash = await hashTriangles(geometry.triangles);
+    // Both only for the marker overlay's back-face test, and both computed once
+    // here rather than per repaint. The orientation is measured from the normals
+    // that will actually be used, never inferred from the winding — see
+    // surfaceOrientation. It is only meaningful on a closed mesh, which is also
+    // the only case the test runs in: a cut surface has no far side to hide a
+    // marker on.
+    const normals = vertexNormals(mesh);
     const entry = {
       id: state.nextId++,
       name: file.name,
@@ -861,6 +980,10 @@ async function loadSurface(file) {
       finder,
       index,
       openEdge: openCount > 0 ? openBoundary : null,
+      normals,
+      orientation: openCount > 0
+        ? 1
+        : surfaceOrientation(geometry.positions, normals),
       // What the loader added to every vertex, so exports can take it back off.
       translation: mesh.surfannotateTranslation || [0, 0, 0],
       // A label records coordinates as well as vertex indices, and they only
@@ -992,7 +1115,10 @@ function removeSurface(id) {
   // Drop the shared session only once the last surface using that topology has
   // gone, or switching away and back would silently lose the border points.
   const stillUsed = state.surfaces.some((s) => s.topologyKey === entry.topologyKey);
-  if (!stillUsed) state.sessions.delete(entry.topologyKey);
+  if (!stillUsed) {
+    state.sessions.delete(entry.topologyKey);
+    state.masks.delete(entry.topologyKey);
+  }
 
   if (state.activeId !== id) {
     renderLayerLists();
@@ -1042,8 +1168,6 @@ async function addOverlay(file) {
         labelToValues(await file.text(), entry.geometry.vertexCount).values,
         { ...display, name: file.name })
       : await loadOverlay(state.nv, entry.mesh, file, display);
-    // readLayer appends, so the ROI layer is no longer last. Re-attach it on top.
-    reattachRoiLayer();
 
     const overlay = {
       id: state.nextId++,
@@ -1051,17 +1175,35 @@ async function addOverlay(file) {
       layer,
       visible: true,
       opacity: Number(ui.overlayOpacity.value),
-      autoRange: { low: layer.cal_min, high: layer.cal_max }
+      autoRange: { low: layer.cal_min, high: layer.cal_max },
+      // The mask is written into layer.values, so the originals have to survive
+      // somewhere — this is the only copy of what the file actually said.
+      baseValues: layer.values,
+      baseTransparentBelowCalMin: layer.isTransparentBelowCalMin,
+      maskedBuffer: null,
+      // Curvature is the anatomy the mask is meant to reveal, not data to be
+      // masked. A default, not a rule: a curvature file under another name is
+      // one checkbox away.
+      ignoreMask: isCurvatureName(file.name)
     };
     entry.overlays.push(overlay);
     entry.activeOverlayId = overlay.id;
     state.overlayLayer = layer;
     state.overlayAutoRange = overlay.autoRange;
 
+    // readLayer appends, so the ROI layer is no longer last, and an exempt
+    // overlay has to sink below the ones the mask cuts holes in.
+    applyOverlayMask(entry, overlay);
+    restackLayers(entry);
+
     syncOverlayControls();
-    setStatus(
-      `Overlay ${file.name} loaded — display window ` +
-      `${layer.cal_min.toFixed(3)} to ${layer.cal_max.toFixed(3)}.`
+    // Before the status line, so an overlay loaded while one of these maps is
+    // already selected gets the same window, and the message reports it.
+    const snapped = applyColormapWindow();
+    setStatus(snapped
+      ? `Overlay ${file.name} loaded. ${snapped.note}`
+      : `Overlay ${file.name} loaded — display window ` +
+        `${layer.cal_min.toFixed(3)} to ${layer.cal_max.toFixed(3)}.`
     );
     repaint();
   } catch (error) {
@@ -1071,6 +1213,75 @@ async function addOverlay(file) {
 }
 
 /** True for a FreeSurfer .label, by extension or by its fixed first line. */
+/**
+ * Load the binary mask that decides where overlays are drawn at all.
+ *
+ * The FreeSurfer curv branch is not an optimisation. `NVMeshLoaders.readLayer`
+ * picks its reader by sniffing the magic bytes, not the filename, so `lh.V1.mask`
+ * lands in `readCURV` — which min-max normalises AND inverts. A binary mask
+ * through that path comes back with every 1 as a 0, masking exactly the cortex
+ * it was meant to keep, and looking entirely reasonable while it does.
+ */
+async function loadMask(file) {
+  const entry = activeSurface();
+  if (!entry) return;
+  setStatus(`Loading mask ${file.name}…`);
+  try {
+    const vertexCount = entry.geometry.vertexCount;
+    let values;
+    if (await isFreeSurferLabel(file)) {
+      values = labelToValues(await file.text(), vertexCount).values;
+    } else {
+      const buffer = await file.arrayBuffer();
+      values = isCurvFormat(buffer)
+        ? readCurvValues(buffer, vertexCount)
+        : await readLayerValues(entry.mesh, file);
+    }
+
+    const mask = toBinaryMask(values);
+    const kept = maskedInCount(mask);
+    if (!kept) {
+      setStatus(`${file.name} marks no vertices at all — every overlay would vanish.`);
+      return;
+    }
+
+    state.masks.set(entry.topologyKey, { name: file.name, mask });
+    applyMaskToTopology(entry.topologyKey);
+    syncMaskControls();
+    commitLayer(state.nv, entry.mesh);
+    repaint();
+    setStatus(`Mask ${file.name}: overlays limited to ` +
+      `${kept.toLocaleString()} of ${vertexCount.toLocaleString()} vertices.`);
+  } catch (error) {
+    console.error('surfannotate: failed to load mask', error);
+    setStatus(`Could not load mask ${file.name}: ${error.message}`);
+  }
+}
+
+function clearMask() {
+  const entry = activeSurface();
+  if (!entry || !state.masks.delete(entry.topologyKey)) return;
+  applyMaskToTopology(entry.topologyKey);
+  syncMaskControls();
+  commitLayer(state.nv, entry.mesh);
+  repaint();
+  setStatus('Mask cleared. Every overlay is drawn everywhere again.');
+}
+
+/** Enable, disable and fill the mask controls for whatever surface is shown. */
+function syncMaskControls() {
+  const entry = activeSurface();
+  const mask = activeMask(entry);
+  ui.maskInput.disabled = !entry;
+  ui.maskClear.disabled = !mask;
+  ui.maskHint.textContent = mask
+    ? `${mask.name}: overlays limited to ` +
+      `${maskedInCount(mask.mask).toLocaleString()} vertices. Curvature is always shown.`
+    : 'Optional. Every overlay is drawn only where the mask is non-zero; ' +
+      'curvature is always shown. A file with "mask" in its name can just be ' +
+      'dropped on the viewer.';
+}
+
 async function isFreeSurferLabel(file) {
   if (/\.label$/i.test(file.name)) return true;
   try {
@@ -1109,6 +1320,7 @@ function setOverlayVisible(id, visible) {
     opacity: visible ? overlay.opacity : 0
   });
   renderLayerLists();
+  renderColorLegend();
   repaint();
 }
 
@@ -1140,7 +1352,8 @@ function removeOverlay(id) {
 /** Enable, disable and fill the overlay controls for whatever is selected. */
 function syncOverlayControls() {
   const overlay = activeOverlay();
-  const controls = [ui.overlayColormap, ui.overlayMin, ui.overlayMax, ui.overlayRangeReset];
+  const controls = [ui.overlayColormap, ui.overlayMin, ui.overlayMax, ui.overlayRangeReset,
+    ui.overlayIgnoreMask];
   for (const control of controls) control.disabled = !overlay;
   ui.overlayOpacity.disabled = !overlay;
 
@@ -1149,23 +1362,198 @@ function syncOverlayControls() {
     ui.overlaySelectedHint.textContent = `Editing ${overlay.name}.`;
     ui.overlayColormap.value = overlay.layer.colormap || 'gray';
     ui.overlayOpacity.value = String(overlay.opacity);
+    ui.overlayIgnoreMask.checked = overlay.ignoreMask;
     showOverlayRange(overlay.layer);
   } else {
     // Blank rather than leave another surface's numbers sitting in the boxes,
     // where they read as this surface's settings.
     ui.overlayMin.value = '';
     ui.overlayMax.value = '';
+    ui.overlayIgnoreMask.checked = false;
   }
+  syncMaskControls();
+  renderColorLegend();
   renderLayerLists();
+}
+
+/**
+ * Give the selected colour map the display window it needs, if it needs one.
+ * `colormapWindow` owns the rule; `state.overlayAutoRange` is untouched, so Auto
+ * remains the way back.
+ *
+ * @returns {{low: number, high: number, note: string}|null} what was applied
+ */
+function applyColormapWindow() {
+  const overlay = activeOverlay();
+  const layer = state.overlayLayer;
+  if (!layer?.values) return null;
+  // The overlay's own values, not the layer's: under a mask those are mostly
+  // -Infinity, and the window should describe the data, not the visible remnant
+  // of it. It is also what makes the window survive loading a mask.
+  const values = overlay?.baseValues || layer.values;
+  const snapped = colormapWindow(ui.overlayColormap.value, values, state.overlayAutoRange);
+  if (!snapped) return null;
+
+  layer.cal_min = snapped.low;
+  layer.cal_max = snapped.high;
+  showOverlayRange(layer);
+  commitOverlay();
+  renderColorLegend();
+  return snapped;
+}
+
+/** How big the colour field is drawn, in CSS pixels. */
+const LEGEND_WHEEL_SIZE = 96;
+const LEGEND_BAR_WIDTH = 132;
+const LEGEND_BAR_HEIGHT = 10;
+
+/**
+ * Draw the active overlay's colour scale over the bottom-left of the view.
+ *
+ * The colours come from `nv.colormap(key)` — the LUT the shader itself samples —
+ * rather than from the control points in `colormaps.js`, so the legend cannot
+ * describe one scale while the surface renders another, and NiiVue's own maps
+ * get a legend for free.
+ */
+function renderColorLegend() {
+  const overlay = activeOverlay();
+  const layer = overlay?.layer;
+  const showing = Boolean(layer) && overlay.visible && state.legendVisible;
+  ui.colorLegend.hidden = !showing;
+  if (!showing) return;
+
+  const key = ui.overlayColormap.value;
+  const kind = legendKind(key);
+  ui.colorLegend.dataset.kind = kind;
+
+  const width = kind === 'bar' ? LEGEND_BAR_WIDTH : LEGEND_WHEEL_SIZE;
+  const height = kind === 'bar' ? LEGEND_BAR_HEIGHT : LEGEND_WHEEL_SIZE;
+  paintLegendCanvas(kind, state.nv.colormap(key), width, height);
+
+  ui.colorLegendTicks.replaceChildren(
+    ...legendRings(kind),
+    ...legendTicks(kind, layer.cal_min, layer.cal_max).map((tick) => placeTick(kind, tick))
+  );
+  ui.colorLegendCaption.textContent = overlay.name;
+}
+
+/** Paint at device resolution, so the wheel's rim is not a staircase. */
+function paintLegendCanvas(kind, lut, width, height) {
+  const canvas = ui.colorLegendCanvas;
+  const ratio = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = Math.round(width * ratio);
+  canvas.height = Math.round(height * ratio);
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const pixels = paintLegend(kind, lut, canvas.width, canvas.height);
+  canvas.getContext('2d').putImageData(
+    new ImageData(pixels, canvas.width, canvas.height), 0, 0
+  );
+}
+
+/**
+ * Turn one tick's unit coordinates into a positioned label. A bar tick has only
+ * an x along the bar; a wheel tick is on a unit circle with y upward, which is
+ * the flip in the second branch.
+ */
+function placeTick(kind, tick) {
+  const label = document.createElement('span');
+  label.className = 'color-legend-tick';
+  label.textContent = tick.label;
+  if (kind === 'bar') {
+    label.style.left = `${tick.x * 100}%`;
+  } else {
+    label.style.left = `${50 + tick.x * 50}%`;
+    label.style.top = `${50 - tick.y * 50}%`;
+  }
+  return label;
+}
+
+/** The eccentricity rings the labels are read against; the other kinds have none. */
+function legendRings(kind) {
+  if (kind !== 'eccentricity') return [];
+  return [1 / 3, 2 / 3].map((fraction) => {
+    const ring = document.createElement('span');
+    ring.className = 'color-legend-ring';
+    ring.style.width = `${fraction * 100}%`;
+    return ring;
+  });
 }
 
 /** Keep the ROI layer above any overlay so the boundary stays visible. */
 function reattachRoiLayer() {
   const entry = activeSurface();
   if (!entry) return;
-  const existing = entry.mesh.layers.findIndex((layer) => layer.name === 'surfannotate-roi');
-  if (existing >= 0) entry.mesh.layers.splice(existing, 1);
+  restackLayers(entry);
+}
+
+/**
+ * Rebuild the layer stack bottom-up: overlays exempt from the mask, then the
+ * overlays it applies to, then the ROI layer on top.
+ *
+ * The exempt ones have to be underneath or the mask reveals nothing — curvature
+ * loaded *after* a retinotopy map would sit over the holes the mask punches and
+ * the whole feature would look broken. `entry.overlays` is reordered to match so
+ * the list in the panel reads bottom-to-top like the render does.
+ */
+function restackLayers(entry) {
+  entry.overlays.sort((a, b) => Number(b.ignoreMask) - Number(a.ignoreMask));
+  entry.mesh.layers = entry.overlays.map((overlay) => overlay.layer);
   attachLabelLayer(entry.mesh, entry.labelValues, currentLabelTable());
+}
+
+/** The mask covering a surface's topology, or null when none is loaded. */
+function activeMask(entry) {
+  return entry ? state.masks.get(entry.topologyKey) || null : null;
+}
+
+/**
+ * Point one overlay's layer at the values it should render.
+ *
+ * NiiVue mesh layers have no per-vertex alpha — `blendColormap` drops a vertex
+ * only when its value is below `cal_min` — so the mask lives in the values
+ * themselves, and the untouched originals have to be kept on the side. See
+ * niivue/overlayMask.js for why the sentinel is -Infinity and why the kept
+ * values are clamped.
+ */
+function applyOverlayMask(entry, overlay) {
+  const mask = overlay.ignoreMask ? null : activeMask(entry);
+  const layer = overlay.layer;
+
+  if (!mask) {
+    layer.values = overlay.baseValues;
+    layer.isTransparentBelowCalMin = overlay.baseTransparentBelowCalMin;
+    return;
+  }
+  overlay.maskedBuffer ||= new Float32Array(overlay.baseValues.length);
+  layer.values = maskedValues(
+    overlay.baseValues, mask.mask, layer.cal_min, overlay.maskedBuffer
+  );
+  layer.isTransparentBelowCalMin = true;
+}
+
+/** Re-derive every overlay of every surface the mask covers. */
+function applyMaskToTopology(topologyKey) {
+  for (const entry of state.surfaces) {
+    if (entry.topologyKey !== topologyKey) continue;
+    for (const overlay of entry.overlays) applyOverlayMask(entry, overlay);
+    restackLayers(entry);
+  }
+}
+
+/**
+ * Push the active overlay to the GPU, re-deriving its values first.
+ *
+ * Every path that moves the display window has to go through here rather than
+ * calling commitLayer directly: the mask clamps kept values up to `cal_min`, so
+ * a window that moved without a re-derive would render the old clamp.
+ */
+function commitOverlay() {
+  const entry = activeSurface();
+  const overlay = activeOverlay();
+  if (entry && overlay) applyOverlayMask(entry, overlay);
+  commitLayer(state.nv, state.mesh);
 }
 
 // -- the layer lists ------------------------------------------------------
@@ -1299,7 +1687,7 @@ function renderLayerLists() {
 /** Show a sensible number of decimals for whatever the overlay's units are. */
 function showOverlayRange(layer) {
   const span = Math.abs(layer.cal_max - layer.cal_min);
-  const decimals = span >= 100 ? 1 : span >= 1 ? 3 : 5;
+  const decimals = rangeDecimals(span);
   ui.overlayMin.value = Number(layer.cal_min.toFixed(decimals));
   ui.overlayMax.value = Number(layer.cal_max.toFixed(decimals));
   ui.overlayMin.step = String(Number((span / 100).toFixed(decimals)) || 'any');
@@ -1414,16 +1802,121 @@ function vertexAt(event) {
   return resolveVertex(state.index, mm);
 }
 
+/** The same cap the legend uses, so both overlays rasterise at one ratio. */
+function pixelRatio() {
+  return Math.min(window.devicePixelRatio || 1, 3);
+}
+
 /**
- * Paint a vertex and its 1-ring. A single vertex is roughly one pixel on a
- * 160k-vertex hemisphere, which is too small to aim at or to see.
+ * One marker, rasterised once and kept. Cached on shape, colour and ratio
+ * together: all three change what the pixels are, and nothing else does.
  */
-function markVertexAndRing(vertex, label) {
-  state.labelValues[vertex] = label;
-  const { adjOffset, adjNeighbor } = state.graph;
-  for (let e = adjOffset[vertex]; e < adjOffset[vertex + 1]; e++) {
-    state.labelValues[adjNeighbor[e]] = label;
+function markerCanvas(shape, colorKey, ratio) {
+  const key = `${shape}|${colorKey}|${ratio}`;
+  const cached = state.spriteCache.get(key);
+  if (cached) return cached;
+
+  const { core, rim } = MARKER_COLORS[colorKey] || MARKER_COLORS.white;
+  const sprite = markerSprite({
+    shape,
+    radius: MARKER_RADIUS * ratio,
+    core,
+    rim,
+    stroke: MARKER_STROKE * ratio,
+    halo: MARKER_HALO * ratio
+  });
+
+  const canvas = document.createElement('canvas');
+  canvas.width = sprite.size;
+  canvas.height = sprite.size;
+  canvas.getContext('2d').putImageData(
+    new ImageData(sprite.pixels, sprite.size, sprite.size), 0, 0
+  );
+
+  const entry = { canvas, centre: sprite.centre };
+  state.spriteCache.set(key, entry);
+  return entry;
+}
+
+/**
+ * Project the clicks and the landmarks onto the overlay canvas.
+ *
+ * Reads the matrices back from NiiVue rather than tracking the camera itself,
+ * so there is no second copy of the view state to keep in step. Back-facing
+ * markers are dropped on a closed surface; on a cut one there is no far side to
+ * hide, and `meshOrientation` would have nothing to measure either.
+ */
+function renderMarkers() {
+  const canvas = ui.markerOverlay;
+  const session = state.session;
+  const ratio = pixelRatio();
+  const width = Math.round(canvas.clientWidth * ratio);
+  const height = Math.round(canvas.clientHeight * ratio);
+  if (width <= 0 || height <= 0) return;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
   }
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+  const entry = activeSurface();
+  if (!session || !entry || !state.mesh) return;
+
+  const { mvp, normal } = renderMatrices(state.nv);
+  const cull = entry.openEdge ? null : entry.normals;
+  const shape = ui.markerShape.value;
+  const colorKey = ui.markerColor.value;
+
+  // Border points and landmarks differ by shape, not by colour: colour is
+  // carrying contrast against the surface now, so it is not free to carry
+  // identity as well.
+  const groups = [
+    { vertices: session.clicks, shape },
+    {
+      vertices: session.points.map((point) => point.vertex),
+      shape: shape === MARKER_CROSS ? MARKER_CIRCLE : MARKER_CROSS
+    }
+  ];
+
+  for (const group of groups) {
+    if (!group.vertices.length) continue;
+    const sprite = markerCanvas(group.shape, colorKey, ratio);
+    const placed = projectMarkers({
+      mvp,
+      positions: entry.geometry.positions,
+      vertices: group.vertices,
+      width,
+      height,
+      normals: cull,
+      normalMatrix: normal,
+      orientation: entry.orientation,
+      margin: MARKER_MARGIN * ratio
+    });
+    for (const marker of placed) {
+      ctx.drawImage(
+        sprite.canvas,
+        Math.round(marker.x) - sprite.centre,
+        Math.round(marker.y) - sprite.centre
+      );
+    }
+  }
+}
+
+/**
+ * Coalesce marker redraws onto one animation frame.
+ *
+ * The camera callbacks fire far more often than once a frame during a rotate
+ * drag — the same reason the hover picker is throttled — and every one of them
+ * would otherwise re-project and re-blit the whole set.
+ */
+function scheduleMarkers() {
+  if (state.markersPending) return;
+  state.markersPending = true;
+  requestAnimationFrame(() => {
+    state.markersPending = false;
+    renderMarkers();
+  });
 }
 
 /** A press that moves more than this many CSS pixels is a rotate, not a click. */
@@ -1448,16 +1941,34 @@ function onCanvasClick(event) {
   if (!state.session) return;
   const vertex = vertexAt(event);
   if (vertex < 0) return; // the ray missed the surface
+  handleVertexClick(vertex);
+}
 
+/**
+ * Everything a click means once the picker has resolved it to a vertex.
+ *
+ * Split from onCanvasClick so it can be driven by index: aiming a synthetic
+ * mouse event at one particular vertex of a 163k-vertex mesh in a 3D view is
+ * not something a test can do reliably.
+ */
+function handleVertexClick(vertex) {
   // A vertex owned by an ROI above this one in the list is cut out of the
   // graph, so no path can reach it. Say whose it is, rather than accept the
   // click and fail at "Close ROI" with an unexplained gap.
+  //
+  // Lead with the edge closure. Reaching into a finished ROI is almost always
+  // an attempt to share its border, and closing against it does that exactly —
+  // no shared points to click at all. Reordering and reopening stay as the
+  // answer for the rarer case where the point really does have to be inside.
   if (state.excluded && isIsolated(state.graph, vertex)) {
     const owner = savedRois().find((roi) => roi.mask && roi.mask[vertex]);
-    setStatus(owner
-      ? `That point belongs to ${owner.name}. Move it below ${owner.name} in the ` +
-        'list, or reopen that ROI, to draw here.'
-      : 'That point belongs to an ROI above this one in the list.');
+    const whose = owner ? owner.name : 'an ROI above this one in the list';
+    setStatus(
+      `That point belongs to ${whose}. To share its border, place your points on ` +
+      `open cortex and use "${EDGE_LABELS.roi.label}" — its rim closes the region ` +
+      `for you. To draw inside it, move this ROI below ${whose} in the list, or ` +
+      'reopen it.'
+    );
     return;
   }
 
@@ -1561,28 +2072,18 @@ function paintLabels() {
     }
   });
 
-  // Fill style is purely visual — the region itself is unchanged, so exports
-  // are identical whichever style is showing.
-  const style = ui.fillStyle.value;
-  if (session.filled && style !== FILL_STYLES.OUTLINE) {
-    const ink = style === FILL_STYLES.HATCHED
-      ? hatchMask(state.geometry.positions, session.filled)
-      : session.filled;
+  if (session.filled) {
     for (let v = 0; v < state.labelValues.length; v++) {
-      if (ink[v]) state.labelValues[v] = LABEL_REGION;
+      if (session.filled[v]) state.labelValues[v] = LABEL_REGION;
     }
   }
 
-  // The traced boundary and the landmarks sit on top of everything else.
+  // The traced boundary sits on top of everything else. The clicks and the
+  // landmarks are no longer painted here at all — they go on the overlay, which
+  // is also why they no longer have to be hidden once a region is filled: a
+  // screen-space marker is a fixed few pixels wide and cannot be mistaken for
+  // part of the region the way a 1-ring could.
   for (const v of session.chain) state.labelValues[v] = LABEL_BOUNDARY;
-  // Border markers are drawn with their 1-ring so they are big enough to see,
-  // which makes them wider than the vertices actually in the ROI. Once the
-  // region is filled that would misrepresent its extent, so hide them. Undoing
-  // a point clears the fill, and they come back.
-  if (!session.filled) {
-    for (const v of session.clicks) markVertexAndRing(v, LABEL_CLICK);
-  }
-  for (const point of session.points) markVertexAndRing(point.vertex, LABEL_POINT);
 
   const roiLayer = state.mesh.layers.find((layer) => layer.name === 'surfannotate-roi');
   if (roiLayer) roiLayer.colormapLabel = makeLabelLut(currentLabelTable());
@@ -1607,6 +2108,9 @@ function currentLabelTable() {
 }
 
 function repaint() {
+  // Before the guard: with no session there is nothing on the surface to paint,
+  // but there may still be markers left on the overlay to clear.
+  scheduleMarkers();
   if (!state.session) return;
   paintLabels();
   syncControls();
@@ -1622,8 +2126,43 @@ function resetControls() {
   ui.flipRegion.hidden = true;
   ui.edgeRow.hidden = true;
   ui.edgeHint.hidden = true;
+  state.edgeSources = { mesh: false, roi: false };
   ui.pointList.innerHTML = '';
   ui.roiList.innerHTML = '';
+  scheduleMarkers();
+}
+
+/**
+ * What to call the edge-closure button, given what the edge is currently made
+ * of. A finished ROI's rim closes a region exactly as the mesh's own cut does —
+ * `excludeVertices` makes them the same thing — but naming both "surface edge"
+ * hid the ROI case entirely: on a whole hemisphere there is no visible edge, so
+ * the button read as inapplicable at the very moment it was the right tool.
+ */
+const EDGE_LABELS = {
+  mesh: {
+    label: 'Close on surface edge',
+    hint: 'Draw only the part of the border crossing the flat surface: both ends are ' +
+      'extended to the nearest edge, which closes the region. Two points are enough.'
+  },
+  roi: {
+    label: 'Close on ROI edge',
+    hint: 'A finished ROI acts as an edge. Draw only the part of the border you do ' +
+      'not share with it — both ends are extended to its rim, and the two regions ' +
+      'end up exactly adjacent with nothing left between them.'
+  },
+  both: {
+    label: 'Close on edge',
+    hint: 'Both the surface edge and any finished ROI close a region. Draw only the ' +
+      'part of the border that crosses open cortex; both ends are extended to the ' +
+      'nearest edge, whichever kind it is.'
+  }
+};
+
+/** Which of the three EDGE_LABELS entries applies right now. */
+function edgeLabelKind(sources) {
+  if (sources.mesh && sources.roi) return 'both';
+  return sources.roi ? 'roi' : 'mesh';
 }
 
 function syncControls() {
@@ -1634,10 +2173,16 @@ function syncControls() {
 
   ui.undoPoint.disabled = !hasClicks;
   ui.closePath.disabled = session.clicks.length < 3;
-  // A cut surface only: the edge is what closes the region, so a closed surface
-  // has nothing to offer here. Two points are enough, unlike a loop.
+  // Needs an edge to close against — the mesh's own cut, or the rim of a
+  // finished ROI, which excludeVertices has made into one. Two points are
+  // enough, unlike a loop.
   ui.edgeRow.hidden = !session.hasOpenEdge;
   ui.edgeHint.hidden = !session.hasOpenEdge;
+  if (session.hasOpenEdge) {
+    const edge = EDGE_LABELS[edgeLabelKind(state.edgeSources)];
+    ui.closeOnEdge.textContent = edge.label;
+    ui.edgeHint.textContent = edge.hint;
+  }
   ui.closeOnEdge.disabled = session.clicks.length < 2;
   ui.fillRegion.disabled = !session.closed;
   ui.flipRegion.hidden = !(hasRegion && session.regionOrder.length > 1);
@@ -1760,5 +2305,11 @@ window.__surfannotateIo = {
 // Only what the e2e suite drives. Everything here is module-private in the
 // bundle otherwise, and a shipping app should not export its internals wholesale.
 window.__surfannotateUi = {
-  repaint, runFill, setMode, activateSurface, activeSurface, activeOverlay, savedRois
+  repaint, runFill, setMode, activateSurface, activeSurface, activeOverlay, savedRois,
+  // Synchronous, unlike the scheduled path: a test that had to race the
+  // animation frame would be flaky in exactly the way the drag-and-drop tests
+  // already warn about.
+  renderMarkers,
+  // By index, because the picker cannot be aimed at a chosen vertex from a test.
+  handleVertexClick
 };

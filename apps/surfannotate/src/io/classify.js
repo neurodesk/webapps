@@ -15,7 +15,26 @@ export const SNIFF_BYTES = 4096;
 
 export const SURFACE = 'surface';
 export const OVERLAY = 'overlay';
+export const MASK = 'mask';
 export const UNKNOWN = 'unknown';
+
+/**
+ * A mask announces itself in its name, and nothing else can tell.
+ *
+ * A vertex mask is a per-vertex file like any other — the same curv, .label,
+ * .mgz or GIfTI formats — so no magic number distinguishes "where is there data"
+ * from the data itself. The name is the only signal, and in practice it is a
+ * reliable one: `lh.V1.mask`, `sub-01_desc-brain_mask.nii.gz`,
+ * `lh.cortex_mask.gii`.
+ *
+ * Matched as a substring rather than a delimited token because BIDS runs the
+ * word together — `desc-brainmask.nii.gz` is one word and a token match would
+ * miss it. The `masked` exclusion is the one false positive worth guarding:
+ * `lh.thickness.masked.gii` is an overlay that has *had* a mask applied, which
+ * is the opposite of a mask.
+ */
+const MASK_NAME = /mask/i;
+const MASKED_NAME = /masked/i;
 
 /** Extensions that are only ever geometry. */
 const SURFACE_EXT = /\.(mz3|obj|stl|ply|vtk|off|srf|byu|dfs|ico|tri|nv|wrl|x3d|asc)$/i;
@@ -42,10 +61,23 @@ const FREESURFER_SURFACE = new RegExp(
  * @param {string} filename
  * @param {ArrayBuffer|Uint8Array|null} head first `SNIFF_BYTES` of the file, or
  *   null to classify on the name alone
- * @returns {'surface'|'overlay'|'unknown'}
+ * @returns {'surface'|'overlay'|'mask'|'unknown'}
  */
 export function classifyFile(filename, head = null) {
   const name = String(filename || '');
+  const kind = classifyData(name, head);
+  // A mask is a *kind of* per-vertex file, so the question of whether this is
+  // geometry is settled first and never overridden: a surface with "mask" in
+  // its name is still a surface. Promoting UNKNOWN too is what recognises
+  // `lh.V1.mask`, whose extension is in no list and whose curv magic number
+  // says only "per-vertex data".
+  if (kind === SURFACE) return SURFACE;
+  if (MASK_NAME.test(name) && !MASKED_NAME.test(name)) return MASK;
+  return kind;
+}
+
+/** Surface, overlay, or neither — everything except the mask question. */
+function classifyData(name, head) {
   const bytes = head ? new Uint8Array(head instanceof Uint8Array ? head : head) : null;
 
   // 1. Unambiguous extensions win outright — no need to read anything.
