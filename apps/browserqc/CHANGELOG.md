@@ -1,5 +1,11 @@
 # browserqc
 
+## 1.0.7
+
+### Patch Changes
+
+- Add clear NIfTI and DICOM upload controls, numbered sidebar steps, and explanations for each app's processing options.
+
 ## 1.0.6
 
 ### Patch Changes

@@ -54,6 +54,9 @@ const saveBtn = $<HTMLButtonElement>('saveBtn')
 const aboutBtn = $<HTMLButtonElement>('aboutBtn')
 const aboutDialog = $<HTMLDialogElement>('aboutDialog')
 const dicomPick = $<HTMLSelectElement>('dicomPick')
+const niftiInput = $<HTMLInputElement>('niftiInput')
+const dicomInput = $<HTMLInputElement>('dicomInput')
+const methodDescription = $('methodDescription')
 const webgpuDialog = $<HTMLDialogElement>('webgpuDialog')
 
 // --- NiiVue setup ---
@@ -533,6 +536,30 @@ dicomPick.addEventListener(
 applyBtn.addEventListener('click', () => enqueue(runDeface), ac)
 saveBtn.addEventListener('click', () => void runSave(), ac)
 aboutBtn.addEventListener('click', () => aboutDialog.showModal(), ac)
+niftiInput.addEventListener('change', () => {
+  const files = Array.from(niftiInput.files ?? [])
+  if (files.length > 0) enqueue(() => handleDrop(Promise.resolve(files)))
+  niftiInput.value = ''
+}, ac)
+dicomInput.addEventListener('change', () => {
+  const files = Array.from(dicomInput.files ?? [])
+  if (files.length > 0) enqueue(() => handleDrop(Promise.resolve(files)))
+  dicomInput.value = ''
+}, ac)
+
+const methodDescriptions: Record<string, string> = {
+  allineate: 'Fast affine registration that removes facial voxels. This is the recommended starting point.',
+  allineate_robustfov: 'Crops neck and lower slices before fast affine registration. Use this when the standard fit includes too much neck.',
+  allineate_hel: 'Uses a slower, exhaustive Hellinger registration for difficult scans where the fast fit is not accurate enough.',
+  allineate_hel_robustfov: 'Combines the neck crop with exhaustive Hellinger registration. This is the slowest affine option.',
+  mindgrab: 'Uses a WebGPU neural network to keep the brain and remove everything outside it.',
+  mindgrab_robust: 'Crops neck and lower slices before WebGPU brain extraction.',
+  mindgrab8: 'Uses WebGPU brain extraction with an 8 mm border around the brain.',
+  mindgrab_robust8: 'Combines the neck crop, WebGPU brain extraction, and an 8 mm brain border.',
+}
+methodSelect.addEventListener('change', () => {
+  methodDescription.textContent = methodDescriptions[methodSelect.value] ?? ''
+}, ac)
 
 // --- Cleanup (HMR / tab close) ---
 async function cleanup(): Promise<void> {

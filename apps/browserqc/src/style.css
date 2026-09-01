@@ -67,6 +67,52 @@ main {
   font-size: 0.82rem;
 }
 
+.control-section {
+  margin: 0 -2px 14px;
+  padding: 0 2px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.control-section > h2 {
+  margin: 0 0 7px;
+  color: #c9d0e0;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.control-section > p {
+  margin: 0 0 9px;
+  color: #aab2c4;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.upload-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.upload-button {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid #6f8cff;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(74, 109, 255, 0.16);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.upload-button:hover { background: rgba(74, 109, 255, 0.28); }
+.drop-hint { margin-top: 7px !important; color: #838a9a !important; }
+.processing-summary strong { color: #dce3f5; }
+
 .qc-head {
   display: flex;
   align-items: center;

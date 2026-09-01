@@ -12,8 +12,21 @@
 
 <body>
   <header>
-    <div class="row">
-      <label for="methodSelect">Method</label>
+    <section class="control-section" aria-labelledby="inputHeading">
+      <h2 id="inputHeading">1. Input image</h2>
+      <p>Choose one NIfTI image or a folder containing a DICOM series. Files stay in this browser.</p>
+      <div class="upload-actions">
+        <label class="upload-button" for="niftiInput">Choose NIfTI</label>
+        <input id="niftiInput" type="file" accept=".nii,.nii.gz,.mgh,.mgz,.nrrd,.mha,.mhd,.nhdr,.head,.v" hidden />
+        <label class="upload-button" for="dicomInput">Choose DICOM folder</label>
+        <input id="dicomInput" type="file" webkitdirectory multiple hidden />
+      </div>
+      <p class="drop-hint">You can also drop either format onto the viewer.</p>
+      <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
+    </section>
+    <section class="control-section" aria-labelledby="processingHeading">
+      <h2 id="processingHeading">2. Processing</h2>
+      <label for="methodSelect">Defacing method</label>
       <select id="methodSelect" title="niimath affine defacing (BSD allineate: fast or Hellinger engine) or MindGrab brain extraction (WebGPU)">
         <option value="allineate" selected>allineate (fast)</option>
         <option value="allineate_robustfov">allineate (fast, robustfov)</option>
@@ -24,8 +37,15 @@
         <option value="mindgrab8">mindgrab 8mm border (WebGPU)</option>
         <option value="mindgrab_robust8">mindgrab robustfov + 8mm (WebGPU)</option>
       </select>
+      <p id="methodDescription" class="option-description">Fast affine registration that removes facial voxels. This is the recommended starting point.</p>
       <button id="applyBtn">Apply</button>
+    </section>
+    <section class="control-section" aria-labelledby="outputHeading">
+      <h2 id="outputHeading">3. Output</h2>
+      <p>Review the result in the viewer before downloading the defaced NIfTI image.</p>
       <button disabled id="saveBtn">Save Image</button>
+    </section>
+    <div class="sidebar-actions">
       <button id="aboutBtn">About</button>
     </div>
   </header>
@@ -47,8 +67,6 @@
       </table>
     </div>
   </footer>
-
-  <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
 
   <dialog id="aboutDialog">
     <form method="dialog">

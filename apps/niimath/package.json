@@ -1,7 +1,7 @@
 {
   "name": "niimath",
   "private": true,
-  "version": "1.0.7",
+  "version": "1.0.8",
   "type": "module",
   "license": "BSD-2-Clause",
   "scripts": {
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
     "@niivue/niimath": "^1.2.0",
     "@niivue/niivue": "^0.62.1"
   }

@@ -1,6 +1,7 @@
 import './style.css'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
+import { runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niivue, SLICE_TYPE, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue'
 import { Niimath } from "@niivue/niimath"
 
@@ -220,6 +221,38 @@ async function loadImage(url) {
   nv.updateGLVolume();
 }
 
+async function loadFile(file) {
+  const bytes = await file.arrayBuffer()
+  for (const mesh of [...nv.meshes]) nv.removeMesh(mesh)
+  for (const volume of [...nv.volumes]) nv.removeVolume(volume)
+  await nv.loadFromArrayBuffer(bytes, file.name)
+  uneditedImage = nv.volumes[0]
+  nv.updateGLVolume()
+}
+
+async function loadDicomFiles(files) {
+  loadingCircle.classList.remove('hidden')
+  try {
+    const converted = await runDcm2niix(files)
+    if (converted.length === 0) throw new Error('No NIfTI image was found in this folder.')
+    dicomPick.replaceChildren()
+    for (const [index, file] of converted.entries()) {
+      const option = document.createElement('option')
+      option.value = String(index)
+      option.textContent = file.name
+      dicomPick.append(option)
+    }
+    dicomPick.classList.toggle('hidden', converted.length < 2)
+    await loadFile(converted[0])
+    dicomPick.onchange = () => void loadFile(converted[Number(dicomPick.value)])
+  } catch (error) {
+    console.error(error)
+    window.alert(error instanceof Error ? error.message : String(error))
+  } finally {
+    loadingCircle.classList.add('hidden')
+  }
+}
+
 
 async function main() {
 
@@ -290,6 +323,16 @@ async function main() {
       nv.saveImage({ filename: "niimath.nii.gz", isSaveDrawing: false, volumeByIndex: 0 });
     else
       nv.saveImage({ filename: "niimath.nii.gz", isSaveDrawing: false, volumeByIndex: 1 });
+  }
+  niftiInput.onchange = async function () {
+    const file = niftiInput.files?.[0]
+    if (file) await loadFile(file)
+    niftiInput.value = ''
+  }
+  dicomInput.onchange = async function () {
+    const files = Array.from(dicomInput.files ?? [])
+    if (files.length > 0) await loadDicomFiles(files)
+    dicomInput.value = ''
   }
   aboutButton.onclick = function () {
     const link = "https://github.com/rordenlab/niimath?tab=readme-ov-file#about"

@@ -42,6 +42,56 @@ header .row {
   gap: 8px;
 }
 
+.control-section {
+  width: 100%;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.control-section h2 {
+  margin: 0 0 6px;
+  color: #c9d0e0;
+  font-size: 0.78rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.control-section p {
+  margin: 0 0 10px;
+  color: #aab2c4;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.upload-actions,
+.sidebar-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.upload-button {
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid #6f8cff;
+  border-radius: 6px;
+  color: #fff;
+  background: rgba(74, 109, 255, 0.16);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.upload-button:hover { background: rgba(74, 109, 255, 0.28); }
+.drop-hint { margin-top: 7px !important; color: #838a9a !important; }
+.control-section select { width: 100%; margin: 5px 0; }
+.control-section #applyBtn,
+.control-section #saveBtn { width: 100%; margin-top: 6px; }
+.option-description { min-height: 3.3em; }
+
 header label {
   font-size: 0.85rem;
 }

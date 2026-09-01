@@ -12,10 +12,28 @@
 
 <body>
   <aside id="qcPanel" aria-label="Image quality metrics">
+    <section class="control-section" aria-labelledby="inputHeading">
+      <h2 id="inputHeading">1. Input image</h2>
+      <p>Choose one NIfTI image or a folder containing a DICOM series. Files stay in this browser.</p>
+      <div class="upload-actions">
+        <label class="upload-button" for="niftiInput">Choose NIfTI</label>
+        <input id="niftiInput" type="file" accept=".nii,.nii.gz,.mgh,.mgz,.nrrd,.mha,.mhd,.nhdr,.head,.v" hidden />
+        <label class="upload-button" for="dicomInput">Choose DICOM folder</label>
+        <input id="dicomInput" type="file" webkitdirectory multiple hidden />
+      </div>
+      <p class="drop-hint">You can also drop either format onto the viewer.</p>
+      <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
+    </section>
+    <section class="control-section processing-summary" aria-labelledby="processingHeading">
+      <h2 id="processingHeading">2. Automatic processing</h2>
+      <p><strong>Brain segmentation</strong> identifies gray matter, white matter, CSF, and subcortical regions.</p>
+      <p><strong>Quality metrics</strong> then measures noise, contrast, sharpness, and tissue composition. Processing starts after you choose an image.</p>
+    </section>
+    <section class="control-section" aria-labelledby="resultsHeading">
     <div class="qc-head">
-      <h3 class="qc-title">Image Quality
+      <h2 id="resultsHeading" class="qc-title">3. Image quality
         <span class="qc-titlesub">MRIQC-style</span>
-      </h3>
+      </h2>
       <button id="aboutBtn" class="qc-about" type="button">About</button>
     </div>
     <div class="qc-opacity">
@@ -23,8 +41,9 @@
       <input type="range" min="0" max="255" value="128" id="ovlSlider" aria-label="Segmentation overlay opacity" />
     </div>
     <div id="qcBody">
-      <p class="qc-empty">No QC values yet — metrics appear automatically once an image loads.</p>
+      <p class="qc-empty">Metrics appear here after processing finishes.</p>
     </div>
+    </section>
   </aside>
 
   <main id="canvas-container">
@@ -44,8 +63,6 @@
       </table>
     </div>
   </footer>
-
-  <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
 
   <dialog id="aboutDialog">
     <form method="dialog">

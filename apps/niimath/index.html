@@ -11,27 +11,45 @@
   <body>
 
     <header>
-      <!-- reset button -->
-      <button id="resetButton">Reset</button>
-      <label for="command">Command</label>
+      <section class="control-section" aria-labelledby="inputHeading">
+      <h2 id="inputHeading">1. Input image</h2>
+      <p>Choose a NIfTI image or a folder containing a DICOM series. Files stay in this browser.</p>
+      <div class="upload-actions">
+        <label class="upload-button" for="niftiInput">Choose NIfTI</label>
+        <input id="niftiInput" type="file" accept=".nii,.nii.gz" hidden />
+        <label class="upload-button" for="dicomInput">Choose DICOM folder</label>
+        <input id="dicomInput" type="file" webkitdirectory multiple hidden />
+      </div>
+      <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
+      </section>
+      <section class="control-section" aria-labelledby="processingHeading">
+      <h2 id="processingHeading">2. Processing</h2>
+      <label for="moreCommands">Example operation</label>
+      <select id="moreCommands"></select>
+      <p class="option-description">Choose an example or edit the command below. The result can replace the image or appear as an overlay.</p>
+      <label for="command">NiiMath command</label>
       <input id="command" value="-dehaze 5 -dog 2 3.2"/>
       <button id="processButton" disabled>Process</button>
-      <button id="saveButton">Save</button>
-      <button id="aboutButton">About</button>
-      <button id="helpButton">Help</button>
-      <!-- <button id="moreButton">More commands</button> -->
-       <!-- more commands dropdown -->
-      <label id="moreCommandsLabel" for="moreCommands" style="color:white">More commands</label>
-      <select id="moreCommands"></select>
       <div id="loadingCircle" class="loading-circle hidden"></div>
-      <label for="overlayCheck" style="color:white">Overlay</label>
+      <label for="overlayCheck">Show result as overlay</label>
       <input type="checkbox" id="overlayCheck" checked />
       <!-- overlay opacity slider -->
-      <label id="overlayOpacityLabel" for="overlayOpacity" style="color:white">Opacity</label>
+      <label id="overlayOpacityLabel" for="overlayOpacity">Overlay opacity</label>
       <input type="range" id="overlayOpacity" min="0" max="1" step="0.01" value="1" />
       <!-- overlay color select (empty but will be populated in main.js) -->
-      <label id="overlayColorLabel" for="overlayColor" style="color:white">Color</label>
+      <label id="overlayColorLabel" for="overlayColor">Overlay color</label>
       <select id="overlayColor"></select>
+      </section>
+      <section class="control-section" aria-labelledby="outputHeading">
+      <h2 id="outputHeading">3. Output</h2>
+      <p>Download the processed image, or reset to start again with the example image.</p>
+      <button id="saveButton">Save processed image</button>
+      <button id="resetButton">Reset</button>
+      </section>
+      <div class="sidebar-actions">
+      <button id="aboutButton">About</button>
+      <button id="helpButton">Command help</button>
+      </div>
     </header>
     <main>
       <canvas id="gl"></canvas>

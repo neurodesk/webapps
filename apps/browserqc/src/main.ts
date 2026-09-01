@@ -48,6 +48,8 @@ const statusMsg = $<HTMLLabelElement>('statusMsg')
 const aboutBtn = $<HTMLButtonElement>('aboutBtn')
 const aboutDialog = $<HTMLDialogElement>('aboutDialog')
 const dicomPick = $<HTMLSelectElement>('dicomPick')
+const niftiInput = $<HTMLInputElement>('niftiInput')
+const dicomInput = $<HTMLInputElement>('dicomInput')
 const ovlSlider = $<HTMLInputElement>('ovlSlider')
 const qcBody = $('qcBody')
 
@@ -437,6 +439,16 @@ dicomPick.addEventListener(
   ac,
 )
 aboutBtn.addEventListener('click', () => aboutDialog.showModal(), ac)
+niftiInput.addEventListener('change', () => {
+  const files = Array.from(niftiInput.files ?? [])
+  if (files.length > 0) enqueue(() => handleDrop(Promise.resolve(files)))
+  niftiInput.value = ''
+}, ac)
+dicomInput.addEventListener('change', () => {
+  const files = Array.from(dicomInput.files ?? [])
+  if (files.length > 0) enqueue(() => handleDrop(Promise.resolve(files)))
+  dicomInput.value = ''
+}, ac)
 // Overlay opacity — drives the segmentation overlay (last volume) when present.
 ovlSlider.addEventListener(
   'input',
