@@ -65,3 +65,8 @@ test('non-React legacy light roles are bridged into the shared dark palette', ()
 test('hosted apps expose the original light palette as an explicit theme', () => {
   assert.match(css, /:root\[data-neurodesk-app\]\[data-neurodesk-theme="light"\]\s*\{[^}]*color-scheme:\s*light[^}]*--nd-brand-page:\s*#ffffff[^}]*--nd-brand-primary:\s*#6aa329[^}]*--nd-brand-text:\s*#0c0e0a/s);
 });
+
+test('top-bar hosts keep their fallback content until the shared bar exists', () => {
+  assert.match(css, /\[data-neurodesk-top-bar-host\]:has\(> \.nd-app-bar\)\s*>\s*:not\(\.nd-app-bar\)\s*\{[^}]*display:\s*none\s*!important/s);
+  assert.doesNotMatch(css, /\[data-neurodesk-top-bar-host\]\s*>\s*:not\(\.nd-app-bar\)\s*\{[^}]*display:\s*none\s*!important/s);
+});

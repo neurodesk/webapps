@@ -431,7 +431,7 @@
   box-shadow: none !important;
 }
 
-[data-neurodesk-top-bar-host] > :not(.nd-app-bar) {
+[data-neurodesk-top-bar-host]:has(> .nd-app-bar) > :not(.nd-app-bar) {
   display: none !important;
 }
 
