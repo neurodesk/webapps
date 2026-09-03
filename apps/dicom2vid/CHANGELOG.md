@@ -1,5 +1,11 @@
 # dicom2vid
 
+## 0.1.8
+
+### Patch Changes
+
+- b5dc424: Sync MRI2VID with upstream commit `2fbd4e9`. Add Siemens mosaic 4D input, color-FA output, frame upscaling and interpolation controls, and corrected histogram rendering.
+
 ## 0.1.7
 
 ### Patch Changes
