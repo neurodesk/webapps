@@ -370,7 +370,7 @@ try {
       if (lightThemeState.theme !== 'light' || lightThemeState.colorScheme !== 'light') {
         failures.push(`${app.id}: theme toggle did not apply the light color scheme`);
       }
-      if (lightThemeState.brandPrimary !== '#6aa329') {
+      if (lightThemeState.brandPrimary !== '#3f6f24') {
         failures.push(`${app.id}: Neurodesk light-theme tokens were not applied`);
       }
       await appThemeToggle.click();

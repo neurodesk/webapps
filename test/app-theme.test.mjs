@@ -62,8 +62,19 @@ test('non-React legacy light roles are bridged into the shared dark palette', ()
   assert.match(css, /#controls\s+:is\(select, input\[type="text"\], input\[type="number"\]\)\s*\{[^}]*background:\s*var\(--nd-brand-unselected\)/s);
 });
 
-test('hosted apps expose the original light palette as an explicit theme', () => {
-  assert.match(css, /:root\[data-neurodesk-app\]\[data-neurodesk-theme="light"\]\s*\{[^}]*color-scheme:\s*light[^}]*--nd-brand-page:\s*#ffffff[^}]*--nd-brand-primary:\s*#6aa329[^}]*--nd-brand-text:\s*#0c0e0a/s);
+test('hosted apps expose the redesigned light palette as an explicit theme', () => {
+  assert.match(css, /:root\[data-neurodesk-app\]\[data-neurodesk-theme="light"\]\s*\{[^}]*color-scheme:\s*light[^}]*--nd-brand-page:\s*#f6f8f5[^}]*--nd-brand-primary:\s*#3f6f24[^}]*--nd-brand-text:\s*#18201b/s);
+});
+
+test('hosted apps use normal-width local UI typography', () => {
+  assert.match(css, /--nd-font-ui:\s*system-ui/);
+  assert.doesNotMatch(css, /Pontano Sans|Arial Narrow|fonts\.gstatic\.com/);
+  assert.match(css, /font-stretch:\s*normal/);
+});
+
+test('light mode reserves green for meaning and uses blue keyboard focus', () => {
+  assert.match(css, /:root\[data-neurodesk-app\]\[data-neurodesk-theme="light"\]\s*\{[^}]*--nd-brand-primary-hover:\s*#31591c[^}]*--nd-brand-unselected:\s*#f1f4f0[^}]*--nd-brand-border:\s*#dce2dc[^}]*--nd-brand-focus:\s*#2563a6/s);
+  assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*3px solid var\(--nd-brand-focus\)/s);
 });
 
 test('top-bar hosts keep their fallback content until the shared bar exists', () => {

@@ -22,6 +22,7 @@ test('landing page uses the Neurocontainers Builder dark palette', () => {
   assert.match(css, /body\s*\{[^}]*background:\s*var\(--page\)/s);
 });
 
-test('landing page exposes its original light palette as an explicit theme', () => {
-  assert.match(css, /:root\[data-neurodesk-theme="light"\]\s*\{[^}]*color-scheme:\s*light[^}]*--page:\s*#ffffff[^}]*--green:\s*#9ec672[^}]*--text:\s*#212529[^}]*--surface:\s*#f7f8f5/s);
+test('landing page exposes a neutral, readable light palette', () => {
+  assert.match(css, /:root\[data-neurodesk-theme="light"\]\s*\{[^}]*color-scheme:\s*light[^}]*--page:\s*#f6f8f5[^}]*--green:\s*#3f6f24[^}]*--text:\s*#18201b[^}]*--surface:\s*#f1f4f0/s);
+  assert.doesNotMatch(css, /Pontano Sans|Arial Narrow|fonts\.gstatic\.com/);
 });

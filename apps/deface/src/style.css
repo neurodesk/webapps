@@ -70,6 +70,14 @@ header .row {
   gap: 8px;
 }
 
+.sidebar-actions {
+  width: 100%;
+}
+
+header.nd-imaging-controls {
+  flex-wrap: nowrap;
+}
+
 .upload-button {
   display: grid;
   min-height: 42px;

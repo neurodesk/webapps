@@ -1,11 +1,3 @@
-@font-face {
-  font-family: "Pontano Sans";
-  font-style: normal;
-  font-weight: 300 700;
-  font-display: swap;
-  src: url("https://fonts.gstatic.com/s/pontanosans/v19/qFdD35GdgYR8EzR6oBLDHa3axT8N.woff2") format("woff2");
-}
-
 /* Neurodesk's hosted-app theme, matched to the Neurocontainers Builder dark
    palette. The shared adapter is loaded after each app's own styles. */
 :root[data-neurodesk-app] {
@@ -18,6 +10,7 @@
   --nd-brand-accent-background: #10140d;
   --nd-brand-selected: #527435;
   --nd-brand-hover: #a8d65c;
+  --nd-brand-primary-hover: #a8d65c;
   --nd-brand-light: #c4e382;
   --nd-brand-unselected: #1f2e18;
   --nd-brand-pale: #10140d;
@@ -34,6 +27,9 @@
   --nd-brand-console-text: #d1d5db;
   --nd-brand-console-time: #91c84a;
   --nd-brand-success: #75b580;
+  --nd-brand-focus: #91c84a;
+  --nd-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --nd-font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
 
   /* Shared imaging-workspace tokens. */
   --nd-color-bg: var(--nd-brand-pale);
@@ -45,7 +41,7 @@
   --nd-color-text-muted: var(--nd-brand-text-muted);
   --nd-color-text-dim: var(--nd-brand-text-dim);
   --nd-color-primary: var(--nd-brand-primary);
-  --nd-color-primary-hover: var(--nd-brand-hover);
+  --nd-color-primary-hover: var(--nd-brand-primary-hover);
   --nd-color-primary-glow: rgb(145 200 74 / 18%);
   --nd-color-success: var(--nd-brand-success);
   --nd-color-accent: var(--nd-brand-selected);
@@ -67,30 +63,32 @@
 
 :root[data-neurodesk-app][data-neurodesk-theme="light"] {
   color-scheme: light;
-  --nd-brand-page: #ffffff;
-  --nd-brand-primary: #6aa329;
+  --nd-brand-page: #f6f8f5;
+  --nd-brand-primary: #3f6f24;
   --nd-brand-menu: #0c0e0a;
-  --nd-brand-selection: #161c10;
-  --nd-brand-accent-background: #1e2a16;
-  --nd-brand-selected: #4f7b38;
-  --nd-brand-hover: #b7d886;
-  --nd-brand-light: #d3e7b6;
-  --nd-brand-unselected: #e6f1d6;
-  --nd-brand-pale: #f0f7e7;
+  --nd-brand-selection: #e7f0df;
+  --nd-brand-accent-background: #eef4e9;
+  --nd-brand-selected: #3f6f24;
+  --nd-brand-hover: #c4e1a7;
+  --nd-brand-primary-hover: #31591c;
+  --nd-brand-light: #d7e7ca;
+  --nd-brand-unselected: #f1f4f0;
+  --nd-brand-pale: #f6f8f5;
   --nd-brand-surface: #ffffff;
-  --nd-brand-text: #0c0e0a;
-  --nd-brand-text-muted: #161c10;
-  --nd-brand-text-dim: #4f7b38;
-  --nd-brand-action-text: #0c0e0a;
+  --nd-brand-text: #18201b;
+  --nd-brand-text-muted: #465149;
+  --nd-brand-text-dim: #667169;
+  --nd-brand-action-text: #ffffff;
   --nd-brand-menu-text: #ffffff;
-  --nd-brand-border: #d3e7b6;
-  --nd-brand-border-strong: #b7d886;
+  --nd-brand-border: #dce2dc;
+  --nd-brand-border-strong: #b8c2b9;
   --nd-brand-console-surface: #ffffff;
-  --nd-brand-console-header: #e6f1d6;
-  --nd-brand-console-text: #161c10;
-  --nd-brand-console-time: #4f7b38;
+  --nd-brand-console-header: #f1f4f0;
+  --nd-brand-console-text: #18201b;
+  --nd-brand-console-time: #3f6f24;
   --nd-brand-success: #217738;
-  --nd-color-primary-glow: rgb(106 163 41 / 18%);
+  --nd-brand-focus: #2563a6;
+  --nd-color-primary-glow: rgb(63 111 36 / 16%);
 }
 
 /* Dicompare's Tailwind theme consumes raw RGB triplets. */
@@ -117,23 +115,23 @@
 
 :root[data-neurodesk-shell="react"][data-neurodesk-theme="light"] {
   color-scheme: light;
-  --color-surface: 240 247 231;
+  --color-surface: 246 248 245;
   --color-surface-primary: 255 255 255;
-  --color-surface-secondary: 230 241 214;
-  --color-surface-hover: 211 231 182;
-  --color-surface-alt: 240 247 231;
-  --color-text-primary: 12 14 10;
-  --color-text-secondary: 79 123 56;
-  --color-text-tertiary: 79 123 56;
-  --color-text-muted: 79 123 56;
+  --color-surface-secondary: 241 244 240;
+  --color-surface-hover: 231 240 223;
+  --color-surface-alt: 246 248 245;
+  --color-text-primary: 24 32 27;
+  --color-text-secondary: 70 81 73;
+  --color-text-tertiary: 70 81 73;
+  --color-text-muted: 102 113 105;
   --color-text-inverted: 255 255 255;
-  --color-border: 211 231 182;
-  --color-border-secondary: 183 216 134;
-  --color-brand-50: 240 247 231;
-  --color-brand-100: 230 241 214;
-  --color-brand-500: 106 163 41;
-  --color-brand-600: 79 123 56;
-  --color-brand-700: 22 28 16;
+  --color-border: 220 226 220;
+  --color-border-secondary: 184 194 185;
+  --color-brand-50: 238 244 233;
+  --color-brand-100: 231 240 223;
+  --color-brand-500: 63 111 36;
+  --color-brand-600: 49 89 28;
+  --color-brand-700: 39 72 22;
 }
 
 /* Older non-React apps use light-palette role names for surfaces and text.
@@ -284,13 +282,14 @@
 [data-neurodesk-app] input,
 [data-neurodesk-app] select,
 [data-neurodesk-app] textarea {
-  font-family: "Pontano Sans", "Arial Narrow", Arial, sans-serif;
+  font-family: var(--nd-font-ui);
+  font-stretch: normal;
 }
 
 [data-neurodesk-app] code,
 [data-neurodesk-app] pre,
 [data-neurodesk-app] :is(.console-output, .nd-console-output) {
-  font-family: Menlo, Monaco, Consolas, monospace;
+  font-family: var(--nd-font-mono);
 }
 
 [data-neurodesk-app] :is(input, select, textarea) {
@@ -404,7 +403,7 @@
 }
 
 [data-neurodesk-app] :focus-visible {
-  outline: 3px solid var(--nd-brand-primary);
+  outline: 3px solid var(--nd-brand-focus);
   outline-offset: 2px;
 }
 
@@ -446,7 +445,7 @@
   min-height: 62px !important;
   padding: 0 28px !important;
   margin: 0 !important;
-  font-family: "Pontano Sans", Arial, sans-serif !important;
+  font-family: var(--nd-font-ui) !important;
   font-size: 16px !important;
   font-weight: 400 !important;
   line-height: 1.2 !important;
@@ -601,7 +600,7 @@
   display: grid;
   gap: 16px;
   padding: 28px;
-  font-family: "Pontano Sans", Arial, sans-serif;
+  font-family: var(--nd-font-ui);
 }
 
 .nd-app-dialog__panel :is(h2, p) {
