@@ -1,4 +1,4 @@
-// MRI2Vid controller. Runs entirely on the client: ingest files, group DICOM
+// MRI2VID controller. Runs entirely on the client: ingest files, group DICOM
 // series, read the selected volume, window and preview it, and encode a video.
 // No network requests are made for image data.
 
@@ -10,7 +10,7 @@ import { groupSeries } from './series.js';
 import { ORIENTATIONS } from './volume.js';
 import {
   orientationGeometry, resolveSliceIndices, extractFrame, normalizeParams,
-  colorNormalizeParams, rotateFrame, resizeFrame,
+  colorNormalizeParams, rotateFrame, resizeFrame, histogramBins,
 } from './pipeline.js';
 import { volumeToNifti } from './nifti_write.js';
 import { encodeVideo, probeEncoders } from './encode.js';
@@ -107,6 +107,9 @@ async function handleFiles(fileRecs) {
           classification: s.classification,
           sliceCount: s.sliceCount,
           isColor: s.isColor,
+          isMosaic: s.isMosaic,
+          mosaicSlices: s.mosaicSlices,
+          volumes: s.volumes,
           recs: s.files.map((n) => byName.get(n)).filter(Boolean),
           isDefault: i === defaultIndex,
         });
@@ -159,6 +162,7 @@ function renderSeries(sources) {
     if (src.classification) chips.push(src.classification.label);
     if (src.kind !== 'dicom-series') chips.push(src.kind);
     if (src.sliceCount) chips.push(`${src.sliceCount} slices`);
+    if (src.isMosaic && src.volumes > 1) chips.push(`${src.volumes} volumes`);
     for (const c of chips) {
       const chip = document.createElement('span');
       chip.className = `chip ${/^(t1|color)$/.test(c) ? c : ''}`;
@@ -186,7 +190,9 @@ async function selectSource(id) {
   const src = S.sources.find((s) => s.id === id);
   if (!src) return;
   S.selectedId = id;
+  S.selectedSource = src;
   markSelected(id);
+  syncMosaicControls(src);
   const gen = ++loadGen;
   setStatus('Loading volume...');
   stopPlay();
@@ -196,7 +202,7 @@ async function selectSource(id) {
     if (src.kind === 'dicom-series') {
       const files = [];
       for (const rec of src.recs) files.push({ name: rec.name, buffer: await rec.file.arrayBuffer() });
-      volume = readDicomSeries(files);
+      volume = readDicomSeries(files, { mosaicReduce: $('mosaicReduce').value });
     } else if (src.kind === 'nifti') {
       volume = await readNifti(await src.recs[0].file.arrayBuffer(), src.label);
     } else if (src.kind === 'mgz') {
@@ -205,14 +211,26 @@ async function selectSource(id) {
     if (gen !== loadGen) return;
     S.volume = volume;
     S.volumeBase = baseName(src.label);
-    onVolumeLoaded();
+    onVolumeLoaded(gen);
     setStatus('');
   } catch (e) {
     if (gen === loadGen) setStatus(`Could not load: ${e.message}`, true);
   }
 }
 
-function onVolumeLoaded() {
+// The 4D control only makes sense for a mosaic series with more than one volume.
+function syncMosaicControls(src) {
+  const row = $('mosaicRow');
+  const on = !!(src && src.isMosaic && src.volumes > 1);
+  row.classList.toggle('hidden', !on);
+  if (on) {
+    $('mosaicNote').textContent =
+      `Siemens mosaic: ${src.volumes} volumes of ${src.mosaicSlices} slices. `
+      + 'Only the collapsed volume is held in memory.';
+  }
+}
+
+function onVolumeLoaded(gen = loadGen) {
   const vol = S.volume;
   S.dataNorm = vol.channels === 1 ? normalizeParams(vol) : null;
   S.colorNorm = null;
@@ -239,34 +257,47 @@ function onVolumeLoaded() {
   $('optionsPanel').classList.remove('hidden');
   $('resultPanel').classList.add('hidden');
 
-  loadIntoViewer(vol);
+  loadIntoViewer(vol, gen);
   probeAndSetFormats();
   refreshRange();
 }
 
 // ---- NiiVue viewer ----
-async function loadIntoViewer(vol) {
+// `gen` is the load token of the volume this call is for. NiiVue setup and volume
+// loading are async, so without it a slow earlier load could finish last and
+// leave the viewer, and the note under it, describing the wrong volume.
+async function loadIntoViewer(vol, gen = loadGen) {
   const note = $('nvNote');
   const notePrefix = vol.meta && vol.meta.note ? `${vol.meta.note}. ` : '';
+  // The histogram and window controls are hidden for color volumes, so do not
+  // point at them there. Set this now rather than after the await, so the note
+  // always describes the volume that is actually loaded.
+  const ready = vol.channels === 1
+    ? `${notePrefix}Set the window with the histogram below.`
+    : `${notePrefix}Color (RGB) volume. The intensity window does not apply; use "Normalize color channels" in Video options.`;
+  note.textContent = ready;
   try {
     if (!S.nv) {
       S.nv = new Niivue({ backColor: [0, 0, 0, 1], show3Dcrosshair: true, isColorbar: false });
       await S.nv.attachToCanvas($('nvCanvas'));
       window.addEventListener('resize', () => { try { S.nv.resizeListener(); } catch (_) { /* ignore */ } });
     }
+    if (gen !== loadGen) return;
     const buf = volumeToNifti(vol);
     if (S.nvUrl) { URL.revokeObjectURL(S.nvUrl); S.nvUrl = null; }
     const blob = new Blob([buf], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     S.nvUrl = url;
     await S.nv.loadVolumes([{ url, name: 'preview.nii' }]);
+    if (gen !== loadGen) { URL.revokeObjectURL(url); if (S.nvUrl === url) S.nvUrl = null; return; }
     try { S.nv.setSliceType(S.nv.sliceTypeMultiplanar); } catch (_) { /* ignore */ }
     try { S.nv.resizeListener(); } catch (_) { /* ignore */ }
     syncNvWindow();
-    note.textContent = `${notePrefix}Set the window with the histogram below.`;
     setTimeout(() => { if (S.nvUrl === url) { URL.revokeObjectURL(url); S.nvUrl = null; } }, 4000);
   } catch (e) {
-    note.textContent = `${notePrefix}3D viewer unavailable in this browser (no WebGL). Windowing and preview still work.`;
+    if (gen === loadGen) {
+      note.textContent = `${notePrefix}3D viewer unavailable in this browser (no WebGL). Windowing and preview still work.`;
+    }
   }
 }
 
@@ -290,23 +321,8 @@ function setWindowControlsVisible(show) {
 
 function computeHistogram(vol) {
   if (vol.channels !== 1) { S.hist = null; return; }
-  const mn = S.dataNorm.min;
-  const mx = S.dataNorm.max > mn ? S.dataNorm.max : mn + 1;
-  const nb = 128;
-  const bins = new Float64Array(nb);
-  const data = vol.data;
-  const n = data.length;
-  const step = Math.max(1, Math.floor(n / 300000));
-  const inv = nb / (mx - mn);
-  for (let i = 0; i < n; i += step) {
-    let b = Math.floor((data[i] - mn) * inv);
-    if (b < 0) b = 0; else if (b >= nb) b = nb - 1;
-    bins[b]++;
-  }
-  let peak = 0;
-  for (let i = 0; i < nb; i++) { bins[i] = Math.log1p(bins[i]); if (bins[i] > peak) peak = bins[i]; }
-  S.hist = { bins, nb, min: mn, max: mx, peak: peak || 1 };
-  S.win = { min: mn, max: mx, lo: mn, hi: mx };
+  S.hist = histogramBins(vol, { min: S.dataNorm.min, max: S.dataNorm.max });
+  S.win = { min: S.hist.min, max: S.hist.max, lo: S.hist.min, hi: S.hist.max };
 }
 
 const HIST_PAD = 6;
@@ -338,7 +354,8 @@ function drawHistogram() {
   const bw = (W - 2 * HIST_PAD) / nb;
   ctx.fillStyle = 'rgba(90,162,255,.35)';
   for (let i = 0; i < nb; i++) {
-    const h = (bins[i] / peak) * (plotH - 4);
+    // Bins above the percentile peak (the background spike) clip to full height.
+    const h = Math.min(1, bins[i] / peak) * (plotH - 4);
     ctx.fillRect(HIST_PAD + i * bw, plotH - h, Math.max(1, bw - 0.5), h);
   }
 
@@ -412,6 +429,8 @@ function currentOptions() {
     annotate: $('annotate').checked,
     format: $('format').value,
     colorNormalize: $('colorNormalize').checked,
+    upscale: Math.max(1, parseFloat($('upscale').value) || 1),
+    interpolation: $('interpolation').value || 'bilinear',
   };
 }
 
@@ -431,16 +450,37 @@ function currentNorm(vol, colorNormalize) {
   return null;
 }
 
-// Extract one frame with the current normalization, rotation, and stretch applied.
-function getFrame(vol, orientation, k, norm, colorNormalize) {
+// Extract one frame with the current normalization, rotation, stretch, and
+// upscale applied. The stretch (aspect correction) and the upscale are folded
+// into a single resample so the frame is only interpolated once.
+function getFrame(vol, orientation, k, norm, colorNormalize, opts = currentOptions()) {
   const geo = orientationGeometry(vol.dims, orientation);
   const frame0 = extractFrame(vol, orientation, k, norm, { colorNormalize });
   let { frame, fW, fH } = rotateFrame(frame0, geo.fW, geo.fH, vol.channels, S.rotate);
-  if (S.scaleX !== 1 || S.scaleY !== 1) {
-    const r = resizeFrame(frame, fW, fH, vol.channels, fW * S.scaleX, fH * S.scaleY);
+  const targetW = fW * S.scaleX * opts.upscale;
+  const targetH = fH * S.scaleY * opts.upscale;
+  if (Math.round(targetW) !== fW || Math.round(targetH) !== fH) {
+    const r = resizeFrame(frame, fW, fH, vol.channels, targetW, targetH, opts.interpolation);
     frame = r.frame; fW = r.fW; fH = r.fH;
   }
   return { frame, fW, fH, channels: vol.channels, sliceIndex: k };
+}
+
+// Report the encoded frame size for the current settings.
+function updateOutputSize() {
+  const el = $('outputSize');
+  if (!S.volume) { el.textContent = ''; return; }
+  const opts = currentOptions();
+  const geo = orientationGeometry(S.volume.dims, opts.orientation);
+  let w = geo.fW;
+  let h = geo.fH;
+  if (S.rotate % 2 === 1) { const t = w; w = h; h = t; }
+  const outW = Math.max(1, Math.round(w * S.scaleX * opts.upscale));
+  const outH = Math.max(1, Math.round(h * S.scaleY * opts.upscale));
+  const resampled = outW !== w || outH !== h;
+  el.textContent = resampled
+    ? `Output frames: ${outW}x${outH} (from ${w}x${h}, ${opts.interpolation}).`
+    : `Output frames: ${outW}x${outH}.`;
 }
 
 function resetStretch() {
@@ -457,6 +497,7 @@ function onStretch() {
   $('scaleXOut').textContent = `${S.scaleX.toFixed(2)}x`;
   $('scaleYOut').textContent = `${S.scaleY.toFixed(2)}x`;
   drawScrub();
+  updateOutputSize();
 }
 
 function refreshRange() {
@@ -475,6 +516,7 @@ function refreshRange() {
     setStatus('');
     drawScrub();
     syncReconButtons();
+    updateOutputSize();
   } catch (e) {
     $('generate').disabled = true;
     setStatus(e.message, true);
@@ -488,7 +530,7 @@ function drawScrub() {
   const geo = orientationGeometry(vol.dims, opts.orientation);
   const k = S.preview.sliceIndices[S.preview.idx];
   const norm = currentNorm(vol, opts.colorNormalize);
-  const f = getFrame(vol, opts.orientation, k, norm, opts.colorNormalize);
+  const f = getFrame(vol, opts.orientation, k, norm, opts.colorNormalize, opts);
   const canvas = $('scrubCanvas');
   canvas.width = f.fW;
   canvas.height = f.fH;
@@ -536,6 +578,7 @@ function cycleRotate() {
   S.rotate = (S.rotate + 1) % 4;
   $('rotateBtn').textContent = S.rotate ? `Rotate 90° (${S.rotate * 90}°)` : 'Rotate 90°';
   drawScrub();
+  updateOutputSize();
 }
 function openPreview() {
   if (!S.volume) return;
@@ -559,7 +602,7 @@ async function generate() {
 
   const norm = currentNorm(vol, opts.colorNormalize);
   const total = geo.nFrames;
-  const frameProvider = (i) => getFrame(vol, opts.orientation, sliceIndices[i], norm, opts.colorNormalize);
+  const frameProvider = (i) => getFrame(vol, opts.orientation, sliceIndices[i], norm, opts.colorNormalize, opts);
 
   S.running = true;
   S.stopFlag = false;
@@ -615,7 +658,10 @@ const TOUR = [
   { sel: '#viewerCard', title: '3. Window the volume', body:
     'The viewer shows the loaded volume. Drag the two handles on the <b>histogram</b> to set the intensity window; it maps to 0-255 in the output. <b>Reset windowing</b> returns to the full range.' },
   { sel: '#optionsPanel', title: '4. Set options', body:
-    'Choose the <b>orientation</b>, <b>frames per second</b>, <b>slice range</b>, output <b>format</b>, and whether to overlay slice numbers.' },
+    'Choose the <b>orientation</b>, <b>frames per second</b>, <b>slice range</b>, output <b>format</b>, and whether to overlay slice numbers. '
+    + '<b>Upscale</b> enlarges the frames before encoding, which helps low-resolution scans such as EPI and B1 maps; pick the <b>interpolation</b> to suit '
+    + '(nearest keeps hard voxel edges, Lanczos is sharpest). For a Siemens mosaic run (fMRI or diffusion) a <b>4D series</b> control appears, choosing whether '
+    + 'the video uses the first volume, the mean, or a maximum intensity projection.' },
   { sel: '#previewBtn', title: '5. Preview and reconstruct', body:
     'Open <b>Preview</b> to see the actual frames, choose the reconstruction (<b>axial, sagittal, coronal</b>, flip), and <b>Rotate</b> the frames upright.' },
   { sel: '#generate', title: '6. Generate and download', body:
@@ -685,6 +731,14 @@ function init() {
   }
   $('annotate').addEventListener('change', drawScrub);
   $('colorNormalize').addEventListener('change', () => { S.colorNorm = null; drawScrub(); });
+
+  for (const id of ['upscale', 'interpolation']) {
+    $(id).addEventListener('change', () => { drawScrub(); updateOutputSize(); });
+  }
+  // Changing the 4D reduction changes the volume itself, so re-read the series.
+  $('mosaicReduce').addEventListener('change', () => {
+    if (S.selectedId) selectSource(S.selectedId);
+  });
 
   // Histogram windowing.
   $('hist').addEventListener('pointerdown', histPointerDown);

@@ -19,7 +19,9 @@ const TS_EXPLICIT_BE = '1.2.840.10008.1.2.2';
 const T = {
   TransferSyntaxUID: 0x00020010,
   SOPClassUID: 0x00080016,
+  ImageType: 0x00080008,
   SeriesDescription: 0x0008103e,
+  SliceThickness: 0x00180050,
   RepetitionTime: 0x00180080,
   EchoTime: 0x00180081,
   InversionTime: 0x00180082,
@@ -34,10 +36,13 @@ const T = {
   FrameContentSequence: 0x00209111,
   PlanePositionSequence: 0x00209113,
   PlaneOrientationSequence: 0x00209116,
+  // Siemens private: how many real slices are tiled into one mosaic frame.
+  NumberOfImagesInMosaic: 0x0019100a,
   SamplesPerPixel: 0x00280002,
   PhotometricInterpretation: 0x00280004,
   PlanarConfiguration: 0x00280006,
   NumberOfFrames: 0x00280008,
+  PixelSpacing: 0x00280030,
   Rows: 0x00280010,
   Columns: 0x00280011,
   BitsAllocated: 0x00280100,
@@ -62,6 +67,8 @@ const NUM_VR = new Set(['US', 'SS', 'UL', 'SL', 'FL', 'FD', 'AT', 'OW', 'OB', 'O
 // Minimal VR dictionary used only for Implicit VR decoding.
 const IMPLICIT_VR = new Map([
   [T.TransferSyntaxUID, 'UI'], [T.SOPClassUID, 'UI'], [T.SeriesDescription, 'LO'],
+  [T.ImageType, 'CS'], [T.SliceThickness, 'DS'], [T.PixelSpacing, 'DS'],
+  [T.NumberOfImagesInMosaic, 'US'],
   [T.RepetitionTime, 'DS'], [T.EchoTime, 'DS'], [T.InversionTime, 'DS'],
   [T.MRAcquisitionType, 'CS'], [T.FlipAngle, 'DS'],
   [T.StudyInstanceUID, 'UI'], [T.SeriesInstanceUID, 'UI'],
@@ -487,13 +494,149 @@ function sortSlices(slices) {
   return slices;
 }
 
+// ---- Siemens mosaic ----
+//
+// An EPI series (fMRI, DWI) is often exported with every slice of one volume
+// tiled into a single large square frame. One file is then a whole 3D volume and
+// a run of files is 4D (timepoints or diffusion directions). Treating each file
+// as a slice, as a plain series read would, gives a video of tiled grids and a
+// volume large enough to exhaust the tab's memory.
+//
+// The tiles are laid out row-major in spatial slice order on a ceil(sqrt(n)) grid,
+// with the unused trailing cells zero-filled.
+export function mosaicInfo(map) {
+  const imageType = elString(map, T.ImageType, '') || '';
+  if (!/(^|\\)MOSAIC(\\|$)/i.test(imageType)) return null;
+  const n = elNumber(map, T.NumberOfImagesInMosaic, null);
+  if (!n || !Number.isFinite(n) || n < 2) return null;
+  if (elNumber(map, T.SamplesPerPixel, 1) !== 1) return null;
+  const rows = elNumber(map, T.Rows);
+  const cols = elNumber(map, T.Columns);
+  const grid = Math.ceil(Math.sqrt(n));
+  if (!rows || !cols || rows % grid !== 0 || cols % grid !== 0) return null;
+  return { n, grid, tileH: rows / grid, tileW: cols / grid, rows, cols };
+}
+
+// How a run of mosaic files (a 4D series) is collapsed to one 3D volume.
+export const MOSAIC_REDUCTIONS = ['first', 'mean', 'max'];
+
+// Read a mosaic series. Only one volume's worth of samples is ever held, so a
+// 620-timepoint fMRI run costs the same memory as a single volume.
+function readMosaicSeries(ordered, reduce) {
+  const firstParsed = parseDicom(ordered[0].buffer);
+  const info = mosaicInfo(firstParsed.map);
+  const { n: nSlices, grid, tileH, tileW, rows, cols } = info;
+
+  const use = reduce === 'first' ? [ordered[0]] : ordered;
+  const nVox = tileH * tileW * nSlices;
+  const acc = new Float32Array(nVox);
+  if (reduce === 'max') acc.fill(-Infinity);
+
+  let used = 0;
+  for (let fi = 0; fi < use.length; fi++) {
+    const parsed = fi === 0 ? firstParsed : parseDicom(use[fi].buffer);
+    const m = parsed.map;
+    // Every file in the series must share the mosaic geometry; skip strays
+    // rather than corrupting the accumulator.
+    const gi = mosaicInfo(m);
+    if (!gi || gi.n !== nSlices || gi.rows !== rows || gi.cols !== cols) continue;
+
+    const bitsAllocated = elNumber(m, T.BitsAllocated, 16);
+    const pixelRep = elNumber(m, T.PixelRepresentation, 0);
+    const slope = readNumberSafe(elNumber(m, T.RescaleSlope, 1.0), 1.0);
+    const intercept = readNumberSafe(elNumber(m, T.RescaleIntercept, 0.0), 0.0);
+    const px = decodeFramePixels(
+      { view: parsed.view, bytes: parsed.bytes, map: m },
+      rows, cols, 1, bitsAllocated, pixelRep, 0, 0,
+    );
+
+    for (let s = 0; s < nSlices; s++) {
+      const tr = Math.floor(s / grid) * tileH;
+      const tc = (s % grid) * tileW;
+      for (let y = 0; y < tileH; y++) {
+        const srcRow = (tr + y) * cols + tc;
+        const dstRow = y * tileW;
+        for (let x = 0; x < tileW; x++) {
+          const v = px[srcRow + x] * slope + intercept;
+          const di = (dstRow + x) * nSlices + s;
+          if (reduce === 'max') { if (v > acc[di]) acc[di] = v; }
+          else if (reduce === 'mean') acc[di] += v;
+          else acc[di] = v;
+        }
+      }
+    }
+    used++;
+  }
+
+  if (!used) throw new DicomError('No readable mosaic frames in this series');
+  if (reduce === 'mean' && used > 1) {
+    for (let i = 0; i < nVox; i++) acc[i] /= used;
+  }
+  if (reduce === 'max') {
+    for (let i = 0; i < nVox; i++) if (acc[i] === -Infinity) acc[i] = 0;
+  }
+
+  const total = ordered.length;
+  let note = `Siemens mosaic: split into ${nSlices} slices`;
+  if (total > 1) {
+    const what = reduce === 'first' ? `first of ${total}`
+      : reduce === 'mean' ? `mean across ${used} of ${total}`
+        : `maximum intensity across ${used} of ${total}`;
+    note = `Siemens mosaic: ${nSlices} slices per volume, ${what} volumes`;
+  }
+
+  return makeVolume({
+    dims: [tileH, tileW, nSlices],
+    channels: 1,
+    data: acc,
+    affine: mosaicAffine(firstParsed.map, nSlices),
+    photometric: 'MONOCHROME2',
+    meta: {
+      source: 'dicom',
+      rows: tileH, cols: tileW, slices: nSlices,
+      mosaic: { nSlices, volumes: ordered.length, used, reduce },
+      note,
+    },
+  });
+}
+
+// A voxel-size-only affine for the preview. The mosaic ImagePositionPatient
+// refers to the corner of the tiled frame, not the first slice, and recovering
+// the true slice geometry needs the Siemens CSA header, so do not pretend to
+// know the orientation here.
+function mosaicAffine(map, nSlices) {
+  const ps = elNumbers(map, T.PixelSpacing) || [1, 1];
+  const th = readNumberSafe(elNumber(map, T.SliceThickness, 1), 1) || 1;
+  const dr = Number.isFinite(ps[0]) && ps[0] > 0 ? ps[0] : 1;
+  const dc = Number.isFinite(ps[1]) && ps[1] > 0 ? ps[1] : 1;
+  return Float64Array.from([
+    dr, 0, 0, 0,
+    0, dc, 0, 0,
+    0, 0, th, 0,
+    0, 0, 0, 1,
+  ]);
+}
+
 // Read a set of DICOM files (one series) into a canonical Volume.
 // `files` is an array of { name, buffer (ArrayBuffer) }.
-export function readDicomSeries(files) {
+// `mosaicReduce` picks how a 4D Siemens mosaic run is collapsed to one volume.
+export function readDicomSeries(files, { mosaicReduce = 'first' } = {}) {
   if (!files || files.length === 0) throw new DicomError('No DICOM files provided');
 
   // Reference reads files in sorted-filename order before the geometry sort.
   const ordered = [...files].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+
+  // Mosaic series need de-tiling before anything else; one file is a volume.
+  try {
+    const probe = parseDicom(ordered[0].buffer, { headerOnly: true });
+    if (mosaicInfo(probe.map)) {
+      const reduce = MOSAIC_REDUCTIONS.includes(mosaicReduce) ? mosaicReduce : 'first';
+      return readMosaicSeries(ordered, reduce);
+    }
+  } catch (e) {
+    if (e instanceof DicomError) throw e;
+    // Fall through to the ordinary series path on any probe failure.
+  }
 
   let allSlices = [];
   let anyMultiframe = false;
@@ -526,7 +669,7 @@ export function readDicomSeries(files) {
 
   if (!isColor) {
     // Grayscale: apply per-slice rescale to real float32 values in [rows, cols, slices].
-    const data = new Float32Array(rows * cols * N);
+    const data = allocate(Float32Array, rows * cols * N, rows, cols, N, 4);
     for (let s = 0; s < N; s++) {
       const sl = allSlices[s];
       const px = sl.pixels;
@@ -543,7 +686,7 @@ export function readDicomSeries(files) {
   }
 
   // Color: interleaved RGB uint8 in [rows, cols, slices] with 3 channels.
-  const data = new Uint8Array(rows * cols * N * 3);
+  const data = allocate(Uint8Array, rows * cols * N * 3, rows, cols, N, 3);
   for (let s = 0; s < N; s++) {
     const px = allSlices[s].pixels;
     let p = 0;
@@ -557,6 +700,21 @@ export function readDicomSeries(files) {
     }
   }
   return buildVolume(data, 3, rows, cols, N, 'RGB', first, allSlices);
+}
+
+// Allocate the volume buffer, turning an out-of-memory failure into an error that
+// says how big the series is and what to do about it. A long EPI run can easily
+// ask for more than a tab will give.
+function allocate(Ctor, length, rows, cols, N, bytesPerVoxel) {
+  try {
+    return new Ctor(length);
+  } catch (e) {
+    const gb = (rows * cols * N * bytesPerVoxel) / (1024 ** 3);
+    throw new DicomError(
+      `This series is too large to hold in the browser (${rows}x${cols}x${N} needs about ${gb.toFixed(1)} GB). `
+      + 'Load a subset of the files, or use a series with fewer or smaller slices.',
+    );
+  }
 }
 
 function buildVolume(data, channels, rows, cols, N, photometric, first, slices) {
@@ -607,8 +765,10 @@ function affineFromSlices(first, slices) {
 export function readDicomHeader(buffer, name) {
   const parsed = parseDicom(buffer, { headerOnly: true });
   const { map } = parsed;
+  const mosaic = mosaicInfo(map);
   return {
     name,
+    mosaicSlices: mosaic ? mosaic.n : 0,
     seriesInstanceUID: elString(map, T.SeriesInstanceUID, ''),
     studyInstanceUID: elString(map, T.StudyInstanceUID, ''),
     seriesNumber: elNumber(map, T.SeriesNumber, null),

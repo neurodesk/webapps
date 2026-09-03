@@ -14,7 +14,7 @@ const KEYWORDS = {
   t1: /(\bt1\b|t1w|mprage|mp2rage|mp[_ ]?rage|\btfl\b|bravo|spgr|fspgr|flash3d|t1[_ ]?vibe|vibe)/i,
 };
 
-const LABELS = ['t1', 't2', 'flair', 'dwi', 'color', 'localizer', 'other'];
+const LABELS = ['t1', 't2', 'flair', 'dwi', 'fmri', 'color', 'localizer', 'other'];
 
 function num(v) {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -39,6 +39,14 @@ export function classifySeries(series) {
   const kw = {};
   for (const [label, re] of Object.entries(KEYWORDS)) {
     if (re.test(desc)) { kw[label] = true; reasons.push(`description matches ${label}`); }
+  }
+
+  // A Siemens mosaic export is an EPI run: diffusion when the description says
+  // so, otherwise a functional time series. Either way it is not the structural
+  // scan, whatever the short TR and TE would otherwise suggest.
+  if (series.isMosaic) {
+    reasons.push('Siemens mosaic (EPI time series)');
+    return { label: kw.dwi ? 'dwi' : 'fmri', confidence: 0.9, reasons };
   }
 
   // Physics votes (secondary), only when tags are present.
@@ -68,7 +76,7 @@ export function classifySeries(series) {
 // Higher pickScore = more likely to be the default structural pick.
 function pickScore(series, classification) {
   let score = 0;
-  const labelBonus = { t1: 100, t2: 60, flair: 55, other: 30, dwi: 20, color: 15, localizer: 0 };
+  const labelBonus = { t1: 100, t2: 60, flair: 55, other: 30, dwi: 20, color: 15, fmri: 10, localizer: 0 };
   score += labelBonus[classification.label] ?? 0;
   score += classification.confidence * 20;
   if (/3D/i.test(series.physics.mrAcquisitionType || '')) score += 15;
@@ -93,6 +101,10 @@ export function groupSeries(headers) {
         sliceCount: 0,
         isColor: (h.samplesPerPixel === 3) || /RGB|YBR/i.test(h.photometric || ''),
         isMultiframe: (h.numberOfFrames || 1) > 1,
+        // Siemens mosaic: each file is a whole volume, not a slice.
+        isMosaic: (h.mosaicSlices || 0) > 0,
+        mosaicSlices: h.mosaicSlices || 0,
+        volumes: 0,
         rows: h.rows,
         cols: h.cols,
         physics: {
@@ -106,7 +118,11 @@ export function groupSeries(headers) {
     }
     const s = byUid.get(uid);
     s.files.push(h.name);
-    s.sliceCount += (h.numberOfFrames || 1);
+    s.volumes += 1;
+    // For a mosaic series the slice count is per volume and constant, so it is
+    // taken from the tile count rather than summed over files.
+    if (s.isMosaic) s.sliceCount = s.mosaicSlices;
+    else s.sliceCount += (h.numberOfFrames || 1);
   }
 
   const series = [...byUid.values()].map((s) => {

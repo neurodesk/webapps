@@ -23,13 +23,31 @@ class Slice:
                 setattr(self, k, v)
 
 
+def is_color(ds):
+    """
+    True when a dataset holds RGB (or similar) pixels rather than grayscale.
+    """
+    return int(getattr(ds, "SamplesPerPixel", 1)) == 3
+
+
+def is_multiframe(ds):
+    """
+    True when a dataset holds genuine 3D (multiframe) pixel data.
+
+    A color slice such as a color-FA DWI map is (rows, cols, 3): the trailing
+    axis is the RGB channel, not a slice axis, so ndim alone cannot decide this.
+    """
+    ndim = ds.pixel_array.ndim
+    return ndim == 4 or (ndim == 3 and not is_color(ds))
+
+
 def convert_to_2d(dcm):
     """
     Convert 3D DICOM to a list of 2D slices, preserving metadata for each slice if available
     """
     pixel_array = dcm.pixel_array
-    if pixel_array.ndim == 2:
-        raise ValueError("DICOM pixel array is already 2D.")
+    if not is_multiframe(dcm):
+        raise ValueError("DICOM pixel array is already a single frame.")
 
     # Determine which axis corresponds to the slices to iterate over.
     n_slices = dcm.NumberOfFrames
@@ -107,8 +125,8 @@ def load_and_sort_dicoms(folder_path):
         raise RuntimeError("No readable DICOMs found")
 
     # Handle 3D DICOMs. If there are multiple 3D DICOMs they cannot be
-    # processed as one.
-    if any(ds.pixel_array.ndim == 3 for ds in datasets):
+    # processed as one. Color slices are (rows, cols, 3) and are not 3D here.
+    if any(is_multiframe(ds) for ds in datasets):
         if len(datasets) > 1:
             raise TypeError("Multiple DICOMs contain 3D pixel data")
 
@@ -140,14 +158,18 @@ def load_and_sort_dicoms(folder_path):
 def get_orientation_slice(view, volume):
     orientation = view.lower()
 
+    # A color volume carries a trailing RGB axis. It must ride along unchanged,
+    # so every transpose keeps any axis past the first three where it is.
+    extra = tuple(range(3, volume.ndim))
+
     if orientation == "sagittal":
-        return np.transpose(volume, (2, 0, 1))
+        return np.transpose(volume, (2, 0, 1) + extra)
     if orientation == "coronal":
         return np.moveaxis(volume, 1, 0)
     if orientation == "axial":
         return volume
     if orientation == "sagittal_flipped":
-        return np.flip(np.transpose(volume, (2, 0, 1)), axis=1)
+        return np.flip(np.transpose(volume, (2, 0, 1) + extra), axis=1)
     if orientation == "coronal_flipped":
         return np.flip(np.moveaxis(volume, 1, 0), axis=1)
     if orientation == "axial_flipped":
@@ -170,6 +192,7 @@ def process_dicom_files(
 
     base_array = datasets[0].pixel_array
     base_shape = base_array.shape
+    color = base_array.ndim == 3 and base_shape[-1] == 3
 
     frames = []
     for idx, ds in enumerate(datasets):
@@ -194,12 +217,21 @@ def process_dicom_files(
 
         frames.append(array.astype(np.float32) * slope + intercept)
 
-    volume = np.stack(frames, axis=-1)
+    # axis=2 puts the slice axis after (rows, cols) for both grayscale (rows,
+    # cols, slices) and color (rows, cols, slices, 3) stacks. For grayscale this
+    # is identical to the axis=-1 stack it replaces.
+    volume = np.stack(frames, axis=2)
 
-    volume = cv2.normalize(volume, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    if color:
+        # Color input (for example a color-FA map) is already display-ready
+        # 8-bit RGB. Rescaling it per volume would change the direction colors,
+        # so pass it through instead of normalizing.
+        volume = np.clip(volume, 0, 255).astype(np.uint8)
+    else:
+        volume = cv2.normalize(volume, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
     oriented_full = get_orientation_slice(orientation, volume)
-    if oriented_full.ndim != 3:
+    if oriented_full.ndim != (4 if color else 3):
         raise ValueError("Unexpected orientation result; expected 3D array")
 
     total_slices = oriented_full.shape[0]
@@ -240,9 +272,11 @@ def process_dicom_files(
     if output_dir and not os.path.isdir(output_dir):
         os.makedirs(output_dir, exist_ok=True)
 
-    writer = cv2.VideoWriter(output_file, codec, fps, (width_px, height), isColor=False)
+    writer = cv2.VideoWriter(output_file, codec, fps, (width_px, height), isColor=color)
     if not writer.isOpened():
         raise RuntimeError(f"Could not open video writer for {output_file}")
+
+    text_color = (255, 255, 255) if color else 255
 
     try:
         for frame_idx, slice_idx in enumerate(slice_indices):
@@ -256,13 +290,17 @@ def process_dicom_files(
                     (10, height - 10),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.5,
-                    255,
+                    text_color,
                     1,
                     cv2.LINE_AA,
                 )
                 frame_to_write = annotated
             else:
                 frame_to_write = frame
+
+            if color:
+                # OpenCV writes BGR; the DICOM samples are RGB.
+                frame_to_write = frame_to_write[..., ::-1]
 
             writer.write(np.ascontiguousarray(frame_to_write))
     finally:

@@ -179,6 +179,48 @@ export function colorNormalizeParams(vol) {
   };
 }
 
+// Intensity histogram for the windowing control, as bar heights in [0, 1].
+//
+// Bar heights are the square root of the counts, normalized to a high percentile
+// rather than to the tallest bin. A medical image is mostly air, so the
+// background bin routinely holds a couple of hundred times more voxels than any
+// tissue bin. Scaling to it (or compressing the counts with log, which lifts
+// every small bin toward the top) flattens the tissue detail into a solid block.
+// Taking a high percentile instead lets the background spike clip off the top and
+// leaves the tissue peaks legible.
+//
+// Large volumes are subsampled with a fixed stride: the shape of the
+// distribution is what matters here, not exact counts.
+export function histogramBins(vol, { min, max, nBins = 128, maxSamples = 300000, percentile = 0.99 } = {}) {
+  const nb = Math.max(1, nBins);
+  const mn = min;
+  const mx = max > mn ? max : mn + 1;
+  const bins = new Float64Array(nb);
+  const data = vol.data;
+  const n = data.length;
+  const step = Math.max(1, Math.floor(n / maxSamples));
+  const inv = nb / (mx - mn);
+
+  for (let i = 0; i < n; i += step) {
+    let b = Math.floor((data[i] - mn) * inv);
+    if (b < 0) b = 0; else if (b >= nb) b = nb - 1;
+    bins[b]++;
+  }
+
+  for (let i = 0; i < nb; i++) bins[i] = Math.sqrt(bins[i]);
+
+  // Take the percentile over the occupied bins only. A volume with few distinct
+  // values (a mask, a label map) leaves most bins empty, and including those
+  // would drag the percentile down to zero and clip every real bar to full
+  // height.
+  const occupied = Array.from(bins).filter((b) => b > 0).sort((a, b) => a - b);
+  const peak = occupied.length
+    ? occupied[Math.floor((occupied.length - 1) * percentile)] || occupied[occupied.length - 1]
+    : 1;
+
+  return { bins, nb, min: mn, max: mx, peak: peak || 1 };
+}
+
 // Rotate a frame clockwise by q quarter-turns (0..3). Returns { frame, fW, fH }.
 // The reference orientations are pure array ops, so some views come out on their
 // side; this lets the user set the output upright without changing parity.
@@ -204,12 +246,106 @@ export function rotateFrame(frame, fW, fH, channels, q) {
   return { frame: src, fW: w, fH: h };
 }
 
-// Bilinear resize of a frame to (newW, newH). Used by the preview stretch/shrink
-// tool to correct or adjust the aspect ratio; applied to the encoded frames too.
-export function resizeFrame(frame, fW, fH, channels, newW, newH) {
+// ---- interpolation ----
+// Resampling kernels used by resizeFrame. Each returns a weight for a sample at
+// distance t (in source pixels) from the target position.
+
+// Catmull-Rom cubic (a = -0.5): sharper than bilinear, no ringing worth worrying
+// about at the upsample factors offered here.
+function cubicWeight(t) {
+  const a = -0.5;
+  const x = Math.abs(t);
+  if (x < 1) return ((a + 2) * x - (a + 3)) * x * x + 1;
+  if (x < 2) return ((a * x - 5 * a) * x + 8 * a) * x - 4 * a;
+  return 0;
+}
+
+// Lanczos with a = 3. Sharpest of the three, at the cost of mild overshoot.
+function lanczosWeight(t) {
+  const x = Math.abs(t);
+  if (x < 1e-8) return 1;
+  if (x >= 3) return 0;
+  const px = Math.PI * x;
+  return (3 * Math.sin(px) * Math.sin(px / 3)) / (px * px);
+}
+
+export const INTERPOLATIONS = ['nearest', 'bilinear', 'bicubic', 'lanczos'];
+
+// Half-width of the kernel support, in source pixels, for the separable filters.
+const SUPPORT = { bicubic: 2, lanczos: 3 };
+const KERNEL = { bicubic: cubicWeight, lanczos: lanczosWeight };
+
+// Precompute, for one output axis, the source indices and weights of every
+// output sample. Separable resampling: do this once per axis instead of per
+// pixel. `scale` is srcLen / dstLen.
+function axisTaps(srcLen, dstLen, method) {
+  const scale = srcLen / dstLen;
+  const kernel = KERNEL[method];
+  const support = SUPPORT[method];
+  // When downsampling, widen the kernel so it averages the pixels being merged
+  // instead of point-sampling them (this is what keeps a shrink from aliasing).
+  const filterScale = Math.max(1, scale);
+  const radius = support * filterScale;
+  const taps = Math.max(1, Math.ceil(radius) * 2);
+
+  const idx = new Int32Array(dstLen * taps);
+  const wts = new Float32Array(dstLen * taps);
+
+  for (let d = 0; d < dstLen; d++) {
+    const center = (d + 0.5) * scale - 0.5;
+    const left = Math.ceil(center - radius);
+    let sum = 0;
+    const base = d * taps;
+    for (let t = 0; t < taps; t++) {
+      let s = left + t;
+      const w = kernel((s - center) / filterScale);
+      // Clamp to the edge so border pixels extend rather than fade to black.
+      if (s < 0) s = 0; else if (s > srcLen - 1) s = srcLen - 1;
+      idx[base + t] = s;
+      wts[base + t] = w;
+      sum += w;
+    }
+    if (sum !== 0) {
+      for (let t = 0; t < taps; t++) wts[base + t] /= sum;
+    }
+  }
+  return { idx, wts, taps };
+}
+
+// Resize a frame to (newW, newH) with the chosen interpolation. Used both by the
+// preview stretch tool (aspect correction) and by the upscale option; the encoded
+// frames go through the same path, so what you preview is what you get.
+export function resizeFrame(frame, fW, fH, channels, newW, newH, method = 'bilinear') {
   newW = Math.max(1, Math.round(newW));
   newH = Math.max(1, Math.round(newH));
   if (newW === fW && newH === fH) return { frame, fW, fH };
+
+  if (method === 'nearest') return resizeNearest(frame, fW, fH, channels, newW, newH);
+  if (method === 'bicubic' || method === 'lanczos') {
+    return resizeSeparable(frame, fW, fH, channels, newW, newH, method);
+  }
+  return resizeBilinear(frame, fW, fH, channels, newW, newH);
+}
+
+function resizeNearest(frame, fW, fH, channels, newW, newH) {
+  const out = new Uint8ClampedArray(newW * newH * channels);
+  const sx = fW / newW;
+  const sy = fH / newH;
+  for (let y = 0; y < newH; y++) {
+    let syi = Math.floor((y + 0.5) * sy);
+    if (syi < 0) syi = 0; else if (syi > fH - 1) syi = fH - 1;
+    for (let x = 0; x < newW; x++) {
+      let sxi = Math.floor((x + 0.5) * sx);
+      if (sxi < 0) sxi = 0; else if (sxi > fW - 1) sxi = fW - 1;
+      const si = (syi * fW + sxi) * channels;
+      const o = (y * newW + x) * channels;
+      for (let c = 0; c < channels; c++) out[o + c] = frame[si + c];
+    }
+  }
+  return { frame: out, fW: newW, fH: newH };
+}
+
+function resizeBilinear(frame, fW, fH, channels, newW, newH) {
   const out = new Uint8ClampedArray(newW * newH * channels);
   const sx = fW / newW;
   const sy = fH / newH;
@@ -234,6 +370,42 @@ export function resizeFrame(frame, fW, fH, channels, newW, newH) {
         const top = frame[i00 + c] * (1 - wx) + frame[i01 + c] * wx;
         const bot = frame[i10 + c] * (1 - wx) + frame[i11 + c] * wx;
         out[o + c] = top * (1 - wy) + bot * wy;
+      }
+    }
+  }
+  return { frame: out, fW: newW, fH: newH };
+}
+
+// Two-pass separable resample (horizontal, then vertical) for the wider kernels.
+// The intermediate stays in Float32 so rounding happens once, at the end.
+function resizeSeparable(frame, fW, fH, channels, newW, newH, method) {
+  const xt = axisTaps(fW, newW, method);
+  const tmp = new Float32Array(newW * fH * channels);
+  for (let y = 0; y < fH; y++) {
+    const rowIn = y * fW * channels;
+    const rowOut = y * newW * channels;
+    for (let x = 0; x < newW; x++) {
+      const base = x * xt.taps;
+      const o = rowOut + x * channels;
+      for (let c = 0; c < channels; c++) {
+        let acc = 0;
+        for (let t = 0; t < xt.taps; t++) acc += frame[rowIn + xt.idx[base + t] * channels + c] * xt.wts[base + t];
+        tmp[o + c] = acc;
+      }
+    }
+  }
+
+  const yt = axisTaps(fH, newH, method);
+  const out = new Uint8ClampedArray(newW * newH * channels);
+  for (let y = 0; y < newH; y++) {
+    const base = y * yt.taps;
+    const rowOut = y * newW * channels;
+    for (let x = 0; x < newW; x++) {
+      const o = rowOut + x * channels;
+      for (let c = 0; c < channels; c++) {
+        let acc = 0;
+        for (let t = 0; t < yt.taps; t++) acc += tmp[(yt.idx[base + t] * newW + x) * channels + c] * yt.wts[base + t];
+        out[o + c] = acc;
       }
     }
   }

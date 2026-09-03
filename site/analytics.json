@@ -93,7 +93,7 @@
     {
       "id": "dicom2vid",
       "path": "dicom2vid",
-      "title": "DICOM2Vid",
+      "title": "MRI2VID",
       "users": 0,
       "pageViews": 0,
       "countries": []

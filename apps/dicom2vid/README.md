@@ -1,4 +1,4 @@
-# MRI2Vid
+# MRI2VID
 
 Turn a stack of medical images into a scrolling video (MP4 or WebM) by stepping
 through the slices. There are two ways to use it: a browser tool that runs fully
@@ -23,6 +23,14 @@ and encodes the video in the page.
   (JPEG/JPEG2000) is not supported; convert it to uncompressed locally first.
 - A whole DICOM directory is grouped by series; the most likely structural scan
   (a T1w, for example) is selected first, and you can pick any other series.
+- Siemens mosaic EPI (fMRI and diffusion) is split back into real slices. Each
+  mosaic file is a whole volume, so a run of them is 4D; pick whether to use the
+  first volume, the mean, or a maximum intensity projection across volumes. Only
+  the collapsed volume is held in memory, so a long fMRI run costs the same as a
+  single volume.
+- Upscale resamples the frames before encoding, with nearest, bilinear, bicubic,
+  or Lanczos interpolation. Low-resolution scans (EPI, B1 maps) read much better
+  enlarged. It interpolates, it does not add detail.
 - The right panel shows the volume in a NiiVue viewer for windowing, and the
   actual output frames in a scrubber so you see exactly what the video contains.
 - Video is encoded with WebCodecs (H.264 in MP4, or VP9 in WebM) where available,
@@ -34,7 +42,9 @@ is checked against the Python reference frame-for-frame (see Development).
 
 ## Command-line tool
 
-The original script renders one DICOM folder to an MP4.
+The original script renders one DICOM folder to an MP4. Grayscale input gives a
+grayscale video; RGB input (a color-FA map, for example) gives a color video with
+the original colors preserved.
 
 ```
 python MRI2vid.py --folder <path_to_dicom_folder> --output out.mp4 --orientation sagittal

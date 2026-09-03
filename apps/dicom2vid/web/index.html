@@ -8,7 +8,7 @@
        page-view analytics. GitHub Pages cannot set headers, so this meta CSP is
        the only layer (no 'unsafe-inline' for scripts). -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.googletagmanager.com; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https://*.google-analytics.com https://*.googletagmanager.com; media-src 'self' blob:; connect-src 'self' blob: https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; worker-src 'self' blob:; object-src 'none'; base-uri 'none'">
-  <title>MRI2Vid</title>
+  <title>MRI2VID</title>
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -16,7 +16,7 @@
     <div class="head-in">
       <div class="mark"><span>▶</span></div>
       <div>
-        <h1>MRI<span class="g">2Vid</span></h1>
+        <h1>MRI<span class="g">2VID</span></h1>
         <div class="tag">Turn a DICOM, NIfTI, or MGZ volume into a scrolling video, entirely in your browser.</div>
       </div>
       <span class="badge" title="Your images and all processing stay in this browser tab and are never uploaded. Only anonymous usage stats (page views) are collected.">Your images never leave your browser</span>
@@ -89,6 +89,44 @@
               <option value="webm">WebM (VP9)</option>
             </select>
           </label>
+          <label>Upscale
+            <span class="i" tabindex="0" role="button" aria-label="info about upscale"
+              data-tip="Resample every frame to a larger size before encoding. Low-resolution scans (EPI, B1 maps) look much better upscaled. It adds no detail, it just interpolates.">i</span>
+            <select id="upscale">
+              <option value="1">1x (original)</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2x</option>
+              <option value="3">3x</option>
+              <option value="4">4x</option>
+              <option value="6">6x</option>
+              <option value="8">8x</option>
+            </select>
+          </label>
+          <label>Interpolation
+            <span class="i" tabindex="0" role="button" aria-label="info about interpolation"
+              data-tip="How new pixels are filled in. Nearest keeps hard voxel edges, bilinear is smooth, bicubic is sharper, Lanczos is sharpest. Applies to upscaling and to the Stretch tool.">i</span>
+            <select id="interpolation">
+              <option value="bilinear">Bilinear (smooth)</option>
+              <option value="nearest">Nearest (blocky)</option>
+              <option value="bicubic">Bicubic (sharper)</option>
+              <option value="lanczos">Lanczos (sharpest)</option>
+            </select>
+          </label>
+        </div>
+
+        <p id="outputSize" class="small note"></p>
+
+        <div id="mosaicRow" class="hidden">
+          <label>4D series
+            <span class="i" tabindex="0" role="button" aria-label="info about 4D handling"
+              data-tip="This series is a Siemens mosaic: each file is a whole volume, so the run is 4D (fMRI timepoints or diffusion directions). Pick how the volumes are collapsed into the one 3D volume the video scrolls through.">i</span>
+            <select id="mosaicReduce">
+              <option value="first">First volume</option>
+              <option value="mean">Mean across volumes</option>
+              <option value="max">Maximum intensity across volumes</option>
+            </select>
+          </label>
+          <p id="mosaicNote" class="small note"></p>
         </div>
 
         <label class="check"><input id="annotate" type="checkbox"> Overlay slice numbers

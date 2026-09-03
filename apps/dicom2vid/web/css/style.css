@@ -114,6 +114,12 @@ label.check input { width: auto; }
 label.check.inline { margin: 0; }
 .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
 
+/* Frame size readout and the 4D (mosaic) control, both below the options grid. */
+#outputSize { margin: 10px 0 0; }
+#mosaicRow { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+#mosaicRow.hidden { display: none; }
+#mosaicNote { margin: 6px 0 0; }
+
 .progress { height: 8px; background: var(--panel2); border-radius: 999px; overflow: hidden; margin-top: 12px; }
 #progressBar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .15s; }
 .status { margin-top: 10px; font-size: 13px; min-height: 18px; }
