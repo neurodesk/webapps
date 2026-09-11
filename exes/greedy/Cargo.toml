@@ -1,0 +1,9 @@
+[workspace]
+members = ["core", "cli", "wasm"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "Apache-2.0"
+version = "0.1.20260911"
+rust-version = "1.85"

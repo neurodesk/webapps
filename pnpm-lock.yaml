@@ -341,6 +341,59 @@ importers:
 
   apps/easy-mp2rage: {}
 
+  apps/edgereg:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)
+
+  apps/greedy:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260813
+        version: 0.1.20260813
+      '@neurodesk/greedy':
+        specifier: workspace:*
+        version: link:../../packages/greedy
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)
+
   apps/musclemap:
     dependencies:
       '@neurodesk/webapp-components':
@@ -558,6 +611,8 @@ importers:
   packages/analytics: {}
 
   packages/components: {}
+
+  packages/greedy: {}
 
   packages/registration: {}
 
@@ -2018,6 +2073,9 @@ packages:
 
   '@niivue/niivue@1.0.0-rc.11':
     resolution: {integrity: sha512-qfhi/p5yU4vIHrwmcmFaeMuSGBfdORkjNSrBwT2TjnV29f1SPn2OTHLH+SPROznJWViyjhjefmT9SBX4ye/j4Q==}
+
+  '@niivue/niivue@1.0.0-rc.13':
+    resolution: {integrity: sha512-YpahB/wRst5yPv4fztV7z2fREc99uGyDz5KEMFxowXWtT74y0Df9A/TRotMmpAKxg6g4kWX7wQJY/2rjf7nBBQ==}
 
   '@niivue/niivue@1.0.0-rc.9':
     resolution: {integrity: sha512-CPu6+KTONESagpbYn+BF/TWy27twmPgqpLNam9x24tl9XDWKfJTLhkjqBZSCVOyWqu1eYMdJFt/nQeDbTGdWvA==}
@@ -6946,6 +7004,15 @@ snapshots:
       earcut: 3.2.3
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
+
+  '@niivue/niivue@1.0.0-rc.13':
+    dependencies:
+      cbor-x: 1.6.4
+      clipper2-ts: 2.0.1-18
+      earcut: 3.2.3
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.0
+      zarrita: 0.7.4
 
   '@niivue/niivue@1.0.0-rc.9':
     dependencies:

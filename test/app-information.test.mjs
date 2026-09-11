@@ -38,6 +38,8 @@ const REQUIRED_METHODS = {
   synthseg: ['10.1016/j.media.2023.102789', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   synthsr: ['10.1016/j.neuroimage.2021.118206', 'github.com/neurolabusc/py_synthsr'],
   syncro: ['10.1016/j.neuroimage.2021.118206', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', '10.1016/j.media.2007.06.004', '10.1016/j.neuroimage.2010.07.033'],
+  edgereg: ['afni.nimh.nih.gov', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  greedy: ['sites.google.com/view/greedyreg/about', 'github.com/pyushkevich/greedy', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
 };
 
 test('every registered app has app information with packages and cited methods', () => {

@@ -1,0 +1,13 @@
+Greedy Rust
+Copyright 2026 Neurodesk contributors
+
+This Rust implementation follows the command-line behavior of the Greedy C++
+software, created by Paul Yushkevich at the Penn Image Computing and Science
+Lab and maintained by the Greedy open-source contributors. Project history and
+source are available at https://sites.google.com/view/greedyreg/about and
+https://github.com/pyushkevich/greedy. The upstream project is licensed under
+the Apache License 2.0.
+
+The browser build uses wasm-bindgen, wasm-bindgen-rayon and their generated
+worker helper. Their notices and license terms remain in the generated source
+and dependency distributions.

@@ -47,6 +47,9 @@ audit_*.md
 plan_*.md
 *_plan.md
 
+# Uploaded dataset staging
+/reg/
+
 # Temporary model weights
 .tmp_weights/
 apps/musclemap/.tmp_model_env/

@@ -74,3 +74,12 @@ The review covers delayed downloads, failed replacements, DICOM conversion and
 retained mesh settings. Desktop and phone layouts were inspected; the 19-app
 interface, mobile and shared workflow suites pass. Full MindGrab-to-STL tests
 remain hardware-GPU gates and are skipped on the software adapter.
+
+## EdgeReg and Greedy review, 11 September 2026
+
+Both registration apps use the shared download helper. Greedy exposes native
+command-line instructions through the shared Standalone action. Method changes
+hold the busy state while clearing results, and cancellation closes only the
+worker belonging to that run. Real DICOM checks cover extensionless slices,
+multiple converted series and selecting the second series in both apps. Browser
+checks also exercise registration, downloaded NIfTI results and shell dialogs.

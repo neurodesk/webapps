@@ -6,6 +6,7 @@ import { createInfoDialog, renderCommand } from '../src/ui/renderInfoDialog.js';
 import { renderFileField, bindFileDrop } from '../src/ui/renderFileField.js';
 import { bindInfoTooltips, renderInfoIcon } from '../src/ui/bindInfoTooltips.js';
 import { renderViewerToolbar } from '../src/ui/renderViewerToolbar.js';
+import { readFile } from 'node:fs/promises';
 
 function dom(html = '<!doctype html><body></body>') {
   const instance = new JSDOM(html, { pretendToBeVisual: true });
@@ -125,4 +126,10 @@ test('renderViewerToolbar renders only the requested controls', () => {
   for (const id of ['windowMin', 'rangeMin', 'overlayOpacity', 'colormapSelect', 'downloadCurrentVolume', 'screenshotViewer']) {
     assert.ok(full.root.querySelector(`#${id}`), `${id} rendered by default`);
   }
+});
+
+test('imaging workspace provides a reusable three-panel viewer layout', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-viewer-panel-grid\s*\{/);
+  assert.match(css, /\.nd-viewer-panel-title\s*\{/);
 });
