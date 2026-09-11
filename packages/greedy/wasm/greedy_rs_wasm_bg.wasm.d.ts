@@ -6,7 +6,6 @@ export const register_affine_wasm: (a: number, b: number, c: number, d: number, 
 export const register_nmi_svf_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
 export const reslice_affine: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const reslice_warp_affine: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-export const version: () => [number, number];
 export const wbg_rayon_poolbuilder_build: (a: number) => void;
 export const wbg_rayon_poolbuilder_mainJS: (a: number) => any;
 export const wbg_rayon_poolbuilder_numThreads: (a: number) => number;

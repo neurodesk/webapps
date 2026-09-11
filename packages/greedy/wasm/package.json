@@ -2,7 +2,7 @@
   "name": "greedy-rs-wasm",
   "type": "module",
   "description": "Threaded WebAssembly bindings for Greedy MRI registration",
-  "version": "0.1.0",
+  "version": "0.1.20260911",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

@@ -11,6 +11,31 @@ fn fail(message: impl std::fmt::Display) -> ! {
     std::process::exit(2)
 }
 
+fn print_help() {
+    println!(
+        "greedy-rs {}\n\
+         \n\
+         Deterministic 3-D affine and deformable image registration.\n\
+         This minimal Rust tool implements a subset of the C++/ITK Greedy tool\n\
+         developed by Paul Yushkevich.\n\
+         Original Greedy: https://sites.google.com/view/greedyreg/about\n\
+         Source: https://github.com/pyushkevich/greedy\n\
+         \n\
+         Usage:\n\
+           greedy-rs -d 3 -a -m SSD|NMI -i FIXED MOVING -o AFFINE.mat [OPTIONS]\n\
+           greedy-rs -d 3 -m NMI -i FIXED MOVING [-it AFFINE.mat] -o WARP.nii.gz -sv [OPTIONS]\n\
+           greedy-rs -d 3 -rf FIXED -rm MOVING OUTPUT -r TRANSFORM...\n\
+         \n\
+         Common options:\n\
+           -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
+           -threads N      Limit the Rayon worker pool\n\
+           -V 0|1         Disable or enable optimizer output\n\
+           -h, --help      Print this help\n\
+           --version       Print the version",
+        env!("CARGO_PKG_VERSION")
+    );
+}
+
 fn take(args: &[String], at: &mut usize, flag: &str) -> String {
     *at += 1;
     args.get(*at)
@@ -331,6 +356,10 @@ fn run_metric(args: &[String]) {
 
 fn main() {
     let mut args = env::args().skip(1).collect::<Vec<_>>();
+    if args.is_empty() || args.iter().any(|arg| arg == "-h" || arg == "--help") {
+        print_help();
+        return;
+    }
     // Greedy's randomness (-seed, affine -jitter) has no Rust equivalent, so
     // only the deterministic settings are accepted; -double would double
     // image memory for no measured benefit.

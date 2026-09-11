@@ -27,6 +27,32 @@ fn run(arguments: &[&str]) {
 }
 
 #[test]
+fn help_and_version_are_available() {
+    for arguments in [&[][..], &["-h"][..], &["--help"][..]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_greedy-rs"))
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let help = String::from_utf8(output.stdout).unwrap();
+        assert!(help.contains("Usage:"));
+        assert!(help.contains("Paul Yushkevich"));
+        assert!(help.contains("https://sites.google.com/view/greedyreg/about"));
+        assert!(help.contains("https://github.com/pyushkevich/greedy"));
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_greedy-rs"))
+        .arg("--version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        format!("greedy-rs {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}
+
+#[test]
 fn affine_svf_and_reslice_workflow() {
     let directory = env::temp_dir().join(format!("greedy-rs-cli-test-{}", std::process::id()));
     let _ = fs::remove_dir_all(&directory);

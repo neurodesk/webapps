@@ -37,6 +37,11 @@ WebAssembly relative URLs remain valid.
 
 The flags mirror Greedy; unsupported ones fail with a message.
 
+Running `greedy-rs` without arguments, or with `-h` or `--help`, prints the
+available workflows. `greedy-rs --version` prints the workspace version. The
+Greedy app manifest owns the release version; `pnpm release` synchronizes it to
+the JavaScript package, Cargo workspace, lockfile, and generated WASM metadata.
+
 ```sh
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10

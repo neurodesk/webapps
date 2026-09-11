@@ -75,7 +75,9 @@ module. `packages/greedy` owns the JavaScript wrapper and committed threaded
 `wasm-bindgen` output; rebuild it with
 `pnpm --filter @neurodesk/greedy build:wasm`. Apps stage the complete generated
 directory because its Rayon worker helper, JavaScript glue and WASM binary use
-relative URLs and must remain adjacent.
+relative URLs and must remain adjacent. Greedy's app manifest is the release
+version source; the release tooling keeps its package and Rust workspace at the
+same `MAJOR.MINOR.YYYYMMDD` version.
 
 `exes/synthseg` is the SynthSeg 2.0 CLI (ORT CPU + native Metal), imported
 from a standalone repo. Its `README.md` "Numerics" and "Traps" sections are the

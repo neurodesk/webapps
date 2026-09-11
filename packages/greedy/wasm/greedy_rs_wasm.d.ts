@@ -29,8 +29,6 @@ export function reslice_affine(fixed: Uint8Array, moving: Uint8Array, matrix: st
  */
 export function reslice_warp_affine(fixed: Uint8Array, moving: Uint8Array, warp: Uint8Array, matrix: string): Uint8Array;
 
-export function version(): string;
-
 export class wbg_rayon_PoolBuilder {
     private constructor();
     free(): void;
@@ -52,7 +50,6 @@ export interface InitOutput {
     readonly register_nmi_svf_wasm: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly reslice_affine: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly reslice_warp_affine: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
-    readonly version: () => [number, number];
     readonly wbg_rayon_poolbuilder_build: (a: number) => void;
     readonly wbg_rayon_poolbuilder_mainJS: (a: number) => any;
     readonly wbg_rayon_poolbuilder_numThreads: (a: number) => number;

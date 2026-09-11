@@ -8,11 +8,6 @@ use wasm_bindgen::prelude::*;
 // registration so the core's existing Rayon slab loops use Web Workers.
 pub use wasm_bindgen_rayon::init_thread_pool;
 
-#[wasm_bindgen]
-pub fn version() -> String {
-    env!("CARGO_PKG_VERSION").into()
-}
-
 fn wasm_error(error: greedy_rs_core::Error) -> JsValue {
     JsValue::from_str(&error.to_string())
 }

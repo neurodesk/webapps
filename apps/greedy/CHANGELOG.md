@@ -10,4 +10,4 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/greedy@0.1.0
+  - @neurodesk/greedy@0.1.20260911
