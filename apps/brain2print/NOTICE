@@ -1,0 +1,6 @@
+Brain2Print third-party components
+
+@niivue/niivue — BSD-2-Clause — https://github.com/niivue/niivue
+@niivue/dcm2niix (via @neurodesk/runtime-support) — BSD-2-Clause — https://github.com/niivue/niivue-dcm2niix
+@niivue/niimath — BSD-2-Clause — https://github.com/rordenlab/niimath
+@brainchop/mindgrab — MIT — https://github.com/neuroneural/brainchopC
