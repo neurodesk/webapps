@@ -24,7 +24,9 @@ pub use nifti::{
 pub use nmi::{BINS, bin_image};
 pub use par::set_threads;
 pub use pyramid::{FACTORS as PYRAMID_FACTORS, build as build_pyramid, downsample_grid, resample};
-pub use reslice::{Transform, grids_match, read_matrix, reslice};
+pub use reslice::{
+    Interpolation, Transform, grids_match, read_matrix, reslice, reslice_with_interpolation,
+};
 pub use svf::register_nmi_svf;
 
 use std::{error::Error as StdError, fmt};

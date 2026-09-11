@@ -9,6 +9,12 @@ pub enum Transform {
     Warp(VectorField),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Interpolation {
+    Linear,
+    Nearest,
+}
+
 pub fn read_matrix(text: &str) -> Result<Mat4> {
     let values = text
         .split_whitespace()
@@ -54,6 +60,23 @@ fn index(grid: &Grid, x: usize, y: usize, z: usize) -> usize {
 
 pub(crate) fn trilinear_scalar(image: &NiftiImage, voxel: [f64; 3]) -> f32 {
     trilinear_scalar_gradient(image, voxel).0
+}
+
+fn nearest_scalar(image: &NiftiImage, voxel: [f64; 3]) -> f32 {
+    let voxel = voxel.map(|value| value.round() as isize);
+    if voxel
+        .iter()
+        .zip(image.grid.dims)
+        .any(|(&value, dimension)| value < 0 || value as usize >= dimension)
+    {
+        return 0.0;
+    }
+    image.data[index(
+        &image.grid,
+        voxel[0] as usize,
+        voxel[1] as usize,
+        voxel[2] as usize,
+    )]
 }
 
 /// Trilinear sample and its derivative with respect to voxel coordinates.
@@ -199,6 +222,22 @@ pub fn reslice(
     chain: &[Transform],
     expected_moving_grid: Option<&Grid>,
 ) -> Result<NiftiImage> {
+    reslice_with_interpolation(
+        fixed_grid,
+        moving,
+        chain,
+        expected_moving_grid,
+        Interpolation::Linear,
+    )
+}
+
+pub fn reslice_with_interpolation(
+    fixed_grid: &Grid,
+    moving: &NiftiImage,
+    chain: &[Transform],
+    expected_moving_grid: Option<&Grid>,
+    interpolation: Interpolation,
+) -> Result<NiftiImage> {
     if let Some(expected) = expected_moving_grid {
         if !grids_match(&moving.grid, expected, 1e-4) {
             return Err(Error("--verify-aligned failed: moving image grid differs from the registration source grid".into()));
@@ -216,10 +255,11 @@ pub fn reslice(
     for_each_z(&mut data, fixed_grid.dims[2], |z, slab| {
         for (offset, out) in slab.iter_mut().enumerate() {
             let fixed_lps = fixed_grid.voxel_to_lps(fixed_grid.voxel(z * per_slab + offset));
-            *out = trilinear_scalar(
-                moving,
-                moving_from_lps.apply(apply_chain(fixed_lps, &chain)),
-            );
+            let voxel = moving_from_lps.apply(apply_chain(fixed_lps, &chain));
+            *out = match interpolation {
+                Interpolation::Linear => trilinear_scalar(moving, voxel),
+                Interpolation::Nearest => nearest_scalar(moving, voxel),
+            };
         }
     });
     Ok(NiftiImage {

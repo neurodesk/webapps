@@ -1,9 +1,10 @@
 use std::{env, fs, path::Path};
 
 use greedy_rs_core::{
-    AffineMetric, Mat4, ScalarType, Transform, build_pyramid, decode_image, decode_vector_field,
-    encode_image, encode_vector_field, image_centers, nmi_score_gradient_affine, read_matrix,
-    register_affine, register_nmi_svf, reslice, score_affine, ssd_score_gradient,
+    AffineMetric, Interpolation, Mat4, ScalarType, Transform, build_pyramid, decode_image,
+    decode_vector_field, encode_image, encode_vector_field, image_centers,
+    nmi_score_gradient_affine, read_matrix, register_affine, register_nmi_svf, reslice,
+    reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
 fn fail(message: impl std::fmt::Display) -> ! {
@@ -29,6 +30,7 @@ fn print_help() {
          Common options:\n\
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
            -threads N      Limit the Rayon worker pool\n\
+           -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
            -V 0|1         Disable or enable optimizer output\n\
            -h, --help      Print this help\n\
            --version       Print the version",
@@ -403,6 +405,7 @@ fn main() {
         return;
     }
     let (mut fixed, mut reslices, mut verify, mut chain) = (None, Vec::new(), None, Vec::new());
+    let mut interpolation = Interpolation::Linear;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -422,6 +425,15 @@ fn main() {
                 reslices.push((moving, output));
             }
             "--verify-aligned" => verify = Some(take(&args, &mut at, "--verify-aligned")),
+            "-ri" => {
+                interpolation = match take(&args, &mut at, "-ri").to_ascii_uppercase().as_str() {
+                    "LINEAR" => Interpolation::Linear,
+                    "NN" => Interpolation::Nearest,
+                    value => fail(format!(
+                        "unsupported interpolation {value}; expected LINEAR or NN"
+                    )),
+                }
+            }
             "-r" => {
                 at += 1;
                 chain.extend(args[at..].iter().map(|s| transform(s)));
@@ -444,11 +456,12 @@ fn main() {
         .map(|path| decode_image(&read(path)).unwrap_or_else(|e| fail(e)));
     for (moving_path, output_path) in reslices {
         let moving = decode_image(&read(&moving_path)).unwrap_or_else(|e| fail(e));
-        let output = reslice(
+        let output = reslice_with_interpolation(
             &fixed.grid,
             &moving,
             &chain,
             expected.as_ref().map(|image| &image.grid),
+            interpolation,
         )
         .unwrap_or_else(|e| fail(e));
         fs::write(

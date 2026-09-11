@@ -4,6 +4,11 @@
 
 ### Patch Changes
 
+- Add nearest-neighbor reslice interpolation for discrete masks and label maps.
+
+
+### Patch Changes
+
 - Add native Greedy command-line help, retain upstream Greedy attribution in the CLI and npm package, and align the package and native Rust versions.
 
 ## 0.1.0

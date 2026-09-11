@@ -123,6 +123,8 @@ fn affine_svf_and_reslice_workflow() {
         output.to_str().unwrap(),
         "--verify-aligned",
         moving.to_str().unwrap(),
+        "-ri",
+        "NN",
         "-r",
         warp.to_str().unwrap(),
         matrix.to_str().unwrap(),

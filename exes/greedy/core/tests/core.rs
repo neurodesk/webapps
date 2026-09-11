@@ -1,8 +1,9 @@
 use greedy_rs_core::{
-    AffineMetric, Grid, Mat4, NiftiImage, ScalarType, Transform, VectorField, affine_matrix,
-    affine_parameters, decode_image, decode_vector_field, downsample_grid, encode_image,
-    encode_vector_field, gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine,
-    register_affine, register_nmi_svf, reslice, score_affine, ssd_score_gradient,
+    AffineMetric, Grid, Interpolation, Mat4, NiftiImage, ScalarType, Transform, VectorField,
+    affine_matrix, affine_parameters, decode_image, decode_vector_field, downsample_grid,
+    encode_image, encode_vector_field, gaussian_smooth, grids_match, image_centers,
+    nmi_score_gradient_affine, register_affine, register_nmi_svf, reslice,
+    reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
 fn grid(dims: [usize; 3]) -> Grid {
@@ -158,6 +159,23 @@ fn identity_reslice_preserves_values_and_strict_grid_check() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn nearest_reslice_preserves_discrete_values() {
+    let moving = NiftiImage {
+        grid: grid([2, 1, 1]),
+        data: vec![0.0, 10.0],
+        scalar_type: ScalarType::U8,
+    };
+    let mut fixed = moving.grid.clone();
+    fixed.lps_from_voxel.0[0][3] = 0.4;
+    let chain = [Transform::Affine(Mat4::IDENTITY)];
+    let linear = reslice(&fixed, &moving, &chain, None).unwrap();
+    let nearest =
+        reslice_with_interpolation(&fixed, &moving, &chain, None, Interpolation::Nearest).unwrap();
+    assert_eq!(linear.data, vec![4.0, 6.0]);
+    assert_eq!(nearest.data, vec![0.0, 10.0]);
 }
 
 #[test]

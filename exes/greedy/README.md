@@ -46,10 +46,12 @@ the JavaScript package, Cargo workspace, lockfile, and generated WASM metadata.
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10
 greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz out.nii.gz -r warp.nii.gz aff.mat
+greedy-rs -d 3 -rf fixed.nii.gz -rm mask.nii.gz warped-mask.nii.gz -ri NN -r warp.nii.gz aff.mat
 ```
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
+- Reslicing is linear by default. Use `-ri NN` for masks and label maps.
 - `-jitter 0` is accepted; any other `-jitter`, `-seed`, and `-double` are
   rejected. Images are always f32; geometry, histograms, and reductions are
   f64.
