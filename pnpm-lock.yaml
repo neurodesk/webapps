@@ -42,6 +42,34 @@ importers:
         specifier: ^2.8.1
         version: 2.9.0
 
+  apps/brain2print:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260813
+        version: 0.1.20260813
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.11
+        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
+
   apps/browserqc:
     dependencies:
       '@brainchop/mindgrab':
@@ -272,7 +300,7 @@ importers:
         version: 7.3.6(@types/node@24.13.3)(jiti@1.21.7)(yaml@2.9.0)
       vitest:
         specifier: ^3.2.4
-        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jiti@1.21.7)(jsdom@26.1.0)(yaml@2.9.0)
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jsdom@26.1.0)
 
   apps/dwi2trx:
     dependencies:
@@ -7326,13 +7354,13 @@ snapshots:
       chai: 5.3.3
       tinyrainbow: 2.0.0
 
-  '@vitest/mocker@3.2.7(vite@7.3.6(@types/node@24.13.3)(jiti@1.21.7)(yaml@2.9.0))':
+  '@vitest/mocker@3.2.7(vite@5.4.21(@types/node@24.13.3))':
     dependencies:
       '@vitest/spy': 3.2.7
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.6(@types/node@24.13.3)(jiti@1.21.7)(yaml@2.9.0)
+      vite: 5.4.21(@types/node@24.13.3)
 
   '@vitest/pretty-format@3.2.7':
     dependencies:
@@ -7363,7 +7391,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.17
       tinyrainbow: 2.0.0
-      vitest: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jiti@1.21.7)(jsdom@26.1.0)(yaml@2.9.0)
+      vitest: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jsdom@26.1.0)
 
   '@vitest/utils@3.2.7':
     dependencies:
@@ -10860,11 +10888,11 @@ snapshots:
       jiti: 1.21.7
       yaml: 2.9.0
 
-  vitest@3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jiti@1.21.7)(jsdom@26.1.0)(yaml@2.9.0):
+  vitest@3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jsdom@26.1.0):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@24.13.3)(jiti@1.21.7)(yaml@2.9.0))
+      '@vitest/mocker': 3.2.7(vite@5.4.21(@types/node@24.13.3))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7
@@ -10882,7 +10910,7 @@ snapshots:
       tinyglobby: 0.2.17
       tinypool: 1.1.1
       tinyrainbow: 2.0.0
-      vite: 7.3.6(@types/node@24.13.3)(jiti@1.21.7)(yaml@2.9.0)
+      vite: 5.4.21(@types/node@24.13.3)
       vite-node: 3.2.4(@types/node@24.13.3)
       why-is-node-running: 2.3.0
     optionalDependencies:
@@ -10891,7 +10919,6 @@ snapshots:
       '@vitest/ui': 3.2.7(vitest@3.2.7)
       jsdom: 26.1.0
     transitivePeerDependencies:
-      - jiti
       - less
       - lightningcss
       - msw
@@ -10901,8 +10928,6 @@ snapshots:
       - sugarss
       - supports-color
       - terser
-      - tsx
-      - yaml
 
   w3c-keyname@2.2.8: {}
 

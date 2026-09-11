@@ -16,7 +16,7 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
   await bar.getByRole("button", { name: "About", exact: true }).click();
   await expect(page.locator("#infoDialog")).toBeVisible();
   await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
-  await bar.getByRole("button", { name: "Light", exact: true }).click();
+  await bar.locator("[data-neurodesk-theme-toggle]").click();
   await expect(page.locator("html")).toHaveAttribute("data-neurodesk-theme", "light");
 });
 

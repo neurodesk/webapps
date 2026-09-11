@@ -13,6 +13,11 @@ exes/*/dist/
 exes/*/models/
 exes/*/target/
 
+# Mesh outputs and regression data belong on Hugging Face, not in git
+*.stl
+*.obj
+*.mz3
+
 # dwi2trx ships the small dtifit-enabled niimath runtime, including its WASM.
 !apps/dwi2trx/vendor/
 !apps/dwi2trx/vendor/niimath/

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brain2Print — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" open>
+        <summary class="nd-section-title">1. Input image</summary>
+        <div class="nd-section-content">
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI or DICOM files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files</span>
+          </label>
+          <label class="nd-file">
+            Choose DICOM folder
+            <input id="folderInput" type="file" data-neurodesk-input="image" webkitdirectory multiple hidden />
+          </label>
+          <select id="seriesSelect" class="hidden" aria-label="Choose converted image series"></select>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" open>
+        <summary class="nd-section-title">2. Create mesh</summary>
+        <div class="nd-section-content">
+          <p class="nd-hint">MindGrab segments the scan locally, then niimath makes a printable mesh.</p>
+          <button id="segmentButton" class="nd-btn nd-btn-primary" type="button" disabled>Run segmentation</button>
+          <div class="nd-field">
+            <label for="simplify">Mesh simplification <small id="simplifyValue">20%</small></label>
+            <input id="simplify" type="range" min="5" max="100" step="5" value="20" />
+            <p class="nd-hint">Lower values make a smaller, simpler mesh.</p>
+          </div>
+          <label class="nd-check"><input id="largestOnly" type="checkbox" checked /> Keep only the largest component</label>
+          <label class="nd-check"><input id="fillBubbles" type="checkbox" checked /> Fill internal bubbles</label>
+          <button id="meshButton" class="nd-btn nd-btn-secondary" type="button" disabled>Create mesh</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">3. Download</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="format">Format</label>
+            <select id="format">
+              <option value="stl">STL</option>
+              <option value="obj">OBJ</option>
+            </select>
+          </div>
+          <button id="downloadButton" class="nd-btn nd-btn-secondary" type="button" disabled>Download mesh</button>
+        </div>
+      </details>
+
+      <!-- App-owned About and Privacy content; the shared bar renders the buttons and Cite. -->
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image and mesh viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Load a brain MRI to begin.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary">Scroll to change slices · drag to adjust the view</span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Brain2Print creates a printable brain mesh entirely in your browser. Load a NIfTI image or a DICOM series, segment it with the MindGrab 16chan18cls model, then download the niimath mesh as STL or OBJ.</p>
+      <p>This is a research demonstration, not a medical device. Use a recent WebGPU-capable desktop browser.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Your images and meshes remain in your browser. This app does not upload them.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

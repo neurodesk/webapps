@@ -757,3 +757,30 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  brain2print:
+    packages:
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: MindGrab, url: https://www.npmjs.com/package/@brainchop/mindgrab, role: brain segmentation }
+      - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh generation }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Application
+        title: brain2print AI powered web tool for creating 3D printable brain models
+        reference: "Rorden C, McCormick M, Hanayik T, Masoud M, Plis SM. brain2print AI powered web tool for creating 3D printable brain models. Scientific Reports. 2025;15:15664."
+        doi: 10.1038/s41598-025-00014-5
+        url: https://pubmed.ncbi.nlm.nih.gov/40325035/
+      - group: Brain segmentation
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, Fedorov A, Hoffmann M, Rorden C, Plis S. MindGrab: A spectrally-motivated architecture for accessible deep learning in neuroimaging. NeuroImage. 2026;338:122074."
+        doi: 10.1016/j.neuroimage.2026.122074
+        url: https://pubmed.ncbi.nlm.nih.gov/42331200/
+      - group: Mesh generation
+        title: niimath
+        reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."
+        doi: 10.52294/001c.94384
+        code: https://github.com/rordenlab/niimath
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."
+        doi: 10.1016/j.jneumeth.2016.03.001

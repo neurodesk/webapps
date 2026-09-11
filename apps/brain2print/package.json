@@ -1,0 +1,26 @@
+{
+  "name": "brain2print",
+  "version": "0.1.20260911",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/copy-brainchop.mjs && vite",
+    "build": "node scripts/copy-brainchop.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app brain2print",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260813",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20260909",
+    "@niivue/niivue": "1.0.0-rc.11"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "vite": "^6.3.2"
+  }
+}

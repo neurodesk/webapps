@@ -388,3 +388,23 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: brain2print
+    path: brain2print
+    title: Brain2Print
+    description: Create printable brain meshes from NIfTI or DICOM scans in your browser.
+    category: data-preparation
+    keywords: [brain, mri, segmentation, mesh, 3d-printing]
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
