@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { gunzipSync } from "node:zlib";
 
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
@@ -36,6 +37,14 @@ test("defaults load into three panels and affine registration completes", async 
   await expect(page.locator("#stationaryInfo")).toContainText("brain extracted");
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
   await expect(page.locator("#resultList")).toContainText("Registered moving image");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#resultList").getByRole("button", { name: "Download" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("t1_brain_registered.nii.gz");
+  const image = gunzipSync(await readFile(await download.path()));
+  expect(image.readInt32LE(0)).toBe(348);
+  expect(image.length).toBeGreaterThan(352);
 });
 
 test("the method selector runs affine plus nonlinear registration", async ({ page }) => {
@@ -44,7 +53,13 @@ test("the method selector runs affine plus nonlinear registration", async ({ pag
   await expect(page.locator("#method")).toContainText("Affine · NMI");
   await expect(page.locator("#method")).toContainText("Affine + nonlinear · NMI");
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
-  await page.locator("#method").selectOption("deformable");
+  const lockedWhileClearing = await page.evaluate(() => {
+    const method = document.getElementById("method");
+    method.value = "deformable";
+    method.dispatchEvent(new Event("change"));
+    return document.getElementById("runButton").disabled;
+  });
+  expect(lockedWhileClearing).toBe(true);
   await expect(page.locator("#resultList")).toBeEmpty();
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
@@ -66,6 +81,12 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
   await expect(page.locator("#controls > #aboutBtn")).toBeHidden();
   await bar.getByRole("button", { name: "About", exact: true }).click();
   await expect(page.locator("#infoDialog")).toBeVisible();
+  await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("#controls > #standaloneBtn")).toBeHidden();
+  await bar.getByRole("button", { name: "Standalone", exact: true }).click();
+  await expect(page.locator("#infoDialog")).toContainText("cargo build --release -p greedy-rs");
+  await expect(page.locator("#infoDialog")).toContainText("-rf fixed.nii.gz");
+  await expect(page.locator("#infoDialog").getByRole("button", { name: "Copy command" })).toBeVisible();
   await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
   await bar.getByRole("button", { name: "Use light theme", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-neurodesk-theme", "light");

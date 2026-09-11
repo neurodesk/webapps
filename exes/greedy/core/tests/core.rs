@@ -416,3 +416,73 @@ fn gaussian_smoothing_preserves_a_constant_interior() {
         smoothed.data[center]
     );
 }
+
+#[test]
+fn nifti_spatial_units_normalize_spacing_and_origin_to_millimetres() {
+    for (unit, factor) in [(1_u8, 1000.0_f32), (2, 1.0), (3, 0.001)] {
+        let mut image = NiftiImage {
+            grid: grid([2, 2, 2]),
+            data: vec![7.0; 8],
+            scalar_type: ScalarType::I16,
+        };
+        image.grid.lps_from_voxel.0[0][3] = 12.0;
+        let mut bytes = encode_image(&image, false).unwrap();
+        bytes[123] = unit | 8;
+        for axis in 0..3 {
+            bytes[80 + axis * 4..84 + axis * 4].copy_from_slice(&(1.0 / factor).to_le_bytes());
+            for column in 0..4 {
+                let offset = 280 + (axis * 4 + column) * 4;
+                let value =
+                    f32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap()) / factor;
+                bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            }
+        }
+        let decoded = decode_image(&bytes).unwrap();
+        for row in 0..4 {
+            for column in 0..4 {
+                assert!(
+                    (decoded.grid.lps_from_voxel.0[row][column]
+                        - image.grid.lps_from_voxel.0[row][column])
+                        .abs()
+                        < 1e-5,
+                    "unit {unit}, row {row}, column {column}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn scaled_integer_identity_reslice_preserves_physical_intensity() {
+    for scalar_type in [
+        ScalarType::U8,
+        ScalarType::I8,
+        ScalarType::I16,
+        ScalarType::U16,
+        ScalarType::I32,
+        ScalarType::U32,
+        ScalarType::I64,
+        ScalarType::U64,
+    ] {
+        let image = NiftiImage {
+            grid: grid([2, 2, 2]),
+            data: vec![7.0; 8],
+            scalar_type,
+        };
+        let mut bytes = encode_image(&image, false).unwrap();
+        bytes[112..116].copy_from_slice(&0.1_f32.to_le_bytes());
+        bytes[116..120].copy_from_slice(&0.05_f32.to_le_bytes());
+        let decoded = decode_image(&bytes).unwrap();
+        let resliced = reslice_with_interpolation(
+            &decoded.grid,
+            &decoded,
+            &[Transform::Affine(Mat4::IDENTITY)],
+            None,
+            Interpolation::Nearest,
+        )
+        .unwrap();
+        let output = decode_image(&encode_image(&resliced, false).unwrap()).unwrap();
+        assert_eq!(output.scalar_type, ScalarType::F32);
+        assert!(output.data.iter().all(|value| (*value - 0.75).abs() < 1e-6));
+    }
+}

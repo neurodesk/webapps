@@ -238,6 +238,16 @@ fn parse_header(b: &[u8]) -> Result<Header> {
     for value in &mut lps[1] {
         *value = -*value;
     }
+    let spatial_scale = match b[123] & 7 {
+        1 => 1000.0,
+        3 => 0.001,
+        _ => 1.0,
+    };
+    for row in lps.iter_mut().take(3) {
+        for value in row {
+            *value *= spatial_scale;
+        }
+    }
     Ok(Header {
         little: le,
         dims,
@@ -427,7 +437,13 @@ pub fn decode_image(bytes: &[u8]) -> Result<NiftiImage> {
     Ok(NiftiImage {
         grid: h.grid,
         data,
-        scalar_type: h.datatype,
+        scalar_type: if (h.slope != 1.0 || h.intercept != 0.0)
+            && !matches!(h.datatype, ScalarType::F32 | ScalarType::F64)
+        {
+            ScalarType::F32
+        } else {
+            h.datatype
+        },
     })
 }
 

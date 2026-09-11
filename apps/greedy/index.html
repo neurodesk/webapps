@@ -61,6 +61,7 @@
       </details>
       <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
+      <button id="standaloneBtn" type="button" hidden>Standalone</button>
     </header>
     <main id="viewer">
       <div class="nd-viewer-canvas-wrapper">
@@ -92,6 +93,11 @@
     </footer>
     <template id="aboutContent"><p>Greedy registers a moving image to a stationary image with affine NMI or affine followed by nonlinear stationary-velocity NMI. Custom images are brain extracted locally with MindGrab before registration.</p></template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+    <template id="standaloneContent">
+      <p>Build the native Rust command-line application to register images on your computer or an HPC system. These commands estimate an affine transform, then reslice the moving image into the fixed image space.</p>
+      <p>Install Rust and a C compiler before building. Supply your own <code>fixed.nii.gz</code> and <code>moving.nii.gz</code> images. The browser performs MindGrab brain extraction for custom inputs; the native CLI expects you to prepare those inputs separately.</p>
+      <p>Run <code>./target/release/greedy-rs --help</code> for nonlinear registration, nearest-neighbor reslicing, and thread options.</p>
+    </template>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

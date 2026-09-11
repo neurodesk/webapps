@@ -9,5 +9,8 @@ export default defineConfig({
     url: "http://localhost:4173",
     reuseExistingServer: !process.env.CI,
   },
-  use: { baseURL: "http://localhost:4173" },
+  use: {
+    baseURL: "http://localhost:4173",
+    launchOptions: { args: process.platform === "linux" ? ["--use-angle=swiftshader", "--use-vulkan=swiftshader", "--enable-features=Vulkan", "--disable-vulkan-surface"] : [] },
+  },
 });

@@ -3,6 +3,7 @@ import { Niimath } from "@niivue/niimath";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import { StageResultList, bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
+import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 import { MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "./config.js";
 
@@ -273,19 +274,10 @@ function addExamples(name, examples) {
 addExamples("moving", MOVING_EXAMPLES);
 addExamples("stationary", STATIONARY_EXAMPLES);
 
-function download(file) {
-  const url = URL.createObjectURL(file);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 const results = new StageResultList({
   element: $("resultList"),
   onView: () => viewers.resliced.drawScene(),
-  onDownload: () => download(output),
+  onDownload: () => downloadFile(output),
 });
 
 async function register() {

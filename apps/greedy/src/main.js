@@ -1,7 +1,8 @@
 import NiiVueGPU, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
-import { StageResultList, bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
+import { StageResultList, bindFileDrop, createInfoDialog, renderCommand, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
+import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 import { MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "./config.js";
 import { extractBrain } from "./brain-extraction.js";
@@ -31,7 +32,7 @@ mountImagingWorkspace({
   status: "#status",
   title: "Greedy",
   subtitle: "Browser-native affine and deformable MRI registration",
-  controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
+  controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn", standalone: "#standaloneBtn" },
 });
 
 function applyLayout(id) {
@@ -73,6 +74,19 @@ $("viewer").append(log.root);
 const info = createInfoDialog({ id: "infoDialog" });
 $("aboutBtn").onclick = () => info.open("About Greedy", $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
+$("standaloneBtn").onclick = () => {
+  info.open("Run Greedy in a terminal", $("standaloneContent"));
+  info.body.append(renderCommand({
+    id: "greedyStandaloneCommands",
+    command: [
+      "git clone https://github.com/neurodesk/webapps",
+      "cd webapps/exes/greedy",
+      "cargo build --release -p greedy-rs",
+      "./target/release/greedy-rs -d 3 -a -m NMI -i fixed.nii.gz moving.nii.gz -o affine.mat -ia-image-centers -n 100x50x10",
+      "./target/release/greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz registered.nii.gz -r affine.mat",
+    ].join("\n"),
+  }).root);
+};
 
 function errorMessage(error) {
   return error instanceof Error && error.message ? error.message : String(error || "Unknown error");
@@ -281,30 +295,28 @@ async function brainExtract(name) {
   $("progress").value = 0;
 }
 
-function download(file) {
-  const url = URL.createObjectURL(file);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.name;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
 const results = new StageResultList({
   element: $("resultList"),
   onView: () => viewers.resliced.drawScene(),
-  onDownload: () => download(output),
+  onDownload: () => downloadFile(output),
 });
 
 function runRegistration(fixed, moving, mode, onProgress) {
   return new Promise((resolve, reject) => {
-    registrationWorker = new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" });
+    const worker = new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" });
+    registrationWorker = worker;
+    let closed = false;
     const close = () => {
-      registrationWorker?.terminate();
-      registrationWorker = null;
-      cancelRegistration = null;
+      closed = true;
+      worker.terminate();
+      if (registrationWorker === worker) {
+        registrationWorker = null;
+        cancelRegistration = null;
+        $("cancelButton").hidden = true;
+      }
     };
-    registrationWorker.onmessage = ({ data }) => {
+    worker.onmessage = ({ data }) => {
+      if (closed) return;
       if (data.phase) {
         onProgress(data.phase);
         return;
@@ -313,11 +325,13 @@ function runRegistration(fixed, moving, mode, onProgress) {
       if (data.error) reject(new Error(data.error));
       else resolve(data);
     };
-    registrationWorker.onerror = (event) => {
+    worker.onerror = (event) => {
+      if (closed) return;
       close();
       reject(new Error(event.error instanceof Error ? event.error.message : event.message || "Greedy worker failed to start."));
     };
-    registrationWorker.onmessageerror = () => {
+    worker.onmessageerror = () => {
+      if (closed) return;
       close();
       reject(new Error("Greedy worker could not exchange registration data."));
     };
@@ -327,8 +341,10 @@ function runRegistration(fixed, moving, mode, onProgress) {
     };
     $("cancelButton").hidden = false;
     Promise.all([fixed.arrayBuffer(), moving.arrayBuffer()]).then(([fixedBytes, movingBytes]) => {
-      registrationWorker?.postMessage({ fixed: fixedBytes, moving: movingBytes, mode }, [fixedBytes, movingBytes]);
-    }, (error) => {
+      if (closed) return;
+      worker.postMessage({ fixed: fixedBytes, moving: movingBytes, mode }, [fixedBytes, movingBytes]);
+    }).catch((error) => {
+      if (closed) return;
       close();
       reject(error);
     });
@@ -375,7 +391,7 @@ $("runButton").onclick = () => void runTask("Starting registration…", async ()
   await clearOutput();
   await register();
 });
-$("method").onchange = () => void clearOutput().then(() => setBusy(false));
+$("method").onchange = () => void runTask("Changing registration method…", clearOutput);
 $("cancelButton").onclick = () => {
   status("Cancelling registration…");
   cancelRegistration?.();

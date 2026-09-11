@@ -31,6 +31,15 @@ test("defaults load and registration reaches the resliced panel", async ({ page 
   await expect(page.locator("#stationaryInfo")).toHaveText("MNI152_T1_1mm.nii.gz");
   await expect(page.locator("#statusText")).toHaveText("Registration complete", { timeout: 60_000 });
   await expect(page.locator("#resultList")).toContainText("Registered moving image");
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.locator("#resultList").getByRole("button", { name: "Download" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("t1_crop_registered.nii");
+  const image = await readFile(await download.path());
+  expect(image.readInt32LE(0)).toBe(348);
+  expect(image.length).toBeGreaterThan(352);
+
 });
 
 test("cancellation keeps controls locked until registration exits", async ({ page }) => {
