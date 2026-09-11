@@ -1,0 +1,13 @@
+@neurodesk/greedy
+Copyright 2026 Neurodesk contributors
+
+The native and WebAssembly implementation is in exes/greedy. It follows the
+command-line behavior of the Greedy C++ software, created by Paul Yushkevich at
+the Penn Image Computing and Science Lab and maintained by the Greedy
+open-source contributors. Project history and source are available at
+https://sites.google.com/view/greedyreg/about and
+https://github.com/pyushkevich/greedy. The upstream project is licensed under
+the Apache License 2.0.
+
+The generated browser runtime includes wasm-bindgen and wasm-bindgen-rayon.
+Their generated notices and license headers are retained.

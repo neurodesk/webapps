@@ -779,3 +779,35 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  greedy:
+    about:
+      - Greedy performs affine or affine followed by deformable MRI registration locally in the browser. Custom inputs are brain extracted before registration.
+    packages:
+      - { name: greedy-rs (Rust → WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/greedy, role: affine and stationary-velocity deformable registration }
+      - { name: MindGrab (brainchop), url: https://github.com/neuroneural/brainchopC, role: brain extraction for custom inputs }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Registration
+        title: Greedy
+        reference: "Greedy was created by Paul Yushkevich at the Penn Image Computing and Science Lab and is maintained by contributors to the Greedy C++ project [Computer software]."
+        url: https://sites.google.com/view/greedyreg/about
+        code: https://github.com/pyushkevich/greedy
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
+      - group: Brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+        code: https://github.com/neuroneural/brainchop
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

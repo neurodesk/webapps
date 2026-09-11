@@ -406,4 +406,25 @@ apps:
     ci:
       toolchains: [node]
       shared_runtime: false
+      browser_test: true
+      release: false
+  - id: greedy
+    path: greedy
+    title: Greedy
+    description: Affine and deformable MRI registration in the browser with Greedy.
+    category: data-preparation
+    keywords: [registration, affine, deformable, NIfTI, Greedy]
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      browser_test: true
       release: false
