@@ -5,12 +5,13 @@ import { readFileSync } from "node:fs";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
+import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
 
 // Headless Chromium otherwise exposes only a SwiftShader WebGPU adapter, on which
 // MindGrab does not finish; these flags hand it the real GPU. Must stay top level
 // (Playwright forbids launchOptions inside a describe group).
 const hardwareGpu = process.platform === "darwin";
-test.use({ launchOptions: { args: ["--enable-unsafe-webgpu", ...(hardwareGpu ? ["--use-angle=metal", "--enable-features=Metal"] : [])] } });
+test.use({ launchOptions: { args: ["--enable-unsafe-webgpu", ...(hardwareGpu ? ["--use-angle=metal", "--enable-features=Metal"] : ["--use-angle=swiftshader", "--use-vulkan=swiftshader", "--enable-features=Vulkan", "--disable-vulkan-surface"])] } });
 
 test("app boots", async ({ page }) => {
   await page.goto("/");
@@ -135,3 +136,50 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
     console.log(`${name}: ${triangles} triangles, volume ${stl.volume.toFixed(0)} mm^3`);
   });
 }
+
+
+test("a delayed example never replaces a selected image", async ({ page }) => {
+  let releaseExample;
+  const held = new Promise(resolve => { releaseExample = resolve; });
+  await page.route("**/browserqc/t1_crop.nii.gz", async route => {
+    await held;
+    await route.fulfill({ body: readFileSync(fixture), contentType: "application/gzip" }).catch(() => {});
+  });
+  await page.goto("/");
+  await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
+  await page.setInputFiles("#imageInput", fixture);
+  await expect(page.locator("#statusText")).toHaveText("small.nii.gz loaded", { timeout: 30000 });
+  releaseExample();
+  await page.waitForTimeout(500);
+  await expect(page.locator("#statusText")).toHaveText("small.nii.gz loaded");
+  await expect(page.locator("#segmentButton")).toBeEnabled();
+});
+
+test("a failed replacement disables segmentation of the previous image", async ({ page }) => {
+  await page.route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
+  await page.goto("/");
+  await expect(page.locator("#segmentButton")).toBeEnabled({ timeout: 30000 });
+  await page.setInputFiles("#imageInput", { name: "broken.nii", mimeType: "application/octet-stream", buffer: Buffer.from("invalid nifti") });
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  await expect(page.locator("#segmentButton")).toBeDisabled();
+  await expect(page.locator("#meshButton")).toBeDisabled();
+  await expect(page.locator("#downloadButton")).toBeDisabled();
+});
+
+
+test("the scan picker converts DICOM and retains mesh settings", async ({ page }, testInfo) => {
+  await page.route("**/browserqc/t1_crop.nii.gz", route => route.abort());
+  await page.goto("/");
+  await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
+  await page.setInputFiles("#imageInput", dicomSeries({ extension: "" }));
+  await expect(page.locator("#statusText")).toHaveText(/\.nii(\.gz)? loaded$/, { timeout: 60000 });
+  await expect(page.locator("#segmentButton")).toBeEnabled();
+  await page.locator("#simplify").fill("35");
+  const section = page.locator("details").filter({ has: page.locator("#simplify") });
+  await section.locator("summary").click();
+  await section.locator("summary").click();
+  await expect(page.locator("#simplify")).toHaveValue("35");
+  await page.screenshot({ path: testInfo.outputPath("dicom-dark.png"), fullPage: true });
+  await page.locator("[data-neurodesk-theme-toggle]").click();
+  await page.screenshot({ path: testInfo.outputPath("dicom-light.png"), fullPage: true });
+});

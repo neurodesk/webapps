@@ -1,8 +1,8 @@
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, renderConsole } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui'
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
-import NiiVueGPU from '@niivue/niivue'
+import NiiVueGPU, { SLICE_TYPE } from '@niivue/niivue'
 import { Niimath } from '@niivue/niimath'
 import { APP } from './config.js'
 import { flipWinding, inspectMesh } from './mesh.js'
@@ -19,6 +19,8 @@ const SEG_COLORMAP = {
   A: [0, ...Array(17).fill(255)],
 }
 
+const exampleDownload = new AbortController()
+let viewerReady = false
 let source = null
 let segmentation = null
 let series = []
@@ -42,6 +44,25 @@ $('aboutBtn').onclick = () => info.open('About Brain2Print', $('aboutContent'))
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'))
 const nv = new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] })
 const niimath = new Niimath()
+const toolbar = renderViewerToolbar({
+  window: false,
+  overlay: false,
+  colormap: false,
+  download: false,
+  screenshot: false,
+  views: [['slices', 'Slices', SLICE_TYPE.MULTIPLANAR], ['render', '3D', SLICE_TYPE.RENDER]].map(([id, label, type], index) => ({
+    id,
+    label,
+    active: index === 0,
+    onClick: () => {
+      if (!viewerReady) return
+      nv.sliceType = type
+      nv.drawScene()
+      toolbar.setActive(id)
+    },
+  })),
+})
+$('viewer').prepend(toolbar.root)
 
 function status(message, error = false) {
   $('statusText').textContent = message
@@ -50,7 +71,7 @@ function status(message, error = false) {
 }
 
 function buttons() {
-  for (const id of ['imageInput', 'folderInput', 'seriesSelect']) $(id).disabled = busy
+  for (const id of ['imageInput', 'folderInput', 'seriesSelect']) $(id).disabled = busy || !viewerReady
   $('segmentButton').disabled = busy || !source
   $('meshButton').disabled = busy || !segmentation
   $('downloadButton').disabled = busy || !nv.meshes.length
@@ -69,6 +90,9 @@ async function loadImage(file) {
   buttons()
   try {
     status(`Loading ${file.name}…`)
+    source = null
+    segmentation = null
+    $('outputSection').open = false
     await clearMeshes()
     await nv.loadVolumes([{ url: file, name: file.name }])
     source = file
@@ -84,7 +108,9 @@ async function loadImage(file) {
 }
 
 async function chooseFiles(files) {
+  if (!viewerReady) return
   if (busy) return status('Wait for the current step to finish before loading another image.', true)
+  exampleDownload.abort()
   busy = true
   buttons()
   try {
@@ -109,6 +135,10 @@ async function segment() {
   busy = true
   buttons()
   try {
+    segmentation = null
+    $('outputSection').open = false
+    await clearMeshes()
+    while (nv.volumes.length > 1) await nv.removeVolume(1)
     status('Segmenting with MindGrab…')
     const input = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
     if (!(input instanceof Uint8Array)) throw new Error('Could not read the input image.')
@@ -120,10 +150,11 @@ async function segment() {
       assetPath: `${import.meta.env.BASE_URL}brainchop/`,
     })
     if (source !== image) throw new Error('The image changed during segmentation; run it again.')
-    segmentation = new Uint8Array(result.image)
+    const labels = new Uint8Array(result.image)
     while (nv.volumes.length > 1) await nv.removeVolume(1)
-    await nv.addVolume({ url: new File([segmentation], 'segmentation.nii'), name: 'segmentation.nii', opacity: 0.5 })
+    await nv.addVolume({ url: new File([labels], 'segmentation.nii'), name: 'segmentation.nii', opacity: 0.5 })
     await nv.setColormapLabel(nv.volumes.length - 1, SEG_COLORMAP)
+    segmentation = labels
     status(`Segmentation complete on ${result.backend} (${Math.round(result.elapsedMs)} ms). Create the mesh when ready.`)
   } catch (error) {
     status(error instanceof Error ? error.message : String(error), true)
@@ -200,15 +231,18 @@ async function init() {
   } catch {
     return status('This browser or GPU cannot initialize WebGPU.', true)
   }
+  viewerReady = true
+  buttons()
   nv.isLegendVisible = false
   extension = nv.createExtensionContext()
   extension.on('locationChange', (event) => { $('location').textContent = event.detail.string })
   try {
-    const response = await fetch(DEFAULT_T1_URL)
+    const response = await fetch(DEFAULT_T1_URL, { signal: exampleDownload.signal })
     if (!response.ok) throw new Error(`example image download failed (${response.status})`)
-    await loadImage(new File([await response.blob()], 't1_crop.nii.gz'))
+    const blob = await response.blob()
+    if (!exampleDownload.signal.aborted) await loadImage(new File([blob], 't1_crop.nii.gz'))
   } catch (error) {
-    status(error instanceof Error ? error.message : String(error), true)
+    if (!exampleDownload.signal.aborted) status(error instanceof Error ? error.message : String(error), true)
   }
 }
 
@@ -217,6 +251,7 @@ window.addEventListener('pagehide', () => {
   extension?.dispose()
   nv.destroy()
 }, { once: true })
+buttons()
 void init()
 
 export default Object.freeze({ APP, chooseFiles, segment, mesh })

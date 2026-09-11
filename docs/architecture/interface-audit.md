@@ -64,3 +64,13 @@ Deface and BrowserQC passed their unsupported-WebGPU and About workflows in the 
 After a fresh production build, reproduce the screenshots and measurements with `INTERFACE_ARTIFACTS="$TMPDIR/interface-audit" pnpm audit:interfaces`. Run `pnpm test:interface-workflows` for the small local-data workflows and `pnpm test:mobile` for layout and touch checks. CI retains the screenshots and measurements as the `interface-audit` artifact.
 
 The September 10 pull-request review adds dwi2trx and SynthSeg on the shared vocabulary. dwi2trx retains vector-generator settings across dialog closure and exports a Siemens scheme in its browser test. SynthSeg tests cancellation ownership and keeps unabortable local parsing busy. Full GPU inference remains a separate hardware validation gate.
+
+## Brain2Print review, 11 September 2026
+
+Brain2Print uses the shared folder picker, viewer toolbar, console and information
+shell, with one primary action. Loading a replacement invalidates the previous
+segmentation and mesh, and selecting an image cancels the startup example download.
+The review covers delayed downloads, failed replacements, DICOM conversion and
+retained mesh settings. Desktop and phone layouts were inspected; the 19-app
+interface, mobile and shared workflow suites pass. Full MindGrab-to-STL tests
+remain hardware-GPU gates and are skipped on the software adapter.
