@@ -5,8 +5,8 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "dev": "node scripts/copy-runtime.mjs && vite --force",
-    "build": "node scripts/copy-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app greedy",
+    "dev": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime.mjs && vite --force",
+    "build": "pnpm --filter @neurodesk/greedy build:wasm && node scripts/copy-runtime.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app greedy",
     "preview": "vite preview",
     "test": "node --test test/*.test.js ../../packages/greedy/test/*.test.js && cargo test --manifest-path ../../exes/greedy/Cargo.toml --workspace --locked",
     "test:e2e": "playwright test",
@@ -23,5 +23,8 @@
     "@playwright/test": "^1.44.0",
     "eslint": "^9.0.0",
     "vite": "^5.0.0"
+  },
+  "neurodeskWebapp": {
+    "coiServiceWorker": true
   }
 }

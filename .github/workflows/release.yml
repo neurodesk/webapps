@@ -67,9 +67,12 @@ jobs:
         if: matrix.rust_wasm
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-pack
+      - name: Install pinned nightly toolchain
         if: matrix.rust_wasm
-        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        if: matrix.rust_wasm
+        run: cargo install wasm-pack --version 0.13.1 --locked
       - uses: actions/setup-python@v7
         if: matrix.python_reference
         with:

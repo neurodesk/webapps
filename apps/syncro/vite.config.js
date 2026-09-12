@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
-import {isolationFallback} from '../synthsr/scripts/coi-plugin.mjs';
+import {isolationFallback} from '../../scripts/lib/isolation-fallback-plugin.mjs';
 const require=createRequire(import.meta.url),mindgrabRoot=dirname(require.resolve('@brainchop/mindgrab/package.json')),mindgrabDist=join(mindgrabRoot,'dist');
 const syncroPackage=JSON.parse(await readFile(new URL('../../packages/syncro/package.json',import.meta.url),'utf8'));
 const appPackage=JSON.parse(await readFile(new URL('./package.json',import.meta.url),'utf8'));

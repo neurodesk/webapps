@@ -32,9 +32,9 @@ so releases remain reproducible.
 
 ## Build and test
 
-The Greedy executable source is in `exes/greedy`. Its browser build is committed
-under `packages/greedy/wasm`, included in package releases, and copied into the
-app build alongside MindGrab's runtime files:
+The Greedy executable source is in `exes/greedy`. Its browser runtime is built
+into the ignored `packages/greedy/wasm` directory and copied into the app build
+alongside MindGrab's runtime files:
 
 ```bash
 pnpm --filter @neurodesk/greedy build:wasm
@@ -43,9 +43,8 @@ pnpm --filter greedy build
 pnpm --filter greedy test:e2e
 ```
 
-The app does not fetch executable code from Hugging Face or a GitHub release.
-Hugging Face stores example data; package releases carry the browser module;
-native release archives can be published separately from `exes/greedy`.
+Hugging Face stores example data. The standalone web archive, including the
+generated browser runtime, is attached to each `greedy-v…` GitHub Release.
 
 ## MindGrab release note
 

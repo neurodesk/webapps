@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { resolveModel,manifest,defaultThreads,synthesize } from '../src/node.js';
-import { readVolume } from '../src/index.js';
+import { readVolume,writeVolume } from '../src/index.js';
 const exec=promisify(execFile),cli=fileURLToPath(new URL('../bin/synthsr.js',import.meta.url));
 const fixture=name=>fileURLToPath(new URL('../../../apps/synthsr/test/fixtures/'+name,import.meta.url));
 const volume=async path=>{const b=await readFile(path);return readVolume(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength));};
@@ -33,6 +33,12 @@ test('thread defaults respect the Slurm allocation',()=>{
   const before=process.env.SLURM_CPUS_PER_TASK;
   try {process.env.SLURM_CPUS_PER_TASK='3';assert.equal(defaultThreads(),3);}
   finally {if(before===undefined)delete process.env.SLURM_CPUS_PER_TASK;else process.env.SLURM_CPUS_PER_TASK=before;}
+});
+test('singleton fourth dimensions remain spatially 3D',()=>{
+  const buffer=writeVolume({data:new Uint8Array(8),dims:[2,2,2],affine:[[1,0,0,0],[0,1,0,0],[0,0,1,0]]});
+  const header=new DataView(buffer);header.setInt16(40,4,true);header.setInt16(48,1,true);
+  assert.deepEqual(readVolume(buffer).dims,[2,2,2]);
+  header.setInt16(48,2,true);assert.throws(()=>readVolume(buffer),/single 3D image/);
 });
 test('invalid thread/device options and output conflicts fail before inference',async()=>{
   const input=fixture('validation.nii.gz');

@@ -427,7 +427,7 @@ apps:
       toolchains: [node, rust-wasm]
       shared_runtime: false
       browser_test: true
-      release: false
+      release: true
   - id: brain2print
     path: brain2print
     title: Brain2Print

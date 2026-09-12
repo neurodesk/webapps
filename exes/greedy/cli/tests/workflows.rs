@@ -136,6 +136,44 @@ fn affine_svf_and_reslice_workflow() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+#[test]
+fn auto_background_uses_the_source_minimum_below_zero() {
+    let directory =
+        env::temp_dir().join(format!("greedy-rs-background-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir(&directory).unwrap();
+    let mut fixed_image = image();
+    fixed_image.grid.lps_from_voxel.0[0][3] = -1.0;
+    let mut moving_image = image();
+    moving_image.data[0] = -1000.0;
+    let fixed = directory.join("fixed.nii.gz");
+    let moving = directory.join("moving.nii.gz");
+    let matrix = directory.join("identity.mat");
+    let output = directory.join("resliced.nii.gz");
+    fs::write(&fixed, encode_image(&fixed_image, true).unwrap()).unwrap();
+    fs::write(&moving, encode_image(&moving_image, true).unwrap()).unwrap();
+    fs::write(&matrix, "1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1\n").unwrap();
+
+    run(&[
+        "-d",
+        "3",
+        "-rf",
+        fixed.to_str().unwrap(),
+        "-rm",
+        moving.to_str().unwrap(),
+        output.to_str().unwrap(),
+        "-rb",
+        "auto",
+        "-r",
+        matrix.to_str().unwrap(),
+    ]);
+    assert_eq!(
+        decode_image(&fs::read(&output).unwrap()).unwrap().data[0],
+        -1000.0
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
 /// Regression gate against Greedy 1.3 (double, `-threads 1 -jitter 0`) on the
 /// 2 mm benchmark pair. Runs only when `GREEDY_BENCH_DIR` points at
 /// allineate-benchmark; the bar is Greedy's own float-versus-double spread.

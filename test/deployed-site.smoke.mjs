@@ -12,7 +12,7 @@ const registry = await loadAppsRegistry();
 const isolatedApps = [];
 for (const app of registry.apps) {
   const packageJson = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8'));
-  if (packageJson.neurodeskWebapp?.static?.coiServiceWorker) isolatedApps.push(app);
+  if (packageJson.neurodeskWebapp?.coiServiceWorker || packageJson.neurodeskWebapp?.static?.coiServiceWorker) isolatedApps.push(app);
 }
 
 const browser = await chromium.launch({ headless: true });

@@ -2,6 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
     "packages/runtime-support/src/**",
+    "scripts/lib/isolation-fallback-plugin.mjs",
     "scripts/lib/runtime-support.mjs",
     "scripts/vendor-runtime-support.mjs"
   ],

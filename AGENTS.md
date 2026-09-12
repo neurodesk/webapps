@@ -77,13 +77,14 @@ Face dataset `neurodeskorg/webapps` via a pinned manifest and are never
 committed.
 
 `exes/greedy` is the native Rust Greedy workspace and the source of the browser
-module. `packages/greedy` owns the JavaScript wrapper and committed threaded
-`wasm-bindgen` output; rebuild it with
+module. `packages/greedy` owns the JavaScript wrapper and ignored threaded
+`wasm-bindgen` build output; rebuild it with
 `pnpm --filter @neurodesk/greedy build:wasm`. Apps stage the complete generated
 directory because its Rayon worker helper, JavaScript glue and WASM binary use
-relative URLs and must remain adjacent. Greedy's app manifest is the release
-version source; the release tooling keeps its package and Rust workspace at the
-same `MAJOR.MINOR.YYYYMMDD` version.
+relative URLs and must remain adjacent. The versioned Greedy web release carries
+that generated runtime; it is never committed or npm-published. Greedy's app
+manifest is the release version source; the release tooling keeps its package
+and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version.
 
 `exes/synthseg` is the SynthSeg 2.0 CLI (ORT CPU + native Metal), imported
 from a standalone repo. Its `README.md` "Numerics" and "Traps" sections are the

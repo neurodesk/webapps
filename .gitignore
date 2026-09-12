@@ -26,6 +26,7 @@ exes/*/target/
 
 # WASM files (downloaded by per-app setup.sh)
 apps/*/web/wasm/
+packages/greedy/wasm/
 
 # Vendored shared components (generated from packages/components by each app's vendor script)
 apps/*/web/vendor/

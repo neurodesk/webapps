@@ -75,9 +75,12 @@ jobs:
         if: matrix.rust_wasm
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-pack
+      - name: Install pinned nightly toolchain
         if: matrix.rust_wasm
-        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        if: matrix.rust_wasm
+        run: cargo install wasm-pack --version 0.13.1 --locked
       - uses: actions/setup-python@v7
         if: matrix.python_reference
         with:
@@ -116,8 +119,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install wasm-pack
-        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+      - name: Install pinned nightly toolchain
+        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        run: cargo install wasm-pack --version 0.13.1 --locked
       - run: pnpm install --frozen-lockfile
       - name: Install browser
         run: |
@@ -162,6 +167,13 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.app == 'greedy'
+      - name: Install Greedy WebAssembly toolchain
+        if: matrix.app == 'greedy'
+        run: |
+          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
       - uses: actions/setup-python@v7
         if: matrix.python_reference
         with:
