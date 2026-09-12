@@ -1,5 +1,11 @@
 # @neurodesk/topofit
 
+## 0.2.20260912
+
+### Minor Changes
+
+- Match OpenRecon cubic conforming, pin deterministic browser inference, and add reproducibility hashes and repeat-run validation.
+
 ## 0.1.20260912
 
 ### Patch Changes

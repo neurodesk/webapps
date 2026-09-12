@@ -2,7 +2,6 @@ import { runTopofit } from '@neurodesk/topofit';
 import { Tensor, browserRuntime, createBrowserSession } from '@neurodesk/topofit/browser';
 import manifest from '@neurodesk/topofit/manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
-import { conformImage } from './conform.js';
 
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
 const cachePromise = openModelCache();
@@ -49,12 +48,16 @@ self.onmessage = async ({ data: job }) => {
       model: job.model,
       conform: job.conform,
       overlayThickness: job.overlayThickness,
-      conformImage,
       loadAsset: (name, from, to) => asset(name, from, to, job.assetBase),
       createSession: createBrowserSession,
       Tensor,
       onProgress: progress,
-      runtime: { app: 'TopoFit web 0.1.20260912', release: manifest.release, ...browserRuntime() },
+      runtime: {
+        app: 'TopoFit web 0.2.20260912',
+        release: manifest.release,
+        assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),
+        ...browserRuntime(),
+      },
     });
     self.postMessage({ type: 'result', ...result }, result.files.map((file) => file.bytes));
   } catch (error) {

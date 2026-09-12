@@ -252,7 +252,7 @@ $('runButton').onclick = () => {
       active.terminate();
       worker = null;
       setBusy(false);
-      status(`Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.provenance.seconds)} s`);
+      status(`Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.elapsedSeconds)} s`);
       await showResult('qc');
     }
   };

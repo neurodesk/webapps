@@ -18,13 +18,15 @@ SURFACES = (
     "lh.registration",
     "rh.registration",
 )
+OUTPUTS = (*SURFACES, "topofit_qc.nii", "topofit_manifest.json")
 CONTAINER = "vnmd/topofit_0.5.1@sha256:dff22ad5577a1a7ba0530759e009f293271ea5ddfc3441fb35b61322bbd6ec29"
 RELEASE = "topofit-0.5.1-onnx-20260911"
 INPUTS = {
     "end-to-end": {
         "dataset": "OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz",
         "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
-        "preprocessing": "Each implementation conforms the original anisotropic scan with its production preprocessing path.",
+        "preprocessing": "Both implementations conform the original anisotropic scan with the pinned OpenRecon cubic contract.",
+        "inferenceSha256": "63cb6de32f0ef41ee536c4d98bd826c0be82b7a3999ab50a3600562d5a802381",
     },
     "controlled": {
         "dataset": "Browser-resampled 1 mm RAS derivative of OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz",
@@ -49,6 +51,11 @@ def sha256(path):
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def canonical_sha256(value):
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def percentile(values, probability):
@@ -140,6 +147,44 @@ def compare_qc(reference, browser):
     return result
 
 
+def validate_manifest(directory, fixture):
+    path = directory / "topofit_manifest.json"
+    manifest = json.loads(path.read_text())
+    assert manifest["schemaVersion"] == 2
+    assert manifest["inputSha256"] == fixture["sha256"]
+    if "inferenceSha256" in fixture:
+        assert manifest["inferenceSha256"] == fixture["inferenceSha256"]
+    for name in (*SURFACES, "topofit_qc.nii"):
+        assert manifest["outputSha256"][name] == sha256(directory / name)
+    return {
+        "sha256": sha256(path),
+        "inputSha256": manifest["inputSha256"],
+        "inferenceSha256": manifest["inferenceSha256"],
+        "alignmentInputSha256": manifest["alignmentInputSha256"],
+        "modelInputSha256": manifest["modelInputSha256"],
+        "runtime": {key: value for key, value in manifest["runtime"].items() if key != "assets"},
+        "assetSetSha256": canonical_sha256(manifest["runtime"]["assets"]),
+        "outputSha256": manifest["outputSha256"],
+    }
+
+
+def compare_repeat(directory, repeats):
+    result = []
+    for repeat in repeats:
+        hashes = {}
+        for name in OUTPUTS:
+            expected = sha256(directory / name)
+            actual = sha256(repeat / name)
+            hashes[name] = actual
+            assert actual == expected, f"Repeat output differs: {name}"
+        result.append({
+            "run": repeat.name,
+            "byteIdentical": True,
+            "outputSetSha256": canonical_sha256(hashes),
+        })
+    return result
+
+
 def within_thresholds(report):
     for name, surface in report["surfaces"].items():
         if name.endswith("registration"):
@@ -170,6 +215,7 @@ def main():
     parser.add_argument("--conversion-report", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mode", choices=tuple(INPUTS), required=True)
+    parser.add_argument("--repeat", type=Path, action="append", default=[])
     args = parser.parse_args()
     fixture = INPUTS[args.mode]
     assert sha256(args.input) == fixture["sha256"]
@@ -201,13 +247,15 @@ def main():
         args.reference / "topofit_qc.nii.gz",
         args.browser / "topofit_qc.nii",
     )
+    report["provenance"] = validate_manifest(args.browser, fixture)
+    report["repeatability"] = compare_repeat(args.browser, args.repeat)
     passed = within_thresholds(report)
     report["status"] = "passed" if passed else "measured-difference"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
-    if args.mode == "controlled" and not passed:
-        raise SystemExit("Controlled ONNX/browser parity exceeded its release thresholds")
+    if not passed:
+        raise SystemExit(f"{args.mode.capitalize()} ONNX/browser parity exceeded its release thresholds")
 
 
 if __name__ == "__main__":
