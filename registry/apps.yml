@@ -240,7 +240,7 @@ apps:
     support_status: active
     shell: static-html
     ci:
-      toolchains: [node]
+      toolchains: [node, python-reference]
       shared_runtime: false
       browser_test: true
       release: true
@@ -465,7 +465,7 @@ apps:
     shell: imaging-workspace
     app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
     ci:
-      toolchains: [node, python-reference]
+      toolchains: [node]
       shared_runtime: false
       browser_test: true
       release: true
