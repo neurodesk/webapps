@@ -838,3 +838,29 @@ apps:
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."
         doi: 10.1016/j.jneumeth.2016.03.001
+
+  topofit:
+    packages:
+      - { name: BrainNet, url: https://github.com/simnibs/brainnet, role: TopoFit and TReGA pretrained models }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: niimath, url: https://github.com/rordenlab/niimath, role: 1 mm RAS conforming }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Cortical surface reconstruction
+        title: BrainNet
+        reference: "Nielsen JD, Hoopes A, Iglesias JE, et al. BrainNet: Deep learning for cortical surface reconstruction. arXiv. 2025."
+        url: https://arxiv.org/abs/2505.14017
+        code: https://github.com/simnibs/brainnet
+      - group: Cortical surface reconstruction
+        title: TopoFit
+        reference: "Hoopes A, Iglesias JE, Fischl B, Greve DN, Dalca AV. TopoFit: Rapid Reconstruction of Topologically-Correct Cortical Surfaces. Proceedings of Machine Learning Research. 2022;172:5086-5096."
+        url: https://proceedings.mlr.press/v172/hoopes22a.html
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

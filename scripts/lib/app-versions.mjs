@@ -14,6 +14,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/syncro': 'syncro',
+  '@neurodesk/topofit': 'topofit',
 });
 
 export function releaseDate(now = new Date()) {
@@ -150,6 +151,10 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
   synthsr: [
     { file: 'exes/synthsr/Cargo.toml', pattern: /(^\[package\][\s\S]*?^version = ")[^"]+(")/m, replace: '$1{version}$2' },
     { file: 'exes/synthsr/Cargo.lock', pattern: /(name = "synthsr"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  topofit: [
+    { file: 'apps/topofit/src/config.js', pattern: /(version: ')[^']+(')/, replace: '$1{version}$2' },
+    { file: 'apps/topofit/src/inference-worker.js', pattern: /(app: 'TopoFit web )[^']+(')/, replace: '$1{version}$2' },
   ],
 });
 

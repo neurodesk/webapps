@@ -567,6 +567,31 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
 
+  apps/topofit:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
+      '@neurodesk/topofit':
+        specifier: workspace:*
+        version: link:../../packages/topofit
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.11
+        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(yaml@2.9.0)
+
   apps/vesselboost:
     dependencies:
       '@neurodesk/webapp-components':
@@ -658,6 +683,18 @@ importers:
         version: 1.29.0
 
   packages/synthstrip: {}
+
+  packages/topofit:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      nifti-reader-js:
+        specifier: 0.8.0
+        version: 0.8.0
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
 
 packages:
 

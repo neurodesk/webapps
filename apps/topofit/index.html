@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="description" content="Reconstruct cortical surfaces locally from a brain MRI with TopoFit.">
+    <title>TopoFit · Neurodesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI or DICOM files">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <select id="seriesSelect" aria-label="Input image or DICOM series" hidden></select>
+          <details class="nd-sidebar-section" id="exampleImages">
+            <summary class="nd-section-title">Example image</summary>
+            <div class="nd-section-content">
+              <button id="exampleButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Load OpenNeuro example</button>
+            </div>
+          </details>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Surface reconstruction</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="model">Image contrast</label>
+            <select id="model">
+              <option value="t1w-1mm">T1-weighted · 1 mm</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="conform" type="checkbox" checked> Conform to the 1 mm RAS model grid</label>
+              <div class="nd-field">
+                <label for="thickness">QC line thickness</label>
+                <select id="thickness"><option value="0">Thin</option><option value="1" selected>Standard</option><option value="2">Wide</option><option value="3">Widest</option></select>
+              </div>
+            </div>
+          </details>
+          <p class="nd-hint">Research only. Outputs are not motion-cleared and must not be used for prescription.</p>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Reconstruct cortex</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content"><div id="resultList"></div></div>
+      </details>
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Brain image and cortical surface viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Load a brain scan to reconstruct its cortical surfaces.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel"></span><span id="location">Scroll to change slices · drag to adjust the view</span></div>
+    </main>
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready · choose an image to begin</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Reconstruction progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" aria-label="Cancel reconstruction" hidden>×</button>
+    </footer>
+    <template id="aboutContent">
+      <p>TopoFit estimates left and right white, pial, and spherical-registration surfaces from one brain MRI. This browser implementation runs the pinned BrainNet model locally from verified ONNX artifacts.</p>
+      <p>Research only. The workflow is not motion-cleared and is not for prescription.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Your scan and reconstructed surfaces stay in this browser. Pretrained models are downloaded from Hugging Face; the optional example is downloaded from OpenNeuro.</p>
+    </template>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -33,6 +33,7 @@ const REQUIRED_METHODS = {
   dicom2vid: ['10.1007/s003300101100', 'github.com/Vanilagy/mp4-muxer'],
   browserqc: ['10.1371/journal.pone.0184661', '10.21105/joss.05098', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
   brain2print: ['10.1038/s41598-025-00014-5', '10.1016/j.neuroimage.2026.122074', '10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],
+  topofit: ['arxiv.org/abs/2505.14017', 'proceedings.mlr.press/v172/hoopes22a.html', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   surfannotate: ['10.1016/j.neuroimage.2012.01.021', 'github.com/niivue/niivue'],
   zarro: ['10.1038/s41592-021-01326-w', 'zarr.dev', 'dandiarchive.org'],
   synthseg: ['10.1016/j.media.2023.102789', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],

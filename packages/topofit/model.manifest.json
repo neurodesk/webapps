@@ -1,0 +1,1344 @@
+{
+  "schema_version": 1,
+  "app": "topofit",
+  "release": "topofit-0.5.1-onnx-20260911",
+  "license": "GPL-3.0-only",
+  "repository": "neurodeskorg/webapps",
+  "revision": "b438d1162e7192ca425ca47282b06fe62340c85a",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b438d1162e7192ca425ca47282b06fe62340c85a/topofit/0.5.1/onnx-20260911/",
+  "source": {
+    "openReconVersion": "0.5.1",
+    "container": "vnmd/topofit_0.5.1@sha256:dff22ad5577a1a7ba0530759e009f293271ea5ddfc3441fb35b61322bbd6ec29",
+    "brainnet": "0.2",
+    "brainsynth": "0.1",
+    "checkpointSha256": {
+      "trega": "684bf1ce039732a35dbf4547e8d78decef0be1a4139764265ed951a8204be2df",
+      "topofitT1w": "1cd8600194f582db0cd87ef3eeca242ff85c6055c6e740c26c9ba25ac430dd1a",
+      "topofitSynth": "b4ba24ed2718fac0709ee456d711cf5a872723772d73fad5817aac88d9a3e195"
+    },
+    "neurocontainersCommit": "1c960cec82947541d270e06099ab415933c9ea07",
+    "brainnetTagObject": "a526011e1eb14e73f933d37d6d3db086b68f8474"
+  },
+  "preprocessing_contract": {
+    "tregaShape": [
+      192,
+      224,
+      192
+    ],
+    "topofitShape": [
+      176,
+      208,
+      176
+    ],
+    "layout": "NCDHW; RAS spatial axes, z fastest",
+    "normalizationQuantiles": [
+      0.001,
+      0.999
+    ],
+    "surfaceOrder": 6,
+    "verticesPerHemisphere": 245762,
+    "facesPerHemisphere": 491520
+  },
+  "assets": [
+    {
+      "filename": "trega-synth-random.onnx",
+      "bytes": 1487969,
+      "sha256": "96165925caf6dfe324025d72a5bd5ec525965299c2c0cf685f0ed7899f9d50f8",
+      "seconds": 1.2671830654144287,
+      "operators": [
+        "Abs",
+        "Add",
+        "Cast",
+        "Concat",
+        "Constant",
+        "Conv",
+        "Div",
+        "Expand",
+        "Gather",
+        "InstanceNormalization",
+        "MatMul",
+        "MaxPool",
+        "Mul",
+        "PRelu",
+        "ReduceSum",
+        "Relu",
+        "Reshape",
+        "Resize",
+        "Slice",
+        "Transpose",
+        "Unsqueeze"
+      ],
+      "inputs": [
+        "image",
+        "voxel_to_ras"
+      ],
+      "outputs": [
+        "targets",
+        "weights",
+        "templates"
+      ],
+      "iterations": 1,
+      "parity": [
+        {
+          "maxAbs": 0.0016512870788574219,
+          "meanAbs": 0.0001880464405985549
+        },
+        {
+          "maxAbs": 1.7583370208740234e-06,
+          "meanAbs": 1.7666928897597245e-07
+        },
+        {
+          "maxAbs": 0.0,
+          "meanAbs": 0.0
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-features.onnx",
+      "bytes": 11771099,
+      "sha256": "bd1d506bdf12eb48da57cd0ad8e77d65251ed4e096143108debe9f5a7b27de39",
+      "seconds": 3.51472544670105,
+      "operators": [
+        "Concat",
+        "Constant",
+        "Conv",
+        "InstanceNormalization",
+        "MaxPool",
+        "PRelu",
+        "Resize"
+      ],
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3"
+      ],
+      "iterations": 1,
+      "parity": [
+        {
+          "maxAbs": 4.601478576660156e-05,
+          "meanAbs": 2.911719093390275e-06
+        },
+        {
+          "maxAbs": 4.673004150390625e-05,
+          "meanAbs": 1.897561332953046e-06
+        },
+        {
+          "maxAbs": 0.00010943412780761719,
+          "meanAbs": 6.420680620067287e-06
+        },
+        {
+          "maxAbs": 0.0010547637939453125,
+          "meanAbs": 8.861525566317141e-05
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-0.onnx",
+      "bytes": 295070,
+      "sha256": "10fea29ad85ac6ed332a90318ca783bb0bfb97ab979bca07025cf4c0e63b29fe",
+      "seconds": 0.8257143497467041,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 3.0507322890116484e-07
+        },
+        {
+          "maxAbs": 1.7881393432617188e-07,
+          "meanAbs": 2.9481867613867507e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.4744138070454937e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-1.onnx",
+      "bytes": 583780,
+      "sha256": "c2ecafeacb4e14c1aad5beb0d470e940be1b476e27fbd0c3807b45731ae8f8d9",
+      "seconds": 1.096198320388794,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.6452852378279204e-06
+        },
+        {
+          "maxAbs": 8.940696716308594e-08,
+          "meanAbs": 1.7487312931052656e-08
+        },
+        {
+          "maxAbs": 2.47955322265625e-05,
+          "meanAbs": 5.020305707148509e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-2.onnx",
+      "bytes": 976041,
+      "sha256": "c9a5fca47b3ed362b2508ca68695f2dcf157ac9fa676378db3ffd5e6cc05bd01",
+      "seconds": 1.190908670425415,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.394492642248224e-06
+        },
+        {
+          "maxAbs": 8.940696716308594e-08,
+          "meanAbs": 1.2660307469047893e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.1738462692155736e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-3.onnx",
+      "bytes": 1783070,
+      "sha256": "674a1b74c629ca6cf7f8c8bb6b082d371b007edb645ed3a645548f2e450bb9ed",
+      "seconds": 1.389831304550171,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.0531705356697785e-06
+        },
+        {
+          "maxAbs": 8.940696716308594e-08,
+          "meanAbs": 1.3701415113587245e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.98746238311287e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-4.onnx",
+      "bytes": 3981380,
+      "sha256": "194dcd24b4a8e23f4fca023bfd61d7295e1210c655a531e51493ec9038639993",
+      "seconds": 1.5049755573272705,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 6.526169045173447e-07
+        },
+        {
+          "maxAbs": 3.5762786865234375e-07,
+          "meanAbs": 3.660073844002909e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 9.041262956088758e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-5.onnx",
+      "bytes": 12774165,
+      "sha256": "272001b7ed2d1ff120dd836ff1051b63f0e7e288f8caa9853754215213e3ecbb",
+      "seconds": 2.1191909313201904,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.700411130263092e-07
+        },
+        {
+          "maxAbs": 1.5497207641601562e-06,
+          "meanAbs": 1.6368495892038482e-07
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 5.720279432352982e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-white-order-6.onnx",
+      "bytes": 47944792,
+      "sha256": "dfc1980ec250a8171a031c5dfb54407eaa73983310dff3ae8e80e7e097c5b207",
+      "seconds": 6.811712265014648,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 1,
+      "parity": [
+        {
+          "maxAbs": 2.288818359375e-05,
+          "meanAbs": 2.8974696419936663e-07
+        },
+        {
+          "maxAbs": 7.152557373046875e-06,
+          "meanAbs": 2.1603314337426127e-07
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 6.734109092576546e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-t1w-1mm-pial.onnx",
+      "bytes": 106204,
+      "sha256": "85ab59a2a69b18757451d7dd6dabe843cdee09b89eb8089ad51aaec83b702699",
+      "seconds": 1.9553258419036865,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "Less",
+        "Mul",
+        "PRelu",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "white",
+        "uncertainty"
+      ],
+      "outputs": [
+        "pial",
+        "uncertainty_out"
+      ],
+      "iterations": 10,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 8.88694362544129e-09
+        },
+        {
+          "maxAbs": 2.384185791015625e-07,
+          "meanAbs": 2.53771204050679e-09
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-features.onnx",
+      "bytes": 15896888,
+      "sha256": "5086e5094f2bbdb01550862419c2cad60338b8d37bbe257486dacc228ac73054",
+      "seconds": 8.51729702949524,
+      "operators": [
+        "Concat",
+        "Constant",
+        "Conv",
+        "InstanceNormalization",
+        "MaxPool",
+        "PRelu",
+        "Resize"
+      ],
+      "inputs": [
+        "image"
+      ],
+      "outputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3"
+      ],
+      "iterations": 1,
+      "parity": [
+        {
+          "maxAbs": 5.918741226196289e-05,
+          "meanAbs": 3.0011372018634574e-06
+        },
+        {
+          "maxAbs": 0.00011008977890014648,
+          "meanAbs": 2.7985147426079493e-06
+        },
+        {
+          "maxAbs": 0.00018596649169921875,
+          "meanAbs": 8.063397217483725e-06
+        },
+        {
+          "maxAbs": 0.0020194202661514282,
+          "meanAbs": 0.00011556696699699387
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-0.onnx",
+      "bytes": 295070,
+      "sha256": "d2be2b02642f55047d3662bf76f5c74d62cf029394454a6494f4a7c01e9bfb7a",
+      "seconds": 0.8315002918243408,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 3.896733744568337e-07
+        },
+        {
+          "maxAbs": 4.172325134277344e-07,
+          "meanAbs": 8.355866043530114e-08
+        },
+        {
+          "maxAbs": 1.1444091796875e-05,
+          "meanAbs": 1.256824816664448e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-1.onnx",
+      "bytes": 583780,
+      "sha256": "cc25c5f445feb5f6a3cb39d2b6b0ab1c8c59c676136997d6d2b50a7ffdc4797b",
+      "seconds": 0.9992296695709229,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.3316630429471843e-06
+        },
+        {
+          "maxAbs": 1.1920928955078125e-07,
+          "meanAbs": 2.1551265660946228e-08
+        },
+        {
+          "maxAbs": 2.288818359375e-05,
+          "meanAbs": 3.6873113913316047e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-2.onnx",
+      "bytes": 976041,
+      "sha256": "0ec5906b0846b5ff698ffba29900afc42fad24a7032256333aeeb2104bf9997c",
+      "seconds": 1.1919636726379395,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.679008732935472e-06
+        },
+        {
+          "maxAbs": 5.960464477539063e-08,
+          "meanAbs": 1.4591365449234672e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.5337867555208504e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-3.onnx",
+      "bytes": 1783070,
+      "sha256": "e194453352e870afa5221126aae44fdeb6f109b3d0946cf7b1ce3c001bdba137",
+      "seconds": 1.4003183841705322,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 1.298766846957733e-06
+        },
+        {
+          "maxAbs": 5.960464477539063e-08,
+          "meanAbs": 1.155531670349319e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.282947207277175e-06
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-4.onnx",
+      "bytes": 3981380,
+      "sha256": "951a1ee1171805fa7c1420c31d3deb32c1535bc0d7adf9fff8a60f3178cde347",
+      "seconds": 1.518667221069336,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 8.320335496136977e-07
+        },
+        {
+          "maxAbs": 3.5762786865234375e-07,
+          "meanAbs": 4.263867481313355e-08
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 9.117345030063007e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-5.onnx",
+      "bytes": 12774165,
+      "sha256": "36a7139c6af2ff4ff5dc216c686c5412acdc85ba0cb22e169735988d22aae465",
+      "seconds": 2.121767282485962,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 2,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.958922493689897e-07
+        },
+        {
+          "maxAbs": 1.430511474609375e-06,
+          "meanAbs": 1.2113396508084406e-07
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 5.673440455211676e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-white-order-6.onnx",
+      "bytes": 47944792,
+      "sha256": "253e70b2c85dd44e5fcd2c96be00fbefa6b0c391f2bcf9162586f60871d5f1b9",
+      "seconds": 6.574234247207642,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Div",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "InstanceNormalization",
+        "Less",
+        "Max",
+        "Mul",
+        "PRelu",
+        "ReduceL2",
+        "ReduceMax",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "vertices",
+        "uncertainty",
+        "registration"
+      ],
+      "outputs": [
+        "vertices_out",
+        "uncertainty_out",
+        "registration_out"
+      ],
+      "iterations": 1,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 2.891050883135904e-07
+        },
+        {
+          "maxAbs": 6.4373016357421875e-06,
+          "meanAbs": 1.5858940116686426e-07
+        },
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 6.680247111034987e-07
+        }
+      ]
+    },
+    {
+      "filename": "topofit-synth-1mm-pial.onnx",
+      "bytes": 106204,
+      "sha256": "a3988d33d2753d763486c408a0f3776ac6c96a1c52f348b8be74dfadd132a229",
+      "seconds": 1.9167053699493408,
+      "operators": [
+        "Add",
+        "And",
+        "Cast",
+        "Clip",
+        "Concat",
+        "Constant",
+        "ConstantOfShape",
+        "Conv",
+        "Equal",
+        "Expand",
+        "Floor",
+        "Gather",
+        "GatherElements",
+        "GreaterOrEqual",
+        "Less",
+        "Mul",
+        "PRelu",
+        "Reshape",
+        "Slice",
+        "Split",
+        "Sub",
+        "Transpose",
+        "Unsqueeze",
+        "Where"
+      ],
+      "inputs": [
+        "dec0",
+        "dec1",
+        "dec2",
+        "dec3",
+        "white",
+        "uncertainty"
+      ],
+      "outputs": [
+        "pial",
+        "uncertainty_out"
+      ],
+      "iterations": 10,
+      "parity": [
+        {
+          "maxAbs": 1.52587890625e-05,
+          "meanAbs": 5.66032554161211e-09
+        },
+        {
+          "maxAbs": 2.384185791015625e-07,
+          "meanAbs": 1.6141782355205692e-09
+        }
+      ]
+    },
+    {
+      "filename": "faces-lh.i32",
+      "bytes": 5898240,
+      "sha256": "3a573d25fa398ac1ebe5145c0528fe7d4c33bfbb5cb8bf636bac37e3a7bfd902",
+      "shape": [
+        491520,
+        3
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "faces-rh.i32",
+      "bytes": 5898240,
+      "sha256": "735860e9a36e5d090628259b780ef3980ef95a45ee1ff9374258bb3c21d8f34f",
+      "shape": [
+        491520,
+        3
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "template-lh.f32",
+      "bytes": 744,
+      "sha256": "6ed358bac79f459c218a1a74e0bac4ee2d5c268ede23d53245de16d672f07df7",
+      "shape": [
+        1,
+        62,
+        3
+      ],
+      "dtype": "float32"
+    },
+    {
+      "filename": "template-rh.f32",
+      "bytes": 744,
+      "sha256": "d088aa1e5f6dfc1f83379608b462b0f8d14da41f26a1295a3bdb885891c5d5ba",
+      "shape": [
+        1,
+        62,
+        3
+      ],
+      "dtype": "float32"
+    },
+    {
+      "filename": "registration-lh.f32",
+      "bytes": 744,
+      "sha256": "13ba9a4029c540e2a1a27d08941822e8ee2a67314aa8ba752eab3f3097828048",
+      "shape": [
+        1,
+        62,
+        3
+      ],
+      "dtype": "float32"
+    },
+    {
+      "filename": "registration-rh.f32",
+      "bytes": 744,
+      "sha256": "8ff8687cfcce85442bae6b482fdfb40f2a916adf2ca10efc01d863569f221042",
+      "shape": [
+        1,
+        62,
+        3
+      ],
+      "dtype": "float32"
+    },
+    {
+      "filename": "subdivide-order-0-edges.i32",
+      "bytes": 1440,
+      "sha256": "4eefca9a6081eae5fda52fc1ef03650c6c2dbd796c115ff0938bab94c26c26d5",
+      "shape": [
+        180,
+        2
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "subdivide-order-1-edges.i32",
+      "bytes": 5760,
+      "sha256": "0408ebfd0663361b8ebc3f4df7a9d7d3112d233ab2ba33d006edc744b4037199",
+      "shape": [
+        720,
+        2
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "subdivide-order-2-edges.i32",
+      "bytes": 23040,
+      "sha256": "e18a855bfc1915bc45cc498a262d61304c8066af227e64dacc987554b2255479",
+      "shape": [
+        2880,
+        2
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "subdivide-order-3-edges.i32",
+      "bytes": 92160,
+      "sha256": "44efb6edfc0555386ef6a71ca3637fac5f9fe9d572d1222485d049afdf2dc4f7",
+      "shape": [
+        11520,
+        2
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "subdivide-order-4-edges.i32",
+      "bytes": 368640,
+      "sha256": "3326a5446a2e2e0c42f0c7b5c5e9e4020c80d16616cba097ecb7b5beffacee6b",
+      "shape": [
+        46080,
+        2
+      ],
+      "dtype": "int32"
+    },
+    {
+      "filename": "subdivide-order-5-edges.i32",
+      "bytes": 1474560,
+      "sha256": "22191eec450e13df65cd0fbd1058451fae77cfc32606b7c056a23ab985915d2d",
+      "shape": [
+        184320,
+        2
+      ],
+      "dtype": "int32"
+    }
+  ],
+  "validation": {
+    "dataset": "OpenNeuro ds000001",
+    "example_url": "https://s3.amazonaws.com/openneuro.org/ds000001/sub-01/anat/sub-01_T1w.nii.gz",
+    "example_sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
+    "controlled_comparison": "packages/topofit/validation/results/ds000001-controlled.json",
+    "end_to_end_comparison": "packages/topofit/validation/results/ds000001-end-to-end.json"
+  }
+}

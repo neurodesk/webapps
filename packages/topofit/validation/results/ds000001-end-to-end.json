@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "release": "topofit-0.5.1-onnx-20260911",
+  "conversionReportSha256": "3d7927a85db8039f32ea04b523ac8f3e6fcc59123bf8ca39cd64e00a2d8544b1",
+  "status": "measured-difference",
+  "mode": "end-to-end",
+  "scope": "One OpenNeuro ds000001 T1-weighted scan; engineering parity, not clinical validation.",
+  "input": {
+    "dataset": "OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz",
+    "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98"
+  },
+  "preprocessing": "Each implementation conforms the original anisotropic scan with its production preprocessing path.",
+  "container": "vnmd/topofit_0.5.1@sha256:dff22ad5577a1a7ba0530759e009f293271ea5ddfc3441fb35b61322bbd6ec29",
+  "thresholds": {
+    "surfaceMeanMm": 0.25,
+    "surfaceP95Mm": 0.5,
+    "surfaceMaxMm": 2.0,
+    "registrationMeanDegrees": 0.1,
+    "registrationP95Degrees": 0.25,
+    "registrationRadiusMaxMm": 0.01,
+    "qcWithinOneVoxel": 0.99
+  },
+  "surfaces": {
+    "lh.white": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.4666579301758163,
+      "p95_corresponding_distance_mm": 1.0458493826963537,
+      "max_corresponding_distance_mm": 3.022954063108568,
+      "browser_sha256": "1e1c108b929b129d82d5239d9c4b8e2ed9d9fb75d036fe973f0c356a84df7dc7",
+      "reference_sha256": "019b12b21a40c525f5b2574af5f31b55725d517b68e02cd811825974f4fc126b"
+    },
+    "rh.white": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.5065731711677711,
+      "p95_corresponding_distance_mm": 1.0683227797627217,
+      "max_corresponding_distance_mm": 2.440392853784648,
+      "browser_sha256": "7a0d81ec924c590c82f7fd45a1b2a2ff9833f652f06d683c272533be01721a13",
+      "reference_sha256": "4a0c230add9cece03f713a7f706251a88db176b00faea2fcac0602fa34cdd1cd"
+    },
+    "lh.pial": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.5198707467763256,
+      "p95_corresponding_distance_mm": 1.1550380896528676,
+      "max_corresponding_distance_mm": 3.128245658437968,
+      "browser_sha256": "068982cfa4533bb5ca228c7743b0fa93da1b055df6391444f8505d426b39be96",
+      "reference_sha256": "ea9d56cfa4274d0e21158bc5fb0b602e322ff92c2a0cffe8fccdb3b9bbd0fd96"
+    },
+    "rh.pial": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.5623631642118804,
+      "p95_corresponding_distance_mm": 1.205040180744102,
+      "max_corresponding_distance_mm": 3.6310974786609393,
+      "browser_sha256": "a0a6ca6add63d89e8d61d266f41bc18a482db21f87f8b6a5e13b25ed39393b60",
+      "reference_sha256": "ddb4a4c2e9a15dc122928a9557b03b641d93a73594ae7065867b46ef686bd7cc"
+    },
+    "lh.registration": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.5025872362882917,
+      "p95_corresponding_distance_mm": 1.0475560438676332,
+      "max_corresponding_distance_mm": 2.0068074397044957,
+      "browser_sha256": "cd2a1cd8eba422b54988bbf96fece0100816095234f87bf6653cfa091b0432a6",
+      "reference_sha256": "2ee500bb51fe710f0da82539a732fceb2bf439fd886e09bede2d77e32795d377",
+      "mean_angular_error_degrees": 0.2879619240466792,
+      "p95_angular_error_degrees": 0.6002081354509125,
+      "max_radius_error_mm": 1.6101322160011478e-05
+    },
+    "rh.registration": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.6181818105107352,
+      "p95_corresponding_distance_mm": 1.254233735804615,
+      "max_corresponding_distance_mm": 1.9937292356101748,
+      "browser_sha256": "843899aa3fe10331d2b5eaaf7499485849cc8164159d885e3169e1c948628d5a",
+      "reference_sha256": "6642526992336467480a2f786de0c2306c8e5a1c3178842ddd9d3af670070533",
+      "mean_angular_error_degrees": 0.354193209412031,
+      "p95_angular_error_degrees": 0.7186276906964212,
+      "max_radius_error_mm": 1.678835488405639e-05
+    }
+  },
+  "qc": {
+    "shape": [
+      160,
+      192,
+      192
+    ],
+    "max_affine_difference_mm": 0.0,
+    "white_dice": 0.939571973827699,
+    "pial_dice": 0.927978819083036,
+    "white_within_one_voxel_symmetric_coverage": 0.9999863530599852,
+    "pial_within_one_voxel_symmetric_coverage": 0.9986739721601464,
+    "browser_sha256": "159053550129c9c8645448e6fb00c49606e02aa36175862f202a3701c2e81b82",
+    "reference_sha256": "c83de586141f6c260a5733d0345921db254abe12dfd8647280572853ba67c38b"
+  }
+}

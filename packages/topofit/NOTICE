@@ -1,0 +1,7 @@
+TopoFit models and scientific workflow
+Copyright BrainNet contributors
+https://github.com/simnibs/brainnet/tree/v0.2
+GPL-3.0-only
+
+The validation reference is generated with the Neurodesk OpenRecon TopoFit
+0.5.1 container. The OpenNeuro ds000001 input is distributed under PDDL 1.0.

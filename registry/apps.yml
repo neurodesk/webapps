@@ -448,3 +448,24 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: topofit
+    path: topofit
+    title: TopoFit
+    description: Reconstruct cortical white, pial, and registration surfaces locally from a brain MRI.
+    category: segmentation-analysis
+    keywords: [TopoFit, cortical surface, MRI, FreeSurfer, BrainNet, ONNX]
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: packages/topofit/model.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/neurocontainers@1c960cec82947541d270e06099ab415933c9ea07
+    license: GPL-3.0-only
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
+    ci:
+      toolchains: [node, python-reference]
+      shared_runtime: false
+      browser_test: true
+      release: true
