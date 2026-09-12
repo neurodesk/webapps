@@ -1,0 +1,36 @@
+{
+  "name": "@neurodesk/topofit",
+  "version": "0.1.20260912",
+  "description": "BrainNet TopoFit cortical surface reconstruction for browsers",
+  "type": "module",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./browser": "./src/browser.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "nifti-reader-js": "0.8.0",
+    "onnxruntime-web": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/topofit"
+  }
+}
