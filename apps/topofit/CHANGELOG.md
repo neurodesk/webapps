@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Correct the TopoFit release-matrix toolchain declaration.
 - Harden public release verification, limit the UI to the validated model, and correct interface and conforming details.
 - Updated dependencies
   - @neurodesk/topofit@0.1.20260912

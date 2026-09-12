@@ -240,7 +240,7 @@ apps:
     support_status: active
     shell: static-html
     ci:
-      toolchains: [node, python-reference]
+      toolchains: [node]
       shared_runtime: false
       browser_test: true
       release: true
