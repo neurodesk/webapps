@@ -62,14 +62,14 @@ pub(crate) fn trilinear_scalar(image: &NiftiImage, voxel: [f64; 3]) -> f32 {
     trilinear_scalar_gradient(image, voxel).0
 }
 
-fn nearest_scalar(image: &NiftiImage, voxel: [f64; 3]) -> f32 {
+fn nearest_scalar(image: &NiftiImage, voxel: [f64; 3], background: f32) -> f32 {
     let voxel = voxel.map(|value| value.round() as isize);
     if voxel
         .iter()
         .zip(image.grid.dims)
         .any(|(&value, dimension)| value < 0 || value as usize >= dimension)
     {
-        return 0.0;
+        return background;
     }
     image.data[index(
         &image.grid,
@@ -82,10 +82,18 @@ fn nearest_scalar(image: &NiftiImage, voxel: [f64; 3]) -> f32 {
 /// Trilinear sample and its derivative with respect to voxel coordinates.
 /// Missing border corners have value zero, matching `trilinear_scalar`.
 pub(crate) fn trilinear_scalar_gradient(image: &NiftiImage, voxel: [f64; 3]) -> (f32, [f64; 3]) {
+    trilinear_scalar_gradient_with_background(image, voxel, 0.0)
+}
+
+fn trilinear_scalar_gradient_with_background(
+    image: &NiftiImage,
+    voxel: [f64; 3],
+    background: f32,
+) -> (f32, [f64; 3]) {
     let base = voxel.map(f64::floor);
     let fraction = [voxel[0] - base[0], voxel[1] - base[1], voxel[2] - base[2]];
     let base = base.map(|x| x as isize);
-    let mut total = 0.0;
+    let mut total = background as f64;
     let mut gradient = [0.0; 3];
     for dz in 0..2 {
         for dy in 0..2 {
@@ -115,8 +123,9 @@ pub(crate) fn trilinear_scalar_gradient(image: &NiftiImage, voxel: [f64; 3]) -> 
                     } else {
                         fraction[2]
                     };
-                    let value =
-                        image.data[index(&image.grid, x as usize, y as usize, z as usize)] as f64;
+                    let value = image.data[index(&image.grid, x as usize, y as usize, z as usize)]
+                        as f64
+                        - background as f64;
                     total += value * wx * wy * wz;
                     gradient[0] += value * if dx == 0 { -1.0 } else { 1.0 } * wy * wz;
                     gradient[1] += value * wx * if dy == 0 { -1.0 } else { 1.0 } * wz;
@@ -238,6 +247,27 @@ pub fn reslice_with_interpolation(
     expected_moving_grid: Option<&Grid>,
     interpolation: Interpolation,
 ) -> Result<NiftiImage> {
+    reslice_with_background(
+        fixed_grid,
+        moving,
+        chain,
+        expected_moving_grid,
+        interpolation,
+        0.0,
+    )
+}
+
+pub fn reslice_with_background(
+    fixed_grid: &Grid,
+    moving: &NiftiImage,
+    chain: &[Transform],
+    expected_moving_grid: Option<&Grid>,
+    interpolation: Interpolation,
+    background: f32,
+) -> Result<NiftiImage> {
+    if !background.is_finite() {
+        return Err(Error("reslice background must be finite".into()));
+    }
     if let Some(expected) = expected_moving_grid {
         if !grids_match(&moving.grid, expected, 1e-4) {
             return Err(Error("--verify-aligned failed: moving image grid differs from the registration source grid".into()));
@@ -251,14 +281,16 @@ pub fn reslice_with_interpolation(
     let chain = steps(chain)?;
     let moving_from_lps = moving.grid.lps_from_voxel.inverse()?;
     let per_slab = fixed_grid.dims[0] * fixed_grid.dims[1];
-    let mut data = vec![0.0_f32; fixed_grid.dims.iter().product()];
+    let mut data = vec![background; fixed_grid.dims.iter().product()];
     for_each_z(&mut data, fixed_grid.dims[2], |z, slab| {
         for (offset, out) in slab.iter_mut().enumerate() {
             let fixed_lps = fixed_grid.voxel_to_lps(fixed_grid.voxel(z * per_slab + offset));
             let voxel = moving_from_lps.apply(apply_chain(fixed_lps, &chain));
             *out = match interpolation {
-                Interpolation::Linear => trilinear_scalar(moving, voxel),
-                Interpolation::Nearest => nearest_scalar(moving, voxel),
+                Interpolation::Linear => {
+                    trilinear_scalar_gradient_with_background(moving, voxel, background).0
+                }
+                Interpolation::Nearest => nearest_scalar(moving, voxel, background),
             };
         }
     });

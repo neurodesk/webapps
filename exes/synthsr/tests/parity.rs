@@ -120,6 +120,12 @@ fn rejects_corrupt_non_finite_flat_and_4d() {
     nan.truncate(352);
     nan.extend((0..8).flat_map(|i| if i == 0 { f32::NAN } else { 1.0 }.to_le_bytes()));
     assert!(nifti::read(&nan).err().unwrap().contains("non-finite"));
+
+    // MATLAB commonly writes a spatially 3-D image as dim[0]=4, dim[4]=1.
+    let mut singleton_four_d = bytes.clone();
+    singleton_four_d[40..42].copy_from_slice(&4i16.to_le_bytes());
+    assert!(nifti::read(&singleton_four_d).is_ok());
+
     let mut four_d = bytes;
     four_d[40..42].copy_from_slice(&4i16.to_le_bytes());
     four_d[48..50].copy_from_slice(&2i16.to_le_bytes());

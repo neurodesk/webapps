@@ -21,17 +21,17 @@ GREEDY_BENCH_DIR=/path/to/allineate-benchmark \
   cargo test -p greedy-rs --test workflows nmi_affine_2mm_matches_greedy_within_float_double_spread -- --ignored
 ```
 
-Build the committed threaded browser package through the workspace package,
-which selects the pinned nightly and shared-memory flags:
+Build the threaded browser runtime through the workspace package, which selects
+the pinned nightly and shared-memory flags:
 
 ```sh
 cd ../..
 pnpm --filter @neurodesk/greedy build:wasm
 ```
 
-The generated module lives in `packages/greedy/wasm` and ships with the npm
-package. Browser apps stage that directory unchanged so the Rayon worker and
-WebAssembly relative URLs remain valid.
+The generated module lives in the ignored `packages/greedy/wasm` directory.
+Browser apps stage that directory unchanged so the Rayon worker and WebAssembly
+relative URLs remain valid; the standalone Greedy web release contains it.
 
 ## CLI
 
@@ -40,18 +40,22 @@ The flags mirror Greedy; unsupported ones fail with a message.
 Running `greedy-rs` without arguments, or with `-h` or `--help`, prints the
 available workflows. `greedy-rs --version` prints the workspace version. The
 Greedy app manifest owns the release version; `pnpm release` synchronizes it to
-the JavaScript package, Cargo workspace, lockfile, and generated WASM metadata.
+the JavaScript package, Cargo workspace, and lockfile.
 
 ```sh
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10
 greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz out.nii.gz -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm mask.nii.gz warped-mask.nii.gz -ri NN -r warp.nii.gz aff.mat
+greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.nii.gz aff.mat
 ```
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
 - Reslicing is linear by default. Use `-ri NN` for masks and label maps.
+- `-rb VALUE` sets the value outside the moving image field of view. `-rb auto`
+  uses the lower of zero and the moving image's finite minimum, which preserves
+  the air background of CT images while retaining zero for magnitude images.
 - `-jitter 0` is accepted; any other `-jitter`, `-seed`, and `-double` are
   rejected. Images are always f32; geometry, histograms, and reductions are
   f64.

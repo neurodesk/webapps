@@ -95,7 +95,10 @@ workflow accepts selected or Git-affected catalog apps, then tests, builds, and
 publishes an independent standalone bundle for each app. Tags use
 `<app>-v<version>` and all point to the same validated monorepo commit. Each
 release includes that app's static browser bundle; large model weights remain on
-Hugging Face and are fetched at runtime.
+Hugging Face and are fetched at runtime. Greedy's generated browser runtime is
+included in its standalone web archive; dispatch `release-apps` with
+`apps=greedy` for a Greedy-only release because the default affected plan is
+catalog-wide for shared source changes.
 
 ## Adding an app
 

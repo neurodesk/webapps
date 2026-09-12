@@ -8,12 +8,10 @@
     "node": ">=22"
   },
   "exports": {
-    ".": "./src/index.js",
-    "./wasm/*": "./wasm/*"
+    ".": "./src/index.js"
   },
   "files": [
     "src",
-    "wasm",
     "README.md",
     "LICENSE",
     "NOTICE"

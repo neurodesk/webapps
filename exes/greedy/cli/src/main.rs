@@ -4,8 +4,28 @@ use greedy_rs_core::{
     AffineMetric, Interpolation, Mat4, ScalarType, Transform, build_pyramid, decode_image,
     decode_vector_field, encode_image, encode_vector_field, image_centers,
     nmi_score_gradient_affine, read_matrix, register_affine, register_nmi_svf, reslice,
-    reslice_with_interpolation, score_affine, ssd_score_gradient,
+    reslice_with_background, score_affine, ssd_score_gradient,
 };
+
+#[derive(Clone, Copy)]
+enum ResliceBackground {
+    Value(f32),
+    Auto,
+}
+
+impl ResliceBackground {
+    fn resolve(self, image: &greedy_rs_core::NiftiImage) -> f32 {
+        match self {
+            Self::Value(value) => value,
+            Self::Auto => image
+                .data
+                .iter()
+                .copied()
+                .filter(|value| value.is_finite())
+                .fold(0.0, f32::min),
+        }
+    }
+}
 
 fn fail(message: impl std::fmt::Display) -> ! {
     eprintln!("greedy-rs: {message}");
@@ -31,6 +51,7 @@ fn print_help() {
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
            -threads N      Limit the Rayon worker pool\n\
            -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
+           -rb VALUE|AUTO  Reslice outside value (default: 0)\n\
            -V 0|1         Disable or enable optimizer output\n\
            -h, --help      Print this help\n\
            --version       Print the version",
@@ -406,6 +427,7 @@ fn main() {
     }
     let (mut fixed, mut reslices, mut verify, mut chain) = (None, Vec::new(), None, Vec::new());
     let mut interpolation = Interpolation::Linear;
+    let mut background = ResliceBackground::Value(0.0);
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -434,6 +456,20 @@ fn main() {
                     )),
                 }
             }
+            "-rb" => {
+                let value = take(&args, &mut at, "-rb");
+                background = if value.eq_ignore_ascii_case("auto") {
+                    ResliceBackground::Auto
+                } else {
+                    let value = value
+                        .parse::<f32>()
+                        .unwrap_or_else(|_| fail("-rb must be a finite number or AUTO"));
+                    if !value.is_finite() {
+                        fail("-rb must be a finite number or AUTO");
+                    }
+                    ResliceBackground::Value(value)
+                };
+            }
             "-r" => {
                 at += 1;
                 chain.extend(args[at..].iter().map(|s| transform(s)));
@@ -456,12 +492,13 @@ fn main() {
         .map(|path| decode_image(&read(path)).unwrap_or_else(|e| fail(e)));
     for (moving_path, output_path) in reslices {
         let moving = decode_image(&read(&moving_path)).unwrap_or_else(|e| fail(e));
-        let output = reslice_with_interpolation(
+        let output = reslice_with_background(
             &fixed.grid,
             &moving,
             &chain,
             expected.as_ref().map(|image| &image.grid),
             interpolation,
+            background.resolve(&moving),
         )
         .unwrap_or_else(|e| fail(e));
         fs::write(

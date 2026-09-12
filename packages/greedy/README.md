@@ -1,8 +1,8 @@
 # @neurodesk/greedy
 
-Browser wrapper and committed threaded WebAssembly build for `exes/greedy`.
-The package exposes the small affine/deformable registration pipeline, gzip
-boundary helpers, and the generated `wasm-bindgen` runtime directory.
+Browser wrapper for the threaded WebAssembly build of `exes/greedy`.
+The package exposes the small affine/deformable registration pipeline and gzip
+boundary helpers.
 
 ## Attribution
 
@@ -32,8 +32,6 @@ pnpm --filter @neurodesk/greedy test
 ```
 
 The build uses the pinned `nightly-2025-11-15` toolchain and writes the
-generated runtime to `packages/greedy/wasm`. These files are committed and are
-included in package releases, matching the repository convention used for
-other browser-owned WASM modules. The webapp does not download executable code
-from Hugging Face or GitHub releases; those services hold datasets and native
-release archives respectively.
+generated runtime to the ignored `packages/greedy/wasm` directory. The
+versioned `greedy-v…` GitHub Release includes it in the standalone web archive.
+The deployed app serves that runtime from its own origin.

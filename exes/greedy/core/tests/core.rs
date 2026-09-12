@@ -2,7 +2,7 @@ use greedy_rs_core::{
     AffineMetric, Grid, Interpolation, Mat4, NiftiImage, ScalarType, Transform, VectorField,
     affine_matrix, affine_parameters, decode_image, decode_vector_field, downsample_grid,
     encode_image, encode_vector_field, gaussian_smooth, grids_match, image_centers,
-    nmi_score_gradient_affine, register_affine, register_nmi_svf, reslice,
+    nmi_score_gradient_affine, register_affine, register_nmi_svf, reslice, reslice_with_background,
     reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
@@ -24,6 +24,13 @@ fn nifti_scalar_and_vector_round_trip() {
     assert_eq!(decoded.data, image.data);
     assert_eq!(decoded.scalar_type, ScalarType::I16);
     assert!(grids_match(&decoded.grid, &image.grid, 0.0));
+
+    // MATLAB commonly writes a spatially 3-D image as dim[0]=4, dim[4]=1.
+    let mut singleton_4d = encode_image(&image, false).unwrap();
+    singleton_4d[40..42].copy_from_slice(&4_i16.to_le_bytes());
+    assert_eq!(decode_image(&singleton_4d).unwrap().data, image.data);
+    singleton_4d[48..50].copy_from_slice(&2_i16.to_le_bytes());
+    assert!(decode_image(&singleton_4d).is_err());
 
     let field = VectorField {
         grid: grid([2, 2, 2]),
@@ -176,6 +183,38 @@ fn nearest_reslice_preserves_discrete_values() {
         reslice_with_interpolation(&fixed, &moving, &chain, None, Interpolation::Nearest).unwrap();
     assert_eq!(linear.data, vec![4.0, 6.0]);
     assert_eq!(nearest.data, vec![0.0, 10.0]);
+}
+
+#[test]
+fn reslice_uses_requested_background_outside_the_source_field_of_view() {
+    let moving = NiftiImage {
+        grid: grid([2, 1, 1]),
+        data: vec![10.0, 20.0],
+        scalar_type: ScalarType::I16,
+    };
+    let mut fixed = moving.grid.clone();
+    fixed.lps_from_voxel.0[0][3] = -0.5;
+    let chain = [Transform::Affine(Mat4::IDENTITY)];
+    let linear = reslice_with_background(
+        &fixed,
+        &moving,
+        &chain,
+        None,
+        Interpolation::Linear,
+        -1000.0,
+    )
+    .unwrap();
+    let nearest = reslice_with_background(
+        &fixed,
+        &moving,
+        &chain,
+        None,
+        Interpolation::Nearest,
+        -1000.0,
+    )
+    .unwrap();
+    assert_eq!(linear.data, vec![-495.0, 15.0]);
+    assert_eq!(nearest.data, vec![-1000.0, 20.0]);
 }
 
 #[test]
