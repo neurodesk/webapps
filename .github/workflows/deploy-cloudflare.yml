@@ -28,10 +28,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - uses: dtolnay/rust-toolchain@nightly-2025-11-15
-        with:
-          components: rust-src
-          targets: wasm32-unknown-unknown
+      - name: Install pinned nightly toolchain
+        run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
       - name: Install wasm-pack 0.13.1
         run: cargo install wasm-pack --version 0.13.1 --locked
       - run: pnpm install --frozen-lockfile
