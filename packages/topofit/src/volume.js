@@ -1,6 +1,7 @@
 import * as nifti from 'nifti-reader-js';
 
 const product = (shape) => shape.reduce((total, value) => total * value, 1);
+export const MAX_CONFORM_MEMORY_BYTES = 768 * 1024 * 1024;
 
 export function readVolume(buffer) {
   const source = nifti.isCompressed(buffer) ? nifti.decompress(buffer) : buffer;
@@ -28,6 +29,10 @@ export function readVolume(buffer) {
   if (!type) throw new Error(`Unsupported NIfTI datatype ${header.datatypeCode}.`);
   const raw = nifti.readImage(header, source);
   if (raw.byteLength < voxelCount * type[1]) throw new Error('The NIfTI image is truncated.');
+  const retainedBytes = source === buffer ? source.byteLength : source.byteLength + buffer.byteLength;
+  if (estimateConformMemoryBytes(dims, retainedBytes) > MAX_CONFORM_MEMORY_BYTES) {
+    throw new Error('This image is too large to conform safely in the browser. Crop or resample it before loading.');
+  }
   const view = new DataView(raw);
   const slope = header.scl_slope || 1;
   const intercept = header.scl_slope ? header.scl_inter : 0;
@@ -52,6 +57,20 @@ export function readVolume(buffer) {
     datatypeCode: scaled ? 64 : header.datatypeCode,
     storageDatatypeCode: header.datatypeCode,
   };
+}
+
+export function estimateConformMemoryBytes(dims, retainedBytes = 0) {
+  const source = product(dims);
+  const afterX = 256 * dims[1] * dims[2];
+  const afterY = 256 * 256 * dims[2];
+  const target = 256 * 256 * 256;
+  const simultaneousFloat64 = Math.max(
+    2 * source + afterX,
+    source + afterX + afterY,
+    source + afterY + target,
+    source + target + target / 2,
+  );
+  return retainedBytes + simultaneousFloat64 * Float64Array.BYTES_PER_ELEMENT;
 }
 
 export function needsConform(affine, tolerance = 1e-5) {

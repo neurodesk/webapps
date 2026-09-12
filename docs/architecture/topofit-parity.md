@@ -52,7 +52,7 @@ type RunResult = {
 };
 ```
 
-`conformVolume()` owns RAS orientation for axis-aligned inputs, nibabel's integer-centered target affine, SciPy-compatible cubic spline filtering, mirror-edge interpolation, constant-zero fill, and integer output casting. It uses separable Float64 interpolation stages and returns the final Float32 model volume. On the release fixture, peak Node resident memory is approximately 457 MB and conforming takes approximately 6.7 seconds.
+`conformVolume()` owns RAS orientation for axis-aligned inputs, nibabel's integer-centered target affine, SciPy-compatible cubic spline filtering, mirror-edge interpolation, constant-zero fill, and integer output casting. It uses separable Float64 interpolation stages and returns the final Float32 model volume. Before decoding voxel values, `readVolume()` estimates every simultaneous conform buffer and rejects inputs above the 768 MiB preprocessing budget. On the release fixture, peak Node resident memory is approximately 457 MB and conforming takes approximately 6.7 seconds.
 
 ## Ownership
 
@@ -82,7 +82,7 @@ The comparison rejects mixed evidence by checking the conversion status, input d
 
 ## Result
 
-The captured browser conform tensor matches all 16,777,216 OpenRecon voxels and the target affine exactly. End-to-end mean anatomical surface distance is now 0.046 to 0.068 mm, p95 is 0.098 to 0.164 mm, and maximum distance is 0.238 to 0.467 mm. Two independent production-browser runs produced byte-identical surfaces, QC NIfTI, and stable manifest. Their elapsed times, recorded separately, were 173 and 170 seconds.
+The captured browser conform tensor matches all 16,777,216 OpenRecon voxels and the target affine exactly. End-to-end mean anatomical surface distance is now 0.046 to 0.068 mm, p95 is 0.098 to 0.164 mm, and maximum distance is 0.238 to 0.467 mm. Two independent `0.3.20260912` production-browser runs produced byte-identical surfaces, QC NIfTI, and stable manifest. Their elapsed times, recorded separately, were 171 and 172 seconds.
 
 ## Synthesis decision
 

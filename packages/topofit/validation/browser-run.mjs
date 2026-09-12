@@ -21,8 +21,8 @@ try {
   await expect.poll(() => page.evaluate(() => crossOriginIsolated)).toBe(true);
   await page.locator('#imageInput').setInputFiles(input);
   await expect(page.locator('#runButton')).toBeEnabled();
-  if (conformOption === '--no-conform') await page.locator('#conform').uncheck();
   await page.locator('#advancedSettings > summary').click();
+  if (conformOption === '--no-conform') await page.locator('#conform').uncheck();
   await page.locator('#thickness').selectOption('0');
   await page.screenshot({ path: `${outputDirectory}/desktop-input.png`, fullPage: true });
 
