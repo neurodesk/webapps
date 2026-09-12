@@ -31,7 +31,7 @@ export function readVolume(buffer) {
   const view = new DataView(raw);
   const slope = header.scl_slope || 1;
   const intercept = header.scl_slope ? header.scl_inter : 0;
-  const data = new Float32Array(voxelCount);
+  const data = new Float64Array(voxelCount);
   for (let i = 0; i < voxelCount; i += 1) {
     data[i] = view[type[0]](i * type[1], header.littleEndian) * slope + intercept;
     if (!Number.isFinite(data[i])) throw new Error('The image contains non-finite intensities.');
@@ -42,7 +42,16 @@ export function readVolume(buffer) {
     row.map((value) => (rowIndex < 3 ? value * scale : value)),
   );
   inverseAffine(affine);
-  return { data, dims, affine, source, header };
+  const scaled = Boolean(header.scl_slope) && (slope !== 1 || intercept !== 0);
+  return {
+    data,
+    dims,
+    affine,
+    source,
+    header,
+    datatypeCode: scaled ? 64 : header.datatypeCode,
+    storageDatatypeCode: header.datatypeCode,
+  };
 }
 
 export function needsConform(affine, tolerance = 1e-5) {

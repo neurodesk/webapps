@@ -18,3 +18,10 @@ The exporter validates every learned ONNX boundary before it writes
 browser comparison in `validation/`. The checked-in manifest points to an
 immutable dataset commit and records every runtime asset's byte count and
 SHA-256.
+
+With conforming enabled, the package reproduces OpenRecon's centered 256³,
+1 mm RAS, order-3 cubic preprocessing for supported axis-aligned NIfTI inputs.
+ONNX Runtime WebAssembly uses one thread so repeated runs have a fixed executor
+policy. The downloaded processing manifest contains SHA-256 hashes for the
+input, conformed tensor, model inputs, assets, and outputs; elapsed time is kept
+outside that stable manifest.

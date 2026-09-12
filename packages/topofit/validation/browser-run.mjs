@@ -2,7 +2,7 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const [url, input, outputDirectory] = process.argv.slice(2);
+const [url, input, outputDirectory, conformOption] = process.argv.slice(2);
 if (!outputDirectory) {
   throw new Error('Usage: browser-run.mjs URL input.nii.gz output-directory');
 }
@@ -21,6 +21,7 @@ try {
   await expect.poll(() => page.evaluate(() => crossOriginIsolated)).toBe(true);
   await page.locator('#imageInput').setInputFiles(input);
   await expect(page.locator('#runButton')).toBeEnabled();
+  if (conformOption === '--no-conform') await page.locator('#conform').uncheck();
   await page.locator('#advancedSettings > summary').click();
   await page.locator('#thickness').selectOption('0');
   await page.screenshot({ path: `${outputDirectory}/desktop-input.png`, fullPage: true });

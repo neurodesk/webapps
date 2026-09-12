@@ -1,4 +1,5 @@
 import { estimateBrainAffine, multiply } from './affine.js';
+import { conformVolume } from './conform.js';
 import { createQcVolume } from './qc.js';
 import { readFloat32Asset, readInt32Asset, writeFreeSurfer } from './results.js';
 import {
@@ -26,7 +27,6 @@ export async function runTopofit(options) {
     buffer,
     model = 't1w-1mm',
     conform = true,
-    conformImage,
     overlayThickness = 1,
     loadAsset,
     createSession,
@@ -40,17 +40,21 @@ export async function runTopofit(options) {
     throw new Error('TopoFit runtime dependencies are missing.');
   }
   const started = performance.now();
+  const inputSha256 = await sha256(buffer);
   onProgress(0.01, 'Reading input image…');
   const source = readVolume(buffer);
   let inference = source;
   let conformed = false;
-  if (needsConform(source.affine)) {
-    if (!conform) throw new Error('This scan is not a 1 mm RAS image. Enable conforming to reconstruct it.');
-    if (typeof conformImage !== 'function') throw new Error('The 1 mm RAS conformer is unavailable.');
+  if (conform) {
     onProgress(0.03, 'Conforming to the 1 mm RAS model grid…');
-    inference = readVolume(await conformImage(buffer));
+    inference = conformVolume(source, {
+      onProgress: (fraction) => onProgress(0.03 + fraction * 0.025, 'Conforming to the 1 mm RAS model grid…'),
+    });
     conformed = true;
+  } else if (needsConform(source.affine)) {
+    throw new Error('This scan is not a 1 mm RAS image. Enable conforming to reconstruct it.');
   }
+  const inferenceSha256 = await sha256(inference.data);
 
   onProgress(0.06, 'Loading affine-registration model…');
   const tregaBytes = await loadAsset('trega-synth-random.onnx', 0.06, 0.15);
@@ -82,6 +86,8 @@ export async function runTopofit(options) {
   const subjectRight = applyAffine(templateTransform, readFloat32Asset(templateRightBytes));
   const center = surfaceCenter(subjectLeft, subjectRight);
   const prepared = cropAndNormalize(inference, TOPOFIT_SHAPE, center);
+  const alignmentInputSha256 = await sha256(tregaInput.data);
+  const modelInputSha256 = await sha256(prepared.data);
   const croppedLeft = translate(subjectLeft, prepared.offset, -1);
   const croppedRight = translate(subjectRight, prepared.offset, -1);
 
@@ -196,9 +202,14 @@ export async function runTopofit(options) {
       });
     }
   }
+  const outputSha256 = Object.fromEntries(
+    await Promise.all(files.map(async (file) => [file.name, await sha256(file.bytes)])),
+  );
   const qc = createQcVolume(source, vertices, overlayThickness);
   files.unshift({ id: 'qc', name: 'topofit_qc.nii', mediaType: 'application/nifti', bytes: qc });
+  outputSha256['topofit_qc.nii'] = await sha256(qc);
   const provenance = {
+    schemaVersion: 2,
     status: 'SURFACE_READY_RESEARCH_ONLY',
     warning: 'RESEARCH ONLY - NOT MOTION-CLEARED - NOT FOR PRESCRIPTION',
     model,
@@ -211,7 +222,11 @@ export async function runTopofit(options) {
     modelCropAffine: prepared.affine,
     surfaceVertices: vertices['lh.white'].length / 3,
     surfaceFaces: faces.lh.length / 3,
-    seconds: (performance.now() - started) / 1000,
+    inputSha256,
+    inferenceSha256,
+    alignmentInputSha256,
+    modelInputSha256,
+    outputSha256,
     runtime,
   };
   files.push({
@@ -221,7 +236,7 @@ export async function runTopofit(options) {
     bytes: encoder.encode(`${JSON.stringify(provenance, null, 2)}\n`).buffer,
   });
   onProgress(1, 'Cortical surfaces ready');
-  return { files, provenance };
+  return { files, provenance, elapsedSeconds: (performance.now() - started) / 1000 };
 }
 
 const encoder = new TextEncoder();
@@ -263,4 +278,12 @@ async function releaseSession(session) {
 
 function disposeOutput(output) {
   for (const tensor of Object.values(output)) tensor?.dispose?.();
+}
+
+async function sha256(value) {
+  const bytes = ArrayBuffer.isView(value)
+    ? value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+    : value;
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
