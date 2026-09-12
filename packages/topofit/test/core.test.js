@@ -3,7 +3,13 @@ import test from 'node:test';
 import { estimateBrainAffine } from '../src/affine.js';
 import { runTopofit } from '../src/pipeline.js';
 import { writeFreeSurfer } from '../src/results.js';
-import { axisAlignedVoxelSpacing, cropAndNormalize, imageCenter } from '../src/volume.js';
+import {
+  axisAlignedVoxelSpacing,
+  cropAndNormalize,
+  estimateConformMemoryBytes,
+  imageCenter,
+  MAX_CONFORM_MEMORY_BYTES,
+} from '../src/volume.js';
 
 test('weighted affine fit recovers the source transform', () => {
   const templates = new Float32Array([
@@ -68,6 +74,11 @@ test('axis-aligned spacing follows voxel axes through orientation permutations',
     () => axisAlignedVoxelSpacing([[1, 0.1, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]),
     /axis-aligned/,
   );
+});
+
+test('conform memory preflight covers every simultaneous interpolation buffer', () => {
+  assert.ok(estimateConformMemoryBytes([160, 192, 192], 16 * 1024 * 1024) < MAX_CONFORM_MEMORY_BYTES);
+  assert.ok(estimateConformMemoryBytes([512, 512, 512], 256 * 1024 * 1024) > MAX_CONFORM_MEMORY_BYTES);
 });
 
 test('FreeSurfer writer emits triangular geometry and volume metadata', () => {

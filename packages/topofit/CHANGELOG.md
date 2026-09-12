@@ -1,5 +1,11 @@
 # @neurodesk/topofit
 
+## 0.3.20260912
+
+### Minor Changes
+
+- Reject unsafe conform allocations and pin prepared-input and asset hashes in both parity modes.
+
 ## 0.2.20260912
 
 ### Minor Changes

@@ -27,11 +27,18 @@ INPUTS = {
         "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
         "preprocessing": "Both implementations conform the original anisotropic scan with the pinned OpenRecon cubic contract.",
         "inferenceSha256": "63cb6de32f0ef41ee536c4d98bd826c0be82b7a3999ab50a3600562d5a802381",
+        "alignmentInputSha256": "dfe7f91f20904694784aece9f38c6a6e548806154ebb414ac0f00e01fdcb478e",
+        "modelInputSha256": "01c640f9a27e12c8b0dacf3ca8c2d988e238403f7089a8de466db9c05c559ac3",
+        "assetSetSha256": "80274962e92442a88f7e8c8ebddc98a01bd618e5c95070b881d12d38094db9f7",
     },
     "controlled": {
         "dataset": "Browser-resampled 1 mm RAS derivative of OpenNeuro ds000001/sub-01/anat/sub-01_T1w.nii.gz",
         "sha256": "69dc5c8be1850422e30ce8b03c6b434bb919c0427a3ec79e79b7552b4c00db5e",
         "preprocessing": "Both implementations receive the identical browser-resampled 1 mm RAS volume; OpenRecon runs with --no-conform.",
+        "inferenceSha256": "37bea74e762cac21e75472cc7286e716c9cb85ea9745706a5513dd8876351f76",
+        "alignmentInputSha256": "ad51ec5409a8be0b60ef359760fb94a76c6b788f9c628a572185daf41c92c8a0",
+        "modelInputSha256": "7704182dbae55b4f103eb8fecb70ad251722e427db7b49528d82f3609589a407",
+        "assetSetSha256": "80274962e92442a88f7e8c8ebddc98a01bd618e5c95070b881d12d38094db9f7",
     },
 }
 THRESHOLDS = {
@@ -152,8 +159,15 @@ def validate_manifest(directory, fixture):
     manifest = json.loads(path.read_text())
     assert manifest["schemaVersion"] == 2
     assert manifest["inputSha256"] == fixture["sha256"]
-    if "inferenceSha256" in fixture:
-        assert manifest["inferenceSha256"] == fixture["inferenceSha256"]
+    for name in ("inferenceSha256", "alignmentInputSha256", "modelInputSha256"):
+        assert manifest[name] == fixture[name]
+    asset_set_sha256 = canonical_sha256(manifest["runtime"]["assets"])
+    assert asset_set_sha256 == fixture["assetSetSha256"]
+    assert manifest["runtime"]["release"] == RELEASE
+    assert manifest["runtime"]["inference"] == "ONNX Runtime Web WASM"
+    assert manifest["runtime"]["onnxruntime"] == "1.29.0"
+    assert manifest["runtime"]["threads"] == 1
+    assert manifest["runtime"]["graphOptimizationLevel"] == "all"
     for name in (*SURFACES, "topofit_qc.nii"):
         assert manifest["outputSha256"][name] == sha256(directory / name)
     return {
@@ -163,7 +177,7 @@ def validate_manifest(directory, fixture):
         "alignmentInputSha256": manifest["alignmentInputSha256"],
         "modelInputSha256": manifest["modelInputSha256"],
         "runtime": {key: value for key, value in manifest["runtime"].items() if key != "assets"},
-        "assetSetSha256": canonical_sha256(manifest["runtime"]["assets"]),
+        "assetSetSha256": asset_set_sha256,
         "outputSha256": manifest["outputSha256"],
     }
 

@@ -103,13 +103,13 @@
     "reference_sha256": "c83de586141f6c260a5733d0345921db254abe12dfd8647280572853ba67c38b"
   },
   "provenance": {
-    "sha256": "af5e2e6ebf3891b02b5c14eab961e10087e0abbdefbab7babe5c67f949d8ef12",
+    "sha256": "2b8095d342709b41d5779ba0a121233e21345920e23103f9ab3ffbc9be6ca473",
     "inputSha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
     "inferenceSha256": "63cb6de32f0ef41ee536c4d98bd826c0be82b7a3999ab50a3600562d5a802381",
     "alignmentInputSha256": "dfe7f91f20904694784aece9f38c6a6e548806154ebb414ac0f00e01fdcb478e",
     "modelInputSha256": "01c640f9a27e12c8b0dacf3ca8c2d988e238403f7089a8de466db9c05c559ac3",
     "runtime": {
-      "app": "TopoFit web 0.2.20260912",
+      "app": "TopoFit web 0.3.20260912",
       "release": "topofit-0.5.1-onnx-20260911",
       "inference": "ONNX Runtime Web WASM",
       "onnxruntime": "1.29.0",
@@ -129,9 +129,9 @@
   },
   "repeatability": [
     {
-      "run": "browser-parity-v02-run2",
+      "run": "browser-parity-v03-run2",
       "byteIdentical": true,
-      "outputSetSha256": "d50ca6fa0f4df1b2b618586085095c8f86eb48f673d550a970537e695fbe217e"
+      "outputSetSha256": "565fe734f49869309a6fbe5397134c205c512395fe924727d99dbfe330a48146"
     }
   ]
 }
