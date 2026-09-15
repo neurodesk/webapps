@@ -44,6 +44,8 @@ async function checkLayout(page, label) {
     };
     return {
       pageOverflow: document.documentElement.scrollWidth > width + 1,
+      dialogOverflow: [...document.querySelectorAll('.nd-dialog-body')].filter(visible)
+        .filter(element => element.scrollWidth > element.clientWidth + 1).map(describe),
       overflow: [...document.querySelectorAll('body *')].filter(visible).filter(element => {
         const rect = element.getBoundingClientRect();
         return (rect.right > width + 1 || rect.left < -1) && !scrollableAncestor(element);
@@ -54,7 +56,7 @@ async function checkLayout(page, label) {
         .filter(visible).filter(element => Number.parseFloat(getComputedStyle(element).fontSize) < 16).map(describe),
     };
   });
-  const failed = result.pageOverflow || result.overflow.length || result.smallNavigation.length || result.smallInputs.length;
+  const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.smallInputs.length;
   if (failed) failures.push(`${label}: ${JSON.stringify(result)}`);
   if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${label.replaceAll('/', '-')}.png`) });
   console.log(`${failed ? 'FAIL' : 'PASS'} ${label}${failed ? ' ' + JSON.stringify(result) : ''}`);

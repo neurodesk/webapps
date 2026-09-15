@@ -19,8 +19,15 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
         link.append(createElement('a', { href: part.url, text: `Part ${index + 1} of ${download.parts.length} · ${(part.bytes / 1e9).toFixed(2)} GB`, ownerDocument: doc }));
         content.append(link);
       }
-      if (download.archiveSha256) append('p', `Complete archive SHA-256: ${download.archiveSha256}`);
-      if (download.sha256) content.append(renderCommand({ id: `checksum-${download.kind}-${download.platform}`, command: download.sha256, label: 'SHA-256' }, doc).root);
+      if (download.archiveSha256) {
+        append('p', 'Complete archive SHA-256');
+        content.append(renderCommand({ id: `archive-checksum-${download.kind}-${download.platform}`, command: download.archiveSha256, label: 'complete archive SHA-256' }, doc).root);
+      }
+      if (download.sha256) {
+        const label = download.parts?.length ? 'Installation instructions SHA-256' : 'Download SHA-256';
+        append('p', label);
+        content.append(renderCommand({ id: `checksum-${download.kind}-${download.platform}`, command: download.sha256, label }, doc).root);
+      }
       if (download.command) content.append(renderCommand({ id: `standalone-${download.kind}-${download.platform}`, command: download.command }, doc).root);
     }
   }

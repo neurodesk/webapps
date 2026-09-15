@@ -35,6 +35,14 @@ The DICOM analysis check was added after the full matrix and passed separately a
 
 These tests verify runnable workflows and output structure. They do not replace each scientific package's accuracy/parity validation or establish validity for every possible clinical input. The small SynthSeg fixture is unsuitable for the SYNcro normalization test: it produced a non-finite deformation. The full-size packaged registration example passed. Extreme trial coordinates now have a Rust regression test and no longer crash the worker pool.
 
+## Local Linux container check
+
+The x86-64 distribution also ran in Docker on the local Apple silicon host through its Linux emulation. With `--network=none`, all 24 installed apps opened their Standalone dialogs without missing assets or external requests. The actual container entrypoint also completed the NiiMath batch job. All 100,672 output voxels matched the expected add-one result with zero error. The image includes `tini`: without it, Xvfb waits indefinitely when its launcher is PID 1. The runtime preflight and all-app container test exercise this startup path in CI.
+
+## Published release
+
+[Neurodesk Webapps 0.1.20260915](https://github.com/neurodesk/webapps/releases/tag/webapps-v0.1.20260915) was published from `89282bd`. [Release run 34948689850](https://github.com/neurodesk/webapps/actions/runs/34948689850) passed every job: locked bundle, macOS ARM64, Windows x64, Linux x64, Docker, Apptainer and publication. macOS signing and Apple notarization succeeded. The Linux container matrix started all 24 apps with networking disabled; Docker and Apptainer batch outputs passed the numerical check.
+
 ## Release gates
 
 GitHub Actions builds one locked asset bundle, then starts every installed app on macOS ARM64, Linux x64 and Windows x64. Eight CPU-compatible workflows also run on each platform. Packaging is followed by another all-app startup test using the extracted executable. Linux additionally builds a Docker image, tests it with `--network=none`, and executes a batch job from the Apptainer SIF. Publication requires those jobs to pass and checks every archive part and the reassembled archive SHA-256.

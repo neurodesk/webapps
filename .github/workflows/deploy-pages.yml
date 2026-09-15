@@ -78,6 +78,10 @@ jobs:
         run: pnpm test:deployed
         env:
           BASE_URL: ${{ steps.deployment.outputs.page_url }}
+      - name: Verify standalone downloads in every deployed application
+        run: node test/standalone-downloads.smoke.mjs
+        env:
+          BASE_URL: ${{ steps.deployment.outputs.page_url }}
       - name: Verify deployed NIfTI and DICOM scan pickers
         run: pnpm test:image-uploads
         env:

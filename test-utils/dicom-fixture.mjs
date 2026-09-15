@@ -23,7 +23,7 @@ export function dicomSeries({ series = 1, slices = 4, extension = '.dcm' } = {})
       tag(8, 0x16, 'UI', '1.2.840.10008.5.1.4.1.1.4'), tag(8, 0x18, 'UI', instance),
       tag(8, 0x60, 'CS', 'MR'), tag(8, 0x70, 'LO', 'Synthetic'),
       tag(8, 0x103e, 'LO', `test_scan_${series}`), tag(0x10, 0x10, 'PN', 'Synthetic^Phantom'),
-      tag(0x18, 0x1030, 'LO', `test_protocol_${series}`),
+      tag(0x18, 0x1030, 'LO', `test_scan_${series}`),
       tag(0x18, 0x50, 'DS', '1'), tag(0x18, 0x80, 'DS', '2000'), tag(0x18, 0x81, 'DS', '20'),
       tag(0x20, 0x0d, 'UI', '1.2.826.0.1.3680043.10.543.99'), tag(0x20, 0x0e, 'UI', uid),
       tag(0x20, 0x11, 'IS', series), tag(0x20, 0x13, 'IS', slice + 1),

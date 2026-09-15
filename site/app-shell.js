@@ -18,6 +18,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     standaloneHref: new URL(shellScript.dataset.standaloneHref || 'standalone.json', shellScript.src).href,
     componentsHref: new URL(shellScript.dataset.componentsHref || 'shell-adapters/components/', shellScript.src).href,
   };
+  let standaloneStylesReady;
 
   const informationScript = document.querySelector('script[data-neurodesk-app-information]');
   let information = null;
@@ -223,13 +224,25 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         if (!response.ok) throw new Error(`Standalone catalog: HTTP ${response.status}`);
         const catalog = await response.json();
         const { openStandalone } = await import(/* @vite-ignore */ new URL('ui/renderStandalone.js', metadata.componentsHref).href);
-        if (!document.querySelector('[data-standalone-styles]')) {
-          const styles = element('link');
-          styles.rel = 'stylesheet';
-          styles.href = new URL('styles/imaging-workspace.css', metadata.componentsHref).href;
-          styles.dataset.standaloneStyles = '';
-          document.head.append(styles);
+        if (!standaloneStylesReady) {
+          const existing = document.querySelector('[data-standalone-styles]');
+          const styles = existing || element('link');
+          standaloneStylesReady = styles.sheet ? Promise.resolve() : new Promise((resolve, reject) => {
+            styles.addEventListener('load', resolve, { once: true });
+            styles.addEventListener('error', () => {
+              styles.remove();
+              standaloneStylesReady = null;
+              reject(new Error('Standalone stylesheet could not be loaded'));
+            }, { once: true });
+          });
+          if (!existing) {
+            styles.rel = 'stylesheet';
+            styles.href = new URL('styles/imaging-workspace.css', metadata.componentsHref).href;
+            styles.dataset.standaloneStyles = '';
+            document.head.append(styles);
+          }
         }
+        await standaloneStylesReady;
         openStandalone({ title: metadata.title, app: catalog.apps[metadata.id], suite: catalog.suite, installed: document.documentElement.hasAttribute('data-neurodesk-offline') });
       } catch (error) {
         console.error('Standalone information could not be loaded', error);

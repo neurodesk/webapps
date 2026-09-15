@@ -6,6 +6,8 @@ const registry = await loadAppsRegistry();
 const catalog = await loadStandalone(registry);
 const suite = catalog.suite;
 if (!suite?.downloads?.length || !Array.isArray(suite.apps)) throw new Error('Publish the tested offline suite and import standalone-catalog.json before deploying');
+const desktopVersion = JSON.parse(await readFile('packages/desktop/package.json')).version;
+if (suite.version !== desktopVersion) throw new Error(`Publish suite ${desktopVersion} before deploying; catalog still references ${suite.version}`);
 for (const app of registry.apps) {
   const version = JSON.parse(await readFile(`apps/${app.id}/package.json`)).version;
   if (!suite.apps.some(item => item.id === app.id && item.version === version)) throw new Error(`${app.id} ${version} has no matching released offline application`);

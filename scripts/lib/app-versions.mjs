@@ -78,16 +78,33 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
   config.fixed = [...config.fixed, ...linkedGroups];
   const plan = await getReleasePlan(root, undefined, config);
   if (plan.preState) throw new Error('Date releases do not support Changesets prerelease mode.');
+  const desktopName = '@neurodesk/desktop';
+  const desktop = packages.get(desktopName);
+  const changedApps = plan.releases.filter(item => item.type !== 'none' && packages.get(item.name)?.group === 'apps');
+  if (desktop && changedApps.length && !plan.releases.some(item => item.name === desktopName && item.type !== 'none')) {
+    plan.releases = plan.releases.filter(item => item.name !== desktopName);
+    plan.releases.push({
+      name: desktopName,
+      type: 'patch',
+      oldVersion: desktop.manifest.version,
+      newVersion: desktop.manifest.version,
+      changesets: [...new Set(changedApps.flatMap(item => item.changesets))],
+    });
+  }
   for (const release of plan.releases) {
     if (release.type === 'none') continue;
     const pkg = packages.get(release.name);
-    if (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name)) continue;
+    if (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name) && release.name !== desktopName) continue;
     const series = pkg.manifest.releaseSeries;
     if (series !== undefined && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(series)) {
       throw new Error(`${release.name}: releaseSeries must be MAJOR.MINOR, got ${series}`);
     }
     release.newVersion = nextVersion(release.oldVersion, series === undefined ? release.type : 'patch', date);
     if (series !== undefined) release.newVersion = `${series}.${date}`;
+    // GitHub suite artifacts are immutable, including explicit same-day app fixes.
+    if (release.name === desktopName && release.newVersion === release.oldVersion) {
+      release.newVersion = nextVersion(release.oldVersion, 'minor', date);
+    }
     if (release.newVersion === release.oldVersion && !sameDay) {
       throw new Error(`${release.name} is already at ${release.oldVersion}; release again tomorrow or pass --same-day to update this version`);
     }

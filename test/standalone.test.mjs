@@ -41,6 +41,18 @@ test('every app has an executable offline workflow test', async () => {
   assert.deepEqual([...workflowApps].sort(), registry.apps.map(app => app.id).sort(), 'Implement an offline computation or interactive workflow test before adding an app');
 });
 
+test('multipart archive checksums use the wrapping copy control', () => {
+  const dom = new JSDOM('<html><body></body></html>');
+  const archiveSha256 = 'b'.repeat(64);
+  const suite = { downloads: [{ kind: 'desktop', platform: 'macos-arm64', version: '0.1.20260915', url: 'https://example.test/install.txt', archiveSha256 }] };
+  const dialog = openStandalone({ title: 'Demo', app: { downloads: [], containers: [] }, suite }, dom.window.document);
+  const code = dialog.root.querySelector('#archive-checksum-desktop-macos-arm64');
+  assert.equal(code.textContent, archiveSha256);
+  assert.ok(code.closest('.nd-command'));
+  assert.ok(dialog.root.querySelector('[aria-label="Copy complete archive SHA-256"]'));
+  dom.window.close();
+});
+
 
 test('future apps automatically receive real offline workflow coverage on hosted CI', () => {
   assert.deepEqual(ciWorkflowApps({ apps: [{ id: 'future-app' }, { id: 'synthseg' }] }), ['future-app']);

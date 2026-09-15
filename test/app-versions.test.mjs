@@ -117,6 +117,24 @@ test('a linked-package changeset releases the app, package and native versions t
   assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
 });
 
+test('an app release automatically versions the complete desktop suite', async (t) => {
+  const { root, put, json } = await fixture(t);
+  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
+  await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nUpdated offline app.\n');
+  const release = await planRelease(root, { date: '20261001' });
+  assert.equal(release.plan.releases.find(item => item.name === '@neurodesk/desktop')?.newVersion, '0.1.20261001');
+  await applyRelease(release);
+  assert.equal((await json('packages/desktop')).version, '0.1.20261001');
+});
+
+test('same-day app updates get a distinct immutable suite version', async (t) => {
+  const { root, put } = await fixture(t);
+  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
+  await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nSame-day offline fix.\n');
+  const release = await planRelease(root, { date: '20260930', sameDay: true });
+  assert.equal(release.plan.releases.find(item => item.name === '@neurodesk/desktop')?.newVersion, '0.2.20260930');
+});
+
 test('an app release uses the strongest linked bump and updates pinned dependents to the final date', async (t) => {
   const { root, put, json } = await fixture(t);
   await put('packages/unrelated/package.json', JSON.stringify({
