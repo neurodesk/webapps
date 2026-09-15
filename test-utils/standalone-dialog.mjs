@@ -7,9 +7,12 @@ export async function verifyStandaloneDialog(page, id) {
   const dialog = page.locator('#neurodeskStandaloneDialog');
   await expect(dialog).toBeVisible();
   for (const download of [...catalog.apps[id].downloads, ...(catalog.suite?.downloads || [])]) {
-    await expect(dialog.locator(`a[href="${download.url}"]`)).toBeVisible();
-    await expect(dialog).toContainText(download.sha256);
+    for (const file of download.parts || [download]) {
+      await expect(dialog.locator(`a[href="${file.url}"]`)).toBeVisible();
+    }
+    await expect(dialog).not.toContainText(download.sha256);
   }
+  await expect(dialog).not.toContainText(/SHA-256|shasum|Prepare this upstream/i);
   await expect(dialog).not.toContainText('cargo build');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
