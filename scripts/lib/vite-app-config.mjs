@@ -45,6 +45,8 @@ function injectDevShell({ app, version, measurementId, information }) {
         description: app.description,
         version,
         information,
+        standaloneHref: fsUrl(join(repoRoot, 'registry/standalone.json')),
+        componentsHref: `${fsUrl(join(repoRoot, 'packages/components/src'))}/`,
         measurementId,
         href: fsUrl(join(repoRoot, 'site', 'app-theme.css')),
         themeHref: fsUrl(join(repoRoot, 'site', 'theme.js')),

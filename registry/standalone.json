@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "repository": "neurodesk/webapps",
+  "suite": null,
+  "apps": {
+    "musclemap": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "vesselboost": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "spinalcordtoolbox": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "calmar": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "qsmbly": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "seedseg": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "dicompare": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "deface": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "easy-mp2rage": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "niimath": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "dicom2vid": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "browserqc": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "surfannotate": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "zarro": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "synthsr": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "synthseg": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "syncro": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "dwi2trx": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "edgereg": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "greedy": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "ants": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "brain2print": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "topofit": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "fireants": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    }
+  }
+}

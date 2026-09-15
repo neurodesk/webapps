@@ -206,6 +206,18 @@ const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 manifest.version = nextVersion(manifest.version, 'patch', releaseDate());
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
+// Every generated app participates in desktop packaging and offline validation.
+for (const [filename, value] of [
+  ['standalone.json', { desktop: true, profile: 'interactive', assets: [], downloads: [], containers: [] }],
+  ['offline-assets.sources.json', []],
+  ['offline-assets.lock.json', []],
+]) {
+  const path = join(root, 'registry', filename);
+  const catalog = JSON.parse(await readFile(path, 'utf8'));
+  catalog.apps[name] = value;
+  await writeFile(path, `${JSON.stringify(catalog, null, 2)}\n`);
+}
+
 // Register the app so deploy + statistics workflows pick it up.
 await writeFile(registry, nextText);
 

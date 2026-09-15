@@ -10,7 +10,8 @@
  * See: https://github.com/neurodesk/webapps/tree/main/apps/dicompare
  */
 
-const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
+const OFFLINE = navigator.userAgent.includes('Electron');
+const PYODIDE_CDN = OFFLINE ? new URL('/_offline/python/', self.location.origin).href : 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
 // Version updated automatically by the version-bump GitHub Action on release
 const DICOMPARE_PACKAGE = 'dicompare==0.6.0';
 
@@ -56,9 +57,14 @@ async function initializePyodide(requestId) {
 
   sendProgress(requestId, { percentage: 50, currentOperation: 'Installing DICOM analysis tools...' });
 
+  const config = OFFLINE ? await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json()) : null;
+  if (config) await pyodide.loadPackage(config.packages);
+  const installation = config
+    ? `await micropip.install(${JSON.stringify(config.wheels.map(url => new URL('/_offline/python/wheels/' + url.split('/').pop(), self.location.origin).href))}, deps=False)`
+    : `await micropip.install('${DICOMPARE_PACKAGE}')`;
   await pyodide.runPythonAsync(`
 import micropip
-await micropip.install('${DICOMPARE_PACKAGE}')
+${installation}
 
 import dicompare
 import dicompare.interface

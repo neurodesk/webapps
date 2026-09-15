@@ -1,0 +1,32 @@
+{
+  "name": "@neurodesk/desktop",
+  "version": "0.1.20260915",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "description": "Offline Neurodesk Webapps with bundled models",
+  "author": "Neurodesk",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/main.js && node --check src/server.js",
+    "start": "electron .",
+    "package": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "40.10.6",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "org.neurodesk.webapps",
+    "productName": "Neurodesk Webapps",
+    "directories": { "output": "release" },
+    "files": ["src/**", "package.json"],
+    "extraResources": [{ "from": "resources", "to": "offline" }],
+    "asar": true,
+    "mac": { "target": [{ "target": "zip", "arch": ["arm64"] }], "category": "public.app-category.medical" },
+    "linux": { "target": [{ "target": "tar.gz", "arch": ["x64"] }], "category": "Science" },
+    "win": { "target": [{ "target": "zip", "arch": ["x64"] }] },
+    "artifactName": "webapps-${version}-${os}-${arch}.${ext}"
+  }
+}

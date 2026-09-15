@@ -1,5 +1,17 @@
 # topofit
 
+## 0.7.20260915
+
+### Minor Changes
+
+- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.2.0
+  - @neurodesk/topofit@0.7.20260915
+
 ## 0.6.20260914
 
 ### Minor Changes
@@ -23,7 +35,6 @@
   - @neurodesk/topofit@0.5.20260914
   - @neurodesk/webapp-components@0.1.5
   - @neurodesk/runtime-support@0.1.2
-
 
 ### Minor Changes
 

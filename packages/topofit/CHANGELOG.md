@@ -1,5 +1,12 @@
 # @neurodesk/topofit
 
+## 0.7.20260915
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.2.0
+
 ## 0.6.20260914
 
 ### Minor Changes
@@ -14,7 +21,6 @@
 - Updated dependencies [3cd773f]
 - Updated dependencies [4add8da]
   - @neurodesk/webapp-components@0.1.5
-
 
 ### Minor Changes
 

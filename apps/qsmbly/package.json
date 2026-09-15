@@ -1,6 +1,6 @@
 {
   "name": "qsmbly",
-  "version": "0.24.20260914",
+  "version": "0.25.20260915",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
   "type": "module",
   "scripts": {

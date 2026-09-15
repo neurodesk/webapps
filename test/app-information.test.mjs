@@ -143,7 +143,8 @@ test('the shell About action appends the packages, builder and ecosystem block t
   assert.match(block.textContent, /Neurodesk team/);
   assert.match(block.textContent, /lightNIIng ecosystem \(lightniing\.org\), which aims to make neuroimaging tools widely available for clinical translation/);
   assert.ok(block.querySelector('a[href="https://lightniing.org"]'), 'About links to lightniing.org');
-  assert.ok(window.document.querySelector('.nd-app-bar a[href="https://lightniing.org"]'), 'app bar links to lightniing.org');
+  assert.equal(window.document.querySelector('.nd-app-bar a[href="https://lightniing.org"]'), null, 'ecosystem link stays in About only');
+  assert.ok(window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="standalone"]'), 'every app exposes Standalone');
   assert.equal(overlay.querySelectorAll('[data-neurodesk-app-info="about"]').length, 1);
   window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="about"]').click();
   await new Promise((resolve) => setTimeout(resolve, 20));

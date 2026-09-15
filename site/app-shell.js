@@ -15,6 +15,8 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     sourceHref: shellScript.dataset.sourceHref,
     url: shellScript.dataset.appUrl,
     shell: shellScript.dataset.appShell,
+    standaloneHref: shellScript.dataset.standaloneHref || new URL('standalone.json', shellScript.src).href,
+    componentsHref: shellScript.dataset.componentsHref || new URL('shell-adapters/components/', shellScript.src).href,
   };
 
   const informationScript = document.querySelector('script[data-neurodesk-app-information]');
@@ -214,7 +216,26 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     body.append(section.firstElementChild);
   }
 
-  function openAppInformation(kind) {
+  async function openAppInformation(kind) {
+    if (kind === 'standalone') {
+      try {
+        const response = await fetch(metadata.standaloneHref);
+        if (!response.ok) throw new Error(`Standalone catalog: HTTP ${response.status}`);
+        const catalog = await response.json();
+        const { openStandalone } = await import(/* @vite-ignore */ new URL('ui/renderStandalone.js', metadata.componentsHref).href);
+        if (!document.querySelector('[data-standalone-styles]')) {
+          const styles = element('link');
+          styles.rel = 'stylesheet';
+          styles.href = new URL('styles/imaging-workspace.css', metadata.componentsHref).href;
+          styles.dataset.standaloneStyles = '';
+          document.head.append(styles);
+        }
+        openStandalone({ title: metadata.title, app: catalog.apps[metadata.id], suite: catalog.suite, installed: document.documentElement.hasAttribute('data-neurodesk-offline') });
+      } catch (error) {
+        console.error('Standalone information could not be loaded', error);
+      }
+      return;
+    }
     // Cite is always the shared, registry-driven list so every app cites the
     // same way; About keeps app-owned content and gains the shared block.
     if (kind === 'cite' && information) { openFallbackDialog(kind); return; }
@@ -238,9 +259,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       createControlAction('about', 'About', 'about'),
       createControlAction('cite', 'Cite', 'cite'),
     ];
-    if (findLegacyControl('standalone')) {
-      informationActions.push(createControlAction('standalone', 'Standalone', 'standalone'));
-    }
+    informationActions.push(createControlAction('standalone', 'Standalone', 'standalone'));
     informationActions.push(createControlAction('privacy', 'Privacy', 'privacy'));
     navigation.append(
       ...informationActions,
@@ -251,7 +270,6 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         return toggle;
       })(),
       createLink('More Apps', 'apps', metadata.moreAppsHref, 'More Neurodesk web apps'),
-      ...(information?.shared?.ecosystem_url ? [createLink(information.shared.ecosystem_name || 'lightNIIng', 'ecosystem', information.shared.ecosystem_url, `${information.shared.ecosystem_name || 'lightNIIng'} neuroimaging infrastructure`)] : []),
       createLink('GitHub', 'github', metadata.sourceHref, 'View this app on GitHub'),
     );
     bar.append(identity, navigation);
@@ -298,7 +316,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
   }
 
   function syncOptionalActions() {
-    const registered = Boolean(findLegacyControl('standalone'));
+    const registered = true;
     document.querySelectorAll('.nd-app-bar__navigation').forEach((navigation) => {
       const existing = navigation.querySelector('[data-neurodesk-shell-control="standalone"]');
       if (!registered && existing) existing.remove();

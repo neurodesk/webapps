@@ -1,5 +1,9 @@
 # Dependencies
 node_modules/
+.tools/
+.offline-cache/
+packages/desktop/resources/
+packages/desktop/release/
 .pnpm-store/
 
 # Build output

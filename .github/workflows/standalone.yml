@@ -1,0 +1,91 @@
+name: standalone
+
+on:
+  pull_request:
+  push:
+    branches: [main, t3code/standalone-app-releases]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install WASM build tools
+        run: |
+          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
+      - run: pnpm install --frozen-lockfile
+      - name: Test package contracts
+        run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
+      - run: pnpm build
+      - name: Verify all offline inputs against the committed lock
+        run: node scripts/desktop/assets.mjs
+      - run: node scripts/desktop/assemble.mjs
+      - name: Archive complete offline resources
+        run: tar -czf offline-resources.tar.gz -C packages/desktop resources
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: offline-resources
+          path: offline-resources.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+
+  desktop:
+    needs: bundle
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-15, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node packages/desktop/node_modules/electron/install.js
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: offline-resources
+      - run: tar -xzf offline-resources.tar.gz -C packages/desktop
+      - name: Exercise every app with fresh profiles and network denied
+        if: runner.os != 'Linux'
+        run: node scripts/desktop/smoke.mjs
+        env:
+          NEURODESK_TEST_REPORT: desktop-reports
+      - name: Exercise Linux desktop under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/desktop/smoke.mjs
+        env:
+          NEURODESK_TEST_REPORT: desktop-reports
+      - name: Package suite
+        run: pnpm --filter @neurodesk/desktop package
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: desktop-${{ matrix.os }}
+          path: |
+            desktop-reports/
+            packages/desktop/release/
+          compression-level: 0
+          if-no-files-found: error

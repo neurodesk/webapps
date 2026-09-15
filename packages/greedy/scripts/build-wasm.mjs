@@ -58,7 +58,7 @@ try {
     "--",
     "-Z",
     "build-std=panic_abort,std",
-  ], { cwd: packageRoot, stdio: "inherit", env: { ...process.env, RUSTFLAGS: atomics } });
+  ], { cwd: packageRoot, stdio: "inherit", env: { ...process.env, CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS: atomics } });
 
   rmSync(new URL("../wasm/.gitignore", import.meta.url), { force: true });
   for (const file of globSync(`${output}/**/*.js`)) {

@@ -116,7 +116,7 @@ The shared statements live there once:
 - Builder: "The web application is developed and hosted by the Neurodesk team …"
 - Ecosystem: "This app is part of the lightNIIng ecosystem (lightniing.org), which
   aims to make neuroimaging tools widely available for clinical translation."
-  The shared bar also links every app to https://lightniing.org.
+  The link belongs in About; it is not repeated in the application bar.
 - Platform citation: Renton et al. 2024, Nature Methods (Neurodesk).
 
 The build injects the app's entry as one JSON script and `site/app-shell.js`

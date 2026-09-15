@@ -1,5 +1,11 @@
 # easy-mp2rage
 
+## 0.3.20260915
+
+### Minor Changes
+
+- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
+
 ## 0.2.20260910
 
 ### Minor Changes

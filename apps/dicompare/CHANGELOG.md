@@ -1,5 +1,11 @@
 # dicompare
 
+## 0.13.20260915
+
+### Minor Changes
+
+- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
+
 ## 0.12.20260910
 
 ### Minor Changes

@@ -699,6 +699,15 @@ importers:
 
   packages/components: {}
 
+  packages/desktop:
+    devDependencies:
+      electron:
+        specifier: 40.10.6
+        version: 40.10.6
+      electron-builder:
+        specifier: 26.15.3
+        version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+
   packages/greedy: {}
 
   packages/registration: {}

@@ -24,7 +24,7 @@ function isElectronProduction(): boolean {
   // In Electron dev, we load from http://localhost which still has network access
   return self.location.protocol === 'file:' ||
          self.location.protocol === 'app:' ||
-         self.location.hostname === '';
+         self.location.hostname === '' || navigator.userAgent.includes('Electron');
 }
 
 // Detect if running in Electron at all (including dev mode)
@@ -39,9 +39,7 @@ function getPyodideBaseUrl(): string {
     // In Electron production, use bundled Pyodide
     // Worker is in assets/, pyodide is in pyodide/, so go up one level
     // We need absolute path for the pyodide.js import
-    const workerUrl = self.location.href;
-    const baseUrl = workerUrl.substring(0, workerUrl.lastIndexOf('/assets/') + 1);
-    return baseUrl + 'pyodide/';
+    return new URL('/_offline/python/', self.location.origin).href;
   }
   // In browser or Electron dev mode, use CDN
   return 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
@@ -50,9 +48,7 @@ function getPyodideBaseUrl(): string {
 // Get absolute URL for wheel files (for micropip)
 function getWheelBaseUrl(): string {
   if (isElectronProduction()) {
-    const workerUrl = self.location.href;
-    const baseUrl = workerUrl.substring(0, workerUrl.lastIndexOf('/assets/') + 1);
-    return baseUrl + 'pyodide/wheels/';
+    return new URL('/_offline/python/wheels/', self.location.origin).href;
   }
   return '';
 }
@@ -132,13 +128,8 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     console.log('[Worker] Pre-loading Pyodide packages for offline use...');
     // Load all required Pyodide built-in packages from local storage
     // These will be loaded from indexURL (our local pyodide/ folder)
-    await pyodide.loadPackage([
-      'numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema',
-      'python-dateutil', 'pytz', 'six', 'attrs', 'packaging',
-      'typing-extensions', 'setuptools', 'pillow', 'matplotlib',
-      'contourpy', 'cycler', 'fonttools', 'kiwisolver', 'pyparsing',
-      'referencing', 'jsonschema-specifications', 'rpds-py', 'pyrsistent'
-    ]);
+    const config = await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json());
+    await pyodide.loadPackage(config.packages);
     console.log('[Worker] Pyodide packages loaded from local storage');
   }
 
@@ -177,11 +168,8 @@ wheels_to_install = [
 ]
 
 for wheel in wheels_to_install:
-    try:
-        await micropip.install(wheel)
-        print(f"[Worker] Installed {wheel}")
-    except Exception as e:
-        print(f"[Worker] Warning: Could not install {wheel}: {e}")
+    await micropip.install(wheel, deps=False)
+    print(f"[Worker] Installed {wheel}")
 
 import dicompare
 import dicompare.interface

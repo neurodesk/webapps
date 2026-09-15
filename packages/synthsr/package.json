@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/synthsr",
-  "version": "0.3.20260914",
+  "version": "0.4.20260915",
   "description": "SynthSR brain image synthesis for Node.js, HPC and browsers",
   "type": "module",
   "license": "Apache-2.0",

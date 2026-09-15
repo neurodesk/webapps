@@ -1,6 +1,6 @@
 {
   "name": "syncro",
-  "version": "0.2.20260914",
+  "version": "0.3.20260915",
   "private": true,
   "type": "module",
   "scripts": {

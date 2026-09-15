@@ -21,6 +21,9 @@ async function makeRepo(t) {
   });
   await cp(sourceRegistry, join(root, 'registry', 'apps.yml'));
   await cp(join(repoRoot, 'registry', 'app-information.yml'), join(root, 'registry', 'app-information.yml'));
+  for (const filename of ['standalone.json', 'offline-assets.sources.json', 'offline-assets.lock.json']) {
+    await cp(join(repoRoot, 'registry', filename), join(root, 'registry', filename));
+  }
   return root;
 }
 
@@ -46,6 +49,10 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   const root = await makeRepo(t);
   const result = await newApp(root, ['demo-app']);
   assert.equal(result.code, 0, result.stderr);
+  for (const filename of ['standalone.json', 'offline-assets.sources.json', 'offline-assets.lock.json']) {
+    const catalog = JSON.parse(await readFile(join(root, 'registry', filename)));
+    assert.ok(Object.hasOwn(catalog.apps, 'demo-app'));
+  }
 
   const registry = await loadAppsRegistry(join(root, 'registry', 'apps.yml'));
   const app = findApp(registry, 'demo-app');

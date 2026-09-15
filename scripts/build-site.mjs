@@ -8,6 +8,7 @@ import { injectCompositeTheme } from './lib/composite-theme.mjs';
 import { renderLandingPage } from './lib/landing-page.mjs';
 import { assembleRuntimeAssetStore } from './lib/runtime-assets.mjs';
 import { headersFile } from './lib/vite-app-config.mjs';
+import { stageStandaloneAssets } from './lib/standalone.mjs';
 
 const registry = await loadAppsRegistry();
 const information = await loadAppInformation(registry);
@@ -51,6 +52,7 @@ for (const app of registry.apps) {
     url: `${siteOrigin}/${app.path}/`,
     information: appInformationPayload(information, app.id),
   }));
+  await stageStandaloneAssets(destination);
 }
 
 await assembleRuntimeAssetStore({ repoRoot, siteDist, registry });
@@ -62,6 +64,7 @@ for (const [name, sharedSource] of sharedSiteAssets) {
   await cp(sharedSource, join(siteDist, name), { recursive: true });
 }
 await cp(join(repoRoot, 'site', 'analytics.json'), join(siteDist, 'analytics.json'));
+await stageStandaloneAssets(siteDist);
 await writeFile(join(siteDist, '.nojekyll'), '');
 await writeFile(join(siteDist, '_headers'), headersFile);
 console.log(`Assembled ${registry.apps.length} apps at ${siteDist}`);

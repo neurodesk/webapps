@@ -37,6 +37,7 @@
        (canonical source: QSMxT/qsmxt.github.io → qsm-nav.js). -->
   <script>
     (function () {
+      if (document.documentElement.hasAttribute("data-neurodesk-offline")) return;
       var s = document.createElement("script");
       var local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
       s.src = local ? "/qsm-nav.js" : "https://qsmxt.github.io/qsm-nav.js";
@@ -56,7 +57,7 @@
 
   <!-- NiiVue -->
   <script type="module">
-    import { Niivue, NVImage } from "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js";
+    import { Niivue, NVImage } from "./niivue/index.js";
     window.Niivue = Niivue;
     window.NVImage = NVImage;
   </script>

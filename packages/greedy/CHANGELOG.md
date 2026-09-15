@@ -1,5 +1,7 @@
 # @neurodesk/greedy
 
+## 0.3.20260915
+
 ## 0.2.20260914
 
 ### Minor Changes

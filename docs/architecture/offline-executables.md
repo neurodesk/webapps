@@ -1,5 +1,7 @@
 # Offline executable rollout
 
+The [catalog-wide standalone release plan](standalone-rollout-plan.md) and [shared Electron architecture](webapps-desktop-architecture.md) supersede this document's coverage, packaging and delivery order. Every app is included in the desktop suite, including SurfAnnotate and ZARRo. Models ship inside desktop, command-line and container distributions. The remaining catalog notes below are historical background; the Greedy implementation notes remain useful.
+
 The catalog has 24 apps. Twenty-two have useful batch workflows. SurfAnnotate and ZARRo remain interactive applications unless a separate batch operation is requested.
 
 This plan records source and release configuration, not verified public availability. Greedy is the implementation in this change. The remaining rows are planned work.
@@ -8,7 +10,7 @@ This plan records source and release configuration, not verified public availabi
 
 Each completed CLI has an Apple ARM installer signed with Developer ID and notarized, a Linux x64 archive, a Windows x64 archive, and an npm-installable command. Each release uses its app's `MAJOR.MINOR.YYYYMMDD` version. Package licenses, attribution and runtime dependencies travel with the executable.
 
-Offline means that execution needs no network after installation and explicit model provisioning. Models and validation datasets stay on the pinned Hugging Face dataset, outside Git. Model-based commands need an explicit download step, checksum validation, a configurable local model directory, and a useful error when an asset is missing. Commands must not silently download weights during an offline run.
+Offline means installation and first execution need no network or existing model cache. Model sources and validation datasets stay on the pinned Hugging Face dataset, outside Git; release artifacts include the required model files and runtime assets. A missing asset reports an incomplete installation. There is no runtime model download step.
 
 Every target must run a scientific fixture from an extracted archive and an installed npm package. A help/version check alone does not validate a pipeline. Existing numerical parity gates remain in place. Release evidence must distinguish generated fixture checks from reference-dataset parity and from network-disabled execution.
 
