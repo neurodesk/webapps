@@ -71,7 +71,7 @@ try {
       await page.waitForLoadState('load');
       const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible');
       if (await enter.count()) await enter.first().click();
-      await expect(page.locator(selector)).toBeAttached();
+      await expect(page.locator(selector)).toBeEnabled();
       await page.locator(selector).setInputFiles(dicomSeries({ extension: '.IMA' }));
       await verify(page);
       if (process.env.UPLOAD_ARTIFACTS) {
