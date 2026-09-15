@@ -51,10 +51,14 @@ try {
       }
       await expect(dialog).toBeVisible();
       await expect(dialog).toContainText('Models included');
-      await expect(dialog).not.toContainText(/cargo build|compile from source|make macos-release/i);
+      await expect(dialog).not.toContainText(/cargo build|compile from source|make macos-release|sha-256|sha256|shasum|Prepare this upstream/i);
+      const sections = await dialog.locator('section > h3').allTextContents();
+      assert.ok(sections.includes('Webapp standalone · Without models'));
+      assert.ok(sections.indexOf('Webapp standalone · Without models') < sections.indexOf('Webapp standalone · Models included'));
+      if (catalog.apps[app.id].containers.length) assert.equal(sections[0], 'Neurodesk containers');
       const links = await dialog.locator('a').evaluateAll(elements => elements.map(element => element.href));
       for (const download of [...catalog.suite.downloads, ...catalog.apps[app.id].downloads]) {
-        for (const file of [download, ...(download.parts || [])]) {
+        for (const file of download.parts || [download]) {
           assert.ok(links.includes(file.url), `${app.id}: missing visible ${download.platform} download ${file.url}`);
         }
       }

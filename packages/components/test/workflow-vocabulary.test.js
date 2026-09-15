@@ -160,3 +160,11 @@ test('imaging workspace provides a reusable three-panel viewer layout', async ()
   assert.match(css, /\.nd-viewer-canvas-wrapper \{ flex: none; min-height: 0; height: calc\(3 \* min\(100vw, 360px\)\); \}/);
   assert.match(css, /orientation: landscape\) \{\s*\.nd-imaging-viewer:has\([^)]*\) \.nd-viewer-canvas-wrapper \{ height: calc\(100vw \/ 3\); \}/);
 });
+
+
+test('download sections share visible separation and accessible disclosure targets', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-dialog-section\s*\{[^}]*border: 1px solid var\(--nd-color-border\)/);
+  assert.match(css, /\.nd-dialog-section \+ \.nd-dialog-section\s*\{[^}]*margin-top:/);
+  assert.match(css, /\.nd-download-option summary\s*\{[^}]*min-height: 44px/);
+});

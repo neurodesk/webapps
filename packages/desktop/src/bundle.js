@@ -39,6 +39,12 @@ export async function loadBundle(root) {
     if (canonicalUrl(url) !== url) throw new Error(`Noncanonical asset URL: ${url}`);
     bundlePath(root, asset.path);
     if (!/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.bytes) || asset.bytes < 0) throw new Error(`Unverified asset: ${url}`);
+    if (asset.remote && (bundle.modelsIncluded !== false || asset.kind !== 'model')) throw new Error('Only models in the package without models can be downloaded');
+  }
+  for (const record of Object.values(bundle.files || {})) {
+    if (!record.remote) continue;
+    const source = bundle.assets[record.remote.url];
+    if (bundle.modelsIncluded !== false || !source?.remote || !Number.isSafeInteger(record.remote.offset) || record.remote.offset < 0 || record.remote.offset + record.bytes > source.bytes) throw new Error('Invalid downloadable model file');
   }
   return bundle;
 }
@@ -62,6 +68,7 @@ export async function verifyBundle(root) {
   const checked = new Set();
   for (const app of bundle.apps) await stat(bundlePath(root, `site/${app.path}/index.html`));
   for (const asset of [...Object.values(bundle.assets), ...Object.entries(bundle.files || {}).map(([path, record]) => ({ ...record, path }))]) {
+    if (asset.remote) continue;
     if (checked.has(asset.path)) continue;
     const path = bundlePath(root, asset.path);
     const details = await lstat(path);

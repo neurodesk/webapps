@@ -31,38 +31,42 @@ const find = name => {
 const platforms = ['macos-arm64', 'linux-x64', 'windows-x64', 'linux-x64-apptainer'];
 const downloads = [];
 const uploads = new Set();
-for (const platform of platforms) {
-  const path = find(`${platform}.json`);
-  const metadata = JSON.parse(await readFile(path));
-  if (metadata.version !== version || metadata.modelsIncluded !== true) throw new Error(`Incomplete ${platform}`);
-  const primary = find(basename(new URL(metadata.url).pathname));
-  if (await fileHash(primary) !== metadata.sha256) throw new Error(`Corrupt ${primary}`);
-  uploads.add(primary);
-  const complete = createHash('sha256');
-  for (const part of metadata.parts || []) {
-    const partPath = find(part.filename);
-    if (await fileHash(partPath) !== part.sha256) throw new Error(`Corrupt ${partPath}`);
-    for await (const chunk of createReadStream(partPath)) complete.update(chunk);
-    uploads.add(partPath);
+for (const modelsIncluded of [false, true]) {
+  for (const platform of platforms) {
+    const path = find(`${platform}${modelsIncluded ? '' : '-without-models'}.json`);
+    const metadata = JSON.parse(await readFile(path));
+    if (metadata.version !== version || metadata.modelsIncluded !== modelsIncluded) throw new Error(`Incomplete ${platform}`);
+    const primary = find(basename(new URL(metadata.url).pathname));
+    if (await fileHash(primary) !== metadata.sha256) throw new Error(`Corrupt ${primary}`);
+    uploads.add(primary);
+    const complete = createHash('sha256');
+    for (const part of metadata.parts || []) {
+      const partPath = find(part.filename);
+      if (await fileHash(partPath) !== part.sha256) throw new Error(`Corrupt ${partPath}`);
+      for await (const chunk of createReadStream(partPath)) complete.update(chunk);
+      uploads.add(partPath);
+    }
+    if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
+    downloads.push(metadata);
+    uploads.add(path);
   }
-  if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
-  downloads.push(metadata);
-  uploads.add(path);
 }
-for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) {
-  const matching = files.filter(path => path.includes(`desktop-${os}/`) && path.endsWith('/packaged-desktop-reports/startup.json'));
-  if (matching.length !== 1) throw new Error(`Missing installed-app tests for ${os}`);
-  const results = JSON.parse(await readFile(matching[0]));
-  const expected = registry.apps.map(app => app.id).sort();
-  if (JSON.stringify(results.map(result => result.app).sort()) !== JSON.stringify(expected) || results.some(result => !result.passed)) throw new Error(`Incomplete installed-app tests for ${os}`);
+for (const models of ['included', 'without']) {
+  for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) {
+    const matching = files.filter(path => path.includes(`desktop-${os}-${models}/`) && path.endsWith('/packaged-desktop-reports/startup.json'));
+    if (matching.length !== 1) throw new Error(`Missing installed-app tests for ${os}`);
+    const results = JSON.parse(await readFile(matching[0]));
+    const expected = registry.apps.map(app => app.id).sort();
+    if (JSON.stringify(results.map(result => result.app).sort()) !== JSON.stringify(expected) || results.some(result => !result.passed)) throw new Error(`Incomplete installed-app tests for ${os}`);
+  }
+  if (!files.some(path => path.includes(`desktop-ubuntu-22.04-${models}/`) && path.endsWith('/container-reports/batch.json'))) throw new Error(`Missing ${models} HPC batch tests`);
 }
-if (!files.some(path => path.endsWith('/container-reports/batch.json'))) throw new Error('Missing HPC batch tests');
 catalog.suite = { version, revision, apps: await Promise.all(registry.apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version }))), downloads };
 const metadataPath = join(directory, 'standalone-catalog.json');
 await writeFile(metadataPath, `${JSON.stringify(catalog, null, 2)}\n`);
 uploads.add(metadataPath);
 const notesPath = join(directory, 'release-notes.md');
-await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.apps.length} applications include their models and runtime assets. No model downloads are needed on the destination machine.\n\nDownload every archive part for your platform and its installation instructions. Verify the checksums before reassembly. macOS targets Apple silicon; Linux and Windows target x86-64. The Apptainer SIF supports HPC GUI sessions and JSON batch jobs. WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports, and a Docker batch job with networking disabled. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n`);
+await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.apps.length} applications are available in two editions. **Without models** downloads and caches models when needed. **Models included** bundles all model and runtime assets for offline use.\n\nDownload every archive part for your platform and its installation instructions. macOS targets Apple silicon; Linux and Windows target x86-64. The Apptainer SIF supports HPC GUI sessions and JSON batch jobs. WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports, and a Docker batch job with networking disabled. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n`);
 if (process.argv.includes('--prepare-only')) {
   console.log(metadataPath);
 } else {

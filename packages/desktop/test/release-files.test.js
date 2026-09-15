@@ -23,6 +23,7 @@ test('release parts reassemble byte for byte with independently verifiable check
     }
     assert.deepEqual(Buffer.concat(pieces), input);
     assert.equal(createHash('sha256').update(input).digest('hex'), result.archiveSha256);
-    assert.match(result.command, /shasum -a 256/);
+    assert.doesNotMatch(result.command, /shasum|sha256/i);
+    assert.match(result.command, /unzip/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

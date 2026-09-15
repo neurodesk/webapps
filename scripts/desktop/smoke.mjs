@@ -17,6 +17,7 @@ const bundle = JSON.parse(await readFile(join(resources, 'manifest.json')));
 const environment = { ...process.env };
 delete environment.ELECTRON_RUN_AS_NODE;
 const results = [];
+let modelDownloadTested = false;
 for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || process.env.NEURODESK_TEST_APP.split(',').includes(app.id))) {
   const userData = await mkdtemp(join(tmpdir(), `neurodesk-${app.id}-`));
   const errors = [];
@@ -46,6 +47,17 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     page.on('pageerror', error => { console.error(`${app.id} pageerror: ${error.stack || error.message}`); errors.push(error.stack || error.message); });
     page.on('response', response => { if (response.status() >= 400 && !new URL(response.url()).pathname.startsWith('/_local/')) missing.push(`${response.status()} ${response.url()}`); });
     await page.waitForLoadState('domcontentloaded');
+    if (bundle.modelsIncluded === false && !modelDownloadTested && process.env.NEURODESK_CONTAINER !== '1') {
+      const [url, model] = Object.entries(bundle.assets).filter(([url, asset]) => asset.remote && url.endsWith('.onnx')).sort((a, b) => a[1].bytes - b[1].bytes)[0];
+      const bytes = await page.evaluate(async url => {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Model download failed: ${response.status}`);
+        return (await response.arrayBuffer()).byteLength;
+      }, url);
+      if (bytes !== model.bytes) throw new Error('Downloaded model has the wrong size');
+      modelDownloadTested = true;
+      console.log(`Verified first-use model download: ${url}`);
+    }
     const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible');
     if (await enter.count()) await enter.first().click();
     if (await page.locator('#welcomeLater:visible').count()) await page.locator('#welcomeLater').click();

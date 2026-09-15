@@ -575,6 +575,29 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-dialog-body p { margin: 0 0 var(--nd-space-sm); }
 .nd-dialog-body h3 { margin: var(--nd-space-lg) 0 var(--nd-space-xs); padding-bottom: var(--nd-space-xs); border-bottom: 1px solid var(--nd-color-border); color: var(--nd-color-primary); font-size: 0.9rem; font-weight: 600; }
 .nd-dialog-body h3:first-child { margin-top: 0; }
+.nd-dialog-section {
+  padding: var(--nd-space-lg);
+  border: 1px solid var(--nd-color-border);
+  border-radius: var(--nd-radius-sm);
+  background: var(--nd-color-bg);
+}
+.nd-dialog-section + .nd-dialog-section {
+  margin-top: var(--nd-space-lg);
+}
+.nd-dialog-section h4 {
+  margin: var(--nd-space-sm) 0 var(--nd-space-xs);
+  font-size: 0.875rem;
+}
+.nd-download-option + .nd-download-option {
+  margin-top: var(--nd-space-md);
+  padding-top: var(--nd-space-sm);
+  border-top: 1px solid var(--nd-color-border);
+}
+.nd-download-option summary {
+  cursor: pointer;
+  padding: var(--nd-space-sm) 0;
+  min-height: 44px;
+}
 .nd-dialog-body a { color: var(--nd-color-primary); overflow-wrap: anywhere; }
 .nd-dialog-body pre { margin: 0 0 var(--nd-space-sm); padding: var(--nd-space-sm) var(--nd-space-md); overflow: auto; background: var(--nd-color-bg); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.75rem; line-height: 1.6; }
 .nd-dialog-body code { font-family: "SF Mono", Consolas, monospace; font-size: 0.8em; }

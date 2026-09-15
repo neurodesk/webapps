@@ -3,17 +3,23 @@ import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { prepareReleaseFiles } from './release-files.mjs';
-import { fileHash, verifyBundle } from '../../packages/desktop/src/bundle.js';
+import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const projectDir = join(root, 'packages/desktop');
+const light = process.env.NEURODESK_MODELS === 'without';
+const resources = join(projectDir, light ? 'resources-light' : 'resources');
 const require = createRequire(join(projectDir, 'package.json'));
 const { build } = require('electron-builder');
 // Model weights dominate these archives; moderate compression avoids spending
 // tens of minutes on the hosted runner for a small download-size difference.
 process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
-await verifyBundle(join(projectDir, 'resources'));
-const artifacts = await build({ projectDir, publish: 'never', config: { executableName: 'neurodesk-webapps' } });
+await verifyBundle(resources);
+const artifacts = await build({ projectDir, publish: 'never', config: {
+  executableName: 'neurodesk-webapps',
+  extraResources: [{ from: resources, to: 'offline' }],
+  ...(light ? { artifactName: 'webapps-${version}-without-models-${os}-${arch}.${ext}' } : {}),
+} });
 const executable = process.platform === 'darwin'
   ? join(projectDir, 'release/mac-arm64/neurodesk-webapps.app/Contents/MacOS/neurodesk-webapps')
   : process.platform === 'win32'
@@ -35,5 +41,5 @@ await new Promise((resolve, reject) => {
 const version = JSON.parse(await readFile(join(projectDir, 'package.json'))).version;
 const platform = { darwin: 'macos-arm64', linux: 'linux-x64', win32: 'windows-x64' }[process.platform];
 for (const path of artifacts.filter(path => /\.(zip|tar\.gz)$/.test(path))) {
-  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform }));
+  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform, modelsIncluded: !light }));
 }

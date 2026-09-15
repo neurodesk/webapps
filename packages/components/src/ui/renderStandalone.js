@@ -1,47 +1,77 @@
 import { createElement } from '../core/dom.js';
 import { createInfoDialog, renderCommand } from './renderInfoDialog.js';
 
-export function openStandalone({ title, app, suite, installed = false }, doc = globalThis.document) {
+const platforms = {
+  'macos-arm64': 'macOS · Apple silicon',
+  'windows-x64': 'Windows · x64',
+  'linux-x64': 'Linux · x64',
+  'linux-x64-apptainer': 'Apptainer · Linux x64',
+};
+
+export function openStandalone({ title, app, suite, installed = false, modelsIncluded = true }, doc = globalThis.document) {
   const content = doc.createElement('div');
-  const append = (tag, text) => content.append(createElement(tag, { text, ownerDocument: doc }));
-  if (installed) append('p', 'This application runs from your installed offline package. Models and runtime dependencies are included.');
-  for (const [heading, downloads] of [['Desktop application', app.downloads.filter(item => item.kind === 'desktop')], ['Webapps desktop suite', suite?.downloads.filter(item => item.kind === 'desktop') || []], ['Command line / HPC', [...app.downloads.filter(item => item.kind === 'cli'), ...(suite?.downloads.filter(item => item.kind === 'container') || [])]]]) {
-    if (!downloads.length) continue;
-    append('h3', heading);
-    for (const download of downloads) {
-      const row = createElement('p', { ownerDocument: doc });
-      row.append(createElement('a', { href: download.url, text: `${download.platform} · ${download.version}`, ownerDocument: doc }));
-      if (download.parts?.length) row.append(doc.createTextNode(' · Download every part below'));
-      if (download.modelsIncluded) row.append(doc.createTextNode(' · Models included'));
-      content.append(row);
-      for (const [index, part] of (download.parts || []).entries()) {
-        const link = createElement('p', { ownerDocument: doc });
-        link.append(createElement('a', { href: part.url, text: `Part ${index + 1} of ${download.parts.length} · ${(part.bytes / 1e9).toFixed(2)} GB`, ownerDocument: doc }));
-        content.append(link);
-      }
-      if (download.archiveSha256) {
-        append('p', 'Complete archive SHA-256');
-        content.append(renderCommand({ id: `archive-checksum-${download.kind}-${download.platform}`, command: download.archiveSha256, label: 'complete archive SHA-256' }, doc).root);
-      }
-      if (download.sha256) {
-        const label = download.parts?.length ? 'Installation instructions SHA-256' : 'Download SHA-256';
-        append('p', label);
-        content.append(renderCommand({ id: `checksum-${download.kind}-${download.platform}`, command: download.sha256, label }, doc).root);
-      }
-      if (download.command) content.append(renderCommand({ id: `standalone-${download.kind}-${download.platform}`, command: download.command }, doc).root);
-    }
-  }
-  if (!app.downloads.length && !suite?.downloads?.length && !installed) append('p', 'Offline packages have not been published for this app yet.');
+  const element = (tag, text, attributes = {}) => createElement(tag, { text, ...attributes, ownerDocument: doc });
+  const section = (id, heading, description) => {
+    const root = element('section', undefined, { className: 'nd-dialog-section', 'aria-labelledby': id });
+    root.append(element('h3', heading, { id }));
+    if (description) root.append(element('p', description));
+    content.append(root);
+    return root;
+  };
+  const command = (parent, id, text) => parent.append(renderCommand({ id, command: text }, doc).root);
+  if (installed) content.append(element('p', modelsIncluded
+    ? 'Installed with models included. Ready for offline use.'
+    : 'Installed without models. Models download when needed.'));
   if (app.containers.length) {
-    append('h3', 'Neurodesk container');
+    const root = section('standalone-neurodesk', 'Neurodesk containers');
     for (const container of app.containers) {
-      const row = createElement('p', { ownerDocument: doc });
-      row.append(createElement('a', { href: container.url, text: container.label, ownerDocument: doc }));
-      content.append(row);
-      if (container.description) append('p', container.description);
-      if (container.command) content.append(renderCommand({ id: `container-${container.id}`, command: container.command }, doc).root);
+      root.append(element('h4', container.label));
+      if (container.dockerImage) {
+        const row = element('p');
+        row.append(element('a', container.dockerLabel || 'Docker Hub', { href: container.url }));
+        root.append(row);
+        command(root, `docker-${container.id}`, `docker pull ${container.dockerImage}`);
+      }
+      if (container.apptainerUrl) {
+        const row = element('p');
+        row.append(element('a', 'Download Apptainer image', { href: container.apptainerUrl }));
+        root.append(row);
+        command(root, `apptainer-${container.id}`, `curl -X GET ${container.apptainerUrl} -O`);
+      }
     }
   }
+  const downloads = [...(suite?.downloads || []), ...app.downloads];
+  for (const included of [false, true]) {
+    const selected = downloads.filter(download => download.modelsIncluded === included);
+    if (!selected.length) continue;
+    const profile = included ? 'full' : 'light';
+    const root = section(`standalone-${profile}`, `Webapp standalone · ${included ? 'Models included' : 'Without models'}`,
+      included ? 'Webapps with models bundled for offline use.' : 'Webapps with models downloaded when needed.');
+    for (const [index, download] of selected.entries()) {
+      const row = element('div', undefined, { className: 'nd-download-option' });
+      const label = `${download.kind === 'cli' ? `${title} command line · ` : ''}${platforms[download.platform] || download.platform}`;
+      const size = download.bytes ? ` · ${(download.bytes / 1e9).toFixed(2)} GB` : '';
+      row.append(element('h4', `${label}${size}`));
+      if (download.parts?.length) {
+        const links = element('p');
+        for (const [partIndex, part] of download.parts.entries()) {
+          if (partIndex) links.append(doc.createTextNode(' · '));
+          links.append(element('a', `Part ${partIndex + 1} of ${download.parts.length}`, { href: part.url }));
+        }
+        row.append(links);
+      } else row.append(element('a', 'Download', { href: download.url }));
+      // Integrity metadata stays in the release catalog, outside the user flow.
+      const instructions = download.command?.split('\n').filter(line => !/sha256|sha-256|shasum|get-filehash/i.test(line)).join('\n');
+      if (download.parts?.length && instructions) {
+        const details = element('details');
+        details.append(element('summary', 'Installation instructions'));
+        command(details, `install-${profile}-${index}`, instructions);
+        row.append(details);
+      }
+      root.append(row);
+    }
+  }
+  if (!downloads.length && !installed) content.append(element('p', 'Standalone downloads have not been published yet.'));
   doc.getElementById('neurodeskStandaloneDialog')?.remove();
   const dialog = createInfoDialog({ id: 'neurodeskStandaloneDialog' }, doc);
   dialog.open(`${title} · Standalone`, content, { wide: true });

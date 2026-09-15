@@ -2,6 +2,13 @@
 
 ## 0.3.20260915
 
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.2.1
+  - @neurodesk/synthseg@0.3.20260915
+
+
 ### Minor Changes
 
 - Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.

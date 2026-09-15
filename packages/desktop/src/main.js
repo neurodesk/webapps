@@ -3,9 +3,10 @@ import { app, BrowserWindow, dialog, net, session, Menu } from 'electron';
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join, resolve, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { bundlePath, canonicalUrl, loadBundle, verifyBundle } from './bundle.js';
+import { canonicalUrl, loadBundle, verifyBundle } from './bundle.js';
 import { readJob, runJob } from './jobs.js';
 import { mimeType, startOfflineServer } from './server.js';
+import { createModelResolver } from './models.js';
 
 const root = process.env.NEURODESK_BUNDLE || (app.isPackaged ? join(process.resourcesPath, 'offline') : resolve('resources'));
 if (process.env.NEURODESK_USER_DATA) app.setPath('userData', process.env.NEURODESK_USER_DATA);
@@ -27,7 +28,8 @@ app.whenReady().then(async () => {
 try {
   const bundle = await loadBundle(root);
   const job = argument('--job') ? await readJob(resolve(argument('--job'))) : null;
-  const local = await startOfflineServer(root);
+  const models = createModelResolver(root, bundle, join(app.getPath('userData'), 'models'));
+  const local = await startOfflineServer(root, { resolveFile: models.file, modelsIncluded: bundle.modelsIncluded !== false });
   server = local.server;
   const offlineSession = session.fromPartition('offline');
   const downloads = [];
@@ -61,8 +63,8 @@ try {
       callback({ cancel: true });
     } else callback({});
   });
-  // HTTPS is served exclusively from verified packaged files, including in
-  // workers. There is no network fallback, cache warming or model downloader.
+  // Full installations serve packaged files. The smaller edition can fetch
+  // only pinned model assets, which are verified and cached before use.
   offlineSession.protocol.handle('https', async request => {
     const asset = bundle.assets[canonicalUrl(request.url)];
     if (!asset) {
@@ -71,7 +73,10 @@ try {
     }
     const requestedHash = new URL(request.url).searchParams.get('sha256');
     if (requestedHash && requestedHash !== asset.sha256) return new Response('Model checksum does not match this installation', { status: 409 });
-    const response = await net.fetch(pathToFileURL(bundlePath(root, asset.path)).href);
+    let path;
+    try { path = await models.asset(canonicalUrl(request.url)); }
+    catch (error) { return new Response(error.message, { status: 503 }); }
+    const response = await net.fetch(pathToFileURL(path).href);
     return new Response(response.body, { headers: {
       'Content-Type': asset.contentType || mimeType(new URL(request.url).pathname),
       'Access-Control-Allow-Origin': '*',

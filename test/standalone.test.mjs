@@ -41,15 +41,18 @@ test('every app has an executable offline workflow test', async () => {
   assert.deepEqual([...workflowApps].sort(), registry.apps.map(app => app.id).sort(), 'Implement an offline computation or interactive workflow test before adding an app');
 });
 
-test('multipart archive checksums use the wrapping copy control', () => {
+test('standalone choices are ordered and omit technical clutter', () => {
   const dom = new JSDOM('<html><body></body></html>');
-  const archiveSha256 = 'b'.repeat(64);
-  const suite = { downloads: [{ kind: 'desktop', platform: 'macos-arm64', version: '0.1.20260915', url: 'https://example.test/install.txt', archiveSha256 }] };
-  const dialog = openStandalone({ title: 'Demo', app: { downloads: [], containers: [] }, suite }, dom.window.document);
-  const code = dialog.root.querySelector('#archive-checksum-desktop-macos-arm64');
-  assert.equal(code.textContent, archiveSha256);
-  assert.ok(code.closest('.nd-command'));
-  assert.ok(dialog.root.querySelector('[aria-label="Copy complete archive SHA-256"]'));
+  const download = { kind: 'desktop', platform: 'macos-arm64', version: '0.1.20260915', url: 'https://example.test/install.txt', archiveSha256: 'b'.repeat(64), parts: [{ url: 'https://example.test/part1' }], command: "echo 'hash' | shasum -a 256 -c -\nunzip app.zip" };
+  const suite = { downloads: [{ ...download, modelsIncluded: true }, { ...download, modelsIncluded: false }] };
+  const app = { downloads: [], containers: [{ id: 'demo', label: 'Demo 1', url: 'https://hub.docker.com/r/demo', dockerImage: 'demo:1', apptainerUrl: 'https://neurocontainers.neurodesk.workers.dev/demo_1_20260915.simg' }] };
+  const dialog = openStandalone({ title: 'Demo', app, suite }, dom.window.document);
+  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'Webapp standalone · Without models', 'Webapp standalone · Models included']);
+  assert.doesNotMatch(dialog.root.textContent, /sha256|sha-256|shasum|Prepare this upstream/i);
+  assert.match(dialog.root.textContent, /docker pull demo:1/);
+  assert.match(dialog.root.textContent, /curl -X GET https:\/\/neurocontainers.neurodesk.workers.dev\/demo_1_20260915.simg -O/);
+  assert.equal(dialog.root.querySelector('details').open, false);
+  assert.match(dialog.root.textContent, /unzip app.zip/);
   dom.window.close();
 });
 

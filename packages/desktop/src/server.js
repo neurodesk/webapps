@@ -12,7 +12,7 @@ export const mimeType = path => ({
   '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.txt': 'text/plain',
 }[extname(path)] || 'application/octet-stream');
 
-export async function startOfflineServer(root, { port = 0 } = {}) {
+export async function startOfflineServer(root, { port = 0, resolveFile, modelsIncluded = true } = {}) {
   const mounts = new Map();
   const server = createServer(async (request, response) => {
     try {
@@ -31,7 +31,8 @@ export async function startOfflineServer(root, { port = 0 } = {}) {
         const child = relative(directory, path);
         if (child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) throw new Error('Path escapes selected directory');
       } else {
-        path = bundlePath(join(root, 'site'), `${pathname.replace(/^\/+/, '')}${pathname.endsWith('/') ? 'index.html' : ''}`);
+        const file = `site/${pathname.replace(/^\/+/, '')}${pathname.endsWith('/') ? 'index.html' : ''}`;
+        path = resolveFile ? await resolveFile(file) : bundlePath(root, file);
       }
       const details = await stat(path);
       if (!details.isFile()) throw new Error('Not a file');
@@ -44,7 +45,7 @@ export async function startOfflineServer(root, { port = 0 } = {}) {
         'Cache-Control': 'no-store',
       };
       if (path.endsWith('.html')) {
-        const html = (await readFile(path, 'utf8')).replace(/<html\b/, '<html data-neurodesk-offline');
+        const html = (await readFile(path, 'utf8')).replace(/<html\b/, `<html data-neurodesk-offline data-neurodesk-models-included="${modelsIncluded}"`);
         response.writeHead(200, headers).end(request.method === 'HEAD' ? undefined : html);
       } else {
         headers['Content-Length'] = details.size;

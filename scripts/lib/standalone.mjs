@@ -28,7 +28,7 @@ function validateDownloads(downloads, id) {
       if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`${id}: download must have a checksum`);
     }
     if (!download.platform || !download.version || !['desktop', 'cli', 'container'].includes(download.kind)) throw new Error(`${id}: incomplete release metadata`);
-    if (download.kind === 'desktop' && download.modelsIncluded !== true) throw new Error(`${id}: desktop package must include models`);
+    if (typeof download.modelsIncluded !== 'boolean') throw new Error(`${id}: declare whether models are included`);
   }
 }
 

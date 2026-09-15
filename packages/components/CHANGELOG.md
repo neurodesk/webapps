@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.2.1
+
+### Patch Changes
+
+- Offer desktop and HPC downloads both with and without models. Put official Neurodesk Docker and Apptainer downloads first, simplify installation details, and separate standalone choices into clear sections.
+
 ## 0.2.0
 
 ### Minor Changes

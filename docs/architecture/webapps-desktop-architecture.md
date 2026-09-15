@@ -2,7 +2,7 @@
 
 ## Distributions
 
-One Electron application contains all 24 webapps and their complete runtime assets. The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. The suite is the main standalone download in every app's shared application bar.
+One Electron application contains all 24 webapps and their complete runtime assets. The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. Every app offers both a smaller suite without models and a complete suite with models included, after its available upstream Neurodesk containers.
 
 | Distribution | Execution profile |
 | --- | --- |
@@ -16,9 +16,17 @@ The suite runs the browser's compiled WebAssembly, WebGPU and Python pipelines. 
 
 `registry/offline-assets.sources.json` declares external inputs. The lock records their exact URLs, hashes, sizes and dependencies. Assembly verifies the cache and copies the complete dependency closure into the release, including neural-network weights, templates, atlases, WebAssembly, Pyodide and Python wheels. Large files stay out of Git.
 
-The desktop host serves app files through a loopback server. HTTPS requests resolve exclusively to verified packaged files. Unlisted requests fail; there is no network fallback, first-run model downloader or automatic updater. Profiles begin empty during tests. `--verify` checks the packaged site and model files against the manifest.
+The desktop host serves app files through a loopback server. HTTPS requests resolve exclusively to verified packaged files. Unlisted requests fail. In the model-inclusive edition there is no network fallback or model downloader. Profiles begin empty during tests. `--verify` checks the packaged site and model files against the manifest.
 
 The renderer uses Electron's sandbox with context isolation and no Node integration. Local OME-Zarr access requires an explicit directory selection or `--zarr DIRECTORY`; the resulting temporary URL cannot escape that directory through path traversal or symlinks.
+
+## Edition without models
+
+`without-models.mjs` derives the smaller edition from the verified full bundle. It removes every locked model and matching site copy, including MuscleMap's split model. The manifest retains exact source URLs, hashes and sizes. Local model pieces are reconstructed from their pinned complete model.
+
+Only these declared models can be downloaded. The main process verifies model bytes before serving them, caches verified downloads, and reuses them on later runs. Concurrent requests share one download; corrupt downloads are rejected and retried on the next request. App and runtime files remain bundled. The model-inclusive edition never enables this path.
+
+Both editions are built and tested on all three platforms and as Apptainer images. The package tests exercise an actual first-use model download in the smaller edition, plus all-app startup. Tests verify offline cache reuse and rejection of corrupt or unlisted models.
 
 ## HPC execution
 
@@ -34,11 +42,11 @@ WebGPU methods require compatible GPU hardware and drivers. All 24 representativ
 
 `registry/standalone.json` supplies real GitHub binary URLs, platform information, checksums, model-inclusion claims and upstream Neurodesk container choices. The shared dialog renders it for every app, including VesselBoost and SynthSeg. Compilation commands are not standalone downloads. The lightNIIng bar link is removed; the required ecosystem statement remains in About.
 
-The release workflow builds the locked bundle, tests each platform, tests the installed executables and builds/tests the SIF. Publication requires every distribution job to pass. Files larger than GitHub's asset limit are split into numbered parts. Installation instructions include local reassembly and checksum commands; no network access is needed after transferring the complete set.
+The release workflow builds the locked bundle, tests each platform, tests the installed executables and builds/tests the SIF. Publication requires every distribution job to pass. Files larger than GitHub's asset limit are split into numbered parts. The dialog groups downloads in bordered sections and hides extraction commands inside installation disclosures. Hashes remain in machine-readable release metadata. Installation instructions include local reassembly commands; no network access is needed after transferring the complete set.
 
 `publish.mjs` verifies the individual parts and reassembled archive hashes, uploads a draft release and publishes it after the complete artifact set is present. Its generated catalog records every app version and the source revision. Web deployment refuses a catalog without a matching published suite and checks that the actual binary URLs resolve. The deployed-interface test opens every app's Standalone dialog and checks its release links.
 
-Upstream Neurodesk containers are optional alternatives. Their methods and defaults may differ from the browser implementation. The suite SIF carries the tested webapp pipelines and bundled assets. See [container assignments](standalone-container-research.md) for verified upstream versions and unavailable releases.
+Upstream Neurodesk containers are optional alternatives. Docker pulls use published Docker Hub tags. Apptainer downloads use exact filenames from Neurocommand's `cvmfs/log.txt` and the official Neurodesk worker endpoint. The suite SIF carries the tested webapp pipelines and bundled assets. See [container assignments](standalone-container-research.md) for verified upstream versions and unavailable releases.
 
 ## Future applications
 

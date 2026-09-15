@@ -150,3 +150,7 @@ and `pnpm test:interface-workflows`.
 All 24 current apps use the shared Standalone control. The lightNIIng topbar link is removed; its ecosystem statement remains in About. One registry supplies released binary URLs, checksums and available upstream Neurodesk container options. The complete offline suite supplies apps without a separate native CLI, including VesselBoost. Source-build instructions are not shown in the shared dialog.
 
 Production checks passed at desktop and phone sizes. The phone suite now opens Standalone at 320-pixel portrait and 844-pixel landscape widths. See [standalone validation](standalone-validation.md) for real offline workflows and release gates.
+
+### Standalone download choices
+
+All 24 apps share the simplified download dialog: Neurodesk Docker and official Apptainer downloads first, then the webapp suite without models, followed by model-inclusive downloads. Bordered shared sections separate the choices. Hashes and upstream preparation boilerplate are absent; multipart extraction commands are collapsed. TopoFit's Docker link is labeled as a candidate build because that is the only published Docker tag; its official Apptainer image is listed separately.

@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
 
-export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
+export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000, kind = 'desktop', modelsIncluded = true }) {
   if (!Number.isSafeInteger(partBytes) || partBytes < 1 || partBytes >= 2 ** 31) throw new Error('Invalid release part size');
   const filename = basename(archive);
   if (!/^[a-zA-Z0-9._-]+$/.test(filename)) throw new Error('Archive filename must be safe in shell commands');
@@ -25,23 +25,20 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
   const concatenate = parts.length < 2 ? '' : windows
     ? `cmd /c copy /b ${parts.map(part => part.filename).join('+')} ${filename}\n`
     : `cat ${parts.map(part => part.filename).join(' ')} > ${filename}\n`;
-  const verify = windows
-    ? `if ((Get-FileHash ${filename} -Algorithm SHA256).Hash.ToLower() -ne '${sha256}') { throw 'Archive checksum mismatch' }`
-    : `echo '${sha256}  ${filename}' | ${platform.startsWith('macos') ? 'shasum -a 256' : 'sha256sum'} -c -`;
   const extract = filename.endsWith('.sif') ? `apptainer run ${filename} --verify` : filename.endsWith('.zip')
     ? windows ? `Expand-Archive ${filename} -DestinationPath NeurodeskWebapps` : `unzip ${filename}`
     : `tar -xzf ${filename}`;
-  const command = `${concatenate}${verify}\n${extract}`;
+  const command = `${concatenate}${extract}`;
   const installation = `${filename}.install.txt`;
-  await writeFile(join(destination, installation), `Neurodesk Webapps ${version} for ${platform}\n\nDownload every file below into one folder. All models and runtime dependencies are included. Transfer the complete set to the offline machine.\n\n${parts.map(part => `${part.filename}\nSHA-256 ${part.sha256}`).join('\n\n')}\n\nRun in ${windows ? 'PowerShell' : 'a terminal'} from that folder:\n\n${command}\n\nComplete archive SHA-256: ${sha256}\n\nOpen the extracted Neurodesk Webapps application. For scheduler jobs, see STANDALONE.md included in the application resources.\n`);
+  await writeFile(join(destination, installation), `Neurodesk Webapps ${version} for ${platform}\n\nDownload every file below into one folder. ${modelsIncluded ? 'All models and runtime dependencies are included. Transfer the complete set to the offline machine.' : 'Models are not included. An internet connection is needed when a model is first used.'}\n\n${parts.map(part => part.filename).join('\n')}\n\nRun in ${windows ? 'PowerShell' : 'a terminal'} from that folder:\n\n${command}\n\nOpen the extracted Neurodesk Webapps application. For scheduler jobs, see STANDALONE.md included in the application resources.\n`);
   const result = {
-    kind, platform, version, modelsIncluded: true, bytes,
+    kind, platform, version, modelsIncluded, bytes,
     url: parts.length === 1 ? parts[0].url : baseUrl + installation,
     sha256: parts.length === 1 ? sha256 : await fileHash(join(destination, installation)),
     ...(parts.length > 1 ? { parts, archiveSha256: sha256, archiveFilename: filename } : {}),
     command,
   };
-  await writeFile(join(destination, `${platform}.json`), `${JSON.stringify(result, null, 2)}\n`);
+  await writeFile(join(destination, `${platform}${modelsIncluded ? '' : '-without-models'}.json`), `${JSON.stringify(result, null, 2)}\n`);
   await writeFile(join(destination, `${filename}.sha256`), `${sha256}  ${filename}\n`);
   return result;
 }

@@ -1,8 +1,11 @@
-# Neurodesk Webapps offline
+# Neurodesk Webapps standalone
 
-This release includes all 24 web applications, their models, Python wheels, WebAssembly modules and sample assets. Internet access is denied by the application. No account, Python installation or model download is needed on the destination machine.
+Choose one of two editions for all 24 web applications:
 
-Download all archive parts and the installation instructions on a connected machine, verify their SHA-256 checksums, and transfer the complete set. Follow the included commands to reassemble and extract the archive. Open Neurodesk Webapps and choose an application. The Standalone button identifies the installed offline version.
+- **Without models** includes the application, Python wheels, WebAssembly modules and sample assets. Models download when first used and are cached locally. This edition needs an internet connection for models that are not cached.
+- **Models included** bundles the complete model and runtime assets. It works from the first start without an internet connection.
+
+Download the archive for your platform. For multipart archives, download every part into one folder and follow the installation instructions to join and extract them. Open Neurodesk Webapps and choose an application. No Python installation is needed.
 
 ## Hardware
 
