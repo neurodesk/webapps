@@ -4,8 +4,12 @@
 
 ### Patch Changes
 
-- Publish Brain extraction in a separately versioned offline suite.
+- Add T1 and T2 head MRI examples with cancellable downloads and retry. Remove the BET method description and clarify that the current browser SynthStrip adapter uses the CPU. Require declared, pinned examples and browser coverage for newly generated apps.
 
+
+### Patch Changes
+
+- Publish Brain extraction in a separately versioned offline suite.
 
 ### Patch Changes
 

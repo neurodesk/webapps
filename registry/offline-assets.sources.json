@@ -1559,6 +1559,14 @@
         "bytes": 10296357,
         "kind": "model",
         "license": "Apache-2.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
+        "kind": "example"
       }
     ]
   },

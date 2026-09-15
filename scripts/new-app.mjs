@@ -118,6 +118,7 @@ const REQUIRED = [
   'index.html',
   'src/main.js',
   'src/config.js',
+  'examples.json',
   'test/config.test.js',
   'e2e/smoke.spec.js',
 ];
@@ -164,6 +165,7 @@ const entry = {
   ci: {
     toolchains,
     shared_runtime: false,
+    browser_test: true,
     release: false,
   },
 };
@@ -206,11 +208,13 @@ const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 manifest.version = nextVersion(manifest.version, 'patch', releaseDate());
 await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
+const examples = JSON.parse(await readFile(join(dest, 'examples.json'), 'utf8'));
+
 // Every generated app participates in desktop packaging and offline validation.
 for (const [filename, value] of [
   ['standalone.json', { desktop: true, profile: 'interactive', assets: [], downloads: [], containers: [] }],
-  ['offline-assets.sources.json', []],
-  ['offline-assets.lock.json', []],
+  ['offline-assets.sources.json', examples.map(({ url }) => ({ url, kind: 'example' }))],
+  ['offline-assets.lock.json', examples.map(({ url }) => url)],
 ]) {
   const path = join(root, 'registry', filename);
   const catalog = JSON.parse(await readFile(path, 'utf8'));

@@ -33,6 +33,16 @@ For new collapsible groups, use native `details` with a `summary`, or `renderSid
 
 At phone widths, stack controls or use clearly labeled tabs. Keep the viewer and primary action reachable. Allow scrolling within genuinely wide tables, not across the whole page. Touch targets must be at least 44 by 44 CSS pixels; text-entry controls must use at least 16px text on touch devices. Keep field labels and visible keyboard focus.
 
+## Examples
+
+New apps declare a nonempty `apps/<id>/examples.json` array of `{ id, label, url }` entries. Use suitable, de-identified data at a commit-pinned URL in the `neurodeskorg/webapps` Hugging Face dataset. Register every URL in both offline asset inventories. Keep example data outside the source repository.
+
+Place a labelled `select[data-neurodesk-example]` in the open input section, with example IDs as option values. Selection loads through the normal input path and enables the primary action without automatically running it. Show download progress or loading status; support cancellation and retry after failure. Preserve the chosen algorithm.
+
+The generator includes a working T1 MRI example; replace or extend it for the app’s science. The manifest check rejects omissions and unpinned data for new apps. The interface audit checks the selector against the manifest, loads the first hosted example, verifies its filename in `#fileInfo` and requires `#runButton` to become enabled. Keep these canonical template IDs. Keep `ci.browser_test: true` and an end-to-end test that selects an example, runs the main workflow and checks a useful output. Exercise the real hosted example too; a mocked download only tests interaction.
+
+Existing apps are migrated through the fixed legacy list in `scripts/lib/app-examples.mjs`; remove an entry when adopting the contract.
+
 ## Completion check
 
 1. Build the changed apps and assemble the site with `pnpm build`. The audit reads `dist`, so stale bundles invalidate the result.

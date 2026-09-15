@@ -66,6 +66,12 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   assert.deepEqual([...app.keywords], ['TODO']);
   assert.deepEqual([...app.ci.toolchains], ['node']);
   assert.equal(app.ci.release, false);
+  assert.equal(app.ci.browser_test, true);
+  const examples = JSON.parse(await readFile(join(root, 'apps/demo-app/examples.json')));
+  assert.equal(examples[0].id, 't1');
+  const offline = JSON.parse(await readFile(join(root, 'registry/offline-assets.lock.json')));
+  assert.deepEqual(offline.apps['demo-app'], examples.map(example => example.url));
+  assert.ok(offline.assets[examples[0].url]);
 
   const packageJson = JSON.parse(await readFile(join(root, 'apps', 'demo-app', 'package.json'), 'utf8'));
   assert.equal(packageJson.name, 'demo-app');

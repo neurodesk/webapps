@@ -5,6 +5,7 @@ import { readVolume } from '@neurodesk/synthsr';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 
 const fixture = new URL('../../calmar/tests/fixtures/synthstrip-mini/T1.nii.gz', import.meta.url).pathname;
+const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
 const bytesOf = buffer => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 
 test('BET produces the existing Rust mask and downloads images with original geometry', async ({ page }) => {
@@ -14,6 +15,7 @@ test('BET produces the existing Rust mask and downloads images with original geo
   await page.locator('#imageInput').setInputFiles(fixture);
   await expect(page.locator('#runButton')).toBeEnabled();
   await page.locator('#method').selectOption('bet');
+  await expect(page.locator('#methodHint')).toBeHidden();
   await page.locator('#advancedSettings summary').click();
   await page.locator('#threshold').fill('0');
   await page.locator('#advancedSettings summary').click();
@@ -40,6 +42,69 @@ test('BET produces the existing Rust mask and downloads images with original geo
   expect(binary.reduce((sum, value) => sum + value, 0)).toBe(246875);
   expect(createHash('sha256').update(binary).digest('hex')).toBe('107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862');
   expect(brain.data.every((value, index) => value === (binary[index] ? original.data[index] : 0))).toBe(true);
+});
+
+test('examples load through the picker and BET downloads a brain mask', async ({ page }) => {
+  for (const example of examples) await page.route(example.url, route => route.fulfill({ path: fixture }));
+  await page.goto('./');
+  const picker = page.getByLabel('Example', { exact: true });
+  for (const example of examples) {
+    await picker.selectOption(example.id);
+    await expect(page.locator('#statusText')).toHaveText('Image loaded · ready to extract brain');
+    await expect(page.locator('#fileInfo')).toContainText(new URL(example.url).pathname.split('/').pop());
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+    await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(1);
+  }
+  await page.locator('#method').selectOption('bet');
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready');
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('#resultList .nd-download-btn').nth(2).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('chris_t2_bet_mask.nii');
+  const mask = readVolume(bytesOf(await readFile(await download.path())));
+  expect(createHash('sha256').update(Uint8Array.from(mask.data)).digest('hex')).toBe('107a46c3a2f42f4a7796dc5a5b2a6660a302239ae50a0cf2eea80b1767a50862');
+});
+
+test('failed example download can retry the same example', async ({ page }) => {
+  const example = examples[0];
+  let attempts = 0;
+  await page.route(example.url, route => ++attempts === 1
+    ? route.fulfill({ status: 503, body: 'Unavailable' })
+    : route.fulfill({ path: fixture }));
+  await page.goto('./');
+  const picker = page.getByLabel('Example', { exact: true });
+  await picker.selectOption(example.id);
+  await expect(page.locator('#statusText')).toContainText('Could not load example (HTTP 503)');
+  await expect(page.locator('#runButton')).toBeDisabled();
+  await expect(picker).toBeEnabled();
+  await picker.selectOption(example.id);
+  await expect(page.locator('#runButton')).toBeEnabled();
+  expect(attempts).toBe(2);
+});
+
+test('cancelling an example aborts its request and permits the same selection again', async ({ page }) => {
+  const example = examples[0];
+  let releaseRequest;
+  let attempts = 0;
+  await page.route(example.url, async route => {
+    if (++attempts === 1) await new Promise(resolve => { releaseRequest = resolve; });
+    await route.fulfill({ path: fixture }).catch(() => {});
+  });
+  await page.goto('./');
+  const picker = page.getByLabel('Example', { exact: true });
+  await picker.selectOption(example.id);
+  await expect(picker).toBeDisabled();
+  const failed = page.waitForEvent('requestfailed', request => request.url() === example.url);
+  await page.locator('#cancelButton').click();
+  await failed;
+  await expect(page.locator('#statusText')).toHaveText('Cancelled');
+  await expect(page.locator('#runButton')).toBeDisabled();
+  releaseRequest();
+  await picker.selectOption(example.id);
+  await expect(page.locator('#statusText')).toHaveText('Image loaded · ready to extract brain');
+  await expect(page.locator('#runButton')).toBeEnabled();
+  expect(attempts).toBe(2);
 });
 
 test('cancel terminates a waiting method load and a fresh BET run succeeds', async ({ page }) => {

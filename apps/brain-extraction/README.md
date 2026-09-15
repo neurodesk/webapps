@@ -1,8 +1,11 @@
 # Brain extraction
 
-Load one NIfTI image or DICOM series, choose MindGrab, BET or SynthStrip, and
+Choose a T1- or T2-weighted full-head scan from **Example**, or load one NIfTI
+image or DICOM series. Choose MindGrab, BET or SynthStrip, and
 select **Extract brain**. View and download the brain image and binary mask.
-Processing stays in the browser. Cancel stops the worker and model download.
+Processing stays in the browser. Cancel stops the worker and active downloads.
+Examples load into the viewer without starting extraction. Their pinned Hugging
+Face URLs are listed in `examples.json` and included in the offline asset catalog.
 
 MindGrab defaults to its available GPU backend. SynthStrip uses ONNX Runtime
 Web on the CPU and downloads a checksum-verified model. BET uses QSMbly's Rust

@@ -10,6 +10,7 @@ import {
   renderViewerToolbar,
 } from "@neurodesk/webapp-components/ui";
 import { APP } from "./config.js";
+import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,24 +49,55 @@ function status(message, error = false) {
   log.log(message, error ? "error" : "info");
 }
 
-function loadFiles(filesPromise) {
-  filesPromise.then((files) => {
+let loading = null;
+async function loadFiles(filesPromise) {
+  if (loading) return;
+  const controller = new AbortController();
+  loading = controller;
+  $("imageInput").disabled = true;
+  $("exampleSelect").disabled = true;
+  $("runButton").disabled = true;
+  $("cancelButton").hidden = false;
+  status("Loading image…");
+  try {
+    const files = await (typeof filesPromise === "function" ? filesPromise(controller.signal) : filesPromise);
+    controller.signal.throwIfAborted();
     source = files[0] ?? null;
     $("fileInfo").hidden = !source;
     $("fileInfo").textContent = source ? source.name : "";
     $("dropZone").classList.toggle("has-files", Boolean(source));
     $("emptyState").hidden = Boolean(source);
-    $("runButton").disabled = !source;
     status(source ? `${source.name} loaded` : "Ready");
-  });
+  } catch (error) {
+    status(controller.signal.aborted ? "Cancelled" : error.message, !controller.signal.aborted);
+  } finally {
+    loading = null;
+    $("imageInput").disabled = false;
+    $("exampleSelect").disabled = false;
+    $("exampleSelect").value = "";
+    $("runButton").disabled = !source;
+    $("cancelButton").hidden = true;
+  }
 }
+$("cancelButton").onclick = () => loading?.abort();
 $("imageInput").addEventListener("change", (event) => {
   const files = Array.from(event.target.files);
   event.target.value = "";
   if (files.length) loadFiles(Promise.resolve(files));
 });
 bindFileDrop($("dropZone"), loadFiles);
-$("exampleButton").addEventListener("click", () => status("Add an example image URL to load here"));
+for (const example of examples) {
+  $("exampleSelect").add(new Option(example.label, example.id));
+}
+$("exampleSelect").onchange = () => {
+  const example = examples.find(entry => entry.id === $("exampleSelect").value);
+  if (!example) return;
+  void loadFiles(async signal => {
+    const response = await fetch(example.url, { signal });
+    if (!response.ok) throw new Error("Example download failed. Please try again.");
+    return [new File([await response.blob()], new URL(example.url).pathname.split("/").pop())];
+  });
+};
 
 $("runButton").addEventListener("click", () => {
   status("Processing…");

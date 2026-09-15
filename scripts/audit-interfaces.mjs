@@ -3,6 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { loadAppExamples } from './lib/app-examples.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const { apps } = await loadAppsRegistry();
@@ -13,6 +14,7 @@ if (output) await mkdir(output, { recursive: true });
 const results = [];
 try {
   for (const app of apps) {
+    const examples = await loadAppExamples(app);
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       const context = await browser.newContext({ viewport, isMobile: viewport.width < 600, hasTouch: viewport.width < 600 });
       const page = await context.newPage();
@@ -76,6 +78,16 @@ try {
         }
         if (result.clippedNavigation.length) result.failures.push(`Clipped navigation: ${result.clippedNavigation.join(', ')}`);
         if (result.duplicates.length) result.failures.push(`Duplicate navigation: ${result.duplicates.join(', ')}`);
+        if (examples) {
+          const selector = page.locator('select[data-neurodesk-example]');
+          await expect(selector).toBeVisible();
+          await expect(selector).toBeEnabled();
+          const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
+          expect(ids).toEqual(examples.map(example => example.id));
+          await selector.selectOption(examples[0].id);
+          await expect(page.locator('#fileInfo')).toContainText(new URL(examples[0].url).pathname.split('/').pop(), { timeout: 120000 });
+          await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+        }
         result.uploads = await page.locator('input[type="file"]').evaluateAll(inputs => inputs.map(input => ({
           id: input.id || input.name || 'unnamed file input',
           kind: input.dataset.neurodeskInput,

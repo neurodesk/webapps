@@ -19,6 +19,10 @@ Before changing UI, adding controls, or scaffolding an app, read [the design sys
 
 For catalog-wide work, use [the interface audit](docs/architecture/interface-audit.md) to track remaining changes per app. Update its findings when resolving them.
 
+## Working examples
+
+Every new app must offer a scientifically suitable example in its input section so users can try the main workflow without supplying files. Follow the example contract in [the interface standard](docs/architecture/interface-standard.md#examples): declare pinned data, register offline assets, and test selecting an example through processing and download. Include loading, failure, retry and cancellation behavior. Keep the generated example control and browser coverage when replacing template placeholders.
+
 ## Reference app and minimal implementations
 
 New apps are built to look familiar and read familiar. Start with the generator,
