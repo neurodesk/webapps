@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { prepareReleaseFiles } from './release-files.mjs';
-import { verifyBundle } from '../../packages/desktop/src/bundle.js';
+import { loadBundle, verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const projectDir = join(root, 'packages/desktop');
@@ -30,6 +30,7 @@ const packagedResources = process.platform === 'darwin'
   ? resolve(executable, '../../Resources/offline')
   : join(resolve(executable, '..'), 'resources/offline');
 await verifyBundle(packagedResources);
+if (((await loadBundle(packagedResources)).modelsIncluded !== false) !== !light) throw new Error('Packaged model edition does not match the requested edition');
 await new Promise((resolve, reject) => {
   const child = spawn(process.execPath, [join(root, 'scripts/desktop/smoke.mjs')], {
     stdio: 'inherit',

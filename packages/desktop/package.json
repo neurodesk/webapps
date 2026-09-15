@@ -4,14 +4,14 @@
   "private": true,
   "type": "module",
   "main": "src/main.js",
-  "description": "Offline Neurodesk Webapps with bundled models",
+  "description": "Neurodesk Webapps for local image processing",
   "author": "Neurodesk",
   "license": "MIT",
   "scripts": {
     "test": "node --test test/*.test.js",
     "lint": "node --check src/main.js && node --check src/server.js",
     "start": "electron .",
-    "package": "electron-builder --publish never"
+    "package": "node ../../scripts/desktop/pack.mjs"
   },
   "devDependencies": {
     "electron": "40.10.6",
@@ -26,12 +26,6 @@
     "files": [
       "src/**",
       "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "resources",
-        "to": "offline"
-      }
     ],
     "asar": true,
     "mac": {

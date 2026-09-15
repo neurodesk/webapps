@@ -70,7 +70,14 @@ export async function verifyBundle(root) {
   const checked = new Set();
   for (const app of bundle.apps) await stat(bundlePath(root, `site/${app.path}/index.html`));
   for (const asset of [...Object.values(bundle.assets), ...Object.entries(bundle.files || {}).map(([path, record]) => ({ ...record, path }))]) {
-    if (asset.remote) continue;
+    if (asset.remote) {
+      const present = await lstat(bundlePath(root, asset.path)).then(() => true, error => {
+        if (error.code === 'ENOENT') return false;
+        throw error;
+      });
+      if (present) throw new Error(`Model unexpectedly included in the package without models: ${asset.path}`);
+      continue;
+    }
     if (checked.has(asset.path)) continue;
     const path = bundlePath(root, asset.path);
     const details = await lstat(path);

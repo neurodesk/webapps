@@ -86,3 +86,11 @@ test('remote file metadata cannot choose a cache path outside the model cache', 
   await writeFile(join(light, 'manifest.json'), JSON.stringify(bundle));
   await assert.rejects(loadBundle(light), /Unverified file/);
 });
+
+test('verification rejects model files accidentally copied into the smaller edition', async t => {
+  const { root, full, data, record } = await fixture(t);
+  const light = join(root, 'light');
+  await withoutModels(full, light);
+  await writeFile(join(light, record.path), data);
+  await assert.rejects(verifyBundle(light), /unexpectedly included/);
+});
