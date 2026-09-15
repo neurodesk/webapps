@@ -51,6 +51,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `topofit` | Cortical surface reconstruction | `packages/topofit/src/pipeline.js` and `src/browser.js`. Supply Node/native sessions, offline assets and meshing adapters. |
 | `dwi2trx` | Tensor fitting and tractography | `apps/dwi2trx/src/dwi2trx` needs WebGPU and subgroup support for tracking. Prove a headless GPU runtime and retain the vendored dtifit-enabled niimath. |
 | `brain2print` | Segmentation to printable mesh | `apps/brain2print/src/mesh.js` has pure mesh validation. Extract the `src/main.js` pipeline with headless MindGrab and niimath meshing. |
+| `brain-extraction` | BET, MindGrab and SynthStrip brain extraction | Packaged in suite 0.4.20260915 with pinned models, the shared extraction adapters and an offline BET extraction/export check. |
 | `dicom2vid` | Volume-to-video conversion | `apps/dicom2vid/web/js/pipeline.js` and `encode.js` depend on browser video/canvas APIs. Choose and validate an offline renderer/encoder before packaging. |
 | `surfannotate` | No default batch equivalent | Manual surface ROI drawing and vertex selection. Excluded from this rollout. |
 | `zarro` | No default batch equivalent | Interactive OME-Zarr exploration. Conversion or extraction would be a separately scoped command. |

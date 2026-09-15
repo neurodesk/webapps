@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.4.20260915
+
+### Minor Changes
+
+- Add Brain extraction with BET, MindGrab and SynthStrip, including the pinned model and an offline extraction check.
+
 ## 0.3.20260915
 
 ### Patch Changes

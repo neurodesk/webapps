@@ -54,6 +54,26 @@
           "sha256": "5d25483158d53d8f34d0e9c06a654d56c8dca4ebdf370ea0982ef11315a00e0e"
         }
       ]
+    },
+    {
+      "id": "mindgrab-cpu",
+      "version": "0.1.20260813",
+      "target": "mindgrab/0.1.20260813/cpu",
+      "reason": "Keep the threaded MindGrab CPU fallback and its adjacent WASM inside each app service-worker scope. The common store pins and verifies this runtime version.",
+      "files": [
+        {
+          "name": "brainchop-mindgrab.js",
+          "source_app": "syncro",
+          "source": "mindgrab/brainchop-mindgrab.js",
+          "sha256": "f90cacdfa16fee0c9bf1ee6e0274d9ca6f5a989d05826836372742640e9a5b98"
+        },
+        {
+          "name": "brainchop-mindgrab.wasm",
+          "source_app": "syncro",
+          "source": "mindgrab/brainchop-mindgrab.wasm",
+          "sha256": "8c074d09c40516d03e0d33cb979bc38a08a886424b899388ed8a0c1507c40f47"
+        }
+      ]
     }
   ],
   "downloads": [

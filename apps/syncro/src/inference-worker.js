@@ -5,7 +5,7 @@ import {readVolume,runSynthsr} from '@neurodesk/synthsr';
 import {createBrowserSession,browserRuntime} from '@neurodesk/synthsr/browser';
 import {runSynthstrip} from '@neurodesk/synthstrip';
 import {assets,browserSynthstrip} from '../../../packages/syncro/src/assets.js';
-import {runMindgrab} from './mindgrab.js';
+import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
 ort.env.wasm.wasmPaths={wasm:wasmURL,mjs:wasmModuleURL};
 ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||1):1;
 const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brain extraction | Neurodesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="filePicker"></div>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <button id="folderButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Choose folder</button>
+          <label class="nd-file" hidden><input id="folderInput" type="file" data-neurodesk-input="image" multiple webkitdirectory hidden aria-label="Choose DICOM folder" /></label>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Brain extraction</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="method">Method</label>
+            <select id="method">
+              <option value="mindgrab">MindGrab</option>
+              <option value="bet">BET</option>
+              <option value="synthstrip">SynthStrip</option>
+            </select>
+            <p id="methodHint" class="nd-hint"></p>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings" hidden>
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field" id="betSettings">
+                <label for="threshold">Fractional intensity <small>0–1</small></label>
+                <input id="threshold" type="number" required min="0" max="1" step="0.05" value="0.5" />
+                <p class="nd-hint">Lower values produce a larger brain mask.</p>
+              </div>
+              <div class="nd-field" id="mindgrabSettings">
+                <label for="mindgrabBackend">Processing</label>
+                <select id="mindgrabBackend">
+                  <option value="auto">Automatic</option>
+                  <option value="cpu">CPU</option>
+                </select>
+                <p class="nd-hint">Choose CPU if graphics processing is slow or unavailable.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Extract brain</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Load an image to begin.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent"><p>Extract a brain image and mask with QSMbly’s Rust BET, MindGrab or SynthStrip. Outputs retain the input image geometry.</p></template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
