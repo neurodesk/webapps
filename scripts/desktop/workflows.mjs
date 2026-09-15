@@ -107,7 +107,16 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await page.locator('#surfaceInput').setInputFiles({ name: 'tetrahedron.obj', mimeType: 'text/plain', buffer: Buffer.from('v 0 0 0\nv 10 0 0\nv 0 10 0\nv 0 0 10\nf 1 3 2\nf 1 2 4\nf 2 3 4\nf 3 1 4\n') });
     await expect(page.locator('#overlayInput')).toBeEnabled({ timeout: 60000 });
     await expect(page.locator('#surfaceList')).toContainText('tetrahedron.obj');
-    return { loadedSurface: 'tetrahedron.obj' };
+    await page.evaluate(() => {
+      const { session } = window.__surfannotate;
+      for (const vertex of [0, 1, 2]) session.addClick(vertex);
+      session.closePath();
+      window.__surfannotateUi.runFill(-1);
+    });
+    const result = await download('#exportLabel');
+    const lines = result.bytes.toString('utf8').trim().split('\n');
+    assert.ok(Number(lines[1]) > 0, 'Surface annotation must contain vertices');
+    return { loadedSurface: 'tetrahedron.obj', filename: result.filename, vertices: Number(lines[1]) };
   }
   if (id === 'qsmbly') {
     const result = await page.evaluate(async () => {
@@ -187,7 +196,12 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await page.locator('#maskFitBtn').click();
     await expect(page.locator('#saveMapsBtn')).toBeEnabled({ timeout: 600000 });
     const result = await download('#saveMapsBtn');
-    return { filename: result.filename, bytes: result.bytes.length };
+    await page.locator('#trackingSection').evaluate(section => { section.open = true; });
+    await page.locator('#trackBtn').click();
+    await expect(page.locator('#saveBtn')).toBeEnabled({ timeout: 300000 });
+    const tractogram = await download('#saveBtn');
+    assert.equal(tractogram.bytes.readUInt16LE(0), 0x4b50, 'TRX must be a ZIP archive');
+    return { filename: result.filename, bytes: result.bytes.length, tractogram: tractogram.filename, tractogramBytes: tractogram.bytes.length };
   }
   if (id === 'syncro') {
     const manifest = JSON.parse(await readFile(join(resources, 'manifest.json')));

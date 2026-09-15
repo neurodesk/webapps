@@ -139,3 +139,11 @@ test('shared Vite development config injects the production shell contract', asy
   assert.match(themed, /lightniing.org/);
   assert.match(themed, /data-analytics-href="data:text\/javascript/);
 });
+
+test('composite assembly redirects baked standalone controls to shared root assets', () => {
+  const standalone = injectCompositeTheme(document, metadata);
+  const composite = injectCompositeTheme(standalone, { ...metadata, standaloneHref: '../standalone.json', componentsHref: '../shell-adapters/components/' });
+  assert.match(composite, /data-standalone-href="\.\.\/standalone.json"/);
+  assert.match(composite, /data-components-href="\.\.\/shell-adapters\/components\/"/);
+  assert.equal(injectCompositeTheme(composite, { ...metadata, standaloneHref: '../standalone.json', componentsHref: '../shell-adapters/components/' }), composite);
+});

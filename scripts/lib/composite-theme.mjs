@@ -127,6 +127,17 @@ export function injectCompositeTheme(html, {
     );
   }
 
+  // Composite builds may receive an already themed standalone app. Update its
+  // resource locations before removing the app-local copies during assembly.
+  for (const [name, value] of [['standalone-href', standaloneHref], ['components-href', componentsHref]]) {
+    if (value === undefined) continue;
+    themed = themed.replace(/<script\b[^>]*\bdata-neurodesk-app-shell(?:\s|=|>)[^>]*>/i, tag => {
+      const attribute = ` data-${name}="${escapeAttribute(value)}"`;
+      const existing = new RegExp(`\\sdata-${name}="[^"]*"`, 'i');
+      return existing.test(tag) ? tag.replace(existing, attribute) : tag.replace(/>$/, `${attribute}>`);
+    });
+  }
+
   // App information (packages under the hood, method citations and the shared
   // builder, ecosystem and platform statements) travels as one JSON script so
   // the shell renders identical About and Cite dialogs for every app.
