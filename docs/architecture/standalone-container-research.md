@@ -61,6 +61,10 @@ The [QSMbly container recipe](https://github.com/neurodesk/neurocontainers/blob/
 
 ## Registry verification, 15 September 2026
 
-The interface lists only upstream images whose release tag and immutable digest were verified against Docker Hub. SCT 7.3.3 is available there as build `20260902`, although the Neurocommand catalog records `20260904`. The standalone catalog uses the verified Docker Hub digest.
+The current interface uses Docker Hub tags and the official prebuilt Apptainer downloads. Exact `.simg` filenames come from [Neurocommand's CVMFS log](https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt). All 12 assigned Apptainer endpoints returned HTTP 200 to `curl -I` on 15 September 2026. Downloads use `curl -X GET https://neurocontainers.neurodesk.workers.dev/NAME.simg -O`.
 
-TopoFit 0.5.1 is listed in Neurocommand as build `20260905`, but its stable Docker Hub tag returned 404 and the documented SIF download returned 403. Only a candidate Docker tag was accessible. The interface therefore uses the released Webapps suite for TopoFit until a stable upstream download can be verified. The suite includes the browser pipeline and its models.
+SCT 7.3.3 uses Docker build `20260902` and Apptainer build `20260904`. They are stored separately in the catalog.
+
+TopoFit's official `topofit_0.5.1_20260905.simg` download is now verified. Docker Hub publishes only `candidate-1c960cec82947541d270e06099ab415933c9ea07` for that version; its link explicitly says candidate build. Earlier Python URL checks returned 403, while the supported curl method succeeds.
+
+The historical assignment discussion above describes implementation differences. The download dialog presents the direct choices without that research and preparation text.

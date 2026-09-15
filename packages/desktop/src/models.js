@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
+import { Transform } from 'node:stream';
 import { join } from 'node:path';
 import { bundlePath, fileHash } from './bundle.js';
 
@@ -40,7 +41,14 @@ export function createModelResolver(root, bundle, cache, fetchModel = globalThis
     return cached(record, async temporary => {
       const response = await fetchModel(url, { signal: AbortSignal.timeout(600000) });
       if (!response.ok || !response.body) throw new Error(`Model download failed: HTTP ${response.status}`);
-      await pipeline(response.body, createWriteStream(temporary, { flags: 'wx' }));
+      let bytes = 0;
+      const limit = new Transform({
+        transform(chunk, _encoding, callback) {
+          bytes += chunk.length;
+          callback(bytes > record.bytes ? new Error('Downloaded model exceeds its expected size') : null, chunk);
+        },
+      });
+      await pipeline(response.body, limit, createWriteStream(temporary, { flags: 'wx' }));
     });
   }
   async function file(path) {

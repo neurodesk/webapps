@@ -76,3 +76,13 @@ test('local model pieces are reconstructed from the pinned complete model', asyn
   const resolver = createModelResolver(light, bundle, join(root, 'cache'), async () => new Response(data));
   assert.deepEqual(await readFile(await resolver.file('site/demo/model.part-00')), piece);
 });
+
+test('remote file metadata cannot choose a cache path outside the model cache', async t => {
+  const { root, full } = await fixture(t);
+  const light = join(root, 'light');
+  await withoutModels(full, light);
+  const bundle = await loadBundle(light);
+  bundle.files['site/demo/model.onnx'].sha256 = '../../outside';
+  await writeFile(join(light, 'manifest.json'), JSON.stringify(bundle));
+  await assert.rejects(loadBundle(light), /Unverified file/);
+});

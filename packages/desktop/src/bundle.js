@@ -41,7 +41,9 @@ export async function loadBundle(root) {
     if (!/^[a-f0-9]{64}$/.test(asset.sha256) || !Number.isSafeInteger(asset.bytes) || asset.bytes < 0) throw new Error(`Unverified asset: ${url}`);
     if (asset.remote && (bundle.modelsIncluded !== false || asset.kind !== 'model')) throw new Error('Only models in the package without models can be downloaded');
   }
-  for (const record of Object.values(bundle.files || {})) {
+  for (const [path, record] of Object.entries(bundle.files || {})) {
+    bundlePath(root, path);
+    if (!/^[a-f0-9]{64}$/.test(record.sha256) || !Number.isSafeInteger(record.bytes) || record.bytes < 0) throw new Error(`Unverified file: ${path}`);
     if (!record.remote) continue;
     const source = bundle.assets[record.remote.url];
     if (bundle.modelsIncluded !== false || !source?.remote || !Number.isSafeInteger(record.remote.offset) || record.remote.offset < 0 || record.remote.offset + record.bytes > source.bytes) throw new Error('Invalid downloadable model file');
