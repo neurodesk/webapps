@@ -32,10 +32,11 @@ try {
   const offlineSession = session.fromPartition('offline');
   const downloads = [];
   if (process.env.NEURODESK_DOWNLOADS) {
-    await mkdir(process.env.NEURODESK_DOWNLOADS, { recursive: true });
+    const downloadDirectory = resolve(process.env.NEURODESK_DOWNLOADS);
+    await mkdir(downloadDirectory, { recursive: true });
     offlineSession.on('will-download', (_event, item) => {
       const filename = basename(item.getFilename());
-      const path = join(process.env.NEURODESK_DOWNLOADS, `${randomUUID()}-${filename}`);
+      const path = join(downloadDirectory, `${randomUUID()}-${filename}`);
       const record = { filename, path, state: 'pending', bytes: 0 };
       downloads.push(record);
       item.setSavePath(path);

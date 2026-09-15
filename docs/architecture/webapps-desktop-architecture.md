@@ -1,10 +1,10 @@
 # One offline Neurodesk Webapps desktop application
 
-## Decision proposed for the standalone rollout
+## Desktop architecture
 
 Build one Electron application containing all 24 webapps, all models needed by their supported methods, and all execution dependencies. Make this the main desktop download. Generate optional individual-app Electron distributions from the same packaging configuration. Continue to deliver command-line executables and Apptainer images for HPC batch work.
 
-This incorporates the user's clarified requirement: models are included in the distributed package. Installation and first execution must work on an airgapped machine with an empty cache. There is no model downloader, first-run provisioning step, or remote fallback in these offline distributions. This document is a plan; the suite has not been implemented or tested yet.
+This incorporates the user's clarified requirement: models are included in the distributed package. Installation and first execution must work on an airgapped machine with an empty cache. There is no model downloader, first-run provisioning step, or remote fallback in these offline distributions. The host and packaging are implemented in `packages/desktop` and `scripts/desktop`. All 24 representative workflows passed locally; platform release results are gated by GitHub Actions. See [validation](standalone-validation.md) and the [user guide](../../packages/desktop/STANDALONE.md).
 
 ## Three ways to use the same applications
 

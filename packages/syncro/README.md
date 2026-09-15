@@ -4,7 +4,7 @@ Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared bro
 
 ## Portable Windows and Linux builds
 
-Download the Windows x64 or Linux x64 archive from the webapp's **Standalone** dialog. Each archive contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, and the MNI template. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+Download the Windows x64 or Linux x64 archive from the webapp's **Standalone** dialog. Each archive contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
 
 On Linux, download, verify, extract, and check the current release:
 
@@ -33,28 +33,13 @@ Expand-Archive -Path $Archive -DestinationPath .
 & ".\syncro-$Version-windows-x64\syncro.exe" input.nii.gz results --threads 4
 ```
 
-Keep the extracted directory intact. The first analysis downloads the checksum-pinned SynthSR and SynthStrip models. Run `syncro download-models` first to prepare an offline cache.
+Keep the extracted directory intact. Releases built with this packaging include both models and run offline by default. No model download or cache preparation is needed on the destination machine. Older releases that lack a `models` directory are not complete offline distributions.
 
 Use `--ct` for a CT image in Hounsfield units. Modality is explicit; there is no intensity-based CT autodetection. CT has not yet been validated against the reference container in this port.
 
-## Node.js package for HPC
-
-Download `neurodesk-syncro-MAJOR.MINOR.YYYYMMDD.tgz` from the same **Standalone** dialog. The website carries a tarball built from `packages/syncro`, not an npm registry publication. Node.js 22 or newer is required. `ONNXRUNTIME_NODE_INSTALL=skip` skips optional CUDA downloads and retains the CPU backend.
-
-```bash
-ONNXRUNTIME_NODE_INSTALL=skip npm install -g --prefix "$HOME/.local" ./neurodesk-syncro-MAJOR.MINOR.YYYYMMDD.tgz
-export PATH="$HOME/.local/bin:$PATH"
-syncro input.nii.gz results --threads 4
-syncro input.nii.gz results-with-lesion --lesion lesion.nii.gz
-```
-
 ## Offline HPC jobs
 
-Install the npm package and prefetch models on a networked node:
-
-```bash
-syncro download-models --cache-dir /shared/syncro-models
-```
+Use the complete Linux archive above, or the Neurodesk Webapps Apptainer release described in [the desktop guide](../../packages/desktop/STANDALONE.md). The portable SYNcro executable runs without a display server.
 
 Example SLURM script (adapt partitions, paths and resource requests to your system):
 
@@ -64,10 +49,8 @@ Example SLURM script (adapt partitions, paths and resource requests to your syst
 #SBATCH --mem=32G
 #SBATCH --time=01:00:00
 set -euo pipefail
-export PATH="$HOME/.local/bin:$PATH"
-syncro /data/input.nii.gz /scratch/my-job/syncro \
-  --threads "$SLURM_CPUS_PER_TASK" \
-  --cache-dir /shared/syncro-models --offline
+/shared/software/syncro-VERSION-linux-x64/syncro /data/input.nii.gz /scratch/my-job/syncro \
+  --threads "$SLURM_CPUS_PER_TASK" --offline
 ```
 
 The CLI uses native ONNX Runtime CPU for synthesis and extraction. Registration uses the same single-threaded ANTs WebAssembly kernel as the webapp. `--threads` controls neural-network inference, not registration. The kernel has a 4 GiB linear-memory ceiling; the validated registration grew to 3.16 GB. Process memory also includes model sessions, image buffers and outputs. Start with 32 GB per job; this is a conservative request, not a measured peak-RSS guarantee. Use a separate process/output directory for each subject.

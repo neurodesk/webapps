@@ -20,13 +20,55 @@
   "build": {
     "appId": "org.neurodesk.webapps",
     "productName": "Neurodesk Webapps",
-    "directories": { "output": "release" },
-    "files": ["src/**", "package.json"],
-    "extraResources": [{ "from": "resources", "to": "offline" }],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "offline"
+      }
+    ],
     "asar": true,
-    "mac": { "target": [{ "target": "zip", "arch": ["arm64"] }], "category": "public.app-category.medical" },
-    "linux": { "target": [{ "target": "tar.gz", "arch": ["x64"] }], "category": "Science" },
-    "win": { "target": [{ "target": "zip", "arch": ["x64"] }] },
+    "mac": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.medical",
+      "signIgnore": [
+        "/Contents/Resources/offline/"
+      ]
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Science"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
     "artifactName": "webapps-${version}-${os}-${arch}.${ext}"
   }
 }

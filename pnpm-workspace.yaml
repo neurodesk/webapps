@@ -17,3 +17,5 @@ minimumReleaseAgeExclude:
   - '@fireants/fireants@0.1.20260913'
 patchedDependencies:
   '@niivue/niivue@1.0.0-rc.11': patches/@niivue__niivue@1.0.0-rc.11.patch
+overrides:
+  '@electron/osx-sign>isbinaryfile': 5.0.7

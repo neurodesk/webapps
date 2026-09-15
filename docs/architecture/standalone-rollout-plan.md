@@ -152,3 +152,5 @@ For apps without a matching existing container, create a Neurocontainers recipe 
 6. Deployment and web-release workflows run `scripts/desktop/check-published.mjs`. They reject any app version absent from the published offline suite or any missing platform binary. Adding a webapp cannot silently bypass standalone distribution.
 
 The catalog uses one complete suite for all apps. `assemble.mjs --app <id>` also supports an isolated app bundle using the same runtime and dependency closure. Separate per-app installers are optional; the complete suite is the required release for every app.
+
+Hosted CI chooses workflow coverage from the app registry, not a fixed allowlist. New apps automatically run their real offline workflow on all three desktop platforms. Existing hardware-intensive workflows are explicit exceptions in `scripts/desktop/ci-apps.mjs` and have local hardware test evidence. Adding an exception requires reviewing equivalent hardware results; it does not remove the all-app installed startup gate.

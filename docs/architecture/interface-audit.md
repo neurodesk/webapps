@@ -144,3 +144,9 @@ ONNX requests, cancellation, atlas failure recovery and scan replacement.
 Desktop and phone screenshots were reviewed in dark and light themes.
 The fresh 24-app build passed `pnpm audit:interfaces`, `pnpm test:mobile`
 and `pnpm test:interface-workflows`.
+
+## Standalone rollout, 15 September 2026
+
+All 24 current apps use the shared Standalone control. The lightNIIng topbar link is removed; its ecosystem statement remains in About. One registry supplies released binary URLs, checksums and available upstream Neurodesk container options. The complete offline suite supplies apps without a separate native CLI, including VesselBoost. Source-build instructions are not shown in the shared dialog.
+
+Production checks passed at desktop and phone sizes. The phone suite now opens Standalone at 320-pixel portrait and 844-pixel landscape widths. See [standalone validation](standalone-validation.md) for real offline workflows and release gates.

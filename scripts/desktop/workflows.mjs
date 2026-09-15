@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { verifyNiftiOffset } from './check-nifti.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 
@@ -91,7 +92,8 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await page.locator('#processButton').click();
     await expect(page.locator('#outputSection')).toHaveAttribute('open', '', { timeout: 60000 });
     await expect(page.locator('#saveButton')).toBeVisible({ timeout: 60000 });
-    return nifti(await download('#saveButton'));
+    const result = await download('#saveButton');
+    return { ...nifti(result), ...verifyNiftiOffset(await readFile(fixture), result.bytes, 1) };
   }
   if (id === 'easy-mp2rage') {
     const bytes = createSyntheticMuscleMapNifti();

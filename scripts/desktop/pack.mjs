@@ -9,6 +9,9 @@ const root = resolve(import.meta.dirname, '../..');
 const projectDir = join(root, 'packages/desktop');
 const require = createRequire(join(projectDir, 'package.json'));
 const { build } = require('electron-builder');
+// Model weights dominate these archives; moderate compression avoids spending
+// tens of minutes on the hosted runner for a small download-size difference.
+process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
 await verifyBundle(join(projectDir, 'resources'));
 const artifacts = await build({ projectDir, publish: 'never', config: { executableName: 'neurodesk-webapps' } });
 const executable = process.platform === 'darwin'

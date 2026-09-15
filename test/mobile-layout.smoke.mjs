@@ -115,6 +115,12 @@ try {
           await checkLayout(page, `${app.id}/privacy/${viewport.width}`);
           await dialog.locator('.modal-close, .nd-modal-close, .nd-dialog-close, .nd-app-dialog__close, [aria-label="Close privacy"]').first().tap();
           await expect(dialog).toBeHidden();
+          await page.locator('.nd-app-bar:visible [data-neurodesk-shell-control="standalone"]').first().tap();
+          const standalone = page.locator('#neurodeskStandaloneDialog');
+          await expect(standalone).toBeVisible();
+          await checkLayout(page, `${app.id}/standalone/${viewport.width}`);
+          await standalone.getByRole('button', { name: 'Close', exact: true }).tap();
+          await expect(standalone).toBeHidden();
         }
       }
       if (app.id === 'qsmbly') {

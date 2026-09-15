@@ -45,6 +45,10 @@ jobs:
           key: standalone-turbo-${{ runner.os }}-${{ github.sha }}
           restore-keys: standalone-turbo-${{ runner.os }}-
       - run: pnpm build
+      - uses: actions/cache@v6
+        with:
+          path: .offline-cache
+          key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
       - name: Verify all offline inputs against the committed lock
         run: node scripts/desktop/assets.mjs
       - run: node scripts/desktop/assemble.mjs
@@ -92,13 +96,15 @@ jobs:
         env:
           NEURODESK_TEST_REPORT: desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
+      - name: Select workflow coverage from the complete app registry
+        shell: bash
+        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
       - name: Test offline computations and exports
         if: runner.os != 'Linux'
         run: node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
-          NEURODESK_TEST_APP: musclemap,qsmbly,dicompare,niimath,easy-mp2rage,dicom2vid,surfannotate,zarro
       - name: Test Linux offline computations and exports
         if: runner.os == 'Linux'
         run: xvfb-run -a node scripts/desktop/smoke.mjs
@@ -106,7 +112,9 @@ jobs:
           NEURODESK_TEST_REPORT: desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
           NEURODESK_SOFTWARE_RENDERING: '1'
-          NEURODESK_TEST_APP: musclemap,qsmbly,dicompare,niimath,easy-mp2rage,dicom2vid,surfannotate,zarro
+      - name: Restore full catalog coverage for installed-package tests
+        shell: bash
+        run: echo "NEURODESK_TEST_APP=" >> "$GITHUB_ENV"
       - name: Package and test the installed suite
         if: runner.os != 'Linux'
         run: node scripts/desktop/pack.mjs

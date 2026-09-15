@@ -8,7 +8,7 @@ import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const resources = process.env.NEURODESK_BUNDLE || join(root, 'packages/desktop/resources');
-const report = process.env.NEURODESK_TEST_REPORT || await mkdtemp(join(tmpdir(), 'neurodesk-desktop-report-'));
+const report = resolve(process.env.NEURODESK_TEST_REPORT || await mkdtemp(join(tmpdir(), 'neurodesk-desktop-report-')));
 await mkdir(report, { recursive: true });
 await verifyBundle(resources);
 const require = createRequire(join(root, 'packages/desktop/package.json'));
@@ -26,7 +26,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
   try {
     desktop = await electron.launch({
       executablePath,
-      args: process.env.NEURODESK_EXECUTABLE ? [] : [join(root, 'packages/desktop')],
+      args: [...(process.env.NEURODESK_CONTAINER === '1' ? ['--no-sandbox'] : []), ...(process.env.NEURODESK_EXECUTABLE ? [] : [join(root, 'packages/desktop')])],
       env: { ...environment, NEURODESK_BUNDLE: resources, NEURODESK_APP: app.id, NEURODESK_USER_DATA: userData, NEURODESK_DOWNLOADS: join(report, app.id, 'downloads') },
       timeout: 60000,
     });

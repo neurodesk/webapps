@@ -15,5 +15,7 @@ Run the equivalent commands on Windows with `windows-x64`. A package can only
 be built on its target operating system. GitHub Actions builds both targets and
 can attach them to an existing `syncro-vVERSION` release.
 
-The archives do not contain SynthSR or SynthStrip models. Run `syncro
-download-models` before using an offline system.
+The archives include the checksum-pinned SynthSR and SynthStrip models in
+`models/`. Packaging downloads and verifies them on the build machine. The
+launcher selects those bundled models and enables offline mode, so the first
+analysis on an airgapped machine needs no downloads or cache preparation.
