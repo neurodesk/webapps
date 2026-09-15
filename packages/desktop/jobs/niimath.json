@@ -4,6 +4,7 @@
   "expectedDownloads": 1,
   "timeoutMs": 120000,
   "steps": [
+    { "action": "wait", "selector": "#niftiInput", "condition": "enabled" },
     { "action": "upload", "selector": "#niftiInput", "paths": ["input.nii.gz"] },
     { "action": "fill", "selector": "#command", "value": "-add 1" },
     { "action": "click", "selector": "#processButton" },

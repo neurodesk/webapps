@@ -120,7 +120,30 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     return nifti(await download(selector));
   }
   if (id === 'niimath') {
-    await page.locator('#niftiInput').setInputFiles(fixture);
+    await expect(page.locator('#niftiInput')).toBeEnabled({ timeout: 60000 });
+    const releaseUpload = await page.evaluateHandle(() => {
+      const original = File.prototype.arrayBuffer;
+      let release;
+      const pending = new Promise(resolve => { release = resolve; });
+      File.prototype.arrayBuffer = async function () {
+        await pending;
+        return original.call(this);
+      };
+      return () => {
+        File.prototype.arrayBuffer = original;
+        release();
+      };
+    });
+    try {
+      await page.locator('#niftiInput').setInputFiles(fixture);
+      await expect(page.locator('#processButton')).toBeDisabled();
+      await expect(page.locator('#niftiInput')).toBeDisabled();
+      await expect(page.locator('#moreCommands')).toBeDisabled();
+      await expect(page.locator('#saveButton')).toBeDisabled();
+    } finally {
+      await releaseUpload.evaluate(release => release());
+      await releaseUpload.dispose();
+    }
     await page.locator('#command').fill('-add 1');
     await expect(page.locator('#processButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#processButton').click();

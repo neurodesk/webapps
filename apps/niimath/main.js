@@ -30,6 +30,27 @@ console.log(niimath);
 // store a reference to an unedited image for
 // use when the user wants to change the command from the dropdown
 let uneditedImage;
+let imageBusy = false;
+let imageProcessingReady = false;
+
+function updateImageControls() {
+  const disabled = imageBusy || !imageProcessingReady;
+  for (const control of document.querySelectorAll('#niftiInput, #dicomInput, #dicomPick, #images button, #moreCommands, #processButton, #saveButton')) {
+    control.disabled = disabled;
+  }
+}
+
+async function runImageTask(task) {
+  if (imageBusy || !imageProcessingReady) return;
+  imageBusy = true;
+  updateImageControls();
+  try {
+    await task();
+  } finally {
+    imageBusy = false;
+    updateImageControls();
+  }
+}
 
 async function processImage(isOverlay) {
   loadingCircle.classList.remove('hidden')
@@ -83,7 +104,7 @@ async function processImage(isOverlay) {
 // respond to our button press
 function buttonProcessImage() {
   const isOverlay = overlayCheck.checked;
-  processImage(isOverlay);
+  void runImageTask(() => processImage(isOverlay));
 }
 
 // set overlay opacity
@@ -245,7 +266,7 @@ async function loadDicomFiles(files) {
     }
     dicomPick.classList.toggle('hidden', converted.length < 2)
     await loadFile(converted[0])
-    dicomPick.onchange = () => void loadFile(converted[Number(dicomPick.value)])
+    dicomPick.onchange = () => void runImageTask(() => loadFile(converted[Number(dicomPick.value)]))
   } catch (error) {
     console.error(error)
     window.alert(error instanceof Error ? error.message : String(error))
@@ -282,14 +303,15 @@ async function main() {
   function initializeImageProcessing() {
     // await initWasm();
     let button = document.getElementById('processButton');
-    button.disabled = false;
+    imageProcessingReady = true;
+    updateImageControls();
     button.onclick = buttonProcessImage;
   }
   const imgEl = document.getElementById("images");
   for (const example of NIFTI_EXAMPLES) {
     const btn = document.createElement("button");
     btn.textContent = example.id;
-    btn.onclick = () => loadImage(example.url);
+    btn.onclick = () => runImageTask(() => loadImage(example.url));
     imgEl.appendChild(btn);
   }
   saveButton.onclick = function () {
@@ -300,24 +322,25 @@ async function main() {
   }
   niftiInput.onchange = async function () {
     const files = Array.from(niftiInput.files ?? [])
-    if (files.length) await loadDicomFiles(files)
+    if (files.length) await runImageTask(() => loadDicomFiles(files))
     niftiInput.value = ''
   }
   dicomInput.onchange = async function () {
     const files = Array.from(dicomInput.files ?? [])
-    if (files.length > 0) await loadDicomFiles(files)
+    if (files.length > 0) await runImageTask(() => loadDicomFiles(files))
     dicomInput.value = ''
   }
-  bindFileDrop(document.getElementById('inputDropZone'), async (pending) => {
+  bindFileDrop(document.getElementById('inputDropZone'), (pending) => runImageTask(async () => {
     const files = await pending
     if (files.length) await loadDicomFiles(files)
-  })
+  }))
   helpButton.onclick = function () {
     // open link in new tab
     const link = "https://github.com/rordenlab/niimath/blob/9f3a301be72c331b90ef5baecb7a0232e9b47ba4/src/niimath.c#L259"
     window.open(link, '_blank');
   }
 
+  updateImageControls();
   let canvas = document.getElementById('gl');
   nv.setInterpolation(true);
   nv.attachToCanvas(canvas);
