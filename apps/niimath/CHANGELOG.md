@@ -4,9 +4,10 @@
 
 ### Patch Changes
 
+- 5f5edfa: Wait for image loading to finish before enabling processing, and prevent input changes during processing so downloads contain the processed image.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.2.2
-
 
 ### Patch Changes
 

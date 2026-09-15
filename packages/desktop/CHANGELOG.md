@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.6.20260915
+
+### Patch Changes
+
+- Prevent Niimath input loading from overwriting processed results during offline batch jobs.
+
 ## 0.5.20260915
 
 ### Patch Changes
