@@ -16,6 +16,7 @@
     "audit:convergence": "node scripts/audit-shared-imaging.mjs",
     "generate:mirrors": "node scripts/generate-distribution-mirrors.mjs",
     "test": "node --test test/*.test.mjs && turbo run test",
+    "test:examples": "node --test test/app-examples.test.mjs",
     "test:registry": "node --test test/registry.test.mjs",
     "app-plan": "node scripts/app-plan.mjs",
     "test:smoke": "node test/composite-site.smoke.mjs",

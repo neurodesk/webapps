@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.5.20260915
+
+### Patch Changes
+
+- Include T1 and T2 head MRI examples for Brain extraction.
+
 ## 0.4.20260915
 
 ### Minor Changes

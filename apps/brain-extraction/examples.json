@@ -1,0 +1,12 @@
+[
+  {
+    "id": "t1-head",
+    "label": "T1-weighted head \u00b7 5 MB",
+    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+  },
+  {
+    "id": "t2-head",
+    "label": "T2-weighted head \u00b7 4 MB",
+    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+  }
+]

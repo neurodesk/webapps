@@ -13,7 +13,7 @@
       Do not add app CSS for anything shown here. See docs/architecture/design-system.md.
     -->
     <header id="controls">
-      <!-- 1. Input: open, one compact scan picker, optional example. -->
+      <!-- 1. Input: open, one compact scan picker, working example. -->
       <details class="nd-sidebar-section" id="inputSection" open>
         <summary class="nd-section-title">Input image</summary>
         <div class="nd-section-content">
@@ -23,7 +23,12 @@
             <span>Drop NIfTI or DICOM files or folder</span>
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
-          <button id="exampleButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Load example image</button>
+          <div class="nd-field">
+            <label for="exampleSelect">Example</label>
+            <select id="exampleSelect" data-neurodesk-example>
+              <option value="">Choose an example…</option>
+            </select>
+          </div>
         </div>
       </details>
 

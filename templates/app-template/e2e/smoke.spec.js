@@ -2,6 +2,9 @@
 // cross-origin isolation, worker loading, and app boot. Runs against `vite preview`
 // (see playwright.config.js) so it exercises the built, header-served output.
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 
 test("app boots", async ({ page }) => {
   await page.goto("/");
@@ -46,3 +49,13 @@ test("a web worker loads and responds", async ({ page }) => {
   });
   expect(ok).toBe(true);
 });
+
+for (const example of examples) {
+  test(`example ${example.id} loads through the input workflow`, async ({ page }) => {
+    test.setTimeout(120000);
+    await page.goto("/");
+    await page.locator("select[data-neurodesk-example]").selectOption(example.id);
+    await expect(page.locator("#fileInfo")).toContainText(new URL(example.url).pathname.split("/").pop(), { timeout: 120000 });
+    await expect(page.locator("#runButton")).toBeEnabled();
+  });
+}

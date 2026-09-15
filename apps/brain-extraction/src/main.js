@@ -5,6 +5,7 @@ import { StageResultList, createInfoDialog, renderConsole, renderFileField, rend
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
+import examples from '../examples.json';
 
 const $ = id => document.getElementById(id);
 mountImagingWorkspace({
@@ -49,6 +50,18 @@ const toolbar = renderViewerToolbar({
 $('viewer').prepend(toolbar.root);
 const picker = renderFileField({ id: 'imageInput', rootId: 'dropZone', text: 'Drop NIfTI or DICOM files or folder' });
 $('filePicker').append(picker.root);
+for (const example of examples) $('example').add(new Option(example.label, example.id));
+$('example').onchange = () => {
+  const example = examples.find(item => item.id === $('example').value);
+  $('example').value = '';
+  if (!example) return;
+  importImages(async signal => {
+    status(`Downloading ${example.label}…`);
+    const response = await fetch(example.url, { signal });
+    if (!response.ok) throw new Error(`Could not load example (HTTP ${response.status}). Choose it again to retry.`);
+    return [new File([await response.blob()], new URL(example.url).pathname.split('/').pop())];
+  });
+};
 const results = new StageResultList({
   element: $('resultList'),
   onView: (stage, result) => show(result.file, stage),
@@ -59,11 +72,11 @@ let outputs = {};
 let state = { phase: 'idle' };
 const methodHints = {
   mindgrab: 'Brainchop neural network. Runs on the GPU when available, with a CPU fallback.',
-  bet: 'QSMbly’s Rust BET. Runs on the CPU without a model download.',
-  synthstrip: 'SynthStrip neural network. Runs on the CPU and can require several GB of memory.',
+  synthstrip: 'SynthStrip neural network. This browser implementation uses the CPU and can require several GB of memory.',
 };
 function methodChanged() {
-  $('methodHint').textContent = methodHints[$('method').value];
+  $('methodHint').textContent = methodHints[$('method').value] || '';
+  $('methodHint').hidden = $('method').value === 'bet';
   $('advancedSettings').hidden = $('method').value === 'synthstrip';
   $('betSettings').hidden = $('method').value !== 'bet';
   $('mindgrabSettings').hidden = $('method').value !== 'mindgrab';
@@ -78,7 +91,7 @@ function status(message, error = false) {
 }
 function refreshControls() {
   const busy = state.phase !== 'idle';
-  for (const id of ['imageInput', 'folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
+  for (const id of ['example', 'imageInput', 'folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
   $('runButton').disabled = busy || !source;
   $('cancelButton').hidden = !busy;
 }
@@ -142,7 +155,7 @@ function show(file, stage) {
   });
   return viewQueue;
 }
-async function importImages(filesPromise) {
+async function importImages(filesSource) {
   if (state.phase !== 'idle') return;
   const job = start('loading');
   source = null;
@@ -156,7 +169,7 @@ async function importImages(filesPromise) {
   picker.setHasFiles(false);
   status('Reading images and converting DICOM if needed…');
   try {
-    const files = await filesPromise;
+    const files = await (typeof filesSource === 'function' ? filesSource(job.controller.signal) : filesSource);
     job.controller.signal.throwIfAborted();
     const images = await readImageFiles(files, { signal: job.controller.signal });
     job.controller.signal.throwIfAborted();
