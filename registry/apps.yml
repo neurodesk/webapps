@@ -380,7 +380,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify]
+    app_scoped_runtime_families: [ort-web-asyncify, mindgrab-cpu]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false
@@ -441,6 +441,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: imaging-workspace
+    app_scoped_runtime_families: [mindgrab-cpu]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false
@@ -461,6 +462,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: imaging-workspace
+    app_scoped_runtime_families: [mindgrab-cpu]
     ci:
       toolchains: [node]
       shared_runtime: false
@@ -522,6 +524,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: imaging-workspace
+    app_scoped_runtime_families: [mindgrab-cpu]
     ci:
       toolchains: [node]
       shared_runtime: false
@@ -542,7 +545,7 @@ apps:
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace
-    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix]
+    app_scoped_runtime_families: [ort-web-asyncify, dcm2niix, mindgrab-cpu]
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false
