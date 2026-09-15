@@ -4,8 +4,12 @@
 
 ### Patch Changes
 
-- Include Brain extraction in the offline desktop suite with its SynthStrip model and a real BET extraction and download check. Reuse the shared MindGrab adapter in SYNcro.
+- Publish Brain extraction in a separately versioned offline suite.
 
+
+### Patch Changes
+
+- Include Brain extraction in the offline desktop suite with its SynthStrip model and a real BET extraction and download check. Reuse the shared MindGrab adapter in SYNcro.
 
 ### Minor Changes
 

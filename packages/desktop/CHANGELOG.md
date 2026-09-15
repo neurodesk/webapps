@@ -1,5 +1,7 @@
 # @neurodesk/desktop
 
+## 0.4.20260915
+
 ## 0.3.20260915
 
 ### Minor Changes
