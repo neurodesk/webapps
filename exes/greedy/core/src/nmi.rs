@@ -59,6 +59,14 @@ pub(crate) fn histogram_sample<const DERIVATIVES: bool>(
     // cast is observable at near-integer coordinates: it selects the same
     // one-sided partial-volume derivative as the reference implementation.
     let voxel = voxel.map(|value| value as f32 as f64);
+    // Reject trial transforms outside the image before converting to isize.
+    // Saturating casts of huge coordinates followed by +1 can overflow and
+    // incorrectly classify an out-of-field sample as an interior sample.
+    if (0..3).any(|axis| {
+        !voxel[axis].is_finite() || voxel[axis] < -1.0 || voxel[axis] >= grid.dims[axis] as f64
+    }) {
+        return ([0; 8], [0.0; 8], [[0.0; 3]; 8]);
+    }
     let base = voxel.map(f64::floor);
     let fraction = [voxel[0] - base[0], voxel[1] - base[1], voxel[2] - base[2]];
     let base = base.map(|x| x as isize);
@@ -259,4 +267,35 @@ fn entropies(joint: &[f64], sum: f64) -> (Vec<f64>, [f64; BINS], [f64; BINS], f6
         entropy(&moving),
         joint_entropy,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Mat4;
+
+    #[test]
+    fn extreme_trial_coordinates_have_no_histogram_overlap() {
+        let grid = Grid {
+            dims: [2, 2, 2],
+            lps_from_voxel: Mat4::IDENTITY,
+        };
+        for coordinate in [
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            f64::MAX,
+            1e30,
+            -1e30,
+        ] {
+            for axis in 0..3 {
+                let mut point = [0.5; 3];
+                point[axis] = coordinate;
+                let (bins, weights, derivatives) = histogram_sample::<true>(&grid, &[1; 8], point);
+                assert_eq!(bins, [0; 8]);
+                assert_eq!(weights, [0.0; 8]);
+                assert_eq!(derivatives, [[0.0; 3]; 8]);
+            }
+        }
+    }
 }

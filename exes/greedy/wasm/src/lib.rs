@@ -9,6 +9,17 @@ use wasm_bindgen::prelude::*;
 // registration so the core's existing Rayon slab loops use Web Workers.
 pub use wasm_bindgen_rayon::init_thread_pool;
 
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = error)]
+    fn report_panic(message: &str);
+}
+
+#[wasm_bindgen(start)]
+pub fn initialize_diagnostics() {
+    std::panic::set_hook(Box::new(|info| report_panic(&info.to_string())));
+}
+
 fn wasm_error(error: greedy_rs_core::Error) -> JsValue {
     JsValue::from_str(&error.to_string())
 }

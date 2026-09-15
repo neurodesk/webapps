@@ -5,7 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { basename, join, resolve } from 'node:path';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
 
-export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000 }) {
+export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
   if (!Number.isSafeInteger(partBytes) || partBytes < 1 || partBytes >= 2 ** 31) throw new Error('Invalid release part size');
   const filename = basename(archive);
   if (!/^[a-zA-Z0-9._-]+$/.test(filename)) throw new Error('Archive filename must be safe in shell commands');
@@ -28,14 +28,14 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
   const verify = windows
     ? `if ((Get-FileHash ${filename} -Algorithm SHA256).Hash.ToLower() -ne '${sha256}') { throw 'Archive checksum mismatch' }`
     : `echo '${sha256}  ${filename}' | ${platform.startsWith('macos') ? 'shasum -a 256' : 'sha256sum'} -c -`;
-  const extract = filename.endsWith('.zip')
+  const extract = filename.endsWith('.sif') ? `apptainer run ${filename} --verify` : filename.endsWith('.zip')
     ? windows ? `Expand-Archive ${filename} -DestinationPath NeurodeskWebapps` : `unzip ${filename}`
     : `tar -xzf ${filename}`;
   const command = `${concatenate}${verify}\n${extract}`;
   const installation = `${filename}.install.txt`;
   await writeFile(join(destination, installation), `Neurodesk Webapps ${version} for ${platform}\n\nDownload every file below into one folder. All models and runtime dependencies are included. Transfer the complete set to the offline machine.\n\n${parts.map(part => `${part.filename}\nSHA-256 ${part.sha256}`).join('\n\n')}\n\nRun in ${windows ? 'PowerShell' : 'a terminal'} from that folder:\n\n${command}\n\nComplete archive SHA-256: ${sha256}\n\nOpen the extracted Neurodesk Webapps application. For scheduler jobs, see STANDALONE.md included in the application resources.\n`);
   const result = {
-    kind: 'desktop', platform, version, modelsIncluded: true, bytes,
+    kind, platform, version, modelsIncluded: true, bytes,
     url: parts.length === 1 ? parts[0].url : baseUrl + installation,
     sha256: parts.length === 1 ? sha256 : await fileHash(join(destination, installation)),
     ...(parts.length > 1 ? { parts, archiveSha256: sha256, archiveFilename: filename } : {}),
@@ -47,7 +47,7 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
-  const [archive, destination, version, platform] = process.argv.slice(2);
+  const [archive, destination, version, platform, kind] = process.argv.slice(2);
   if (!archive || !destination || !version || !platform) throw new Error('Usage: release-files.mjs ARCHIVE OUTPUT VERSION PLATFORM');
-  console.log(await prepareReleaseFiles(archive, destination, { version, platform }));
+  console.log(await prepareReleaseFiles(archive, destination, { version, platform, kind }));
 }

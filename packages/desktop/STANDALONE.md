@@ -34,3 +34,16 @@ Use File > Open local OME-Zarr, or `--zarr DIRECTORY`. Only that directory is gr
 ## Integrity and maintenance
 
 `--verify` checks every packaged model and site file against its SHA-256 manifest. An incomplete or modified bundle fails verification. Keep the complete extracted application together. Updates are explicit replacement releases; the application does not fetch updates or missing files.
+
+## Apptainer on HPC
+
+The Linux SIF release contains the compiled suite and its system libraries. After reassembling the SIF, use:
+
+```
+apptainer run webapps-VERSION-linux-x64.sif --verify
+apptainer run --bind "$PWD:/data" webapps-VERSION-linux-x64.sif --job /data/job.json --output /data/results
+```
+
+The image starts Xvfb when no display is available. For a GPU job, request a GPU from the scheduler and use the site's graphics-driver binding configuration, such as `--nv` for NVIDIA. Successful GPU execution depends on the site's driver and graphics support. Use a graphical HPC session for interactive applications.
+
+The container runs Chromium without its setuid sandbox because Apptainer manages process isolation. Run as your regular user and bind only the required input/output directories. The normal desktop application keeps its renderer sandbox enabled.

@@ -8,14 +8,30 @@
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "musclemap",
+          "label": "musclemap 1.4.0 (20260827)",
+          "url": "https://hub.docker.com/r/vnmd/musclemap_1.4.0",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull musclemap.sif docker://vnmd/musclemap_1.4.0@sha256:fde084d6dd64c4eb467403fdd05f740999b103669ef095fed0f08438d81e2d7d"
+        }
+      ]
     },
     "vesselboost": {
       "desktop": true,
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "vesselboost",
+          "label": "vesselboost 2.0.64 (20260909)",
+          "url": "https://hub.docker.com/r/vnmd/vesselboost_2.0.64",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull vesselboost.sif docker://vnmd/vesselboost_2.0.64@sha256:75830d7be55e8ff75c543b250bed831178f866fa4b8b646380950f4d32a697f5"
+        }
+      ]
     },
     "spinalcordtoolbox": {
       "desktop": true,
@@ -36,7 +52,15 @@
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "qsmbly",
+          "label": "qsmbly 0.11.0 (20260506)",
+          "url": "https://hub.docker.com/r/vnmd/qsmbly_0.11.0",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull qsmbly.sif docker://vnmd/qsmbly_0.11.0@sha256:61d3646e9d92814d32e4e373bb774601f90cec25e029c4c9a10c412920550ffa"
+        }
+      ]
     },
     "seedseg": {
       "desktop": true,
@@ -50,7 +74,15 @@
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "dicompare",
+          "label": "dicompare 0.5.4 (20260506)",
+          "url": "https://hub.docker.com/r/vnmd/dicompare_0.5.4",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull dicompare.sif docker://vnmd/dicompare_0.5.4@sha256:a5b3466699bb5873c084c81206d163e40ed7569302e9031099afbf00b1a2f6e5"
+        }
+      ]
     },
     "deface": {
       "desktop": true,
@@ -71,7 +103,15 @@
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "niimath",
+          "label": "niimath 1.0.20260703 (20260909)",
+          "url": "https://hub.docker.com/r/vnmd/niimath_1.0.20260703",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull niimath.sif docker://vnmd/niimath_1.0.20260703@sha256:42be84cb26ffd658454f8c93a96976d6d96b147830dc4c880d9d023e91c3a6d7"
+        }
+      ]
     },
     "dicom2vid": {
       "desktop": true,
@@ -137,7 +177,15 @@
           "modelsIncluded": true
         }
       ],
-      "containers": []
+      "containers": [
+        {
+          "id": "freesurfer",
+          "label": "freesurfer 8.2.0 (20260818)",
+          "url": "https://hub.docker.com/r/vnmd/freesurfer_8.2.0",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull freesurfer.sif docker://vnmd/freesurfer_8.2.0@sha256:0915ccb5f268d06c7af3f69119f6a27577ebb86eb9ff7b5399122973b44aeae5"
+        }
+      ]
     },
     "synthseg": {
       "desktop": true,
@@ -155,14 +203,30 @@
           "modelsIncluded": true
         }
       ],
-      "containers": []
+      "containers": [
+        {
+          "id": "synthseg",
+          "label": "synthseg 8.2.0 (20260902)",
+          "url": "https://hub.docker.com/r/vnmd/synthseg_8.2.0",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull synthseg.sif docker://vnmd/synthseg_8.2.0@sha256:81ecc9844c1fe59fe6b05c9e5201e0aeaf4d03666bd3596b5c021ac19330f2b7"
+        }
+      ]
     },
     "syncro": {
       "desktop": true,
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "syncro",
+          "label": "syncro 0.1.1 (20251216)",
+          "url": "https://hub.docker.com/r/vnmd/syncro_0.1.1",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull syncro.sif docker://vnmd/syncro_0.1.1@sha256:51246ec424976d130bd4ed731b7e1f0d3401c22146c200664eb77fc77159e946"
+        }
+      ]
     },
     "dwi2trx": {
       "desktop": true,
@@ -214,14 +278,30 @@
           "modelsIncluded": false
         }
       ],
-      "containers": []
+      "containers": [
+        {
+          "id": "itksnap",
+          "label": "itksnap 4.4.0 (20260117)",
+          "url": "https://hub.docker.com/r/vnmd/itksnap_4.4.0",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull itksnap.sif docker://vnmd/itksnap_4.4.0@sha256:5bcdcbf81c329ca49c22e5b479ec7391c41b2c4a4cdd73b9f1e61e5d5d0e25ff"
+        }
+      ]
     },
     "ants": {
       "desktop": true,
       "profile": "batch",
       "assets": [],
       "downloads": [],
-      "containers": []
+      "containers": [
+        {
+          "id": "ants",
+          "label": "ants 2.6.5 (20260602)",
+          "url": "https://hub.docker.com/r/vnmd/ants_2.6.5",
+          "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application. Prepare this upstream image on a connected machine. Use the Webapps Apptainer release for the tested offline web application.",
+          "command": "apptainer pull ants.sif docker://vnmd/ants_2.6.5@sha256:084b3a847f0008fa4b4a04bd81d6423b9720bdc9243dbf75fa510e8fb86ec8c2"
+        }
+      ]
     },
     "brain2print": {
       "desktop": true,

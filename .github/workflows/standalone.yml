@@ -5,6 +5,11 @@ on:
   push:
     branches: [main, t3code/standalone-app-releases]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish verified desktop and HPC binaries to GitHub Releases
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,8 +64,11 @@ jobs:
       matrix:
         os: [ubuntu-22.04, macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 100
     steps:
+      - name: Free Linux runner storage for model-inclusive archives
+        if: runner.os == 'Linux'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
@@ -115,6 +123,15 @@ jobs:
         env:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
           NEURODESK_SOFTWARE_RENDERING: '1'
+      - name: Install pinned Apptainer
+        if: runner.os == 'Linux'
+        run: |
+          curl -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
+          echo "82b0bdddf459087d202383360b8318d526ad6826c748a2f669913cc6aef9ee40  $RUNNER_TEMP/apptainer.deb" | sha256sum -c -
+          sudo apt-get install -y "$RUNNER_TEMP/apptainer.deb"
+      - name: Build and test offline Docker and Apptainer distributions
+        if: runner.os == 'Linux'
+        run: node scripts/desktop/container.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
@@ -123,6 +140,28 @@ jobs:
             desktop-reports/
             desktop-workflow-reports/
             packaged-desktop-reports/
+            container-reports/
             packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: desktop
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: desktop-*
+          path: release-artifacts
+      - run: node scripts/desktop/publish.mjs release-artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

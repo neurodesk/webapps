@@ -6,6 +6,8 @@ import { gunzipSync } from 'node:zlib';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 
+export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants'];
+
 export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   const fixture = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
   const download = async selector => {
@@ -188,7 +190,10 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     return { filename: result.filename, bytes: result.bytes.length };
   }
   if (id === 'syncro') {
-    await page.locator('#input').setInputFiles(fixture);
+    const manifest = JSON.parse(await readFile(join(resources, 'manifest.json')));
+    const template = Object.entries(manifest.assets).find(([url]) => url.endsWith('/reg/moving/t1_brain.nii.gz'));
+    assert.ok(template, 'The real registration example must be packaged');
+    await page.locator('#input').setInputFiles({ name: 't1_brain.nii.gz', mimeType: 'application/gzip', buffer: await readFile(join(resources, template[1].path)) });
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#runButton').click();
     await expect(page.locator('#download')).toBeEnabled({ timeout: 900000 });

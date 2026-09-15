@@ -6,6 +6,7 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
+import { workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 
 test('standalone catalog covers the entire app registry', async () => {
@@ -31,4 +32,10 @@ test('shared dialog displays verified releases and keeps unpublished platforms u
   assert.match(dialog.root.querySelector('a').href, /demo.zip$/);
   assert.equal(dialog.root.querySelector('dialog'), null);
   dom.window.close();
+});
+
+
+test('every app has an executable offline workflow test', async () => {
+  const registry = await loadAppsRegistry();
+  assert.deepEqual([...workflowApps].sort(), registry.apps.map(app => app.id).sort(), 'Implement an offline computation or interactive workflow test before adding an app');
 });

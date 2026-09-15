@@ -141,3 +141,14 @@ For apps without a matching existing container, create a Neurocontainers recipe 
 - Preserve existing numerical gates. Container alternatives need their own documented method/version comparison. Never infer scientific equivalence from a matching tool name.
 - For code releases, use `pnpm changeset` and `pnpm release` to produce date versions, changelogs and embedded strings. Coordinate native and web publication around those versions.
 - Build the fresh production site with `pnpm build`, then run `pnpm audit:interfaces`, `pnpm test:mobile` and `pnpm test:interface-workflows`. Store screenshots and scratch artifacts under the storage-backed `TMPDIR`, review desktop and phone screenshots in both themes, and exercise downloads and container commands. No UI tests are claimed for this planning-only change.
+
+## Adding an application after this rollout
+
+1. Run `pnpm new-app <id>`. The generator adds entries to the standalone catalog, asset sources and asset lock alongside the app registry.
+2. Add a real workflow to `scripts/desktop/workflows.mjs` and its ID to `workflowApps`. CI rejects incomplete coverage. Include every optional model and dependency in the asset sources, then refresh and review the checksummed lock. Large files remain outside Git.
+3. Exercise the workflow with `NEURODESK_TEST_APP=<id> NEURODESK_WORKFLOWS=1 node scripts/desktop/smoke.mjs`. Missing network requests and missing local assets fail the test. Add CPU-compatible workflows to the GitHub matrix; retain hardware-GPU validation for GPU methods.
+4. Add a changeset, run the repository release command, and increment the desktop suite version before publishing another immutable suite. Dispatch `standalone` with `publish=true`. Publication requires all three installed desktop packages and the HPC image to pass their gates.
+5. Import the release's `standalone-catalog.json` into `registry/standalone.json`. It contains the exact app versions, archive URLs and checksums produced by CI. Review the Standalone dialog before merging.
+6. Deployment and web-release workflows run `scripts/desktop/check-published.mjs`. They reject any app version absent from the published offline suite or any missing platform binary. Adding a webapp cannot silently bypass standalone distribution.
+
+The catalog uses one complete suite for all apps. `assemble.mjs --app <id>` also supports an isolated app bundle using the same runtime and dependency closure. Separate per-app installers are optional; the complete suite is the required release for every app.

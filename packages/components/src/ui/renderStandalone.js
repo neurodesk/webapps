@@ -5,7 +5,7 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
   const content = doc.createElement('div');
   const append = (tag, text) => content.append(createElement(tag, { text, ownerDocument: doc }));
   if (installed) append('p', 'This application runs from your installed offline package. Models and runtime dependencies are included.');
-  for (const [heading, downloads] of [['Desktop application', app.downloads.filter(item => item.kind === 'desktop')], ['Webapps desktop suite', suite?.downloads || []], ['Command line / HPC', app.downloads.filter(item => item.kind === 'cli')]]) {
+  for (const [heading, downloads] of [['Desktop application', app.downloads.filter(item => item.kind === 'desktop')], ['Webapps desktop suite', suite?.downloads.filter(item => item.kind === 'desktop') || []], ['Command line / HPC', [...app.downloads.filter(item => item.kind === 'cli'), ...(suite?.downloads.filter(item => item.kind === 'container') || [])]]]) {
     if (!downloads.length) continue;
     append('h3', heading);
     for (const download of downloads) {
