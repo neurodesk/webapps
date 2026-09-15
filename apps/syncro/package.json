@@ -21,7 +21,8 @@
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.11",
     "fflate": "^0.8.2",
-    "onnxruntime-web": "1.29.0"
+    "onnxruntime-web": "1.29.0",
+    "@neurodesk/brain-extraction": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

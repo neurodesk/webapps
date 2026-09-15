@@ -1,0 +1,34 @@
+{
+  "name": "brain-extraction",
+  "version": "0.1.20260915",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app brain-extraction",
+    "preview": "vite preview",
+    "test": "pnpm --filter @neurodesk/brain-extraction test",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/brain-extraction": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/synthstrip": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.11",
+    "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "vite": "^6.3.2"
+  },
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  },
+  "license": "Apache-2.0"
+}

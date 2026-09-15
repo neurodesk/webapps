@@ -32,7 +32,16 @@
         "playwright-report/**"
       ]
     },
-    "lint": {}
+    "lint": {},
+    "brain-extraction#build": {
+      "dependsOn": [
+        "^build",
+        "qsmbly#build"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    }
   },
   "globalPassThroughEnv": [
     "TMPDIR"

@@ -46,6 +46,7 @@ export function selectAffectedApps(registry, changedPaths = []) {
 
   if (sharedChange) return registry.apps;
   if (directlyChanged.size === 0) return [];
+  if (directlyChanged.has('qsmbly')) directlyChanged.add('brain-extraction');
   return registry.apps.filter((app) => directlyChanged.has(app.id));
 }
 

@@ -958,3 +958,54 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+  brain-extraction:
+    packages:
+    - name: QSMbly Rust BET
+      url: https://github.com/neurodesk/webapps/tree/main/apps/qsmbly
+      role: brain extraction on the CPU
+    - name: MindGrab (brainchop)
+      url: https://github.com/neuroneural/brainchop
+      role: default brain extraction
+    - name: NiiVue
+      url: https://github.com/niivue/niivue
+      role: image viewer
+    - name: dcm2niix (WebAssembly)
+      url: https://github.com/rordenlab/dcm2niix
+      role: DICOM to NIfTI conversion
+    - name: ONNX Runtime Web
+      url: https://onnxruntime.ai
+      role: SynthStrip inference on the CPU
+    citations:
+    - group: Brain extraction
+      title: BET (Brain Extraction Tool)
+      reference: Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143–155.
+      doi: 10.1002/hbm.10062
+      code: https://github.com/Bostrix/FSL-BET2
+    - group: Brain extraction
+      title: MindGrab
+      reference: 'Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv.
+        2025.'
+      url: https://arxiv.org/abs/2506.11860
+    - group: Brain extraction
+      title: Brainchop
+      reference: 'Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098.'
+      doi: 10.21105/joss.05098
+      code: https://github.com/neuroneural/brainchop
+    - group: Brain extraction
+      title: SynthStrip
+      reference: 'Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip: skull-stripping for any brain image. NeuroImage. 2022;260:119474.'
+      doi: 10.1016/j.neuroimage.2022.119474
+      code: https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/
+    - group: Browser inference
+      title: ONNX Runtime Web
+      reference: 'Microsoft. ONNX Runtime: cross-platform, high performance ML inferencing and training accelerator [Computer software].'
+      url: https://onnxruntime.ai
+    - group: DICOM conversion
+      title: dcm2niix
+      reference: 'Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal
+        of Neuroscience Methods. 2016;264:47–56.'
+      doi: 10.1016/j.jneumeth.2016.03.001
+    - group: Visualization
+      title: NiiVue
+      reference: 'NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software].'
+      url: https://github.com/niivue/niivue
