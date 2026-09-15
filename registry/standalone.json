@@ -105,14 +105,56 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.3.20260910",
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-linux-x64.tar.gz",
+          "sha256": "fa455dfab5942c7f7a7dd1185eadaeff76f26289661eb435f00e36ef6c98a9e9",
+          "bytes": 63591273,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.3.20260910",
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-macos-arm64.pkg",
+          "sha256": "a36d7641db1b58436444d9b827b43938bbf54526c68d322c08dca520da867c9a",
+          "bytes": 60672120,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.3.20260910",
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-windows-x64.zip",
+          "sha256": "b50052b2a1d4f8eefa6654af8602e20d0b22bf57ee4456393c59441af774c338",
+          "bytes": 58224370,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/synthsr-v0.3.20260910/synthsr-0.3.20260910-windows-x64.zip.validation.txt",
+          "modelsIncluded": true
+        }
+      ],
       "containers": []
     },
     "synthseg": {
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20260910",
+          "url": "https://github.com/neurodesk/webapps/releases/download/synthseg-v0.2.20260910/synthseg-0.2.20260910-macos-arm64.pkg",
+          "sha256": "fe2e4c27c041c477b300b13a9c41e185720c8ac0f476052b24a2aae471b6eb70",
+          "bytes": 57289186,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/synthseg-v0.2.20260910/synthseg-0.2.20260910-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true
+        }
+      ],
       "containers": []
     },
     "syncro": {
@@ -140,7 +182,38 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.2.20260914",
+          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-linux-x64.tar.gz",
+          "sha256": "b6f05be8f3e4c84ea1cb6402fc05214251b30a68c69d9513458ae4daec4ea460",
+          "bytes": 489090,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": false
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.2.20260914",
+          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-macos-arm64.pkg",
+          "sha256": "270654c2aaace86e67bdde8fdaf57eb364d74af559fb64123dece537ddd74e24",
+          "bytes": 469568,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": false
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.2.20260914",
+          "url": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-windows-x64.zip",
+          "sha256": "1f08072d25955f90f07978e8762d9dc3a2fb351bbd70b3957690e7e47dcfb0ad",
+          "bytes": 408356,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/greedy-v0.2.20260914/greedy-0.2.20260914-windows-x64.zip.validation.txt",
+          "modelsIncluded": false
+        }
+      ],
       "containers": []
     },
     "ants": {

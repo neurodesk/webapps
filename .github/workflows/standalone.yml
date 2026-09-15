@@ -34,6 +34,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Test package contracts
         run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
+      - uses: actions/cache@v6
+        with:
+          path: .turbo
+          key: standalone-turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: standalone-turbo-${{ runner.os }}-
       - run: pnpm build
       - name: Verify all offline inputs against the committed lock
         run: node scripts/desktop/assets.mjs
@@ -78,14 +83,48 @@ jobs:
         run: xvfb-run -a node scripts/desktop/smoke.mjs
         env:
           NEURODESK_TEST_REPORT: desktop-reports
-      - name: Package suite
-        run: pnpm --filter @neurodesk/desktop package
+          NEURODESK_SOFTWARE_RENDERING: '1'
+      - name: Test offline computations and exports
+        if: runner.os != 'Linux'
+        run: node scripts/desktop/smoke.mjs
+        env:
+          NEURODESK_TEST_REPORT: desktop-workflow-reports
+          NEURODESK_WORKFLOWS: '1'
+          NEURODESK_TEST_APP: musclemap,qsmbly,dicompare,niimath,easy-mp2rage,dicom2vid,surfannotate,zarro
+      - name: Test Linux offline computations and exports
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/desktop/smoke.mjs
+        env:
+          NEURODESK_TEST_REPORT: desktop-workflow-reports
+          NEURODESK_WORKFLOWS: '1'
+          NEURODESK_SOFTWARE_RENDERING: '1'
+          NEURODESK_TEST_APP: musclemap,qsmbly,dicompare,niimath,easy-mp2rage,dicom2vid,surfannotate,zarro
+      - name: Package and test the installed suite
+        if: runner.os != 'Linux'
+        run: node scripts/desktop/pack.mjs
+        env:
+          NEURODESK_TEST_REPORT: packaged-desktop-reports
+          CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLEID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLEIDPASS || '' }}
+          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_TEAM_ID || '' }}
+      - name: Package and test the Linux suite
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/desktop/pack.mjs
+        env:
+          NEURODESK_TEST_REPORT: packaged-desktop-reports
+          NEURODESK_SOFTWARE_RENDERING: '1'
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: desktop-${{ matrix.os }}
           path: |
             desktop-reports/
-            packages/desktop/release/
+            desktop-workflow-reports/
+            packaged-desktop-reports/
+            packages/desktop/release/*.zip
+            packages/desktop/release/*.tar.gz
+            packages/desktop/release/*.sha256
           compression-level: 0
           if-no-files-found: error

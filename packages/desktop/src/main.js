@@ -1,8 +1,10 @@
-import { app, BrowserWindow, dialog, net, session } from 'electron';
+import { randomUUID } from 'node:crypto';
+import { app, BrowserWindow, dialog, net, session, Menu } from 'electron';
 import { appendFile, mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { bundlePath, canonicalUrl, loadBundle } from './bundle.js';
+import { bundlePath, canonicalUrl, loadBundle, verifyBundle } from './bundle.js';
+import { readJob, runJob } from './jobs.js';
 import { mimeType, startOfflineServer } from './server.js';
 
 const root = process.env.NEURODESK_BUNDLE || (app.isPackaged ? join(process.resourcesPath, 'offline') : resolve('resources'));
@@ -10,16 +12,37 @@ if (process.env.NEURODESK_USER_DATA) app.setPath('userData', process.env.NEURODE
 app.commandLine.appendSwitch('disable-background-networking');
 app.commandLine.appendSwitch('disable-component-update');
 app.commandLine.appendSwitch('disable-domain-reliability');
+if (process.env.NEURODESK_SOFTWARE_RENDERING === '1' || process.argv.includes('--software-rendering')) {
+  for (const [name, value] of [['use-gl', 'angle'], ['use-angle', 'swiftshader'], ['enable-unsafe-swiftshader', ''], ['enable-unsafe-webgpu', '']]) app.commandLine.appendSwitch(name, value);
+}
 let server;
 let window;
 const blockedRequests = [];
+const argument = name => {
+  const index = process.argv.indexOf(name);
+  return index < 0 ? undefined : process.argv[index + 1];
+};
 
 app.whenReady().then(async () => {
 try {
   const bundle = await loadBundle(root);
+  const job = argument('--job') ? await readJob(resolve(argument('--job'))) : null;
   const local = await startOfflineServer(root);
   server = local.server;
   const offlineSession = session.fromPartition('offline');
+  const downloads = [];
+  if (process.env.NEURODESK_DOWNLOADS) {
+    await mkdir(process.env.NEURODESK_DOWNLOADS, { recursive: true });
+    offlineSession.on('will-download', (_event, item) => {
+      const filename = basename(item.getFilename());
+      const path = join(process.env.NEURODESK_DOWNLOADS, `${randomUUID()}-${filename}`);
+      const record = { filename, path, state: 'pending', bytes: 0 };
+      downloads.push(record);
+      item.setSavePath(path);
+      item.once('done', (_event, state) => { record.state = state; record.bytes = item.getReceivedBytes(); });
+    });
+  }
+  app.userAgentFallback += ' NeurodeskOffline/1';
   await mkdir(app.getPath('userData'), { recursive: true });
   const blocked = async url => {
     blockedRequests.push(url);
@@ -62,16 +85,50 @@ try {
   window.webContents.on('will-navigate', (event, url) => {
     if (new URL(url).origin !== local.origin) event.preventDefault();
   });
-  window.once('ready-to-show', () => window.show());
-  const selected = process.env.NEURODESK_APP || bundle.defaultApp;
+  if (!job) window.once('ready-to-show', () => window.show());
+  if (process.argv.includes('--verify')) {
+    console.log(JSON.stringify(await verifyBundle(root)));
+    app.quit();
+    return;
+  }
+  const selected = job?.app || argument('--app') || process.env.NEURODESK_APP || bundle.defaultApp;
   const selectedApp = selected ? bundle.apps.find(candidate => candidate.id === selected) : null;
   if (selected && !selectedApp) throw new Error(`App is not included: ${selected}`);
-  await window.loadURL(`${local.origin}/${selectedApp ? `${selectedApp.path}/` : ''}`);
+  const openZarr = async directory => {
+    const zarro = bundle.apps.find(candidate => candidate.id === 'zarro');
+    if (!zarro) throw new Error('ZARRo is not included in this package');
+    const url = new URL(`/${zarro.path}/`, local.origin);
+    url.searchParams.set('source', 'custom');
+    url.searchParams.set('url', await local.mountDirectory(directory));
+    await window.loadURL(url.href);
+  };
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { label: 'File', submenu: [
+      { label: 'All applications', click: () => window.loadURL(`${local.origin}/`) },
+      { label: 'Open local OME-Zarr folder…', enabled: bundle.apps.some(app => app.id === 'zarro'), click: async () => {
+        const result = await dialog.showOpenDialog(window, { properties: ['openDirectory'] });
+        if (!result.canceled) await openZarr(result.filePaths[0]).catch(error => dialog.showErrorBox('Open OME-Zarr', error.message));
+      } },
+      { type: 'separator' },
+      { role: 'quit' },
+    ] },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+  ]));
+  if (argument('--zarr')) await openZarr(argument('--zarr'));
+  else await window.loadURL(`${local.origin}/${selectedApp ? `${selectedApp.path}/` : ''}`);
   // Exposed only to the main process, used by packaged-artifact verification.
-  globalThis.neurodeskOffline = { root, origin: local.origin, apps: bundle.apps, blockedRequests };
+  globalThis.neurodeskOffline = { root, origin: local.origin, apps: bundle.apps, blockedRequests, downloads, mountDirectory: local.mountDirectory };
+  if (job) {
+    const result = await runJob(window.webContents, job, argument('--output') || resolve('results'));
+    if (blockedRequests.length) throw new Error(`The job requested ${blockedRequests.length} assets absent from the offline package`);
+    console.log(JSON.stringify(result));
+    app.quit();
+  }
 } catch (error) {
   console.error(error);
-  dialog.showErrorBox('Neurodesk offline installation', error.message);
+  if (!argument('--job')) dialog.showErrorBox('Neurodesk offline installation', error.message);
   app.exit(1);
 }
 });

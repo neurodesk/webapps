@@ -1,3 +1,4 @@
+import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mjs';
 import {test,expect} from '@playwright/test';
 import {createHash} from 'node:crypto';
 import {readFile,writeFile} from 'node:fs/promises';
@@ -25,19 +26,7 @@ test('load, invalid input, and cancellation preserve the original',async({page})
   await expect(page.locator('#processButton')).toBeEnabled();
   await page.locator('#aboutBtn').dispatchEvent('click');await expect(page.locator('#infoDialog')).toBeVisible();await expect(page.locator('#infoDialogTitle')).toHaveText('About SynthSR');await page.locator('#infoDialog').getByRole('button',{name:'Close',exact:true}).click();
   await expect(page.locator('#infoDialog')).toBeHidden();
-  await page.locator('#standaloneBtn').dispatchEvent('click');
-  await expect(page.locator('#infoDialog')).toBeVisible();
-  await expect(page.locator('#infoDialog')).toContainText('curl -fLO');
-  await expect(page.locator('#infoDialog')).not.toContainText('Slurm');
-  for(const [id,asset] of Object.entries({nativeMacosDownload:`synthsr-${VERSION}-macos-arm64.pkg`,nativeWindowsDownload:`synthsr-${VERSION}-windows-x64.zip`,nativeLinuxDownload:`synthsr-${VERSION}-linux-x64.tar.gz`})){
-    await expect(page.locator(`#${id}`)).toHaveAttribute('href',`https://github.com/neurodesk/webapps/releases/download/synthsr-v${VERSION}/${asset}`);
-    await expect(page.locator(`#${id.replace('Download','Checksum')}`)).toHaveAttribute('href',`https://github.com/neurodesk/webapps/releases/download/synthsr-v${VERSION}/${asset}.sha256`);
-  }
-  await expect(page.locator('#nativeWindowsCommands')).toContainText('.\\synthsr.exe input.nii.gz output_synthsr.nii.gz');
-  await expect(page.locator('#nativeLinuxCommands')).toContainText('./synthsr input.nii.gz output_synthsr.nii.gz');
-  const packageDownload=page.waitForEvent('download');await page.locator('#standalonePackage').click();
-  expect((await packageDownload).suggestedFilename()).toBe(`neurodesk-synthsr-${VERSION}.tgz`);
-  await page.locator('#infoDialog').getByRole('button',{name:'Close',exact:true}).click();
+  await verifyStandaloneDialog(page, 'synthsr');
 });
 
 for(const backend of ['webgpu','wasm']) test(`full-volume ${backend} regression with default augmentation`,async({page})=>{

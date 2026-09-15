@@ -37,7 +37,19 @@ fn main() {
         }
     };
     let mut command = Command::new(node);
-    command.arg(entry).args(env::args_os().skip(1));
+    let models = entry
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("models");
+    command
+        .arg(entry)
+        .args(env::args_os().skip(1))
+        .env("NEURODESK_SYNCRO_MODEL_DIR", models)
+        .env("NEURODESK_OFFLINE", "1");
 
     #[cfg(unix)]
     {

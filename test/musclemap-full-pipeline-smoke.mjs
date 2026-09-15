@@ -124,7 +124,7 @@ export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_
       };
     });
     output = state.output;
-    const threadMatch = output.match(/Using WASM backend \(.*?, (\d+) threads\)/);
+    const threadMatch = output.match(/(?:Using WASM backend \(.*?, |Forcing WASM backend with )(\d+) threads/);
     const requestedThreads = Number(threadMatch?.[1]);
 
     requireCondition(output.includes('Downloaded and verified: musclemap-wholebody.onnx'), 'model verification did not run');

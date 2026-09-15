@@ -257,8 +257,8 @@ importers:
         specifier: ^17.0.1
         version: 17.0.6
       pyodide:
-        specifier: ^0.27.0
-        version: 0.27.7
+        specifier: 0.27.0
+        version: 0.27.0
       react:
         specifier: ^19.1.1
         version: 19.2.7
@@ -4792,8 +4792,8 @@ packages:
     resolution: {integrity: sha512-KTqnxsgGiQ6ZAzZCVlJH5eOjSnvlyEgx1m8bkRJfOhmGRqfo5KLvmAlACQkrjEtOQ4B7wF9TdSLIs9O90MX9xA==}
     engines: {node: '>=16.0.0'}
 
-  pyodide@0.27.7:
-    resolution: {integrity: sha512-RUSVJlhQdfWfgO9hVHCiXoG+nVZQRS5D9FzgpLJ/VcgGBLSAKoPL8kTiOikxbHQm1kRISeWUBdulEgO26qpSRA==}
+  pyodide@0.27.0:
+    resolution: {integrity: sha512-0O992noCKqv8lPw4+QFWw8d8yrNWVtQ6zPhWNg/RNYbFohiwmV6SGlVh5fWk/4pOxyhgHbayq+ur8JoR/r5U9A==}
     engines: {node: '>=18.0.0'}
 
   quansync@0.2.11:
@@ -10291,7 +10291,7 @@ snapshots:
 
   pvutils@1.1.5: {}
 
-  pyodide@0.27.7:
+  pyodide@0.27.0:
     dependencies:
       ws: 8.18.0
     transitivePeerDependencies:

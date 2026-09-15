@@ -9,7 +9,7 @@ import {runSynthsr,readVolume,writeVolume} from '../../synthsr/src/index.js';
 import {runSynthstrip} from '../../synthstrip/src/index.js';
 import {createRegistration} from '../../registration/src/index.js';
 const hash=b=>createHash('sha256').update(b).digest('hex');
-export const defaultCacheDir=()=>join(process.env.XDG_CACHE_HOME||join(homedir(),'.cache'),'neurodesk','syncro');
+export const defaultCacheDir=()=>process.env.NEURODESK_SYNCRO_MODEL_DIR||join(process.env.XDG_CACHE_HOME||join(homedir(),'.cache'),'neurodesk','syncro');
 const templateURL=new URL('../data/MNI152_T1_1mm_brain.nii.gz',import.meta.url);
 const templateSha256='32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212';
 const registrationWasmSha256='23cb91e0a9363cce16581d459ee52dabbf35538a2ad4ed565d2d83cd4a116348';
@@ -25,7 +25,9 @@ export async function checkInstallation({
   if(typeof createModule!=='function')throw new Error('Registration module did not load.');
   const tensor=new ort.Tensor('float32',Float32Array.of(0),[1]);
   if(tensor.size!==1)throw new Error('ONNX Runtime tensor check failed.');
+  const bundledModels=process.env.NEURODESK_SYNCRO_MODEL_DIR ? await downloadModels({offline:true}) : null;
   return {
+    ...(bundledModels ? {models:Object.fromEntries(Object.entries(bundledModels).map(([name,value])=>[name,value.hash]))} : {}),
     platform:process.platform,
     arch:process.arch,
     node:process.version,
@@ -35,14 +37,14 @@ export async function checkInstallation({
     registrationWasmSha256,
   };
 }
-export async function downloadModels({cacheDir=defaultCacheDir(),offline=false,onProgress=()=>{}}={}) {
+export async function downloadModels({cacheDir=defaultCacheDir(),offline=process.env.NEURODESK_OFFLINE==='1',onProgress=()=>{}}={}) {
   const result={};
   for(const [name,asset]of Object.entries(assets)) {
     const path=join(cacheDir,asset.sha256,name+'.onnx');let bytes;
     try {bytes=await readFile(path);}catch(e){if(e.code!=='ENOENT')throw e;}
     if(bytes&&(bytes.length!==asset.bytes||hash(bytes)!==asset.sha256))throw new Error(`Cached ${name} model failed checksum verification: ${path}`);
     if(!bytes) {
-      if(offline)throw new Error(`${name} is not cached. Run syncro download-models on a networked node first.`);
+      if(offline)throw new Error(`${name} is missing from the offline installation. Reinstall the complete release.`);
       onProgress('download',0,`Downloading ${name}…`);const response=await fetch(asset.url);
       if(!response.ok)throw new Error(`Failed to download ${name}: HTTP ${response.status}`);
       bytes=Buffer.from(await response.arrayBuffer());
@@ -54,7 +56,7 @@ export async function downloadModels({cacheDir=defaultCacheDir(),offline=false,o
   }
   return result;
 }
-export async function normalize({input,output,additional=[],ct=false,threads=Number(process.env.SLURM_CPUS_PER_TASK)||Math.min(4,availableParallelism()),cacheDir,offline=false,resume=false,onProgress=()=>{}}={}) {
+export async function normalize({input,output,additional=[],ct=false,threads=Number(process.env.SLURM_CPUS_PER_TASK)||Math.min(4,availableParallelism()),cacheDir,offline=process.env.NEURODESK_OFFLINE==='1',resume=false,onProgress=()=>{}}={}) {
   if(!input||!output)throw new Error('Input image and output directory are required.');
   if(!Number.isSafeInteger(threads)||threads<1)throw new Error('Threads must be a positive integer.');
   const inputBytes=await readFile(input),out=resolve(output),checkpoint=join(out,'.checkpoints');

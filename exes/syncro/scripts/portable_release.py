@@ -270,8 +270,8 @@ Check the installation:
 Run normalization:
   {invocation} input.nii.gz results --threads 4
 
-Models download on first use. To prepare an offline cache, run:
-  {invocation} download-models --cache-dir PATH
+Models and the MNI template are included and checked locally.
+No network connection or previously populated cache is required.
 
 SYNcro is research software. Review the output alignment before use.
 """
@@ -319,6 +319,8 @@ def package_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
         _prune_onnx_runtime(stage / "app", target)
         runtime_archive = _download_runtime(target, work)
         _extract_node_files(runtime_archive, target, stage)
+        private_node = stage / "runtime" / ("node.exe" if target.id.startswith("windows-") else "node")
+        _run([str(private_node), str(stage / "app/bin/syncro.js"), "download-models", "--cache-dir", str(stage / "models")], cwd=stage)
         _build_launcher(stage, target)
         shutil.copy2(repo / "packages/syncro/LICENSE", stage / "LICENSE")
         shutil.copy2(repo / "packages/syncro/NOTICE", stage / "NOTICE")

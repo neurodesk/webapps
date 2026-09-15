@@ -33,8 +33,7 @@ try {
         await page.waitForTimeout(300);
         const bar = page.locator('.nd-app-bar:visible');
         for (const name of ['About', 'Cite', 'Privacy']) await expect(bar.getByRole('button', { name, exact: true })).toHaveCount(1);
-        const hasStandalone = await page.locator('[data-neurodesk-control="standalone"]').count() > 0;
-        await expect(bar.getByRole('button', { name: 'Standalone', exact: true })).toHaveCount(hasStandalone ? 1 : 0);
+        await expect(bar.getByRole('button', { name: 'Standalone', exact: true })).toHaveCount(1);
         for (const name of ['More Apps', 'GitHub']) await expect(bar.getByRole('link', { name, exact: true })).toHaveCount(1);
         await expect(bar.locator('[data-neurodesk-theme-toggle]')).toHaveCount(1);
         Object.assign(result, await page.evaluate(() => {

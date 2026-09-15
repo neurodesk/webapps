@@ -1,3 +1,4 @@
+import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mjs';
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 const PACKAGE_VERSION=JSON.parse(await readFile(new URL('../../../packages/syncro/package.json',import.meta.url),'utf8')).version;
@@ -121,19 +122,7 @@ test('compact help, standalone commands and result switching remain reachable',a
  await expect(page.locator('.nd-info-tooltip').first()).toBeVisible();
  await page.locator('#settingsSection > summary').click();
  await expect(page.locator('#standalone')).toHaveCount(0);
- await page.locator('.nd-app-bar').getByRole('button',{name:'Standalone',exact:true}).click();
- await expect(page.locator('#info')).toBeVisible();
- await expect(page.locator('#infoTitle')).toHaveText('Standalone');
- await expectCentered(page,page.locator('#info'));
- await expect(page.locator('#nativeWindowsDownload')).toHaveAttribute('href',`https://github.com/neurodesk/webapps/releases/download/syncro-v${PACKAGE_VERSION}/syncro-${PACKAGE_VERSION}-windows-x64.zip`);
- await expect(page.locator('#nativeLinuxDownload')).toHaveAttribute('href',`https://github.com/neurodesk/webapps/releases/download/syncro-v${PACKAGE_VERSION}/syncro-${PACKAGE_VERSION}-linux-x64.tar.gz`);
- await expect(page.locator('#nativeWindowsCommands')).toContainText(`.\\syncro-${PACKAGE_VERSION}-windows-x64\\syncro.exe self-check`);
- await expect(page.locator('#nativeLinuxCommands')).toContainText(`./syncro-${PACKAGE_VERSION}-linux-x64/syncro input.nii.gz results --threads 4`);
- await page.locator('[data-copy-target="nativeLinuxCommands"]').click();
- expect(await page.evaluate(()=>window.copiedText)).toContain('sha256sum -c');
- await page.locator('#nodePackageDetails > summary').click();
- await expect(page.locator('#packageLink')).toHaveAttribute('href',`downloads/neurodesk-syncro-${PACKAGE_VERSION}.tgz`);
- await page.locator('#info').getByRole('button',{name:'Close'}).click();
+ await verifyStandaloneDialog(page, 'syncro');
  for(const label of ['About','Privacy']){
   await page.locator('.nd-app-bar').getByRole('button',{name:label,exact:true}).click();
   await expect(page.locator('#info')).toBeVisible();

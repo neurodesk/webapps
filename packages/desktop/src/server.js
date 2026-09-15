@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { createReadStream } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { readFile, stat, realpath } from 'node:fs/promises';
+import { extname, join, relative, isAbsolute, sep } from 'node:path';
 import { bundlePath } from './bundle.js';
 
 export const mimeType = path => ({
@@ -12,6 +13,7 @@ export const mimeType = path => ({
 }[extname(path)] || 'application/octet-stream');
 
 export async function startOfflineServer(root, { port = 0 } = {}) {
+  const mounts = new Map();
   const server = createServer(async (request, response) => {
     try {
       if (!['GET', 'HEAD'].includes(request.method)) {
@@ -20,7 +22,17 @@ export async function startOfflineServer(root, { port = 0 } = {}) {
       }
       const url = new URL(request.url, 'http://localhost');
       const pathname = decodeURIComponent(url.pathname);
-      const path = bundlePath(join(root, 'site'), `${pathname.replace(/^\/+/, '')}${pathname.endsWith('/') ? 'index.html' : ''}`);
+      let path;
+      if (pathname.startsWith('/_local/')) {
+        const [, , token, ...parts] = pathname.split('/');
+        const directory = mounts.get(token);
+        if (!directory) throw new Error('Directory has not been granted');
+        path = await realpath(bundlePath(directory, parts.join('/')));
+        const child = relative(directory, path);
+        if (child === '..' || child.startsWith(`..${sep}`) || isAbsolute(child)) throw new Error('Path escapes selected directory');
+      } else {
+        path = bundlePath(join(root, 'site'), `${pathname.replace(/^\/+/, '')}${pathname.endsWith('/') ? 'index.html' : ''}`);
+      }
       const details = await stat(path);
       if (!details.isFile()) throw new Error('Not a file');
       const headers = {
@@ -48,5 +60,16 @@ export async function startOfflineServer(root, { port = 0 } = {}) {
     server.once('error', reject);
     server.listen(port, '127.0.0.1', resolve);
   });
-  return { server, origin: `http://127.0.0.1:${server.address().port}` };
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  return {
+    server,
+    origin,
+    async mountDirectory(path) {
+      const directory = await realpath(path);
+      if (!(await stat(directory)).isDirectory()) throw new Error('Choose a directory');
+      const token = randomUUID();
+      mounts.set(token, directory);
+      return `${origin}/_local/${token}`;
+    },
+  };
 }
