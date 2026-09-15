@@ -1,12 +1,15 @@
-import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, stat, readdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 
 export async function readJob(path) {
   const job = JSON.parse(await readFile(path, 'utf8'));
   if (job.schemaVersion !== 1 || !/^[a-z][a-z0-9-]*$/.test(job.app) || !Array.isArray(job.steps) || !job.steps.length) throw new Error('Invalid offline job');
   if (!Number.isSafeInteger(job.expectedDownloads) || job.expectedDownloads < 1) throw new Error('A batch job must declare its expected download count');
+  if (job.timeoutMs !== undefined && (!Number.isSafeInteger(job.timeoutMs) || job.timeoutMs < 1)) throw new Error('Invalid job timeout');
   for (const step of job.steps) {
     if (!['upload', 'click', 'fill', 'select', 'check', 'wait'].includes(step.action) || typeof step.selector !== 'string') throw new Error('Invalid job step');
+    if (step.timeoutMs !== undefined && (!Number.isSafeInteger(step.timeoutMs) || step.timeoutMs < 1)) throw new Error('Invalid step timeout');
+    if (step.condition && !['exists', 'enabled', 'visible', 'text', 'value'].includes(step.condition)) throw new Error('Invalid wait condition');
     if (step.action === 'upload') {
       if (!Array.isArray(step.paths) || !step.paths.length) throw new Error('Upload requires local paths');
       step.paths = step.paths.map(value => resolve(dirname(path), value));
@@ -29,18 +32,20 @@ const inspectElement = ({ selector, condition, value }) => {
 export async function runJob(contents, job, outputDirectory) {
   const output = resolve(outputDirectory);
   await mkdir(output, { recursive: true });
+  if ((await readdir(output)).length) throw new Error('Output directory must be empty');
   const downloads = [];
+  let downloadError;
   const pending = [];
   const names = new Set();
   const onDownload = (_event, item, owner) => {
     if (owner !== contents) return;
     const filename = basename(item.getFilename());
-    if (names.has(filename)) { item.cancel(); return; }
+    if (names.has(filename)) { downloadError = new Error(`Duplicate output: ${filename}`); item.cancel(); return; }
     names.add(filename);
     item.setSavePath(join(output, filename));
-    pending.push(new Promise((resolve, reject) => {
+    pending.push(new Promise(resolve => {
       item.once('done', (_event, state) => {
-        if (state !== 'completed') reject(new Error(`Output download ${filename}: ${state}`));
+        if (state !== 'completed') { downloadError = new Error(`Output download ${filename}: ${state}`); resolve(); }
         else { downloads.push({ filename, bytes: item.getReceivedBytes() }); resolve(); }
       });
     }));
@@ -51,6 +56,7 @@ export async function runJob(contents, job, outputDirectory) {
     const timeout = step.timeoutMs ?? job.timeoutMs ?? 900000;
     const deadline = Date.now() + timeout;
     while (!await evaluate(inspectElement, step)) {
+      if (downloadError) throw downloadError;
       if (Date.now() > deadline) throw new Error(`Timed out waiting for ${step.selector} (${step.condition || 'exists'})`);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -81,10 +87,12 @@ export async function runJob(contents, job, outputDirectory) {
     }
     const deadline = Date.now() + (job.timeoutMs || 900000);
     while (pending.length < job.expectedDownloads) {
+      if (downloadError) throw downloadError;
       if (Date.now() > deadline) throw new Error(`Expected ${job.expectedDownloads} outputs, received ${pending.length}`);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     await Promise.all(pending);
+    if (downloadError) throw downloadError;
     if (downloads.length !== job.expectedDownloads || downloads.some(item => item.bytes === 0)) throw new Error('Batch output validation failed');
     const report = { app: job.app, downloads };
     await writeFile(join(output, 'job-result.json'), `${JSON.stringify(report, null, 2)}\n`);

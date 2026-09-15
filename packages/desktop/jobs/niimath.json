@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "app": "niimath",
+  "expectedDownloads": 1,
+  "timeoutMs": 120000,
+  "steps": [
+    { "action": "upload", "selector": "#niftiInput", "paths": ["input.nii.gz"] },
+    { "action": "fill", "selector": "#command", "value": "-add 1" },
+    { "action": "click", "selector": "#processButton" },
+    { "action": "wait", "selector": "#outputSection[open]" },
+    { "action": "click", "selector": "#saveButton" }
+  ]
+}

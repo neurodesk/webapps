@@ -22,6 +22,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
   const errors = [];
   const missing = [];
   let desktop;
+  let progress;
   try {
     desktop = await electron.launch({
       executablePath,
@@ -30,8 +31,19 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
       timeout: 60000,
     });
     const page = await desktop.firstWindow();
+    let reporting = false;
+    let previousStatus = '';
+    progress = setInterval(async () => {
+      if (reporting || !process.env.NEURODESK_WORKFLOWS) return;
+      reporting = true;
+      try {
+        const status = await page.locator('#statusText, #status, #consoleOutput, #log').allTextContents();
+        const text = status.join(' ').slice(-1600);
+        if (text !== previousStatus) { console.log(`${app.id} progress: ${text}`); previousStatus = text; }
+      } catch {} finally { reporting = false; }
+    }, 10000);
     page.on('console', message => console.log(`${app.id} ${message.type()}: ${message.text()}`));
-    page.on('pageerror', error => errors.push(error.message));
+    page.on('pageerror', error => { console.error(`${app.id} pageerror: ${error.stack || error.message}`); errors.push(error.stack || error.message); });
     page.on('response', response => { if (response.status() >= 400 && !new URL(response.url()).pathname.startsWith('/_local/')) missing.push(`${response.status()} ${response.url()}`); });
     await page.waitForLoadState('domcontentloaded');
     const enter = page.locator('#enterAppButton:visible, #landingLaunch:visible');
@@ -48,6 +60,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     errors.push(error.message);
     results.push({ app: app.id, passed: false, errors, missing });
   } finally {
+    clearInterval(progress);
     if (desktop && errors.length) {
       try { await (await desktop.firstWindow()).screenshot({ path: join(report, `${app.id}-failure.png`) }); } catch {}
     }

@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "checkedDate": "2026-09-15",
+  "containers": {
+    "musclemap": {
+      "id": "musclemap",
+      "label": "musclemap 1.4.0 (20260827)",
+      "version": "1.4.0",
+      "buildDate": "20260827",
+      "image": "vnmd/musclemap_1.4.0@sha256:fde084d6dd64c4eb467403fdd05f740999b103669ef095fed0f08438d81e2d7d",
+      "digest": "sha256:fde084d6dd64c4eb467403fdd05f740999b103669ef095fed0f08438d81e2d7d",
+      "url": "https://hub.docker.com/r/vnmd/musclemap_1.4.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/musclemap/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "vesselboost": {
+      "id": "vesselboost",
+      "label": "vesselboost 2.0.64 (20260909)",
+      "version": "2.0.64",
+      "buildDate": "20260909",
+      "image": "vnmd/vesselboost_2.0.64@sha256:75830d7be55e8ff75c543b250bed831178f866fa4b8b646380950f4d32a697f5",
+      "digest": "sha256:75830d7be55e8ff75c543b250bed831178f866fa4b8b646380950f4d32a697f5",
+      "url": "https://hub.docker.com/r/vnmd/vesselboost_2.0.64",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/vesselboost/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "qsmbly": {
+      "id": "qsmbly",
+      "label": "qsmbly 0.11.0 (20260506)",
+      "version": "0.11.0",
+      "buildDate": "20260506",
+      "image": "vnmd/qsmbly_0.11.0@sha256:61d3646e9d92814d32e4e373bb774601f90cec25e029c4c9a10c412920550ffa",
+      "digest": "sha256:61d3646e9d92814d32e4e373bb774601f90cec25e029c4c9a10c412920550ffa",
+      "url": "https://hub.docker.com/r/vnmd/qsmbly_0.11.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/qsmbly/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "dicompare": {
+      "id": "dicompare",
+      "label": "dicompare 0.5.4 (20260506)",
+      "version": "0.5.4",
+      "buildDate": "20260506",
+      "image": "vnmd/dicompare_0.5.4@sha256:a5b3466699bb5873c084c81206d163e40ed7569302e9031099afbf00b1a2f6e5",
+      "digest": "sha256:a5b3466699bb5873c084c81206d163e40ed7569302e9031099afbf00b1a2f6e5",
+      "url": "https://hub.docker.com/r/vnmd/dicompare_0.5.4",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/dicompare/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "niimath": {
+      "id": "niimath",
+      "label": "niimath 1.0.20260703 (20260909)",
+      "version": "1.0.20260703",
+      "buildDate": "20260909",
+      "image": "vnmd/niimath_1.0.20260703@sha256:42be84cb26ffd658454f8c93a96976d6d96b147830dc4c880d9d023e91c3a6d7",
+      "digest": "sha256:42be84cb26ffd658454f8c93a96976d6d96b147830dc4c880d9d023e91c3a6d7",
+      "url": "https://hub.docker.com/r/vnmd/niimath_1.0.20260703",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/niimath/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "synthsr": {
+      "id": "freesurfer",
+      "label": "freesurfer 8.2.0 (20260818)",
+      "version": "8.2.0",
+      "buildDate": "20260818",
+      "image": "vnmd/freesurfer_8.2.0@sha256:0915ccb5f268d06c7af3f69119f6a27577ebb86eb9ff7b5399122973b44aeae5",
+      "digest": "sha256:0915ccb5f268d06c7af3f69119f6a27577ebb86eb9ff7b5399122973b44aeae5",
+      "url": "https://hub.docker.com/r/vnmd/freesurfer_8.2.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/freesurfer/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "synthseg": {
+      "id": "synthseg",
+      "label": "synthseg 8.2.0 (20260902)",
+      "version": "8.2.0",
+      "buildDate": "20260902",
+      "image": "vnmd/synthseg_8.2.0@sha256:81ecc9844c1fe59fe6b05c9e5201e0aeaf4d03666bd3596b5c021ac19330f2b7",
+      "digest": "sha256:81ecc9844c1fe59fe6b05c9e5201e0aeaf4d03666bd3596b5c021ac19330f2b7",
+      "url": "https://hub.docker.com/r/vnmd/synthseg_8.2.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/synthseg/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "syncro": {
+      "id": "syncro",
+      "label": "syncro 0.1.1 (20251216)",
+      "version": "0.1.1",
+      "buildDate": "20251216",
+      "image": "vnmd/syncro_0.1.1@sha256:51246ec424976d130bd4ed731b7e1f0d3401c22146c200664eb77fc77159e946",
+      "digest": "sha256:51246ec424976d130bd4ed731b7e1f0d3401c22146c200664eb77fc77159e946",
+      "url": "https://hub.docker.com/r/vnmd/syncro_0.1.1",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/syncro/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "greedy": {
+      "id": "itksnap",
+      "label": "itksnap 4.4.0 (20260117)",
+      "version": "4.4.0",
+      "buildDate": "20260117",
+      "image": "vnmd/itksnap_4.4.0@sha256:5bcdcbf81c329ca49c22e5b479ec7391c41b2c4a4cdd73b9f1e61e5d5d0e25ff",
+      "digest": "sha256:5bcdcbf81c329ca49c22e5b479ec7391c41b2c4a4cdd73b9f1e61e5d5d0e25ff",
+      "url": "https://hub.docker.com/r/vnmd/itksnap_4.4.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/itksnap/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    },
+    "ants": {
+      "id": "ants",
+      "label": "ants 2.6.5 (20260602)",
+      "version": "2.6.5",
+      "buildDate": "20260602",
+      "image": "vnmd/ants_2.6.5@sha256:084b3a847f0008fa4b4a04bd81d6423b9720bdc9243dbf75fa510e8fb86ec8c2",
+      "digest": "sha256:084b3a847f0008fa4b4a04bd81d6423b9720bdc9243dbf75fa510e8fb86ec8c2",
+      "url": "https://hub.docker.com/r/vnmd/ants_2.6.5",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/f985e28c5a78285bed756c71e9abd83e52588a9f/recipes/ants/build.yaml",
+      "description": "Upstream Neurodesk implementation. Its methods and defaults may differ from this web application."
+    }
+  },
+  "unresolved": [
+    {
+      "app": "spinalcordtoolbox",
+      "error": "HTTP Error 404: Not Found"
+    },
+    {
+      "app": "topofit",
+      "error": "HTTP Error 404: Not Found"
+    }
+  ]
+}

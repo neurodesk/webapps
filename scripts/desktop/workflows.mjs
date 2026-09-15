@@ -10,6 +10,15 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   const fixture = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
   const download = async selector => {
     const count = await desktop.evaluate(() => globalThis.neurodeskOffline.downloads.length);
+    await page.locator(selector).evaluate(element => {
+      for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+        if (parent.tagName === 'DETAILS') parent.open = true;
+        if (parent.matches('[data-disclosure]')) {
+          const toggle = parent.querySelector('[data-disclosure-toggle]');
+          if (toggle?.getAttribute('aria-expanded') === 'false') toggle.click();
+        }
+      }
+    });
     await page.locator(selector).click();
     await expect.poll(() => desktop.evaluate((_electron, count) => globalThis.neurodeskOffline.downloads[count]?.state, count), { timeout: 60000 }).toBe('completed');
     const item = await desktop.evaluate((_electron, count) => globalThis.neurodeskOffline.downloads[count], count);
@@ -25,7 +34,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   };
   if (id === 'musclemap') return verifyMuscleMapFullPipeline(page, page.url());
   if (['vesselboost', 'spinalcordtoolbox', 'seedseg'].includes(id)) {
-    await page.locator(id === 'seedseg' ? '#unifiedFiles' : '#fileInput').setInputFiles(fixture);
+    await page.locator(id === 'seedseg' ? '#unifiedFiles' : '#fileInput').setInputFiles(id === 'seedseg' ? { name: 'scan_T1w.nii.gz', mimeType: 'application/gzip', buffer: await readFile(fixture) } : fixture);
     if (id === 'vesselboost') {
       for (const selector of ['#skipDownsampleBtn', '#skipN4Btn', '#skipDenoiseBtn']) {
         await expect(page.locator(selector)).toBeEnabled({ timeout: 60000 });
@@ -78,7 +87,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await page.locator('#command').fill('-add 1');
     await expect(page.locator('#processButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#processButton').click();
-    await page.locator('#outputSection').evaluate(section => { section.open = true; });
+    await expect(page.locator('#outputSection')).toHaveAttribute('open', '', { timeout: 60000 });
     await expect(page.locator('#saveButton')).toBeVisible({ timeout: 60000 });
     return nifti(await download('#saveButton'));
   }

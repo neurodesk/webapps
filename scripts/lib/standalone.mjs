@@ -14,13 +14,22 @@ export async function loadStandalone(registry, root = repoRoot) {
     for (const key of ['assets', 'downloads', 'containers']) {
       if (!Array.isArray(app[key])) throw new Error(`${id}: missing ${key}`);
     }
-    for (const download of app.downloads) {
-      if (!/^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//.test(download.url)) throw new Error(`${id}: invalid download URL`);
-      if (!/^[a-f0-9]{64}$/.test(download.sha256)) throw new Error(`${id}: download must have a checksum`);
-      if (!download.platform || !download.version || !download.kind) throw new Error(`${id}: incomplete release metadata`);
-    }
+    validateDownloads(app.downloads, id);
   }
+  if (value.suite) validateDownloads(value.suite.downloads, 'suite');
   return value;
+}
+
+function validateDownloads(downloads, id) {
+  if (!Array.isArray(downloads)) throw new Error(`${id}: missing downloads`);
+  for (const download of downloads) {
+    for (const file of [download, ...(download.parts || [])]) {
+      if (!/^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//.test(file.url)) throw new Error(`${id}: invalid download URL`);
+      if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`${id}: download must have a checksum`);
+    }
+    if (!download.platform || !download.version || !['desktop', 'cli', 'container'].includes(download.kind)) throw new Error(`${id}: incomplete release metadata`);
+    if (download.kind === 'desktop' && download.modelsIncluded !== true) throw new Error(`${id}: desktop package must include models`);
+  }
 }
 
 export async function stageStandaloneAssets(destination) {

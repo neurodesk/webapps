@@ -123,8 +123,6 @@ jobs:
             desktop-reports/
             desktop-workflow-reports/
             packaged-desktop-reports/
-            packages/desktop/release/*.zip
-            packages/desktop/release/*.tar.gz
-            packages/desktop/release/*.sha256
+            packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error

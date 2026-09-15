@@ -15,8 +15,8 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     sourceHref: shellScript.dataset.sourceHref,
     url: shellScript.dataset.appUrl,
     shell: shellScript.dataset.appShell,
-    standaloneHref: shellScript.dataset.standaloneHref || new URL('standalone.json', shellScript.src).href,
-    componentsHref: shellScript.dataset.componentsHref || new URL('shell-adapters/components/', shellScript.src).href,
+    standaloneHref: new URL(shellScript.dataset.standaloneHref || 'standalone.json', shellScript.src).href,
+    componentsHref: new URL(shellScript.dataset.componentsHref || 'shell-adapters/components/', shellScript.src).href,
   };
 
   const informationScript = document.querySelector('script[data-neurodesk-app-information]');
@@ -233,6 +233,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
         openStandalone({ title: metadata.title, app: catalog.apps[metadata.id], suite: catalog.suite, installed: document.documentElement.hasAttribute('data-neurodesk-offline') });
       } catch (error) {
         console.error('Standalone information could not be loaded', error);
+        window.alert('Standalone downloads could not be loaded. Please try again.');
       }
       return;
     }

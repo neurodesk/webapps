@@ -51,8 +51,11 @@ for (const app of registry.apps) {
     measurementId: registry.site.analytics.measurement_id,
     url: `${siteOrigin}/${app.path}/`,
     information: appInformationPayload(information, app.id),
+    standaloneHref: '../standalone.json',
+    componentsHref: '../shell-adapters/components/',
   }));
-  await stageStandaloneAssets(destination);
+  await rm(join(destination, 'standalone.json'), { force: true });
+  await rm(join(destination, 'shell-adapters/components'), { recursive: true, force: true });
 }
 
 await assembleRuntimeAssetStore({ repoRoot, siteDist, registry });

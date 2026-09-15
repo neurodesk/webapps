@@ -17,7 +17,7 @@ try {
  let r=run([input,output,'--offline']);assert.notEqual(r.status,0);assert.match(r.stderr,/already exists/);
  assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
  r=run([input,join(work,'new'),'--threads','0']);assert.notEqual(r.status,0);assert.match(r.stderr,/positive integer/);
- r=run(['download-models','--offline','--cache-dir',join(work,'empty-cache')]);assert.notEqual(r.status,0);assert.match(r.stderr,/not cached/);
+ r=run(['download-models','--offline','--cache-dir',join(work,'empty-cache')]);assert.notEqual(r.status,0);assert.match(r.stderr,/missing from the offline installation/);
  r=run([input,output,'--resume','--offline']);assert.notEqual(r.status,0);
  assert.equal(await readFile(join(output,'keep.txt'),'utf8'),'preserve');
  console.log('PASS installed package: self-check, help, output preservation, thread validation, offline cache failure, invalid resume');

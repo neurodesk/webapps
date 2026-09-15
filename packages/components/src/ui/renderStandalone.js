@@ -11,8 +11,15 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
     for (const download of downloads) {
       const row = createElement('p', { ownerDocument: doc });
       row.append(createElement('a', { href: download.url, text: `${download.platform} · ${download.version}`, ownerDocument: doc }));
+      if (download.parts?.length) row.append(doc.createTextNode(' · Download every part below'));
       if (download.modelsIncluded) row.append(doc.createTextNode(' · Models included'));
       content.append(row);
+      for (const [index, part] of (download.parts || []).entries()) {
+        const link = createElement('p', { ownerDocument: doc });
+        link.append(createElement('a', { href: part.url, text: `Part ${index + 1} of ${download.parts.length} · ${(part.bytes / 1e9).toFixed(2)} GB`, ownerDocument: doc }));
+        content.append(link);
+      }
+      if (download.archiveSha256) append('p', `Complete archive SHA-256: ${download.archiveSha256}`);
       if (download.sha256) content.append(renderCommand({ id: `checksum-${download.kind}-${download.platform}`, command: download.sha256, label: 'SHA-256' }, doc).root);
       if (download.command) content.append(renderCommand({ id: `standalone-${download.kind}-${download.platform}`, command: download.command }, doc).root);
     }
