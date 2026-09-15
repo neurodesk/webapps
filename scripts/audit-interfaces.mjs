@@ -29,6 +29,11 @@ try {
         if (await workspace.isVisible()) await workspace.click();
         const welcome = page.locator('#welcomeLater');
         if (await welcome.isVisible()) await welcome.click();
+        // Loading registration examples resets the Output disclosure. Exercise
+        // keyboard controls only after initialization has succeeded or failed.
+        if (['ants', 'greedy'].includes(app.id)) {
+          await expect(page.locator('#runButton:enabled, #statusText.error').first()).toBeVisible({ timeout: 60000 });
+        }
         // Allow the shell observer and disclosure transitions to settle after entry.
         await page.waitForTimeout(300);
         const bar = page.locator('.nd-app-bar:visible');
