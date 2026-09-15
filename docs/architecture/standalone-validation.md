@@ -53,6 +53,14 @@ The final repository, desktop and shared layout regression run passed 163 tests.
 
 [Neurodesk Webapps 0.2.20260915](https://github.com/neurodesk/webapps/releases/tag/webapps-v0.2.20260915) contains all eight platform/edition downloads. Every published binary URL passed its availability check. A fresh production build using that catalog passed the 24-app interface audit, mobile layouts, six disclosure workflows and all-app Standalone link checks. Desktop and 320-pixel phone screenshots were reviewed; the dialog has no horizontal overflow and orders containers, downloads without models, then downloads with models included.
 
+## OpenRecon links, 15 September 2026
+
+The shared Standalone dialog exposes OpenRecon for MuscleMap, QSMbly through QSMxT, Spinal Cord Toolbox, SynthSeg, TopoFit and VesselBoost. Each mapping was checked against the corresponding recipe in [neurodesk/openrecon](https://github.com/neurodesk/openrecon/). The interface links to Siemens teamplay C2P for the official package, the build repository and the specific recipe. Apps without a mapping omit the section.
+
+Source `ad6f89e` passed 26 focused catalog, design-system and version tests, a fresh production build, the 24-app interface audit, all mobile layouts, six disclosure workflows and the all-app Standalone link test. The link test checks OpenRecon visibility, package names, destinations and section order. Desktop and 320-pixel phone screenshots were reviewed in dark and light themes, with no horizontal overflow. [Web CI 35023309215](https://github.com/neurodesk/webapps/actions/runs/35023309215) passed all application and shared-site checks. These tests cover the webapp integration; they do not run packages on an MRI scanner.
+
+[Release CI 35023235467](https://github.com/neurodesk/webapps/actions/runs/35023235467) passed startup, portable workflow and installed-app checks for both editions on macOS ARM64, Windows x64 and Linux x64. Both Linux editions passed Docker and Apptainer checks. [Suite 0.3.20260915](https://github.com/neurodesk/webapps/releases/tag/webapps-v0.3.20260915) includes the OpenRecon links in the installed application dialogs. All published binary URLs passed availability checks; the final production build passed the 24-app Standalone link test with the updated release catalog.
+
 ## Release gates
 
 GitHub Actions builds one locked asset bundle, then starts every installed app on macOS ARM64, Linux x64 and Windows x64. Eight CPU-compatible workflows also run on each platform. Packaging is followed by another all-app startup test using the extracted executable. Linux additionally builds a Docker image, tests it with `--network=none`, and executes a batch job from the Apptainer SIF. Publication requires those jobs to pass and checks every archive part and the reassembled archive SHA-256.
