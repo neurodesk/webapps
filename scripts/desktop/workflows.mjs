@@ -4,6 +4,7 @@ import { readFile, readdir, mkdtemp, mkdir, writeFile, rm } from 'node:fs/promis
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { verifyNiftiOffset } from './check-nifti.mjs';
+import { dicomSeries } from '../../test-utils/dicom-fixture.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 
@@ -66,16 +67,37 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   if (id === 'dicompare') {
     const worker = (await readdir(join(resources, 'site/dicompare/assets'))).find(name => /^pyodide\.worker-.*\.js$/.test(name));
     assert.ok(worker, 'Compiled Python worker must be included');
-    return page.evaluate(worker => new Promise((resolve, reject) => {
+    const files = dicomSeries().map(file => ({ name: file.name, bytes: [...file.buffer] }));
+    const acquisitions = await page.evaluate(({ worker, files }) => new Promise((resolve, reject) => {
       const instance = new Worker(new URL(`assets/${worker}`, location.href), { type: 'module' });
-      const timeout = setTimeout(() => { instance.terminate(); reject(new Error('Offline Python initialization timed out')); }, 120000);
-      instance.onerror = error => { clearTimeout(timeout); instance.terminate(); reject(new Error(error.message)); };
+      const finish = (error, result) => {
+        clearTimeout(timeout);
+        instance.terminate();
+        if (error) reject(error);
+        else resolve(result);
+      };
+      const timeout = setTimeout(() => finish(new Error('Offline DICOM analysis timed out')), 120000);
+      instance.onerror = error => finish(new Error(error.message));
       instance.onmessage = ({ data }) => {
-        if (data.type === 'error') { clearTimeout(timeout); instance.terminate(); reject(new Error(JSON.stringify(data.error))); }
-        if (data.id === 'offline-python' && data.type === 'success') { clearTimeout(timeout); instance.terminate(); resolve(data.payload); }
+        if (data.type === 'error') finish(new Error(JSON.stringify(data.error)));
+        if (data.id === 'offline-python' && data.type === 'success') {
+          instance.postMessage({ id: 'offline-analysis', type: 'analyzeFiles', payload: {
+            fileNames: files.map(file => file.name),
+            fileContents: files.map(file => new Uint8Array(file.bytes).buffer),
+          } });
+        }
+        if (data.id === 'offline-analysis' && data.type === 'success') finish(null, data.payload);
       };
       instance.postMessage({ id: 'offline-python', type: 'initialize' });
-    }), worker);
+    }), { worker, files });
+    assert.ok(Array.isArray(acquisitions) && acquisitions.length > 0, 'DICOM analysis must identify the synthetic acquisition');
+    assert.equal(acquisitions.length, 1);
+    const acquisition = acquisitions[0];
+    assert.equal(acquisition.totalFiles, 4);
+    assert.equal(acquisition.sliceCount, 4);
+    assert.equal(acquisition.seriesDescription, 'test_scan_1');
+    assert.equal(acquisition.acquisitionFields.find(field => field.keyword === 'RepetitionTime')?.value, 2000);
+    return { acquisitions: acquisitions.length, files: acquisition.totalFiles, slices: acquisition.sliceCount };
   }
   if (['synthsr', 'synthseg'].includes(id)) {
     await page.locator('#imageInput').setInputFiles(fixture);

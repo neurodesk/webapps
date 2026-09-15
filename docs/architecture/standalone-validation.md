@@ -12,7 +12,7 @@ Source application bundles were built from commit `7244446`, including the Greed
 | CALMaR | Brain extraction and NIfTI export |
 | QSMbly | Compiled SWI calculation, all 4,096 output values checked |
 | SeedSeg | Four lesion models and consensus |
-| dicompare | Compiled Python worker initialization with bundled runtime and all application dependencies |
+| dicompare | Compiled Python worker analyzes four synthetic DICOM slices; checks acquisition grouping, file/slice counts and repetition time |
 | Deface | Default-image defacing and NIfTI export |
 | EasyMP2RAGE | Denoising and derivatives ZIP export |
 | NiiMath | Add-one image operation and NIfTI export; a separate numerical check verified all 100,672 voxels with zero error |
@@ -30,6 +30,8 @@ Source application bundles were built from commit `7244446`, including the Greed
 | Brain2Print | Segmentation, meshing and manifold STL export with binary triangle-count validation |
 | TopoFit | Surface-fitting workflow and QC volume export |
 | FireANTs | Registration and registered-image export |
+
+The DICOM analysis check was added after the full matrix and passed separately against the same packaged application.
 
 These tests verify runnable workflows and output structure. They do not replace each scientific package's accuracy/parity validation or establish validity for every possible clinical input. The small SynthSeg fixture is unsuitable for the SYNcro normalization test: it produced a non-finite deformation. The full-size packaged registration example passed. Extreme trial coordinates now have a Rust regression test and no longer crash the worker pool.
 

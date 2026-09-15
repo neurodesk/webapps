@@ -58,3 +58,9 @@ The [QSMbly container recipe](https://github.com/neurodesk/neurocontainers/blob/
 3. For every new container, consume the same GitHub binary artifact offered in the app's Standalone dialog, then publish the Neurodesk recipe and accepted release record.
 4. Keep source model assets in the approved Hugging Face dataset with pinned manifests and checksums, and include their verified copies in each released image. Test with no network and empty caches. Container or model redistribution conditions remain part of the release packaging work.
 5. Populate Standalone with verified binary downloads and the assigned container. Pending recipe names belong in this plan, not in user-facing download links.
+
+## Registry verification, 15 September 2026
+
+The interface lists only upstream images whose release tag and immutable digest were verified against Docker Hub. SCT 7.3.3 is available there as build `20260902`, although the Neurocommand catalog records `20260904`. The standalone catalog uses the verified Docker Hub digest.
+
+TopoFit 0.5.1 is listed in Neurocommand as build `20260905`, but its stable Docker Hub tag returned 404 and the documented SIF download returned 403. Only a candidate Docker tag was accessible. The interface therefore uses the released Webapps suite for TopoFit until a stable upstream download can be verified. The suite includes the browser pipeline and its models.
