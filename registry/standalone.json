@@ -613,6 +613,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "brain-extraction": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

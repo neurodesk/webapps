@@ -1551,6 +1551,15 @@
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz",
         "kind": "example-template"
       }
+    ],
+    "brain-extraction": [
+      {
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/e0a056b3d6b2b075bab5b780281af17fc9d6421d/syncro/synthstrip-browser.onnx",
+        "sha256": "dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800",
+        "bytes": 10296357,
+        "kind": "model",
+        "license": "Apache-2.0"
+      }
     ]
   },
   "exclusions": [
