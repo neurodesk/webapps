@@ -15,6 +15,9 @@ export async function loadStandalone(registry, root = repoRoot) {
       if (!Array.isArray(app[key])) throw new Error(`${id}: missing ${key}`);
     }
     validateDownloads(app.downloads, id);
+    if (app.openrecon && (typeof app.openrecon.label !== 'string' || !app.openrecon.label.trim() || typeof app.openrecon.recipe !== 'string' || !/^[a-z0-9][a-z0-9_-]*$/.test(app.openrecon.recipe))) {
+      throw new Error(`${id}: OpenRecon requires a package label and recipe name`);
+    }
   }
   if (value.suite) validateDownloads(value.suite.downloads, 'suite');
   return value;

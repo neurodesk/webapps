@@ -56,6 +56,16 @@ try {
       assert.ok(sections.includes('Webapp standalone · Without models'));
       assert.ok(sections.indexOf('Webapp standalone · Without models') < sections.indexOf('Webapp standalone · Models included'));
       if (catalog.apps[app.id].containers.length) assert.equal(sections[0], 'Neurodesk containers');
+      const openrecon = catalog.apps[app.id].openrecon;
+      const scanner = dialog.locator('section[aria-labelledby="standalone-openrecon"]');
+      await expect(scanner).toHaveCount(openrecon ? 1 : 0);
+      if (openrecon) {
+        assert.ok(sections.indexOf('OpenRecon · MRI scanner console') < sections.indexOf('Webapp standalone · Without models'));
+        await expect(scanner).toContainText(`Run the ${openrecon.label} container on the MRI scanner console`);
+        await expect(scanner.getByRole('link', { name: 'Siemens teamplay C2P exchange' })).toHaveAttribute('href', 'https://webclient.us.api.teamplay.siemens-healthineers.com/c2p');
+        await expect(scanner.getByRole('link', { name: 'neurodesk/openrecon', exact: true })).toHaveAttribute('href', 'https://github.com/neurodesk/openrecon/');
+        await expect(scanner.getByRole('link', { name: `${openrecon.label} recipe` })).toHaveAttribute('href', `https://github.com/neurodesk/openrecon/tree/main/recipes/${openrecon.recipe}`);
+      }
       const links = await dialog.locator('a').evaluateAll(elements => elements.map(element => element.href));
       for (const download of [...catalog.suite.downloads, ...catalog.apps[app.id].downloads]) {
         for (const file of download.parts || [download]) {

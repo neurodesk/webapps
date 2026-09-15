@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.2.2
+
+### Patch Changes
+
+- Add OpenRecon scanner-console package links to Standalone for MuscleMap, QSMbly via QSMxT, Spinal Cord Toolbox, SynthSeg, TopoFit and VesselBoost. Link to Siemens teamplay C2P for official packages and neurodesk/openrecon for builds.
+
 ## 0.2.1
 
 ### Patch Changes

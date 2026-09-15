@@ -40,6 +40,21 @@ export function openStandalone({ title, app, suite, installed = false, modelsInc
       }
     }
   }
+  if (app.openrecon) {
+    const root = section('standalone-openrecon', 'OpenRecon · MRI scanner console',
+      `Run the ${app.openrecon.label} container on the MRI scanner console with OpenRecon.`);
+    const download = element('p');
+    download.append(doc.createTextNode('Download the official OpenRecon package from the '),
+      element('a', 'Siemens teamplay C2P exchange', { href: 'https://webclient.us.api.teamplay.siemens-healthineers.com/c2p' }),
+      doc.createTextNode('.'));
+    const build = element('p');
+    build.append(doc.createTextNode('Or build it using '),
+      element('a', 'neurodesk/openrecon', { href: 'https://github.com/neurodesk/openrecon/' }),
+      doc.createTextNode(' with the '),
+      element('a', `${app.openrecon.label} recipe`, { href: `https://github.com/neurodesk/openrecon/tree/main/recipes/${app.openrecon.recipe}` }),
+      doc.createTextNode('.'));
+    root.append(download, build);
+  }
   const downloads = [...(suite?.downloads || []), ...app.downloads];
   for (const included of [false, true]) {
     const selected = downloads.filter(download => download.modelsIncluded === included);

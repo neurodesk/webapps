@@ -5,8 +5,13 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.2.1
+  - @neurodesk/webapp-components@0.2.2
 
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.2.1
 
 ### Minor Changes
 

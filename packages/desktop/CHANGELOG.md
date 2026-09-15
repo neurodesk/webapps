@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.3.20260915
+
+### Patch Changes
+
+- Add OpenRecon scanner-console package links for MuscleMap, QSMbly via QSMxT, Spinal Cord Toolbox, SynthSeg, TopoFit and VesselBoost.
+
 ## 0.2.20260915
 
 ### Minor Changes

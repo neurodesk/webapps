@@ -16,6 +16,20 @@ test('standalone catalog covers the entire app registry', async () => {
   assert.equal(Object.keys(catalog.apps).length, registry.apps.length);
 });
 
+test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
+  const catalog = await loadStandalone(await loadAppsRegistry());
+  const expected = { musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };
+  assert.deepEqual(Object.fromEntries(Object.entries(catalog.apps).filter(([, app]) => app.openrecon).map(([id, app]) => [id, app.openrecon.recipe])), expected);
+  const dom = new JSDOM('<html><body></body></html>');
+  const dialog = openStandalone({ title: 'QSMbly', app: catalog.apps.qsmbly, suite: catalog.suite }, dom.window.document);
+  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'OpenRecon · MRI scanner console', 'Webapp standalone · Without models', 'Webapp standalone · Models included']);
+  const scanner = dialog.root.querySelector('section[aria-labelledby="standalone-openrecon"]');
+  assert.match(scanner.textContent, /Run the QSMxT container on the MRI scanner console/);
+  assert.match(scanner.textContent, /official OpenRecon package/);
+  assert.deepEqual([...scanner.querySelectorAll('a')].map(node => node.href), ['https://webclient.us.api.teamplay.siemens-healthineers.com/c2p', 'https://github.com/neurodesk/openrecon/', 'https://github.com/neurodesk/openrecon/tree/main/recipes/qsmxt']);
+  dom.window.close();
+});
+
 test('a future app cannot be silently omitted from desktop packaging', async t => {
   const root = await mkdtemp(join(tmpdir(), 'standalone-registry-'));
   t.after(() => rm(root, { recursive: true, force: true }));
