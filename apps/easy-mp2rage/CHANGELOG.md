@@ -1,5 +1,11 @@
 # easy-mp2rage
 
+## 0.3.20260916
+
+### Patch Changes
+
+- Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 ## 0.3.20260915
 
 ### Minor Changes

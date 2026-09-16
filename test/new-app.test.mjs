@@ -70,8 +70,8 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   const examples = JSON.parse(await readFile(join(root, 'apps/demo-app/examples.json')));
   assert.equal(examples[0].id, 't1');
   const offline = JSON.parse(await readFile(join(root, 'registry/offline-assets.lock.json')));
-  assert.deepEqual(offline.apps['demo-app'], examples.map(example => example.url));
-  assert.ok(offline.assets[examples[0].url]);
+  assert.deepEqual(offline.apps['demo-app'], examples.flatMap(example => example.files.map(file => file.url)));
+  assert.ok(offline.assets[examples[0].files[0].url]);
 
   const packageJson = JSON.parse(await readFile(join(root, 'apps', 'demo-app', 'package.json'), 'utf8'));
   assert.equal(packageJson.name, 'demo-app');

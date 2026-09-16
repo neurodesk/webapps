@@ -148,6 +148,24 @@ export async function applyRelease({ plan, workspace, config, packages, embedded
  * version registers a site here; test/app-versions.test.mjs checks they agree.
  */
 export const EMBEDDED_VERSION_SITES = Object.freeze({
+  qsmbly: [
+    { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
+  vesselboost: [
+    { file: 'apps/vesselboost/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
+  seedseg: [
+    { file: 'apps/seedseg/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
+  spinalcordtoolbox: [
+    { file: 'apps/spinalcordtoolbox/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
+  calmar: [
+    { file: 'apps/calmar/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
+  dicompare: [
+    { file: 'apps/dicompare/src/version.ts', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+  ],
   greedy: [
     { file: 'exes/greedy/Cargo.toml', pattern: /(^\[workspace\.package\][\s\S]*?^version = ")[^"]+(")/m, replace: '$1{version}$2' },
     { file: 'exes/greedy/Cargo.lock', pattern: /(name = "greedy-rs"\nversion = ")[^"]+(")/, replace: '$1{version}$2' },

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "t1-mni",
+    "label": "T1 brain to MNI152 template",
+    "description": "Matched moving T1 brain and stationary MNI152 T1 template.",
+    "expectedResult": "A registered T1 image resampled into the MNI152 template space.",
+    "files": [
+      {
+        "role": "moving",
+        "name": "t1_crop.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/t1_crop.nii.gz"
+      },
+      {
+        "role": "stationary",
+        "name": "MNI152_T1_1mm.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/MNI152_T1_1mm.nii.gz"
+      }
+    ]
+  }
+]

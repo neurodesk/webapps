@@ -1,12 +1,12 @@
 import './style.css'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, renderExampleSelector } from '@neurodesk/webapp-components/ui'
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niivue, SLICE_TYPE, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue'
 import { Niimath } from "@niivue/niimath"
 
-import { NIFTI_EXAMPLES, NIIMATH_EXAMPLE_BASE_URL as ASSET_BASE_URL } from '@neurodesk/webapp-components/example-images'
+import examples from './examples.json'
 
 mountImagingWorkspace({
   controls: 'body > header',
@@ -35,9 +35,14 @@ let imageProcessingReady = false;
 
 function updateImageControls() {
   const disabled = imageBusy || !imageProcessingReady;
-  for (const control of document.querySelectorAll('#niftiInput, #dicomInput, #dicomPick, #images button, #moreCommands, #processButton, #saveButton')) {
+  for (const control of document.querySelectorAll('#niftiInput, #dicomInput, #dicomPick, #moreCommands')) {
     control.disabled = disabled;
   }
+  exampleControl.setDisabled(disabled);
+  document.getElementById("moreCommands").disabled = disabled || !uneditedImage;
+  document.getElementById("processButton").disabled = disabled || !uneditedImage;
+  document.getElementById("saveButton").disabled = disabled || !uneditedImage;
+  document.getElementById("resetButton").disabled = disabled || !uneditedImage;
 }
 
 async function runImageTask(task) {
@@ -228,26 +233,13 @@ function moreCommandsSelected() {
   buttonProcessImage();
 }
 
-async function loadImage(url) {
-  // remove all meshes and volumes
-  for (let i = 0; i < nv.meshes.length; i++) {
-    nv.removeMesh(nv.meshes[i]);
-  }
-  for (let i = 0; i < nv.volumes.length; i++) {
-    nv.removeVolume(nv.volumes[i]);
-  }
-  let volumeList = [{ url: url },];
-  await nv.loadVolumes(volumeList);
-  // set the unedited image to the loaded image
-  uneditedImage = nv.volumes[0];
-  nv.updateGLVolume();
-}
-
-async function loadFile(file) {
+async function loadFile(file, signal) {
   const bytes = await file.arrayBuffer()
+  signal?.throwIfAborted()
   for (const mesh of [...nv.meshes]) nv.removeMesh(mesh)
   for (const volume of [...nv.volumes]) nv.removeVolume(volume)
   await nv.loadFromArrayBuffer(bytes, file.name)
+  signal?.throwIfAborted()
   uneditedImage = nv.volumes[0]
   nv.updateGLVolume()
 }
@@ -275,6 +267,18 @@ async function loadDicomFiles(files) {
   }
 }
 
+
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, signal, assertCurrent }) => {
+    const [file] = await fetchFiles()
+    assertCurrent()
+    if (imageBusy || !imageProcessingReady) throw new Error("Wait for the current image operation to finish.")
+    await runImageTask(() => loadFile(file, signal))
+  },
+})
+document.getElementById('exampleControl').append(exampleControl.root)
+exampleControl.setDisabled(true)
 
 async function main() {
 
@@ -306,13 +310,6 @@ async function main() {
     imageProcessingReady = true;
     updateImageControls();
     button.onclick = buttonProcessImage;
-  }
-  const imgEl = document.getElementById("images");
-  for (const example of NIFTI_EXAMPLES) {
-    const btn = document.createElement("button");
-    btn.textContent = example.id;
-    btn.onclick = () => runImageTask(() => loadImage(example.url));
-    imgEl.appendChild(btn);
   }
   saveButton.onclick = function () {
     if (nv.volumes.length < 2)
@@ -347,10 +344,6 @@ async function main() {
   nv.setSliceType(SLICE_TYPE.MULTIPLANAR)
   nv.setMultiplanarLayout(MULTIPLANAR_TYPE.GRID)
   nv.opts.multiplanarShowRender = SHOW_RENDER.ALWAYS
-  var volumeList = [{ url: `${ASSET_BASE_URL}fa8.nii.gz` },];
-  await nv.loadVolumes(volumeList);
-  uneditedImage = nv.volumes[0];
-
   // initialize niimath (loads wasm and sets up worker)
   await niimath.init();
   console.log(niimath);

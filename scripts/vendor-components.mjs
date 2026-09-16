@@ -30,4 +30,5 @@ try {
 
 await rm(join(appDir, destRoot, "vendor"), { recursive: true, force: true });
 await cp(src, dest, { recursive: true });
+if (destRoot !== '.') await cp(join(appDir, 'examples.json'), join(appDir, destRoot, 'examples.json'));
 console.log(`Vendored @neurodesk/webapp-components -> ${dest.replace(repoRoot + "/", "")}`);

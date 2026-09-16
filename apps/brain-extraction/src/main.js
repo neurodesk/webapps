@@ -1,3 +1,4 @@
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -50,18 +51,20 @@ const toolbar = renderViewerToolbar({
 $('viewer').prepend(toolbar.root);
 const picker = renderFileField({ id: 'imageInput', rootId: 'dropZone', text: 'Drop NIfTI or DICOM files or folder' });
 $('filePicker').append(picker.root);
-for (const example of examples) $('example').add(new Option(example.label, example.id));
-$('example').onchange = () => {
-  const example = examples.find(item => item.id === $('example').value);
-  $('example').value = '';
-  if (!example) return;
-  importImages(async signal => {
-    status(`Downloading ${example.label}…`);
-    const response = await fetch(example.url, { signal });
-    if (!response.ok) throw new Error(`Could not load example (HTTP ${response.status}). Choose it again to retry.`);
-    return [new File([await response.blob()], new URL(example.url).pathname.split('/').pop())];
-  });
-};
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    const files = await fetchFiles();
+    assertCurrent();
+    if (!await importImages(Promise.resolve(files), signal)) throw new Error('The example image could not be loaded.');
+    assertCurrent();
+  },
+  onStatus: status,
+});
+exampleControl.select.id = 'example';
+exampleControl.root.querySelector('label').htmlFor = 'example';
+$('exampleControl').replaceWith(exampleControl.root);
+
 const results = new StageResultList({
   element: $('resultList'),
   onView: (stage, result) => show(result.file, stage),
@@ -91,7 +94,8 @@ function status(message, error = false) {
 }
 function refreshControls() {
   const busy = state.phase !== 'idle';
-  for (const id of ['example', 'imageInput', 'folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
+  exampleControl.setDisabled(busy);
+  for (const id of ['imageInput', 'folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
   $('runButton').disabled = busy || !source;
   $('cancelButton').hidden = !busy;
 }
@@ -155,9 +159,11 @@ function show(file, stage) {
   });
   return viewQueue;
 }
-async function importImages(filesSource) {
+async function importImages(filesSource, signal) {
+  if (!signal) exampleControl.cancel();
   if (state.phase !== 'idle') return;
   const job = start('loading');
+  signal?.addEventListener('abort', () => { job.controller.abort(); finish(job); }, { once: true });
   source = null;
   ++viewRevision;
   $('gl1').hidden = true;
@@ -185,8 +191,10 @@ async function importImages(filesSource) {
     show(source, 'original');
     finish(job);
     status('Image loaded · ready to extract brain');
+    return true;
   } catch (error) {
     if (finish(job)) status(error.message, true);
+    if (signal) throw error;
   }
 }
 picker.onFiles(importImages);
@@ -238,6 +246,7 @@ $('runButton').onclick = () => {
   }
 };
 function cancel() {
+  exampleControl.cancel();
   if (state.phase === 'idle') return;
   const job = state;
   job.controller.abort();

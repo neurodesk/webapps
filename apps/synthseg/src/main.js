@@ -1,3 +1,5 @@
+import examples from '../examples.json';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import {
@@ -75,8 +77,7 @@ $('resultList').querySelector('.nd-view-btn').id = 'viewResultBtn';
 $('saveBtn').disabled = true;
 $('viewResultBtn').disabled = true;
 const assetBase = import.meta.env.VITE_SYNTHSEG_ASSET_BASE || manifest.base_url;
-const exampleURL =
-  import.meta.env.VITE_SYNTHSEG_EXAMPLE_URL || `${manifest.validation.base_url}T1_head.nii.gz`;
+
 const webgpu = Boolean(navigator.gpu);
 let source,
   output,
@@ -87,10 +88,8 @@ let source,
   busy = false,
   timer,
   started;
-let exampleAbort,
-  importAbort,
-  importedImages = [],
-  loadedExample = '';
+let importAbort,
+  importedImages = [];
 
 function status(message, error = false) {
   $('statusText').textContent = message;
@@ -99,7 +98,8 @@ function status(message, error = false) {
 }
 function setBusy(value, cancellable = false) {
   busy = value;
-  for (const id of ['imageInput', 'seriesSelect', 'exampleSelect', 'mode', 'ct'])
+  exampleControl.setDisabled(value);
+  for (const id of ['imageInput', 'seriesSelect', 'mode', 'ct'])
     $(id).disabled = value;
   $('processButton').disabled = value || !source || !webgpu;
   $('cancelBtn').hidden = !value || !cancellable;
@@ -146,19 +146,18 @@ async function show() {
       `Visualization unavailable: ${error.message}. Processing and NIfTI download remain available.`;
   }
 }
-async function load(file, exampleId = '') {
+async function load(file, signal) {
   if (busy || !file) return false;
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
     status('Reading image…');
     const { data, dims } = await readNifti(await file.arrayBuffer());
+    signal?.throwIfAborted();
     source = file;
     output = null;
     provenance = null;
     $('outputSection').open = false;
-    loadedExample = exampleId;
-    $('exampleSelect').value = exampleId;
     $('ct').checked = looksLikeCt(data);
     $('progress').value = 0;
     $('elapsed').textContent = '';
@@ -180,6 +179,7 @@ async function load(file, exampleId = '') {
   }
 }
 async function importImages(filesPromise) {
+  exampleControl.cancel();
   if (busy) return;
   const controller = new AbortController();
   importAbort = controller;
@@ -218,33 +218,20 @@ $('seriesSelect').onchange = async () => {
 bindFileDrop($('dropZone'), (files) => {
   if (!busy) void importImages(files);
 });
-$('exampleSelect').onchange = async () => {
-  if (!$('exampleSelect').value || busy) return;
-  const id = $('exampleSelect').value;
-  setBusy(true, true);
-  status(`Downloading ${id}…`);
-  const controller = new AbortController();
-  exampleAbort = controller;
-  try {
-    const response = await fetch(exampleURL, { signal: controller.signal });
-    if (!response.ok)
-      throw new Error('Example download failed. You can load a local NIfTI image instead.');
-    const bytes = await response.arrayBuffer();
-    if (controller.signal.aborted) return;
-    setBusy(false);
-    if (await load(new File([bytes], `${id}.nii.gz`), id)) $('seriesSelect').hidden = true;
-  } catch (error) {
-    if (error.name !== 'AbortError') {
-      setBusy(false);
-      status(error.message, true);
-    }
-  } finally {
-    if (exampleAbort === controller) {
-      exampleAbort = null;
-      $('exampleSelect').value = loadedExample;
-    }
-  }
-};
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    const files = await fetchFiles();
+    assertCurrent();
+    if (!await load(files[0], signal)) throw new Error('The example image could not be loaded.');
+    assertCurrent();
+  },
+  onStatus: status,
+});
+exampleControl.select.id = 'exampleSelect';
+exampleControl.root.querySelector('label').htmlFor = 'exampleSelect';
+$('exampleControl').replaceWith(exampleControl.root);
+
 $('opacity').oninput = () => {
   const value = Number($('opacity').value);
   $('overlayOpacityValue').textContent = `${Math.round(value * 100)}%`;
@@ -310,7 +297,7 @@ $('processButton').onclick = async () => {
   });
 };
 $('cancelBtn').onclick = () => {
-  exampleAbort?.abort();
+  exampleControl.cancel();
   importAbort?.abort();
   setBusy(false);
   $('progress').value = 0;
@@ -331,7 +318,7 @@ if (!webgpu)
     true,
   );
 window.addEventListener('pagehide', () => {
-  exampleAbort?.abort();
+  exampleControl.cancel();
   importAbort?.abort();
   worker?.terminate();
   clearInterval(timer);

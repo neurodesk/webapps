@@ -1,0 +1,20 @@
+[
+  {
+    "id": "stroke-lesion",
+    "label": "Stroke T1 and lesion mask",
+    "description": "Matched structural MRI and a lesion mask from OpenNeuro ds004884, reduced to the validated demonstration grid. Load, review and confirm the supplied mask before running analysis.",
+    "expectedResult": "A reviewed lesion mask and downloadable lesion-network mapping results.",
+    "files": [
+      {
+        "role": "structural",
+        "name": "stroke_T1.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz"
+      },
+      {
+        "role": "lesion",
+        "name": "stroke_lesion_mask.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz"
+      }
+    ]
+  }
+]

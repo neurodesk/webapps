@@ -1,0 +1,15 @@
+[
+  {
+    "id": "t1-brain",
+    "label": "T1-weighted brain MRI",
+    "description": "Structural brain MRI for segmentation and printable surface generation.",
+    "expectedResult": "A segmented brain and downloadable STL or OBJ mesh.",
+    "files": [
+      {
+        "role": "image",
+        "name": "t1_crop.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.nii.gz"
+      }
+    ]
+  }
+]

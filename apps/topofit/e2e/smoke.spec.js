@@ -2,6 +2,10 @@
 // cross-origin isolation, worker loading, and app boot. Runs against `vite preview`
 // (see playwright.config.js) so it exercises the built, header-served output.
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
+
+const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
+const exampleUrl = examples[0].files[0].url;
 import { writeFreeSurfer } from '../../../packages/topofit/src/results.js';
 
 function niftiFixture(oblique = false) {
@@ -124,10 +128,37 @@ test('production inference worker starts the verified model request', async ({ p
 
 test('optional example is rejected when its checksum differs', async ({ page }) => {
   await page.goto('/');
-  await page.route('https://s3.amazonaws.com/openneuro.org/**', (route) => route.fulfill({ body: 'not the scan' }));
-  await page.locator('#exampleImages > summary').click();
-  await page.locator('#exampleButton').click();
-  await expect(page.locator('#statusText')).toContainText('checksum did not match');
+  await page.route(exampleUrl, (route) => route.fulfill({ body: 'not the scan' }));
+  await page.locator('[data-neurodesk-example]').selectOption('openneuro-t1');
+  await expect(page.locator('#statusText')).toContainText('checksum for sub-01_T1w.nii.gz did not match');
+});
+
+test('cancelling a pending example preserves the selected image and permits retry', async ({ page }) => {
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  let attempts = 0;
+  await page.route(exampleUrl, async route => {
+    attempts++;
+    if (attempts === 1) await held;
+    await route.fulfill({ status: 503 }).catch(() => {});
+  });
+  await page.goto('/');
+  await page.locator('#imageInput').setInputFiles(niftiFixture());
+  await expect(page.locator('#runButton')).toBeEnabled();
+  const original = await page.locator('#fileInfo').textContent();
+  const picker = page.locator('[data-neurodesk-example]');
+  const request = page.waitForRequest(exampleUrl);
+  await picker.selectOption('openneuro-t1');
+  await request;
+  await page.getByRole('button', { name: 'Cancel example download' }).click();
+  release();
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'cancelled');
+  await expect(page.locator('#fileInfo')).toHaveText(original);
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await picker.selectOption('openneuro-t1');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'error');
+  await expect(picker).toBeEnabled();
+  expect(attempts).toBe(2);
 });
 
 test('surface checkboxes show multiple meshes and expose the X-ray control', async ({ page }) => {

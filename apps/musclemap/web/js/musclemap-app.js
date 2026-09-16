@@ -1,4 +1,4 @@
-import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -133,7 +133,7 @@ class MuscleMapApp {
 
     this.fileIOController = new MuscleMapInputSet({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file) => this.onFileLoaded(file),
+      onFileLoaded: (file) => (this.inputReady = this.onFileLoaded(file)),
       onViewFile: (file) => this.onFileLoaded(file),
       onFilesChanged: () => this.onFilesChanged(),
       onDicomFiles: (files) => this.dicomController.convertFiles(files),
@@ -182,6 +182,7 @@ class MuscleMapApp {
     }
 
     this.setupEventListeners();
+    await this.setupExamples();
     this.setupInfoTooltips();
     this.setupStartPage();
 
@@ -309,6 +310,25 @@ class MuscleMapApp {
   }
 
   // ==================== Event Listeners ====================
+
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        this.fileIOController.clearFiles();
+        this.fileIOController.addFiles(files);
+        await this.inputReady;
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('fileInput');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
+  }
 
   setupEventListeners() {
     const fileInput = document.getElementById('fileInput');

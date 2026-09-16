@@ -15,15 +15,15 @@ import NiiVueGPU, {
   SLICE_TYPE,
 } from '@niivue/niivue'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, renderConsole } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, renderConsole, renderExampleSelector } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { readImageFiles, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niimath } from '@niivue/niimath'
 import { CSF_LABELS, WM_LABELS, bindSidecar, readQcReport, renderQc } from './qc'
 import type { QcMetrics, QcReport } from './qc'
+import examples from '../examples.json'
 
 const ASSET_BASE_URL = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/'
-const T1_URL = `${ASSET_BASE_URL}t1_crop.nii.gz`
 const TEMPLATE_URL = `${ASSET_BASE_URL}avg152T1.nii.gz`
 
 mountImagingWorkspace({
@@ -171,10 +171,7 @@ async function fetchFile(url: string, name: string): Promise<File> {
   return new File([await res.blob()], name)
 }
 
-async function fetchJson(url: string): Promise<unknown | null> {
-  const res = await fetch(url)
-  return res.ok ? res.json() : null
-}
+
 
 // MindGrab returns native-grid labels, so no conform/reslice implementation or model
 // files are shipped with this demo.
@@ -248,9 +245,35 @@ async function computeQc(segBytes: Uint8Array): Promise<void> {
 }
 
 // Load `file` as the displayed volume, segment it, and QC the result.
+let sourceFile: File | null = null
+let viewerReady = false
+async function loadSource(file: File, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  sourceFile = null
+  lastReport = null
+  saveBtn.disabled = true
+  $<HTMLButtonElement>('runButton').disabled = true
+  $('fileInfo').hidden = true
+  renderQc(qcBody, null)
+  $<HTMLDetailsElement>('resultsSection').open = false
+  await nv.loadVolumes([{ url: file, name: file.name }])
+  signal?.throwIfAborted()
+  sourceFile = file
+  lastReport = null
+  saveBtn.disabled = true
+  renderQc(qcBody, null)
+  $<HTMLDetailsElement>('resultsSection').open = false
+  $('fileInfo').hidden = false
+  $('fileInfo').textContent = file.name
+  $<HTMLButtonElement>('runButton').disabled = false
+  setStatus('Image loaded. Run quality control when ready.')
+}
+
 async function runSegment(file: File): Promise<void> {
   if (isCleanedUp) return // a job queued before cleanup() (HMR) must not touch a dead nv
   spin(true)
+  exampleControl.setDisabled(true)
+  $<HTMLButtonElement>('runButton').disabled = true
   busy = true
   lastReport = null
   lastName = file.name
@@ -306,6 +329,8 @@ async function runSegment(file: File): Promise<void> {
   } finally {
     busy = false
     spin(false)
+    exampleControl.setDisabled(!viewerReady)
+    $<HTMLButtonElement>('runButton').disabled = !sourceFile
   }
 }
 
@@ -313,12 +338,13 @@ async function runSegment(file: File): Promise<void> {
 let dcmConverted: File[] = []
 const DIRECT_VOLUME_RE = /\.(nii|nii\.gz|mgh|mgz|nrrd|mha|mhd|nhdr|head|v)$/i
 
-async function handleDrop(filesPromise: Promise<File[]>): Promise<void> {
+async function handleDrop(filesPromise: Promise<File[]>, signal?: AbortSignal): Promise<void> {
   if (isCleanedUp) return
   spin(true)
   try {
     setStatus('Reading dropped files…')
     const files = await filesPromise
+    signal?.throwIfAborted()
     if (files.length === 0) {
       setStatus('Drop contained no readable files.')
       return
@@ -328,6 +354,7 @@ async function handleDrop(filesPromise: Promise<File[]>): Promise<void> {
     if (sidecar) {
       try { dropMeta = JSON.parse(await sidecar.text()) } catch { setStatus(`Ignoring invalid JSON sidecar: ${sidecar.name}`) }
     }
+    signal?.throwIfAborted()
     ;({ bind: bidsMeta, staged: stagedSidecar } = bindSidecar(dropMeta, stagedSidecar, files))
     if (files.every((file) => file.name.toLowerCase().endsWith('.json'))) {
       setStatus(sidecar && dropMeta ? `Sidecar staged: ${sidecar.name}. Choose its image next.` : 'No valid JSON sidecar found.')
@@ -337,12 +364,12 @@ async function handleDrop(filesPromise: Promise<File[]>): Promise<void> {
     dicomPick.classList.add('hidden')
     // Fast-path a single obvious volume file straight to segmentation.
     if (files.length === 1 && DIRECT_VOLUME_RE.test(files[0].name)) {
-      await runSegment(files[0])
+      await loadSource(files[0], signal)
       return
     }
     setStatus(`Converting ${files.length} file(s) with dcm2niix…`)
     const t0 = performance.now()
-    const niftiFiles = await readImageFiles(files, { directVolume: DIRECT_VOLUME_RE })
+    const niftiFiles = await readImageFiles(files, { directVolume: DIRECT_VOLUME_RE, signal })
     const ms = Math.round(performance.now() - t0)
     if (niftiFiles.length === 0) {
       setStatus('No NIfTI output produced. Are these DICOM images?')
@@ -361,7 +388,7 @@ async function handleDrop(filesPromise: Promise<File[]>): Promise<void> {
       dicomPick.classList.remove('hidden')
       setStatus(`dcm2niix: ${niftiFiles.length} NIfTI in ${ms} ms — pick one.`)
     }
-    await runSegment(niftiFiles[0])
+    await loadSource(niftiFiles[0], signal)
   } finally {
     spin(false)
   }
@@ -394,11 +421,31 @@ async function init(): Promise<void> {
     setStatus(noWebGpu)
     return
   }
-  // Load + segment the pinned external sample subject.
-  bidsMeta = await fetchJson(`${ASSET_BASE_URL}t1_crop.json`)
-  const t1 = await fetchFile(T1_URL, 't1_crop.nii.gz')
-  await runSegment(t1)
+  viewerReady = true
+  exampleControl.setDisabled(false)
+  setStatus('Choose an example or open a brain scan.')
 }
+
+const exampleControl = renderExampleSelector({
+  examples,
+  onStatus: setStatus,
+  onLoad: async (_example, { fetchFiles, signal, assertCurrent }) => {
+    const files = await fetchFiles()
+    assertCurrent()
+    const job = pending.then(async () => {
+      assertCurrent()
+      await handleDrop(Promise.resolve(files), signal)
+    })
+    pending = job.catch(() => {})
+    await job
+  },
+})
+$('exampleControl').append(exampleControl.root)
+exampleControl.setDisabled(true)
+$('runButton').addEventListener('click', () => {
+  const file = sourceFile
+  if (file) enqueue(() => runSegment(file))
+}, ac)
 
 // --- Wiring ---
 document.addEventListener('dragover', (e) => e.preventDefault(), ac)
@@ -424,7 +471,7 @@ dicomPick.addEventListener(
   'change',
   () => {
     const file = dcmConverted[Number(dicomPick.value)]
-    if (file) enqueue(() => runSegment(file))
+    if (file) enqueue(() => loadSource(file))
   },
   ac,
 )
@@ -465,6 +512,7 @@ ovlSlider.addEventListener(
 
 // --- Cleanup (HMR / tab close) ---
 async function cleanup(): Promise<void> {
+  exampleControl.destroy()
   if (isCleanedUp) return
   isCleanedUp = true
   listeners.abort()

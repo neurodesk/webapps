@@ -1,0 +1,15 @@
+[
+  {
+    "id": "body-mri",
+    "label": "Body MRI (TotalSegmentator s0175)",
+    "description": "An in-vivo MRI spanning head to upper thigh, previously checked with the MuscleMap model. It does not include the lower legs. Dataset license: CC BY-NC-SA 2.0.",
+    "expectedResult": "Downloadable muscle labels and regional measurements for the anatomy covered by the scan.",
+    "files": [
+      {
+        "role": "image",
+        "name": "body_mri_s0175.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/musclemap/body-mri/body_mri_s0175.nii.gz"
+      }
+    ]
+  }
+]

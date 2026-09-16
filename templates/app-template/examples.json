@@ -2,6 +2,14 @@
   {
     "id": "t1",
     "label": "T1-weighted head MRI",
-    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+    "description": "A T1-weighted head MRI for the scaffold’s pass-through demonstration.",
+    "expectedResult": "Prepare and download an unchanged copy; replace this demonstration with the app’s scientific method.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+      }
+    ]
   }
 ]

@@ -1,3 +1,4 @@
+import { renderExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
 // Easy MP2RAGE T1 Map, in-browser controller.
 // Parses NIfTI in JS (nifti.js), runs the WASM core in a Web Worker, previews
 // with a self-contained canvas viewer, and offers client-side downloads. Your
@@ -1563,3 +1564,34 @@ refreshRunState();
 log('Ready. Drop files or DICOM folders, pick a task, and Compute. All image processing runs locally, your images never leave the tab.');
 
 document.getElementById('aboutButton').addEventListener('click', () => document.getElementById('aboutDialog').showModal());
+
+async function setupExamples() {
+  const response = await fetch(new URL('examples.json', document.baseURI));
+  if (!response.ok) throw new Error('Could not load the example catalog.');
+  const examples = await response.json();
+  const selector = renderExampleSelector({
+    examples,
+    onLoad: async (example, { fetchFiles, assertCurrent }) => {
+      if (running) throw new Error('Stop processing before loading an example.');
+      const files = await fetchFiles();
+      assertCurrent();
+      setAppMode('single');
+      state.files = [];
+      state.jsons = [];
+      await addFiles(files);
+      assertCurrent();
+      if (state.files.length !== files.length) throw new Error('Some example images could not be read.');
+      for (const [prefix, parameters] of Object.entries(example.parameters)) {
+        for (const [name, value] of Object.entries(parameters)) {
+          $(`#${prefix}_${name}`).value = value;
+        }
+      }
+      $('#paramSource').value = 'manual';
+      $('#paramSrcNote').textContent = 'Matched synthetic example acquisition';
+      refreshRunState();
+    },
+    onStatus: message => log(message),
+  });
+  $('.modeToggle').before(selector.root);
+}
+void setupExamples().catch(error => log(error.message));

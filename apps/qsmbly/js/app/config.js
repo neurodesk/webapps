@@ -13,7 +13,7 @@ const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof Wor
 const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version (keep in sync with package.json, Cargo.toml, and git tags)
-export const VERSION = '0.23.0';
+export const VERSION = '0.25.20260916';
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
 export const QSM_RS_VERSION = '0.23.0';
@@ -329,47 +329,6 @@ export const TFI_DEFAULTS = {
   tol: _TFI.tol,
 };
 
-// Example data stays on immutable OSF object URLs and is fetched on demand.
-export const EXAMPLE_DATA = {
-  baseUrl: null,
-  files: [
-    'sub-1_echo-1_part-mag_MEGRE.nii.gz',
-    'sub-1_echo-1_part-mag_MEGRE.json',
-    'sub-1_echo-1_part-phase_MEGRE.nii.gz',
-    'sub-1_echo-1_part-phase_MEGRE.json',
-    'sub-1_echo-2_part-mag_MEGRE.nii.gz',
-    'sub-1_echo-2_part-mag_MEGRE.json',
-    'sub-1_echo-2_part-phase_MEGRE.nii.gz',
-    'sub-1_echo-2_part-phase_MEGRE.json',
-    'sub-1_echo-3_part-mag_MEGRE.nii.gz',
-    'sub-1_echo-3_part-mag_MEGRE.json',
-    'sub-1_echo-3_part-phase_MEGRE.nii.gz',
-    'sub-1_echo-3_part-phase_MEGRE.json',
-    'sub-1_echo-4_part-mag_MEGRE.nii.gz',
-    'sub-1_echo-4_part-mag_MEGRE.json',
-    'sub-1_echo-4_part-phase_MEGRE.nii.gz',
-    'sub-1_echo-4_part-phase_MEGRE.json',
-  ],
-  urls: {
-    'sub-1_echo-1_part-mag_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031592f1ede34d5380d7bf',
-    'sub-1_echo-1_part-mag_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c',
-    'sub-1_echo-1_part-phase_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594d9869f43beec7017',
-    'sub-1_echo-1_part-phase_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf827',
-    'sub-1_echo-2_part-mag_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594f1ede34d5380d7c2',
-    'sub-1_echo-2_part-mag_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d469675bd488fdf828',
-    'sub-1_echo-2_part-phase_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031591ca0aa1330880d636',
-    'sub-1_echo-2_part-phase_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf825',
-    'sub-1_echo-3_part-mag_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4',
-    'sub-1_echo-3_part-mag_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d37bd2b1503380d819',
-    'sub-1_echo-3_part-phase_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315917bd2b1503380d7d1',
-    'sub-1_echo-3_part-phase_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522',
-    'sub-1_echo-4_part-mag_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a2',
-    'sub-1_echo-4_part-mag_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838',
-    'sub-1_echo-4_part-phase_MEGRE.json': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a1',
-    'sub-1_echo-4_part-phase_MEGRE.nii.gz': 'https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0'
-  }
-};
-
 // Stage display names for UI
 export const STAGE_DISPLAY_NAMES = {
   'magnitude': 'Magnitude',
@@ -534,7 +493,6 @@ const QSMConfig = {
   WHQSM_DEFAULTS,
   HDQSM_DEFAULTS,
   MEDI_DEFAULTS,
-  EXAMPLE_DATA,
   STAGE_DISPLAY_NAMES,
   PIPELINE_METHODS,
   PIPELINE_DEFAULTS,

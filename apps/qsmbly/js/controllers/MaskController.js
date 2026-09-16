@@ -440,19 +440,18 @@ export class MaskController {
 
     // Call WASM bias correction via worker
     return new Promise((resolve, reject) => {
-      const messageHandler = (event) => {
-        if (event.data.type === 'biasCorrection') {
-          worker.removeEventListener('message', messageHandler);
-          if (event.data.error) {
-            reject(new Error(event.data.error));
+      const unsubscribe = worker.subscribe((message) => {
+        if (message.type === 'biasCorrection') {
+          unsubscribe();
+          if (message.error) {
+            reject(new Error(message.error));
           } else {
-            resolve(new Float64Array(event.data.result));
+            resolve(new Float64Array(message.result));
           }
         }
-      };
+      });
 
-      worker.addEventListener('message', messageHandler);
-      worker.postMessage({
+      worker.send({
         type: 'biasCorrection',
         data: {
           magnitude: magnitudeData,
@@ -461,7 +460,7 @@ export class MaskController {
           sigma_mm: 7.0,
           nbox: 15
         }
-      });
+      }, []);
     });
   }
 
@@ -511,19 +510,18 @@ export class MaskController {
     this.setProgress(0.25, 'Computing quality map...');
 
     return new Promise((resolve, reject) => {
-      const messageHandler = (event) => {
-        if (event.data.type === 'voxelQuality') {
-          worker.removeEventListener('message', messageHandler);
-          if (event.data.error) {
-            reject(new Error(event.data.error));
+      const unsubscribe = worker.subscribe((message) => {
+        if (message.type === 'voxelQuality') {
+          unsubscribe();
+          if (message.error) {
+            reject(new Error(message.error));
           } else {
-            resolve(new Float64Array(event.data.result));
+            resolve(new Float64Array(message.result));
           }
         }
-      };
+      });
 
-      worker.addEventListener('message', messageHandler);
-      worker.postMessage({
+      worker.send({
         type: 'voxelQuality',
         data: {
           phase: phase1,
@@ -533,7 +531,7 @@ export class MaskController {
           mask: mask,
           nx, ny, nz
         }
-      });
+      }, []);
     });
   }
 
@@ -1061,8 +1059,8 @@ export class MaskController {
       const worker = this.getWorker();
 
       // Set up handler for BET messages
-      const betHandler = (e) => {
-        const { type, ...data } = e.data;
+      const unsubscribe = worker.subscribe((message) => {
+        const { type, ...data } = message;
 
         switch (type) {
           case 'betProgress':
@@ -1072,21 +1070,20 @@ export class MaskController {
             this.updateOutput(data.message);
             break;
           case 'betComplete':
-            worker.removeEventListener('message', betHandler);
+            unsubscribe();
             this.handleBETComplete(data, onComplete);
             break;
           case 'betError':
-            worker.removeEventListener('message', betHandler);
+            unsubscribe();
             this.updateOutput(`BET Error: ${data.message}`);
             this.setProgress(0, 'BET Failed');
             if (onComplete) onComplete({ error: data.message });
             break;
         }
-      };
-      worker.addEventListener('message', betHandler);
+      });
 
       // Send BET request to worker (pure WASM, no Python code needed)
-      worker.postMessage({
+      worker.send({
         type: 'runBET',
         data: {
           magnitudeBuffer: magnitudeNifti,
@@ -1095,7 +1092,7 @@ export class MaskController {
           iterations: betSettings.iterations,
           subdivisions: betSettings.subdivisions
         }
-      });
+      }, []);
 
     } catch (error) {
       this.updateOutput(`BET Error: ${error.message}`);

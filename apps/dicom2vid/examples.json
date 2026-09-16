@@ -1,0 +1,15 @@
+[
+  {
+    "id": "t1-brain",
+    "label": "T1-weighted brain MRI",
+    "description": "An anatomical brain volume for previewing axial, coronal and sagittal slice videos.",
+    "expectedResult": "A downloadable video of the selected brain slices.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+      }
+    ]
+  }
+]

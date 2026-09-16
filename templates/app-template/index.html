@@ -23,12 +23,7 @@
             <span>Drop NIfTI or DICOM files or folder</span>
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
-          <div class="nd-field">
-            <label for="exampleSelect">Example</label>
-            <select id="exampleSelect" data-neurodesk-example>
-              <option value="">Choose an example…</option>
-            </select>
-          </div>
+          <div id="exampleControl"></div>
         </div>
       </details>
 
@@ -51,7 +46,7 @@
               <label class="nd-check"><input id="option" type="checkbox" checked /> Example option</label>
             </div>
           </details>
-          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run processing</button>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Prepare input copy</button>
         </div>
       </details>
 

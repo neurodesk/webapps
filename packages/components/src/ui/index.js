@@ -15,3 +15,4 @@ export * from './renderConsole.js';
 export * from './renderInfoDialog.js';
 export * from './renderFileField.js';
 export * from './bindInfoTooltips.js';
+export * from './renderExampleSelector.js';

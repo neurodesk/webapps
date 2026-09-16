@@ -23,10 +23,12 @@ test("app boots", async ({ page }) => {
   await expect(page.locator(".nd-viewer-panel")).toHaveCount(3);
 });
 
-test("defaults load and registration reaches the resliced panel", async ({ page }) => {
+test("selected examples load and registration reaches the resliced panel", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#movingExample")).toHaveValue(/t1_crop\.nii\.gz$/);
-  await expect(page.locator("#stationaryExample")).toHaveValue(/MNI152_T1_1mm\.nii\.gz$/);
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   await expect(page.locator("#movingInfo")).toHaveText("t1_crop.nii.gz");
   await expect(page.locator("#stationaryInfo")).toHaveText("MNI152_T1_1mm.nii.gz");
   await expect(page.locator("#statusText")).toHaveText("Registration complete", { timeout: 60_000 });
@@ -44,6 +46,10 @@ test("defaults load and registration reaches the resliced panel", async ({ page 
 
 test("cancellation keeps controls locked until registration exits", async ({ page }) => {
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   const cancel = page.locator("#cancelButton");
   await expect(cancel).toBeVisible({ timeout: 60_000 });
   const stayedLocked = await page.evaluate(() => {
@@ -56,31 +62,31 @@ test("cancellation keeps controls locked until registration exits", async ({ pag
 });
 
 test("a failed replacement cannot register the previous moving image", async ({ page }) => {
-  await page.route("**/CT_Philips.nii.gz", (route) => route.fulfill({ body: "not a NIfTI image" }));
   await page.goto("/");
-  await expect(page.locator("#statusText")).toHaveText("Registration complete", { timeout: 60_000 });
-  await page.locator("#movingExample").selectOption({ label: "CT_Philips" });
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await page.locator("#movingInput").setInputFiles({ name: "broken.nii", mimeType: "application/octet-stream", buffer: Buffer.from("not a NIfTI image") });
   await expect(page.locator("#movingInfo")).toBeHidden();
   await expect(page.locator("#runButton")).toBeDisabled();
 });
 
-test("a failed preset download keeps the loaded selection", async ({ page }) => {
-  await page.route("**/CT_Philips.nii.gz", (route) => route.fulfill({ status: 503 }));
+test("a failed example download keeps the loaded pair and can retry", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#statusText")).toHaveText("Registration complete", { timeout: 60_000 });
-  const select = page.locator("#movingExample");
-  const previous = await select.inputValue();
-  await select.selectOption({ label: "CT_Philips" });
-  await expect(page.locator("#statusText")).toHaveText("Example download failed (503).");
-  await expect(select).toHaveValue(previous);
+  const select = page.locator("[data-neurodesk-example]");
+  await select.selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await page.route("**/t1_crop.nii.gz", route => route.fulfill({ status: 503 }));
+  await select.selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
+  await expect(select).toHaveValue("");
+  await expect(select).toBeEnabled();
   await expect(page.locator("#movingInfo")).toHaveText("t1_crop.nii.gz");
 });
 
 test("image controls stay disabled without WebGPU", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { value: undefined }));
   await page.goto("/");
-  await expect(page.locator("#movingExample")).toBeDisabled();
-  await expect(page.locator("#stationaryExample")).toBeDisabled();
+  await expect(page.locator("[data-neurodesk-example]")).toBeDisabled();
   await expect(page.locator("#statusText")).toContainText("WebGPU is unavailable");
 });
 

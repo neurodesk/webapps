@@ -121,3 +121,7 @@ Common issues it catches:
 - Production deploys build from the latest release tag while the workflow file comes from `main`; asset verification must tolerate older release tags by validating ONNX files and template `.nii.gz` files that exist in the checked-out build, without hard-coding newer template paths.
 
 <!-- SPECKIT END -->
+
+## Examples
+
+The example uses the pinned T2 spinal-cord reference case and preserves the selected SCT task. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.

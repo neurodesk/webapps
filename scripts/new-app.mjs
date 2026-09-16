@@ -213,8 +213,8 @@ const examples = JSON.parse(await readFile(join(dest, 'examples.json'), 'utf8'))
 // Every generated app participates in desktop packaging and offline validation.
 for (const [filename, value] of [
   ['standalone.json', { desktop: true, profile: 'interactive', assets: [], downloads: [], containers: [] }],
-  ['offline-assets.sources.json', examples.map(({ url }) => ({ url, kind: 'example' }))],
-  ['offline-assets.lock.json', examples.map(({ url }) => url)],
+  ['offline-assets.sources.json', examples.flatMap(example => example.files.map(({ url }) => ({ url, kind: 'example' })))],
+  ['offline-assets.lock.json', examples.flatMap(example => example.files.map(({ url }) => url))],
 ]) {
   const path = join(root, 'registry', filename);
   const catalog = JSON.parse(await readFile(path, 'utf8'));

@@ -1,3 +1,5 @@
+import examples from '../examples.json';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import { createElement } from '@neurodesk/webapp-components/core';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -6,7 +8,6 @@ import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
 import { zip } from 'fflate';
 import { templateAsset } from '../../../packages/syncro/src/assets.js';
-import { fetchTutorial } from '../../../packages/syncro/src/tutorials.js';
 import { configureNativeDownloads } from './native-release.js';
 import './styles.css';
 
@@ -123,7 +124,6 @@ let busy = false;
 let timer;
 let started;
 let importAbort;
-let tutorialAbort;
 let viewRevision = 0;
 let viewTask = Promise.resolve();
 let zipTask;
@@ -136,8 +136,9 @@ function setStatus(message, error = false) {
 
 function setBusy(value) {
   busy = value;
+  exampleControl.setDisabled(value);
   for (const field of Object.values(fileFields)) field.input.disabled = value;
-  for (const id of ['tutorial', 'ct', 'keepSynth', 'synthsrBackend', 'brainExtractor', 'normalization']) $(id).disabled = value;
+  for (const id of ['ct', 'keepSynth', 'synthsrBackend', 'brainExtractor', 'normalization']) $(id).disabled = value;
   $('clearLesion').disabled = value;
   $('clearPathological').disabled = value;
   $('runButton').disabled = value || !inputs.primary;
@@ -313,6 +314,7 @@ function commitInput(slot, { file, volume }) {
 }
 
 async function importScans(slot, filesPromise) {
+  exampleControl.cancel();
   if (busy) return;
   const controller = new AbortController();
   importAbort = controller;
@@ -349,55 +351,42 @@ for (const [slot, field] of Object.entries(fileFields)) {
   field.onFiles((files) => importScans(slot, files));
 }
 
-$('tutorial').onchange = async () => {
-  const id = $('tutorial').value;
-  tutorialAbort?.abort();
-  if (!id) return;
-  const controller = new AbortController();
-  tutorialAbort = controller;
-  setBusy(true);
-  try {
-    const tutorial = await fetchTutorial(id, {
-      signal: controller.signal,
-      onProgress(value, message) {
-        $('progress').value = value;
-        setStatus(message);
-      },
-    });
-    const asFile = (item) => item ? new File([item.bytes], item.name) : null;
-    const inspected = {};
-    for (const slot of ['primary', 'lesion', 'pathological']) {
-      const file = asFile(tutorial[slot]);
-      if (file) inspected[slot] = await inspectInput(file);
-    }
-    controller.signal.throwIfAborted();
-    inputs = { primary: null, lesion: null, pathological: null };
-    for (const [slot, field] of Object.entries(fileFields)) {
-      field.setHasFiles(false);
-      field.setText(slot === 'primary' ? 'Drop primary NIfTI or DICOM files' : slot === 'lesion' ? 'Drop a binary lesion map' : 'Drop pathological modality files');
-      $(`${slot}Info`).hidden = true;
-    }
-    $('clearLesion').hidden = true;
-    $('clearPathological').hidden = true;
-    for (const slot of ['primary', 'lesion', 'pathological']) {
-      if (inspected[slot]) commitInput(slot, inspected[slot]);
-    }
-    $('ct').checked = tutorial.ct;
-    $('keepSynth').checked = tutorial.keep_synth;
-    $('tutorial').value = '';
-    rebuildViewItems('input:primary');
-    $('progress').value = 0;
-    setStatus('Tutorial ready · review the inputs, then normalize to MNI');
-  } catch (error) {
-    $('tutorial').value = '';
-    if (error.name !== 'AbortError') setStatus(error.message, true);
-  } finally {
-    if (tutorialAbort === controller) {
-      tutorialAbort = null;
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (example, { fetchFiles, assertCurrent }) => {
+    const files = await fetchFiles();
+    assertCurrent();
+    setBusy(true);
+    try {
+      const inspected = {};
+      for (const [index, file] of files.entries()) {
+        inspected[example.files[index].role] = await inspectInput(file);
+        assertCurrent();
+      }
+      inputs = { primary: null, lesion: null, pathological: null };
+      for (const [slot, field] of Object.entries(fileFields)) {
+        field.setHasFiles(false);
+        field.setText(slot === 'primary' ? 'Drop primary NIfTI or DICOM files' : slot === 'lesion' ? 'Drop a binary lesion map' : 'Drop pathological modality files');
+        $(`${slot}Info`).hidden = true;
+      }
+      $('clearLesion').hidden = true;
+      $('clearPathological').hidden = true;
+      for (const slot of ['primary', 'lesion', 'pathological']) {
+        if (inspected[slot]) commitInput(slot, inspected[slot]);
+      }
+      $('ct').checked = example.id === 'ct-only';
+      rebuildViewItems('input:primary');
+      $('progress').value = 0;
+    } finally {
       setBusy(false);
     }
-  }
-};
+  },
+  onStatus: setStatus,
+});
+exampleControl.select.id = 'tutorial';
+exampleControl.root.querySelector('label').htmlFor = 'tutorial';
+$('exampleControl').replaceWith(exampleControl.root);
+
 
 function clearOptionalInput(slot) {
   inputs[slot] = null;
@@ -501,8 +490,7 @@ $('runButton').onclick = () => {
 $('cancel').onclick = () => {
   importAbort?.abort();
   importAbort = null;
-  tutorialAbort?.abort();
-  tutorialAbort = null;
+  exampleControl.cancel();
   $('tutorial').value = '';
   setBusy(false);
   setStatus('Processing cancelled');
@@ -543,7 +531,7 @@ $('download').onclick = () => {
 rebuildViewItems();
 window.addEventListener('pagehide', () => {
   importAbort?.abort();
-  tutorialAbort?.abort();
+  exampleControl.cancel();
   worker?.terminate();
   zipTask?.();
   clearInterval(timer);

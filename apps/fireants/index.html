@@ -10,10 +10,6 @@
       <details class="nd-sidebar-section" id="inputSection" open>
         <summary class="nd-section-title">Images</summary>
         <div class="nd-section-content">
-          <div class="nd-field">
-            <label for="movingExample">Moving image</label>
-            <select id="movingExample"><option value="">Choose an example…</option></select>
-          </div>
           <label class="nd-file" id="movingDropZone">
             <input id="movingInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose moving NIfTI or DICOM files" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -24,10 +20,6 @@
           <div id="movingSeriesField" class="nd-field" hidden>
             <label for="movingSeries">Moving series</label>
             <select id="movingSeries"></select>
-          </div>
-          <div class="nd-field">
-            <label for="stationaryExample">Stationary image</label>
-            <select id="stationaryExample"><option value="">Choose a template…</option></select>
           </div>
           <label class="nd-file" id="stationaryDropZone">
             <input id="stationaryInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose stationary NIfTI or DICOM files" />

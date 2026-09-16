@@ -1,0 +1,54 @@
+[
+  {
+    "id": "flair",
+    "label": "FLAIR brain MRI",
+    "description": "FLAIR MRI supplied with the reference SynthSR implementation.",
+    "expectedResult": "A synthetic 1 mm T1-weighted brain image.",
+    "files": [
+      {
+        "role": "image",
+        "name": "FLAIR.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/synthsr/flair/FLAIR.nii.gz"
+      }
+    ]
+  },
+  {
+    "id": "t1-head",
+    "label": "T1-weighted head MRI",
+    "description": "Structural head MRI for brain image synthesis.",
+    "expectedResult": "A synthetic 1 mm T1-weighted brain image.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+      }
+    ]
+  },
+  {
+    "id": "t2-head",
+    "label": "T2-weighted head MRI",
+    "description": "T2-weighted MRI demonstrates synthesis across MR contrasts.",
+    "expectedResult": "A synthetic 1 mm T1-weighted brain image.",
+    "files": [
+      {
+        "role": "image",
+        "name": "chris_t2.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+      }
+    ]
+  },
+  {
+    "id": "brain-ct",
+    "label": "Brain CT",
+    "description": "Head CT in Hounsfield units; the input modality is detected automatically.",
+    "expectedResult": "A synthetic T1-weighted brain image from CT.",
+    "files": [
+      {
+        "role": "image",
+        "name": "CT_Philips.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/CT_Philips.nii.gz"
+      }
+    ]
+  }
+]

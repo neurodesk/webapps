@@ -1,4 +1,4 @@
-import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -63,7 +63,7 @@ class SeedSegApp {
     // Controllers
     this.fileIOController = new SeedSegInputSet({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file) => this.onFileLoaded(file)
+      onFileLoaded: (file) => (this.inputReady = this.onFileLoaded(file))
     });
 
     this.dicomController = new SeedSegDicomInput({
@@ -102,6 +102,7 @@ class SeedSegApp {
     // Setup
     await this.setupViewer();
     this.setupEventListeners();
+    await this.setupExamples();
     this.setupInfoTooltips();
 
     // Log threading support
@@ -124,6 +125,25 @@ class SeedSegApp {
   }
 
   // ==================== Event Listeners ====================
+
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        this._buckets = { t1w: [], other: [] };
+        await this._handleUnifiedFiles(files, { assumeT1w: true });
+        await this.inputReady;
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('unifiedFiles');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
+  }
 
   setupEventListeners() {
     // Unified file input
@@ -295,7 +315,7 @@ class SeedSegApp {
     });
   }
 
-  _handleUnifiedFiles(files) {
+  _handleUnifiedFiles(files, options = {}) {
     const niftiFiles = [];
     const dicomFiles = [];
 
@@ -319,14 +339,14 @@ class SeedSegApp {
     }
 
     if (niftiFiles.length > 0) {
-      this._addFilesToBuckets(niftiFiles);
+      this._addFilesToBuckets(niftiFiles, options);
     }
   }
 
   _onDicomConversionComplete(niftiFiles) {
     this._showDicomStatus(false);
     if (!niftiFiles || niftiFiles.length === 0) return;
-    this._addFilesToBuckets(niftiFiles, { fromDicom: true });
+    this._addFilesToBuckets(niftiFiles, { assumeT1w: true });
   }
 
   _showDicomStatus(show) {
@@ -334,14 +354,14 @@ class SeedSegApp {
     if (el) el.style.display = show ? 'flex' : 'none';
   }
 
-  _addFilesToBuckets(files, { fromDicom = false } = {}) {
-    let t1wAssigned = fromDicom ? this._buckets.t1w.length > 0 : true;
+  _addFilesToBuckets(files, { assumeT1w = false } = {}) {
+    let t1wAssigned = assumeT1w ? this._buckets.t1w.length > 0 : true;
     for (const file of files) {
       if (/t1/i.test(file.name)) {
         this._buckets.t1w.push(file);
         t1wAssigned = true;
-      } else if (fromDicom && !t1wAssigned) {
-        // First file from DICOM conversion defaults to T1w
+      } else if (assumeT1w && !t1wAssigned) {
+        // Converted scans and declared T1 examples assign their first image to T1w.
         this._buckets.t1w.push(file);
         t1wAssigned = true;
       } else {

@@ -33,6 +33,27 @@ async function loadSurface(page) {
   await openOutputPanels(page);
 }
 
+test('hosted cortical example supports landmark selection and download', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.locator('[data-neurodesk-example]').selectOption('left-cortex');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120_000 });
+  await expect(page.locator('#surfaceList')).toContainText('lh.pial');
+  await page.locator('#modePoints').click();
+  const canvas = await page.locator('#gl').boundingBox();
+  await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await openOutputPanels(page);
+  await expect(page.locator('#exportPoints')).toBeEnabled();
+  const download = page.waitForEvent('download');
+  await page.locator('#exportPoints').click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/\.points\.json$/);
+  const chunks = [];
+  for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+  const points = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  expect(points.points).toHaveLength(1);
+  expect(points.points[0].xyz.every(Number.isFinite)).toBe(true);
+});
+
 test('the shell mounts with the shared workspace and a link back to the catalog', async ({ page }) => {
   await expect(page.locator('#controls')).toBeVisible();
   // #gl, not "#viewer canvas": the colour legend puts a second canvas in there.

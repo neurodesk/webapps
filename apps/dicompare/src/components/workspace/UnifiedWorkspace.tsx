@@ -29,6 +29,7 @@ import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
 import { useSessionPersistence } from '../../contexts/SessionPersistenceContext';
+import ExampleInput from './ExampleInput';
 
 const UnifiedWorkspace: React.FC = () => {
   const {
@@ -388,6 +389,7 @@ const UnifiedWorkspace: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <ExampleInput />
       {/* Processing error */}
       {processingError && (
         <div className="mb-4 p-3 bg-status-error-bg border border-status-error/30 text-status-error rounded flex items-start">

@@ -1,6 +1,6 @@
 {
   "name": "brain-extraction",
-  "version": "0.1.20260915",
+  "version": "0.1.20260916",
   "private": true,
   "type": "module",
   "scripts": {

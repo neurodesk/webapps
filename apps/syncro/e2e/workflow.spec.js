@@ -89,7 +89,7 @@ test('failed tutorial loading returns the selector to its neutral action',async(
  await page.route('https://huggingface.co/datasets/neurodeskorg/webapps/**',route=>route.abort());
  await page.goto('./');
  await page.locator('#tutorial').selectOption('trace-only');
- await expect(page.locator('#statusText')).toContainText('Could not download');
+ await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state','error');
  await expect(page.locator('#tutorial')).toHaveValue('');
  await expect(page.locator('#runButton')).toBeDisabled();
 });

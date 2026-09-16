@@ -65,18 +65,19 @@ for (const width of [390, 1440]) {
 }
 
 test('shared examples load through the image workflow and preserve input on failure', async ({ page }) => {
-  const { NIFTI_EXAMPLES } = await import('@neurodesk/webapp-components/example-images');
+  const { readFile } = await import('node:fs/promises');
+  const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
   const { fileURLToPath } = await import('node:url');
   const fixture = fileURLToPath(new URL('../test/fixtures/validation.nii.gz', import.meta.url));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
-  await expect(page.locator('#exampleSelect option')).toHaveText(['Choose an example…', 'FLAIR', ...NIFTI_EXAMPLES.filter(example => !['CT_Abdo','CT_Electrodes','Iguana','spmMotor'].includes(example.id)).map(example => example.id)]);
+  await expect(page.locator('#exampleSelect option')).toHaveText(['Choose an example…', ...examples.map(example => example.label)]);
   await expect(page.locator('#exampleBtn')).toHaveCount(0);
-  for (const id of ['chris_t1', 'CT_Philips']) {
-    const example = NIFTI_EXAMPLES.find(example => example.id === id);
-    await page.route(example.url, route => route.fulfill({ path: fixture, contentType: 'application/octet-stream' }));
+  for (const id of ['t1-head', 'brain-ct']) {
+    const example = examples.find(example => example.id === id);
+    await page.route(example.files[0].url, route => route.fulfill({ path: fixture, contentType: 'application/octet-stream' }));
     await page.locator('#exampleSelect').selectOption(id);
-    await expect(page.locator('#fileInfo')).toContainText(`${id}.nii.gz`);
+    await expect(page.locator('#fileInfo')).toContainText(example.files[0].name);
     await expect(page.locator('#processButton')).toBeEnabled();
     await expect(page.locator('#modality')).toHaveValue('mr'); // Both responses contain the same positive fixture, regardless of filename.
     await expect(page.locator('#outputTab')).toBeHidden();
@@ -84,12 +85,12 @@ test('shared examples load through the image workflow and preserve input on fail
   await page.locator('#synthesisSection > summary').click();
   await expect(page.locator('#modality')).toBeHidden();
   await page.locator('#synthesisSection > summary').click();
-  await expect(page.locator('#exampleSelect')).toHaveValue('CT_Philips');
-  const failedExample = NIFTI_EXAMPLES.find(example => example.id === 'mni152');
-  await page.route(failedExample.url, route => route.fulfill({ status: 503, body: 'Unavailable' }));
-  await page.locator('#exampleSelect').selectOption('mni152');
-  await expect(page.locator('#statusText')).toContainText('Example download failed');
-  await expect(page.locator('#exampleSelect')).toHaveValue('CT_Philips');
+  await expect(page.locator('#exampleSelect')).toHaveValue('');
+  const failedExample = examples.find(example => example.id === 't2-head');
+  await page.route(failedExample.files[0].url, route => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.locator('#exampleSelect').selectOption('t2-head');
+  await expect(page.locator('#statusText')).toContainText('Could not download');
+  await expect(page.locator('#exampleSelect')).toHaveValue('');
   await expect(page.locator('#fileInfo')).toContainText('CT_Philips.nii.gz');
   await expect(page.locator('#modality')).toHaveValue('mr');
   await expect(page.locator('#processButton')).toBeEnabled();

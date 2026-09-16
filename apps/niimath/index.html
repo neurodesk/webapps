@@ -20,6 +20,7 @@
         <span>Drop NIfTI or DICOM files or folder</span>
       </label>
       <label class="nd-btn nd-btn-secondary nd-btn-sm nd-btn-block">Choose DICOM folder<input id="dicomInput" type="file" data-neurodesk-input="image" webkitdirectory multiple hidden /></label>
+      <div id="exampleControl"></div>
       <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
       </div>
       </details>
@@ -50,7 +51,7 @@
       <details class="control-section nd-sidebar-section" id="outputSection">
       <summary class="nd-section-title" id="outputHeading">3. Output</summary>
       <div class="nd-section-content">
-      <p>Download the processed image, or reset to start again with the example image.</p>
+      <p>Download the processed image, or reset to the original image.</p>
       <button id="saveButton">Save processed image</button>
       <button id="resetButton">Reset</button>
       </div>
@@ -63,7 +64,7 @@
       <canvas id="gl"></canvas>
     </main>
     <footer>
-        <details class="nd-sidebar-section"><summary class="nd-section-title">Example images</summary><div id="images"></div></details>
+
 </footer>
     <script type="module" src="./main.js"></script>
   </body>

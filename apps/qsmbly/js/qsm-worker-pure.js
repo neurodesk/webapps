@@ -12,7 +12,7 @@ import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js
 import { computeFieldMap } from './worker/utils/FieldMapping.js';
 import { buildConfigJson } from './modules/ConfigBridge.js';
 import * as QSMConfig from './app/config.js';
-import { createWorkerEmitter, installWorkerRouter } from './vendor/webapp-components/src/worker/index.js';
+import { createWorkerEmitter, installWorkerRouter } from '../vendor/webapp-components/src/worker/index.js';
 
 let wasmModule = null;
 const workerMessages = createWorkerEmitter(self);

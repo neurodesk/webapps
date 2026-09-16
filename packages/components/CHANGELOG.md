@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.3.0
+
+### Minor Changes
+
+- Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 ## 0.2.2
 
 ### Patch Changes

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "synthetic-signal-voids",
+    "label": "Synthetic prostate signal voids (software demonstration)",
+    "description": "An idealized T1 signal phantom with three cylindrical signal voids and surrounding signal loss. This software demonstration is not patient data and does not validate marker detection or clinical accuracy. Model detections may differ from the three simulated voids.",
+    "expectedResult": "Run the selected models, inspect their probability and consensus maps, and download the result. The number and position of predicted markers are not validated for this synthetic image.",
+    "files": [
+      {
+        "role": "t1",
+        "name": "synthetic_prostate_signal_voids.nii",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/seedseg/synthetic-signal-voids/synthetic_prostate_signal_voids.nii",
+        "sha256": "9a18fb7089db325bda31a51740df0f4043cb7f71e8689b8adb4e571e3d066c8f"
+      }
+    ],
+    "provenance": {
+      "generator": "prostate-signal-voids-v1",
+      "source": "web/js/prostate-example.js"
+    }
+  }
+]

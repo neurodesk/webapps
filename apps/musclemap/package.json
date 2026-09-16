@@ -1,6 +1,6 @@
 {
   "name": "musclemap",
-  "version": "1.4.20260915",
+  "version": "1.4.20260916",
   "releaseSeries": "1.4",
   "private": true,
   "type": "module",
@@ -26,7 +26,8 @@
     "pretest:e2e": "pnpm vendor && pnpm runtime-support && bash web/setup.sh",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
-    "test:python": "python3 -m pytest tests/ -q"
+    "test:python": "python3 -m pytest tests/ -q",
+    "test:examples": "node --test scripts/test_examples.mjs"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*"

@@ -32,6 +32,25 @@ async function readDownload(download) {
   return Buffer.concat(chunks);
 }
 
+test('hosted cell microscopy example streams and exports image values', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('./');
+  await page.locator('[data-neurodesk-example]').selectOption('microscopy-stack');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120_000 });
+  await openTools(page);
+  await expect(page.locator('#downloadNifti')).toBeEnabled();
+  const pending = page.waitForEvent('download');
+  await page.locator('#downloadNifti').click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toMatch(/\.nii$/);
+  const bytes = await readDownload(download);
+  const header = parseNiftiHeader(bytes);
+  expect(header.shape[2]).toBe(3);
+  const values = new Uint16Array(bytes.buffer, bytes.byteOffset + header.voxelOffset, (bytes.byteLength - header.voxelOffset) / 2);
+  expect(values.some(value => value > 0)).toBe(true);
+  expect(values.some(value => value !== values[0])).toBe(true);
+});
+
 function parseNiftiHeader(buffer) {
   const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   const headerSize = view.getInt32(0, true);

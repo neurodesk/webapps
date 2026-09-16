@@ -45,13 +45,13 @@ test('BET produces the existing Rust mask and downloads images with original geo
 });
 
 test('examples load through the picker and BET downloads a brain mask', async ({ page }) => {
-  for (const example of examples) await page.route(example.url, route => route.fulfill({ path: fixture }));
+  for (const example of examples) await page.route(example.files[0].url, route => route.fulfill({ path: fixture }));
   await page.goto('./');
   const picker = page.getByLabel('Example', { exact: true });
   for (const example of examples) {
     await picker.selectOption(example.id);
-    await expect(page.locator('#statusText')).toHaveText('Image loaded · ready to extract brain');
-    await expect(page.locator('#fileInfo')).toContainText(new URL(example.url).pathname.split('/').pop());
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready');
+    await expect(page.locator('#fileInfo')).toContainText(new URL(example.files[0].url).pathname.split('/').pop());
     await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
     await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(1);
   }
@@ -69,13 +69,13 @@ test('examples load through the picker and BET downloads a brain mask', async ({
 test('failed example download can retry the same example', async ({ page }) => {
   const example = examples[0];
   let attempts = 0;
-  await page.route(example.url, route => ++attempts === 1
+  await page.route(example.files[0].url, route => ++attempts === 1
     ? route.fulfill({ status: 503, body: 'Unavailable' })
     : route.fulfill({ path: fixture }));
   await page.goto('./');
   const picker = page.getByLabel('Example', { exact: true });
   await picker.selectOption(example.id);
-  await expect(page.locator('#statusText')).toContainText('Could not load example (HTTP 503)');
+  await expect(page.locator('#statusText')).toContainText('HTTP 503');
   await expect(page.locator('#runButton')).toBeDisabled();
   await expect(picker).toBeEnabled();
   await picker.selectOption(example.id);
@@ -87,7 +87,7 @@ test('cancelling an example aborts its request and permits the same selection ag
   const example = examples[0];
   let releaseRequest;
   let attempts = 0;
-  await page.route(example.url, async route => {
+  await page.route(example.files[0].url, async route => {
     if (++attempts === 1) await new Promise(resolve => { releaseRequest = resolve; });
     await route.fulfill({ path: fixture }).catch(() => {});
   });
@@ -95,14 +95,14 @@ test('cancelling an example aborts its request and permits the same selection ag
   const picker = page.getByLabel('Example', { exact: true });
   await picker.selectOption(example.id);
   await expect(picker).toBeDisabled();
-  const failed = page.waitForEvent('requestfailed', request => request.url() === example.url);
-  await page.locator('#cancelButton').click();
+  const failed = page.waitForEvent('requestfailed', request => request.url() === example.files[0].url);
+  await page.getByRole('button', { name: 'Cancel example download' }).click();
   await failed;
-  await expect(page.locator('#statusText')).toHaveText('Cancelled');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'cancelled');
   await expect(page.locator('#runButton')).toBeDisabled();
   releaseRequest();
   await picker.selectOption(example.id);
-  await expect(page.locator('#statusText')).toHaveText('Image loaded · ready to extract brain');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready');
   await expect(page.locator('#runButton')).toBeEnabled();
   expect(attempts).toBe(2);
 });

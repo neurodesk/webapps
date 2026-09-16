@@ -17,15 +17,15 @@ import NiiVueGPU, {
   SLICE_TYPE,
 } from '@niivue/niivue'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, renderConsole } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, renderConsole, renderExampleSelector } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { readImageFiles, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niimath } from '@neurodesk/runtime-support/niimath'
+import examples from '../examples.json'
 import type { MindgrabInferer } from './mindgrab/index'
 
 const ASSET_BASE_URL =
   'https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/deface/'
-const T1_URL = `${ASSET_BASE_URL}t1_crop.nii.gz`
 const MNI_URL = `${ASSET_BASE_URL}avg152T1.nii.gz`
 const MASK_URL = `${ASSET_BASE_URL}avg152T1mask.nii.gz`
 
@@ -192,6 +192,7 @@ function spin(on: boolean): void {
 function updateButtons(): void {
   const busy = isBusy()
   applyBtn.disabled = busy || !sourceFile || !refFiles
+  exampleControl.setDisabled(busy || !refFiles)
   methodSelect.disabled = busy
   saveBtn.disabled = busy || !hasDefaced
   aboutBtn.disabled = false
@@ -250,7 +251,8 @@ async function fetchFile(url: string, name: string): Promise<File> {
 // asSource=true for user-supplied images (default/drop/dcm2niix pick) — these
 // become the pristine input that Apply defaces. The defaced result is displayed
 // with asSource=false so it never replaces the source.
-async function loadFromFile(file: File, asSource = true): Promise<void> {
+async function loadFromFile(file: File, asSource = true, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
   // Fail closed: a source (asSource=true) is un-defaced, so clear Save eligibility
   // BEFORE the awaitable display — a load rejection after a prior deface must not
   // leave Save enabled over the un-defaced image (same pattern as makeBrainMask).
@@ -271,6 +273,7 @@ async function loadFromFile(file: File, asSource = true): Promise<void> {
     throw err
   }
   if (isCleanedUp) return
+  signal?.throwIfAborted()
   if (asSource) sourceFile = file
   // A freshly loaded source is NOT yet defaced; a deface result (asSource=false) is.
   hasDefaced = !asSource
@@ -507,17 +510,35 @@ async function init(): Promise<void> {
     setStatus(noWebGpu)
     return
   }
-  setStatus('Loading default image + MNI template…')
+  setStatus('Loading MNI template…')
   // Fetch the bundled template/mask once; load the default subject.
   const [mni, mask] = await Promise.all([
     fetchFile(MNI_URL, 'MNI152_T1_2mm.nii.gz'),
     fetchFile(MASK_URL, 'mniMask.nii.gz'),
   ])
   refFiles = { mni, mask }
-  const t1 = await fetchFile(T1_URL, 't1_crop.nii.gz')
-  await loadFromFile(t1)
-  setStatus('Ready — choose a method and click Apply.')
+  setStatus('Choose an example or open a scan, then click Apply.')
 }
+
+const exampleControl = renderExampleSelector({
+  examples,
+  onStatus: setStatus,
+  onLoad: async (_example, { fetchFiles, signal, assertCurrent }) => {
+    const [file] = await fetchFiles()
+    assertCurrent()
+    const job = pending.then(async () => {
+      assertCurrent()
+      inFlightCount++
+      updateButtons()
+      try { await loadFromFile(file, true, signal) }
+      finally { inFlightCount--; updateButtons() }
+    })
+    pending = job.catch(() => {})
+    await job
+  },
+})
+$('exampleControl').append(exampleControl.root)
+exampleControl.setDisabled(true)
 
 // --- Wiring ---
 document.addEventListener('dragover', (e) => e.preventDefault(), ac)
@@ -574,6 +595,7 @@ methodSelect.addEventListener('change', () => {
 
 // --- Cleanup (HMR / tab close) ---
 async function cleanup(): Promise<void> {
+  exampleControl.destroy()
   if (isCleanedUp) return
   isCleanedUp = true
   listeners.abort()

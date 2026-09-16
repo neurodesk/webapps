@@ -1,3 +1,5 @@
+import examples from '../examples.json';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVueGPU, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import { Niimath } from "@niivue/niimath";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
@@ -5,12 +7,11 @@ import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-i
 import { StageResultList, bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
-import { MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "./config.js";
 
 const $ = (id) => document.getElementById(id);
 const slots = {
-  moving: { file: null, files: [], input: $("movingInput"), select: $("movingExample"), info: $("movingInfo"), drop: $("movingDropZone"), series: $("movingSeries"), seriesField: $("movingSeriesField") },
-  stationary: { file: null, files: [], input: $("stationaryInput"), select: $("stationaryExample"), info: $("stationaryInfo"), drop: $("stationaryDropZone"), series: $("stationarySeries"), seriesField: $("stationarySeriesField") },
+  moving: { file: null, files: [], input: $("movingInput"), info: $("movingInfo"), drop: $("movingDropZone"), series: $("movingSeries"), seriesField: $("movingSeriesField") },
+  stationary: { file: null, files: [], input: $("stationaryInput"), info: $("stationaryInfo"), drop: $("stationaryDropZone"), series: $("stationarySeries"), seriesField: $("stationarySeriesField") },
 };
 const viewers = {
   moving: new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] }),
@@ -91,9 +92,9 @@ function status(message, error = false) {
 function setBusy(value) {
   busy = value;
   const disabled = value || !viewersReady;
+  exampleControl.setDisabled(disabled);
   for (const slot of Object.values(slots)) {
     slot.input.disabled = disabled;
-    slot.select.disabled = disabled;
     slot.series.disabled = disabled;
   }
   $("robustFov").disabled = disabled;
@@ -184,7 +185,7 @@ async function clearOutput() {
   await viewers.resliced.removeAllVolumes();
 }
 
-async function loadSlot(name, file, registerAfter = true) {
+async function loadSlot(name, file, registerAfter = false, signal) {
   if (!file) return;
   await clearOutput();
   const slot = slots[name];
@@ -198,6 +199,7 @@ async function loadSlot(name, file, registerAfter = true) {
     await viewers[name].removeAllVolumes();
     throw error;
   }
+  signal?.throwIfAborted();
   $("emptyState").hidden = true;
   slot.file = file;
   slot.info.hidden = false;
@@ -222,6 +224,7 @@ async function runTask(message, task) {
 }
 
 async function importSlot(name, filesPromise) {
+  exampleControl.cancel();
   await runTask(`Reading ${name} image · converting DICOM if needed…`, async () => {
     const images = await readImageFiles(await filesPromise);
     if (!images.length) throw new Error("Choose NIfTI files or a complete DICOM series.");
@@ -229,7 +232,6 @@ async function importSlot(name, filesPromise) {
     slot.files = images;
     slot.series.replaceChildren(...images.map((file, index) => new Option(file.name, String(index))));
     slot.seriesField.hidden = images.length < 2;
-    slot.select.value = "";
     await loadSlot(name, images[0]);
   });
 }
@@ -244,35 +246,26 @@ for (const [name, slot] of Object.entries(slots)) {
   slot.series.onchange = () => void runTask(`Loading ${name} series…`, () => loadSlot(name, slot.files[Number(slot.series.value)]));
 }
 
-async function fetchExample(item) {
-  const response = await fetch(item.url);
-  if (!response.ok) throw new Error(`Example download failed (${response.status}).`);
-  return new File([await response.blob()], item.filename);
-}
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    const [moving, stationary] = await fetchFiles();
+    assertCurrent();
+    if (!viewersReady) throw new Error('The image viewers are not ready. Try again after initialization.');
+    setBusy(true);
+    try {
+      await loadSlot('moving', moving, false, signal);
+      assertCurrent();
+      await loadSlot('stationary', stationary, false, signal);
+      assertCurrent();
+    } finally {
+      setBusy(false);
+    }
+  },
+  onStatus: status,
+});
+$('inputSection').querySelector('.nd-section-content').prepend(exampleControl.root);
 
-function addExamples(name, examples) {
-  const select = slots[name].select;
-  for (const item of examples) select.add(new Option(item.label, item.url));
-  select.value = examples[0].url;
-  select.onchange = () => {
-    const item = examples.find((candidate) => candidate.url === select.value);
-    if (!item) return;
-    const previous = examples.find((candidate) => candidate.filename === slots[name].file?.name)?.url ?? "";
-    void runTask(`Downloading ${item.label}…`, async () => {
-      let file;
-      try {
-        file = await fetchExample(item);
-      } catch (error) {
-        select.value = previous;
-        throw error;
-      }
-      await loadSlot(name, file);
-    });
-  };
-}
-
-addExamples("moving", MOVING_EXAMPLES);
-addExamples("stationary", STATIONARY_EXAMPLES);
 
 const results = new StageResultList({
   element: $("resultList"),
@@ -335,7 +328,7 @@ async function init() {
     status("WebGPU is unavailable. EdgeReg needs a recent desktop browser.", true);
     return;
   }
-  await runTask("Loading default moving and stationary images…", async () => {
+  await runTask("Initializing image viewers…", async () => {
     try {
       await attachViewers();
     } catch (error) {
@@ -344,17 +337,12 @@ async function init() {
       $("viewerError").textContent = `Visualization unavailable: ${errorMessage(error)}`;
       throw error;
     }
-    const [moving, stationary] = await Promise.all([
-      fetchExample(MOVING_EXAMPLES[0]),
-      fetchExample(STATIONARY_EXAMPLES[0]),
-    ]);
-    await loadSlot("moving", moving, false);
-    await loadSlot("stationary", stationary, false);
-    await register();
+    status("Ready · choose an example or upload images, then register.");
   });
 }
 
 window.addEventListener("pagehide", () => {
+  exampleControl.destroy();
   clearInterval(timer);
   niimath.dispose();
   destroyViewers();

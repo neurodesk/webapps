@@ -10,6 +10,8 @@ import NiiVue, {
   type VolumeChunkSource,
 } from '@niivue/niivue'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import examples from '../examples.json'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import * as zarr from 'zarrita'
 import './styles.css'
@@ -1761,6 +1763,7 @@ function renderStainLayers(): void {
 
 async function loadSelectedStainLayerRuntime(
   id: string,
+  signal?: AbortSignal,
 ): Promise<StainLayerRuntime | null> {
   const existing = stainLayerRuntimes.get(id)
   if (existing || !nv) return existing ?? null
@@ -1773,7 +1776,7 @@ async function loadSelectedStainLayerRuntime(
       await waitForAdaptiveLodIdle()
       if (stainLayerRuntimes.size > 0) await waitForStainLayerUploads()
       await applyCurrentStainLayerVisibility(id)
-      await reloadVolume({ reloadSource: true, preserveView: true })
+      await reloadVolume({ reloadSource: true, preserveView: true, signal })
       return stainLayerRuntimes.get(id) ?? null
     } finally {
       stainLayerSceneMutationDepth--
@@ -5245,6 +5248,7 @@ interface ReloadOptions {
   reloadSource?: boolean
   preserveView?: boolean
   view?: ViewState | null
+  signal?: AbortSignal
 }
 
 function reloadVolume(options: ReloadOptions = {}): Promise<void> {
@@ -5258,7 +5262,9 @@ function reloadVolume(options: ReloadOptions = {}): Promise<void> {
       requestedBaseLevel = requestState.requestedBaseLevel
       fixedZarrLevel = requestState.fixedZarrLevel
       shouldInitializeCustomSource = requestState.shouldInitializeCustomSource
-      await performReloadVolume(options, signal)
+      await performReloadVolume(options, options.signal
+        ? AbortSignal.any([signal, options.signal])
+        : signal)
     })
     .then(() => undefined)
 }
@@ -5492,7 +5498,41 @@ async function main(): Promise<void> {
     syncNvSlideView()
   })
 
+  const exampleSelector = renderExampleSelector({
+    examples,
+    async onLoad(example, { signal, assertCurrent }) {
+      assertCurrent()
+      resetRenderCropForSourceChange()
+      activeStainLayerId = null
+      fixedZarrLevel = null
+      requestedBaseLevel = null
+      shouldInitializeCustomSource = true
+      els.source.value = 'custom'
+      els.customStainName.value = example.label
+      setCustomStoreUrls([example.sourceUrl])
+      syncSourceControls()
+      const layer = commitCustomLayer()
+      try {
+        const runtime = await loadSelectedStainLayerRuntime(layer.id, signal)
+        assertCurrent()
+        if (!runtime) throw new Error('The example volume did not load. Please retry.')
+        await waitForStainLayerUploads(signal)
+        assertCurrent()
+        if (stats.failures > 0) throw new Error('Some example image chunks failed to load. Please retry.')
+      } catch (error) {
+        await removeStainLayer(layer.id)
+        throw error
+      }
+    },
+  })
+  els.source.closest('label')?.before(exampleSelector.root)
+  window.addEventListener('pagehide', () => exampleSelector.destroy(), { once: true })
+  for (const input of [els.source, els.zarrUrl, els.dandisetId, els.dandiVersion]) {
+    input.addEventListener('input', () => exampleSelector.cancel())
+  }
+
   els.source.addEventListener('change', () => {
+    exampleSelector.cancel()
     resetRenderCropForSourceChange()
     fixedZarrLevel = null
     shouldInitializeCustomSource = true
@@ -5591,6 +5631,7 @@ async function main(): Promise<void> {
     void clearSelectedDandiAssets()
   })
   els.reload.addEventListener('click', () => {
+    exampleSelector.cancel()
     let customLayer: StainLayer | null = null
     if (els.source.value === 'custom') {
       try {

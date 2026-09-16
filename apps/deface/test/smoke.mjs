@@ -90,6 +90,7 @@ await runVitePreviewSmoke({
     // attaches) AND the default image + MNI template load — so this single wait
     // subsumes the old explicit WebGPU-ready check (the #memstatus indicator was
     // removed; init failure leaves Apply disabled and this fails with a clear msg).
+    await page.getByRole('combobox', { name: 'Example', exact: true }).selectOption('t1-head')
     await page.waitForSelector('#applyBtn:not([disabled])', { timeout: 30000 })
       .catch(() => fail('Apply never enabled (NiiVue attach / default image / refs not ready)', page))
     // M2 privacy guard: Save must be DISABLED before any deface, so the un-defaced

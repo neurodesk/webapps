@@ -1,0 +1,49 @@
+[
+  {
+    "id": "synthetic-mp2rage",
+    "label": "Synthetic MP2RAGE and SA2RAGE phantom",
+    "description": "A deterministic signal-model phantom with matched 7 T acquisition parameters. Supports T1 mapping and B1 mapping; this is synthetic data, not a patient scan.",
+    "expectedResult": "Downloadable T1 and relative B1 maps from the known signal-model phantom.",
+    "files": [
+      {
+        "role": "uni",
+        "name": "phantom_UNI.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_UNI.nii.gz"
+      },
+      {
+        "role": "inv2",
+        "name": "phantom_INV2.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_INV2.nii.gz"
+      },
+      {
+        "role": "sa2rage",
+        "name": "phantom_SA2RAGE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_SA2RAGE.nii.gz"
+      }
+    ],
+    "parameters": {
+      "mp": {
+        "tr": 4.3,
+        "ti1": 0.84,
+        "ti2": 2.37,
+        "fa1": 5,
+        "fa2": 6,
+        "nz1": 64,
+        "nz2": 128,
+        "trflash": 0.007,
+        "inveff": 0.96
+      },
+      "sa": {
+        "tr": 2.4,
+        "ti1": 0.15,
+        "ti2": 1.5,
+        "fa1": 6,
+        "fa2": 6,
+        "nz1": 24,
+        "nz2": 24,
+        "trflash": 0.005,
+        "avgt1": 1.5
+      }
+    }
+  }
+]

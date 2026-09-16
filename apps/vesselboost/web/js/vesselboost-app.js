@@ -1,4 +1,4 @@
-import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -121,6 +121,7 @@ class VesselBoostApp {
     this.viewerController.registerVesselColormap(colormapData);
 
     this.setupEventListeners();
+    await this.setupExamples();
     this.setupInfoTooltips();
 
     // Start ONNX initialization in background
@@ -164,6 +165,23 @@ class VesselBoostApp {
   }
 
   // ==================== Event Listeners ====================
+
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        await this.fileIOController._acceptFile(files[0], true);
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('fileInput');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
+  }
 
   setupEventListeners() {
     const fileInput = document.getElementById('fileInput');

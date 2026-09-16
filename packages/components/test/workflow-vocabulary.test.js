@@ -168,3 +168,8 @@ test('download sections share visible separation and accessible disclosure targe
   assert.match(css, /\.nd-dialog-section \+ \.nd-dialog-section\s*\{[^}]*margin-top:/);
   assert.match(css, /\.nd-download-option summary\s*\{[^}]*min-height: 44px/);
 });
+
+test('select and input fields shrink within narrow control grids', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-field > :is\(select, input\)\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
+});

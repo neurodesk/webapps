@@ -33,7 +33,7 @@ test('SeedSeg pins the current ONNX Runtime Web loader contract', async () => {
 
   const requested = requestedRuntimeFiles();
   const ortFiles = requested.filter((file) => file.group === 'ort-web').map((file) => file.name).sort();
-  assert.deepEqual(ortFiles, ['ort-wasm-simd-threaded.mjs', 'ort-wasm-simd-threaded.wasm', 'ort.webgpu.bundle.min.mjs']);
+  assert.deepEqual(ortFiles, ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']);
 
   const worker = await readFile(join(appRoot, 'web', 'js', 'inference-worker.js'), 'utf8');
   assert.match(worker, /import\s+\*\s+as\s+ort\s+from\s+['"]\.\.\/wasm\/ort\.webgpu\.bundle\.min\.mjs['"]/,

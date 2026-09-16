@@ -1,6 +1,6 @@
 {
   "name": "qsmbly",
-  "version": "0.25.20260915",
+  "version": "0.25.20260916",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
   "type": "module",
   "scripts": {
@@ -14,7 +14,9 @@
     "pretest": "pnpm vendor && pnpm runtime-support",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "test:examples": "node --test scripts/test_examples.mjs scripts/test_mask_worker.mjs",
+    "test:e2e": "node ../../test/examples.smoke.mjs --app qsmbly"
   },
   "devDependencies": {
     "jest": "^29.7.0",

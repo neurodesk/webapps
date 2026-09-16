@@ -1,3 +1,5 @@
+import examples from '../examples.json'
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
 /**
  * dwi2trx — browser-only diffusion MRI pipeline (WASM + WebGPU; no data leaves
  * the machine). The compact workflow reveals tensor maps and streamlines as
@@ -149,6 +151,8 @@ let shownView: 'input' | 'maps' | 'tracts' | null = null
 let loadSeq = 0
 let inputAbortController: AbortController | null = null
 
+let exampleControl: ReturnType<typeof renderExampleSelector> | undefined
+
 function setStatus(msg: string, error = false): void {
   statusEl.textContent = msg
   statusEl.classList.toggle('error', error)
@@ -158,6 +162,7 @@ function setStatus(msg: string, error = false): void {
 /** Show/hide the spinning busy indicator beside the status text during slow
  *  work (mindgrab, the dtifit fit, DICOM conversion). */
 function busy(on: boolean): void {
+  exampleControl?.setDisabled(on)
   const progress = $<HTMLProgressElement>('progress')
   if (on) progress.removeAttribute('value')
   else progress.value = 0
@@ -801,6 +806,7 @@ function beginLoad(): { seq: number; controller: AbortController } {
 }
 
 async function loadInputFiles(filesPromise: Promise<File[]>): Promise<void> {
+  exampleControl?.cancel()
   const { seq, controller } = beginLoad()
   // A new load invalidates later workflow results.
   $('emptyState').hidden = false
@@ -1272,35 +1278,26 @@ function setFaFloor(): void {
   nv.updateGLVolume()
 }
 
-const SAMPLE_BASE_URL =
-  'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/'
-
-async function fetchAsFile(url: string): Promise<File> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Could not fetch ${url} (${res.status}).`)
-  return new File([await res.blob()], url.split('/').pop() ?? 'file')
-}
-
-async function loadSample(): Promise<void> {
-  const { seq, controller } = beginLoad()
-  busy(true)
-  setStatus('Loading sample…')
-  try {
-    const [nii, bval, bvec] = await Promise.all([
-      fetchAsFile(`${SAMPLE_BASE_URL}dwi.nii.gz`),
-      fetchAsFile(`${SAMPLE_BASE_URL}dwi.bval`),
-      fetchAsFile(`${SAMPLE_BASE_URL}dwi.bvec`),
-    ])
-    const resolved = await resolveInput([nii, bval, bvec], controller.signal)
-    await loadInput(resolved, 'sample', seq, 'Sample DWI')
-  } catch (err) {
-    if (seq === loadSeq)
-      setStatus(`Failed to load sample: ${(err as Error).message}`, true)
-  } finally {
-    if (inputAbortController === controller) inputAbortController = null
-    if (seq === loadSeq) busy(false)
-  }
-}
-
-if (loadSeq === 0) await loadSample()
+exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    const files = await fetchFiles()
+    assertCurrent()
+    const { seq, controller } = beginLoad()
+    signal.addEventListener('abort', () => controller.abort(), { once: true })
+    busy(true)
+    try {
+      const resolved = await resolveInput(files, controller.signal)
+      assertCurrent()
+      await loadInput(resolved, 'sample', seq, 'Example DWI')
+      assertCurrent()
+    } finally {
+      if (inputAbortController === controller) inputAbortController = null
+      if (seq === loadSeq) busy(false)
+    }
+  },
+  onStatus: setStatus,
+})
+$('inputSection').querySelector('.nd-section-content')?.prepend(exampleControl.root)
+window.addEventListener('pagehide', () => exampleControl?.destroy())
 render()

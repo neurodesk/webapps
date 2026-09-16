@@ -1,11 +1,21 @@
 # syncro
 
+## 0.3.20260916
+
+### Patch Changes
+
+- Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.0
+  - @neurodesk/greedy@0.3.20260916
+  - @neurodesk/synthsr@0.4.20260916
+  - @neurodesk/brain-extraction@0.1.1
+
 ## 0.3.20260915
 
 ### Patch Changes
 
 - Include Brain extraction in the offline desktop suite with its SynthStrip model and a real BET extraction and download check. Reuse the shared MindGrab adapter in SYNcro.
-
 
 ### Patch Changes
 

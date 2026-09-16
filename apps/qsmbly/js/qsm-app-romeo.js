@@ -1,4 +1,4 @@
-import { bindSectionDisclosures, ConsoleOutput } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures, ConsoleOutput } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 // Import extracted utility modules
@@ -161,6 +161,7 @@ class QSMApp {
     await this.setupViewer();
     this.setupUIControls();
     this.setupEventListeners();
+    await this.setupExamples();
     this.syncSidebarFromSettings();
     this.updateDownloadButtons();
 
@@ -453,6 +454,25 @@ class QSMApp {
     }
   }
 
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        this.fileIOController.clearAllFiles();
+        await this._handleUnifiedFiles(files);
+        document.getElementById('inputSection').classList.remove('collapsed');
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('unifiedFiles');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
+  }
+
   setupEventListeners() {
     // Mobile tab bar
     this._setupMobileTabs();
@@ -464,7 +484,6 @@ class QSMApp {
     this._setupUnifiedDropZone();
 
     // Load example data button
-    document.getElementById('loadExampleData')?.addEventListener('click', () => this._loadExampleData());
 
     // Field map units dropdown
     document.getElementById('fieldMapUnits')?.addEventListener('change', () => {
@@ -957,68 +976,6 @@ class QSMApp {
   }
 
   /**
-   * Fetch example data from GitHub Release and load it.
-   */
-  async _loadExampleData() {
-    const btn = document.getElementById('loadExampleData');
-    const { baseUrl, files, urls = {} } = QSMConfig.EXAMPLE_DATA;
-    const assetUrl = (name) => urls[name] || `${baseUrl}/${name}`;
-
-    btn.disabled = true;
-    btn.textContent = 'Downloading example data...';
-    this.updateOutput('Downloading example data...');
-    this.setProgress(0, 'Downloading example data...');
-
-    try {
-      // First, issue HEAD requests in parallel to learn total size
-      const headResponses = await Promise.all(files.map(async (name) => {
-        const resp = await fetch(assetUrl(name), { method: 'HEAD' });
-        const len = parseInt(resp.headers.get('Content-Length') || '0', 10);
-        return { name, size: len };
-      }));
-      const totalBytes = headResponses.reduce((sum, h) => sum + h.size, 0);
-      const perFileBytes = new Array(files.length).fill(0);
-      let downloadedBytes = 0;
-
-      const updateProgress = () => {
-        downloadedBytes = perFileBytes.reduce((s, b) => s + b, 0);
-        const frac = totalBytes > 0 ? downloadedBytes / totalBytes : 0;
-        const mb = (downloadedBytes / 1e6).toFixed(1);
-        const totalMb = (totalBytes / 1e6).toFixed(1);
-        this.setProgress(frac, `Downloaded ${mb} / ${totalMb} MB`);
-      };
-
-      const fetched = await Promise.all(files.map(async (name, i) => {
-        const resp = await fetch(assetUrl(name));
-        if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
-
-        const reader = resp.body.getReader();
-        const chunks = [];
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          perFileBytes[i] += value.byteLength;
-          updateProgress();
-        }
-        const blob = new Blob(chunks);
-        return new File([blob], name);
-      }));
-
-      this.updateOutput(`Downloaded ${fetched.length} files. Loading...`);
-      await this._handleUnifiedFiles(fetched);
-      this.setProgress(0, '');
-      this.updateOutput('Example data loaded successfully.');
-    } catch (err) {
-      this.setProgress(0, '');
-      this.updateOutput(`Error loading example data: ${err.message}`);
-      console.error('Example data load failed:', err);
-    } finally {
-      btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
-    }
-  }
-
-  /**
    * Central state handler — called whenever bucket contents change.
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
@@ -1053,10 +1010,6 @@ class QSMApp {
     }
     const dropZone = document.getElementById('unifiedDrop');
     if (dropZone) dropZone.classList.toggle('has-files', hasFiles);
-
-    // Disable example data button when files are loaded
-    const exampleBtn = document.getElementById('loadExampleData');
-    if (exampleBtn) exampleBtn.disabled = hasFiles;
 
     // Update validation messages
     this._updateInputValidation();

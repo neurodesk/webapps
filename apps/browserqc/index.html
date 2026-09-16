@@ -21,13 +21,15 @@
         <span>Drop NIfTI or DICOM files or folder</span>
       </label>
       <label class="nd-btn nd-btn-secondary nd-btn-sm nd-btn-block">Choose DICOM folder<input id="dicomInput" type="file" data-neurodesk-input="image" webkitdirectory multiple hidden /></label>
+      <div id="exampleControl"></div>
+      <p id="fileInfo" class="nd-file-info" hidden></p>
       <select id="dicomPick" class="hidden" aria-label="Pick a converted NIfTI series"></select>
     </div>
     </details>
     <details class="nd-sidebar-section" id="processingSection" open>
-      <summary class="nd-section-title">2. Automatic processing</summary>
+      <summary class="nd-section-title">2. Quality control</summary>
       <div class="nd-section-content">
-      <p class="nd-hint">Choose an image to start segmentation and quality measurements automatically.</p>
+      <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run quality control</button>
     </div>
     </details>
     <details class="nd-sidebar-section" id="resultsSection">
@@ -62,7 +64,7 @@
   </footer>
 
   <template id="aboutContent"><p>Automated MRI quality control, <strong>entirely in your browser</strong> — no upload, no server.
-        Drag in a NIfTI image (or a folder of DICOM files) and it runs automatically.</p>
+        Open a NIfTI image or a folder of DICOM files, then run quality control.</p>
       <ul>
         <li><strong>Segmentation</strong> — a
           <a href="https://github.com/neuroneural/brainchop" target="_blank" rel="noopener">brainchop</a>

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "left-cortex",
+    "label": "Left cortical surface",
+    "description": "Left pial surface reconstructed by TopoFit from its public validation MRI.",
+    "expectedResult": "Draw a cortical ROI, close its border, and export a FreeSurfer label.",
+    "files": [
+      {
+        "role": "surface",
+        "name": "lh.pial",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1c3a4b2c508b01171540e3870272d39f66b04004/topofit/0.5.1/onnx-20260911/validation/browser/end-to-end/lh.pial"
+      }
+    ]
+  }
+]

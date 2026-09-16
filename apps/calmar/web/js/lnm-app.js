@@ -1,4 +1,4 @@
-import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 import { SimpleFileIOController, readSingleImage } from '@neurodesk/webapp-components/file-io';
@@ -366,6 +366,7 @@ export class LesionNetworkMappingApp {
     this.viewerController.registerSctColormap(SCHAEFER400_COLORMAP, 'lnm-schaefer400');
     this.viewerController.registerSctColormap(LESION_MASK_COLORMAP, LESION_MASK_COLORMAP_ID);
     this.bindEvents();
+    await this.setupExamples();
     this.populateAtlasSelect();
     this.populateVersionLabel();
     this.updateOutput('Ready.');
@@ -384,6 +385,27 @@ export class LesionNetworkMappingApp {
       moduleUrl: new URL('../dcm2niix/index.js', import.meta.url).href,
       updateOutput: message => this.updateOutput(message)
     });
+  }
+
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        const structural = files[example.files.findIndex(file => file.role === 'structural')];
+        const lesion = files[example.files.findIndex(file => file.role === 'lesion')];
+        await this.setStructural(structural);
+        assertCurrent();
+        await this.startUploadedLesionMaskReview(lesion);
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('structuralFileInput');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
   }
 
   bindEvents() {

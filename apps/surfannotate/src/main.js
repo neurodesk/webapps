@@ -1,5 +1,7 @@
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import './styles.css';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import examples from '../examples.json';
 
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { Niivue } from '@niivue/niivue';
@@ -612,6 +614,22 @@ async function init() {
   // as well as redraw.
   window.addEventListener('resize', scheduleMarkers);
 
+  const exampleSelector = renderExampleSelector({
+    examples,
+    onStatus: setStatus,
+    async onLoad(example, { fetchFiles, assertCurrent }) {
+      const files = await fetchFiles();
+      await enqueueLoad(async () => {
+        for (const file of files) {
+          assertCurrent();
+          await loadSurface(file, { assertCurrent, rethrow: true });
+        }
+      });
+    },
+  });
+  ui.surfaceInput.closest('label').before(exampleSelector.root);
+  window.addEventListener('pagehide', () => exampleSelector.destroy(), { once: true });
+
   ui.surfaceInput.addEventListener('change', (event) => {
     const files = Array.from(event.target.files || []);
     // Clear it now, not after loading: picking the same file twice in a row
@@ -951,10 +969,12 @@ async function handleDroppedFiles(files) {
   }
 }
 
-async function loadSurface(file) {
+async function loadSurface(file, { assertCurrent = () => {}, rethrow = false } = {}) {
   setStatus(`Loading ${file.name}…`);
+  let mesh;
   try {
-    const mesh = await loadMeshFromFile(state.nv, file);
+    mesh = await loadMeshFromFile(state.nv, file);
+    assertCurrent();
     const geometry = getGeometry(mesh);
 
     setStatus(`Indexing ${geometry.vertexCount.toLocaleString()} vertices…`);
@@ -970,6 +990,7 @@ async function loadSurface(file) {
     for (let v = 0; v < openBoundary.length; v++) if (openBoundary[v]) openCount++;
 
     const triangleHash = await hashTriangles(geometry.triangles);
+    assertCurrent();
     // Both only for the marker overlay's back-face test, and both computed once
     // here rather than per repaint. The orientation is measured from the normals
     // that will actually be used, never inferred from the winding — see
@@ -1029,6 +1050,8 @@ async function loadSurface(file) {
     setStatus(`${file.name}: ${geometry.vertexCount.toLocaleString()} vertices, ` +
       `${(geometry.triangles.length / 3).toLocaleString()} faces.${note}${carried}`);
   } catch (error) {
+    if (mesh && !state.surfaces.some(entry => entry.mesh === mesh)) state.nv.removeMesh(mesh);
+    if (rethrow) throw error;
     // Surface it in the UI *and* the console — a parse failure deep inside
     // NiiVue is otherwise silent and looks like "nothing happened".
     console.error('surfannotate: failed to load surface', error);

@@ -17,9 +17,13 @@ test.beforeEach(async ({ page }, testInfo) => {
   }));
 });
 
-test("live data defaults download and both registration modes complete", async ({ page }) => {
+test("live data examples download and both registration modes complete", async ({ page }) => {
   test.skip(!process.env.GREEDY_LIVE_DATA, "Set GREEDY_LIVE_DATA=1 to exercise the pinned Hugging Face images.");
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   await expect(page.locator("#movingInfo")).toContainText("t1_brain.nii.gz", { timeout: 60_000 });
   await expect(page.locator("#stationaryInfo")).toContainText("MNI152_T1_1mm_brain.nii.gz", { timeout: 60_000 });
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 120_000 });
@@ -29,11 +33,13 @@ test("live data defaults download and both registration modes complete", async (
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 120_000 });
 });
 
-test("defaults load into three panels and affine registration completes", async ({ page }) => {
+test("selected examples load into three panels and affine registration completes", async ({ page }) => {
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   await expect(page.locator(".nd-viewer-panel")).toHaveCount(3);
-  await expect(page.locator("#movingExample")).toHaveValue(/t1_brain\.nii\.gz$/);
-  await expect(page.locator("#stationaryExample")).toHaveValue(/MNI152_T1_1mm_brain\.nii\.gz$/);
   await expect(page.locator("#movingInfo")).toContainText("brain extracted");
   await expect(page.locator("#stationaryInfo")).toContainText("brain extracted");
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
@@ -50,6 +56,10 @@ test("defaults load into three panels and affine registration completes", async 
 
 test("the method selector runs affine plus nonlinear registration", async ({ page }) => {
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   await expect(page.locator("#method option")).toHaveCount(2);
   await expect(page.locator("#method")).toContainText("Affine · NMI");
   await expect(page.locator("#method")).toContainText("Affine + nonlinear · NMI");
@@ -69,6 +79,10 @@ test("the method selector runs affine plus nonlinear registration", async ({ pag
 
 test("custom images are flagged and can be brain extracted per image", async ({ page }) => {
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("#resultList")).toBeEmpty();
+  await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60_000 });
   await page.locator("#movingInput").setInputFiles({ name: "custom.nii.gz", mimeType: "application/gzip", buffer: fixture });
   await expect(page.locator("#movingInfo")).toContainText("not brain extracted");
@@ -102,7 +116,6 @@ test("page is cross-origin isolated for threaded Greedy WASM", async ({ page }) 
 test("image controls stay disabled without WebGPU", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { value: undefined }));
   await page.goto("/");
-  await expect(page.locator("#movingExample")).toBeDisabled();
-  await expect(page.locator("#stationaryExample")).toBeDisabled();
+  await expect(page.locator("[data-neurodesk-example]")).toBeDisabled();
   await expect(page.locator("#statusText")).toContainText("WebGPU is unavailable");
 });

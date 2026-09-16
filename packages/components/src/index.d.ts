@@ -19,6 +19,35 @@ export interface ImagingWorkspaceConfig {
 export function mountImagingWorkspace(config: ImagingWorkspaceConfig): HTMLElement;
 
 // ---- Workflow vocabulary builders (ui) ----
+export interface ExampleFile {
+  role: string;
+  name: string;
+  url: string;
+  sha256?: string;
+}
+export interface AppExample {
+  id: string;
+  label: string;
+  description: string;
+  expectedResult: string;
+  files: ExampleFile[];
+}
+export interface ExampleLoadContext {
+  signal: AbortSignal;
+  fetchFiles(): Promise<File[]>;
+  assertCurrent(): void;
+}
+export function renderExampleSelector<T extends AppExample>(config: {
+  examples: T[];
+  onLoad(example: T, context: ExampleLoadContext): Promise<void>;
+  onStatus?(message: string, error: boolean): void;
+}, doc?: Document): {
+  root: HTMLDivElement;
+  select: HTMLSelectElement;
+  cancel(): void;
+  setDisabled(value: boolean): void;
+  destroy(): void;
+};
 export interface RenderedFileField {
   root: HTMLLabelElement;
   input: HTMLInputElement;

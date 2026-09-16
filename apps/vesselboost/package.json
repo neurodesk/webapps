@@ -17,7 +17,8 @@
     "pretest": "pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
-    "test:shared": "node --test test/shared-components-parity.test.js"
+    "test:shared": "node --test test/shared-components-parity.test.js",
+    "test:examples": "node --test scripts/test_examples.mjs"
   },
   "dependencies": {
     "nifti-reader-js": "^0.8.0",
@@ -29,7 +30,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "vesselboost",
-  "version": "0.3.20260915",
+  "version": "0.3.20260916",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

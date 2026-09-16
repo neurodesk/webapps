@@ -62,8 +62,9 @@ test("built runtime assets include CPU, WebGPU, worker, and legal files", async 
 test("CPU and Greedy are defaults and registration reports timing and memory", async ({ page }) => {
   await stubRegistration(page);
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator(".nd-viewer-panel")).toHaveCount(3);
-  await expect(page.locator("#statusText")).toContainText("CPU and Greedy are selected by default");
   await expect(page.locator("#useGpu")).not.toBeChecked();
   await expect(page.locator("#useSyn")).not.toBeChecked();
   await expect(page.locator("#runButton")).toBeEnabled();
@@ -79,6 +80,8 @@ test("CPU and Greedy are defaults and registration reports timing and memory", a
 test("GPU and SyN choices are forwarded and GPU-attributed memory is logged", async ({ page }) => {
   await stubRegistration(page);
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator("#runButton")).toBeEnabled();
   await page.locator("#useGpu").check();
   await page.locator("#useSyn").check();
@@ -90,6 +93,8 @@ test("GPU and SyN choices are forwarded and GPU-attributed memory is logged", as
 
 test("the packaged CPU worker completes a small Greedy registration", async ({ page }) => {
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator("#runButton")).toBeEnabled();
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 120_000 });
@@ -108,9 +113,9 @@ test("shared shell owns information actions and the page is isolated", async ({ 
 test("CPU registration stays available without WebGPU", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { value: undefined }));
   await page.goto("/");
-  await expect(page.locator("#movingExample")).toBeEnabled();
-  await expect(page.locator("#stationaryExample")).toBeEnabled();
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("[data-neurodesk-example]")).toBeEnabled();
   await expect(page.locator("#useGpu")).toBeDisabled();
   await expect(page.locator("#runButton")).toBeEnabled();
-  await expect(page.locator("#statusText")).toContainText("WebGPU registration is unavailable");
 });

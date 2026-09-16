@@ -1,0 +1,81 @@
+[
+  {
+    "id": "microscopy-stack",
+    "label": "Cell microscopy stack (3 planes)",
+    "description": "BioIO microscopy validation image, 1800 × 1200 × 3 voxels with four resolution levels. Opens the first channel and time point.",
+    "expectedResult": "Explore the cells, change zoom level or slice, and download the field of view as NIfTI.",
+    "sourceUrl": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/",
+    "files": [
+      {
+        "role": "zarr",
+        "name": ".zattrs",
+        "path": ".zattrs",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/.zattrs",
+        "sha256": "93e67fbd412f80e11925286dc274fb3bcb467d735b8253b421712bbb3fe9bd91"
+      },
+      {
+        "role": "zarr",
+        "name": ".zgroup",
+        "path": ".zgroup",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/.zgroup",
+        "sha256": "2383746e67b4bcc2762b3f100f06c3fa2d5f149ab5a8e5da5d33521464a01959"
+      },
+      {
+        "role": "zarr",
+        "name": "0-.zarray",
+        "path": "0/.zarray",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/0/.zarray",
+        "sha256": "4e617a553b7818677e220ecca8de9b63d0f13098395ece219b0c0c81e9ae9dc0"
+      },
+      {
+        "role": "zarr",
+        "name": "0-0.0.0.0.0",
+        "path": "0/0.0.0.0.0",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/0/0.0.0.0.0",
+        "sha256": "686b14f33f84c4163db44bdc8426407f402e336789ebbfe2b255ec60eec9a65b"
+      },
+      {
+        "role": "zarr",
+        "name": "1-.zarray",
+        "path": "1/.zarray",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/1/.zarray",
+        "sha256": "1a193bd137a0cbf9996df2f5e8ee98f697b15f123087813a4aff3c9659867bd5"
+      },
+      {
+        "role": "zarr",
+        "name": "1-0.0.0.0.0",
+        "path": "1/0.0.0.0.0",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/1/0.0.0.0.0",
+        "sha256": "382854fed8200681f3caf442ed4ed70671afe33b33106d770a7700a19a82662a"
+      },
+      {
+        "role": "zarr",
+        "name": "2-.zarray",
+        "path": "2/.zarray",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/2/.zarray",
+        "sha256": "7614654c4cdf5cf907110ef75d7b820f996e5ded0303315351ca4fcceaa6e472"
+      },
+      {
+        "role": "zarr",
+        "name": "2-0.0.0.0.0",
+        "path": "2/0.0.0.0.0",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/2/0.0.0.0.0",
+        "sha256": "c9c33399843e8eadb0bf42b74fbe6cc5011dbc1bcb0d15c47df2939dff8221f9"
+      },
+      {
+        "role": "zarr",
+        "name": "3-.zarray",
+        "path": "3/.zarray",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/3/.zarray",
+        "sha256": "91d7b3afeab48ebbb295ed73216779a7b430d70ec2031585ca1e07587ec85713"
+      },
+      {
+        "role": "zarr",
+        "name": "3-0.0.0.0.0",
+        "path": "3/0.0.0.0.0",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/3/0.0.0.0.0",
+        "sha256": "da8a0638d8b8e9c0b58c5b1d0ea872222e3ea26bf44432b2b314396d18819d17"
+      }
+    ]
+  }
+]

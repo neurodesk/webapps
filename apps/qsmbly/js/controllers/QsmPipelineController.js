@@ -343,6 +343,6 @@ export class QsmPipelineController {
   }
 
   getChannel() {
-    return Object.freeze({ postMessage: (message) => this.workerSession?.send(message) });
+    return this.workerSession;
   }
 }

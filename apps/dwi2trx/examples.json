@@ -1,0 +1,25 @@
+[
+  {
+    "id": "dwi-gradients",
+    "label": "Diffusion MRI with matching gradients",
+    "description": "A matched DWI, b-value and b-vector bundle for tensor fitting and tractography.",
+    "expectedResult": "FA and direction maps, followed by downloadable TRX streamlines.",
+    "files": [
+      {
+        "role": "image",
+        "name": "dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.nii.gz"
+      },
+      {
+        "role": "bval",
+        "name": "dwi.bval",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.bval"
+      },
+      {
+        "role": "bvec",
+        "name": "dwi.bvec",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.bvec"
+      }
+    ]
+  }
+]

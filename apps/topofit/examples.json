@@ -1,0 +1,16 @@
+[
+  {
+    "id": "openneuro-t1",
+    "label": "OpenNeuro T1-weighted brain MRI",
+    "description": "The scan used by the TopoFit reconstruction validation.",
+    "expectedResult": "Reconstructed cortical surfaces for both hemispheres.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sub-01_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/topofit/openneuro-t1/sub-01_T1w.nii.gz",
+        "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98"
+      }
+    ]
+  }
+]

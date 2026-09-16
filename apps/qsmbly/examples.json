@@ -1,0 +1,90 @@
+[
+  {
+    "id": "four-echo-qsm",
+    "label": "Four-echo magnitude and phase MRI",
+    "description": "Matched magnitude, phase and acquisition sidecars from a four-echo QSM acquisition.",
+    "expectedResult": "A downloadable quantitative susceptibility map after masking and reconstruction.",
+    "files": [
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-1_part-mag_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-mag_MEGRE.json"
+      },
+      {
+        "role": "magnitude",
+        "name": "sub-1_echo-1_part-mag_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-mag_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-1_part-phase_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-phase_MEGRE.json"
+      },
+      {
+        "role": "phase",
+        "name": "sub-1_echo-1_part-phase_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-phase_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-2_part-mag_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-mag_MEGRE.json"
+      },
+      {
+        "role": "magnitude",
+        "name": "sub-1_echo-2_part-mag_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-mag_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-2_part-phase_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-phase_MEGRE.json"
+      },
+      {
+        "role": "phase",
+        "name": "sub-1_echo-2_part-phase_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-phase_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-3_part-mag_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-mag_MEGRE.json"
+      },
+      {
+        "role": "magnitude",
+        "name": "sub-1_echo-3_part-mag_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-mag_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-3_part-phase_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-phase_MEGRE.json"
+      },
+      {
+        "role": "phase",
+        "name": "sub-1_echo-3_part-phase_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-phase_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-4_part-mag_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-mag_MEGRE.json"
+      },
+      {
+        "role": "magnitude",
+        "name": "sub-1_echo-4_part-mag_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-mag_MEGRE.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "sub-1_echo-4_part-phase_MEGRE.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-phase_MEGRE.json"
+      },
+      {
+        "role": "phase",
+        "name": "sub-1_echo-4_part-phase_MEGRE.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-phase_MEGRE.nii.gz"
+      }
+    ]
+  }
+]

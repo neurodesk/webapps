@@ -1,0 +1,15 @@
+[
+  {
+    "id": "t2-cord",
+    "label": "T2-weighted spinal cord MRI",
+    "description": "The SCT T2 spinal-cord reference case. Choose the Spinal cord task to segment the cord.",
+    "expectedResult": "A downloadable spinal-cord mask.",
+    "files": [
+      {
+        "role": "image",
+        "name": "sct_T2_spinalcord.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz"
+      }
+    ]
+  }
+]

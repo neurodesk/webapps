@@ -1,0 +1,20 @@
+[
+  {
+    "id": "t1-head",
+    "label": "T1-weighted brain MRI with acquisition metadata",
+    "description": "A structural brain scan and its BIDS sidecar.",
+    "expectedResult": "Run quality control to view segmentation and download a QC report.",
+    "files": [
+      {
+        "role": "image",
+        "name": "t1_crop.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.nii.gz"
+      },
+      {
+        "role": "metadata",
+        "name": "t1_crop.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.json"
+      }
+    ]
+  }
+]

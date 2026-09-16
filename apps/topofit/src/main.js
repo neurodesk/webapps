@@ -1,3 +1,5 @@
+import examples from '../examples.json';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
@@ -134,8 +136,8 @@ function status(message, error = false) {
 
 function setBusy(value) {
   busy = value;
+  exampleControl.setDisabled(value);
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value;
-  $('exampleButton').disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
   $('analyzeButton').disabled = value || viewerBusy || !reconstruction;
   $('cancelButton').hidden = !value;
@@ -298,6 +300,7 @@ async function load(file) {
     $('progress').value = 0;
     await showSource();
     status('Image loaded · ready to reconstruct');
+    return true;
   } catch (error) {
     status(error.message, true);
   } finally {
@@ -306,6 +309,7 @@ async function load(file) {
 }
 
 async function importFiles(filesPromise) {
+  exampleControl.cancel();
   if (busy) return;
   setBusy(true);
   status('Reading images · converting DICOM if needed…');
@@ -330,27 +334,18 @@ $('imageInput').onchange = () => {
 };
 $('seriesSelect').onchange = () => void load(importedImages[Number($('seriesSelect').value)]);
 bindFileDrop($('dropZone'), (files) => void importFiles(files));
-$('exampleButton').onclick = async () => {
-  if (busy) return;
-  setBusy(true);
-  status('Downloading OpenNeuro example…');
-  try {
-    const response = await fetch(manifest.validation.example_url);
-    if (!response.ok) throw new Error('The example image could not be downloaded.');
-    const bytes = await response.arrayBuffer();
-    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (value) =>
-      value.toString(16).padStart(2, '0'),
-    ).join('');
-    if (digest !== manifest.validation.example_sha256) {
-      throw new Error('The example image checksum did not match the validated scan.');
-    }
-    setBusy(false);
-    await load(new File([bytes], 'sub-01_T1w.nii.gz', { type: 'application/gzip' }));
-  } catch (error) {
-    status(error.message, true);
-    setBusy(false);
-  }
-};
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent }) => {
+    const files = await fetchFiles();
+    assertCurrent();
+    if (!await load(files[0])) throw new Error('The example image could not be loaded.');
+    assertCurrent();
+  },
+  onStatus: status,
+});
+$('exampleControl').replaceWith(exampleControl.root);
+
 
 $('findPatches').onchange = () => { $('patchSettings').hidden = !$('findPatches').checked; };
 $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion').value !== 'roi'; };
@@ -483,6 +478,7 @@ $('runButton').onclick = () => void run();
 $('analyzeButton').onclick = () => void run(true);
 
 $('cancelButton').onclick = () => {
+  exampleControl.cancel();
   preparation = null;
   worker?.terminate();
   worker = null;
@@ -490,4 +486,4 @@ $('cancelButton').onclick = () => {
   $('progress').value = 0;
   status(`${operation} cancelled. ${reconstruction ? 'Your reconstructed surfaces remain available.' : 'Your original image is unchanged.'}`);
 };
-window.addEventListener('pagehide', () => worker?.terminate());
+window.addEventListener('pagehide', () => { exampleControl.destroy(); worker?.terminate(); });

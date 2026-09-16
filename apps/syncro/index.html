@@ -11,17 +11,7 @@
   <details class="nd-sidebar-section" id="inputSection" open>
     <summary class="nd-section-title">Inputs</summary>
     <div class="nd-section-content">
-      <div class="nd-field">
-        <label for="tutorial">Tutorial dataset</label>
-        <select id="tutorial">
-          <option value="">Load a tutorial…</option>
-          <option value="trace-t1">TRACE lesion + T1w primary</option>
-          <option value="trace-only">TRACE primary + lesion</option>
-          <option value="t1-only">T1w primary + lesion</option>
-          <option value="ct-only">CT primary + lesion</option>
-        </select>
-        <p class="nd-hint">Tutorial images retain their source terms. The CT example is non-commercial; redistribution terms for the T1w lesion annotation are not yet confirmed.</p>
-      </div>
+      <div id="exampleControl"></div>
       <div class="nd-field">
         <label>Primary scan <span aria-hidden="true">*</span></label>
         <div id="primaryField"></div>

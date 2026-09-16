@@ -1,4 +1,4 @@
-import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -94,9 +94,9 @@ export class SpinalCordToolboxApp {
     // Controllers
     this.fileIOController = new SctInputSessions({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file, context) => this.onFileLoaded(file, context),
+      onFileLoaded: (file, context) => (this.inputReady = this.onFileLoaded(file, context)),
       onFilesCleared: () => {
-        void this.onFilesCleared();
+        this.inputCleared = this.onFilesCleared();
       },
       onSessionsChanged: () => this.onInputSessionsChanged()
     });
@@ -143,6 +143,7 @@ export class SpinalCordToolboxApp {
     }
 
     this.setupEventListeners();
+    await this.setupExamples();
     this.populateTaskSelector();
     this.setupInfoTooltips();
     this.syncViewerModeControls();
@@ -250,6 +251,27 @@ export class SpinalCordToolboxApp {
   }
 
   // ==================== Event Listeners ====================
+
+  async setupExamples() {
+    const response = await fetch(new URL('examples.json', document.baseURI));
+    if (!response.ok) throw new Error('Could not load the example catalog.');
+    const examples = await response.json();
+    this.exampleSelector = renderExampleSelector({
+      examples,
+      onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        const files = await fetchFiles();
+        assertCurrent();
+        this.fileIOController.clearFiles();
+        await this.inputCleared;
+        assertCurrent();
+        this.fileIOController.handleFiles(files);
+        await this.inputReady;
+      },
+      onStatus: (message) => this.updateOutput(message),
+    });
+    const input = document.getElementById('fileInput');
+    input.closest('.section-content').prepend(this.exampleSelector.root);
+  }
 
   setupEventListeners() {
     const fileInput = document.getElementById('fileInput');

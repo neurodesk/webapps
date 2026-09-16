@@ -58,6 +58,12 @@
       {
         "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/musclemap/body-mri/body_mri_s0175.nii.gz",
+        "sha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379",
+        "bytes": 16134253,
+        "kind": "example"
       }
     ],
     "vesselboost": [
@@ -103,6 +109,12 @@
       {
         "url": "https://unpkg.com/@niivue/niivue@0.68.1/dist/niivue.umd.js",
         "kind": "runtime-cdn"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/vesselboost/brain-mra/chris_MRA.nii.gz",
+        "sha256": "d4bf431c4b4223e3ea368c5c26ea7904c23d9d59496e14022e32a38a5270b63f",
+        "bytes": 95078,
+        "kind": "example"
       }
     ],
     "spinalcordtoolbox": [
@@ -149,6 +161,12 @@
       {
         "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz",
+        "sha256": "97638eee6df7c75b4de8921163e708420587de28b03eefb3fb1efbcdad659506",
+        "bytes": 9092309,
+        "kind": "example"
       }
     ],
     "calmar": [
@@ -213,40 +231,68 @@
       {
         "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
+        "sha256": "725a37bf9556c6776a7be552597999df67d175a44eafc03252db058e8f5c5cad",
+        "bytes": 4104013,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz",
+        "sha256": "460d447286c7ecd70942b4144030388ae767928fc53f27ec66a39c5fe86d0e10",
+        "bytes": 78302,
+        "kind": "example"
       }
     ],
     "qsmbly": [
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "26f6d74ccd6e7fa34526a4a9f17fbfcce305b7ccdbee6ce7f4ed74dda8622b86",
+        "bytes": 381
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315917bd2b1503380d7d1",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "260f4019476c9bad09f804c8004290549fc10f3d07da4e013773e1d18177486e",
+        "bytes": 377
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031591ca0aa1330880d636",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "5b4a4f0a86ab1594db58194577d45f9ca3085515a06627bdaa69cfe96df3d75c",
+        "bytes": 378
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031592f1ede34d5380d7bf",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "3dbe983e3eadb4dca595d045d33a235185f145eec51fb036e5cf41d4437f18b2",
+        "bytes": 382
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a1",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "070dcd8efe29b12bb9509ba35d202621846fc49c06923f0a04a99569c5498e04",
+        "bytes": 378
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a2",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "4a24501e299b9043dedac5564776be28b4e778dd2312298f9d40d1fbcf60f4cb",
+        "bytes": 382
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594d9869f43beec7017",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "160ec9ddf8f062c763a04b29d2031f25bb63a97d22aa2b2558d185f486530571",
+        "bytes": 378
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594f1ede34d5380d7c2",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "a812b389433bb137d45ae2df56e4ffadf761c84d7d82ba785fac09e6a469503f",
+        "bytes": 382
       },
       {
         "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c",
@@ -485,6 +531,102 @@
       {
         "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap",
         "kind": "font-css"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-mag_MEGRE.json",
+        "sha256": "3dbe983e3eadb4dca595d045d33a235185f145eec51fb036e5cf41d4437f18b2",
+        "bytes": 382,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-mag_MEGRE.nii.gz",
+        "sha256": "62f817c1d5556f25485438bf6f1d3ff3156cfd11609304519c3e753305dec01f",
+        "bytes": 3510840,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-phase_MEGRE.json",
+        "sha256": "160ec9ddf8f062c763a04b29d2031f25bb63a97d22aa2b2558d185f486530571",
+        "bytes": 378,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-1_part-phase_MEGRE.nii.gz",
+        "sha256": "e5dbd8b9641eaa4fe12917feccdb49f350df3d04f54008631fcfcfda7a093969",
+        "bytes": 3668449,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-mag_MEGRE.json",
+        "sha256": "a812b389433bb137d45ae2df56e4ffadf761c84d7d82ba785fac09e6a469503f",
+        "bytes": 382,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-mag_MEGRE.nii.gz",
+        "sha256": "aa2bb366ebf3dce34b355a62666e19e8e254f238569f89d4b59de0c5bb5a3b9e",
+        "bytes": 3505501,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-phase_MEGRE.json",
+        "sha256": "5b4a4f0a86ab1594db58194577d45f9ca3085515a06627bdaa69cfe96df3d75c",
+        "bytes": 378,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-2_part-phase_MEGRE.nii.gz",
+        "sha256": "cca10c0802055165ed30a2292f0bd024668e93315fef8608701792596a5b1e15",
+        "bytes": 3666524,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-mag_MEGRE.json",
+        "sha256": "26f6d74ccd6e7fa34526a4a9f17fbfcce305b7ccdbee6ce7f4ed74dda8622b86",
+        "bytes": 381,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-mag_MEGRE.nii.gz",
+        "sha256": "3934f306e1475a31f74cbdbbe62fa5c36369617e256beb9c7cf8d5cf5e0d40ee",
+        "bytes": 3513321,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-phase_MEGRE.json",
+        "sha256": "260f4019476c9bad09f804c8004290549fc10f3d07da4e013773e1d18177486e",
+        "bytes": 377,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-3_part-phase_MEGRE.nii.gz",
+        "sha256": "cd9574df6ecca0e53500276eb40ab65574cc7686fe7a0f2b0e52bb4e7ada08ff",
+        "bytes": 3664119,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-mag_MEGRE.json",
+        "sha256": "4a24501e299b9043dedac5564776be28b4e778dd2312298f9d40d1fbcf60f4cb",
+        "bytes": 382,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-mag_MEGRE.nii.gz",
+        "sha256": "c61d0b10df4ccea650d27b97ed21260c8fb68460b7eac22ac94cf46562503752",
+        "bytes": 3508647,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-phase_MEGRE.json",
+        "sha256": "070dcd8efe29b12bb9509ba35d202621846fc49c06923f0a04a99569c5498e04",
+        "bytes": 378,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/qsmbly/four-echo-qsm/sub-1_echo-4_part-phase_MEGRE.nii.gz",
+        "sha256": "03f790fd832d0d1c6a9338493ecb6c0a8b8f31f51415787fcc6a2502283ca431",
+        "bytes": 3664573,
+        "kind": "example"
       }
     ],
     "seedseg": [
@@ -701,6 +843,12 @@
         "bytes": 283584,
         "kind": "python-wheel",
         "license": null
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/seedseg/synthetic-signal-voids/synthetic_prostate_signal_voids.nii",
+        "sha256": "9a18fb7089db325bda31a51740df0f4043cb7f71e8689b8adb4e571e3d066c8f",
+        "bytes": 2359648,
+        "kind": "example"
       }
     ],
     "dicompare": [
@@ -905,6 +1053,726 @@
         "bytes": 283584,
         "kind": "python-wheel",
         "license": null
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-001.dcm",
+        "sha256": "14d312bef9406d07f6e68b644b89a7a3b320457e4c6a5e29e385a6c2e3b1bbd7",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-002.dcm",
+        "sha256": "1d249ccba0759e835e96f4a6afa35d66da09191ea67932ff9ed41eafd04a8819",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-003.dcm",
+        "sha256": "e8a5705fdbb8c9dbbd3ca1f9a17beeb2ebb20500bfbae36413c956aaf2706932",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-004.dcm",
+        "sha256": "f1abc4d98237af20df0cf9a97acba2fdb7270cd019f00b232f29ab29193eb9f3",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-005.dcm",
+        "sha256": "18c93213aaa663de49567edb98c04aeb068b1f2ea3139abc5bfb5193a8389446",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-006.dcm",
+        "sha256": "8434549c42397db2cb572a102f24e73fa9305f45885a5b8540c4b1ccf14b54ad",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-007.dcm",
+        "sha256": "1cd4fcfb83083fa922b6af9eff8c8e5c5b4488db2264211ac3cd90238ba13b3b",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-008.dcm",
+        "sha256": "80ed84ebc7c9c9f1ff5639ab6dc57e4f0cfbba1c40427b382e6e5a01df499667",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-009.dcm",
+        "sha256": "056196b51933a6a3ca5f312e75aa45e06297a2a8391bdbca548537be7139d074",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-010.dcm",
+        "sha256": "7bb692a3cbb9eb3398ec0e354a94a856522e62bce57fa798dc64d9fac9f2bdc9",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-011.dcm",
+        "sha256": "274f0506e7d7a891fa05e56c0b3d73d74bedca6308d2618f387fe6acf3cdd65e",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-012.dcm",
+        "sha256": "6eeb27d3542ae8418c7825890cbdd47458d2f48c438e1a6740ecaaca62d968aa",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-013.dcm",
+        "sha256": "939b416b9d0ff87ac55d451de4ec88cd026553d7bcb5e8eb6630406a77d55b7e",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-014.dcm",
+        "sha256": "efd71f81605f9254e3881df69724645f55e0dbbc79a24fa07c7b4dcd97e930d2",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-015.dcm",
+        "sha256": "5d80a36e4353a03775fbdf4a0344f66ee07894c671ca90c5adf60d4d5a5c092f",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-016.dcm",
+        "sha256": "4ea191c1b1f813b4ebd8bee4422fbe1855a9495cf339dfd80a707084ce26c10e",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-017.dcm",
+        "sha256": "fb6fec4646f04a2a36391c8ad0d5d9e9097799104adac4745f2a0382ed980bb4",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-018.dcm",
+        "sha256": "3d94f181cc8441b799b4b5f383dbb15c17166d3928ab8aaf08c6cb0545c9d00d",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-019.dcm",
+        "sha256": "09219639b9a7f8cc8d9ffa2a7b2d18dd8e409a9d7c9cf46eb1faa31b2f9fd634",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-020.dcm",
+        "sha256": "b41ff8f916657a4e15405cb3345e28f1be2e71503654253f7442436357baf08b",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-021.dcm",
+        "sha256": "da38f1aa570ccb1d5e0630ffdf72e2521636428564ac952d7de09fc8411d33fa",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-022.dcm",
+        "sha256": "a9cb16f1dbbef36f4de71d70983baf1b9f27dbbbc887eba09a0b1a15d38054cb",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-023.dcm",
+        "sha256": "c9df7fe3d812ffaaf62a8c9348653bd24b35ce60adcca38f7fd165f478a3ded5",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-024.dcm",
+        "sha256": "3d473858793a5ed2f918705ed0bc650735c06195bc42b9aa997fc416ec886e88",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-025.dcm",
+        "sha256": "cf23344e9a49ef3106efb0af9ee09d8f9f8e9410cc3e6caa85763bc2ee8cfbe8",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-026.dcm",
+        "sha256": "bffc91e64e369ea0b0f279858c6fa4760cb7376b585a8e3c30f7efa1b4805b86",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-027.dcm",
+        "sha256": "5463b78b850229dc0ab6607f9361b278e1d964757ab161525f78b87092a00ae9",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-028.dcm",
+        "sha256": "3d2fa54dbd60e621154cf8b65fe92130503b8d77b26171d0d4687265732093bc",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-029.dcm",
+        "sha256": "807ffc9ff5c18e7f8726ab5e00571b7b01b581a5ff8ba7112fa966ad87106ded",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-030.dcm",
+        "sha256": "2fc87389ff647f5a5fa529fb713be316a6523bf4bf98ad515ddd8086b6e30e31",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-031.dcm",
+        "sha256": "57cd60592d1636bcebaf8f5dcd56e80f9e324d0ccbc165be6716227ae943995a",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-032.dcm",
+        "sha256": "c6b53ffe2f96a17d57b3674b044e6cbd2f7975f7665cf13b3a714a9f6a765612",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-033.dcm",
+        "sha256": "3de1970a445357fb984cdecc4840fc4694e3fb7196180fe2006232ef4338bc9b",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-034.dcm",
+        "sha256": "ad8698ea39a4f7f3cceaa8247b101eb4833f1be33dc30e665a255c6f29fa3c08",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-035.dcm",
+        "sha256": "fb9d74ee96321a1f16b5b8973c6d68860878efc062a5e2f08ee2ff7606174f7d",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-036.dcm",
+        "sha256": "60cc7f9c0fe761f2c98f5329c119756317d8d71fa47986de45aae001a0d73261",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-037.dcm",
+        "sha256": "98027779fc9955297d7aadf027bf26449d35a1ef0a2af9e69ef4e4ae3851f14c",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-038.dcm",
+        "sha256": "60ea649044a0dd273bdd1c4e151fbb5b983f692f31dc8a98a2390f29e3de52ea",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-039.dcm",
+        "sha256": "db1707ea3cd75d3eeaf8d91913173f0e40fa3bbe300fc389a60ae01ff1b47d4f",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-040.dcm",
+        "sha256": "0082e0475308dea5f399c000bf5d8eddf040dffbfda4f2bd78abf988d140c7e3",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-041.dcm",
+        "sha256": "d9431fff4707f34862ef316cdd82200d879dc8f2609677414875a83af5e6c529",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-042.dcm",
+        "sha256": "70e966bef508bdcd3c61db50c670c96ff212c77d81f127005423e4d4cba01f11",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-043.dcm",
+        "sha256": "650c7d291ce86f3b19a27d5d4834c40a6ca42bce50527bc314b3985d379415ca",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-044.dcm",
+        "sha256": "1864a6bf5313db9d22b1459a8f7425c09bc3f65a9d92694324bd01e0e5652894",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-045.dcm",
+        "sha256": "ccf63e43bb914ca49233c7ca8b9c638e7d47f459f875a9701f50f3cf803dd177",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-046.dcm",
+        "sha256": "7f7055a3ac2fd5be4ffcd7c073e91ca4f74b3957a6a6fb2c220a5be953a9c35b",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-047.dcm",
+        "sha256": "8b334b97c8c4865b1a53c777260e3033196ce4d3f69d496cd31dcc70eb1df0da",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-048.dcm",
+        "sha256": "fd585b98cd7445f836843e5768a7452445ec73630502f6770963a26dd11d3c71",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-049.dcm",
+        "sha256": "983b61eb432b66191f912225b4f1c935dd1fb1fa80ca178e1f9eabf6831fbd24",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-050.dcm",
+        "sha256": "9c6365e283ed18d2cfdc71bc28edf537508e2fe76083fb1fcfb88645ec05b216",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-051.dcm",
+        "sha256": "8c416ab31ca26f10fde7602f19e73f3b83d0dbc62ab394b0054f63ba44f24380",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-052.dcm",
+        "sha256": "1e6f89834669ba420e261d4284d217e65f4a344d08b687056a080ef107d1e8ba",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-053.dcm",
+        "sha256": "c9d1299d9cc9ab5ba22d90050562083a5eec8752a494e94ecf85f961478aeb72",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-054.dcm",
+        "sha256": "12e740f7b1be118f50b348916da272c82eec88b008b507dbe46ef7542c732306",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-055.dcm",
+        "sha256": "c6a79639813e7343fbb1dbd66bc312e4c752acb4d1e90351887e8debc073e362",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-056.dcm",
+        "sha256": "ad333f12ed199f6c4f6e2810c2e399ebd41d0f78d8b405bd74f9c06c9a253638",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-057.dcm",
+        "sha256": "79ccd2b0afca8213c71e50b6380e17f2684afa14ce7fb399456e578da5275256",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-058.dcm",
+        "sha256": "f773601130d5e305c57c3af6c249f21ec4813bf57d2fdb6a480eee1d9a457059",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-059.dcm",
+        "sha256": "482a070f49d0db561af8e2c35320216465d1c02b2c8d27e0a7facaeffd02499f",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-060.dcm",
+        "sha256": "991e40788abd9bda1cd52128b8e51081389b67d1c98162ea365d8876fdb55f8e",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-061.dcm",
+        "sha256": "b9a3d378bd9454aa2e151315da916493abfdac45e6b4999e038dcdeb26858253",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-062.dcm",
+        "sha256": "8403e7ccc9fcc146264be910745d8053b99c10d0364c1a1dbc01ef7859f84ce9",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-063.dcm",
+        "sha256": "84571cc608d7c115c8097f01ad4ea439ff8350f8f4f5cdab64e75674e94dc5be",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-064.dcm",
+        "sha256": "49fae63fd19c0f3f873fe536a21b27d84ceae69c481f1ea6caa1439bf3b157a7",
+        "bytes": 527990,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-065.dcm",
+        "sha256": "c90939cbc51a6623a672acef0ec4154ee143b1fbf2fb2c92e2e87a250eb74122",
+        "bytes": 527990,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-066.dcm",
+        "sha256": "0b6a232a207248dcc3e1d863641d8721056a7c5b36d6ff4ac94fc94343f4ad8f",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-067.dcm",
+        "sha256": "6475c78b31fdf8a660cecf33ecba1dff484dadd7698b4ceaf0f4056c23d79438",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-068.dcm",
+        "sha256": "d610026e8b15067f30911ff5e666e6fcf16c7f4a62c46855c5f1bc8d5722d6ad",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-069.dcm",
+        "sha256": "d9acf0a23373be84a54ba322b1f8a2c5e9e0464abfff93351a421b13b1469901",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-070.dcm",
+        "sha256": "59e2e6ee645859f35eae44ba141902d98cda77b5f39075c43e89f8bc527b4338",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-071.dcm",
+        "sha256": "3c3c9c1ecc3eec6a182fc638a1167f5c7eba78c973605c191fdcdeb9c45daf85",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-072.dcm",
+        "sha256": "ecaae1f9c2b5fd2b0f24e33394803dfb3f439dc5422342abdb8802cdcba7451e",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-073.dcm",
+        "sha256": "b226cd60662d0c6736d4d8478b284b77c4e47bdf21b6fd125385fe01dda1fdc5",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-074.dcm",
+        "sha256": "5dd96c1fa62477c63c48038d67c1fdafba85ee23ea69885176772d54613bb10d",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-075.dcm",
+        "sha256": "2720109b8355b217e9e13e990c842c095ee73a00b75846a068aff71c9bd820e2",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-076.dcm",
+        "sha256": "db223dbc0ddab2899050e1e16ddb5f95d3e5eddc9d9b08c3ed401edfc6ead283",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-077.dcm",
+        "sha256": "b3e216ab7fd10256abb69c3cbd630d63dc27bc10398e5363d1a19171d35dc2d8",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-078.dcm",
+        "sha256": "eb0acea1205fb1577ceb406f5e6a4b076f744eb679b96c787e10fd89bf08c6a6",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-079.dcm",
+        "sha256": "0f0f269228a5e56e5ff8b07a6883275660b2e3fb6d39aeb65b245d5b3fd2c50d",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-080.dcm",
+        "sha256": "2741b751b39466854f0ed85856b638d079de46698435eb4feb71230b374d4114",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-081.dcm",
+        "sha256": "674b17458d6ac3d029ecad8dad74053bddb310a993d8e47542f02f2b22865e07",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-082.dcm",
+        "sha256": "1edf946db05439977a9af191a0462c5f7686228ed2baa290e980b0f83084c9fe",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-083.dcm",
+        "sha256": "72626a84c832733b06eb6c8b973f3a30d79ba2019d4e3b435dbe99adfcac98e0",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-084.dcm",
+        "sha256": "235adfa5a4ac5c03c439adbcfc9b3ddb59318eac7ec0cb06a23a25e35c64da67",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-085.dcm",
+        "sha256": "96e3105dd57a3a98f9cbd14c131367a309e2a88ce2b8a85e945da188927396cc",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-086.dcm",
+        "sha256": "17be5172cc41910fd4d44920eb5d8b08ff5e1ae8d8929df29e4f37671eff1c46",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-087.dcm",
+        "sha256": "42d90c496aa8a217de565774518d131e6d81044b3b242af97a5c36a77af92ba6",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-088.dcm",
+        "sha256": "059b3e5dc9e832dfaf607c39f0bc2f87b4756785de13b5f8c4a8bed05b9c0cdd",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-089.dcm",
+        "sha256": "8b787f366f4611b9686579f6f4cfa050744c6b19ac05e658ddad8e4b3200113a",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-090.dcm",
+        "sha256": "a1c8bf173d6be2dc44b3ff88d82182dcda7ac6c9299db7e36ea0312cc0817104",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-091.dcm",
+        "sha256": "b15ecc8228b8f32f928714328ac52ea7f4860432c74992fa2b3ae469ff8efa88",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-092.dcm",
+        "sha256": "41f11c532eacf68499144725c0fbf9f9fcf9cf3ea86ea2a2a50e991ca2549480",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-093.dcm",
+        "sha256": "d0acf3152f40452ab3ae34611ed0058e145abd6fa6047a572759e636c02211b8",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-094.dcm",
+        "sha256": "f73713c318294d133c9fcd11efd7aff9aa12527ec0d687b0cbd58f4819258633",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-095.dcm",
+        "sha256": "a0fa7c84f545c290752f4cdb0e491ccc39842b916b41bb213777b193774a6590",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-096.dcm",
+        "sha256": "2a02c866e910476df606b8f662b8d849981ff5ee55b9ded90d8cec8a722fb59c",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-097.dcm",
+        "sha256": "8aaa78a420f2abac0cb7b8c27119c4443c28ad0779e9995d5699ab5ad9b11d18",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-098.dcm",
+        "sha256": "16a0fd1a691e17ee49d804cd77236171df88e84557e3b0b2a1d896290e154b7e",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-099.dcm",
+        "sha256": "90ff49bff1b24e4c4b93f3fafa9c31a1a0d3887b5600fdb74d99ebf3dd13b1e6",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-100.dcm",
+        "sha256": "8e38fa62f66e1eb0dc39e7b85f463541beeb05da7f5e26f4530cfe58e962773d",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-101.dcm",
+        "sha256": "2a23480ef51ff26b1558f0d7c1c6514c78c8eb60d75e1c109250684ea6a2aff2",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-102.dcm",
+        "sha256": "188fcf0d606bdbcd48545fda4124280bb487dc7c7fd3470bf425589e05d56fb2",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-103.dcm",
+        "sha256": "ea1dcb02501fb50cd6c2f52d1a643bff4d420dccf9a5db6b2dbc5cb14f9ad359",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-104.dcm",
+        "sha256": "73cb8bf9c1781a4dafe2a3c41339154432c075800a29ab9bebc5523c41a27b7f",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-105.dcm",
+        "sha256": "7e29e540c5ae73fa402da2b1c91fa2c71605c8341d9e8e76aed6c455ac1555f1",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-106.dcm",
+        "sha256": "78df6fed7a214cd17a30e51ab9162372909e9641e54da98ba651c91de0e2c0d5",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-107.dcm",
+        "sha256": "97892bfa790cbf90ef3c838124953ed375391bb8994ba0db40a37d5d799eeee0",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-108.dcm",
+        "sha256": "c30056c7222b534e1a7ad6d0e35df4b1dbd2617f572bca38c2c2e860add6f4c5",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-109.dcm",
+        "sha256": "eca68ec282d15ce8fd3e2d442aef4612096ba85b731e8068a28d880636aac0a0",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-110.dcm",
+        "sha256": "9a2b3de14a6ca99a3ae63ee3c86b257c68c8d1b30d84762e3a5934182be23f38",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-111.dcm",
+        "sha256": "af766cb0afdd218460a41e2d4325f491d5a187d38216d2739b7c1c825660ac71",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-112.dcm",
+        "sha256": "bfe4ed8e55f9107edccb823bb60dd82deea10b66e79c8626324504df12630cd9",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-113.dcm",
+        "sha256": "4b7eefd2fef0ea84b3ffccc6ee09284c4848fc8aa46b0be353360d9ced47ea45",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-114.dcm",
+        "sha256": "305ec00c1bbf1e1785fac89771171f8fbd430618954aaeeb58aeac4abc36cd25",
+        "bytes": 527996,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-115.dcm",
+        "sha256": "6b103befa8fb8f2a63b6cba3472587a05eefe5fcca2c49e22914aae10f08eed4",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-116.dcm",
+        "sha256": "50583fbada5c6418caf112d31a1fff37ccb9fd87d345108eff8462e62fd1f4a9",
+        "bytes": 528000,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-117.dcm",
+        "sha256": "c42381cce09db14042fb0ba12a3b134d90f60a7125878d0769eb675f70eec493",
+        "bytes": 527994,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-118.dcm",
+        "sha256": "d4cb4d94d2aaf8547eb781639f40b73084d821471159c8ab7cf5e612b5659b9d",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-119.dcm",
+        "sha256": "4c0568f73954c7c18bd0741652f66172897540276cc5b8f9b9c0e95a9260d465",
+        "bytes": 527998,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-120.dcm",
+        "sha256": "8f838c0b3689997b0e9f82585ce04abac36f13395705ee55ebc9587266b75e75",
+        "bytes": 527994,
+        "kind": "example"
       }
     ],
     "deface": [
@@ -935,9 +1803,34 @@
         "bytes": 587404,
         "kind": "model",
         "license": "NOASSERTION"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902,
+        "kind": "example"
       }
     ],
-    "easy-mp2rage": [],
+    "easy-mp2rage": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_UNI.nii.gz",
+        "sha256": "6b3867a8e8a15fa66078c5774dea3a13ef52e42711ff1dc55a3c87ac8bde6449",
+        "bytes": 7362,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_INV2.nii.gz",
+        "sha256": "f5879939b7c003db69c84eb110a0d0ac0496bad5b2b79989502c03e16856024f",
+        "bytes": 1761,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_SA2RAGE.nii.gz",
+        "sha256": "ad03c7dd1e9fba223f209052a2fdc1a9510626bac62b0c3042f28f5c20b84a02",
+        "bytes": 2501,
+        "kind": "example"
+      }
+    ],
     "niimath": [
       {
         "url": "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz",
@@ -1046,9 +1939,28 @@
         "bytes": 83131,
         "kind": "example-or-support-data",
         "license": "NOASSERTION"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
+        "sha256": "8b763fcadd7a9ae677d4c5cab86b32831c03cddf146504291e7a5082fd9feee1",
+        "bytes": 4294255,
+        "kind": "example"
       }
     ],
-    "dicom2vid": [],
+    "dicom2vid": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902,
+        "kind": "example"
+      }
+    ],
     "browserqc": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/avg152T1.nii.gz",
@@ -1076,9 +1988,76 @@
       {
         "url": "https://fonts.gstatic.com/s/pontanosans/v19/qFdD35GdgYR8EzR6oBLDHa3axT8N.woff2",
         "kind": "font"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1c3a4b2c508b01171540e3870272d39f66b04004/topofit/0.5.1/onnx-20260911/validation/browser/end-to-end/lh.pial",
+        "sha256": "068982cfa4533bb5ca228c7743b0fa93da1b055df6391444f8505d426b39be96",
+        "bytes": 8847582,
+        "kind": "example"
       }
     ],
-    "zarro": [],
+    "zarro": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/.zattrs",
+        "sha256": "93e67fbd412f80e11925286dc274fb3bcb467d735b8253b421712bbb3fe9bd91",
+        "bytes": 4738,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/.zgroup",
+        "sha256": "2383746e67b4bcc2762b3f100f06c3fa2d5f149ab5a8e5da5d33521464a01959",
+        "bytes": 24,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/0/.zarray",
+        "sha256": "4e617a553b7818677e220ecca8de9b63d0f13098395ece219b0c0c81e9ae9dc0",
+        "bytes": 409,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/0/0.0.0.0.0",
+        "sha256": "686b14f33f84c4163db44bdc8426407f402e336789ebbfe2b255ec60eec9a65b",
+        "bytes": 9752891,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/1/.zarray",
+        "sha256": "1a193bd137a0cbf9996df2f5e8ee98f697b15f123087813a4aff3c9659867bd5",
+        "bytes": 405,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/1/0.0.0.0.0",
+        "sha256": "382854fed8200681f3caf442ed4ed70671afe33b33106d770a7700a19a82662a",
+        "bytes": 2325601,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/2/.zarray",
+        "sha256": "7614654c4cdf5cf907110ef75d7b820f996e5ded0303315351ca4fcceaa6e472",
+        "bytes": 405,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/2/0.0.0.0.0",
+        "sha256": "c9c33399843e8eadb0bf42b74fbe6cc5011dbc1bcb0d15c47df2939dff8221f9",
+        "bytes": 590714,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/3/.zarray",
+        "sha256": "91d7b3afeab48ebbb295ed73216779a7b430d70ec2031585ca1e07587ec85713",
+        "bytes": 405,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/zarro/microscopy-stack/3/0.0.0.0.0",
+        "sha256": "da8a0638d8b8e9c0b58c5b1d0ea872222e3ea26bf44432b2b314396d18819d17",
+        "bytes": 153554,
+        "kind": "example"
+      }
+    ],
     "synthsr": [
       {
         "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/T1w7T.nii.gz",
@@ -1158,7 +2137,9 @@
       },
       {
         "url": "https://raw.githubusercontent.com/neurolabusc/py_synthsr/04ab5548f4609c2b44ca51b3f4bc319b585dafa7/FLAIR.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "87edd267540bcdb9734e4a42458c82c2aa8582c61ef6518a792bfdc1e89b5386",
+        "bytes": 2547127
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx",
@@ -1166,12 +2147,38 @@
         "bytes": 52980984,
         "kind": "model",
         "license": "Apache-2.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
+        "sha256": "8b763fcadd7a9ae677d4c5cab86b32831c03cddf146504291e7a5082fd9feee1",
+        "bytes": 4294255,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/CT_Philips.nii.gz",
+        "sha256": "6b6ebf958bfe2972f27c3f8dc06bd3763eb7646186bd2e5251f37f9aa7a16971",
+        "bytes": 7816605,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/synthsr/flair/FLAIR.nii.gz",
+        "sha256": "87edd267540bcdb9734e4a42458c82c2aa8582c61ef6518a792bfdc1e89b5386",
+        "bytes": 2547127,
+        "kind": "example"
       }
     ],
     "synthseg": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/models/synthseg-2.0.onnx",
@@ -1207,20 +2214,56 @@
         "bytes": 10296357,
         "kind": "model",
         "license": "Apache-2.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_T1w.nii.gz",
+        "sha256": "753ed0812286604068a67489caecf8df2e8f3349de8e5af3d18f5c6744be6869",
+        "bytes": 4619526,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_space-TRACE_desc-lesion_mask.nii.gz",
+        "sha256": "cdd5cc70dcc49f425e90e9b102545708ce70ecb76179fcdfc739ab258eea1b92",
+        "bytes": 2381,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_rec-TRACE_dwi.nii.gz",
+        "sha256": "27303b7a328840c20b5f736ab1aebd6d9d5fee55e62eac840a271864e689c73d",
+        "bytes": 631349,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/CT.nii.gz",
+        "sha256": "d1df3c9899b5703da5237c2f6f7c0f7e95652400973e9239e895292a1dd6fa7a",
+        "bytes": 5812929,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/CT-lesion.nii.gz",
+        "sha256": "a5b1503f73baf467d104296d18a9e89c694f52ae35c2849962abd8331a9b9eed",
+        "bytes": 7925,
+        "kind": "example"
       }
     ],
     "dwi2trx": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.bval",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "5b7b0b81f43794445d5b12fb227a5f4ed838c9df384d9a639d47d18fb067118b",
+        "bytes": 102
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.bvec",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "709d68fced5a626dc8496cd0d2950efe18d29187f6aa028bd05551c69e0f6376",
+        "bytes": 535
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "9007c69e6f93b94fd57bf427415a7b4bd2c0822a6b5ee334cb561b8a6ebcd50f",
+        "bytes": 2659565
       }
     ],
     "edgereg": [
@@ -1274,11 +2317,15 @@
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/t1_crop.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "534a240d1d41881bd33ae5b48ac22051836968775275f1261c4115dca0099649",
+        "bytes": 4183263
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/MNI152_T1_1mm.nii.gz",
-        "kind": "example-template"
+        "kind": "example-template",
+        "sha256": "d1f03e160c2548592a01d98d44d7e0ffa8a8ef58bc9b07d26369e214ba170edb",
+        "bytes": 10963667
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/MNI152_T1_ext.nii.gz",
@@ -1292,21 +2339,29 @@
     "greedy": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/moving/t1_brain.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+        "bytes": 1706016
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz",
-        "kind": "example-template"
+        "kind": "example-template",
+        "sha256": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212",
+        "bytes": 3219212
       }
     ],
     "ants": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/moving/t1_brain.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+        "bytes": 1706016
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz",
-        "kind": "example-template"
+        "kind": "example-template",
+        "sha256": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212",
+        "bytes": 3219212
       }
     ],
     "brain2print": [
@@ -1540,16 +2595,26 @@
         "bytes": 1487969,
         "kind": "model",
         "license": "GPL-3.0-only"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/topofit/openneuro-t1/sub-01_T1w.nii.gz",
+        "sha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
+        "bytes": 5663237,
+        "kind": "example"
       }
     ],
     "fireants": [
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/moving/t1_brain.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+        "bytes": 1706016
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz",
-        "kind": "example-template"
+        "kind": "example-template",
+        "sha256": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212",
+        "bytes": 3219212
       }
     ],
     "brain-extraction": [
@@ -1562,11 +2627,15 @@
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
-        "kind": "example"
+        "kind": "example",
+        "sha256": "8b763fcadd7a9ae677d4c5cab86b32831c03cddf146504291e7a5082fd9feee1",
+        "bytes": 4294255
       }
     ]
   },

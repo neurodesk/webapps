@@ -1,6 +1,6 @@
 {
   "name": "dicompare",
-  "version": "0.13.20260915",
+  "version": "0.13.20260916",
   "description": "DICOM compliance validation tool for medical imaging",
   "author": {
     "name": "Ashley Stewart",
@@ -22,7 +22,8 @@
     "type-check": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:e2e": "node ../../test/examples.smoke.mjs --app dicompare"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",
@@ -51,7 +52,8 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.7.1",
     "remark-gfm": "^4.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "@neurodesk/webapp-components": "workspace:*"
   },
   "eslintConfig": {
     "extends": [

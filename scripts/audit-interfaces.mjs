@@ -1,26 +1,46 @@
 #!/usr/bin/env node
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadAppExamples } from './lib/app-examples.mjs';
+import { loadVerifiedExampleCache } from './lib/example-asset-cache.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
 
 const { apps } = await loadAppsRegistry();
+const requested = new Set((process.env.SMOKE_APPS ?? '').split(',').filter(Boolean));
+const selected = requested.size ? apps.filter(app => requested.has(app.id)) : apps;
+if (requested.size && selected.length !== requested.size) throw new Error('SMOKE_APPS contains an unknown app');
+const cacheDirectory = process.env.EXAMPLE_ASSET_CACHE;
+const assetLock = cacheDirectory ? JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.lock.json'), 'utf8')) : null;
+if (cacheDirectory) console.log(`Example source: checksum-verified-cache (${cacheDirectory}); every declared example file must match the offline lock, with no missing-file network fallback`);
 const site = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
 const output = process.env.INTERFACE_ARTIFACTS;
 if (output) await mkdir(output, { recursive: true });
 const results = [];
 try {
-  for (const app of apps) {
+  for (const app of selected) {
     const examples = await loadAppExamples(app);
+    const cachedExamples = cacheDirectory
+      ? await loadVerifiedExampleCache(examples.flatMap(example => example.files), { directory: cacheDirectory, assets: assetLock.assets })
+      : null;
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       const context = await browser.newContext({ viewport, isMobile: viewport.width < 600, hasTouch: viewport.width < 600 });
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
-      const result = { app: app.id, width: viewport.width, failures: [] };
+      const result = { app: app.id, width: viewport.width, exampleSource: cachedExamples ? 'checksum-verified-cache' : 'hosted-network', failures: [] };
       try {
+        if (cachedExamples) {
+          await page.route(url => cachedExamples.has(url.href), route => {
+            const asset = cachedExamples.get(route.request().url());
+            return route.fulfill({
+              body: asset.body,
+              contentType: asset.contentType,
+              headers: { 'access-control-allow-origin': '*', 'cross-origin-resource-policy': 'cross-origin' },
+            });
+          });
+        }
         await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
         const response = await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded' });
         expect(response.status()).toBe(200);
@@ -31,11 +51,6 @@ try {
         if (await workspace.isVisible()) await workspace.click();
         const welcome = page.locator('#welcomeLater');
         if (await welcome.isVisible()) await welcome.click();
-        // Loading registration examples resets the Output disclosure. Exercise
-        // keyboard controls only after initialization has succeeded or failed.
-        if (['ants', 'greedy'].includes(app.id)) {
-          await expect(page.locator('#runButton:enabled, #statusText.error').first()).toBeVisible({ timeout: 60000 });
-        }
         // Allow the shell observer and disclosure transitions to settle after entry.
         await page.waitForTimeout(300);
         const bar = page.locator('.nd-app-bar:visible');
@@ -78,15 +93,45 @@ try {
         }
         if (result.clippedNavigation.length) result.failures.push(`Clipped navigation: ${result.clippedNavigation.join(', ')}`);
         if (result.duplicates.length) result.failures.push(`Duplicate navigation: ${result.duplicates.join(', ')}`);
-        if (examples) {
-          const selector = page.locator('select[data-neurodesk-example]');
-          await expect(selector).toBeVisible();
-          await expect(selector).toBeEnabled();
-          const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
-          expect(ids).toEqual(examples.map(example => example.id));
+        const selector = page.locator('select[data-neurodesk-example]');
+        await expect(selector).toHaveCount(1);
+        await expect(selector).toBeVisible();
+        await expect(selector).toHaveAccessibleName('Example');
+        const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
+        expect(ids).toEqual(examples.map(example => example.id));
+        const state = page.locator('[data-neurodesk-examples]');
+        await expect(state).toHaveAttribute('data-example-state', 'idle');
+        const gpuCapability = await page.evaluate(async () => {
+          if (!navigator.gpu) return 'api-unavailable';
+          return await navigator.gpu.requestAdapter() === null ? 'adapter-unavailable' : 'available';
+        });
+        const unsupportedMessage = async () => {
+          const messages = await page.locator('#statusMsg:visible, #statusText:visible').allTextContents();
+          return messages.find(message => /can[’']t initialize WebGPU/i.test(message)) ?? '';
+        };
+        await expect.poll(async () => {
+          if (await selector.isEnabled()) return 'enabled';
+          if (gpuCapability !== 'available' && await unsupportedMessage()) return 'unsupported';
+          return 'waiting';
+        }, { timeout: 120000 }).not.toBe('waiting');
+        if (await selector.isDisabled()) {
+          const message = await unsupportedMessage();
+          expect(gpuCapability).not.toBe('available');
+          expect(message).toMatch(/can[’']t initialize WebGPU/i);
+          result.exampleImport = {
+            status: 'skipped',
+            example: examples[0].id,
+            reason: message,
+            capability: gpuCapability,
+          };
+          console.log(`SKIP ${app.id}/${viewport.width} example import: ${gpuCapability}; ${message}`);
+        } else {
           await selector.selectOption(examples[0].id);
-          await expect(page.locator('#fileInfo')).toContainText(new URL(examples[0].url).pathname.split('/').pop(), { timeout: 120000 });
-          await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+          await expect.poll(() => state.getAttribute('data-example-state'), { timeout: 180000 }).not.toBe('loading');
+          await expect(state).toHaveAttribute('data-example-state', 'ready');
+          await expect(state).toHaveAttribute('data-example-id', examples[0].id);
+          result.example = examples[0].id;
+          result.exampleImport = { status: 'passed', example: examples[0].id };
         }
         result.uploads = await page.locator('input[type="file"]').evaluateAll(inputs => inputs.map(input => ({
           id: input.id || input.name || 'unnamed file input',
@@ -136,6 +181,9 @@ try {
         if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}.png`), fullPage: true });
       } catch (error) {
         result.failures.push(error.message);
+        const example = page.locator('[data-neurodesk-examples]');
+        if (await example.count()) result.failures.push(await example.locator('[role="status"]').textContent());
+        if (output) await page.screenshot({ path: join(output, `${app.id}-${viewport.width}-failure.png`), fullPage: true }).catch(() => {});
       } finally {
         await context.close();
       }

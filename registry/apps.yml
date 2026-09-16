@@ -144,6 +144,7 @@ apps:
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: true
+      browser_test: true
       release: true
   - id: seedseg
     path: seedseg
@@ -164,6 +165,7 @@ apps:
     ci:
       toolchains: [node]
       shared_runtime: true
+      browser_test: true
       release: true
   - id: dicompare
     path: dicompare
@@ -183,6 +185,7 @@ apps:
     ci:
       toolchains: [node]
       shared_runtime: false
+      browser_test: true
       release: true
   - id: deface
     path: deface
@@ -222,6 +225,7 @@ apps:
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false
+      browser_test: true
       release: true
   - id: niimath
     path: niimath
@@ -241,6 +245,7 @@ apps:
     ci:
       toolchains: [node]
       shared_runtime: false
+      browser_test: true
       release: true
   - id: dicom2vid
     path: dicom2vid

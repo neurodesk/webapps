@@ -51,7 +51,7 @@ interface WorkspaceContextType {
 
   // Add items
   addFromSchema: (selections: AcquisitionSelection[], getSchemaContent: (id: string) => Promise<string | null>, getUnifiedSchema: (id: string) => UnifiedSchema | null) => Promise<string[]>;
-  addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
+  addFromData: (files: FileList, mode?: 'schema-template' | 'validation-subject', assertCurrent?: () => void) => Promise<string[] | void>;
   addFromDataWithHandles: (manager: FileHandleManager, mode?: 'schema-template' | 'validation-subject') => Promise<void>;
   addFromScratch: () => string;
   addEmpty: () => string;
@@ -74,7 +74,7 @@ interface WorkspaceContextType {
   setDataUsageMode: (id: string, mode: 'schema-template' | 'validation-subject') => void;
 
   // Attachments
-  attachData: (id: string, files: FileList) => Promise<void>;
+  attachData: (id: string, files: FileList, assertCurrent?: () => void) => Promise<void>;
   attachSchema: (id: string, binding: SchemaBinding) => void;
   uploadSchemaForItem: (id: string, files: FileList) => Promise<void>;
   detachData: (id: string) => void;
@@ -244,7 +244,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, [setItems]);
 
   // Add items from DICOM files or protocol files
-  const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template') => {
+  const addFromData = useCallback(async (files: FileList, mode: 'schema-template' | 'validation-subject' = 'schema-template', assertCurrent?: () => void) => {
     const fileArray = Array.from(files);
 
     // Gradient-only drop: don't create new items — bind the descriptors to the
@@ -292,6 +292,10 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
 
     const target = mode === 'validation-subject' ? 'data' : 'schema';
     const { acquisitions: newAcquisitions, dicomFileBatchId } = await processFiles(files, target);
+    assertCurrent?.();
+    if (assertCurrent && newAcquisitions.length === 0) {
+      throw new Error('The example did not produce any readable acquisitions.');
+    }
 
     // Create new items for all uploaded acquisitions
     // User can use "Assign data to references" panel to match them to existing references
@@ -328,6 +332,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         selectItem(newItems[0].id);
       }
     }
+    return newItems.map(item => item.id);
   }, [processFiles, setItems, selectItem, items]);
 
   // Add items from DICOM files using File System Access API (for large datasets >2GB)
@@ -479,8 +484,12 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
   }, [setItems]);
 
   // Attach data to a schema-sourced item
-  const attachData = useCallback(async (id: string, files: FileList) => {
+  const attachData = useCallback(async (id: string, files: FileList, assertCurrent?: () => void) => {
     const { acquisitions: allAcquisitions, dicomFileBatchId } = await processFiles(files, 'data');
+    assertCurrent?.();
+    if (assertCurrent && allAcquisitions.length === 0) {
+      throw new Error('The example did not produce any readable test acquisitions.');
+    }
 
     if (allAcquisitions.length === 1) {
       // Single acquisition: attach directly to the item

@@ -17,25 +17,27 @@ test.beforeEach(async ({ page }, testInfo) => {
   }));
 });
 
-test("live data defaults download and SyN registration completes", async ({ page }) => {
+test("live data examples download and SyN registration completes", async ({ page }) => {
   test.skip(!process.env.ANTS_LIVE_DATA, "Set ANTS_LIVE_DATA=1 to exercise the pinned Hugging Face images (about a minute on a fast GPU laptop).");
   test.setTimeout(900_000);
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator("#movingInfo")).toContainText("t1_brain.nii.gz", { timeout: 60_000 });
   await expect(page.locator("#stationaryInfo")).toContainText("MNI152_T1_1mm_brain.nii.gz", { timeout: 60_000 });
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 840_000 });
 });
 
-test("defaults load into three panels and SyN registration completes on demand", async ({ page }) => {
+test("selected examples load into three panels and SyN registration completes on demand", async ({ page }) => {
   test.setTimeout(300_000);
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator(".nd-viewer-panel")).toHaveCount(3);
-  await expect(page.locator("#movingExample")).toHaveValue(/t1_brain\.nii\.gz$/);
-  await expect(page.locator("#stationaryExample")).toHaveValue(/MNI152_T1_1mm_brain\.nii\.gz$/);
   await expect(page.locator("#movingInfo")).toContainText("brain extracted");
   await expect(page.locator("#stationaryInfo")).toContainText("brain extracted");
-  await expect(page.locator("#statusText")).toContainText("Examples loaded", { timeout: 60_000 });
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await expect(page.locator("#resultList")).toBeEmpty();
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 240_000 });
@@ -54,7 +56,9 @@ test("defaults load into three panels and SyN registration completes on demand",
 
 test("custom images are flagged and can be brain extracted per image", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#statusText")).toContainText("Examples loaded", { timeout: 60_000 });
+  await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
   await page.locator("#movingInput").setInputFiles({ name: "custom.nii.gz", mimeType: "application/gzip", buffer: fixture });
   await expect(page.locator("#movingInfo")).toContainText("not brain extracted");
   await expect(page.locator("#movingExtractButton")).toBeEnabled();
@@ -87,7 +91,6 @@ test("page is cross-origin isolated", async ({ page }) => {
 test("image controls stay disabled without WebGPU", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { value: undefined }));
   await page.goto("/");
-  await expect(page.locator("#movingExample")).toBeDisabled();
-  await expect(page.locator("#stationaryExample")).toBeDisabled();
+  await expect(page.locator("[data-neurodesk-example]")).toBeDisabled();
   await expect(page.locator("#statusText")).toContainText("WebGPU is unavailable");
 });

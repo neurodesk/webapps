@@ -1,6 +1,7 @@
+import examples from '../examples.json';
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { NIFTI_EXAMPLES } from '@neurodesk/webapp-components/example-images';
 import { bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from './volume.js';
@@ -66,13 +67,10 @@ info.body.addEventListener('click', async (event) => {
 });
 
 // ---- Workflow state ----
-let source, output, provenance, worker, viewer, viewerReady, busy = false, timer, started, exampleAbort;
-let importAbort, importedImages = [], loadedExample = '';
+let source, output, provenance, worker, viewer, viewerReady, busy = false, timer, started;
+let importAbort, importedImages = [];
 const assetBase = import.meta.env.VITE_SYNTHSR_ASSET_BASE || manifest.base_url || `${import.meta.env.BASE_URL}model-assets/`;
-const exampleURL = import.meta.env.VITE_SYNTHSR_EXAMPLE_URL || 'https://raw.githubusercontent.com/neurolabusc/py_synthsr/04ab5548f4609c2b44ca51b3f4bc319b585dafa7/FLAIR.nii.gz';
-const excludedExamples = new Set(['CT_Abdo', 'CT_Electrodes', 'Iguana', 'spmMotor']);
-const examples = [{ id: 'FLAIR', url: exampleURL }, ...NIFTI_EXAMPLES.filter((example) => !excludedExamples.has(example.id))];
-for (const example of examples) $('exampleSelect').add(new Option(example.id, example.id));
+
 
 function status(message, error = false) {
   $('statusText').textContent = message;
@@ -82,7 +80,8 @@ function status(message, error = false) {
 
 function setBusy(value) {
   busy = value;
-  for (const id of ['imageInput', 'seriesSelect', 'exampleSelect', 'modality', 'backend', 'mode', 'flip', 'sharpen', 'modelInput']) $(id).disabled = value;
+  exampleControl.setDisabled(value);
+  for (const id of ['imageInput', 'seriesSelect', 'modality', 'backend', 'mode', 'flip', 'sharpen', 'modelInput']) $(id).disabled = value;
   $('processButton').disabled = value || !source;
   $('cancelBtn').hidden = !value;
   $('saveBtn').disabled = value || !output;
@@ -132,17 +131,16 @@ function clearOutput() {
   $('reportBtn').disabled = true;
 }
 
-async function load(file, exampleId = '') {
+async function load(file, signal) {
   if (busy || !file) return;
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
     status('Reading image…');
     const volume = readVolume(await file.arrayBuffer());
+    signal?.throwIfAborted();
     source = file;
     clearOutput();
-    loadedExample = exampleId;
-    $('exampleSelect').value = exampleId;
     $('modality').value = volume.data.some((value) => value < 0) ? 'ct' : 'mr';
     $('inputTab').disabled = false;
     $('progress').value = 0;
@@ -163,6 +161,7 @@ async function load(file, exampleId = '') {
 }
 
 async function importImages(filesPromise) {
+  exampleControl.cancel();
   if (busy) return;
   const controller = new AbortController();
   importAbort = controller;
@@ -195,27 +194,20 @@ $('seriesSelect').onchange = async () => {
   if (!await load(importedImages[Number($('seriesSelect').value)])) $('seriesSelect').value = String(importedImages.indexOf(source));
 };
 
-$('exampleSelect').onchange = async () => {
-  const example = examples.find((item) => item.id === $('exampleSelect').value);
-  if (!example || busy) return;
-  setBusy(true);
-  status(`Downloading ${example.id}…`);
-  const controller = new AbortController();
-  exampleAbort = controller;
-  try {
-    const response = await fetch(example.url, { signal: controller.signal });
-    if (!response.ok) throw new Error('Example download failed. You can load a local NIfTI image instead.');
-    const bytes = await response.arrayBuffer();
-    if (controller.signal.aborted) return;
-    setBusy(false);
-    const file = new File([bytes], `${example.id}.nii.gz`);
-    if (await load(file, example.id)) $('seriesField').hidden = true;
-  } catch (error) {
-    if (error.name !== 'AbortError') { setBusy(false); status(error.message, true); }
-  } finally {
-    if (exampleAbort === controller) { exampleAbort = null; $('exampleSelect').value = loadedExample; }
-  }
-};
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    const files = await fetchFiles();
+    assertCurrent();
+    if (!await load(files[0], signal)) throw new Error('The example image could not be loaded.');
+    assertCurrent();
+  },
+  onStatus: status,
+});
+exampleControl.select.id = 'exampleSelect';
+exampleControl.root.querySelector('label').htmlFor = 'exampleSelect';
+$('exampleControl').replaceWith(exampleControl.root);
+
 
 $('mode').onchange = () => {
   $('modeHelp').textContent = $('mode').value === 'tiled'
@@ -256,7 +248,7 @@ $('processButton').onclick = () => {
 };
 
 $('cancelBtn').onclick = () => {
-  exampleAbort?.abort();
+  exampleControl.cancel();
   importAbort?.abort();
   setBusy(false);
   $('progress').value = 0;
@@ -277,4 +269,4 @@ $('saveBtn').onclick = () => output && download(output, output.name);
 $('reportBtn').onclick = () => provenance && download(new Blob([JSON.stringify(provenance, null, 2)], { type: 'application/json' }), output.name.replace('.nii', '.json'));
 
 if (!navigator.gpu) { $('backend').value = 'wasm'; status('Ready · WebGPU unavailable; CPU processing selected'); }
-window.addEventListener('pagehide', () => { exampleAbort?.abort(); importAbort?.abort(); worker?.terminate(); clearInterval(timer); });
+window.addEventListener('pagehide', () => { exampleControl.cancel(); importAbort?.abort(); worker?.terminate(); clearInterval(timer); });

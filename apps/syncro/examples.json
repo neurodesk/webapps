@@ -1,0 +1,68 @@
+[
+  {
+    "id": "trace-t1",
+    "label": "Stroke MRI — T1, TRACE and lesion mask",
+    "description": "Matched patient images and lesion annotation for normalization to MNI space.",
+    "expectedResult": "A normalized primary image and lesion mask in MNI space.",
+    "files": [
+      {
+        "role": "primary",
+        "name": "sub-101_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_T1w.nii.gz",
+        "sha256": "753ed0812286604068a67489caecf8df2e8f3349de8e5af3d18f5c6744be6869"
+      },
+      {
+        "role": "lesion",
+        "name": "sub-101_space-TRACE_desc-lesion_mask.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_space-TRACE_desc-lesion_mask.nii.gz",
+        "sha256": "cdd5cc70dcc49f425e90e9b102545708ce70ecb76179fcdfc739ab258eea1b92"
+      },
+      {
+        "role": "pathological",
+        "name": "sub-101_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_rec-TRACE_dwi.nii.gz",
+        "sha256": "27303b7a328840c20b5f736ab1aebd6d9d5fee55e62eac840a271864e689c73d"
+      }
+    ]
+  },
+  {
+    "id": "trace-only",
+    "label": "Stroke MRI — TRACE and lesion mask",
+    "description": "Matched patient images and lesion annotation for normalization to MNI space.",
+    "expectedResult": "A normalized primary image and lesion mask in MNI space.",
+    "files": [
+      {
+        "role": "primary",
+        "name": "sub-101_rec-TRACE_dwi.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_rec-TRACE_dwi.nii.gz",
+        "sha256": "27303b7a328840c20b5f736ab1aebd6d9d5fee55e62eac840a271864e689c73d"
+      },
+      {
+        "role": "lesion",
+        "name": "sub-101_space-TRACE_desc-lesion_mask.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/sub-101_space-TRACE_desc-lesion_mask.nii.gz",
+        "sha256": "cdd5cc70dcc49f425e90e9b102545708ce70ecb76179fcdfc739ab258eea1b92"
+      }
+    ]
+  },
+  {
+    "id": "ct-only",
+    "label": "Stroke CT with lesion mask",
+    "description": "Matched patient images and lesion annotation for normalization to MNI space. CT data is for non-commercial use.",
+    "expectedResult": "A normalized primary image and lesion mask in MNI space.",
+    "files": [
+      {
+        "role": "primary",
+        "name": "CT.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/CT.nii.gz",
+        "sha256": "d1df3c9899b5703da5237c2f6f7c0f7e95652400973e9239e895292a1dd6fa7a"
+      },
+      {
+        "role": "lesion",
+        "name": "CT-lesion.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/444fd496704f2ac5fd06ed28d614f1b6acfc6fcb/syncro/tutorials/CT-lesion.nii.gz",
+        "sha256": "a5b1503f73baf467d104296d18a9e89c694f52ae35c2849962abd8331a9b9eed"
+      }
+    ]
+  }
+]

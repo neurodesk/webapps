@@ -1,0 +1,28 @@
+[
+  {
+    "id": "t1-head",
+    "label": "T1-weighted head MRI",
+    "description": "A structural scan for image filtering and arithmetic.",
+    "expectedResult": "Process the image and download the result.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+      }
+    ]
+  },
+  {
+    "id": "t2-head",
+    "label": "T2-weighted head MRI",
+    "description": "A T2-weighted scan for comparing image operations.",
+    "expectedResult": "Process the image and download the result.",
+    "files": [
+      {
+        "role": "image",
+        "name": "chris_t2.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+      }
+    ]
+  }
+]

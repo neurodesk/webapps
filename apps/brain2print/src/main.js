@@ -1,3 +1,5 @@
+import examples from '../examples.json'
+import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui'
@@ -9,7 +11,6 @@ import { flipWinding, inspectMesh } from './mesh.js'
 
 const $ = (id) => document.getElementById(id)
 const directVolume = /\.(nii|nii\.gz|mgh|mgz|nrrd|mha|mhd|nhdr|head|v)$/i
-const DEFAULT_T1_URL = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/t1_crop.nii.gz'
 const SEG_COLORMAP = {
   R: [0, 245, 205, 120, 196, 220, 230, 0, 122, 236, 12, 204, 42, 119, 220, 103, 255, 165],
   G: [0, 245, 62, 18, 58, 248, 148, 118, 186, 13, 48, 182, 204, 159, 216, 255, 165, 42],
@@ -19,7 +20,6 @@ const SEG_COLORMAP = {
   A: [0, ...Array(17).fill(255)],
 }
 
-const exampleDownload = new AbortController()
 let viewerReady = false
 let source = null
 let segmentation = null
@@ -71,6 +71,7 @@ function status(message, error = false) {
 }
 
 function buttons() {
+  exampleControl.setDisabled(busy || !viewerReady)
   for (const id of ['imageInput', 'folderInput', 'seriesSelect']) $(id).disabled = busy || !viewerReady
   $('segmentButton').disabled = busy || !source
   $('meshButton').disabled = busy || !segmentation
@@ -84,7 +85,7 @@ async function clearMeshes() {
   while (nv.meshes.length) await nv.removeMesh(0)
 }
 
-async function loadImage(file) {
+async function loadImage(file, signal) {
   if (busy) return
   busy = true
   buttons()
@@ -95,10 +96,12 @@ async function loadImage(file) {
     $('outputSection').open = false
     await clearMeshes()
     await nv.loadVolumes([{ url: file, name: file.name }])
+    signal?.throwIfAborted()
     source = file
     segmentation = null
     $('emptyState').hidden = true
     status(`${file.name} loaded`)
+    return true
   } catch (error) {
     status(error instanceof Error ? error.message : String(error), true)
   } finally {
@@ -110,7 +113,7 @@ async function loadImage(file) {
 async function chooseFiles(files) {
   if (!viewerReady) return
   if (busy) return status('Wait for the current step to finish before loading another image.', true)
-  exampleDownload.abort()
+  exampleControl.cancel()
   busy = true
   buttons()
   try {
@@ -224,6 +227,19 @@ $('meshButton').addEventListener('click', () => void mesh())
 $('downloadButton').addEventListener('click', () => void nv.saveMesh(0, `brain2print.${$('format').value}`))
 bindFileDrop($('dropZone'), (files) => files.then(chooseFiles).catch((error) => status(error instanceof Error ? error.message : String(error), true)))
 
+const exampleControl = renderExampleSelector({
+  examples,
+  onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
+    if (!viewerReady) throw new Error('The WebGPU viewer is not ready.');
+    const files = await fetchFiles();
+    assertCurrent();
+    if (!await loadImage(files[0], signal)) throw new Error('The example image could not be loaded.');
+    assertCurrent();
+  },
+  onStatus: status,
+});
+$('controls').querySelector('.nd-section-content').prepend(exampleControl.root);
+
 async function init() {
   if (!navigator.gpu) return status('Brain2Print requires a recent WebGPU-capable desktop browser.', true)
   try {
@@ -236,17 +252,11 @@ async function init() {
   nv.isLegendVisible = false
   extension = nv.createExtensionContext()
   extension.on('locationChange', (event) => { $('location').textContent = event.detail.string })
-  try {
-    const response = await fetch(DEFAULT_T1_URL, { signal: exampleDownload.signal })
-    if (!response.ok) throw new Error(`example image download failed (${response.status})`)
-    const blob = await response.blob()
-    if (!exampleDownload.signal.aborted) await loadImage(new File([blob], 't1_crop.nii.gz'))
-  } catch (error) {
-    if (!exampleDownload.signal.aborted) status(error instanceof Error ? error.message : String(error), true)
-  }
+  status('Ready · choose an example or upload a brain MRI.')
 }
 
 window.addEventListener('pagehide', () => {
+  exampleControl.destroy()
   niimath.dispose('page closed')
   extension?.dispose()
   nv.destroy()

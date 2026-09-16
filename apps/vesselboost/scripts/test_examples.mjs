@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+const source = await readFile(new URL('../web/js/vesselboost-app.js', import.meta.url), 'utf8');
+const body = source.split('  async setupExamples() {')[1].split('\n  setupEventListeners() {')[0];
+const setup = new Function('renderExampleSelector', 'fetch', 'document', `return async function() {${body}`) ;
+const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
+
+async function loadAdapter() {
+  let options;
+  const loaded = [];
+  const app = { updateOutput() {}, fileIOController: { async _acceptFile(file) { loaded.push(file); } } };
+  const input = { closest: () => ({ prepend() {} }), classList: { remove() {} } };
+  const document = { baseURI: 'https://example.org/vesselboost/', getElementById: () => input };
+  await setup(value => { options = value; return { root: {} }; },
+    async () => ({ ok: true, json: async () => examples }), document).call(app);
+  return { app, options, loaded };
+}
+
+test('selecting the example imports its complete scientific inputs without running processing', async () => {
+  const { options, loaded } = await loadAdapter();
+  const files = examples[0].files.map(file => new File(['example'], file.name));
+  await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
+  assert.equal(loaded.length, 1);
+  assert.deepEqual(loaded.map(file => file.name), examples[0].files.map(file => file.name));
+});
+
+test('cancelled download never replaces the current inputs', async () => {
+  const { options, loaded } = await loadAdapter();
+  await assert.rejects(options.onLoad(examples[0], {
+    fetchFiles: async () => [],
+    assertCurrent() { throw new DOMException('Cancelled', 'AbortError'); },
+  }), { name: 'AbortError' });
+  assert.deepEqual(loaded, []);
+});
+
+test('failed download leaves inputs untouched and can be retried', async () => {
+  const { options, loaded } = await loadAdapter();
+  await assert.rejects(options.onLoad(examples[0], {
+    fetchFiles: async () => { throw new Error('Download failed'); }, assertCurrent() {},
+  }), /Download failed/);
+  assert.deepEqual(loaded, []);
+  const files = examples[0].files.map(file => new File(['example'], file.name));
+  await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
+  assert.equal(loaded.length, 1);
+});

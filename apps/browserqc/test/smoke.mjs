@@ -76,12 +76,9 @@ await runVitePreviewSmoke({
       return
     }
 
-    // 2. The app auto-runs on load: NiiVue attaches, the default image loads, then
-    // MindGrab "Subcortical + GWM" segmentation → native-space overlay →
-    // niimath --qc. The terminal status is set only after the overlay is added, colored,
-    // AND the parsed QC lands in the panel — so reaching it proves the whole path ran.
-    // Wiring-only: it asserts the path runs clean and the panel populates, not the
-    // segmentation/QC *values*.
+    await page.getByRole('combobox', { name: 'Example', exact: true }).selectOption('t1-head')
+    await page.waitForSelector('#runButton:not([disabled])', { timeout: 120000 })
+    await page.click('#runButton')
     await page.waitForFunction(
       () => /Segmentation \+ QC complete|QC unavailable|can.t initialize WebGPU|^Failed:/.test(
         document.getElementById('statusMsg')?.textContent || '',

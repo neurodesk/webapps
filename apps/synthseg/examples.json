@@ -1,0 +1,15 @@
+[
+  {
+    "id": "t1-head",
+    "label": "T1-weighted head MRI",
+    "description": "Whole-head structural MRI for anatomical brain segmentation.",
+    "expectedResult": "FreeSurfer-compatible anatomical labels and volume measurements.",
+    "files": [
+      {
+        "role": "image",
+        "name": "T1_head.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+      }
+    ]
+  }
+]

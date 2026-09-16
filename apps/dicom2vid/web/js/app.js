@@ -1,6 +1,7 @@
+import { renderExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
 // MRI2VID controller. Runs entirely on the client: ingest files, group DICOM
 // series, read the selected volume, window and preview it, and encode a video.
-// No network requests are made for image data.
+// Public examples download on request; user-selected image data stays local.
 
 import { collectFromDrop, collectFromPicker, readPrefix } from './ingest.js';
 import {
@@ -796,3 +797,21 @@ init();
 for (const kind of ['about', 'privacy']) {
   document.getElementById(`${kind}Button`).addEventListener('click', () => document.getElementById(`${kind}Dialog`).showModal());
 }
+
+async function setupExamples() {
+  const response = await fetch(new URL('examples.json', document.baseURI));
+  if (!response.ok) throw new Error('Could not load the example catalog.');
+  const examples = await response.json();
+  const selector = renderExampleSelector({
+    examples,
+    onLoad: async (example, { fetchFiles, assertCurrent }) => {
+      const files = await fetchFiles();
+      assertCurrent();
+      await handleFiles(collectFromPicker(files));
+      if (!S.volume) throw new Error('The example could not be opened as a volume.');
+    },
+    onStatus: setStatus,
+  });
+  $('dropZone').before(selector.root);
+}
+void setupExamples().catch(error => setStatus(error.message, true));

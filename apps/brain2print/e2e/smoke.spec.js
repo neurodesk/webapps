@@ -105,8 +105,8 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
     test.setTimeout(600_000);
     await page.goto("/");
     const status = page.locator("#statusText");
-    // The default image loads from Hugging Face at boot; let it settle before picking ours.
-    await expect(status).toHaveText(/loaded|failed|error/i, { timeout: 180_000 });
+    // Wait for WebGPU initialization before choosing the input.
+    await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
 
     await page.setInputFiles("#imageInput", file ?? { name, mimeType: "application/gzip", buffer: gzipSync(leftHanded(fixture)) });
     await expect(status).toHaveText(`${name} loaded`, { timeout: 120_000 });
@@ -147,6 +147,7 @@ test("a delayed example never replaces a selected image", async ({ page }) => {
   });
   await page.goto("/");
   await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
+  await page.locator("[data-neurodesk-example]").selectOption("t1-brain");
   await page.setInputFiles("#imageInput", fixture);
   await expect(page.locator("#statusText")).toHaveText("small.nii.gz loaded", { timeout: 30000 });
   releaseExample();
@@ -158,6 +159,7 @@ test("a delayed example never replaces a selected image", async ({ page }) => {
 test("a failed replacement disables segmentation of the previous image", async ({ page }) => {
   await page.route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
   await page.goto("/");
+  await page.locator("[data-neurodesk-example]").selectOption("t1-brain");
   await expect(page.locator("#segmentButton")).toBeEnabled({ timeout: 30000 });
   await page.setInputFiles("#imageInput", { name: "broken.nii", mimeType: "application/octet-stream", buffer: Buffer.from("invalid nifti") });
   await expect(page.locator("#statusText")).toHaveClass(/error/);
