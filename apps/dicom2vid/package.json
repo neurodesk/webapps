@@ -10,7 +10,7 @@
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "bash tools/generate_test_fixtures.sh",
     "test": "node --test tools/test/*.test.mjs",
-    "pretest:e2e": "bash tools/generate_test_fixtures.sh",
+    "pretest:e2e": "node ../../scripts/vendor-components.mjs && bash tools/generate_test_fixtures.sh",
     "test:e2e": "node tools/browser/smoke.mjs",
     "serve": "python3 -m http.server 8000 --directory web",
     "test:examples": "node --test tools/test/examples.test.mjs",

@@ -48,6 +48,21 @@ export function renderExampleSelector<T extends AppExample>(config: {
   setDisabled(value: boolean): void;
   destroy(): void;
 };
+export function renderSidebarSection(config?: {
+  id?: string;
+  title?: string;
+  collapsed?: boolean;
+  disabled?: boolean;
+  content?: Node | (Node | string | null | undefined | false)[] | string;
+  badge?: string | number;
+  badgeClassName?: string;
+}, doc?: Document): {
+  root: HTMLDetailsElement;
+  title: HTMLElement;
+  content: HTMLDivElement;
+  setDisabled(disabled: boolean): void;
+  setBadge(text: string, className?: string): void;
+};
 export interface RenderedFileField {
   root: HTMLLabelElement;
   input: HTMLInputElement;
