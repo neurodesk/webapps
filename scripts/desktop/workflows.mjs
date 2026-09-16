@@ -37,6 +37,13 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants'].includes(id)) {
+    const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
+    const selector = page.getByRole('combobox', { name: 'Example', exact: true });
+    await expect(selector).toBeEnabled({ timeout: 120000 });
+    await selector.selectOption(examples[0].id);
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+  }
   if (id === 'musclemap') return verifyMuscleMapFullPipeline(page, page.url());
   if (id === 'brain-extraction') {
     await page.locator('#imageInput').setInputFiles(join(root, 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'));
@@ -69,10 +76,8 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     return result;
   }
   if (['ants', 'greedy', 'edgereg', 'fireants'].includes(id)) {
-    if (id === 'ants' || id === 'fireants') {
-      await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
-      await page.locator('#runButton').click();
-    }
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#runButton').click();
     await expect(page.locator('#statusText')).toContainText('Registration complete', { timeout: 900000 });
     return nifti(await download('#resultList button:has-text("Download") >> nth=0'));
   }
@@ -232,6 +237,8 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   }
   if (id === 'browserqc') {
     await page.locator('#niftiInput').setInputFiles(fixture);
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#runButton').click();
     await expect(page.locator('#saveBtn')).toBeEnabled({ timeout: 600000 });
     await page.locator('#resultsSection').evaluate(section => { section.open = true; });
     const result = await download('#saveBtn');
