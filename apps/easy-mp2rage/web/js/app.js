@@ -96,6 +96,11 @@ function guessRole(name) {
   return '(ignore)';
 }
 
+async function readImageRecord(file, buffer) {
+  const nii = await readNifti(buffer);
+  return { name: file.name, size: file.size, dims: nii.dims, affine: nii.affine, data: nii.data, role: guessRole(file.name) };
+}
+
 async function addFiles(fileList) {
   if (appMode === 'bids') { log('In BIDS mode, switch to "Single dataset" to load individual files.'); return; }
   for (const file of fileList) {
@@ -112,10 +117,9 @@ async function addFiles(fileList) {
     }
     if (!/\.nii(\.gz)?$/.test(lower)) { log(`skipped ${file.name} (not .nii/.nii.gz/.json)`); continue; }
     try {
-      const nii = await readNifti(buf);
-      const rec = { name: file.name, size: file.size, dims: nii.dims, affine: nii.affine, data: nii.data, role: guessRole(file.name) };
+      const rec = await readImageRecord(file, buf);
       state.files.push(rec);
-      log(`loaded ${file.name}  [${nii.dims.join('×')}]  → ${rec.role}`);
+      log(`loaded ${file.name}  [${rec.dims.join('×')}]  → ${rec.role}`);
     } catch (e) { log(`failed to read ${file.name}: ${e}`); }
   }
   renderTable(); refreshRunState();
@@ -1575,12 +1579,12 @@ async function setupExamples() {
       if (running) throw new Error('Stop processing before loading an example.');
       const files = await fetchFiles();
       assertCurrent();
-      setAppMode('single');
-      state.files = [];
-      state.jsons = [];
-      await addFiles(files);
+      const records = await Promise.all(files.map(async file => readImageRecord(file, await file.arrayBuffer())));
       assertCurrent();
-      if (state.files.length !== files.length) throw new Error('Some example images could not be read.');
+      if (running) throw new Error('Stop processing before loading an example.');
+      setAppMode('single');
+      state.files = records;
+      state.jsons = [];
       for (const [prefix, parameters] of Object.entries(example.parameters)) {
         for (const [name, value] of Object.entries(parameters)) {
           $(`#${prefix}_${name}`).value = value;
@@ -1588,6 +1592,7 @@ async function setupExamples() {
       }
       $('#paramSource').value = 'manual';
       $('#paramSrcNote').textContent = 'Matched synthetic example acquisition';
+      renderTable();
       refreshRunState();
     },
     onStatus: message => log(message),
