@@ -161,7 +161,6 @@ class QSMApp {
     await this.setupViewer();
     this.setupUIControls();
     this.setupEventListeners();
-    await this.setupExamples();
     this.syncSidebarFromSettings();
     this.updateDownloadButtons();
 
@@ -236,6 +235,9 @@ class QSMApp {
 
     // Start loading WASM in the background immediately
     this.pipelineExecutor.initialize();
+    document.getElementById('unifiedFiles').disabled = false;
+    document.getElementById('maskFiles').disabled = false;
+    void this.setupExamples().catch(error => this.updateOutput(error.message));
   }
 
   /**

@@ -1,5 +1,11 @@
 # qsmbly
 
+## 0.26.20260916
+
+### Minor Changes
+
+- Initialize upload controllers before fetching the example catalog. Keep file pickers disabled until initialization finishes, and preserve DICOM imports when the catalog is slow or unavailable.
+
 ## 0.25.20260916
 
 ### Patch Changes
