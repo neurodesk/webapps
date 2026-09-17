@@ -8,6 +8,7 @@ import { renderInstallationNotes } from './release-notes.mjs';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
 import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
+import { recordUrls, reusePlan } from '../lib/release-reuse.mjs';
 
 const directory = resolve(process.argv[2] || 'release-artifacts');
 const registry = await loadAppsRegistry();
@@ -38,22 +39,41 @@ async function releaseRecord(platform) {
   if (metadata.version !== version || metadata.platform !== platform) throw new Error(`Incomplete ${platform}`);
   const primary = find(basename(new URL(metadata.url).pathname));
   if (await fileHash(primary) !== metadata.sha256) throw new Error(`Corrupt ${primary}`);
-  uploads.add(primary);
+  const built = [primary, path];
   const complete = createHash('sha256');
   for (const part of metadata.parts || []) {
     const partPath = find(part.filename);
     if (await fileHash(partPath) !== part.sha256) throw new Error(`Corrupt ${partPath}`);
     for await (const chunk of createReadStream(partPath)) complete.update(chunk);
-    uploads.add(partPath);
+    built.push(partPath);
   }
   if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
-  uploads.add(path);
-  return metadata;
+  return { metadata, built };
 }
-const downloads = [];
-for (const platform of platforms) downloads.push(await releaseRecord(platform));
-const models = await releaseRecord('any');
-if (models.kind !== 'models') throw new Error('The platform-independent model pack is missing');
+const available = async urls => {
+  for (const url of urls) {
+    const response = await fetch(url, { method: 'HEAD' }).catch(() => null);
+    if (!response?.ok) return false;
+  }
+  return true;
+};
+const entries = [];
+for (const platform of platforms) entries.push(await releaseRecord(platform));
+entries.push(await releaseRecord('any'));
+if (entries.at(-1).metadata.kind !== 'models') throw new Error('The platform-independent model pack is missing');
+const published = [];
+for (const [index, { record, candidate }] of reusePlan(catalog.suite, entries.map(entry => entry.metadata)).entries()) {
+  if (candidate && await available(recordUrls(candidate))) {
+    console.log(`Reusing the published ${record.platform} ${record.kind} from ${candidate.version}`);
+    published.push(candidate);
+    continue;
+  }
+  if (candidate) console.log(`The published ${record.platform} ${record.kind} is unavailable, so its bytes are uploaded again`);
+  for (const path of entries[index].built) uploads.add(path);
+  published.push(record);
+}
+const downloads = published.slice(0, platforms.length);
+const models = published.at(-1);
 const expectedApps = registry.apps.map(app => app.id).sort();
 async function checkReport(artifact, report, { complete }) {
   const matching = files.filter(path => path.includes(`${artifact}/`) && path.endsWith(`/${report}/startup.json`));

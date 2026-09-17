@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, utimes, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -92,4 +92,17 @@ test('a model whose bytes drifted from the pinned hash stops the pack', async t 
   await assert.rejects(
     modelsPack(full, light, join(root, 'release/models.tar.gz'), join(root, 'release/github'), { version: '0.1.20260915' }),
     /does not match its pinned hash/);
+});
+
+test('the same models produce the same archive bytes after the sources are rebuilt', async t => {
+  const { root, full, light } = await fixture(t);
+  const build = async name => {
+    const archive = join(root, `release/${name}/webapps-0.1.20260915-models.tar.gz`);
+    await modelsPack(full, light, archive, join(root, `release/${name}/github`), { version: '0.1.20260915' });
+    return hash(await readFile(archive));
+  };
+  const first = await build('first');
+  const rebuilt = new Date('2027-03-04T05:06:07Z');
+  for (const entry of await readdir(join(full, 'assets'))) await utimes(join(full, 'assets', entry), rebuilt, rebuilt);
+  assert.equal(await build('second'), first);
 });

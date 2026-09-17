@@ -5,6 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { fileHash, loadBundle } from '../../packages/desktop/src/bundle.js';
 import { prepareReleaseFiles } from './release-files.mjs';
 
+// Every release rebuilds the asset files, so their timestamps and ownership
+// differ while the model bytes do not. Fixing each header field and dropping the
+// gzip name and timestamp makes one model set produce one archive, which lets
+// publishing reuse a pack it already uploaded.
+const deterministic = ['--sort=name', '--mtime=@0', '--owner=0', '--group=0', '--numeric-owner', '--use-compress-program', 'gzip -n'];
+
 // The four platform archives carry byte-identical models, so the models ship
 // once as the content-addressed cache the resolver already reads.
 export async function modelsPack(full, light, archive, destination, { version }) {
@@ -23,7 +29,7 @@ export async function modelsPack(full, light, archive, destination, { version })
   if (!names.size) throw new Error('The package without models declares no downloadable models');
   const models = [...names].sort();
   await mkdir(dirname(archive), { recursive: true });
-  execFileSync('tar', ['-czf', archive, '-C', join(full, 'assets'), ...models], { stdio: 'inherit' });
+  execFileSync('tar', [...deterministic, '-cf', archive, '-C', join(full, 'assets'), ...models], { stdio: 'inherit' });
   return { models, release: await prepareReleaseFiles(archive, destination, { version, platform: 'any', kind: 'models' }) };
 }
 
