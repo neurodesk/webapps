@@ -7,10 +7,9 @@ const require = createRequire(resolve(directory, 'package.json'));
 const builderRequire = createRequire(require.resolve('electron-builder'));
 const { getConfig } = builderRequire('app-builder-lib/out/util/config/config.js');
 
-test('electron-builder copies exactly one selected resource directory', async () => {
-  for (const name of ['resources', 'resources-light']) {
-    const resources = resolve(directory, name);
-    const config = await getConfig(directory, null, { extraResources: [{ from: resources, to: 'offline' }] });
-    assert.deepEqual(config.extraResources, [{ from: resources, to: 'offline' }]);
-  }
+test('electron-builder copies only the resource directory without models', async () => {
+  const resources = resolve(directory, 'resources-light');
+  const config = await getConfig(directory, null, { extraResources: [{ from: resources, to: 'offline' }] });
+  assert.deepEqual(config.extraResources, [{ from: resources, to: 'offline' }]);
+  assert.equal(config.artifactName, 'webapps-${version}-${os}-${arch}.${ext}');
 });

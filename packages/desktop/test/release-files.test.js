@@ -27,3 +27,18 @@ test('release parts reassemble byte for byte with independently verifiable check
     assert.match(result.command, /unzip/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('the model pack record is platform independent and extracts into its own directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'release-models-'));
+  try {
+    const archive = join(root, 'webapps-0.1.20260915-models.tar.gz');
+    await writeFile(archive, Buffer.from('a gzipped pack of hashed model files'));
+    const result = await prepareReleaseFiles(archive, join(root, 'out'), { version: '0.1.20260915', platform: 'any', kind: 'models' });
+    assert.deepEqual(Object.keys(result).sort(), ['bytes', 'command', 'kind', 'platform', 'sha256', 'url', 'version']);
+    assert.equal(result.kind, 'models');
+    assert.equal(result.platform, 'any');
+    assert.equal(result.command, 'mkdir models\ntar -xzf webapps-0.1.20260915-models.tar.gz -C models');
+    assert.deepEqual(JSON.parse(await readFile(join(root, 'out', 'any.json'), 'utf8')), result);
+    assert.match(await readFile(join(root, 'out', 'webapps-0.1.20260915-models.tar.gz.install.txt'), 'utf8'), /Set NEURODESK_MODELS_DIR to its absolute path/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
