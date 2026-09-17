@@ -1,91 +1,51 @@
 name: standalone
 
 on:
-  pull_request:
-  push:
-    branches: [main, t3code/standalone-app-releases]
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish verified desktop and HPC binaries to GitHub Releases
-        type: boolean
-        default: false
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: standalone-${{ github.ref }}
-  cancel-in-progress: true
+  group: standalone-publish-pr44
+  cancel-in-progress: false
 
 jobs:
-  bundle:
+  validate:
     runs-on: ubuntu-22.04
-    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
-        with:
-          targets: wasm32-unknown-unknown
-      - name: Install WASM build tools
+      - name: Require successful validation at the exact source commit
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
-          cargo install wasm-pack --version 0.13.1 --locked
-      - run: pnpm install --frozen-lockfile
-      - name: Test package contracts
-        run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
-      - uses: actions/cache@v6
-        with:
-          path: .turbo
-          key: standalone-turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: standalone-turbo-${{ runner.os }}-
-      - run: pnpm build
-      - uses: actions/cache@v6
-        with:
-          path: .offline-cache
-          key: offline-assets-${{ hashFiles('registry/offline-assets.lock.json') }}
-      - name: Verify all offline inputs against the committed lock
-        run: node scripts/desktop/assets.mjs
-      - run: node scripts/desktop/assemble.mjs
-      - name: Archive complete offline resources
-        run: tar -czf offline-resources.tar.gz -C packages/desktop resources
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: offline-resources
-          path: offline-resources.tar.gz
-          compression-level: 0
-          if-no-files-found: error
+          test "$(gh api repos/neurodesk/webapps/actions/runs/35179487015 --jq '.head_sha + " " + .conclusion')" = "0ad936c0f7967260198339b56790ba139a004f46 success"
 
-  desktop:
-    needs: bundle
+  macos:
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 100
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-15, windows-latest]
         models: [included, without]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 100
     env:
       NEURODESK_MODELS: ${{ matrix.models }}
     steps:
-      - name: Free Linux runner storage for model-inclusive archives
-        if: runner.os == 'Linux'
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 0ad936c0f7967260198339b56790ba139a004f46
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node packages/desktop/node_modules/electron/install.js
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
+          github-token: ${{ github.token }}
+          run-id: 35179487015
           name: offline-resources
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - name: Prepare the package without models
@@ -94,91 +54,62 @@ jobs:
         run: |
           node scripts/desktop/without-models.mjs
           echo "NEURODESK_BUNDLE=$GITHUB_WORKSPACE/packages/desktop/resources-light" >> "$GITHUB_ENV"
-      - name: Exercise every app with fresh profiles and network denied
-        if: runner.os != 'Linux'
-        run: node scripts/desktop/smoke.mjs
-        env:
-          NEURODESK_TEST_REPORT: desktop-reports
-      - name: Exercise Linux desktop under Xvfb
-        if: runner.os == 'Linux'
-        run: xvfb-run -a node scripts/desktop/smoke.mjs
-        env:
-          NEURODESK_TEST_REPORT: desktop-reports
-          NEURODESK_SOFTWARE_RENDERING: '1'
-      - name: Select workflow coverage from the complete app registry
-        shell: bash
-        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
-      - name: Test offline computations and exports
-        if: runner.os != 'Linux'
-        run: node scripts/desktop/smoke.mjs
-        env:
-          NEURODESK_TEST_REPORT: desktop-workflow-reports
-          NEURODESK_WORKFLOWS: '1'
-      - name: Test Linux offline computations and exports
-        if: runner.os == 'Linux'
-        run: xvfb-run -a node scripts/desktop/smoke.mjs
-        env:
-          NEURODESK_TEST_REPORT: desktop-workflow-reports
-          NEURODESK_WORKFLOWS: '1'
-          NEURODESK_SOFTWARE_RENDERING: '1'
-      - name: Restore full catalog coverage for installed-package tests
-        shell: bash
-        run: echo "NEURODESK_TEST_APP=" >> "$GITHUB_ENV"
-      - name: Package and test the installed suite
-        if: runner.os != 'Linux'
+      - name: Sign, notarize and test every installed application
         run: node scripts/desktop/pack.mjs
         env:
           NEURODESK_TEST_REPORT: packaged-desktop-reports
-          CSC_LINK: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.CSC_KEY_PASSWORD || '' }}
-          APPLE_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLEID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLEIDPASS || '' }}
-          APPLE_TEAM_ID: ${{ runner.os == 'macOS' && github.event_name != 'pull_request' && secrets.APPLE_TEAM_ID || '' }}
-      - name: Package and test the Linux suite
-        if: runner.os == 'Linux'
-        run: xvfb-run -a node scripts/desktop/pack.mjs
-        env:
-          NEURODESK_TEST_REPORT: packaged-desktop-reports
-          NEURODESK_SOFTWARE_RENDERING: '1'
-      - name: Install pinned Apptainer
-        if: runner.os == 'Linux'
-        run: |
-          curl -fL https://github.com/apptainer/apptainer/releases/download/v1.5.3/apptainer_1.5.3_amd64.deb -o "$RUNNER_TEMP/apptainer.deb"
-          echo "82b0bdddf459087d202383360b8318d526ad6826c748a2f669913cc6aef9ee40  $RUNNER_TEMP/apptainer.deb" | sha256sum -c -
-          sudo apt-get install -y "$RUNNER_TEMP/apptainer.deb"
-      - name: Build and test offline Docker and Apptainer distributions
-        if: runner.os == 'Linux'
-        run: node scripts/desktop/container.mjs
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: desktop-${{ matrix.os }}-${{ matrix.models }}
+          name: desktop-macos-15-${{ matrix.models }}
           path: |
-            desktop-reports/
-            desktop-workflow-reports/
             packaged-desktop-reports/
-            container-reports/
             packages/desktop/release/github/
           compression-level: 0
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    needs: desktop
+    needs: [validate, macos]
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     permissions:
       contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERIFIED_SHA: 0ad936c0f7967260198339b56790ba139a004f46
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - name: Free runner storage for both verified suite editions
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 0ad936c0f7967260198339b56790ba139a004f46
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: desktop-*
+          github-token: ${{ github.token }}
+          run-id: 35179487015
+          pattern: desktop-ubuntu-*
           path: release-artifacts
-      - run: node scripts/desktop/publish.mjs release-artifacts
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          github-token: ${{ github.token }}
+          run-id: 35179487015
+          pattern: desktop-windows-*
+          path: release-artifacts
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: desktop-macos-*
+          path: release-artifacts
+      - name: Validate every report and checksum, then publish the verified suite
+        run: GITHUB_SHA="$VERIFIED_SHA" node scripts/desktop/publish.mjs release-artifacts
