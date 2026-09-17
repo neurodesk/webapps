@@ -31,7 +31,7 @@ try {
   const pack = process.env.NEURODESK_MODELS_DIR;
   if (pack && !isAbsolute(pack)) throw new Error('NEURODESK_MODELS_DIR must be an absolute path to an extracted model pack');
   const models = createModelResolver(root, bundle, join(app.getPath('userData'), 'models'), { pack });
-  const local = await startOfflineServer(root, { resolveFile: models.file, modelsIncluded: bundle.modelsIncluded !== false });
+  const local = await startOfflineServer(root, { resolveFile: models.file });
   server = local.server;
   const offlineSession = session.fromPartition('offline');
   const downloads = [];

@@ -14,7 +14,6 @@ for (const [id, version] of Object.entries(releases)) {
     if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest)) throw new Error(`${asset.name}: GitHub has no asset digest`);
     return [{ kind: 'cli', platform: match[1], version, url: asset.browser_download_url, sha256: asset.digest.slice(7), bytes: asset.size,
       validationUrl: release.assets.find(item => item.name === `${asset.name}.validation.txt`)?.browser_download_url,
-      modelsIncluded: id !== 'greedy',
     }];
   });
   console.log(`${id}: ${catalog.apps[id].downloads.length} released native downloads`);

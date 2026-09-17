@@ -22,7 +22,7 @@ test('scanner packages link the supported apps to their OpenRecon recipes', asyn
   assert.deepEqual(Object.fromEntries(Object.entries(catalog.apps).filter(([, app]) => app.openrecon).map(([id, app]) => [id, app.openrecon.recipe])), expected);
   const dom = new JSDOM('<html><body></body></html>');
   const dialog = openStandalone({ title: 'QSMbly', app: catalog.apps.qsmbly, suite: catalog.suite }, dom.window.document);
-  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'OpenRecon · MRI scanner console', 'Webapp standalone · Without models', 'Webapp standalone · Models included']);
+  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'OpenRecon · MRI scanner console', 'Webapp standalone']);
   const scanner = dialog.root.querySelector('section[aria-labelledby="standalone-openrecon"]');
   assert.match(scanner.textContent, /Run the QSMxT container on the MRI scanner console/);
   assert.match(scanner.textContent, /official OpenRecon package/);
@@ -40,9 +40,10 @@ test('a future app cannot be silently omitted from desktop packaging', async t =
 
 test('shared dialog displays verified releases and keeps unpublished platforms unlinked', () => {
   const dom = new JSDOM('<html><body></body></html>');
-  const app = { downloads: [{ kind: 'desktop', platform: 'macOS ARM64', version: '0.1.20260915', url: 'https://github.com/neurodesk/webapps/releases/download/demo-v0.1.20260915/demo.zip', modelsIncluded: true }], containers: [] };
+  const app = { downloads: [{ kind: 'desktop', platform: 'macOS ARM64', version: '0.1.20260915', url: 'https://github.com/neurodesk/webapps/releases/download/demo-v0.1.20260915/demo.zip' }], containers: [] };
   const dialog = openStandalone({ title: 'Demo', app }, dom.window.document);
-  assert.match(dialog.root.textContent, /Models included/);
+  assert.match(dialog.root.textContent, /Webapp standalone/);
+  assert.doesNotMatch(dialog.root.textContent, /Model pack/);
   assert.equal(dialog.root.querySelectorAll('a').length, 1);
   assert.match(dialog.root.querySelector('a').href, /demo.zip$/);
   assert.equal(dialog.root.querySelector('dialog'), null);
@@ -58,10 +59,16 @@ test('every app has an executable offline workflow test', async () => {
 test('standalone choices are ordered and omit technical clutter', () => {
   const dom = new JSDOM('<html><body></body></html>');
   const download = { kind: 'desktop', platform: 'macos-arm64', version: '0.1.20260915', url: 'https://example.test/install.txt', archiveSha256: 'b'.repeat(64), parts: [{ url: 'https://example.test/part1' }], command: "echo 'hash' | shasum -a 256 -c -\nunzip app.zip" };
-  const suite = { downloads: [{ ...download, modelsIncluded: true }, { ...download, modelsIncluded: false }] };
+  const models = { kind: 'models', platform: 'any', version: download.version, bytes: 2.1e9, url: 'https://example.test/models.install.txt', archiveSha256: 'c'.repeat(64), parts: [{ url: 'https://example.test/models.part01' }, { url: 'https://example.test/models.part02' }], command: "cat models.part01 models.part02 > models.tar.gz\nmkdir models\ntar -xzf models.tar.gz -C models" };
+  const suite = { downloads: [download], models };
   const app = { downloads: [], containers: [{ id: 'demo', label: 'Demo 1', url: 'https://hub.docker.com/r/demo', dockerImage: 'demo:1', apptainerUrl: 'https://neurocontainers.neurodesk.workers.dev/demo_1_20260915.simg' }] };
   const dialog = openStandalone({ title: 'Demo', app, suite }, dom.window.document);
-  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'Webapp standalone · Without models', 'Webapp standalone · Models included']);
+  assert.deepEqual([...dialog.root.querySelectorAll('section > h3')].map(node => node.textContent), ['Neurodesk containers', 'Webapp standalone', 'Model pack · optional']);
+  const pack = dialog.root.querySelector('section[aria-labelledby="standalone-models"]');
+  assert.match(pack.textContent, /Every platform · 2.10 GB/);
+  assert.match(pack.textContent, /NEURODESK_MODELS_DIR/);
+  assert.deepEqual([...pack.querySelectorAll('a')].map(node => node.href), ['https://example.test/models.part01', 'https://example.test/models.part02']);
+  assert.match(pack.textContent, /tar -xzf models.tar.gz -C models/);
   assert.doesNotMatch(dialog.root.textContent, /sha256|sha-256|shasum|Prepare this upstream/i);
   assert.match(dialog.root.textContent, /docker pull demo:1/);
   assert.match(dialog.root.textContent, /curl -X GET https:\/\/neurocontainers.neurodesk.workers.dev\/demo_1_20260915.simg -O/);
