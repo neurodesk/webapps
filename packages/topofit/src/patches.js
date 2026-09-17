@@ -7,7 +7,7 @@ const unit = (v) => v.map((x) => x / Math.hypot(...v));
 
 export function validatePatchOptions(options = {}) {
   const settings = { radius: 10, count: 3, hemisphere: 'both', maxRms: 0.5, minAreaFraction: 0.25, ...options };
-  for (const [key, min, max] of [['radius', 5, 20], ['count', 1, 10], ['maxRms', 0.01, 2], ['minAreaFraction', 0.1, 1]]) {
+  for (const [key, min, max] of [['radius', 2, 20], ['count', 1, 50], ['maxRms', 0.01, 2], ['minAreaFraction', 0.1, 1]]) {
     if (!Number.isFinite(settings[key]) || settings[key] < min || settings[key] > max) {
       throw new Error(`Patch ${key} must be between ${min} and ${max}.`);
     }

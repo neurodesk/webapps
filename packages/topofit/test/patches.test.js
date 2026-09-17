@@ -73,5 +73,9 @@ test('registration mapping normalizes spheres before nearest-neighbor lookup', (
 });
 
 test('patch settings reject invalid numerical and hemisphere values', () => {
-  for (const options of [{ radius: NaN }, { count: 1.5 }, { hemisphere: 'left' }, { maxRms: 3 }]) assert.throws(() => validatePatchOptions(options));
+  for (const options of [{ radius: NaN }, { radius: 1.5 }, { count: 1.5 }, { count: 51 }, { hemisphere: 'left' }, { maxRms: 3 }]) assert.throws(() => validatePatchOptions(options));
+});
+
+test('patch settings accept small radii and many patches', () => {
+  assert.deepEqual(validatePatchOptions({ radius: 2, count: 50 }), { radius: 2, count: 50, hemisphere: 'both', maxRms: 0.5, minAreaFraction: 0.25 });
 });

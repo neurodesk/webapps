@@ -1,5 +1,11 @@
 # @neurodesk/topofit
 
+## 0.7.20260917
+
+### Patch Changes
+
+- Place Reconstruct cortex above the surface analysis settings. Allow flat-patch radii from 2 mm and up to 50 patches per hemisphere. Document that patches are ranked by flatness, not area.
+
 ## 0.7.20260916
 
 ### Patch Changes
