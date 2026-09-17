@@ -175,11 +175,16 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
       const { session } = window.__surfannotate;
       for (const vertex of [0, 1, 2]) session.addClick(vertex);
       session.closePath();
-      window.__surfannotateUi.runFill(-1);
+      window.__surfannotateUi.runFill(3);
     });
+    await expect(page.locator('#exportLabel')).toBeDisabled();
+    await page.locator('#roiPanel').evaluate(panel => { panel.open = true; });
+    await page.locator('#saveRoi').click();
+    await expect(page.locator('#roiList li')).toHaveCount(1);
     const result = await download('#exportLabel');
     const lines = result.bytes.toString('utf8').trim().split('\n');
-    assert.ok(Number(lines[1]) > 0, 'Surface annotation must contain vertices');
+    assert.equal(Number(lines[1]), 1, 'The ROI must contain the vertex inside the boundary');
+    assert.equal(Number(lines[2].trim().split(/\s+/)[0]), 3);
     return { loadedSurface: 'tetrahedron.obj', filename: result.filename, vertices: Number(lines[1]) };
   }
   if (id === 'qsmbly') {

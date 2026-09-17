@@ -28,9 +28,15 @@ function pixel(pixels, column, row, width = SIZE) {
   return { index: pixels[at], alpha: pixels[at + 3] };
 }
 
-test('only the two retinotopy maps get a wheel', () => {
-  assert.equal(legendKind('eccentricity'), 'eccentricity');
-  assert.equal(legendKind('polar_angle'), 'polar_angle');
+test('only the retinotopy maps get a wheel', () => {
+  assert.equal(legendKind('RYGBP_eccentricity'), 'eccentricity');
+  assert.equal(legendKind('RYBC_eccentricity'), 'eccentricity');
+  assert.equal(legendKind('YBGR_polar-angle'), 'polar_angle');
+  assert.equal(legendKind('RYGBP_polar-angle'), 'polar_angle');
+  assert.equal(legendKind('RYBC_polar-angle'), 'polar_angle');
+  assert.equal(legendKind('YBGR_polar-angle-flipped'), 'polar_angle');
+  // gist_rainbow itself stays a bar: the same colours under the polar-angle
+  // key are what get the wheel.
   for (const key of ['gray', 'viridis', 'gist_rainbow', 'hot', 'jet']) {
     assert.equal(legendKind(key), 'bar', `${key} should get a bar`);
   }

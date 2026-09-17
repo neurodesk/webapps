@@ -421,6 +421,26 @@ nd-imaging-brand {
 .nd-btn-danger { background: var(--nd-color-error); color: white; }
 .nd-btn-danger:hover:not(:disabled) { filter: brightness(0.9); }
 .nd-btn-icon { padding: 2px; background: transparent; color: var(--nd-color-text-muted); border-radius: var(--nd-radius-sm); }
+.nd-btn-icon-sm {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  min-width: 28px;
+  min-height: 28px;
+}
+#controls .nd-result-selected {
+  color: var(--nd-color-text);
+  background: var(--nd-color-surface-elevated);
+  border-color: var(--nd-color-primary);
+  box-shadow: 0 0 0 2px var(--nd-color-primary);
+}
+.nd-result-swatch {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--nd-color-border);
+  border-radius: 50%;
+}
 .nd-btn-icon:hover:not(:disabled) { color: var(--nd-color-primary); background: var(--nd-color-surface-elevated); }
 .nd-btn-block { width: 100%; font-size: 0.75rem; gap: var(--nd-space-xs); }
 .nd-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
@@ -636,6 +656,7 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   .nd-imaging-controls .nd-section-content :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
   .nd-viewer-toolbar :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
   .nd-viewer-toolbar select { font-size: 16px; }
+  .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }
   .nd-console-title, .nd-console-clear { min-height: 44px; }
   .nd-dialog-body .nd-btn, .nd-command .nd-btn { min-height: 44px; }
   .nd-imaging-status .nd-btn-cancel { width: 44px; height: 44px; }

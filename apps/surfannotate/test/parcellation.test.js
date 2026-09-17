@@ -164,3 +164,44 @@ test('resolving an empty list is a surface with nothing on it', () => {
   assert.equal(assigned, 0);
   assert.ok([...owner].every((o) => o === -1));
 });
+
+test('a saved border is used as a vertex path, so the region does not depend on the geometry', () => {
+  // The clicks alone would trace a straight strip along row 2. The saved
+  // border takes a detour down to row 4 in the middle — as a border traced on
+  // another surface sharing the indexing might — and the region must follow
+  // the border, not a re-trace of the clicks.
+  const { base } = flatPatch();
+  const j = 2;
+  const straight = [];
+  for (let i = 0; i < N; i++) straight.push(at(N, i, j));
+  const detour = [];
+  for (let i = 0; i <= 10; i++) detour.push(at(N, i, j));
+  detour.push(at(N, 10, j + 1), at(N, 10, j + 2), at(N, 11, j + 2), at(N, 12, j + 2), at(N, 12, j + 1));
+  for (let i = 12; i < N; i++) detour.push(at(N, i, j));
+
+  const plain = resolveParcellation(base, [strip(1, 'V1', j)]).rois[0];
+  const kept = resolveParcellation(base, [{ ...strip(1, 'V1', j), border: detour }]).rois[0];
+  assert.equal(plain.error, null);
+  assert.equal(kept.error, null);
+  assert.equal(countMask(plain.mask), 2 * N, 'the strip above a straight row-2 border');
+  assert.equal(countMask(kept.mask), 2 * N + 2, 'plus the two vertices the detour encloses');
+  assert.equal(kept.mask[at(N, 11, j)], 1);
+  assert.equal(kept.mask[at(N, 11, j + 1)], 1);
+  // The straight border is a valid path too, so it is honoured verbatim.
+  const same = resolveParcellation(base, [{ ...strip(1, 'V1', j), border: straight }]).rois[0];
+  assert.equal(countMask(same.mask), 2 * N);
+});
+
+test('a saved border that an ROI above has cut through is re-traced from the clicks', () => {
+  // V1 owns rows 0..3. V2's saved border ran along row 2, inside V1 now, so it
+  // is not walkable; V2 falls back to tracing its clicks, which sit on row 6.
+  const { base } = flatPatch();
+  const oldBorder = [];
+  for (let i = 0; i < N; i++) oldBorder.push(at(N, i, 2));
+  const rois = resolveParcellation(base, [
+    strip(1, 'V1', 4),
+    { ...strip(2, 'V2', 6), border: oldBorder }
+  ]).rois;
+  assert.equal(rois[1].error, null, 'the stale border is not an error, just ignored');
+  assert.equal(countMask(rois[1].mask), 2 * N, 'rows 4..5, between V1 and the row-6 clicks');
+});

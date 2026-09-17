@@ -2,6 +2,8 @@ import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(here, '..', 'test', 'fixtures');
@@ -612,7 +614,10 @@ test('the retinotopy colour maps set the window their scale needs', async ({ pag
   await loadSurface(page);
   expect(await page.evaluate(() => {
     const maps = window.__surfannotate.nv.colormaps();
-    return ['eccentricity', 'polar_angle'].every((key) => maps.includes(key));
+    return ['RYGBP_eccentricity', 'RYBC_eccentricity', 'YBGR_polar-angle',
+      'RYGBP_polar-angle', 'RYBC_polar-angle', 'YBGR_polar-angle-flipped',
+      'RYGBP_polar-angle-flipped', 'RYBC_polar-angle-flipped']
+      .every((key) => maps.includes(key));
   })).toBe(true);
 
   await page.setInputFiles('#overlayInput', join(FIXTURES, 'lh.curv'));
@@ -625,16 +630,23 @@ test('the retinotopy colour maps set the window their scale needs', async ({ pag
   };
 
   // NiiVue's .curv reader min-max normalises into 0..1, so this reads as radians.
-  await page.selectOption('#overlayColormap', 'polar_angle');
+  await page.selectOption('#overlayColormap', 'YBGR_polar-angle');
   await expect(page.locator('#statusText')).toContainText('one full cycle');
   expect(await page.evaluate(() => {
     const layer = window.__surfannotate.overlayLayer;
     return { colormap: layer.colormap, min: layer.cal_min, max: layer.cal_max };
-  })).toEqual({ colormap: 'polar_angle', min: 0, max: 2 * Math.PI });
+  })).toEqual({ colormap: 'YBGR_polar-angle', min: 0, max: 2 * Math.PI });
+
+  // The gist_rainbow variant is a polar-angle map too, and gets the same turn.
+  await page.selectOption('#overlayColormap', 'RYGBP_polar-angle');
+  expect(await page.evaluate(() => {
+    const layer = window.__surfannotate.overlayLayer;
+    return { colormap: layer.colormap, min: layer.cal_min, max: layer.cal_max };
+  })).toEqual({ colormap: 'RYGBP_polar-angle', min: 0, max: 2 * Math.PI });
 
   // Anchored at zero, keeping the robust maximum. Read through the boxes, which
   // round the stored value and the recorded one identically.
-  await page.selectOption('#overlayColormap', 'eccentricity');
+  await page.selectOption('#overlayColormap', 'RYGBP_eccentricity');
   expect(await page.inputValue('#overlayMin')).toBe('0');
   expect(await page.inputValue('#overlayMax')).toBe(auto.max);
   expect(await page.evaluate(() => window.__surfannotate.overlayLayer.cal_min)).toBe(0);
@@ -667,14 +679,46 @@ test('the colour scale on the view follows the map, the range and the overlay', 
 
   // The retinotopy maps get their wheel. The four quarter turns are labelled in
   // the unit the window is in, counter-clockwise from the right.
-  await page.selectOption('#overlayColormap', 'polar_angle');
+  await page.selectOption('#overlayColormap', 'YBGR_polar-angle');
   await expect(legend).toHaveAttribute('data-kind', 'polar_angle');
   await expect(ticks).toHaveText(['0', 'π/2', 'π', '3π/2']);
 
-  await page.selectOption('#overlayColormap', 'eccentricity');
-  await expect(legend).toHaveAttribute('data-kind', 'eccentricity');
-  await expect(ticks).toHaveCount(3);
-  await expect(page.locator('#colorLegend .color-legend-ring')).toHaveCount(2);
+  const layerColormap = () => page.evaluate(() => window.__surfannotate.overlayLayer.colormap);
+  // NiiVue's own LUT, as the shader samples it: every entry opaque. A stop
+  // NiiVue could not interpolate (two on one index) comes out as (0, 0, 0, 0).
+  const lutHoles = () => page.evaluate(() => {
+    const lut = window.__surfannotate.nv.colormap(window.__surfannotate.overlayLayer.colormap);
+    const bad = [];
+    for (let i = 0; i < 256; i++) if (lut[i * 4 + 3] !== 255) bad.push(i);
+    return bad;
+  });
+  for (const key of ['RYGBP_polar-angle', 'RYBC_polar-angle', 'YBGR_polar-angle']) {
+    await page.selectOption('#overlayColormap', key);
+    await expect(legend).toHaveAttribute('data-kind', 'polar_angle');
+    await expect(ticks).toHaveText(['0', 'π/2', 'π', '3π/2']);
+    expect(await lutHoles(), `${key} has transparent LUT entries`).toEqual([]);
+
+    // The flip is a checkbox, not another entry: it mirrors the map for the
+    // other hemisphere, keeps the wheel and the ticks, and is read back from
+    // the layer's key.
+    await expect(page.locator('#overlayFlip')).toBeEnabled();
+    await page.check('#overlayFlip');
+    expect(await layerColormap()).toBe(`${key}-flipped`);
+    await expect(legend).toHaveAttribute('data-kind', 'polar_angle');
+    await expect(ticks).toHaveText(['0', 'π/2', 'π', '3π/2']);
+    expect(await lutHoles(), `${key}-flipped has transparent LUT entries`).toEqual([]);
+    await page.uncheck('#overlayFlip');
+    expect(await layerColormap()).toBe(key);
+  }
+
+  for (const key of ['RYGBP_eccentricity', 'RYBC_eccentricity']) {
+    await page.selectOption('#overlayColormap', key);
+    await expect(legend).toHaveAttribute('data-kind', 'eccentricity');
+    await expect(ticks).toHaveCount(3);
+    await expect(page.locator('#colorLegend .color-legend-ring')).toHaveCount(2);
+    // Nothing to flip for: eccentricity is the same from either hemisphere.
+    await expect(page.locator('#overlayFlip')).toBeDisabled();
+  }
 
   // A typed range re-ticks it; the wheel is not a picture of the data's own range.
   await page.fill('#overlayMax', '9');
@@ -914,6 +958,10 @@ test('the ROI name reaches the file name and the file contents', async ({ page }
     session.closePath();
     window.__surfannotateUi.runFill(-1);
   });
+  // Exports write saved ROIs only, and saving selects the ROI just saved.
+  await expect(page.locator('#exportLabel')).toBeDisabled();
+  await page.click('#saveRoi');
+  await expect(page.locator('#exportLabel')).toBeEnabled();
 
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -1325,6 +1373,68 @@ test('overlays belong to their own surface', async ({ page }) => {
   expect(await page.evaluate(() => window.__surfannotate.overlayLayer)).toBe(null);
 });
 
+test('an overlay can be applied to every surface of the same subject, as one overlay', async ({ page }) => {
+  await loadFlat(page);
+  const count = 1681;
+  await expect(page.locator('#overlayShare')).not.toBeChecked();
+  await page.check('#overlayShare');
+  await page.locator('#overlayInput').setInputFiles(curvFile('lh.thickness', count, (v) => (v % 7) / 7));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.thickness loaded');
+  await expect(overlayRows(page)).toHaveCount(1);
+
+  // A matching surface loaded afterwards gets the overlay too.
+  await page.setInputFiles('#surfaceInput', join(FIXTURES, 'lh.flat.inflated.surf.gii'));
+  await expect(surfaceRows(page)).toHaveCount(2);
+  await expect(overlayRows(page)).toHaveCount(1);
+  await expect(overlayRows(page).first()).toContainText('lh.thickness');
+  const values = await page.evaluate(() => {
+    const [a, b] = window.__surfannotate.surfaces;
+    const x = a.overlays[0].baseValues, y = b.overlays[0].baseValues;
+    let same = x.length === y.length; for (let i = 0; same && i < x.length; i++) same = x[i] === y[i];
+    return { same, groupA: a.overlays[0].groupId, groupB: b.overlays[0].groupId };
+  });
+  expect(values.same).toBe(true);
+  expect(values.groupA).toBe(values.groupB);
+
+  // Settings changed here follow the overlay back to the other surface.
+  await page.selectOption('#overlayColormap', 'viridis');
+  await page.fill('#overlayMax', '0.5');
+  await page.press('#overlayMax', 'Enter');
+  await surfaceRows(page).first().locator('input[type=radio]').check();
+  await expect(overlayRows(page)).toHaveCount(1);
+  expect(await page.inputValue('#overlayColormap')).toBe('viridis');
+  expect(await page.inputValue('#overlayMax')).toBe('0.5');
+
+  // One overlay: removing it here removes it there.
+  await overlayRows(page).first().locator('.layer-remove').click();
+  await expect(page.locator('#statusText')).toContainText('from this and 1 matching surface');
+  await expect(overlayRows(page)).toHaveCount(0);
+  await surfaceRows(page).nth(1).locator('input[type=radio]').check();
+  await expect(overlayRows(page)).toHaveCount(0);
+
+  // Unticked — the default — an overlay stays with the surface it was loaded onto.
+  await page.uncheck('#overlayShare');
+  await page.locator('#overlayInput').setInputFiles(curvFile('lh.sulc', count, (v) => v / count));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.sulc loaded');
+  await expect(page.locator('#statusText')).not.toContainText('matching surface');
+  await surfaceRows(page).first().locator('input[type=radio]').check();
+  await expect(overlayRows(page)).toHaveCount(0);
+
+  // Ticking afterwards shares what is already loaded, whichever surface it is on.
+  await page.check('#overlayShare');
+  await expect(page.locator('#statusText')).toContainText('1 overlay now shared');
+  await expect(overlayRows(page)).toHaveCount(1);
+  await expect(overlayRows(page).first()).toContainText('lh.sulc');
+});
+
+test('ticking sharing with no matching surface loaded says so', async ({ page }) => {
+  await loadFlat(page);
+  await page.locator('#overlayInput').setInputFiles(curvFile('lh.sulc', 1681, (v) => v / 1681));
+  await expect(page.locator('#statusText')).toContainText('Overlay lh.sulc loaded');
+  await page.check('#overlayShare');
+  await expect(page.locator('#statusText')).toContainText('No other loaded surface has the same vertices');
+});
+
 test('a dropped overlay is recognised as an overlay, not a second surface', async ({ page }) => {
   await loadSurface(page);
   const bytes = readFileSync(join(FIXTURES, 'lh.curv')).toString('base64');
@@ -1560,10 +1670,183 @@ test('removing an ROI gives its vertices back to the surface', async ({ page }) 
   expect(await page.evaluate(() => window.__surfannotate.excluded)).toBe(null);
 });
 
+test('a selected ROI GIfTI preserves the preceding regions that constrain its border', async ({ page }) => {
+  await loadFlat(page);
+  await saveStrip(page, 4, 'V1');
+  await saveStrip(page, 9, 'V2');
+  expect(await areaSizes(page)).toEqual([{ name: 'V1', n: 164 }, { name: 'V2', n: 205 }]);
+  const before = await page.evaluate(() => window.__surfannotateUi.savedRois()
+    .map(roi => ({ name: roi.name, mask: Array.from(roi.mask) })));
+  const download = page.waitForEvent('download');
+  await page.locator('#exportGifti').click();
+  const file = await download;
+  const chunks = [];
+  for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+  while (await roiRows(page).count()) await roiRows(page).first().locator('.layer-remove').click();
+  await page.setInputFiles('#roiImport', {
+    name: file.suggestedFilename(), mimeType: 'application/xml', buffer: Buffer.concat(chunks)
+  });
+  await expect(roiRows(page)).toHaveCount(2);
+  expect(await page.evaluate(() => window.__surfannotateUi.savedRois()
+    .map(roi => ({ name: roi.name, mask: Array.from(roi.mask) })))).toEqual(before);
+});
+
+test('a session file restores editable ROIs, and so does the .label.gii it rides in', async ({ page }) => {
+  await loadFlat(page);
+  await expect(page.locator('#roiImport')).toBeEnabled();
+  await expect(page.locator('#exportSession')).toBeDisabled();
+  await saveStrip(page, 2, 'V1');
+  await saveStrip(page, 5, 'V2');
+  await page.evaluate(() => { window.__surfannotate.session.togglePoint(700, 'MT'); });
+  const before = await areaSizes(page);
+  await page.fill('#parcellationName', 'retinotopy');
+
+  const save = async (button) => {
+    const download = page.waitForEvent('download');
+    await page.locator(button).click();
+    const file = await download;
+    const path = join(tmpdir(), `surfannotate-e2e-${Date.now()}-${file.suggestedFilename()}`);
+    await file.saveAs(path);
+    return { path, name: file.suggestedFilename(), text: await readFile(path, 'utf8') };
+  };
+  const clearList = async () => {
+    while (await roiRows(page).count()) await roiRows(page).first().locator('.layer-remove').click();
+    await expect(roiRows(page)).toHaveCount(0);
+  };
+
+  // The session: definitions in list order, no masks.
+  const session = await save('#exportSession');
+  expect(session.name).toBe('lh.retinotopy.surfannotate.json');
+  const parsed = JSON.parse(session.text);
+  expect(parsed.rois.map((roi) => roi.name)).toEqual(['V1', 'V2']);
+  expect(parsed.rois[0].clicks).toHaveLength(2);
+  expect(parsed.rois[0].closure).toBe('edge');
+  expect(parsed.points).toEqual([{ vertex: 700, name: 'MT' }]);
+  expect(session.text).not.toContain('"mask"');
+
+  // Loading it back gives the same regions, and the reopen button works on them.
+  await clearList();
+  await page.setInputFiles('#roiImport', session.path);
+  await expect(page.locator('#statusText')).toContainText('Loaded 2 ROIs and 0 landmarks');
+  await expect(roiRows(page)).toHaveCount(2);
+  expect(await areaSizes(page)).toEqual(before);
+  await roiRows(page).first().locator('.layer-edit').click();
+  await expect(page.locator('#statusText')).toContainText('Reopened V1');
+  expect(await page.evaluate(() => window.__surfannotate.session.clicks.length)).toBe(2);
+  await page.locator('#saveRoi').click();
+  await expect(roiRows(page)).toHaveCount(2);
+
+  // The GIfTI export carries the same block, so it loads too.
+  const gifti = await save('#exportAllGifti');
+  expect(gifti.text).toContain('SurfAnnotateSession');
+  await clearList();
+  await page.setInputFiles('#roiImport', gifti.path);
+  await expect(page.locator('#statusText')).toContainText('Loaded 2 ROIs');
+  expect(await areaSizes(page)).toEqual(before);
+
+  // A GIfTI from elsewhere has no border points to restore.
+  const plain = join(tmpdir(), `surfannotate-e2e-${Date.now()}-plain.label.gii`);
+  await writeFile(plain, gifti.text.replace(/SurfAnnotateSession/g, 'Other'));
+  await page.setInputFiles('#roiImport', plain);
+  await expect(page.locator('#statusText')).toContainText('carries no SurfAnnotate border points');
+  await expect(roiRows(page)).toHaveCount(2);
+
+  // Loaded on top of an existing list: the file's colours win and the ROIs
+  // already there move out of the way, while a free colour exists.
+  const colours = () => page.evaluate(() => window.__surfannotateUi.savedRois().map((roi) => roi.colorIndex));
+  expect(await colours()).toEqual([0, 1]);
+  await page.setInputFiles('#roiImport', session.path);
+  await expect(page.locator('#statusText')).toContainText('Loaded 2 ROIs');
+  await expect(roiRows(page)).toHaveCount(4);
+  const after = await colours();
+  expect(after.slice(2)).toEqual([0, 1], 'imported ROIs keep the colours in the file');
+  expect(after.slice(0, 2).every((c) => c !== 0 && c !== 1)).toBe(true);
+  expect(new Set(after).size).toBe(4);
+
+  // Whole-list exports wait while an ROI is reopened, rather than writing a
+  // file that lacks it.
+  await roiRows(page).first().locator('.layer-edit').click();
+  await expect(page.locator('#statusText')).toContainText('Reopened');
+  for (const id of ['exportSession', 'exportAnnot', 'exportAllGifti', 'exportLabel', 'exportGifti']) {
+    await expect(page.locator(`#${id}`), `#${id} while editing`).toBeDisabled();
+  }
+  await expect(page.locator('#exportNameHint')).toContainText('reopened for editing');
+  await page.locator('#saveRoi').click();
+  await expect(page.locator('#exportSession')).toBeEnabled();
+  await expect(page.locator('#exportNameHint')).not.toContainText('reopened');
+});
+
+test('every saved ROI can be written to one file, as .annot and as .label.gii', async ({ page }) => {
+  await loadFlat(page);
+  await expect(page.locator('#exportAnnot')).toBeDisabled();
+  await saveStrip(page, 2, 'V1');
+  await expect(page.locator('#exportAnnot')).toBeEnabled();
+  await saveStrip(page, 5, 'V2');
+  const sizes = await areaSizes(page);
+  const claimed = sizes.reduce((total, roi) => total + roi.n, 0);
+  await page.fill('#parcellationName', 'retinotopy');
+
+  const readDownload = async (button) => {
+    const download = page.waitForEvent('download');
+    await page.locator(button).click();
+    const file = await download;
+    const chunks = [];
+    for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+    return { name: file.suggestedFilename(), bytes: Buffer.concat(chunks) };
+  };
+
+  // .annot: big-endian, vertex count first, then (vertex, packed colour) pairs
+  // followed by the colour table with one entry per ROI.
+  const annot = await readDownload('#exportAnnot');
+  expect(annot.name).toBe('lh.retinotopy.annot');
+  expect(annot.bytes.readInt32BE(0)).toBe(1681);
+  const packed = new Map();
+  for (let v = 0; v < 1681; v++) {
+    const value = annot.bytes.readInt32BE(4 + v * 8 + 4);
+    packed.set(value, (packed.get(value) || 0) + 1);
+  }
+  expect(packed.get(0)).toBe(1681 - claimed);
+  expect(packed.size).toBe(3, 'unlabelled plus one colour per ROI');
+  const table = annot.bytes.toString('latin1', 4 + 1681 * 8);
+  expect(table).toContain('V1\0');
+  expect(table).toContain('V2\0');
+
+  // .label.gii: one Int32 per vertex with a label table naming every ROI.
+  const gifti = await readDownload('#exportAllGifti');
+  expect(gifti.name).toBe('lh.retinotopy.label.gii');
+  const xml = gifti.bytes.toString('utf8');
+  expect(xml).toContain('<![CDATA[V1]]>');
+  expect(xml).toContain('<![CDATA[V2]]>');
+  expect(xml).toContain('<Label Key="2"');
+  const data = Buffer.from(/<Data>([^<]*)<\/Data>/.exec(xml)[1], 'base64');
+  const labels = new Int32Array(data.buffer, data.byteOffset, data.length / 4);
+  expect(labels.length).toBe(1681);
+  expect(labels.filter((key) => key > 0).length).toBe(claimed);
+  expect(new Set(labels).size).toBe(3);
+  await expect(page.locator('#statusText')).toContainText('2 ROIs');
+});
+
 test('a selected ROI is what the export buttons write', async ({ page }) => {
   await loadFlat(page);
+  await expect(page.locator('#exportNameHint')).toContainText('save the filled region');
   await saveStrip(page, 2, 'V1');
-  await roiRows(page).first().locator('.layer-name').click();
+  const row = roiRows(page).first();
+
+  // Saving selects the ROI, and the selection has to be unmistakable, because
+  // it is what a download contains: a solid row style, and the export hint
+  // names the ROI. The row is 320px wide with four buttons in it, so it is
+  // colour that carries this, not a label — a text tag left one letter of the
+  // name visible.
+  await expect(row).toHaveClass(/export-target/);
+  await expect(row.locator('.layer-name')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#exportNameHint')).toContainText('Exporting the saved ROI V1');
+
+  // Deselecting leaves nothing to export; selecting again restores it.
+  await row.locator('.layer-name').click();
+  await expect(row).not.toHaveClass(/export-target/);
+  await expect(page.locator('#exportLabel')).toBeDisabled();
+  await expect(page.locator('#exportNameHint')).toContainText('Select a saved ROI');
+  await row.locator('.layer-name').click();
 
   await expect(page.locator('#exportLabel')).toBeEnabled();
   const download = page.waitForEvent('download');
@@ -1589,6 +1872,42 @@ test('ROIs follow the topology, like the ROI being drawn', async ({ page }) => {
 
   await surfaceRows(page).first().locator('input[type=radio]').check();
   await expect(roiRows(page)).toHaveCount(1, 'and they come back on the original');
+});
+
+test('an ROI is the same vertices on another surface sharing the indexing', async ({ page }) => {
+  // lh.flat.inflated.surf.gii has the flat patch's vertices and triangles under
+  // a warped geometry — lh.inflated to its lh.white. Shortest paths run
+  // differently there, so an ROI re-traced from its clicks would enclose a
+  // different region; the saved border is a vertex path and encloses the same.
+  await loadFlat(page);
+  await saveStrip(page, 2, 'V1');
+  const before = await areaSizes(page);
+  expect(before[0].n).toBeGreaterThan(0);
+
+  await page.setInputFiles('#surfaceInput', join(FIXTURES, 'lh.flat.inflated.surf.gii'));
+  await expect(surfaceRows(page)).toHaveCount(2);
+  await expect(roiRows(page)).toHaveCount(1);
+  expect(await areaSizes(page)).toEqual(before);
+  await expect(roiRows(page).first()).not.toHaveClass(/unresolved/);
+
+  // Dropping the saved border and resolving again re-traces between the
+  // clicks on the warped geometry. On this synthetic patch the straight strip
+  // happens to re-trace to the same row, so this only checks that the
+  // fallback path resolves; the unit test in parcellation.test.js is what
+  // proves a border is honoured over a re-trace when the two differ.
+  const retraced = await page.evaluate(() => {
+    const roi = window.__surfannotateUi.savedRois()[0];
+    const saved = roi.border;
+    roi.border = undefined;
+    window.__surfannotateUi.recomputeParcellation();
+    const n = roi.mask ? roi.mask.reduce((t, v) => t + v, 0) : null;
+    const error = roi.error;
+    roi.border = saved;
+    window.__surfannotateUi.recomputeParcellation();
+    return { retraced: n, error };
+  });
+  expect(retraced.error).toBe(null);
+  expect(await areaSizes(page)).toEqual(before);
 });
 
 test('a loop ROI is reopened onto the side it was filled on', async ({ page }) => {
@@ -1664,7 +1983,6 @@ test('an exported .label can be dropped back in as an overlay', async ({ page })
   // to its curvature parser, which cannot read ASCII, so the drop did nothing.
   await loadFlat(page);
   await saveStrip(page, 2, 'V1');
-  await roiRows(page).first().locator('.layer-name').click();
 
   const download = page.waitForEvent('download');
   await page.locator('#exportLabel').click();
@@ -1847,10 +2165,11 @@ test('the Cite button opens the citations, from the app and from the start page'
 
 // -- regressions found by adversarial testing ------------------------------
 
-test('saving an ROI does not silently retarget the export', async ({ page }) => {
-  // Saving used to select the ROI, and the export buttons prefer the selection
-  // while the filename comes from the name box — so the next export wrote the
-  // saved ROI's vertices under the new ROI's name.
+test('exports write the selected saved ROI under its own name, never the region on screen', async ({ page }) => {
+  // Saving selects the ROI. The name field then goes on naming the *next* ROI,
+  // so the export name must come from the selected ROI itself — otherwise the
+  // saved vertices would be written under the new name. And the region being
+  // drawn is not exportable at all until it is saved.
   await loadFlat(page);
   await saveStrip(page, 2, 'V1');
 
@@ -1864,20 +2183,31 @@ test('saving an ROI does not silently retarget the export', async ({ page }) => 
     window.__surfannotateUi.repaint();
   });
   await page.fill('#roiName', 'V2');
+  await page.dispatchEvent('#roiName', 'input');
 
   const onScreen = await page.evaluate(() =>
     window.__surfannotate.session.filled.reduce((n, v) => n + v, 0));
   expect(onScreen).not.toBe(82);
 
-  const download = page.waitForEvent('download');
-  await page.locator('#exportLabel').click();
-  const file = await download;
-  expect(file.suggestedFilename()).toBe('lh.V2.label');
-  const stream = await file.createReadStream();
-  const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  const lines = Buffer.concat(chunks).toString('utf8').trimEnd().split('\n');
-  expect(Number(lines[1])).toBe(onScreen, 'the region on screen, not the saved one');
+  const read = async () => {
+    const download = page.waitForEvent('download');
+    await page.locator('#exportLabel').click();
+    const file = await download;
+    const chunks = [];
+    for await (const chunk of await file.createReadStream()) chunks.push(chunk);
+    const lines = Buffer.concat(chunks).toString('utf8').trimEnd().split('\n');
+    return { name: file.suggestedFilename(), count: Number(lines[1]) };
+  };
+  const first = await read();
+  expect(first.name).toBe('lh.V1.label', 'the selected ROI names the file, not the name field');
+  expect(first.count).toBe(82, 'the saved ROI, not the region on screen');
+
+  // Saving the second region selects it, and now that is what is written.
+  await page.locator('#saveRoi').click();
+  await expect(page.locator('#exportNameHint')).toContainText('Exporting the saved ROI V2');
+  const second = await read();
+  expect(second.name).toBe('lh.V2.label');
+  expect(second.count).toBe(onScreen);
 });
 
 test('a reopened ROI survives every way of walking away from the edit', async ({ page }) => {
@@ -1928,7 +2258,7 @@ test('removing the last surface disarms the controls instead of crashing', async
   await expect(surfaceRows(page)).toHaveCount(0);
 
   for (const id of ['undoPoint', 'closePath', 'closeOnEdge', 'fillRegion', 'clearRoi',
-    'saveRoi', 'exportLabel', 'exportGifti', 'exportPoints']) {
+    'saveRoi', 'exportLabel', 'exportGifti', 'exportPoints', 'exportAnnot', 'exportAllGifti']) {
     await expect(page.locator(`#${id}`), `#${id} must be disabled`).toBeDisabled();
   }
   await expect(page.locator('#flipRegion')).toBeHidden();

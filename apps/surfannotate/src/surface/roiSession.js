@@ -210,6 +210,67 @@ export class RoiSession {
     };
   }
 
+  /**
+   * Take a border that was traced earlier — on this surface, or on another
+   * one sharing its vertex indexing — instead of re-tracing it from the
+   * clicks.
+   *
+   * This is what makes an ROI the same set of vertices on lh.sphere.reg,
+   * lh.inflated and lh.white: the fill is purely topological, so given the
+   * same barrier and the same anchor it gives the same region on all three,
+   * whereas a shortest path between two clicks genuinely runs differently
+   * over different geometry and would enclose a different region — or, on a
+   * folded surface, none. The clicks stay the editable form; reopening
+   * re-traces on the surface shown.
+   *
+   * Refused, and nothing changed, when the border is not walkable here:
+   * a vertex out of range or cut out of the graph (a neighbouring ROI now
+   * owns it), two consecutive vertices no longer adjacent, a loop that does
+   * not close, or an edge border that no longer separates the surface.
+   *
+   * @param {ArrayLike<number>} chain
+   * @param {string} closure CLOSURE_LOOP or CLOSURE_EDGE
+   * @returns {{ok: boolean, error: string|null}}
+   */
+  adoptChain(chain, closure) {
+    const adopted = Int32Array.from(chain);
+    if (adopted.length < 2) return { ok: false, error: 'BROKEN_BOUNDARY' };
+    const { adjOffset } = this.graph;
+    for (const v of adopted) {
+      if (v < 0 || v >= this.graph.V || adjOffset[v] === adjOffset[v + 1]) {
+        return { ok: false, error: 'BROKEN_BOUNDARY' };
+      }
+    }
+    if (!validateChain(this.graph, adopted).ok) return { ok: false, error: 'BROKEN_BOUNDARY' };
+
+    let regions = null;
+    if (closure === CLOSURE_EDGE) {
+      if (!this.openEdge) return { ok: false, error: 'NO_OPEN_EDGE' };
+      const barrier = new Uint8Array(this.graph.V);
+      for (const v of adopted) barrier[v] = 1;
+      regions = regionComponents(this.graph, barrier);
+      if (regions.count < 2) return { ok: false, error: 'NO_SEPARATION' };
+    } else {
+      const first = adopted[0];
+      const last = adopted[adopted.length - 1];
+      if (first !== last && !validateChain(this.graph, [last, first]).ok) {
+        return { ok: false, error: 'BROKEN_BOUNDARY' };
+      }
+    }
+
+    this.chain = adopted;
+    this.gaps = [];
+    this.closed = true;
+    this.closure = closure;
+    this.filled = null;
+    this.fillError = null;
+    this.components = 0;
+    this.regionOrder = [];
+    this.regionIndex = -1;
+    this._regions = regions;
+    return { ok: true, error: null };
+  }
+
   /** Editing the clicks invalidates any traced boundary and fill. */
   _reopen() {
     this.closed = false;

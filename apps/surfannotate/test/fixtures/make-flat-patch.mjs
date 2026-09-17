@@ -73,3 +73,22 @@ const xml =
 const out = join(dirname(fileURLToPath(import.meta.url)), 'lh.flat.surf.gii');
 writeFileSync(out, xml);
 console.log(`wrote ${out}: ${N * N} vertices, ${triangles.length / 3} faces`);
+
+// A second surface with the SAME vertices and triangles but different
+// geometry — the grid bent by a smooth warp — standing in for lh.inflated
+// next to lh.white. Shortest paths between two vertices run differently on
+// it, which is what the "an ROI is the same vertices on every surface sharing
+// the indexing" test needs: a border re-traced here would enclose a different
+// region, a border carried as a vertex path encloses the same one.
+const warped = new Float32Array(vertices);
+for (let v = 0; v < N * N; v++) {
+  const y = vertices[3 * v + 1];
+  const z = vertices[3 * v + 2];
+  warped[3 * v + 1] = y + 7 * Math.sin(z / 9);
+  warped[3 * v + 2] = z + 7 * Math.sin(y / 11);
+}
+const warpedXml = xml.replace(b64(vertices), b64(warped))
+  .replace('<Value>Flat</Value>', '<Value>Inflated</Value>');
+const outWarped = join(dirname(fileURLToPath(import.meta.url)), 'lh.flat.inflated.surf.gii');
+writeFileSync(outWarped, warpedXml);
+console.log(`wrote ${outWarped}: same topology, warped geometry`);

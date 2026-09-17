@@ -1,5 +1,11 @@
 # surfannotate
 
+## 0.5.20260917
+
+### Minor Changes
+
+- Add retinotopy palettes and hemisphere flipping, editable ROI sessions, whole-parcellation exports, and overlays shared across matching surfaces. Preserve ROI boundaries on GIfTI reimport, keep shared overlays consistent when switching surfaces, and improve export selection and touch controls. Update desktop validation to save the filled ROI before exporting it.
+
 ## 0.4.20260916
 
 ### Patch Changes

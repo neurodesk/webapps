@@ -11,10 +11,21 @@ overlay: curvature, thickness, `.annot`, `.label.gii`, `.shape.gii`, `.mgz`, or 
 `.dscalar.nii`. Colour map, opacity and display window are adjustable, including
 `gist_rainbow`, which NiiVue does not ship.
 
-Two are retinotopy conventions contributed by DL: **eccentricity** (matplotlib's
-`rainbow_r`) and **polar angle** (yellow, blue, green, red, yellow). Picking
-either also sets the display window, because for these two the window is part of
-the map — polar angle is cyclic and only truthful across exactly one turn, and
+Five are retinotopy maps, each named for the colour sequence it runs through.
+Eccentricity: **`RYGBP_eccentricity`** (matplotlib's `rainbow_r`: red at the
+fovea, through yellow, green and blue, to purple at the periphery) and
+**`RYBC_eccentricity`** (red at the fovea, yellow, blue, cyan at the periphery).
+Polar angle: **`YBGR_polar-angle`** (yellow, blue, green, red, yellow —
+contributed by DL), **`RYGBP_polar-angle`** (`gist_rainbow` read as a turn: red,
+yellow, green, blue, pink and back to red, the convention many retinotopy
+figures use) and **`RYBC_polar-angle`** (red, yellow, blue, cyan at the quarter turns,
+back to red). *Flip for the other hemisphere* mirrors whichever polar-angle map
+is selected about the vertical meridian, so the colour at angle θ becomes the
+original's at π − θ. Show one hemisphere plain and the other flipped and the
+two read the same way — upper field up, lower field down, nasal and temporal
+swapped as the anatomy is. Each overlay keeps its own flip. Picking any of
+them also sets the display window, because for these the window is part of the
+map — polar angle is cyclic and only truthful across exactly one turn, and
 eccentricity has to start at zero for the fovea to sit at the bottom of the
 scale. The turn is read off the data: a maximum at or below 2π is radians,
 anything larger is degrees, and negative values take the signed variant.
@@ -66,15 +77,21 @@ not separate an annulus, and is refused rather than silently filled.
 **Several surfaces and overlays at once.** Load as many surfaces as you like — by
 picker or by dropping them on the viewer — and switch between them from the list. One
 is shown at a time, because overlapping cortical surfaces occlude each other and a
-click over two of them could not be attributed to either. Overlays belong to the
-surface they were loaded onto, and each has its own visibility, colour map and range.
+click over two of them could not be attributed to either. An overlay belongs to the surface it
+was loaded onto. Tick *Apply overlays to every loaded surface with the same vertices*
+and it is instead applied to every loaded surface of the same subject — `white`,
+`pial`, `inflated` and `sphere` — as one overlay: one colour map, range and
+visibility, removed from all of them together, and a matching surface loaded later
+receives it too. Ticking the box after overlays are loaded shares those as well; if no
+other loaded surface has the same vertices, the status line says so.
 
 ROIs follow the *vertex indexing*, not the file. Surfaces sharing one — a subject's
-`white`, `pial`, `inflated` and `sphere` — share the border points, so you can place
-them on the inflated surface and see them on the folded one. The traced border and the
-fill are rebuilt on the new surface rather than carried across, because the shortest
-path between two vertices genuinely runs differently over different geometry. Surfaces
-with unrelated topology keep separate, independent ROIs.
+`white`, `pial`, `inflated` and `sphere` — share the ROIs, so you can draw on the sphere
+or the inflated surface and see exactly the same vertices on the folded one. A saved ROI
+carries its border as a vertex path, and a fill is purely topological, so the region is
+identical on every such surface; only when you *reopen* an ROI is the border re-traced
+between your clicks on the surface shown, because a shortest path genuinely runs
+differently over different geometry. Surfaces with unrelated topology keep separate, independent ROIs.
 
 Dropped files are identified by their magic number and name rather than by drop order,
 so a surface and an overlay can be dropped in any sequence. A FreeSurfer `.label` is
@@ -103,8 +120,23 @@ silently dropped.
 
 The pencil reopens an ROI to adjust its border. It keeps its place in the list, so the
 ROIs above it constrain the drawing exactly as when it was first drawn, and the ROIs
-below it are re-derived on save. Clicking a name makes the export buttons write that
-ROI instead of the region being drawn.
+below it are re-derived on save. **Exports write saved ROIs only.** Saving selects the
+ROI just saved, so the flow is draw, save, export; clicking a name selects another, the
+row turns solid green and the export panel names it. The region being drawn is never
+written directly. Each row also carries a swatch of the ROI's fill colour.
+
+**Continuing earlier work.** *Load ROIs from a file* in the Saved ROIs panel restores
+ROIs from a session file or from a `.label.gii` this app exported, with their border
+points intact, so they can be reopened, reordered and built on. Loaded ROIs keep the
+colours they were saved with; an ROI already on the list that shares one moves to a free
+colour. The palette has sixteen colours, chosen to stay apart from each other and from
+the red fill and yellow border of a region still being drawn. While an ROI is reopened
+for editing, every export waits until it is saved or the edit discarded: the whole-list
+files would lack it, and the single-ROI files would write it half-edited. The file must
+belong to the loaded surface — every number in it is a vertex index — and a different
+vertex count or triangulation is refused with a message rather than mapped. A label file
+from another tool has no border points to restore; recovering them from the mask is the
+next step.
 
 **Vertex selection.** Point-and-click landmarks, exported as a vertex list.
 
@@ -120,8 +152,11 @@ document, so there is still one bundle and one path in the composite site.
 | Format | Use |
 | --- | --- |
 | FreeSurfer `.label` | The universal FreeSurfer exchange format; opens in freeview. Also FreeSurfer's own control-point format, so it doubles as a landmark file. Can be dropped back in as an overlay. |
-| GIfTI `.label.gii` | Opens in Connectome Workbench, FSL, nibabel, NiiVue. Carries the ROI name and colour. |
+| GIfTI `.label.gii` | Opens in Connectome Workbench, FSL, nibabel, NiiVue. Carries the ROI name and colour. Editable metadata also includes preceding ROIs that constrain this ROI, so reimport restores its exact region. |
 | Points JSON | Landmarks plus a mesh fingerprint, so a point set cannot be loaded onto the wrong surface. |
+| FreeSurfer `.annot` | **Every saved ROI in one file**, in list order, with names and colours. Opens in freeview; `mri_annotation2label` splits it back into `.label`s. |
+| GIfTI `.label.gii` (all ROIs) | The same parcellation as one integer per vertex with a label table. Opens in Workbench, nibabel, NiiVue. |
+| Session `.surfannotate.json` | **The editable form**: every ROI's border points, closure and anchor, plus the landmarks. Load it back to continue editing or add ROIs. The `.label.gii` exports carry the same block in their metadata, so they reopen here too. |
 
 Coordinates are written in tkreg (surface) RAS, as the `.label` header declares.
 NiiVue adds the volume centre on load so meshes align with volumes, and the export
@@ -140,6 +175,12 @@ number of vertices, and its indices — and the ROIs drawn on it — belong to t
 alone. Switching to a whole hemisphere shows none of them. They are not lost; ROIs
 follow the vertex indexing and reappear when you switch back, which the status line
 says when it happens.
+
+A whole-parcellation file is named `<hemisphere>.<parcellation>`, from the *All saved
+ROIs as one file* field: `lh.retinotopy.annot`, `lh.retinotopy.label.gii`. An ROI that
+did not resolve is left out and named in the status line. Note that `.annot` identifies
+a label by its colour, not by an index, so two ROIs sharing a palette colour are nudged
+one unit apart on the way out — invisible on screen, distinct in the file.
 
 Files are named `<hemisphere>.<roi>`, e.g. `lh.V1.label` — not after the specific
 surface they were drawn on. An ROI traced on `lh.sphere.reg` applies equally to

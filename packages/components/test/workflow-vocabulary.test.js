@@ -173,3 +173,16 @@ test('select and input fields shrink within narrow control grids', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /\.nd-field > :is\(select, input\)\s*\{[^}]*min-width:\s*0;[^}]*max-width:\s*100%;/);
 });
+
+
+test('shared icon buttons reserve a 44px square on touch screens', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const touchRules = css.slice(css.indexOf('@media (pointer: coarse), (max-width: 780px)'));
+  assert.match(touchRules, /\.nd-btn-icon-sm\s*\{[^}]*min-width: 44px;[^}]*min-height: 44px;/);
+});
+
+test('result selection and colour swatches use shared theme tokens', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /#controls \.nd-result-selected\s*\{[^}]*box-shadow: 0 0 0 2px var\(--nd-color-primary\)/);
+  assert.match(css, /\.nd-result-swatch\s*\{[^}]*border: 1px solid var\(--nd-color-border\)/);
+});

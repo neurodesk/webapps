@@ -1,5 +1,5 @@
 // The on-canvas legend for whatever colour map an overlay is drawn in: a wheel
-// for the two retinotopy maps, a bar for everything else.
+// for the retinotopy maps, a bar for everything else.
 //
 // Pure — no DOM and no NiiVue call. The caller passes the LUT, which is what
 // keeps the legend honest: `nv.colormap(key)` hands back the same 256 RGBA
@@ -8,7 +8,7 @@
 // NiiVue changed its interpolation, and would say nothing at all about the maps
 // NiiVue ships.
 
-import { cycleUnit } from './colormaps.js';
+import { colormapRole, cycleUnit } from './colormaps.js';
 
 const TWO_PI = 2 * Math.PI;
 
@@ -26,13 +26,14 @@ const ECCENTRICITY_LABEL_ANGLE = Math.PI / 4;
 const ECCENTRICITY_LABEL_OFFSET = 0.12;
 
 /**
- * Which legend a colour map needs.
+ * Which legend a colour map needs. Decided by the map's role, not its name, so
+ * every polar-angle map gets the wheel whichever colours it runs through.
  *
  * @param {string} key
  * @returns {'eccentricity'|'polar_angle'|'bar'}
  */
 export function legendKind(key) {
-  return key === 'eccentricity' || key === 'polar_angle' ? key : 'bar';
+  return colormapRole(key) ?? 'bar';
 }
 
 /**

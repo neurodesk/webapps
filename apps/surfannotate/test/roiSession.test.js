@@ -138,3 +138,31 @@ test('landmarks toggle independently of the ROI', () => {
   assert.equal(session.points.length, 0);
   assert.throws(() => session.setMode('nonsense'), /unknown mode/);
 });
+
+test('a traced border can be adopted instead of re-traced, and a broken one is refused', () => {
+  const { session, n } = makeSession();
+  const loop = [];
+  for (let i = 5; i <= 15; i++) loop.push(at(n, i, 5));
+  for (let j = 6; j <= 15; j++) loop.push(at(n, 15, j));
+  for (let i = 14; i >= 5; i--) loop.push(at(n, i, 15));
+  for (let j = 14; j >= 6; j--) loop.push(at(n, 5, j));
+
+  assert.deepEqual(session.adoptChain(loop, 'loop'), { ok: true, error: null });
+  assert.equal(session.closed, true);
+  assert.equal(session.closure, 'loop');
+  assert.equal(session.chain.length, loop.length);
+  const filled = session.fill({ seed: at(n, 10, 10) });
+  assert.equal(filled.ok, true);
+  assert.equal(filled.count, 9 * 9, 'the interior of the square');
+
+  // Two vertices that are not neighbours: refused, and the session untouched.
+  const fresh = makeSession().session;
+  const broken = [at(n, 5, 5), at(n, 9, 5)];
+  assert.equal(fresh.adoptChain(broken, 'loop').error, 'BROKEN_BOUNDARY');
+  assert.equal(fresh.closed, false);
+  // A loop whose ends do not meet is not a loop.
+  const open = loop.slice(0, 20);
+  assert.equal(fresh.adoptChain(open, 'loop').error, 'BROKEN_BOUNDARY');
+  // A vertex off the mesh.
+  assert.equal(fresh.adoptChain([0, 1, n * n + 5], 'loop').error, 'BROKEN_BOUNDARY');
+});

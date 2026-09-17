@@ -10,6 +10,10 @@
   color-scheme: light;
   --nd-brand-primary: #6aa329;
   --nd-brand-menu: #0c0e0a;
+  /* Not a text colour. The shared app-theme.css remaps this per theme to a
+     pale green in light mode and a dark green in dark mode — a selection
+     *surface*. Text uses --nd-brand-text (dark grey / pale), and text sitting
+     on the green hover surface uses --nd-brand-menu (always dark). */
   --nd-brand-selection: #161c10;
   --nd-brand-accent-background: #1e2a16;
   --nd-brand-selected: #4f7b38;
@@ -239,7 +243,7 @@ summary:focus-visible {
   align-items: center;
   min-height: 66px;
   padding: 10px 11px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border: 1px dashed var(--nd-brand-primary);
   border-radius: 9px;
@@ -298,14 +302,14 @@ summary:focus-visible {
   line-height: 1.45;
 }
 
-.hint strong { color: var(--nd-brand-selection); }
+.hint strong { color: var(--nd-brand-text); }
 
 .row {
   display: grid;
   grid-template-columns: minmax(105px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   font-size: 0.79rem;
 }
 
@@ -351,7 +355,7 @@ summary:focus-visible {
   display: grid;
   min-height: 36px;
   padding: 7px 11px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border: 1px solid var(--nd-brand-light);
   border-radius: 7px;
@@ -369,11 +373,11 @@ summary:focus-visible {
   cursor: not-allowed;
 }
 
-#controls button {
+#controls button:not(.nd-btn-icon) {
   min-height: 36px;
   margin: 0;
   padding: 7px 11px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border: 1px solid var(--nd-brand-light);
   border-radius: 7px;
@@ -390,8 +394,22 @@ summary:focus-visible {
   border-color: var(--nd-brand-primary);
 }
 
+/* The dark theme paints every panel button from
+   `:root[data-neurodesk-app][data-neurodesk-theme="dark"]:not(...) #controls button`,
+   which outranks the hover rule above, so in dark mode nothing in the panel
+   responded to the pointer at all. This repeats the hover with one more
+   attribute in the selector than the theme uses, so it wins in dark mode; the
+   tokens are the same ones the light theme hovers with. */
+:root[data-neurodesk-app][data-neurodesk-theme="dark"] #controls button:hover:not(:disabled) {
+  color: var(--nd-brand-menu);
+  background: var(--nd-brand-hover);
+  border-color: var(--nd-brand-primary);
+}
+
 #controls button:disabled {
-  color: #7b8477;
+  /* Muted, not faint: a disabled button still has to be readable to know what
+     it would do. #7b8477 measured 3.5:1 on this face; the muted ink is ~6:1. */
+  color: var(--nd-ink-muted);
   background: #f1f4ef;
   border-color: #dce1d8;
   opacity: 1;
@@ -399,12 +417,17 @@ summary:focus-visible {
 }
 
 #controls button.primary {
-  color: var(--nd-brand-menu);
+  /* Literal white: the theme renders this face as a mid green (#3f6f24 in
+     light mode), where the dark ink measured 3.2:1 and white measures 6:1. */
+  color: #fff;
   background: var(--nd-brand-primary);
   border-color: var(--nd-brand-primary);
 }
 
-#controls button.primary:hover:not(:disabled) { background: var(--nd-brand-hover); }
+#controls button.primary:hover:not(:disabled) {
+  color: var(--nd-brand-menu);
+  background: var(--nd-brand-hover);
+}
 
 .segmented {
   display: grid;
@@ -434,7 +457,7 @@ summary:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   font-size: 0.78rem;
 }
 
@@ -442,7 +465,7 @@ summary:focus-visible {
 
 .instruction-note {
   padding: 10px 11px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border-left: 3px solid var(--nd-brand-primary);
   border-radius: 0 7px 7px 0;
@@ -485,7 +508,7 @@ summary:focus-visible {
   gap: 7px;
   min-height: 36px;
   padding: 5px 7px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: #f7f9f5;
   border: 1px solid var(--nd-line-neutral);
   border-radius: 7px;
@@ -530,26 +553,18 @@ summary:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-.layer-list .layer-remove,
-.layer-list .layer-icon,
-.layer-list button.layer-remove,
-.layer-list button.layer-icon {
-  flex: 0 0 auto;
-  width: 24px;
-  min-height: 24px;
-  height: 24px;
-  margin: 0;
-  padding: 0;
-  color: var(--nd-ink-muted);
-  background: transparent;
-  border: 0;
-  border-radius: 5px;
-  font-size: 0.76rem;
-  line-height: 1;
+/* The reorder triangles: a 10×8 polygon, block-level so the grid centres the
+   shape itself and no line box or font metric gets a say. */
+#controls .layer-list .layer-arrow {
+  display: block;
+  width: 11px;
+  height: 9px;
+  fill: currentColor;
 }
 
+
 .layer-list button.layer-icon:hover:not(:disabled),
-.layer-list button.layer-edit:hover { color: var(--nd-brand-selection); background: var(--nd-brand-hover); }
+.layer-list button.layer-edit:hover { color: var(--nd-brand-menu); background: var(--nd-brand-hover); }
 .layer-list .layer-remove:hover { color: #7f2117; background: #f5dcd8; }
 .layer-list button.layer-icon:disabled { color: #b4bbb0; background: transparent; }
 
@@ -558,7 +573,7 @@ summary:focus-visible {
   margin: 2px 0 0;
   padding-left: 1.3rem;
   overflow-y: auto;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   font-size: 0.76rem;
 }
 
@@ -761,7 +776,7 @@ summary:focus-visible {
   justify-content: space-between;
   gap: 16px;
   padding: 0 18px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-white);
   border-top: 1px solid var(--nd-brand-light);
   font-size: 0.76rem;
@@ -909,7 +924,7 @@ summary:focus-visible {
   max-width: 62ch;
   margin: 22px 0 0;
   padding: 10px 13px;
-  color: var(--nd-brand-selection);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border: 1px solid var(--nd-brand-light);
   border-radius: 8px;
@@ -927,9 +942,13 @@ summary:focus-visible {
   border-radius: 50%;
 }
 
+/* The "Reads / Writes" box. The theme remaps its background per theme — pale
+   green in light mode, near-black in dark — so nothing in here may assume a
+   dark face: the text is the page's text token and the titles are the same
+   green as the Start button (dark in light mode, bright in dark mode). */
 .start-local-panel {
   padding: 26px;
-  color: var(--nd-brand-white);
+  color: var(--nd-brand-text);
   background: var(--nd-brand-accent-background);
   border: 1px solid var(--nd-brand-selected);
   border-radius: 14px;
@@ -938,7 +957,7 @@ summary:focus-visible {
 
 .start-local-panel h3 {
   margin: 0 0 10px;
-  color: var(--nd-brand-hover);
+  color: var(--nd-brand-primary);
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -947,7 +966,7 @@ summary:focus-visible {
 
 .start-local-panel h3 + ul { margin-bottom: 22px; }
 .start-local-panel ul:last-child { margin-bottom: 0; }
-.start-local-panel ul { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; color: #f2f5ef; font-size: 0.8rem; line-height: 1.45; }
+.start-local-panel ul { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; color: inherit; font-size: 0.8rem; line-height: 1.45; }
 .start-local-panel li { position: relative; padding-left: 17px; }
 .start-local-panel li::before { content: ""; position: absolute; left: 0; top: 0.55em; width: 6px; height: 6px; background: var(--nd-brand-primary); border-radius: 50%; }
 
@@ -994,7 +1013,7 @@ summary:focus-visible {
   font-weight: 700;
 }
 
-.start-step h4 { margin: 2px 0 5px; color: var(--nd-brand-selection); font-size: 0.92rem; }
+.start-step h4 { margin: 2px 0 5px; color: var(--nd-brand-text); font-size: 0.92rem; }
 .start-step p { grid-column: 2; margin: 0; color: var(--nd-ink-muted); font-size: 0.78rem; line-height: 1.5; }
 
 .start-footer {
@@ -1031,7 +1050,7 @@ summary:focus-visible {
 .cite-dialog::backdrop { background: rgb(12 14 10 / 72%); }
 .cite-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; background: var(--nd-brand-pale); border-bottom: 1px solid var(--nd-brand-light); }
 .cite-header h3 { margin: 0; font-size: 1rem; }
-.cite-close { width: 30px; height: 30px; padding: 0; color: var(--nd-brand-selection); background: transparent; border: 0; border-radius: 6px; font-size: 1.3rem; line-height: 1; cursor: pointer; }
+.cite-close { width: 30px; height: 30px; padding: 0; color: var(--nd-brand-text); background: transparent; border: 0; border-radius: 6px; font-size: 1.3rem; line-height: 1; cursor: pointer; }
 .cite-close:hover { background: var(--nd-brand-hover); }
 .cite-body { padding: 18px; overflow-y: auto; }
 .cite-intro { margin: 0 0 16px; color: var(--nd-ink-muted); font-size: 0.84rem; line-height: 1.5; }

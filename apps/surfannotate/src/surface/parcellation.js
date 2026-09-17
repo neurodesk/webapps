@@ -25,6 +25,8 @@ import { RoiSession, CLOSURE_EDGE } from './roiSession.js';
  * @property {number} id
  * @property {string} name
  * @property {number[]} clicks         border points, in the order placed
+ * @property {number[]} [border]       the border as traced when saved — a vertex
+ *   path, so it means the same on every surface sharing the indexing
  * @property {string} closure          'loop' or 'edge'
  * @property {number} [regionIndex]    which side of an edge closure was taken
  * @property {number} [anchor]         a vertex that was inside the region
@@ -99,7 +101,20 @@ export function resolveRoi(base, claimed, roi) {
     return { ...roi, mask: null, error: 'LOST_POINTS' };
   }
 
-  const closed = roi.closure === CLOSURE_EDGE ? session.closeOnEdge() : session.closePath();
+  // The saved border first: it is a vertex path, so it encloses the same
+  // vertices on lh.sphere.reg, lh.inflated and lh.white alike, where a path
+  // re-traced between the clicks would run differently on each. Re-tracing is
+  // the fallback for when the saved border is no longer walkable — an ROI
+  // above this one has cut through it — which is exactly the case where the
+  // border has to find a new route anyway.
+  let closed = null;
+  if (roi.border && roi.border.length) {
+    const adopted = session.adoptChain(roi.border, roi.closure);
+    if (adopted.ok) closed = { ok: true, error: null };
+  }
+  if (!closed) {
+    closed = roi.closure === CLOSURE_EDGE ? session.closeOnEdge() : session.closePath();
+  }
   if (!closed.ok) {
     return { ...roi, mask: null, error: closed.error || 'BROKEN_BOUNDARY' };
   }

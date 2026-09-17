@@ -6,7 +6,8 @@ import examples from '../examples.json';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { Niivue } from '@niivue/niivue';
 import {
-  registerExtraColormaps, colormapWindow, sampledColormap
+  registerExtraColormaps, colormapWindow, sampledColormap, colormapKey, baseColormap,
+  isFlipped, canFlip
 } from './niivue/colormaps.js';
 import {
   legendKind, legendTicks, paintLegend, rangeDecimals
@@ -39,10 +40,15 @@ import {
 
 import { writeFreeSurferLabel, labelToValues } from './io/freesurferLabel.js';
 import { writeGiftiLabel, maskToLabelArray } from './io/gifti.js';
+import { writeFreeSurferAnnot, uniqueAnnotColors } from './io/freesurferAnnot.js';
+import { parcellationLabels } from './io/parcellationExport.js';
+import {
+  writeSession, readSession, sessionFits, sessionFromGiftiMetadata, SESSION_METADATA_KEY
+} from './io/session.js';
 import { writePointsJson, hashTriangles } from './io/points.js';
 import { isCurvFormat, readCurvValues } from './io/freesurferCurv.js';
 import {
-  exportStem as buildExportStem, hasAnatomicalCoordinates, surfaceKind, FLAT
+  exportStem as buildExportStem, hasAnatomicalCoordinates, surfaceKind, FLAT, SPHERE, INFLATED
 } from './io/naming.js';
 import { classifyFile, SNIFF_BYTES, SURFACE, OVERLAY, MASK, UNKNOWN } from './io/classify.js';
 
@@ -71,9 +77,28 @@ const MARKER_MARGIN = 24;
 // Completed ROIs are painted from a palette, starting well clear of the keys
 // above so the two sets never collide.
 const LABEL_SAVED_BASE = 16;
+// Sixteen, in the order they are handed out. The first eight are the original
+// set; the second eight are picked to stay apart from them and from the two
+// colours the working region uses (its red fill and yellow traced border), so
+// a saved ROI is never mistaken for an unsaved one. Indices are stored in
+// session files, so entries are only ever appended, never reordered.
 const SAVED_ROI_COLORS = [
-  [0.30, 0.69, 0.31], [0.13, 0.59, 0.95], [1.00, 0.60, 0.00], [0.61, 0.35, 0.71],
-  [0.00, 0.74, 0.83], [0.91, 0.12, 0.39], [0.55, 0.76, 0.29], [0.80, 0.52, 0.25]
+  [0.30, 0.69, 0.31], // green
+  [0.13, 0.59, 0.95], // blue
+  [1.00, 0.60, 0.00], // orange
+  [0.61, 0.35, 0.71], // purple
+  [0.00, 0.74, 0.83], // cyan
+  [0.91, 0.12, 0.39], // pink
+  [0.55, 0.76, 0.29], // lime
+  [0.80, 0.52, 0.25], // brown
+  [0.00, 0.47, 0.42], // teal
+  [0.40, 0.23, 0.72], // indigo
+  [0.16, 0.35, 0.60], // navy
+  [0.55, 0.27, 0.07], // dark brown
+  [0.86, 0.62, 0.86], // lilac
+  [0.42, 0.56, 0.14], // olive
+  [0.98, 0.45, 0.30], // coral
+  [0.55, 0.80, 0.98]  // sky — not grey, which vanishes into curvature shading
 ];
 
 const el = (id) => document.getElementById(id);
@@ -104,6 +129,8 @@ const ui = {
   overlaySelectedHint: el('overlaySelectedHint'),
   overlayOpacity: el('overlayOpacity'),
   overlayColormap: el('overlayColormap'),
+  overlayFlip: el('overlayFlip'),
+  overlayShare: el('overlayShare'),
   overlayMin: el('overlayMin'),
   overlayMax: el('overlayMax'),
   overlayRangeReset: el('overlayRangeReset'),
@@ -144,6 +171,11 @@ const ui = {
   exportLabel: el('exportLabel'),
   exportGifti: el('exportGifti'),
   exportPoints: el('exportPoints'),
+  parcellationName: el('parcellationName'),
+  exportAnnot: el('exportAnnot'),
+  exportAllGifti: el('exportAllGifti'),
+  exportSession: el('exportSession'),
+  roiImport: el('roiImport'),
   exportHint: el('exportHint'),
   statusText: el('statusText'),
   vertexReadout: el('vertexReadout'),
@@ -404,6 +436,9 @@ function saveRoi() {
     name,
     topologyKey: entry.topologyKey,
     clicks: Array.from(session.clicks),
+    // The border as traced on this surface. Kept alongside the clicks so the
+    // ROI is the same vertices on every surface sharing the indexing.
+    border: Array.from(session.chain),
     closure: session.closure,
     regionIndex: session.regionIndex,
     includeBoundary: ui.includeBoundary.checked,
@@ -425,11 +460,10 @@ function saveRoi() {
   document.getElementById('roiPanel').open = true;
   document.getElementById('exportPanel').open = true;
 
-  // Deliberately NOT selected. Selecting it would point the export buttons at
-  // this ROI while the name field goes on naming the next one, so the next
-  // export writes these vertices under that name — wrong data under a plausible
-  // filename, with a status line confirming it.
-  state.selectedRoiId = null;
+  // Selected, so the flow is draw, save, export. This used to be unsafe
+  // because the export name came from the name field, which goes on naming
+  // the next ROI; it now comes from the selected ROI itself.
+  state.selectedRoiId = roi.id;
   state.editIndex = -1;
   state.editColor = null;
   state.editing = null;
@@ -437,7 +471,8 @@ function saveRoi() {
 
   const failed = recomputeParcellation();
   const size = roi.mask ? countMask(roi.mask) : 0;
-  setStatus(`Saved ${name} — ${size.toLocaleString()} vertices.` + unresolvedNote(failed));
+  setStatus(`Saved ${name} — ${size.toLocaleString()} vertices. Selected for export.` +
+    unresolvedNote(failed));
 }
 
 /**
@@ -535,11 +570,12 @@ function selectRoi(id) {
   const roi = state.rois.find((candidate) => candidate.id === id);
   if (roi && state.selectedRoiId === id) {
     ui.roiName.value = roi.name;
-    showExportName();
     setStatus(`${roi.name} selected — the export buttons will write it.`);
   } else {
-    setStatus('Export will write the region being drawn.');
+    setStatus('No ROI selected for export.');
   }
+  // renderLayerLists refreshes the export hint, so deselecting, removing or
+  // reopening the selected ROI all clear "Exporting the saved ROI …" too.
   renderLayerLists();
   repaint();
 }
@@ -654,6 +690,11 @@ async function init() {
     if (file) enqueueLoad(() => loadMask(file));
   });
   ui.maskClear.addEventListener('click', clearMask);
+  ui.roiImport.addEventListener('change', (event) => {
+    const [file] = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (file) enqueueLoad(() => importRois(file));
+  });
 
   // These MUST be capture-phase. NiiVue's own drop listener lives on the canvas
   // and calls stopPropagation()/preventDefault() before it consults
@@ -774,7 +815,7 @@ async function init() {
     if (!overlay) return;
     overlay.opacity = Number(ui.overlayOpacity.value);
     setOverlayDisplay(state.nv, state.mesh, overlay.layer, {
-      colormap: ui.overlayColormap.value,
+      colormap: selectedColormapKey(),
       opacity: overlay.visible ? overlay.opacity : 0
     });
   };
@@ -782,11 +823,26 @@ async function init() {
   // Deliberately NOT inside applyOverlayDisplay: the opacity slider shares it
   // and fires per frame of a drag, which would re-snap a window typed over.
   ui.overlayColormap.addEventListener('change', () => {
+    syncFlipControl();
     applyOverlayDisplay();
     const snapped = applyColormapWindow();
     if (snapped) setStatus(snapped.note);
     // applyColormapWindow only redraws the legend when it had a window to apply.
     renderColorLegend();
+  });
+  // The flip changes the colours, not the window: the mirrored map spans the
+  // same turn, so a window the user typed is left alone.
+  ui.overlayShare.addEventListener('change', () => {
+    if (ui.overlayShare.checked) shareAllOverlays();
+  });
+
+  ui.overlayFlip.addEventListener('change', () => {
+    applyOverlayDisplay();
+    renderColorLegend();
+    repaint();
+    setStatus(ui.overlayFlip.checked
+      ? 'Polar angle mirrored left–right, for the other hemisphere.'
+      : 'Polar angle shown unmirrored.');
   });
 
   ui.overlayIgnoreMask.addEventListener('change', () => {
@@ -857,6 +913,9 @@ async function init() {
   ui.exportLabel.addEventListener('click', exportFreeSurferLabel);
   ui.exportGifti.addEventListener('click', exportGiftiLabel);
   ui.exportPoints.addEventListener('click', exportPoints);
+  ui.exportAnnot.addEventListener('click', exportAnnot);
+  ui.exportAllGifti.addEventListener('click', exportAllGifti);
+  ui.exportSession.addEventListener('click', exportSession);
 
   document.addEventListener('keydown', (event) => {
     // Backspace and Delete are the undo shortcut for the viewer, but they are
@@ -1033,6 +1092,17 @@ async function loadSurface(file, { assertCurrent = () => {}, rethrow = false } =
     attachLabelLayer(mesh, entry.labelValues, currentLabelTable());
     const firstSurface = state.surfaces.length === 0;
     state.surfaces.push(entry);
+    // Shared overlays already on a matching surface come onto this one too.
+    if (ui.overlayShare.checked) {
+      const seen = new Set();
+      for (const other of matchingSurfaces(entry)) {
+        for (const overlay of other.overlays) {
+          if (overlay.groupId === undefined || seen.has(overlay.groupId)) continue;
+          seen.add(overlay.groupId);
+          cloneOverlayTo(entry, overlay);
+        }
+      }
+    }
     activateSurface(entry.id);
     if (firstSurface) {
       document.getElementById('overlayPanel').open = true;
@@ -1078,6 +1148,7 @@ function activateSurface(id, { announce = false } = {}) {
   // Before the active topology changes, or savedRois() would put it back on the
   // wrong surface's list.
   restoreEdited();
+  syncSharedOverlays(activeSurface());
 
   state.activeId = id;
   for (const surface of state.surfaces) {
@@ -1142,7 +1213,10 @@ function activateSurface(id, { announce = false } = {}) {
 function removeSurface(id) {
   const position = state.surfaces.findIndex((entry) => entry.id === id);
   if (position < 0) return;
-  if (state.activeId === id) restoreEdited();
+  if (state.activeId === id) {
+    restoreEdited();
+    syncSharedOverlays(activeSurface());
+  }
   const [entry] = state.surfaces.splice(position, 1);
   state.nv.removeMesh(entry.mesh);
 
@@ -1192,7 +1266,7 @@ async function addOverlay(file) {
   try {
     const display = {
       opacity: Number(ui.overlayOpacity.value),
-      colormap: ui.overlayColormap.value
+      colormap: selectedColormapKey()
     };
     // NiiVue cannot read a FreeSurfer .label, so we expand it ourselves. It is
     // also sparse — a list of the vertices in the region — where every format
@@ -1235,12 +1309,17 @@ async function addOverlay(file) {
     // Before the status line, so an overlay loaded while one of these maps is
     // already selected gets the same window, and the message reports it.
     const snapped = applyColormapWindow();
+    // After the window, so the copies start with the same one. Same subject
+    // means the same vertex indexing, and one value per vertex means the file
+    // says the same thing on lh.white as on lh.inflated.
+    const shared = ui.overlayShare.checked ? shareOverlay(entry, overlay) : 0;
+    const sharedNote = shared ? ` Applied to ${shared} matching surface${shared === 1 ? '' : 's'} too.` : '';
     const displayedRange = overlayLayerState(layer).range;
-    setStatus(snapped
+    setStatus((snapped
       ? `Overlay ${file.name} loaded. ${snapped.note}`
       : `Overlay ${file.name} loaded — display window ` +
-        `${displayedRange.low.toFixed(3)} to ${displayedRange.high.toFixed(3)}.`
-    );
+        `${displayedRange.low.toFixed(3)} to ${displayedRange.high.toFixed(3)}.`)
+      + sharedNote);
     repaint();
   } catch (error) {
     console.error('surfannotate: failed to load overlay', error);
@@ -1305,12 +1384,18 @@ function syncMaskControls() {
   const mask = activeMask(entry);
   ui.maskInput.disabled = !entry;
   ui.maskClear.disabled = !mask;
+  // Both texts name the rule, not just its effect: "curvature is always shown"
+  // says nothing about what counts as curvature, and a curvature file under
+  // another name gets masked until the user finds the per-overlay switch.
   ui.maskHint.textContent = mask
     ? `${mask.name}: overlays limited to ` +
-      `${maskedInCount(mask.mask).toLocaleString()} vertices. Curvature is always shown.`
-    : 'Optional. Every overlay is drawn only where the mask is non-zero; ' +
-      'curvature is always shown. A file with "mask" in its name can just be ' +
-      'dropped on the viewer.';
+      `${maskedInCount(mask.mask).toLocaleString()} vertices. Overlays named ` +
+      '"curv" or "curvature" are always shown; tick "Always show this overlay" ' +
+      'for any other.'
+    : 'Optional. Every overlay is drawn only where the mask is non-zero. A file ' +
+      'with "curv" or "curvature" in its name (lh.curv, hemi-L_curv.shape.gii) is ' +
+      'treated as anatomy and always shown; for any other file, tick "Always show ' +
+      'this overlay". A file with "mask" in its name can just be dropped on the viewer.';
 }
 
 async function isFreeSurferLabel(file) {
@@ -1362,6 +1447,19 @@ function removeOverlay(id) {
   if (position < 0) return;
   const [overlay] = entry.overlays.splice(position, 1);
   restackLayers(entry);
+  // A shared overlay is one overlay on several surfaces; it goes from all of them.
+  let elsewhere = 0;
+  if (overlay.groupId !== undefined) {
+    for (const other of matchingSurfaces(entry)) {
+      const at = other.overlays.findIndex((candidate) => candidate.groupId === overlay.groupId);
+      if (at < 0) continue;
+      const [twin] = other.overlays.splice(at, 1);
+      if (other.activeOverlayId === twin.id) other.activeOverlayId = other.overlays[0]?.id ?? null;
+      restackLayers(other);
+      commitLayer(state.nv, other.mesh);
+      elsewhere++;
+    }
+  }
 
   if (entry.activeOverlayId === id) {
     const next = entry.overlays[position] || entry.overlays[position - 1];
@@ -1374,7 +1472,136 @@ function removeOverlay(id) {
   syncOverlayControls();
   commitLayer(state.nv, entry.mesh);
   repaint();
-  setStatus(`Removed overlay ${overlay.name}.`);
+  setStatus(`Removed overlay ${overlay.name}` +
+    (elsewhere ? ` from this and ${elsewhere} matching surface${elsewhere === 1 ? '' : 's'}.` : '.'));
+}
+
+/** The other loaded surfaces with this one's vertex indexing — the same subject. */
+function matchingSurfaces(entry) {
+  return state.surfaces.filter((other) => other !== entry && other.topologyKey === entry.topologyKey);
+}
+
+/**
+ * Put an overlay onto every matching surface as well, as one shared overlay.
+ *
+ * A NiiVue layer belongs to one mesh, so each surface gets its own layer built
+ * from the same values; the copies are tied together by `groupId`, which is
+ * what makes removing one remove all, and what lets a surface switch carry the
+ * colour map, window, opacity and visibility across (`syncSharedOverlays`).
+ *
+ * @returns {number} how many surfaces received a copy
+ */
+function shareOverlay(entry, overlay) {
+  overlay.groupId ??= state.nextId++;
+  let copies = 0;
+  for (const other of matchingSurfaces(entry)) {
+    if (other.overlays.some((candidate) => candidate.groupId === overlay.groupId)) continue;
+    // Separate loads retain their identity even when filenames match.
+    cloneOverlayTo(other, overlay);
+    copies++;
+  }
+  return copies;
+}
+
+/**
+ * Ticking the box after overlays are already loaded shares every one of them,
+ * on every surface, so the order of loading and ticking does not matter.
+ * Unticking only stops future sharing; what is already shared stays one
+ * overlay, which the hint says.
+ */
+function shareAllOverlays() {
+  const entry = activeSurface();
+  if (!entry) return;
+  let copies = 0;
+  let shared = 0;
+  for (const surface of state.surfaces) {
+    for (const overlay of [...surface.overlays]) {
+      const before = overlay.groupId;
+      copies += shareOverlay(surface, overlay);
+      if (before === undefined) shared++;
+    }
+  }
+  syncSharedOverlays(entry);
+  renderLayerLists();
+  repaint();
+  if (!matchingSurfaces(entry).length) {
+    setStatus(`No other loaded surface has the same vertices as ${entry.name}, so there is ` +
+      'nothing to apply the overlays to yet. A surface of the same subject loaded later ' +
+      'will receive them.');
+    return;
+  }
+  setStatus(shared
+    ? `${shared} overlay${shared === 1 ? '' : 's'} now shared across every surface with ` +
+      `the same vertices (${copies} cop${copies === 1 ? 'y' : 'ies'} made).`
+    : 'Every overlay is already shared.');
+}
+
+/** A copy of `source` on `target`, with the same values and display. */
+function cloneOverlayTo(target, source) {
+  const sourceState = overlayLayerState(source.layer);
+  const layer = attachValueLayer(state.nv, target.mesh, Float32Array.from(source.baseValues), {
+    name: source.name,
+    colormap: sourceState.colormap,
+    opacity: source.visible ? source.opacity : 0
+  });
+  setOverlayWindow(layer, sourceState.range.low, sourceState.range.high);
+  const copy = {
+    id: state.nextId++,
+    name: source.name,
+    layer,
+    visible: source.visible,
+    opacity: source.opacity,
+    autoRange: source.autoRange,
+    baseValues: layer.values,
+    baseTransparentBelowCalMin: source.baseTransparentBelowCalMin,
+    maskedBuffer: null,
+    ignoreMask: source.ignoreMask,
+    groupId: source.groupId
+  };
+  target.overlays.push(copy);
+  target.activeOverlayId ??= copy.id;
+  applyOverlayMask(target, copy);
+  restackLayers(target);
+  commitLayer(state.nv, target.mesh);
+  return copy;
+}
+
+/**
+ * Publish the active surface's shared settings before leaving or removing it.
+ * Updating every sibling also covers navigation through unrelated topologies.
+ */
+function syncSharedOverlays(from) {
+  if (!from) return;
+  for (const to of matchingSurfaces(from)) syncOverlaySettings(from, to);
+}
+
+function syncOverlaySettings(from, to) {
+  let changed = false;
+  for (const overlay of to.overlays) {
+    if (overlay.groupId === undefined) continue;
+    const sibling = from.overlays.find((candidate) => candidate.groupId === overlay.groupId);
+    if (!sibling) continue;
+    const siblingState = overlayLayerState(sibling.layer);
+    overlay.visible = sibling.visible;
+    overlay.opacity = sibling.opacity;
+    overlay.ignoreMask = sibling.ignoreMask;
+    setOverlayDisplay(state.nv, to.mesh, overlay.layer, {
+      colormap: siblingState.colormap,
+      opacity: overlay.visible ? overlay.opacity : 0
+    });
+    setOverlayWindow(overlay.layer, siblingState.range.low, siblingState.range.high);
+    applyOverlayMask(to, overlay);
+    changed = true;
+  }
+  const active = from.overlays.find((candidate) => candidate.id === from.activeOverlayId);
+  if (active && active.groupId !== undefined) {
+    const twin = to.overlays.find((candidate) => candidate.groupId === active.groupId);
+    if (twin) to.activeOverlayId = twin.id;
+  }
+  if (changed) {
+    restackLayers(to);
+    commitLayer(state.nv, to.mesh);
+  }
 }
 
 /** Enable, disable and fill the overlay controls for whatever is selected. */
@@ -1389,7 +1616,9 @@ function syncOverlayControls() {
   if (overlay) {
     const layerState = overlayLayerState(overlay.layer);
     ui.overlaySelectedHint.textContent = `Editing ${overlay.name}.`;
-    ui.overlayColormap.value = layerState.colormap;
+    // The layer holds one key; the picker and the flip box are its two halves.
+    ui.overlayColormap.value = baseColormap(layerState.colormap);
+    ui.overlayFlip.checked = isFlipped(layerState.colormap);
     ui.overlayOpacity.value = String(overlay.opacity);
     ui.overlayIgnoreMask.checked = overlay.ignoreMask;
     showOverlayRange(overlay.layer);
@@ -1399,10 +1628,26 @@ function syncOverlayControls() {
     ui.overlayMin.value = '';
     ui.overlayMax.value = '';
     ui.overlayIgnoreMask.checked = false;
+    ui.overlayFlip.checked = false;
   }
+  syncFlipControl();
   syncMaskControls();
   renderColorLegend();
   renderLayerLists();
+}
+
+/**
+ * The flip box is live only for a polar-angle map. It keeps its state while
+ * disabled, so a flip set for one hemisphere survives a look at eccentricity
+ * and comes back with the next polar-angle map.
+ */
+function syncFlipControl() {
+  ui.overlayFlip.disabled = !activeOverlay() || !canFlip(ui.overlayColormap.value);
+}
+
+/** The key the controls currently describe: the picked map, mirrored if asked. */
+function selectedColormapKey() {
+  return colormapKey(ui.overlayColormap.value, ui.overlayFlip.checked);
 }
 
 /**
@@ -1420,7 +1665,7 @@ function applyColormapWindow() {
   // -Infinity, and the window should describe the data, not the visible remnant
   // of it. It is also what makes the window survive loading a mask.
   const snapped = colormapWindow(
-    ui.overlayColormap.value, overlay.baseValues, state.overlayAutoRange
+    selectedColormapKey(), overlay.baseValues, state.overlayAutoRange
   );
   if (!snapped) return null;
 
@@ -1450,7 +1695,7 @@ function renderColorLegend() {
   ui.colorLegend.hidden = !showing;
   if (!showing) return;
 
-  const key = ui.overlayColormap.value;
+  const key = selectedColormapKey();
   const kind = legendKind(key);
   ui.colorLegend.dataset.kind = kind;
 
@@ -1580,24 +1825,48 @@ function commitOverlay() {
 // -- the layer lists ------------------------------------------------------
 
 /** A compact icon button for the layer rows. */
+/**
+ * @param {string|Node} glyph a character, or an element such as `arrowIcon()`
+ */
 function iconButton(glyph, title, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'layer-icon';
+  button.className = 'layer-icon nd-btn-icon nd-btn-icon-sm';
   button.title = title;
   button.setAttribute('aria-label', title);
-  button.textContent = glyph;
+  if (typeof glyph === 'string') button.textContent = glyph;
+  else button.append(glyph);
   button.addEventListener('click', onClick);
   return button;
+}
+
+/**
+ * A triangle drawn as SVG rather than typed as ▲/▼. A text glyph is centred by
+ * its line box, and the ink of a triangle sits off-centre inside that box, so
+ * the flat edge and the apex were never symmetric about the button. A 10×8
+ * polygon in a grid cell is centred by construction.
+ * @param {'up'|'down'} direction
+ */
+function arrowIcon(direction) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 10 8');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('layer-arrow');
+  const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+  polygon.setAttribute('points', direction === 'up' ? '5,0 10,8 0,8' : '0,0 10,0 5,8');
+  svg.append(polygon);
+  return svg;
 }
 
 function makeRemoveButton(title, onClick) {
   const button = document.createElement('button');
   button.type = 'button';
-  button.className = 'layer-remove';
+  button.className = 'layer-remove nd-btn-icon nd-btn-icon-sm';
   button.title = title;
   button.setAttribute('aria-label', title);
-  button.textContent = '×';
+  // U+2715, from the same Dingbats block as the pencil, so the two match in
+  // weight; the multiplication sign renders tiny in Pontano Sans.
+  button.textContent = '\u2715';
   button.addEventListener('click', onClick);
   return button;
 }
@@ -1643,7 +1912,11 @@ function renderLayerLists() {
   const rois = savedRois();
   rois.forEach((roi, index) => {
     const item = document.createElement('li');
-    if (roi.id === state.selectedRoiId) item.classList.add('selected');
+    const isTarget = roi.id === state.selectedRoiId;
+    // `selected` is the shared "active row" look; `export-target` is stronger,
+    // because this selection changes what a button *writes* and a pale tint
+    // was not enough to tell which ROI the next export would be.
+    if (isTarget) item.classList.add('selected', 'export-target', 'nd-result-selected');
     if (roi.error) item.classList.add('unresolved');
 
     const show = document.createElement('input');
@@ -1657,24 +1930,34 @@ function renderLayerLists() {
     order.className = 'layer-meta';
     order.textContent = `${index + 1}.`;
 
+    // The ROI's own fill colour, so the row and the surface can be matched.
+    const swatch = document.createElement('span');
+    swatch.className = 'layer-swatch nd-result-swatch';
+    swatch.style.background = cssColor(SAVED_ROI_COLORS[roi.colorIndex % SAVED_ROI_COLORS.length]);
+    swatch.setAttribute('aria-hidden', 'true');
+
     const name = document.createElement('button');
     name.type = 'button';
     name.className = 'layer-name';
     name.textContent = roi.name;
     name.title = roi.error
       ? `${roi.name}: ${ROI_ERRORS[roi.error] || roi.error}`
-      : `Export ${roi.name} instead of the region being drawn`;
+      : isTarget
+        ? `${roi.name} is what the export buttons write. Click to deselect`
+        : `Select ${roi.name} for export`;
+    name.setAttribute('aria-pressed', String(isTarget));
     name.addEventListener('click', () => selectRoi(roi.id));
 
-    const up = iconButton('\u25b2', `Move ${roi.name} up`, () => moveRoi(roi.id, -1));
+
+    const up = iconButton(arrowIcon('up'), `Move ${roi.name} up`, () => moveRoi(roi.id, -1));
     up.disabled = index === 0;
-    const down = iconButton('\u25bc', `Move ${roi.name} down`, () => moveRoi(roi.id, 1));
+    const down = iconButton(arrowIcon('down'), `Move ${roi.name} down`, () => moveRoi(roi.id, 1));
     down.disabled = index === rois.length - 1;
     const reopen = iconButton('\u270e', `Reopen ${roi.name} to adjust its border`,
       () => reopenRoi(roi.id));
     reopen.classList.add('layer-edit');
 
-    item.append(show, order, name, up, down, reopen,
+    item.append(show, order, swatch, name, up, down, reopen,
       makeRemoveButton(`Remove ${roi.name}`, () => removeRoi(roi.id)));
     ui.roiList.appendChild(item);
   });
@@ -1703,6 +1986,8 @@ function renderLayerLists() {
       makeRemoveButton(`Remove ${overlay.name}`, () => removeOverlay(overlay.id)));
     ui.overlayList.appendChild(item);
   }
+  showExportName();
+  ui.roiImport.disabled = !activeSurface();
 }
 
 /** Show a sensible number of decimals for whatever the overlay's units are. */
@@ -1767,35 +2052,60 @@ function showCoordinateSource() {
   const donor = state.surfaces.find((other) => other.anatomical
     && other.topologyKey === entry.topologyKey);
 
+  const what = flattened ? 'a flat patch' : kind === SPHERE ? 'a sphere'
+    : kind === INFLATED ? 'an inflated surface' : `${kind}`;
+  const where = flattened ? 'the patch' : kind === SPHERE ? 'the sphere' : 'the inflated shape';
   let advice;
   if (donor) {
-    advice = `Switch to ${donor.name} before exporting — it shares this vertex `
-      + 'indexing, so the ROIs come with you.';
+    advice = `Switch to ${donor.name} before exporting if you need brain coordinates — `
+      + 'the ROIs come with you, because the vertices are the same. Vertex indices are '
+      + 'correct either way, which is all freeview and mris_anatomical_stats use.';
   } else if (flattened) {
     // A patch is a cut of a surface, renumbered, so it has fewer vertices than
     // the native surface. Sending someone to lh.pial here would hide their work
     // rather than fix anything — the ROIs belong to this indexing.
-    advice = 'A flat surface also has a different number of vertices from the '
-      + 'native surface it was cut from, so its vertex indices — and the ROIs '
-      + 'drawn on it — belong to this patch alone.';
+    advice = 'A flat patch also has a different number of vertices from the native '
+      + 'surface it was cut from, so its vertex indices — and the ROIs drawn on it — '
+      + 'belong to this patch alone. Export from here and use the file with the patch.';
   } else {
-    advice = 'The vertex indices are correct, and are all freeview and '
-      + 'mris_anatomical_stats read. Load the matching lh.white or lh.pial and '
-      + 'switch to it if you need the coordinates too — it shares this vertex '
-      + 'indexing, so the ROIs come with you.';
+    advice = 'Vertex indices are correct, which is all freeview, mris_anatomical_stats '
+      + 'and mri_label2label (by index) use, so exporting from here is fine for them. '
+      + 'Tools that read the coordinates — mri_label2vol, mri_label2label --regmethod '
+      + "coords — need a folded surface: load this subject's lh.white or lh.pial, "
+      + 'switch to it and export from there. The ROIs come with you, because the '
+      + 'vertices are the same.';
   }
 
   ui.exportHint.textContent =
-    `${entry.name} is ${flattened ? 'flat' : kind}, so its x/y/z are not anatomical. `
-    + advice;
+    `${entry.name} is ${what}, so its x/y/z are not anatomical: they are positions on `
+    + `${where}, not in the brain. ` + advice;
   ui.exportHint.classList.add('warn');
 }
 
-/** Live preview of the file name the export buttons will produce. */
+/** A palette entry in 0..1 as a CSS colour. */
+function cssColor([r, g, b]) {
+  return `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
+}
+
 function showExportName() {
-  el('exportNameHint').textContent = state.mesh
-    ? `Files will be named ${exportStem()}.\u2026`
-    : 'Used in the file name and inside the file.';
+  const hint = el('exportNameHint');
+  if (!state.mesh) {
+    hint.textContent = 'Used in the file name and inside the file.';
+    return;
+  }
+  if (state.editing) {
+    hint.textContent = `${state.editing.name} is reopened for editing. Save it, or clear the ` +
+      'drawing to discard the edit, before exporting.';
+    return;
+  }
+  const chosen = selectedRoi();
+  if (chosen) {
+    hint.textContent = `Exporting the saved ROI ${chosen.name}, as ${exportStem()}.\u2026`;
+  } else if (savedRois().length) {
+    hint.textContent = 'Select a saved ROI in the list to export it.';
+  } else {
+    hint.textContent = 'Exports write saved ROIs: save the filled region, then export it from here.';
+  }
 }
 
 function setMode(mode) {
@@ -2142,7 +2452,8 @@ function repaint() {
 function resetControls() {
   for (const control of [ui.undoPoint, ui.closePath, ui.closeOnEdge, ui.fillRegion,
     ui.clearRoi, ui.undoPointSelection, ui.clearPoints, ui.saveRoi,
-    ui.exportLabel, ui.exportGifti, ui.exportPoints]) {
+    ui.exportLabel, ui.exportGifti, ui.exportPoints, ui.exportAnnot, ui.exportAllGifti,
+    ui.exportSession, ui.roiImport]) {
     control.disabled = true;
   }
   ui.flipRegion.hidden = true;
@@ -2213,10 +2524,26 @@ function syncControls() {
   ui.clearPoints.disabled = !hasPoints;
 
   ui.saveRoi.disabled = !hasRegion;
-  const exportable = hasRegion || session.chain.length > 0 || Boolean(selectedRoi());
+  // Exports write saved ROIs only — the one selected in the list — and nothing
+  // exports while an ROI is reopened. The region being drawn is never written
+  // directly: save it, and saving selects it.
+  const reopened = Boolean(state.editing);
+  const exportable = Boolean(selectedRoi()) && !reopened;
   ui.exportLabel.disabled = !exportable;
   ui.exportGifti.disabled = !exportable;
   ui.exportPoints.disabled = !hasPoints;
+  // The whole-parcellation exports write the list, so they follow the list,
+  // not the session: one resolved ROI is enough, a reopened one does not count
+  // until it is saved again.
+  // While an ROI is reopened it is off the list, so a whole-list file would
+  // silently lack it; the buttons wait until it is saved or discarded.
+  const editing = Boolean(state.editing);
+  const parcellable = savedRois().some((roi) => roi.mask);
+  ui.exportAnnot.disabled = !parcellable || editing;
+  ui.exportAllGifti.disabled = !parcellable || editing;
+  // The session is the editable form, so an unresolved ROI is still worth
+  // keeping — its border points are what would fix it.
+  ui.exportSession.disabled = (savedRois().length === 0 && !hasPoints) || editing;
 
   ui.pointList.innerHTML = '';
   for (const point of session.points) {
@@ -2253,53 +2580,245 @@ function roiName() {
  * source filename into the name would be misleading as well as unwieldy.
  */
 function exportStem() {
-  return buildExportStem(roiName(), {
+  return buildExportStem(selectedRoi()?.name ?? roiName(), {
     anatomicalStructure: state.mesh?.anatomicalStructurePrimary || '',
     filename: state.sourceName || ''
   });
 }
 
+/**
+ * The ROI a single-ROI export writes: the saved ROI selected in the list, and
+ * only that. The region being drawn is not exportable until saved — what is
+ * on screen can still change, and a file of it would be a snapshot nothing
+ * else refers to.
+ * @returns {object|null}
+ */
+function requireSavedRoi() {
+  if (refuseWhileEditing()) return null;
+  const chosen = selectedRoi();
+  if (chosen) return chosen;
+  setStatus(savedRois().length
+    ? 'Select a saved ROI in the list to export it.'
+    : 'Save the filled region first; exports write saved ROIs only.');
+  return null;
+}
+
 function exportFreeSurferLabel() {
-  const indices = exportIndices();
+  const chosen = requireSavedRoi();
+  if (!chosen) return;
+  const indices = maskToIndices(chosen.mask);
   const text = writeFreeSurferLabel(indices, state.geometry.positions, {
-    name: roiName(),
+    name: chosen.name,
     subject: baseName(),
     offset: activeSurface()?.translation
   });
   const filename = `${exportStem()}.label`;
   download(filename, text);
-  setStatus(`Exported ${indices.length.toLocaleString()} vertices as ${filename}.`);
+  setStatus(`Exported ${chosen.name}: ${indices.length.toLocaleString()} vertices as ${filename}.`);
 }
 
 async function exportGiftiLabel() {
-  const name = roiName();
+  const chosen = requireSavedRoi();
+  if (!chosen) return;
   const filename = `${exportStem()}.label.gii`;
-  const xml = await writeGiftiLabel(maskToLabelArray(maskFromSession(), LABEL_REGION), [
+  const xml = await writeGiftiLabel(maskToLabelArray(chosen.mask, LABEL_REGION), [
     { key: LABEL_NONE, name: '???', rgba: [0, 0, 0, 0] },
-    { key: LABEL_REGION, name, rgba: [0.9, 0.2, 0.2, 1] }
-  ], { arrayName: name });
+    { key: LABEL_REGION, name: chosen.name, rgba: [0.9, 0.2, 0.2, 1] }
+  ], {
+    arrayName: chosen.name,
+    metadata: sessionMetadata(savedRois().slice(0, savedRois().indexOf(chosen) + 1))
+  });
 
   download(filename, xml, 'application/xml');
-  setStatus(`Exported ${filename}.`);
+  setStatus(`Exported ${chosen.name} as ${filename}.`);
+}
+
+/** The session as GIfTI file metadata, or nothing when there is nothing to carry. */
+function sessionMetadata(rois) {
+  if (!rois.length && !state.session?.points.length) return {};
+  return { [SESSION_METADATA_KEY]: sessionText(rois) };
+}
+
+/** The editable form of the given ROIs plus the landmarks, as JSON. */
+function sessionText(rois) {
+  return writeSession({
+    rois,
+    points: state.session?.points || [],
+    mesh: state.meshIdentity,
+    topologyKey: activeSurface()?.topologyKey,
+    created: new Date().toISOString()
+  });
 }
 
 /**
- * The vertices every export writes. Both formats go through this, so a selected
- * completed ROI is honoured identically by each — the .label export used to read
- * the session directly and would write an empty file after a save cleared it.
+ * Exports refuse while an ROI is reopened, rather than writing a file that
+ * lacks it (the whole-list files) or holds it half-edited (the single-ROI
+ * files) under a status line saying so — a warning next to a download reads
+ * as "done", and the file was wrong.
+ * @returns {boolean} true when the export must not proceed
  */
-function exportIndices() {
-  return maskToIndices(maskFromSession());
+function refuseWhileEditing() {
+  if (!state.editing) return false;
+  setStatus(`${state.editing.name} is reopened for editing and would be left out. ` +
+    'Save it, or clear the drawing to discard the edit, then export.');
+  return true;
 }
 
-function maskFromSession() {
-  const chosen = selectedRoi();
-  if (chosen) return chosen.mask;
-  const session = state.session;
-  if (session.filled) return session.filled;
-  const mask = new Uint8Array(state.geometry.vertexCount);
-  for (const v of session.chain) mask[v] = 1;
-  return mask;
+function exportSession() {
+  if (refuseWhileEditing()) return;
+  const rois = savedRois();
+  const points = state.session?.points || [];
+  const filename = `${parcellationStem()}.surfannotate.json`;
+  download(filename, sessionText(rois), 'application/json');
+  const note = `${rois.length} ROI${rois.length === 1 ? '' : 's'} and ${points.length} landmark${points.length === 1 ? '' : 's'}`;
+  setStatus(`Exported ${filename} (${note}). Load it onto the same surface to continue editing.`);
+}
+
+/**
+ * Load ROI definitions — border points, not masks — from a session file or a
+ * .label.gii this app wrote, and append them to the list. The file has to
+ * belong to this surface: every number in it is a vertex index, so a mismatch
+ * is refused rather than mapped.
+ */
+async function importRois(file) {
+  const entry = activeSurface();
+  if (!entry) return;
+  setStatus(`Loading ROIs from ${file.name}…`);
+  let session;
+  try {
+    let text = await file.text();
+    if (/\.gii$/i.test(file.name)) {
+      text = sessionFromGiftiMetadata(text);
+      if (!text) {
+        setStatus(`${file.name} carries no SurfAnnotate border points, so it cannot be edited ` +
+          'here yet. Only sessions and .label.gii files this app exported can be loaded for now.');
+        return;
+      }
+    }
+    session = readSession(text);
+  } catch (error) {
+    setStatus(`Could not load ${file.name}: ${error.message}.`);
+    return;
+  }
+  const fit = sessionFits(session, {
+    vertexCount: entry.geometry.vertexCount, topologyKey: entry.topologyKey
+  });
+  if (!fit.ok) {
+    setStatus(`Not loaded: ${fit.reason}. Load the surface it was drawn on and try again.`);
+    return;
+  }
+
+  // An ROI mid-edit goes back on the list first, so the appended ones land
+  // after it rather than in its place.
+  restoreEdited();
+  const existing = savedRois();
+  for (const roi of session.rois) {
+    state.rois.push({
+      id: state.nextId++,
+      name: roi.name,
+      topologyKey: entry.topologyKey,
+      clicks: Array.from(roi.clicks),
+      border: Array.isArray(roi.border) ? Array.from(roi.border) : undefined,
+      closure: roi.closure,
+      regionIndex: roi.regionIndex ?? 0,
+      includeBoundary: Boolean(roi.includeBoundary),
+      anchor: Number.isInteger(roi.anchor) ? roi.anchor : -1,
+      visible: roi.visible !== false,
+      // The file's colour, clamped so a file written against a longer palette
+      // still colours; ROIs drawn afterwards pick the first colour not in use.
+      colorIndex: Number.isInteger(roi.colorIndex)
+        ? roi.colorIndex % SAVED_ROI_COLORS.length : nextColorIndex(),
+      mask: null,
+      chain: new Int32Array(0),
+      error: null
+    });
+  }
+  // The file's colours win: a loaded parcellation should look as it did when
+  // it was saved. An ROI already on the list that shares a colour with one of
+  // them moves to a free colour, while any is free.
+  const imported = new Set(state.rois.slice(state.rois.length - session.rois.length)
+    .map((roi) => roi.colorIndex));
+  const recoloured = [];
+  for (const roi of existing) {
+    if (!imported.has(roi.colorIndex)) continue;
+    const used = new Set(savedRois().map((other) => other.colorIndex));
+    const free = SAVED_ROI_COLORS.findIndex((_, index) => !used.has(index));
+    if (free < 0) continue;
+    roi.colorIndex = free;
+    recoloured.push(roi.name);
+  }
+  let landmarks = 0;
+  if (state.session) {
+    for (const point of session.points) {
+      if (state.session.points.some((existing) => existing.vertex === point.vertex)) continue;
+      state.session.points.push({ vertex: point.vertex, name: point.name || `p${state.session.points.length + 1}` });
+      landmarks++;
+    }
+  }
+  document.getElementById('roiPanel').open = true;
+
+  const failed = recomputeParcellation();
+  syncControls();
+  scheduleMarkers();
+  const n = session.rois.length;
+  setStatus(`Loaded ${n} ROI${n === 1 ? '' : 's'} and ${landmarks} landmark${landmarks === 1 ? '' : 's'} ` +
+    `from ${file.name}.` +
+    (recoloured.length ? ` Recoloured ${recoloured.join(', ')} to stay distinct.` : '') +
+    unresolvedNote(failed));
+}
+
+/** The name field for the whole-parcellation files, or a sensible default. */
+function parcellationName() {
+  return ui.parcellationName.value.trim() || 'rois';
+}
+
+/** `lh.retinotopy` — the hemisphere and the parcellation, never a single ROI. */
+function parcellationStem() {
+  return buildExportStem(parcellationName(), {
+    anatomicalStructure: state.mesh?.anatomicalStructurePrimary || '',
+    filename: state.sourceName || ''
+  });
+}
+
+/**
+ * Every saved ROI on this surface as one label per vertex, in list order.
+ * The masks are already disjoint — that is what the list order resolved —
+ * so this only stacks them. An ROI that did not resolve is left out and named
+ * in the status, rather than silently written as nothing.
+ */
+function parcellationForExport() {
+  const result = parcellationLabels(savedRois(), state.geometry.vertexCount, SAVED_ROI_COLORS);
+  let note = `${result.entries.length} ROI${result.entries.length === 1 ? '' : 's'}`;
+  if (result.skipped.length) note += `; left out (unresolved): ${result.skipped.join(', ')}`;
+  return { ...result, note };
+}
+
+function exportAnnot() {
+  if (refuseWhileEditing()) return;
+  const { labels, entries, note } = parcellationForExport();
+  // .annot identifies a label by its colour, so two ROIs sharing a palette
+  // colour would merge into one on the way out.
+  const colors = uniqueAnnotColors(entries.map((entry) => entry.rgb));
+  const bytes = writeFreeSurferAnnot(labels, entries.map((entry, i) => ({
+    name: entry.name, rgb: colors[i]
+  })));
+  const filename = `${parcellationStem()}.annot`;
+  download(filename, bytes, 'application/octet-stream');
+  setStatus(`Exported ${filename} (${note}).`);
+}
+
+async function exportAllGifti() {
+  if (refuseWhileEditing()) return;
+  const { labels, entries, note } = parcellationForExport();
+  const xml = await writeGiftiLabel(labels, [
+    { key: LABEL_NONE, name: '???', rgba: [0, 0, 0, 0] },
+    ...entries.map((entry, i) => ({
+      key: i + 1, name: entry.name, rgba: [...entry.rgb.map((c) => c / 255), 1]
+    }))
+  ], { arrayName: parcellationName(), metadata: sessionMetadata(savedRois()) });
+  const filename = `${parcellationStem()}.label.gii`;
+  download(filename, xml, 'application/xml');
+  setStatus(`Exported ${filename} (${note}).`);
 }
 
 function exportPoints() {
@@ -2328,6 +2847,7 @@ window.__surfannotateIo = {
 // bundle otherwise, and a shipping app should not export its internals wholesale.
 window.__surfannotateUi = {
   repaint, runFill, setMode, activateSurface, activeSurface, activeOverlay, savedRois,
+  recomputeParcellation,
   // Synchronous, unlike the scheduled path: a test that had to race the
   // animation frame would be flaky in exactly the way the drag-and-drop tests
   // already warn about.

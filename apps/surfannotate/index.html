@@ -144,7 +144,7 @@
           </label>
           <ul class="layer-list" id="surfaceList" aria-label="Loaded surfaces"></ul>
           <p class="hint">
-            FreeSurfer (lh.pial, lh.white, lh.inflated), GIfTI .surf.gii, .mz3 and more.
+            FreeSurfer (lh.pial, lh.white, lh.inflated, and lh.sphere), GIfTI .surf.gii (including flat surfaces), .mz3 and more.
             Drop files on the viewer to add them.
           </p>
         </section>
@@ -170,8 +170,21 @@
               <span class="upload-action">Browse</span>
             </span>
           </label>
+          <label class="check">
+            <input type="checkbox" id="overlayShare" />
+            <span>Apply overlays to every loaded surface with the same vertices (the same subject)</span>
+          </label>
           <ul class="layer-list" id="overlayList" aria-label="Overlays on the shown surface"></ul>
           <p class="hint">Curvature, thickness, .annot, .label.gii, .shape.gii, CIFTI .dscalar.nii.</p>
+          <details class="workflow-help">
+            <summary>How shared overlays work</summary>
+            <p>
+              Sharing applies to overlays loaded before and after the checkbox is ticked.
+              Matching surfaces share the colour map, range and visibility; removing an
+              overlay removes it from all of them. Unticking keeps existing groups shared
+              and leaves new overlays on the surface they are loaded onto.
+            </p>
+          </details>
 
           <!-- One mask for the whole surface, not per overlay: it answers "where
                is there data at all", which is a property of the subject. -->
@@ -185,9 +198,10 @@
           </div>
           <!-- Replaced by syncMaskControls once a mask is loaded. -->
           <p class="hint" id="maskHint">
-            Optional. Every overlay is drawn only where the mask is non-zero;
-            curvature is always shown. A file with "mask" in its name can just be
-            dropped on the viewer.
+            Optional. Every overlay is drawn only where the mask is non-zero. A file
+            with "curv" or "curvature" in its name (lh.curv, hemi-L_curv.shape.gii) is
+            treated as anatomy and always shown; for any other file, tick "Always show
+            this overlay". A file with "mask" in its name can just be dropped on the viewer.
           </p>
 
           <p class="hint" id="overlaySelectedHint" hidden></p>
@@ -203,11 +217,21 @@
               <option value="hot">hot</option>
               <option value="jet">jet</option>
               <option value="gist_rainbow">gist_rainbow</option>
-              <!-- Picking either also sets the display window. -->
-              <option value="eccentricity">eccentricity</option>
-              <option value="polar_angle">polar angle</option>
+              <!-- Retinotopy maps, named for their colour sequence and listed
+                   alphabetically. Picking any of these also sets the display window. -->
+              <option value="RYBC_eccentricity">RYBC_eccentricity</option>
+              <option value="RYBC_polar-angle">RYBC_polar-angle</option>
+              <option value="RYGBP_eccentricity">RYGBP_eccentricity</option>
+              <option value="RYGBP_polar-angle">RYGBP_polar-angle</option>
+              <option value="YBGR_polar-angle">YBGR_polar-angle</option>
             </select>
           </div>
+          <!-- Only a polar-angle map has a hemisphere to flip for; enabled by main.js
+               when one is selected. -->
+          <label class="check">
+            <input type="checkbox" id="overlayFlip" disabled />
+            <span>Flip for the other hemisphere (mirror the polar-angle map left–right)</span>
+          </label>
           <div class="row">
             <label for="overlayOpacity">Overlay opacity</label>
             <input type="range" id="overlayOpacity" min="0" max="1" step="0.05" value="1" disabled />
@@ -339,13 +363,27 @@
             <button type="button" id="saveRoi" disabled>Save filled region</button>
           </div>
           <ul class="layer-list" id="roiList" aria-label="Completed ROIs"></ul>
+          <!-- Border points, not masks: what comes back is editable. -->
+          <label class="file-field mask-field">
+            <input type="file" data-neurodesk-input="surface" id="roiImport" accept=".json,.gii" disabled />
+            <span class="mask-browse">Load ROIs from a file</span>
+          </label>
+          <p class="hint">
+            Restores ROIs saved by this app — a <code>.surfannotate.json</code> session, or
+            a <code>.label.gii</code> it exported — with their border points, so they can be
+            edited or added to. They are appended below any ROIs already listed.
+          </p>
           <details class="workflow-help">
             <summary>How ROI partitioning works</summary>
             <p>
-              Each ROI is drawn on the vertices left by the ROIs above it, so no vertex
-              belongs to two regions. Editing one re-derives the regions below it.
-              Use <strong>&#9650;&#9660;</strong> to set priority, <strong>&#9998;</strong> to
-              reopen a border, or select a name to export that ROI.
+              Saved ROIs never overlap. The list is a priority order: where two ROIs
+              would share vertices, the one higher in the list keeps them and the lower
+              one is trimmed to what is left. Because an ROI is stored as its border,
+              moving a border re-shapes every ROI below it automatically. A saved ROI's
+              rim also acts as an edge for the next one, so you only need to click the
+              new border, not the shared one. Use <strong>&#9650;&#9660;</strong> to
+              change the order, <strong>&#9998;</strong> to reopen a border, or select a
+              name to export that ROI.
             </p>
           </details>
         </details>
@@ -355,10 +393,10 @@
             <span class="panel-step" aria-hidden="true">05</span>
             <div>
               <h2>Export</h2>
-              <p>Download the active region in your preferred format.</p>
+              <p>Download a saved ROI, or every saved ROI, in your preferred format.</p>
             </div>
           </summary>
-          <p class="hint" id="exportNameHint">Used in the file name and inside the file.</p>
+          <p class="hint" id="exportNameHint">Exports write saved ROIs: save the filled region, then export it from here.</p>
           <div class="button-row">
             <button type="button" id="exportLabel" disabled>FreeSurfer .label</button>
             <button type="button" id="exportGifti" disabled>GIfTI .label.gii</button>
@@ -367,6 +405,32 @@
             <button type="button" id="exportPoints" disabled>Points JSON</button>
           </div>
           <p class="hint" id="exportHint">Coordinates are written in the loaded surface's space.</p>
+
+          <!-- Every saved ROI in one file, in list order. Named separately from
+               the ROI field, which names the *next* ROI: lh.retinotopy.annot,
+               not lh.V3.annot. -->
+          <label class="file-field">
+            <span>All saved ROIs as one file</span>
+            <input type="text" id="parcellationName" value="rois" maxlength="64"
+                   placeholder="e.g. retinotopy" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="button-row">
+            <button type="button" id="exportAnnot" disabled>FreeSurfer .annot</button>
+            <button type="button" id="exportAllGifti" disabled>GIfTI .label.gii</button>
+          </div>
+          <p class="hint" id="exportAllHint">
+            One label per vertex; each ROI keeps its name and colour. Opens in freeview,
+            Workbench, nibabel and NiiVue.
+          </p>
+          <div class="button-row">
+            <button type="button" id="exportSession" disabled
+                    title="Border points and landmarks — the editable form">Session .json</button>
+          </div>
+          <p class="hint">
+            The editable form: every ROI's border points and the landmarks. Load it back
+            from the Saved ROIs panel to continue. The <code>.label.gii</code> files above
+            carry the same inside them.
+          </p>
         </details>
       </div>
 
@@ -387,7 +451,7 @@
           <small>Processed locally in this browser — nothing is uploaded.</small>
         </div>
         <!-- The scale for whichever overlay the controls are editing. A wheel for
-             the two retinotopy maps, a bar for the rest; the ticks are text so the
+             the retinotopy maps, a bar for the rest; the ticks are text so the
              values can be read and selected. -->
         <figure id="colorLegend" class="color-legend" hidden>
           <button type="button" id="colorLegendClose" class="color-legend-close"

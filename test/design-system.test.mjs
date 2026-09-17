@@ -23,7 +23,7 @@ const LEGACY_CSS_RATCHET = new Map(Object.entries({
   browserqc: { colourLiterals: 0, cssLines: 72 },
   deface: { colourLiterals: 0, cssLines: 0 },
   niimath: { colourLiterals: 9, cssLines: 155 },
-  surfannotate: { colourLiterals: 58, cssLines: 912 },
+  surfannotate: { colourLiterals: 57, cssLines: 912 },
   zarro: { colourLiterals: 40, cssLines: 1223 },
 }));
 

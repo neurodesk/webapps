@@ -23,6 +23,9 @@ src/
   io/                       File writers/readers, pure and unit-tested
     freesurferLabel.js, gifti.js, points.js, naming.js, classify.js, geometryOffset.js
     freesurferCurv.js       Curv format read honestly — NiiVue's reader inverts
+    freesurferAnnot.js      .annot writer (and reader, for round trips)
+    parcellationExport.js   The ROI list as one label per vertex
+    session.js              Definitions + landmarks as JSON; rides in .label.gii metadata
 ```
 
 The split matters: `surface/` and `io/` run under plain `node --test` with no browser,
@@ -77,9 +80,11 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   vertex picking.
 - **ROI sessions are keyed by topology (`vertexCount:triangleHash`), not by file.** One
   subject's white/pial/inflated share a session so border points survive a switch;
-  `RoiSession.rebind` moves it and deliberately discards the traced chain and fill,
-  which are geometry-dependent. Deleting a surface only drops the session once the last
-  surface with that topology is gone.
+  `RoiSession.rebind` moves it and deliberately discards the *working* region's traced
+  chain and fill, which are geometry-dependent — saved ROIs keep theirs, see the
+  border note below. Deleting a surface only drops the session once the last surface
+  with that topology is gone. `test/fixtures/lh.flat.inflated.surf.gii` is the flat
+  patch's topology under a warped geometry, for testing exactly this.
 - **The edge-closure button is named after the edge that actually exists.**
   `EDGE_LABELS` in `main.js` picks between "Close on surface edge", "Close on ROI
   edge" and "Close on edge" from `state.edgeSources`, which `bindSession` sets from
@@ -115,9 +120,19 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   from the border by hop count, which is the last one a neighbour would take. The border is recomputed
   from the clicks, not restored from the saved chain, for the same reason the clicks are
   authoritative everywhere else.
-- **The clicked vertices are the only authoritative ROI state.** The traced chain and
-  the filled mask are always derived and are discarded whenever the clicks change.
-  freeview does the opposite and that is what makes its undo impossible.
+- **The clicked vertices are the authoritative ROI state for *editing*; the saved
+  border is authoritative for *resolving*.** `saveRoi` stores both: `clicks`, and
+  `border` — the chain as traced on the surface it was drawn on. `resolveRoi` adopts
+  the border verbatim (`RoiSession.adoptChain`) and only re-traces from the clicks
+  when the border is no longer walkable, i.e. an ROI above has cut through it. This
+  is what makes an ROI the same vertices on lh.sphere.reg, lh.inflated and lh.white:
+  the fill is topological, so the same barrier and anchor give the same region on all
+  three, whereas a shortest path between two clicks runs differently on each — on a
+  folded surface a border traced on the sphere leaked and the ROI resolved as
+  `FILL_ESCAPED`, which is the bug this fixed. Reopening still re-traces on the
+  surface shown, so the clicks remain the thing you edit. The mask is always derived
+  and discarded whenever clicks or border change. freeview does the opposite and
+  that is what makes its undo impossible.
 - **Flood fill must only ever walk the 1-ring graph.** Augmenting it (unfolded 2-ring
   edges, k-ring neighbourhoods) adds edges that cross faces, so the fill hops the
   barrier and swallows the hemisphere. Validate the chain before filling.
@@ -141,6 +156,42 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   non-anatomical one, using `naming.surfaceKind` plus a planarity check on the
   geometry, which catches a flat patch whatever it is called. Substituting a
   same-topology anatomical surface automatically is still open.
+- **`.annot` labels are colours, not indices.** FreeSurfer stores each vertex's
+  annotation as its label's colour packed `r + (g << 8) + (b << 16)` and recovers
+  the label by matching that against the colour table. So two labels with one
+  colour are one label, and pure black is "unlabelled". The palette has sixteen
+  colours and a parcellation can have more: `uniqueAnnotColors` nudges
+  collisions one unit apart and the writer refuses to write a table that would
+  merge. Names are null-terminated and every integer is big-endian; verified
+  against nibabel's `read_annot` (labels, names and colours all round-trip).
+  The whole-parcellation exports write `savedRois()` only — an ROI that is
+  reopened for editing is off the list until saved, and the status says so.
+- **Single-ROI exports write the selected saved ROI, and saving selects it.**
+  The region being drawn is not exportable: it can still change, and a file
+  of it is a snapshot nothing refers back to. Saving used to leave the ROI
+  *unselected* because the export file name came from the ROI-name field,
+  which goes on naming the next ROI, so an auto-selected ROI got exported
+  under the next name. `exportStem` now takes the name from the selected ROI
+  itself (`requireSavedRoi`), which is what makes selecting on save safe.
+  While any ROI is reopened, every export is disabled (`refuseWhileEditing`).
+- **A session is definitions, never masks, and it rides inside `.label.gii`.**
+  `io/session.js` writes what `state.rois` holds — clicks, closure, region
+  index, boundary flag, anchor, colour, order — and the landmarks; masks, chains
+  and errors are derived and are deliberately not written. The same JSON is
+  embedded as a GIfTI MetaData entry (`SurfAnnotateSession`) in both
+  `.label.gii` exports, because that is the file people hand to other tools
+  and it costs nothing; `.label` (one header line) and `.annot` (a colour-table
+  filename string) have nowhere safe to put it. `sessionFromGiftiMetadata` is
+  a pattern match, not an XML parse, because DOMParser is absent under
+  `node --test` and the entry has exactly one shape. Loading refuses a vertex
+  count or triangle hash that differs from the active surface — every number
+  in the file is a vertex index. Imported ROIs keep the file's `colorIndex` so
+  a parcellation looks as it did; `nextColorIndex` already skips colours in
+  use, so ROIs drawn afterwards differ.
+- **Importing masks from other tools and recovering border points from them is
+  planned, not done.** The agreed design, the decisions already taken with the
+  user, the failure cases and the test plan are in `docs/roi-import-plan.md`.
+  Read it before starting that work; do not re-derive the design.
 - **Exports are named `<hemisphere>.<roi>`, never after the source surface.** See
   `io/naming.js`. An ROI drawn on `lh.sphere.reg` is valid on any surface sharing that
   vertex indexing, so `lh.sphere.reg.surf.V1.label` would misrepresent it.
@@ -156,14 +207,54 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   It does *not* follow that any edge-to-edge line separates the surface — one joining
   two distinct cuts turns an annulus into a disk without dividing it — so the component
   count is checked, never assumed.
-- **`eccentricity` and `polar_angle` (DL) carry a display window; the other colour
-  maps do not.** `polar_angle` is cyclic — it ends on the colour it starts on,
-  because 0 and 2π are the same direction — so under the default 2nd–98th
-  percentile window the wrap falls inside the data and two angles a quarter-turn
-  apart render identically: a plausible picture that is simply wrong, which is
-  worse than an ugly one. `eccentricity` must start at zero or two subjects are
-  not comparable. `colormapWindow` in `niivue/colormaps.js` owns the rule and is
-  pure, so it unit-tests with the rest. The unit is read off the data rather than
+- **The retinotopy maps carry a display window; the other colour maps do not.**
+  They are `RYGBP_eccentricity`, `RYBC_eccentricity`, `YBGR_polar-angle` (DL),
+  `RYGBP_polar-angle` and `RYBC_polar-angle`,
+  and each is named for the colour sequence it runs through, because several
+  conventions are in use and a bare "polar angle" said nothing about which one
+  you were looking at. **The name is the sequence, so the first letter is the
+  colour at 0** — on a polar-angle wheel that is the right horizontal
+  meridian, on an eccentricity map the fovea. The same sequence can sit under
+  two keys with two roles (`RYBC` does); the polar-angle version repeats its
+  first colour at the full turn and the eccentricity version does not.
+- **The hemisphere flip is one checkbox and a key suffix, not more picker
+  entries.** A NiiVue layer is coloured by colormap key and nothing else, so a
+  mirrored map has to be *registered* — `EXTRA_COLORMAPS` holds every
+  polar-angle map twice, the twin under `<key>-flipped`, derived by
+  `mirrorPolarAngle` and never transcribed. But the picker lists only the base
+  maps: `#overlayFlip` composes the key (`colormapKey`) and
+  `syncOverlayControls` splits the layer's key back into picker + box
+  (`baseColormap`, `isFlipped`). Every read of the picker in `main.js` goes
+  through `selectedColormapKey()`; reading `ui.overlayColormap.value` directly
+  is the bug that renders the unflipped map while the box says flipped. The box
+  is enabled only for a polar-angle map (`canFlip`) and keeps its state while
+  disabled, so a flip survives a detour through eccentricity. Flipping does not
+  re-snap the window — the mirrored map spans the same turn, and a typed window
+  should not be overwritten by a colour change. The mirror itself: the colour
+  at θ is the original's at π − θ, i.e. LUT index j ← (128 − j) mod 256, and
+  this is the *only* place a mirror belongs. The wheel
+  in `colorLegend.js` samples the LUT by azimuth and must stay as it is —
+  mirroring the wheel instead of the map would show the right colours on the
+  legend and the wrong ones on the surface. Two traps in the mirror itself:
+  NiiVue's `makeLut` divides by the segment length, so two stops on one index
+  paint that entry black (stops are keyed by index for that reason), and the
+  ends at 0 and 255 are not control points of the original, so they are
+  sampled from it (`sampleControlPoints`, which interpolates the way NiiVue
+  does). A nearly cyclic map keeps its seam, moved to the left meridian. A polar-angle map is cyclic — it ends
+  on the colour it starts on, because 0 and 2π are the same direction — so
+  under the default 2nd–98th percentile window the wrap falls inside the data
+  and two angles a quarter-turn apart render identically: a plausible picture
+  that is simply wrong, which is worse than an ugly one. Eccentricity must
+  start at zero or two subjects are not comparable. `colormapWindow` in
+  `niivue/colormaps.js` owns the rule and is pure, so it unit-tests with the
+  rest. **The rule and the legend are keyed on `colormapRole(key)`, not on the
+  key**, so a new polar-angle palette is one entry in `COLORMAP_ROLES` and
+  nothing else. `RYGBP_polar-angle` shares its control points with
+  `gist_rainbow` on purpose: the *colours* are the same, the role is what
+  differs, and under the plain `gist_rainbow` key those colours still get a bar
+  and no window. It is only nearly cyclic (matplotlib's ends are a red and a
+  magenta), which leaves a faint seam on the right horizontal meridian; that
+  is the map as the field knows it and is not to be "fixed". The unit is read off the data rather than
   configured — an angle map in degrees never peaks below 7 and one in radians
   never above 2π — and values fitting neither convention return null rather than
   get a turn invented for them. `state.overlayAutoRange` is never overwritten, so
@@ -181,6 +272,17 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   punch scattered holes through the overlay. Anything that moves the display
   window must go through `commitOverlay`, not `commitLayer`, or the old clamp is
   what renders.
+- **A shared overlay is one overlay on several meshes, tied by `groupId`.** NiiVue
+  layers belong to a mesh, so `shareOverlay` builds a copy per matching surface
+  (`cloneOverlayTo`, from the source's `baseValues` and window), and a matching
+  surface loaded later receives the copies in `loadSurface`. Display changes are
+  made on one surface at a time and carried across at the *switch*
+  (`syncSharedOverlays` in `activateSurface`: colour map, window, opacity,
+  visibility, mask exemption, active overlay) — one place, rather than every
+  handler knowing about siblings. Removal removes the group. The mask was already
+  per topology (`state.masks` by `topologyKey`); overlays follow the same
+  idea only when `#overlayShare` is ticked — off by default, at the user's request,
+  so the one-surface behaviour is what a new session gets.
 - **Exempt overlays are restacked to the bottom, and that is what makes the mask
   useful.** `restackLayers` orders exempt overlays before masked overlays, then
   `meshAdapter.replaceLayerStack` puts those layers below the ROI layer. A
@@ -273,6 +375,36 @@ which is why the algorithm suite is fast and deterministic. Only `main.js` and
   seen on a folded surface while every marker shows — they are labels on the
   surface and the folds hide them. Nothing is wrong when that happens; check on
   `lh.inflated`. A true depth test would mean reading the depth buffer every frame.
+- **`--nd-brand-selection` is a surface, never a text colour.** `styles.css`
+  declares it as near-black ink in `:root`, but the shared `app-theme.css`
+  remaps it per theme — pale green (#e7f0df) in light mode, dark green in dark
+  mode — so every `color: var(--nd-brand-selection)` rendered at 1.1:1 on the
+  light theme: labels, checkbox captions, ROI names, panel buttons, upload
+  captions, the instruction note. Body text is `--nd-brand-text`
+  (#18201b light / #e8f5d0 dark); text on the green hover surface is
+  `--nd-brand-menu`, which is dark in both themes; and `--nd-brand-white` is
+  a *surface* too (#161a0e in dark mode), so text that must be white on the
+  export-target row is literal `#fff`. The contrast probe that found this is
+  the way to check: compute every text node's WCAG ratio against its effective
+  background in *both* themes, because the dark theme also overrides colours
+  element by element and hides a bad token.
+- **Row highlights in the lists must be anchored on `#controls`.** The shared
+  `app-theme.css` (generated by `scripts/lib/app-theme-dist.mjs`) restyles every
+  `.layer-list li` in dark mode from a `:root[data-neurodesk-app]
+  [data-neurodesk-theme="dark"]:not(...) :is(...)` selector, whose specificity
+  beats any class chain an app can write. `.layer-list li.export-target`
+  therefore lost its background in the dark theme and only its box-shadow
+  survived — which looked like a design choice. The id wins over attributes,
+  so the export-target rules carry it. The light theme has the mirror trap:
+  it gives buttons a pale face, so glyphs inside a solid row need
+  `background: transparent` set explicitly or they vanish white-on-white.
+  Check both themes with a screenshot; the e2e suite runs in whichever the
+  page defaults to. The same theme rule (`… #controls button`, specificity
+  1,4,1) silently disabled *every* button hover in dark mode, because
+  `#controls button:hover` is only 1,2,1; the dark hover is therefore written
+  once more with one attribute more than the theme uses. Any new interactive
+  state on a panel button needs the same treatment or it will only work in
+  light mode — measure with `page.hover` and `getComputedStyle`, not by eye.
 - **`#controls` must stay `flex-wrap: nowrap`.** The shared `.nd-imaging-controls` class
   sits on the same element and sets `flex-wrap: wrap` for its own row layout. With the
   column direction `styles.css` applies, anything taller than the panel wraps into a
