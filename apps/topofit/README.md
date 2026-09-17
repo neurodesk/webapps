@@ -32,6 +32,8 @@ when the search is enabled; quality thresholds and a native-grid ROI are under
 
 Results include individual patch surfaces, patch-and-normal QC, measurements
 and paired ribbon geometry. Patches are labeled "Left flat patch 1", "Right flat patch 1", and so on.
+Numbers follow flatness within each hemisphere, not area; the ranking is
+described in `packages/topofit/README.md`.
 Select one to center the 3-Plane viewer on it. Meshes are clipped to a 1 mm
 band around each slice so scrolling away does not project the patch onto other regions.
 Selected patches use yellow, two-sided slice intersections so the brain image

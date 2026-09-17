@@ -43,8 +43,11 @@ The search maps fsaverage cortex labels through the registration spheres,
 erodes the medial-wall boundary by 5 mm along mesh edges, and excludes ribbon
 separations below 0.5 mm. Connected candidates use a 10 mm geodesic radius by
 default. Acceptance requires RMS at most 0.5 mm, area at least 25% of the radius
-disc, and signed normal coherence at least 0.9. Up to three disjoint patches
-per hemisphere are returned. Empty ROIs fail; failed quality searches return
+disc, and signed normal coherence at least 0.9. Accepted candidates are ranked
+by `rms + radius × (1 − coherence)`, lowest first, with ties broken by seed
+order; area does not affect the rank. Each hemisphere keeps the best-ranked
+candidates that share no vertices with a higher-ranked patch, up to `count`
+(default 3, at most 50), and numbers them in that order. Empty ROIs fail; failed quality searches return
 `NO_PATCH_MEETS_CRITERIA` without lowering thresholds.
 
 Each accepted patch has a viewable FreeSurfer mid-surface. The analysis JSON
