@@ -1,5 +1,11 @@
 # vesselboost
 
+## 0.4.20260918
+
+### Minor Changes
+
+- Fix the model-loading stall on the hosted site by keeping ONNX Runtime and its thread workers inside VesselBoost's isolation service-worker scope. Test the production example workflow without server-provided isolation headers so browser checks exercise the same isolation mechanism as GitHub Pages. Use a new minor version to preserve today's existing immutable release.
+
 ## 0.3.20260918
 
 ### Patch Changes
@@ -8,11 +14,11 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.1
 
-
 ### Patch Changes
 
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
