@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/astewartau/qsmbly",
+  "previousCommit": "02a49948920076e4ecaaa5eb36f24a0b85efc2d9",
+  "commit": "6e01b15b43b615639881f35e6b1f7dbc214e0864",
+  "qsmCore": "v0.35.0",
+  "qsmxtConfig": "v9.21.0",
+  "integration": [
+    "Keep the monorepo shell, design system, shared dialogs and real-brain example manifest.",
+    "Adapt PipelineExecutor to QsmPipelineController and the shared WorkerSession protocol.",
+    "Fetch model weights through the shared downloader with upstream hashes and a pinned Hugging Face revision.",
+    "Build both WASM bundles with the repository's pinned nightly toolchain and shared cross-origin isolation support.",
+    "Keep monorepo date-based release versions and deployment workflows."
+  ]
+}

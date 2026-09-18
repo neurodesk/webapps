@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.23.0"
+version = "0.27.20260918"
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"
@@ -11,18 +11,30 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["console_error_panic_hook"]
 simd = ["qsm-core/simd"]
+onnx = ["qsm-core/onnx", "dep:getrandom"]
+# Multithreading via wasm threads (SharedArrayBuffer + Web Worker pool). Turns on qsm-core's
+# rayon paths (all classical algorithms) and the tiled-DL parallel tile loop. Requires a
+# threaded build (nightly + -Z build-std + target-feature=+atomics,+bulk-memory) and a
+# cross-origin-isolated page (COOP/COEP). See build.sh and the coi service worker.
+parallel = ["qsm-core/parallel", "dep:wasm-bindgen-rayon"]
 
 [dependencies]
-# Core QSM algorithms. No `parallel` feature — WASM is single-threaded.
-qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.23.0" }
+# Core QSM algorithms. `parallel` (rayon) is enabled via our own `parallel` feature for
+# threaded wasm builds; plain builds stay single-threaded.
+qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.35.0" }
 
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
 # astewartau/qsmxt.rs repo is being retired).
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.11.0" }
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.21.0" }
 
 # WASM bindings
+# getrandom (pulled by tract-onnx) needs an explicit browser-crypto backend on wasm32. Since
+# qsm-core v0.31.0 (tract 0.23) that is getrandom 0.4's "wasm_js" feature, not 0.2's "js".
+getrandom = { version = "0.4", features = ["wasm_js"], optional = true }
 wasm-bindgen = "0.2"
+# Rayon threadpool for wasm (spawns Web Workers); only linked with the `parallel` feature.
+wasm-bindgen-rayon = { version = "1.2", optional = true }
 js-sys = "0.3"
 serde_json = "1"
 console_error_panic_hook = { version = "0.1", optional = true }
@@ -33,3 +45,9 @@ wasm-bindgen-test = "0.3"
 [profile.release]
 opt-level = 3
 lto = true
+
+# wasm-pack runs wasm-opt after the build; without --enable-threads it would strip the shared
+# memory / atomics back out of threaded builds, and the DL bundle is built with +simd128.
+# These flags keep them (harmless for builds that use neither).
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-O2', '--enable-threads', '--enable-bulk-memory', '--enable-mutable-globals', '--enable-simd']

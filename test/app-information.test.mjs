@@ -25,7 +25,7 @@ const REQUIRED_METHODS = {
   vesselboost: ['10.52294/001c.123217', '10.1109/TMI.2010.2046908', '10.1109/TMI.2007.906087', '10.1109/ICCV.1998.710815', '10.1002/hbm.10062', '10.1016/j.neuroimage.2022.119474'],
   spinalcordtoolbox: ['10.1016/j.neuroimage.2016.10.009', '10.1016/j.media.2025.103473', '10.1038/s41592-020-01008-z', 'arxiv.org/abs/2407.17265', 'github.com/neuropoly/totalspineseg', '10.1155/2014/719520', '10.1016/j.neuroimage.2017.10.041'],
   calmar: ['10.1093/brain/awv228', '10.1016/j.neuroimage.2022.119474', 'SynthStroke', 'arxiv.org/abs/2403.19425', '10.1109/TMI.2021.3116879', '10.1016/j.neuroimage.2010.07.033', '10.1152/jn.00338.2011', '10.1093/cercor/bhx179', '10.1038/s41467-018-03399-2', '10.1038/nmeth.1635'],
-  qsmbly: ['10.1002/hbm.10062', '10.1002/mrm.28563', '10.1002/mrm.26963', '10.1002/mrm.23000', '10.1002/nbm.1670', '10.1002/mrm.22135', '10.1002/mrm.22816', '10.1016/j.neuroimage.2015.02.041', '10.1016/j.neuroimage.2020.117701', '10.1016/j.jneumeth.2016.03.001'],
+  qsmbly: ['10.1002/nbm.4461', '10.1016/j.neuroimage.2018.06.030', '10.1016/j.neuroimage.2020.116579', '10.1016/j.neuroimage.2019.116389', '10.1002/mp.17747', '10.1007/978-3-030-59713-9_13', '10.1016/j.neuroimage.2021.118376', '10.1016/j.neuroimage.2019.116064', '10.1016/j.neuroimage.2022.119729', '10.1002/hbm.24750', '10.1002/mrm.29722', '10.1002/hbm.10062', '10.1002/mrm.28563', '10.1002/mrm.26963', '10.1002/mrm.23000', '10.1002/nbm.1670', '10.1002/mrm.22135', '10.1002/mrm.22816', '10.1016/j.neuroimage.2015.02.041', '10.1016/j.neuroimage.2020.117701', '10.1016/j.jneumeth.2016.03.001'],
   seedseg: ['10.1101/2023.10.26.564293', '10.1007/978-3-319-46723-8_49', '10.1016/j.jneumeth.2016.03.001'],
   dicompare: ['github.com/astewartau/dicompare', 'pyodide.org', '10.1016/j.jneumeth.2016.03.001'],
   deface: ['10.52294/001c.94384', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1098/rstb.2001.0915', '10.1016/j.jneumeth.2016.03.001'],
@@ -66,6 +66,12 @@ test('the shared statements say who builds the apps and which ecosystem they bel
   assert.equal(information.shared.ecosystem_url, 'https://lightniing.org');
   assert.equal(information.shared.platform_citation.doi, '10.1038/s41592-023-02145-x');
   assert.match(information.shared.platform_citation.reference, /Renton/);
+});
+
+test('QSMbly About credits and links its upstream application', () => {
+  const upstream = information.apps.qsmbly.packages.find(item => item.name === 'QSMbly (upstream)');
+  assert.equal(upstream.url, 'https://github.com/astewartau/qsmbly');
+  assert.match(information.apps.qsmbly.builders, /Ashley Stewart/);
 });
 
 test('theme injection carries the app information as one JSON script and stays idempotent', () => {

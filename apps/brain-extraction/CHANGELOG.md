@@ -1,5 +1,11 @@
 # brain-extraction
 
+## 0.1.20260918
+
+### Patch Changes
+
+- Include and initialize the Rayon worker helpers required by QSMbly's updated BET runtime.
+
 ## 0.1.20260916
 
 ### Patch Changes

@@ -54,16 +54,22 @@ describe('MaskUtils', () => {
   });
 
   describe('findSeedPoint', () => {
+    // Masks are x-fastest, matching NIfTI data and qsm-core's
+    // idx3d(i,j,k,nx,ny) = i + j*nx + k*nx*ny. A cubic fixture cannot
+    // distinguish this from the transposed convention, so the non-cubic
+    // cases below are the ones that actually pin it down.
+    const idx3d = (i, j, k, nx, ny) => i + j * nx + k * nx * ny;
+
     test('should find center of mass of mask', () => {
       const nx = 5, ny = 5, nz = 5;
       const mask = new Uint8Array(nx * ny * nz);
 
       // Create a small cluster in one corner
       // Indices: (1,1,1), (1,1,2), (1,2,1), (2,1,1)
-      mask[1 * ny * nz + 1 * nz + 1] = 1;
-      mask[1 * ny * nz + 1 * nz + 2] = 1;
-      mask[1 * ny * nz + 2 * nz + 1] = 1;
-      mask[2 * ny * nz + 1 * nz + 1] = 1;
+      mask[idx3d(1, 1, 1, nx, ny)] = 1;
+      mask[idx3d(1, 1, 2, nx, ny)] = 1;
+      mask[idx3d(1, 2, 1, nx, ny)] = 1;
+      mask[idx3d(2, 1, 1, nx, ny)] = 1;
 
       const seed = findSeedPoint(mask, nx, ny, nz);
 
@@ -91,7 +97,7 @@ describe('MaskUtils', () => {
       const mask = new Uint8Array(nx * ny * nz);
 
       // Single voxel at (7, 3, 5)
-      mask[7 * ny * nz + 3 * nz + 5] = 1;
+      mask[idx3d(7, 3, 5, nx, ny)] = 1;
 
       const seed = findSeedPoint(mask, nx, ny, nz);
 
@@ -108,6 +114,36 @@ describe('MaskUtils', () => {
       expect(Number.isInteger(seed[0])).toBe(true);
       expect(Number.isInteger(seed[1])).toBe(true);
       expect(Number.isInteger(seed[2])).toBe(true);
+    });
+
+    test('should read a non-cubic mask x-fastest', () => {
+      const nx = 4, ny = 3, nz = 2;
+      const mask = new Uint8Array(nx * ny * nz);
+
+      // Single voxel at (3, 0, 1). Read with transposed strides the same
+      // flat index decodes to a different, out-of-cluster coordinate.
+      mask[idx3d(3, 0, 1, nx, ny)] = 1;
+
+      const seed = findSeedPoint(mask, nx, ny, nz);
+
+      expect(Array.from(seed)).toEqual([3, 0, 1]);
+    });
+
+    test('should return a seed that is inside a non-cubic mask', () => {
+      const nx = 6, ny = 4, nz = 2;
+      const mask = new Uint8Array(nx * ny * nz);
+
+      // A contiguous slab filling k = 1 only.
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) mask[idx3d(i, j, 1, nx, ny)] = 1;
+      }
+
+      const [i, j, k] = findSeedPoint(mask, nx, ny, nz);
+
+      // grow_region_unwrap returns immediately when mask[seed] is 0, which
+      // would silently hand wrapped phase downstream.
+      expect(mask[idx3d(i, j, k, nx, ny)]).toBe(1);
+      expect(k).toBe(1);
     });
   });
 });

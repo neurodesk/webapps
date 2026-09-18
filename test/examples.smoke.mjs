@@ -41,6 +41,34 @@ try {
     await expect(selector).toBeEnabled();
     console.log(`PASS ${app.id}: imported ${example.id}`);
   }
+  if (app.id === 'qsmbly') {
+    const { readFile } = await import('node:fs/promises');
+    const { readVolume } = await import('../packages/synthsr/src/volume.js');
+    await expect(page.locator('#magField')).toHaveValue('3');
+    expect(await page.evaluate(() => window.app.getEchoTimesFromInputs())).toEqual([20]);
+    await page.locator('#prepareMaskInput').click();
+    await expect(page.locator('#previewMask')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#previewMask').click();
+    await page.locator('#thresholdRobust').click();
+    await expect(page.locator('#runPipelineSidebar')).toBeEnabled({ timeout: 120000 });
+    console.log('PASS qsmbly: prepared the phase-quality input and generated a robust mask');
+    if (!await page.locator('#runPipelineSidebar').isVisible()) {
+      await page.locator('#pipelineSection [data-disclosure-toggle]').click();
+    }
+    await page.locator('#runPipelineSidebar').click();
+    await page.waitForFunction(() => window.app.pipelineExecutor.pipelineHasRun, null, { timeout: 300000 });
+    const result = page.locator('#stage-item-final .stage-download');
+    await expect(result).toBeEnabled();
+    const downloadPromise = page.waitForEvent('download');
+    await result.click();
+    const download = await downloadPromise;
+    const bytes = await readFile(await download.path());
+    const volume = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    expect(volume.dims).toEqual([224, 224, 160]);
+    expect(volume.data.every(Number.isFinite)).toBe(true);
+    expect(volume.data.some(value => value !== 0)).toBe(true);
+    console.log('PASS qsmbly: real brain example produced a finite, nonempty susceptibility map and download');
+  }
   if (app.id === 'niimath') {
     const { readFile } = await import('node:fs/promises');
     const { readVolume } = await import('../packages/synthsr/src/volume.js');

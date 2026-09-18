@@ -150,6 +150,8 @@ export async function applyRelease({ plan, workspace, config, packages, embedded
 export const EMBEDDED_VERSION_SITES = Object.freeze({
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+    { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
+    { file: 'apps/qsmbly/rust-wasm/Cargo.lock', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
   ],
   vesselboost: [
     { file: 'apps/vesselboost/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },

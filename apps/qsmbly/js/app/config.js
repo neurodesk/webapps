@@ -13,10 +13,19 @@ const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof Wor
 const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
 
 // Application version (keep in sync with package.json, Cargo.toml, and git tags)
-export const VERSION = '0.26.20260916';
+export const VERSION = '0.27.20260918';
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.23.0';
+export const QSM_RS_VERSION = '0.35.0';
+
+// Where deep-learning model weights are fetched from in the browser. The qsm-core model
+// registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
+// fails — this base overrides it with a CORS-enabled mirror. Files are fetched as
+// `<base>/<weight-file-name>`. Hugging Face `resolve/main` URLs are public + CORS-enabled
+// (Access-Control-Allow-Origin: *), so they work both locally and on the deployed site.
+// (A relative path like 'models' resolves against the app root for same-origin dev serving;
+// '' falls back to the registry's OSF URLs, which the browser can't fetch cross-origin.)
+export const MODEL_WEIGHT_BASE_URL = 'https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261';
 
 // Physics constants
 export const PHYSICS = {
@@ -82,7 +91,11 @@ import {
   MCPC3DS_DEFAULTS as _MCPC3DS,
   LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
   HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
+  SIGNAL_ERODE_DEFAULTS as _SIGNAL_ERODE,
 } from './qsm-defaults.js';
+
+// Signal-gated erosion (QSM-CI): qsm-core's defaults, used by the mask "Signal Erode" refinement.
+export const SIGNAL_ERODE_DEFAULTS = { ..._SIGNAL_ERODE };
 
 // Re-export with JS-convention field names (camelCase, matching existing usage)
 export const RTS_DEFAULTS = {
@@ -121,8 +134,8 @@ export const LBV_DEFAULTS = {
 
 export const ISMV_DEFAULTS = {
   tol: _ISMV.tol,
-  maxit: _ISMV.max_iter,
-  radius_factor: _ISMV.radius_factor,
+  max_iter: _ISMV.max_iter,
+  radius: _ISMV.radius,
 };
 
 // Adapted re-exports (field name mapping from snake_case to camelCase)
@@ -217,7 +230,7 @@ export const HOMOGENEITY_DEFAULTS = {
 
 export const SHARP_DEFAULTS = {
   threshold: _SHARP.threshold,
-  radius_factor: _SHARP.radius_factor,
+  radius: _SHARP.radius,
 };
 
 export const RESHARP_DEFAULTS = {
@@ -383,7 +396,7 @@ export const PIPELINE_DEFAULTS = {
   romeo: { ...ROMEO_DEFAULTS },
   bf_algorithm: 'vsharp',
   vsharp: { ...VSHARP_DEFAULTS, max_radius: null, min_radius: null },
-  sharp: { radius: 6, ...SHARP_DEFAULTS },
+  sharp: { ...SHARP_DEFAULTS },
   resharp: { ...RESHARP_DEFAULTS },
   ismv: { ...ISMV_DEFAULTS, radius: null },
   pdf: { ...PDF_DEFAULTS, maxit: null },
@@ -391,6 +404,9 @@ export const PIPELINE_DEFAULTS = {
   harperella: { ...HARPERELLA_DEFAULTS },
   iharperella: { ...HARPERELLA_DEFAULTS },
   dipole_inversion: 'rts',
+  // Deep-learning overlap-tiling (browser only; keeps DL nets within the 32-bit wasm heap).
+  // On by default with a browser-safe 64³ patch; the settings modal can change/disable it.
+  dl_tiling: { enabled: true, tile_size: 56, tile_halo: 4 },
   tkd: { ...TKD_DEFAULTS },
   tsvd: { ...TSVD_DEFAULTS },
   tikhonov: { ...TIKHONOV_DEFAULTS },
@@ -458,6 +474,7 @@ export const BOX_FILTER_DEFAULTS = {
 const QSMConfig = {
   VERSION,
   QSM_RS_VERSION,
+  SIGNAL_ERODE_DEFAULTS,
   PHYSICS,
   INPUT_MODES,
   FIELD_MAP_UNITS,
