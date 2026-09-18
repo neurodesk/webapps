@@ -1,10 +1,28 @@
 # @neurodesk/desktop
 
+## 0.13.20260918
+
+### Patch Changes
+
+- Include MuscleMap's clearer input image type, preview, and segmentation controls alongside the Calmar example fix.
+
+## 0.12.20260918
+
+### Patch Changes
+
+- Use suite 0.12 for Calmar; concurrent SeedSeg, MuscleMap and VesselBoost publishers already selected 0.10 and 0.11.
+
+## 0.11.20260918
+
+### Patch Changes
+
+- Reserve a distinct offline suite version for Calmar's corrected example while the SeedSeg suite release is in progress.
+
 ## 0.10.20260918
 
 ### Patch Changes
 
-- Include MuscleMap's clearer input image type, preview, and segmentation controls in the offline suite.
+- Include Calmar's corrected T1-only stroke example in the offline suite.
 
 ## 0.9.20260918
 
