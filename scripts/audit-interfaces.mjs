@@ -130,7 +130,7 @@ try {
             console.log(`SKIP ${app.id}/${viewport.width} example import: ${gpuCapability}; ${message}`);
           } else {
             await selector.selectOption(examples[0].id);
-            await expect.poll(() => state.getAttribute('data-example-state'), { timeout: 180000 }).not.toBe('loading');
+            await expect.poll(() => state.getAttribute('data-example-state', { timeout: 180000 }), { timeout: 180000 }).not.toBe('loading');
             await expect(state).toHaveAttribute('data-example-state', 'ready');
             await expect(state).toHaveAttribute('data-example-id', examples[0].id);
             result.example = examples[0].id;

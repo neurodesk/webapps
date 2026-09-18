@@ -1504,13 +1504,6 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/vesselboost/brain-mra/chris_MRA.nii.gz": {
-      "sha256": "d4bf431c4b4223e3ea368c5c26ea7904c23d9d59496e14022e32a38a5270b63f",
-      "bytes": 95078,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz": {
       "sha256": "97638eee6df7c75b4de8921163e708420587de28b03eefb3fb1efbcdad659506",
       "bytes": 9092309,
@@ -2595,6 +2588,13 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0a35af062d07f36ff2935f8c1454e1ca2f80da86/examples/vesselboost/lausanne-tof/sub-000_ses-20110101_angio.nii.gz": {
+      "sha256": "8e1e772825aafbdf898e0c06e9482640098d9722514b59566957bc3ff22cc2b2",
+      "bytes": 28408253,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -2618,7 +2618,7 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/vesselboost/vesselboost-t2s.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/vesselboost/vesselboost.onnx",
       "https://unpkg.com/@niivue/niivue@0.68.1/dist/niivue.umd.js",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/vesselboost/brain-mra/chris_MRA.nii.gz"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0a35af062d07f36ff2935f8c1454e1ca2f80da86/examples/vesselboost/lausanne-tof/sub-000_ses-20110101_angio.nii.gz"
     ],
     "spinalcordtoolbox": [
       "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
