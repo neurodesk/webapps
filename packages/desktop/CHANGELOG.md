@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.13.20260918
+
+### Patch Changes
+
+- Include the original TOF-MRA example for VesselBoost alongside the corrected Calmar example.
+
 ## 0.12.20260918
 
 ### Patch Changes
