@@ -1,108 +1,58 @@
-import "@neurodesk/webapp-components/styles/imaging-workspace.css";
-import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { routePose } from "./network.js";
-import { insideMask, sampleMask } from "./mask.js";
+import { insideMask } from "./mask.js";
 import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
-import { steer, swim } from "./swim.js";
-import { Race, readScores, saveScore } from "./race.js";
+import { level, steer, swim } from "./swim.js";
+import { Race } from "./race.js";
 import { NavigationMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
+import { Steering, aimFromOffset, combineDemand } from "./controls.js";
+import { assistDemand, probeLumen, throttle } from "./assist.js";
+import { createLeaderboard, formatTime } from "./leaderboard.js";
+import { LEADERBOARD_URL } from "./config.js";
 import "./style.css";
 
 const $ = (id) => document.getElementById(id);
-mountImagingWorkspace({
-  controls: "#controls",
-  viewer: "#viewer",
-  status: "#status",
-  title: "Vessel Surfer",
-  subtitle: "A Neurodesk easter egg",
-  controlsContract: { about: "#about", cite: "#cite", privacy: "#privacy" },
-});
-const navigation = document.querySelector(".nd-imaging-navigation");
-const back = navigation.querySelector("a");
-back.href = "../../";
-back.target = "_top";
-back.textContent = "Back to website";
-for (const id of ["about", "cite", "privacy"]) navigation.append($(id));
-const themeButton = document.createElement("button");
-function themeLabel() {
-  const dark = document.documentElement.dataset.neurodeskTheme !== "light";
-  themeButton.textContent = dark ? "Light" : "Dark";
-  themeButton.setAttribute(
-    "aria-label",
-    dark ? "Use light theme" : "Use dark theme",
-  );
+const coarse = matchMedia("(pointer: coarse)").matches;
+if (coarse) document.body.classList.add("is-touch");
+let storage;
+try {
+  storage = window.localStorage;
+} catch {
+  /* Storage can be disabled. */
 }
-themeButton.onclick = () => {
-  document.documentElement.dataset.neurodeskTheme =
-    document.documentElement.dataset.neurodeskTheme === "light"
-      ? "dark"
-      : "light";
-  themeLabel();
-};
-themeLabel();
-navigation.append(themeButton);
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !document.querySelector("dialog[open]"))
-    parent.postMessage({ type: "close-voyage" }, location.origin);
-});
-const explanations = {
-  about: [
-    "Vessel Surfer",
-    "A small submarine adventure inside a 3D vessel network. The default network is derived from the real IXI322 human brain MRA vessel segmentation published by Bizjak and colleagues. Routes follow its largest connected region, and the tunnel camera stays inside the segmented lumen. Reach the destination shown on the navigation map. Faster completion and fewer wall impacts earn more points. The five best completed runs are stored in this browser. Import a segmented NIfTI mask to explore your own vessels.",
-  ],
-  cite: [
-    "Credits",
-    "Made for Neurodesk. Rendering uses Three.js and its marching-cubes implementation; NIfTI decoding uses NIFTI-Reader-JS. Human data: IXI322-IOP-0891, IXI vascular segmentation dataset by Bizjak et al. (2022), doi:10.1117/12.2611756; Sobisch et al. (2022), PMLR 194:34–44. Source and derived assets: CC BY-NC-SA 4.0. The bundled source record lists processing changes and source URLs.",
-  ],
-  privacy: [
-    "Your voyage stays here",
-    "Vessel Surfer reads imported masks locally in a browser worker. The game does not upload your mask or save it to a server. The shared Neurodesk shell may collect site usage analytics. Reloading clears the imported data. High scores, completion times and bump counts stay in local browser storage; no scores are uploaded.",
-  ],
-};
-for (const [id, [title, body]] of Object.entries(explanations))
-  $(id).onclick = () => {
-    pause();
-    $("info-title").textContent = title;
-    $("info-text").textContent = body;
-    if (id === "cite" || id === "about") {
-      const link = document.createElement("a");
-      link.href = import.meta.env.BASE_URL + "data/ATTRIBUTION.md";
-      link.textContent = " Dataset source, license and processing details";
-      link.target = "_blank";
-      link.rel = "noopener";
-      $("info-text").append(link);
-    }
-    $("info").showModal();
-  };
-let pause = () => {};
+const leaderboard = createLeaderboard({ url: LEADERBOARD_URL, storage });
+
 let renderer;
 try {
   renderer = new THREE.WebGLRenderer({
     canvas: $("ocean"),
     antialias: false,
     alpha: false,
+    powerPreference: "high-performance",
   });
 } catch {
-  $("statusText").textContent =
+  $("hint").textContent =
     "3D rendering is unavailable. Enable WebGL or try another browser.";
   $("play").textContent = "WebGL unavailable";
 }
 if (renderer) boot();
+
 function boot() {
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.setClearColor(0x071820);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x071820, 0.003);
-  const camera = new THREE.PerspectiveCamera(72, 1, 0.002, 600);
+  const camera = new THREE.PerspectiveCamera(78, 1, 0.002, 600);
   const orbit = new OrbitControls(camera, $("ocean"));
   orbit.enableDamping = true;
+  orbit.autoRotate = true;
+  orbit.autoRotateSpeed = 0.5;
   orbit.minDistance = 5;
   orbit.maxDistance = 260;
   scene.add(new THREE.HemisphereLight(0xffccc4, 0x33111a, 1.2));
@@ -112,8 +62,8 @@ function boot() {
   const fill = new THREE.PointLight(0x34bad5, 1800);
   fill.position.set(30, -30, -20);
   scene.add(fill);
-  let vessels = new THREE.Group(),
-    beacons = new THREE.Group();
+  const vessels = new THREE.Group();
+  const beacons = new THREE.Group();
   scene.add(vessels, beacons);
   const sub = new THREE.Group();
   const gold = new THREE.MeshStandardMaterial({
@@ -155,10 +105,6 @@ function boot() {
     dark,
     [0, 0, -1.48],
   );
-  const lamp = new THREE.PointLight(0xffd873, 16, 14);
-  lamp.position.set(0, 0, 1.8);
-  lamp.intensity = 0;
-  sub.add(lamp);
   scene.add(sub);
   // Floating particles establish depth without external textures or assets.
   const points = new Float32Array(1200);
@@ -184,82 +130,132 @@ function boot() {
     color: 0xc94a68,
     emissive: 0x471322,
     side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.42,
     shininess: 65,
-    depthWrite: false,
+  });
+  // Vessels outside the playable lumen, shown only in the overview.
+  const contextMaterial = new THREE.MeshPhongMaterial({
+    color: 0x8c3a50,
+    emissive: 0x2a0c16,
+    side: THREE.DoubleSide,
+    shininess: 30,
   });
   const tunnel = new TunnelCamera();
   const headlamp = new THREE.PointLight(0xffc6ac, 5, 12, 1);
   scene.add(headlamp);
-  const beaconGeometry = new THREE.TorusGeometry(0.92, 0.13, 8, 24),
-    beaconMaterial = new THREE.MeshStandardMaterial({
-      color: 0x7ffff0,
-      emissive: 0x24d4b3,
-      emissiveIntensity: 2,
-    });
+  const beaconGeometry = new THREE.TorusGeometry(0.92, 0.13, 8, 24);
+  const beaconMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffd166,
+    emissive: 0xb57616,
+    emissiveIntensity: 2,
+  });
   let dirty = true;
   orbit.addEventListener("change", () => {
     dirty = true;
   });
-  let network,
-    mask = null,
-    route,
-    running = false,
-    started = false,
-    overview = true,
-    travel = 0,
-    won = false,
-    loading = true;
-  let human = null,
-    humanPromise = null;
+
+  // Game state: loading | ready | running | paused | complete.
+  let state = "loading";
+  let overview = true;
+  let network = null;
+  let mask = null;
+  let human = null;
+  let humanPromise = null;
+  let travel = 0;
+  let route = null;
+  let race = new Race();
+  let lastResult = null;
+  let target = null;
+  let targetRadius = 0.35;
+  let blocked = false;
   const player = new THREE.Vector3();
-  const direction = new THREE.Vector3(0, 1, 0),
-    keys = new HeldInputs();
+  const direction = new THREE.Vector3(0, 1, 0);
   const swimUp = new THREE.Vector3(0, 1, 0);
-  let dragX = 0,
-    dragY = 0;
-  let race = new Race(),
-    target = null,
-    targetRadius = 0.35;
+  const keys = new HeldInputs();
+  const steering = new Steering();
+  const aim = { yaw: 0, pitch: 0 };
+  const stick = { yaw: 0, pitch: 0, pointer: null, x: 0, y: 0 };
   const navigationMap = new NavigationMap($("map"));
-  let scoreStorage;
-  try {
-    scoreStorage = window.localStorage;
-  } catch {
-    /* Storage can be disabled. */
+  const ocean = $("ocean");
+  const running = () => state === "running";
+
+  function showMenu(next) {
+    state = next;
+    $("menu").hidden = next === "running";
+    $("menu").dataset.state = next;
+    for (const element of $("menu").querySelectorAll("[data-show]"))
+      element.classList.toggle(
+        "is-shown",
+        element.dataset.show.split(" ").includes(next),
+      );
+    $("play").textContent = {
+      loading: "Loading brain…",
+      ready: "Dive",
+      running: "Pause",
+      paused: "Resume",
+      complete: "Race again",
+    }[next];
+    $("play").disabled = next === "loading";
+    $("quick-play").disabled = next === "loading" || next === "ready";
+    $("quick-play").textContent = next === "running" ? "Ⅱ" : "▶";
+    $("quick-play").setAttribute(
+      "aria-label",
+      next === "running" ? "Pause" : "Resume",
+    );
+    $("navigation-map").hidden = !target || next === "ready" || next === "loading";
+    $("touch").hidden = next !== "running";
+    $("hint").textContent = "";
+    dirty = true;
   }
-  const timeLabel = (seconds) => {
-    const tenths = Math.floor(seconds * 10);
-    return `${Math.floor(tenths / 600)}:${((tenths % 600) / 10).toFixed(1).padStart(4, "0")}`;
-  };
-  function showScores() {
-    const rows = readScores(scoreStorage);
-    $("score-rows").replaceChildren();
-    if (!rows.length) {
-      const row = $("score-rows").insertRow();
-      const cell = row.insertCell();
-      cell.colSpan = 3;
-      cell.textContent = "No completed runs yet.";
+
+  function renderBoard(board, mine) {
+    const rows = $("score-rows");
+    rows.replaceChildren();
+    if (!board.rows.length) {
+      const cell = rows.insertRow().insertCell();
+      cell.colSpan = 5;
+      cell.textContent = "No completed runs yet. Be the first!";
     }
-    for (const result of rows) {
-      const row = $("score-rows").insertRow();
-      for (const text of [
-        result.points.toLocaleString(),
-        timeLabel(result.seconds),
-        result.bumps,
-      ])
-        row.insertCell().textContent = text;
-    }
+    board.rows.forEach((result, index) => {
+      const row = rows.insertRow();
+      if (
+        mine &&
+        result.name === mine.name &&
+        result.points === mine.points &&
+        result.bumps === mine.bumps
+      )
+        row.classList.add("is-you");
+      for (const [text, className] of [
+        [index + 1, "rank"],
+        [result.name, "name"],
+        [result.points.toLocaleString(), "points"],
+        [formatTime(result.seconds), "time"],
+        [result.bumps, "bumps"],
+      ]) {
+        const cell = row.insertCell();
+        cell.textContent = text;
+        cell.className = className;
+      }
+    });
+    $("board-status").textContent =
+      board.scope === "global"
+        ? `Top ${board.rows.length} worldwide`
+        : "Leaderboard offline · best runs on this device";
+    $("board-status").title = board.error || "";
   }
-  showScores();
+  let boardRequest = 0;
+  async function refreshBoard(mine) {
+    const token = ++boardRequest;
+    const board = await leaderboard.top(10);
+    if (token === boardRequest) renderBoard(board, mine);
+  }
+
   $("map-view").onclick = () => {
     navigationMap.axis = navigationMap.axis === 2 ? 1 : 2;
-    $("map-view").textContent =
-      navigationMap.axis === 2 ? "Front view" : "Top view";
+    const top = navigationMap.axis === 2;
+    $("map-view").textContent = top ? "Top view · switch" : "Front view · switch";
     $("map-view").setAttribute(
       "aria-label",
-      `Switch map to ${navigationMap.axis === 2 ? "front" : "top"} view`,
+      `Switch map to ${top ? "front" : "top"} view`,
     );
   };
   function clear(group) {
@@ -271,20 +267,15 @@ function boot() {
       });
     }
   }
-  function addBeacon(position, id) {
-    const mesh = new THREE.Mesh(beaconGeometry, beaconMaterial);
-    mesh.position.copy(position);
-    mesh.userData.id = id;
-    beacons.add(mesh);
+  function volumeOf() {
+    return mask || human.volume;
   }
-  function updateTunnel(dt, snap = false) {
-    const volume = mask || human.volume;
+  function updateTunnel(dt, radius, snap = false) {
+    const volume = volumeOf();
     const unit = Math.min(...volume.scale);
-    const radius = lumenRadius(volume, player);
-    let ahead = player
+    const ahead = player
       .clone()
       .addScaledVector(direction, Math.max(unit * 0.1, radius * 0.5));
-    // The view follows the player's heading, including while braking at a wall.
     for (let d = radius * 3; d > unit * 0.001; d *= 0.65) {
       const candidate = player.clone().addScaledVector(direction, d);
       if (clearSight(volume, player, candidate)) {
@@ -292,18 +283,16 @@ function boot() {
         break;
       }
     }
-    if (!clearSight(volume, player, ahead)) {
+    if (!clearSight(volume, player, ahead))
       ahead.copy(player).addScaledVector(direction, unit * 0.005);
-    }
     tunnel.up.copy(swimUp);
-    tunnel.update(player, ahead, volume, dt, true);
+    tunnel.update(player, ahead, volume, dt, snap);
     camera.position.copy(tunnel.position);
     camera.up.copy(tunnel.up);
     camera.lookAt(tunnel.target);
     camera.near = Math.max(0.0005, radius * 0.01);
     camera.far = Math.max(2, radius * 20);
     camera.updateProjectionMatrix();
-    // Keep the sub below the sightline and small relative to the local lumen.
     const distance = Math.min(radius * 1.3, player.distanceTo(ahead) * 0.7);
     const subPoint = player
       .clone()
@@ -313,35 +302,32 @@ function boot() {
       distance > unit * 0.04 && clearSight(volume, player, subPoint);
     sub.position.copy(subPoint);
     sub.scale.setScalar(Math.min(radius * 0.1, distance * 0.12));
-    sub.quaternion.setFromUnitVectors(
-      new THREE.Vector3(0, 0, 1),
-      tunnel.heading,
-    );
     headlamp.position
       .copy(player)
       .addScaledVector(tunnel.heading, Math.min(radius * 0.1, distance * 0.1));
     headlamp.intensity = Math.max(0.15, radius * 9);
     headlamp.distance = Math.max(unit * 6, radius * 15);
     scene.fog.density = 0.12 / Math.max(radius, unit * 0.3);
-    $("ocean").dataset.cameraInside = String(
-      insideMask(volume, camera.position.toArray()),
-    );
-    $("ocean").dataset.cameraPosition = JSON.stringify(
-      camera.position.toArray(),
-    );
-    $("ocean").dataset.cameraTarget = JSON.stringify(tunnel.target.toArray());
-    $("ocean").dataset.clearView = String(
-      clearSight(volume, camera.position, tunnel.target),
-    );
+    const data = $("ocean").dataset;
+    data.cameraInside = String(insideMask(volume, camera.position.toArray()));
+    data.cameraPosition = JSON.stringify(camera.position.toArray());
+    data.cameraTarget = JSON.stringify(tunnel.target.toArray());
+    data.clearView = String(clearSight(volume, camera.position, tunnel.target));
+  }
+  // On wide screens the menu panel sits centred, so shift the overview's
+  // projection to keep the vasculature visible beside it.
+  function frameOverview() {
+    const width = ocean.clientWidth;
+    const height = ocean.clientHeight;
+    if (overview && width > 900)
+      camera.setViewOffset(width, height, width * 0.24, 0, width, height);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
   }
   function setView(value) {
-    if (value && running) pause();
     dirty = true;
     overview = value;
-    vesselMaterial.opacity = 1;
-    vesselMaterial.transparent = false;
-    vesselMaterial.depthWrite = true;
-    vesselMaterial.needsUpdate = true;
+    frameOverview();
     headlamp.visible = !value;
     scene.fog.density = value ? 0.003 : 0.12;
     orbit.enabled = value;
@@ -349,39 +335,45 @@ function boot() {
       if (child.name === "overview-surface") child.visible = value;
       if (child.name === "tunnel-surface") child.visible = !value;
     }
-    $("view").setAttribute("aria-pressed", String(value));
-    $("view").textContent = value ? "Dive view" : "Network view";
     if (value) {
-      camera.far = 600;
+      // Frame whatever vasculature is loaded, whichever resolution it has.
+      const bounds = new THREE.Box3().setFromObject(vessels);
+      const sphere = bounds.isEmpty()
+        ? new THREE.Sphere(new THREE.Vector3(), 60)
+        : bounds.getBoundingSphere(new THREE.Sphere());
+      camera.far = Math.max(600, sphere.radius * 12);
       camera.updateProjectionMatrix();
       camera.up.set(0, 1, 0);
-      camera.position.set(100, 58, 125);
-      orbit.target.set(0, 2, 0);
+      camera.position
+        .set(0.55, 0.4, 0.75)
+        .normalize()
+        .multiplyScalar(sphere.radius * 2.4)
+        .add(sphere.center);
+      orbit.target.copy(sphere.center);
+      orbit.minDistance = sphere.radius * 0.2;
+      orbit.maxDistance = sphere.radius * 6;
       orbit.update();
       sub.visible = true;
       sub.position.copy(player);
       sub.scale.setScalar(mask ? Math.min(...mask.scale) * 0.22 : 0.5);
     } else {
-      updateTunnel(0, true);
+      updateTunnel(0, lumenRadius(volumeOf(), player), true);
     }
   }
   function reset() {
-    running = false;
-    started = false;
-    won = false;
-    race = new Race(Math.min(...(mask || human.volume).scale) * 0.4);
-    target = null;
-    $("run-result").hidden = true;
+    const volume = volumeOf();
+    race = new Race(Math.min(...volume.scale) * 0.4);
+    lastResult = null;
     travel = 0;
+    blocked = false;
     keys.clear();
-    dragX = dragY = 0;
+    steering.reset();
+    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
     swimUp.set(0, 1, 0);
     route = network ? { ...network.start } : null;
     clear(beacons);
     if (mask) {
       player.fromArray(mask.spawn);
-      sub.scale.setScalar(Math.min(...mask.scale) * 0.22);
-
       direction.set(0, 0, 1);
       target =
         mask.targets
@@ -391,50 +383,90 @@ function boot() {
         player.clone();
       targetRadius = Math.min(...mask.scale) * 0.7;
     } else {
-      sub.scale.setScalar(1);
       const pose = routePose(network, route);
       player.copy(pose.position);
       direction.copy(pose.direction);
       target = humanChallenge(network).target;
       targetRadius = 0.35;
     }
-    addBeacon(target, "destination");
-    beacons.children[0].scale.setScalar(targetRadius * 0.7);
-    beaconMaterial.color.set(0xffd166);
-    beaconMaterial.emissive.set(0xb57616);
-    navigationMap.configure(
-      network,
-      mask,
-      player,
-      target,
-      mask ? [] : humanChallenge(network).path,
+    const beacon = new THREE.Mesh(beaconGeometry, beaconMaterial);
+    beacon.position.copy(target);
+    beacon.scale.setScalar(targetRadius * 0.7);
+    beacons.add(beacon);
+    const path = mask ? [] : humanChallenge(network).path;
+    navigationMap.configure(network, mask, player, target, path);
+    // The validated reference route, for browser verification only.
+    $("ocean").dataset.path = JSON.stringify(
+      path.map((p) => p.toArray().map((v) => Number(v.toFixed(3)))),
     );
     $("mission-text").textContent = mask
-      ? "Practice: reach the gold destination. Imported masks do not enter the high-score table."
-      : "Reach the gold destination. Finish quickly and avoid wall bumps.";
+      ? "Practice run: reach the gold destination in your own vessel mask. Practice runs are not ranked."
+      : "Pilot a tiny submarine through real human brain vessels to the gold destination. Fast runs with few wall bumps score highest.";
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
     $("score").textContent = "0:00.0";
     $("bumps").textContent = "0 bumps";
-    $("distance").textContent = "0 m traveled";
-    $("play").textContent = "Launch submarine";
-    $("play").disabled = false;
-    $("view").disabled = false;
-    $("reset").disabled = false;
-    $("intro").hidden = false;
-    $("mode").textContent = "SONAR ONLINE";
-    $("statusText").textContent =
-      "Ready to dive. Reach the gold destination on the map.";
+    $("submit-status").textContent =
+      "Only your name, time and bump count are sent to the Neurodesk leaderboard server.";
+    $("submit").disabled = false;
     setView(true);
-    updateControls();
+    showMenu("ready");
+    refreshBoard();
   }
+  function start() {
+    if (state === "loading" || (!network && !mask)) return;
+    if (state === "complete") reset();
+    if (overview) setView(false);
+    race.resume(performance.now());
+    showMenu("running");
+    $("hint").textContent = coarse
+      ? "Drag anywhere to steer · hold Stop or Back"
+      : "Aim with the mouse or WASD · Shift brakes · Space pauses";
+    $("ocean").focus({ preventScroll: true });
+  }
+  function pause() {
+    if (!running()) return;
+    race.pause(performance.now());
+    keys.clear();
+    steering.reset();
+    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    stick.pointer = null;
+    $("stick").hidden = true;
+    showMenu("paused");
+  }
+  function finish() {
+    lastResult = race.finish(performance.now());
+    keys.clear();
+    steering.reset();
+    const message = mask
+      ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
+      : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
+    $("run-result").textContent = message;
+    showMenu("complete");
+    $("submit-form").hidden = Boolean(mask);
+    if (!mask) {
+      $("player-name").value = leaderboard.name;
+      $("player-name").focus({ preventScroll: true });
+    }
+    refreshBoard();
+  }
+  $("submit-form").onsubmit = async (event) => {
+    event.preventDefault();
+    if (!lastResult || mask) return;
+    $("submit").disabled = true;
+    $("submit-status").textContent = "Saving…";
+    const outcome = await leaderboard.submit(lastResult, $("player-name").value);
+    const mine = { ...lastResult, name: leaderboard.name };
+    renderBoard(outcome, mine);
+    $("submit-status").textContent =
+      outcome.scope === "global"
+        ? `Saved. You are #${outcome.rank.toLocaleString()} in the world.`
+        : `The leaderboard is unreachable (${outcome.error}). Saved on this device instead.`;
+  };
   async function loadDemo() {
-    pause();
     const token = ++loadId;
-    loading = true;
-    $("play").disabled = $("view").disabled = $("reset").disabled = true;
-    $("statusText").textContent =
-      "Loading the human brain vessel segmentation…";
+    showMenu("loading");
+    $("hint").textContent = "Loading the human brain vessel segmentation…";
     try {
       humanPromise ||= loadHumanData().catch((error) => {
         humanPromise = null;
@@ -449,6 +481,12 @@ function boot() {
       const overviewMesh = new THREE.Mesh(human.geometry, vesselMaterial);
       overviewMesh.name = "overview-surface";
       overviewMesh.userData.sharedAsset = true;
+      if (human.context) {
+        const contextMesh = new THREE.Mesh(human.context, contextMaterial);
+        contextMesh.name = "overview-surface";
+        contextMesh.userData.sharedAsset = true;
+        vessels.add(contextMesh);
+      }
       const detail = new THREE.Group();
       detail.name = "tunnel-surface";
       for (const geometry of human.chunks) {
@@ -457,85 +495,37 @@ function boot() {
         detail.add(mesh);
       }
       vessels.add(overviewMesh, detail);
-      loading = false;
-      $("source-label").textContent =
-        "Human brain · IXI322 MRA · Bizjak et al. · CC BY-NC-SA 4.0";
-      $("help").textContent =
-        "Steer directly with WASD / arrow keys, or drag in the tunnel. Up/down pitch; left/right turn. Hold Stop or Shift to brake while turning; hold Back or B to reverse. Set cruising speed below. Space pauses. Aim into an opening to choose a branch.";
+      $("source-label").firstChild.textContent =
+        "Human pial arteries · 7T TOF at 140 µm · Bollmann et al. 2022 · ";
       reset();
     } catch (error) {
       if (token !== loadId) return;
-      loading = false;
-      $("statusText").textContent = error.message;
+      showMenu("ready");
+      $("play").disabled = true;
+      $("play").textContent = "Brain data unavailable";
+      $("hint").textContent = error.message;
       $("load-status").textContent = error.message;
       $("dataset").open = true;
     }
   }
-  function updateControls() {
-    dirty = true;
-    $("reverse").hidden = false;
-    for (const [id, label, hint] of [
-      ["left", "←", "Turn left (A or left arrow)"],
-      ["right", "→", "Turn right (D or right arrow)"],
-      ["up", "↑", "Pitch up (W or up arrow)"],
-      ["down", "↓", "Pitch down (S or down arrow)"],
-      ["reverse", "Back", "Hold to reverse (B)"],
-    ]) {
-      $(id).textContent = label;
-      $(id).setAttribute("aria-label", hint);
-      $(id).title = hint;
-    }
-    $("location").textContent = "Free steering · WASD / arrows or drag";
-  }
-  function toggle() {
-    if (loading || (!network && !mask)) return;
-    if (won) reset();
-    running = !running;
-    if (running) race.resume(performance.now());
-    else race.pause(performance.now());
-    if (running) {
-      if (overview) setView(false);
-      started = true;
-      $("intro").hidden = true;
-      if (innerWidth < 701)
-        $("viewer").scrollIntoView({ block: "start", behavior: "smooth" });
-      $("ocean").focus({ preventScroll: true });
-    }
-    $("play").textContent = running
-      ? "Pause voyage"
-      : started
-        ? "Resume voyage"
-        : "Launch submarine";
-    $("mode").textContent = running
-      ? "EXPLORING"
-      : started
-        ? "PAUSED"
-        : "SONAR ONLINE";
-    $("statusText").textContent = running
-      ? "Follow the map to the gold destination. Avoid wall bumps."
-      : "Voyage paused.";
-  }
-  pause = () => {
-    if (running) toggle();
-    keys.clear();
-    dragX = dragY = 0;
+  $("play").onclick = () => {
+    if (state === "running") pause();
+    else start();
   };
-  $("play").onclick = toggle;
-  $("quick-play").onclick = toggle;
-  $("view").onclick = () => {
-    if (!loading && (network || mask)) setView(!overview);
-  };
+  $("quick-play").onclick = $("play").onclick;
   $("reset").onclick = () => {
-    if (!loading && (network || mask)) reset();
+    if (state === "loading" || (!network && !mask)) return;
+    reset();
+    start();
+  };
+  $("menu-button").onclick = () => {
+    if (state === "loading" || (!network && !mask)) return;
+    reset();
   };
   $("speed").oninput = () => {
     $("speed-value").textContent = `${$("speed").value}×`;
   };
   for (const [id, key] of [
-    ["left", "arrowleft"],
-    ["right", "arrowright"],
-    ["up", "arrowup"],
-    ["down", "arrowdown"],
     ["brake", "shift"],
     ["reverse", "b"],
   ]) {
@@ -551,8 +541,7 @@ function boot() {
     $(id).onkeydown = (e) => {
       if (e.key !== " " && e.key !== "Enter") return;
       e.preventDefault();
-      if (e.repeat) return;
-      keys.press(`button:${id}:${e.key}`, key);
+      if (!e.repeat) keys.press(`button:${id}:${e.key}`, key);
     };
     $(id).onkeyup = (e) => {
       if (e.key !== " " && e.key !== "Enter") return;
@@ -563,88 +552,114 @@ function boot() {
       keys.release(`button:${id}: `);
       keys.release(`button:${id}:Enter`);
     };
-    $(id).onclick = (e) => {
-      if (e.detail === 0) {
-        if (key) {
-          const source = `assistive:${id}`;
-          if (keys.sources.has(source)) keys.release(source);
-          else keys.press(source, key);
-        }
-      }
-    };
   }
+  const flightKeys = [
+    "arrowleft",
+    "arrowright",
+    "arrowup",
+    "arrowdown",
+    "a",
+    "d",
+    "w",
+    "s",
+    "shift",
+    "b",
+  ];
   window.addEventListener("keydown", (e) => {
     if (
       e.defaultPrevented ||
-      e.target.closest(
-        "input,select,textarea,summary,dialog,[contenteditable=true]",
-      )
+      e.target.closest("input,select,textarea,summary,[contenteditable=true]")
     )
       return;
-    // Preserve native Enter/Space activation, but arrows still fly when a helm
-    // button has focus after a mouse click or keyboard navigation.
     if (e.target.closest("button") && (e.key === " " || e.key === "Enter"))
       return;
     const k = e.key.toLowerCase();
-    if (
-      [
-        "arrowleft",
-        "arrowright",
-        "arrowup",
-        "arrowdown",
-        "a",
-        "d",
-        "w",
-        "s",
-        " ",
-        "shift",
-        "b",
-      ].includes(k)
-    ) {
+    if (k === "escape" && !e.repeat) {
+      if (running()) pause();
+      else if (state === "paused") start();
+      return;
+    }
+    if (k === " ") {
+      e.preventDefault();
+      if (!e.repeat && state !== "loading") {
+        if (running()) pause();
+        else start();
+      }
+      return;
+    }
+    if (flightKeys.includes(k)) {
       e.preventDefault();
       keys.press(`keyboard:${k}`, k);
-      if (!e.repeat) {
-        if (k === " ") toggle();
-      }
     }
   });
   window.addEventListener("keyup", (e) =>
     keys.release(`keyboard:${e.key.toLowerCase()}`),
   );
-  window.addEventListener("blur", () => pause());
+  window.addEventListener("blur", pause);
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pause();
   });
-  let drag = null;
-  $("ocean").addEventListener("pointerdown", (e) => {
-    if (overview || !running) return;
-    $("ocean").focus({ preventScroll: true });
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
-    $("ocean").setPointerCapture(e.pointerId);
+  // Mouse: the pointer's offset from the screen centre is the aim. Touch or a
+  // held button: a floating joystick anchored where the drag began.
+  const stickRadius = 56;
+  function aimRadius() {
+    return Math.min(ocean.clientWidth, ocean.clientHeight) * 0.42;
+  }
+  ocean.addEventListener("pointermove", (e) => {
+    if (!running() || overview) return;
+    if (stick.pointer === e.pointerId) {
+      const dx = e.clientX - stick.x;
+      const dy = e.clientY - stick.y;
+      const scale = Math.min(1, stickRadius / (Math.hypot(dx, dy) || 1));
+      Object.assign(stick, aimFromOffset(dx, dy, stickRadius, 0.1));
+      $("stick").firstElementChild.style.transform =
+        `translate(${dx * scale}px, ${dy * scale}px)`;
+      return;
+    }
+    if (e.pointerType !== "mouse" || stick.pointer !== null) return;
+    const rect = ocean.getBoundingClientRect();
+    Object.assign(
+      aim,
+      aimFromOffset(
+        e.clientX - (rect.left + rect.width / 2),
+        e.clientY - (rect.top + rect.height / 2),
+        aimRadius(),
+      ),
+    );
   });
-  $("ocean").addEventListener("pointermove", (e) => {
-    if (!drag || drag.id !== e.pointerId) return;
-    const dx = e.clientX - drag.x,
-      dy = e.clientY - drag.y;
-    dragX += dx * 0.006;
-    dragY -= dy * 0.006;
-    drag.x = e.clientX;
-    drag.y = e.clientY;
+  ocean.addEventListener("pointerleave", () => {
+    aim.yaw = aim.pitch = 0;
+  });
+  ocean.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch") document.body.classList.add("is-touch");
+    if (!running() || overview || stick.pointer !== null) return;
+    e.preventDefault();
+    ocean.focus({ preventScroll: true });
+    ocean.setPointerCapture(e.pointerId);
+    stick.pointer = e.pointerId;
+    stick.x = e.clientX;
+    stick.y = e.clientY;
+    stick.yaw = stick.pitch = 0;
+    aim.yaw = aim.pitch = 0;
+    $("stick").style.left = `${e.clientX}px`;
+    $("stick").style.top = `${e.clientY}px`;
+    $("stick").firstElementChild.style.transform = "";
+    $("stick").hidden = false;
   });
   for (const event of ["pointerup", "pointercancel", "lostpointercapture"])
-    $("ocean").addEventListener(event, () => {
-      drag = null;
+    ocean.addEventListener(event, (e) => {
+      if (stick.pointer !== e.pointerId) return;
+      stick.pointer = null;
+      stick.yaw = stick.pitch = 0;
+      $("stick").hidden = true;
     });
-  let worker = null,
-    loadId = 0;
+  let worker = null;
+  let loadId = 0;
   function cancelLoad() {
     loadId++;
     worker?.terminate();
     worker = null;
-    loading = false;
     $("mask").disabled = false;
-    $("play").disabled = !network && !mask;
-    $("reset").disabled = !network && !mask;
   }
   $("demo").onclick = () => {
     cancelLoad();
@@ -655,15 +670,12 @@ function boot() {
   $("mask").onchange = async () => {
     const file = $("mask").files[0];
     if (!file) return;
-    pause();
     cancelLoad();
     const token = loadId;
-    loading = true;
-    $("play").disabled = true;
-    $("reset").disabled = true;
+    const hadData = Boolean(network || mask);
+    showMenu("loading");
     $("mask").disabled = true;
     $("load-status").textContent = "Building your vessel surface…";
-    $("statusText").textContent = "Loading segmentation…";
     try {
       if (file.size > 128 * 1024 * 1024)
         throw new Error("Choose a file smaller than 128 MB.");
@@ -700,7 +712,6 @@ function boot() {
           "Surface is too complex for this game. Try a smaller vessel mask.",
         );
       }
-      // Build the guard in world units, using only emitted marching-cubes faces.
       const count = surface.geometry.drawRange.count;
       const collisionGeometry = new THREE.BufferGeometry();
       collisionGeometry.setAttribute(
@@ -719,17 +730,15 @@ function boot() {
       clear(vessels);
       vessels.add(surface);
       mask = result;
+      $("source-label").firstChild.textContent = `Local mask: ${file.name} · `;
+      $("load-status").textContent = `Loaded ${result.voxels.toLocaleString()} game voxels in the largest connected vessel region.`;
       reset();
-      $("source-label").textContent = `Local mask: ${file.name}`;
-      $("load-status").textContent =
-        `Loaded ${result.voxels.toLocaleString()} game voxels in the largest connected vessel region.`;
-      $("help").textContent =
-        "Free swim: ← / → or A / D turn. ↑ / ↓ or W / S pitch up and down. The sub moves forward automatically; Space pauses. Drag to steer. Hold Stop or Shift to brake while turning; hold Back or B to reverse away from a wall. Restart returns to the entry point.";
+      $("dataset").open = true;
     } catch (error) {
       if (token === loadId) {
         $("load-status").textContent = error.message;
-        $("statusText").textContent =
-          "Mask could not load. Your previous network is still available.";
+        if (hadData) reset();
+        $("dataset").open = true;
       }
     } finally {
       if (token === loadId) cancelLoad();
@@ -737,46 +746,65 @@ function boot() {
   };
   function resize() {
     dirty = true;
-    const { width, height } = $("viewer").getBoundingClientRect();
+    const width = ocean.clientWidth;
+    const height = ocean.clientHeight;
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    frameOverview();
   }
-  new ResizeObserver(resize).observe($("viewer"));
-  $("ocean").addEventListener("webglcontextlost", (e) => {
+  new ResizeObserver(resize).observe(ocean);
+  ocean.addEventListener("webglcontextlost", (e) => {
     e.preventDefault();
     pause();
     $("play").disabled = true;
-    $("statusText").textContent =
+    $("hint").textContent =
       "Graphics connection lost. Reload the page to restart.";
   });
   loadDemo();
   resize();
-  let last = 0,
-    frames = 0;
+  let last = 0;
+  let frames = 0;
   renderer.setAnimationLoop((time) => {
     const dt = Math.min((time - last) / 1000, 0.08);
     last = time;
-    if (running) {
+    if (running()) {
       race.tick(performance.now());
-      const volume = mask || human.volume;
-      const horizontal =
-        (keys.has("arrowright") || keys.has("d") ? 1 : 0) -
-        (keys.has("arrowleft") || keys.has("a") ? 1 : 0);
-      const vertical =
-        (keys.has("arrowup") || keys.has("w") ? 1 : 0) -
-        (keys.has("arrowdown") || keys.has("s") ? 1 : 0);
-      steer(
+      const volume = volumeOf();
+      const unit = Math.min(...volume.scale);
+      const radius = lumenRadius(volume, player);
+      const braking = keys.has("shift");
+      const reversing = keys.has("b");
+      const playerDemand = {
+        yaw:
+          (keys.has("arrowright") || keys.has("d") ? 1 : 0) -
+          (keys.has("arrowleft") || keys.has("a") ? 1 : 0) +
+          aim.yaw +
+          stick.yaw,
+        pitch:
+          (keys.has("arrowup") || keys.has("w") ? 1 : 0) -
+          (keys.has("arrowdown") || keys.has("s") ? 1 : 0) +
+          aim.pitch +
+          stick.pitch,
+      };
+      const probe = probeLumen(
+        volume,
+        player,
         direction,
         swimUp,
-        horizontal * dt * 1.5 + dragX,
-        vertical * dt * 1.5 + dragY,
+        Math.max(unit * 4, radius * 6),
       );
-      dragX = dragY = 0;
-      let speed =
-        Number($("speed").value) * (mask ? Math.min(...mask.scale) * 2 : 1.5);
-      if (keys.has("shift")) speed = 0;
-      if (keys.has("b")) speed *= -0.7;
+      const assist =
+        braking || reversing ? { yaw: 0, pitch: 0 } : assistDemand(probe);
+      const demand = combineDemand(playerDemand, assist, 0.6);
+      const turn = steering.update(demand.yaw, demand.pitch, dt);
+      steer(direction, swimUp, turn.yaw, turn.pitch);
+      level(direction, swimUp, dt);
+      // Cruise at six voxels per second so thin, high-resolution vessels are
+      // as navigable as coarse ones.
+      let speed = Number($("speed").value) * unit * (mask ? 2 : 6);
+      if (reversing) speed *= -0.7;
+      else speed *= throttle(probe);
+      if (braking) speed = 0;
       const next = swim(
         volume,
         player,
@@ -786,11 +814,15 @@ function boot() {
       race.movement(Math.abs(dt * speed), moved);
       travel += moved;
       player.copy(next);
-      $("mode").textContent = keys.has("shift")
-        ? "BRAKING · STEER TO AIM"
-        : Math.abs(speed) > 0 && moved < Math.abs(speed * dt) * 0.1
-          ? "WALL · TURN OR REVERSE"
-          : "EXPLORING";
+      blocked = Math.abs(speed) > 0 && moved < Math.abs(speed * dt) * 0.1;
+      if (frames % 10 === 0)
+        $("hint").textContent = braking
+          ? "Braking · steer to aim, release to go"
+          : blocked
+            ? "Wall · turn or hold Back to reverse"
+            : coarse
+              ? "Drag anywhere to steer · hold Stop or Back"
+              : "Aim with the mouse or WASD · Shift brakes · Space pauses";
       sub.quaternion.slerp(
         new THREE.Quaternion().setFromUnitVectors(
           new THREE.Vector3(0, 0, 1),
@@ -803,51 +835,21 @@ function boot() {
         target &&
         player.distanceTo(target) <= targetRadius &&
         clearSight(volume, player, target)
-      ) {
-        const result = race.finish(performance.now());
-        won = true;
-        running = false;
-        keys.clear();
-        $("play").textContent = "Race again";
-        $("mode").textContent = "DESTINATION REACHED";
-        const message = `${mask ? "Practice complete" : `${result.points.toLocaleString()} points`} · ${timeLabel(result.seconds)} · ${result.bumps} wall bumps`;
-        $("run-result").textContent = message;
-        $("run-result").hidden = false;
-        $("statusText").textContent = message;
-        if (!mask) {
-          const saved = saveScore(scoreStorage, result);
-          $("score-storage").textContent = saved
-            ? "Best five completed runs, saved on this device. Imported masks are practice only."
-            : "Browser storage is unavailable. This result could not be saved.";
-          showScores();
-          $("highscores").open = true;
-        }
-      }
+      )
+        finish();
+      else updateTunnel(dt, radius);
+      dirty = true;
+    } else if (overview) {
+      orbit.update();
+      sub.position.copy(player);
     }
-    $("score").textContent = timeLabel(race.seconds);
+    $("score").textContent = formatTime(race.seconds);
     $("bumps").textContent = `${race.bumps} bump${race.bumps === 1 ? "" : "s"}`;
-    if (target) {
+    if (target && !$("navigation-map").hidden) {
       navigationMap.draw(player, direction);
       const units = mask ? "units" : "mm";
       $("target-distance").textContent =
-        `${player.distanceTo(target).toFixed(1)} ${units} to target · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
-      $("map").setAttribute(
-        "aria-label",
-        `Vessel map. ${$("target-distance").textContent}. Cyan arrow: you. Gold diamond: destination.`,
-      );
-    }
-    if (!overview && (mask || human)) {
-      const before = camera.position.clone();
-      const rotation = camera.quaternion.clone();
-      updateTunnel(dt);
-      if (
-        before.distanceTo(camera.position) > 0.005 ||
-        rotation.angleTo(camera.quaternion) > 0.0001
-      )
-        dirty = true;
-    } else {
-      orbit.update();
-      sub.position.copy(player);
+        `${player.distanceTo(target).toFixed(1)} ${units} away · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
     }
     for (const b of beacons.children) {
       b.userData.baseScale ??= b.scale.x;
@@ -861,52 +863,30 @@ function boot() {
       );
       b.lookAt(camera.position);
     }
-    if (++frames % 12 === 0)
-      $("distance").textContent = `${Math.floor(travel)} ${
-        mask ? "units" : "mm"
-      } traveled`;
-    if (dirty || running) {
+    if (dirty) {
       renderer.render(scene, camera);
       dirty = false;
     }
+    frames++;
     // Read-only telemetry for accessible integrations and browser verification.
-    $("quick-play").textContent = running
-      ? "Ⅱ"
-      : started && !won
-        ? "▶"
-        : "Dive";
-    $("quick-play").disabled = loading;
-    $("ocean").dataset.state = won
-      ? "complete"
-      : running
-        ? "running"
-        : started
-          ? "paused"
-          : "ready";
-    $("ocean").dataset.distance = travel.toFixed(2);
-    $("ocean").dataset.source = mask
-      ? "local-mask"
-      : human
-        ? "IXI322-human-MRA"
-        : "loading";
-    $("ocean").dataset.position = JSON.stringify(player.toArray());
-    $("ocean").dataset.heading = JSON.stringify(direction.toArray());
-    $("ocean").dataset.elapsed = race.seconds.toFixed(3);
-    $("ocean").dataset.bumps = String(race.bumps);
-    $("ocean").dataset.target = target ? JSON.stringify(target.toArray()) : "";
-    $("ocean").dataset.held = [...keys].join(",");
+    const data = ocean.dataset;
+    data.state = state;
+    data.distance = travel.toFixed(2);
+    data.source = mask ? "local-mask" : human ? "human-pial-arteries" : "loading";
+    data.position = JSON.stringify(player.toArray());
+    data.heading = JSON.stringify(direction.toArray());
+    data.up = JSON.stringify(swimUp.toArray());
+    data.elapsed = race.seconds.toFixed(3);
+    data.bumps = String(race.bumps);
+    data.target = target ? JSON.stringify(target.toArray()) : "";
+    data.held = [...keys].join(",");
     for (const [id, names] of [
-      ["left", ["arrowleft", "a"]],
-      ["right", ["arrowright", "d"]],
-      ["up", ["arrowup", "w"]],
-      ["down", ["arrowdown", "s"]],
       ["brake", ["shift"]],
       ["reverse", ["b"]],
-    ]) {
+    ])
       $(id).setAttribute(
         "aria-pressed",
         String(names.some((key) => keys.has(key))),
       );
-    }
   });
 }

@@ -192,3 +192,17 @@ test('custom element hosts retain block layout in the shared stylesheet', async 
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /nd-console,\s*nd-viewer-toolbar,\s*nd-file-field,\s*nd-result-list,\s*nd-example-selector\s*\{\s*display: block;/);
 });
+
+test('raster panels, slice controls and file tables fit the shared workspace', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /canvas\.nd-raster-slice\s*\{[^}]*object-fit:\s*contain/);
+  assert.match(css, /\.nd-slice-controls\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.nd-table-scroll\s*\{[^}]*overflow-x:\s*auto/);
+  assert.match(css, /\.nd-imaging-workspace \[hidden\]\s*\{[^}]*display:\s*none !important/);
+});
+
+test('primary and selected buttons retain their shared visual priority', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-imaging-controls \.nd-section-content \.nd-btn-primary\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
+  assert.match(css, /\.nd-btn-secondary\[aria-pressed="true"\]\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
+});

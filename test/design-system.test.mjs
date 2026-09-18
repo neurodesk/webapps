@@ -82,7 +82,7 @@ test('every app on the imaging-workspace shell imports the shared workspace styl
   for (const app of shellApps) {
     const sources = await collect(join(repoRoot, 'apps', app.id), ['.js', '.ts', '.css', '.html']);
     const texts = await Promise.all(sources.map((path) => readFile(path, 'utf8')));
-    assert.ok(texts.some((text) => text.includes('@neurodesk/webapp-components/styles/imaging-workspace.css')),
+    assert.ok(texts.some((text) => /@neurodesk\/webapp-components\/styles\/imaging-workspace\.css|vendor\/webapp-components\/src\/styles\/imaging-workspace\.css/.test(text)),
       `${app.id}: import @neurodesk/webapp-components/styles/imaging-workspace.css`);
   }
 });
@@ -123,7 +123,7 @@ test('LEGACY_CSS_RATCHET only names apps that still exist on the shell', () => {
 const VOCABULARY_APPS = shellApps.filter((app) => !LEGACY_CSS_RATCHET.has(app.id));
 
 async function appHtml(app) {
-  const candidates = ['index.html', 'src/index.html'];
+  const candidates = ['index.html', 'src/index.html', 'web/index.html'];
   for (const candidate of candidates) {
     const path = join(repoRoot, 'apps', app.id, candidate);
     try { await stat(path); return { path: relative(repoRoot, path), html: await readFile(path, 'utf8') }; } catch { /* next */ }
@@ -150,14 +150,14 @@ test('vocabulary apps build their interface from the shared classes', async () =
     check(/<button[^>]*id="[^"]+"[^>]*hidden>(About|Cite|Privacy|Standalone)<\/button>/.test(html), 'About/Cite/Privacy buttons are hidden and registered through controlsContract');
     check(/class="nd-viewer-canvas-wrapper"/.test(html), 'viewer canvas sits in .nd-viewer-canvas-wrapper');
     check(/class="nd-viewer-empty"/.test(html), 'viewer has a .nd-viewer-empty message before import');
-    check(/id="statusText" class="nd-status-text"/.test(html) && /<progress /.test(html), 'status footer uses .nd-status-text and a native progress element');
+    check(/id="statusText"\s+class="nd-status-text"/.test(html) && /<progress\s/.test(html), 'status footer uses .nd-status-text and a native progress element');
     check(!/<dialog/.test(html), 'dialogs come from createInfoDialog(), not app markup');
     check(!/style="/.test(html), 'no inline styles');
     for (const button of html.matchAll(/<button[^>]*>/g)) {
       if (/hidden/.test(button[0])) continue;
       check(/class="nd-/.test(button[0]), `${button[0].slice(0, 60)}… buttons use nd-btn classes`);
     }
-    const scripts = await collect(join(repoRoot, 'apps', app.id, 'src'), ['.js', '.ts']);
+    const scripts = await collect(join(repoRoot, 'apps', app.id), ['.js', '.ts']);
     const source = (await Promise.all(scripts.map((file) => readFile(file, 'utf8')))).join('\n');
     check(/createConsole\(/.test(source), 'technical log comes from createConsole()');
     check(/createInfoDialog\(/.test(source), 'information dialogs come from createInfoDialog()');

@@ -1,5 +1,11 @@
 # qsmbly
 
+## 0.27.20260918
+
+### Minor Changes
+
+- Sync QSMbly with upstream 6e01b15: update QSM.rs to 0.35.0 and qsmxt-config to 9.21.0, add threaded classical and lazy-loaded deep-learning WASM, HD-BET, signal-based mask refinement and reconstruction fixes. Preserve the shared shell and real brain example, and credit the upstream application in About.
+
 ## 0.26.20260918
 
 ### Patch Changes
@@ -13,6 +19,10 @@
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.0
+
+- Replace the example with real 3 T, 1 mm brain magnitude and phase MRI from the QSMxT OSF dataset, mirrored at a pinned Hugging Face revision with acquisition metadata and provenance.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
 
 ## 0.26.20260916
 

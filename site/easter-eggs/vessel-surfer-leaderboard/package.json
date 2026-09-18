@@ -1,0 +1,19 @@
+{
+  "name": "@neurodesk/vessel-surfer-leaderboard",
+  "version": "0.1.20260918",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker and D1 database behind the Vessel Surfer global leaderboard.",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "test": "node --test test/*.test.js",
+    "lint": "eslint .",
+    "ensure-database": "node scripts/ensure-database.mjs",
+    "migrate": "wrangler d1 migrations apply vessel-surfer-leaderboard --remote",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "wrangler": "^3.0.0"
+  }
+}

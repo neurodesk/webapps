@@ -24,7 +24,7 @@ test('selecting the example imports its complete scientific inputs without runni
   const { options, loaded } = await loadAdapter();
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
-  assert.equal(loaded.length, 16);
+  assert.equal(loaded.length, 4);
   assert.deepEqual(loaded.map(file => file.name), examples[0].files.map(file => file.name));
 });
 
@@ -45,5 +45,5 @@ test('failed download leaves inputs untouched and can be retried', async () => {
   assert.deepEqual(loaded, []);
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
-  assert.equal(loaded.length, 16);
+  assert.equal(loaded.length, 4);
 });

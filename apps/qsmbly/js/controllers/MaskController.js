@@ -5,7 +5,7 @@
  * threshold detection, and BET integration.
  */
 
-import { computeOtsuThreshold, dilateMask3D, erodeMask3D, fillHoles3D } from '@neurodesk/webapp-components/volume';
+import { computeOtsuThreshold } from '@neurodesk/webapp-components/volume';
 import { createMaskNifti, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io';
 
 export class MaskController {
@@ -16,6 +16,8 @@ export class MaskController {
    * @param {Function} options.updateOutput - Logging callback
    * @param {Function} options.setProgress - Progress callback
    * @param {Function} options.initializeWorker - Worker initialization function
+   * @param {Function} options.beginCancellableJob - Marks a worker job cancellable; takes an
+   *   onCancel callback and returns a release function to call when the job finishes
    * @param {Object} options.config - Reference to QSMConfig
    */
   constructor(options) {
@@ -24,6 +26,7 @@ export class MaskController {
     this.updateOutput = options.updateOutput;
     this.setProgress = options.setProgress;
     this.initializeWorker = options.initializeWorker;
+    this.beginCancellableJob = options.beginCancellableJob;
     this.config = options.config;
 
     // Mask state
@@ -48,7 +51,15 @@ export class MaskController {
     this.drawingEnabled = false;
     this.brushMode = 'add';
     this.brushSize = this.config?.MASK_CONFIG?.defaultBrushSize || 3;
+    this.brush3D = false;
+    this.brushShape = 'square';
     this.savedCrosshairWidth = this.config?.VIEWER_CONFIG?.crosshairWidth || 1;
+
+    // Brush override/preview internals
+    this._origDrawPt = null;
+    this._brushPreviewEls = [];
+    this._onBrushMove = null;
+    this._onBrushLeave = null;
   }
 
   // ==================== State Accessors ====================
@@ -67,6 +78,33 @@ export class MaskController {
 
   getVoxelSize() {
     return this.voxelSize;
+  }
+
+  /**
+   * Derive `maskDims` / `voxelSize` from the prepared NIfTI header.
+   *
+   * Prepare stores the header bytes but does not parse the geometry — only the threshold
+   * preview did, inline. Anything that runs before a preview exists (HD-BET, which generates a
+   * mask from scratch) needs the same numbers, so both read them from here.
+   *
+   * @returns {boolean} true if geometry is available
+   */
+  ensureGeometry() {
+    if (this.maskDims && this.voxelSize) return true;
+    if (!this.magnitudeFileBytes || this.magnitudeFileBytes.byteLength < 348) return false;
+    const h = new DataView(this.magnitudeFileBytes);
+    const nx = h.getInt16(42, true);   // dim[1..3]
+    const ny = h.getInt16(44, true);
+    const nz = h.getInt16(46, true);
+    if (!(nx > 0 && ny > 0 && nz > 0)) return false;
+    this.maskDims = [nx, ny, nz];
+    // pixdim[1..3]; a zero pixdim means "unset" in NIfTI, so fall back to isotropic 1 mm.
+    this.voxelSize = [
+      h.getFloat32(80, true) || 1,
+      h.getFloat32(84, true) || 1,
+      h.getFloat32(88, true) || 1,
+    ];
+    return true;
   }
 
   getMaskThreshold() {
@@ -164,6 +202,11 @@ export class MaskController {
       this.setProgress(0.7, 'Caching data...');
       this.preparedMagnitudeData = magnitudeData;
       this.magnitudeData = magnitudeData;
+      // Remember what the prepared image is, and keep the magnitude files, so the signal-dependent
+      // mask ops can get a real magnitude even when the mask was built from phase quality.
+      this.maskInputSource = maskPrepSettings.source;
+      this.magnitudeFilesForSignal = magnitudeFiles;
+      this.signalMagnitudeData = maskPrepSettings.source === 'phase_quality' ? null : magnitudeData;
 
       // Calculate max
       let max = -Infinity;
@@ -574,18 +617,10 @@ export class MaskController {
       const threshold = (this.maskThreshold / 100) * this.magnitudeMax;
       const totalVoxels = this.magnitudeData.length;
 
-      // Extract dimensions from NIfTI header
-      const srcView = new DataView(this.magnitudeFileBytes);
-      const nx = srcView.getInt16(42, true);  // dim[1]
-      const ny = srcView.getInt16(44, true);  // dim[2]
-      const nz = srcView.getInt16(46, true);  // dim[3]
-      this.maskDims = [nx, ny, nz];
-
-      // Extract voxel size from NIfTI header (pixdim[1-3] at offsets 80, 84, 88)
-      const dx = srcView.getFloat32(80, true) || 1;
-      const dy = srcView.getFloat32(84, true) || 1;
-      const dz = srcView.getFloat32(88, true) || 1;
-      this.voxelSize = [dx, dy, dz];
+      // Geometry from the NIfTI header (shared with HD-BET, which runs before any preview).
+      this.maskDims = null;
+      this.voxelSize = null;
+      this.ensureGeometry();
 
       // Create mask data from threshold
       const maskData = new Float32Array(totalVoxels);
@@ -702,23 +737,182 @@ export class MaskController {
 
   // ==================== Morphological Operations ====================
 
-  // 3D morphological erosion - delegates to imported module
-  erodeMask3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = erodeMask3D(this.currentMaskData, this.maskDims);
+  /**
+   * The magnitude image the signal-dependent ops need (BET, HD-BET, signal-gated erosion).
+   *
+   * The *mask input* may be the phase-quality map, which those ops must not gate on — qsm-core
+   * keeps the two separate and qsmxt always hands it the magnitude, so we do the same: reuse the
+   * prepared image when it is a magnitude, otherwise combine the magnitude echoes (RSS) once and
+   * cache it. Returns null when no magnitude was loaded at all.
+   * @returns {Promise<Float64Array|null>}
+   */
+  async getSignalMagnitude() {
+    if (this.signalMagnitudeData) return this.signalMagnitudeData;
+    if (this.maskInputSource && this.maskInputSource !== 'phase_quality' && this.preparedMagnitudeData) {
+      this.signalMagnitudeData = this.preparedMagnitudeData;
+    } else if (this.magnitudeFilesForSignal?.length) {
+      this.updateOutput('Combining magnitude echoes (RSS) for the signal-dependent mask op...');
+      this.signalMagnitudeData = await this.combineMagnitudeRSS(this.magnitudeFilesForSignal);
+    } else {
+      return null;
+    }
+    return this.signalMagnitudeData;
   }
 
-  // 3D morphological dilation - delegates to imported module
-  dilateMask3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = dilateMask3D(this.currentMaskData, this.maskDims);
+  /**
+   * Apply mask operations through qsm-core (the same code the qsmxt pipeline runs), so a mask
+   * refined here matches the `--mask ...` section we print. The wasm lives in the worker (as for
+   * BET), so this is a round-trip.
+   * @param {string} ops - comma-separated qsmxt mask ops, e.g. "erode:2" or "signal-erode"
+   * @returns {Promise<boolean>} true if the mask was updated
+   */
+  async applyMaskOps(ops) {
+    // Say which precondition failed. These used to return false in silence, so a refinement that
+    // quietly did nothing was indistinguishable from one that ran.
+    if (!ops) return false;
+    if (!this.currentMaskData) {
+      this.updateOutput(`Cannot apply "${ops}": no mask yet — create one with Threshold, BET or HD-BET first.`);
+      return false;
+    }
+    if (!this.maskDims) {
+      this.updateOutput(`Cannot apply "${ops}": the image geometry is unknown — run Prepare first.`);
+      return false;
+    }
+    // Only the signal-dependent ops need the magnitude; don't combine echoes otherwise.
+    let magnitude = [];
+    if (/(^|,)\s*(signal-erode|bet|hd-bet)/.test(ops)) {
+      const mag = await this.getSignalMagnitude();
+      if (!mag) {
+        this.updateOutput(`Cannot apply "${ops}": it needs the magnitude image, and none is loaded.`);
+        return false;
+      }
+      magnitude = mag;
+    }
+    await this.initializeWorker();
+    const worker = this.getWorker();
+    const mask = Uint8Array.from(this.currentMaskData, (v) => (v > 0 ? 1 : 0));
+    const magnitudeArr = Float64Array.from(magnitude);
+    const inputData = Float64Array.from(this.preparedMagnitudeData || []);
+    return new Promise((resolve) => {
+      const unsubscribe = worker.subscribe((message) => {
+        const { type, ...data } = message;
+        if (type === 'applyMaskOpsComplete') {
+          unsubscribe();
+          this.currentMaskData = data.maskData;
+          resolve(true);
+        } else if (type === 'applyMaskOpsError') {
+          unsubscribe();
+          this.updateOutput(`Mask op "${ops}" failed: ${data.message}`);
+          resolve(false);
+        }
+      });
+      worker.send({
+        type: 'applyMaskOps',
+        data: {
+          mask, ops, inputData, magnitude: magnitudeArr,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize || [1, 1, 1],
+        },
+      }, [mask.buffer, magnitudeArr.buffer, inputData.buffer]);
+    });
   }
 
-  // Fill holes in 3D mask - delegates to imported module
-  fillHoles3D() {
-    if (!this.currentMaskData || !this.maskDims) return;
-    this.currentMaskData = fillHoles3D(this.currentMaskData, this.maskDims);
+  /**
+   * HD-BET deep-learning brain extraction. A mask *generator*: it replaces the current mask,
+   * and refinements applied afterwards go through {@link applyMaskOps} as usual.
+   *
+   * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 123 MB of weights
+   * (IndexedDB-cached afterwards).
+   *
+   * @param {{patch?: number[], tileStep?: number, tta?: boolean}} [options] - patch defaults to
+   *   the browser-safe 128x128x64 (see the settings modal for why the native 192x192x96 will not
+   *   fit); `tileStep` is the sliding-window stride as a fraction of the patch, in (0, 1].
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runHdBetMask(options = {}) {
+    const patch = options.patch || [128, 128, 64];
+    const tileStep = options.tileStep ?? 0.5;
+    const tta = !!options.tta;
+
+    if (!this.ensureGeometry()) {
+      this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
+      return false;
+    }
+    const magnitude = await this.getSignalMagnitude();
+    if (!magnitude) {
+      this.updateOutput('HD-BET needs the magnitude image, and none is loaded.');
+      return false;
+    }
+
+    // BET and HD-BET are alternative generators; neither uses the threshold slider.
+    this.setThresholdSliderEnabled(false);
+
+    // A previous cancel terminates and nulls the worker, so make sure there is a live one.
+    await this.initializeWorker?.();
+
+    const worker = this.getWorker();
+    const magnitudeArr = Float64Array.from(magnitude);
+    return new Promise((resolve) => {
+      let release = () => {};
+      let settled = false;
+      // Declared before `settle` so it can detach the listener; assigned just below.
+      let unsubscribe = () => {};
+      const settle = (value) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        release();
+        resolve(value);
+      };
+
+      unsubscribe = worker.subscribe((message) => {
+        const { type, ...data } = message;
+        switch (type) {
+          case 'hdBetProgress':
+            this.setProgress(data.value, data.text);
+            break;
+          case 'hdBetLog':
+            this.updateOutput(data.message);
+            break;
+          case 'hdBetComplete':
+            this.currentMaskData = data.maskData;
+            this.originalMaskData = data.maskData.slice();
+            settle(true);
+            break;
+          case 'hdBetError':
+            this.updateOutput(`HD-BET failed: ${data.message}`);
+            this.setProgress(0, 'HD-BET failed');
+            settle(false);
+            break;
+        }
+      });
+
+      // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
+      release = this.beginCancellableJob?.(() => {
+        this.updateOutput('HD-BET cancelled.');
+        this.setProgress(0, 'Cancelled');
+        settle(false);
+      }) || (() => {});
+
+      worker.send({
+        type: 'hdBet',
+        data: {
+          magnitude: magnitudeArr,
+          dims: this.maskDims,
+          voxelSize: this.voxelSize,
+          patch,
+          tileStep,
+          tta,
+        },
+      }, [magnitudeArr.buffer]);
+    });
   }
+
+  // Mask refinements — all go through qsm-core via applyMaskOps.
+  async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
+  async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
+  async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
+  async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
 
   // Clear mask completely
   async clearMask() {
@@ -799,6 +993,9 @@ export class MaskController {
       addBtn.classList.add('active');
       removeBtn.classList.remove('active');
 
+      this._installBrushOverride();
+      this._setupBrushPreview();
+
       this.updateOutput("Draw mode: DRAG to add, switch to Remove & drag to erase. Click Apply when done.");
     } else {
       // Disable drawing
@@ -814,6 +1011,9 @@ export class MaskController {
       if (this.savedCrosshairWidth !== undefined) {
         this.nv.opts.crosshairWidth = this.savedCrosshairWidth;
       }
+
+      this._removeBrushOverride();
+      this._teardownBrushPreview();
 
       this.nv.setDrawingEnabled(false);
       this.nv.closeDrawing();
@@ -850,6 +1050,225 @@ export class MaskController {
       this.nv.setPenValue(this.brushMode === 'add' ? 1 : 0, false);
       this.nv.opts.penSize = this.brushSize;
     }
+  }
+
+  // Toggle 3D brush (paint through neighbouring slices instead of in-plane only)
+  setBrush3D(enabled) {
+    this.brush3D = enabled;
+    if (this.drawingEnabled) {
+      this.updateOutput(enabled
+        ? "3D brush on: strokes paint through neighbouring slices"
+        : "3D brush off: strokes paint the current slice only");
+    }
+  }
+
+  // Set brush shape: 'square' (cube when 3D) or 'circle' (sphere when 3D)
+  setBrushShape(shape) {
+    this.brushShape = shape;
+    document.getElementById('brushShapeSquare')?.classList.toggle('active', shape === 'square');
+    document.getElementById('brushShapeCircle')?.classList.toggle('active', shape === 'circle');
+  }
+
+  // NiiVue's pen paints a 2D square in the current slice plane. Every stroke
+  // (initial click and Bresenham drag lines) funnels through nv.drawPt, so
+  // wrapping it lets the same pen paint the other footprints: in-plane circle,
+  // cube, or sphere.
+  _installBrushOverride() {
+    if (this._origDrawPt) return;
+    const nv = this.nv;
+    this._origDrawPt = nv.drawPt.bind(nv);
+    nv.drawPt = (x, y, z, penValue, drawBitmap = null) => {
+      if (!this.brush3D && this.brushShape === 'square') {
+        return this._origDrawPt(x, y, z, penValue, drawBitmap);
+      }
+      const bitmap = drawBitmap || nv.drawBitmap;
+      if (!bitmap || !nv.back?.dims) return;
+      const dx = nv.back.dims[1];
+      const dy = nv.back.dims[2];
+      const dz = nv.back.dims[3];
+      x = Math.min(Math.max(x, 0), dx - 1);
+      y = Math.min(Math.max(y, 0), dy - 1);
+      z = Math.min(Math.max(z, 0), dz - 1);
+      const half = Math.floor((nv.opts.penSize || 1) / 2);
+      const r2 = (half + 0.5) * (half + 0.5);
+      const isCircle = this.brushShape === 'circle';
+      // Pen-plane normal in RAS voxel axes: axial→z(2), coronal→y(1), sagittal→x(0)
+      const pen = nv.drawPenAxCorSag;
+      const normalAxis = pen >= 0 && pen <= 2 ? 2 - pen : 2;
+      for (let k = -half; k <= half; k++) {
+        if (!this.brush3D && normalAxis === 2 && k !== 0) continue;
+        const zk = z + k;
+        if (zk < 0 || zk >= dz) continue;
+        for (let j = -half; j <= half; j++) {
+          if (!this.brush3D && normalAxis === 1 && j !== 0) continue;
+          const yj = y + j;
+          if (yj < 0 || yj >= dy) continue;
+          for (let i = -half; i <= half; i++) {
+            if (!this.brush3D && normalAxis === 0 && i !== 0) continue;
+            const xi = x + i;
+            if (xi < 0 || xi >= dx) continue;
+            if (isCircle && i * i + j * j + k * k > r2) continue;
+            bitmap[xi + yj * dx + zk * dx * dy] = penValue;
+          }
+        }
+      }
+    };
+  }
+
+  _removeBrushOverride() {
+    if (this._origDrawPt) {
+      delete this.nv.drawPt;  // restore the prototype method
+      this._origDrawPt = null;
+    }
+  }
+
+  // ==================== Brush Preview ====================
+  // Hover cursor showing the exact voxel footprint the next stroke would paint,
+  // snapped to the voxel grid and projected onto every visible 2D slice tile
+  // (in multiplanar view the hovered voxel is outlined in all three planes).
+
+  _setupBrushPreview() {
+    const canvas = this.nv?.canvas;
+    if (!canvas || this._onBrushMove) return;
+    this._onBrushMove = (e) => this._updateBrushPreview(e);
+    this._onBrushLeave = () => this._hideBrushPreviews(0);
+    canvas.addEventListener('pointermove', this._onBrushMove);
+    canvas.addEventListener('pointerleave', this._onBrushLeave);
+  }
+
+  _teardownBrushPreview() {
+    const canvas = this.nv?.canvas;
+    if (canvas && this._onBrushMove) {
+      canvas.removeEventListener('pointermove', this._onBrushMove);
+      canvas.removeEventListener('pointerleave', this._onBrushLeave);
+    }
+    this._onBrushMove = null;
+    this._onBrushLeave = null;
+    this._brushPreviewEls.forEach((el) => el.remove());
+    this._brushPreviewEls = [];
+  }
+
+  _getPreviewEl(n) {
+    while (this._brushPreviewEls.length <= n) {
+      const el = document.createElement('div');
+      el.className = 'brushPreview';
+      el.style.cssText =
+        'position:absolute; pointer-events:none; display:none; z-index:10; ' +
+        'border:1.5px solid rgba(255,220,0,0.95); box-shadow:0 0 0 1px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(0,0,0,0.5);';
+      this.nv.canvas.parentElement.appendChild(el);
+      this._brushPreviewEls.push(el);
+    }
+    return this._brushPreviewEls[n];
+  }
+
+  _hideBrushPreviews(from = 0) {
+    for (let i = from; i < this._brushPreviewEls.length; i++) {
+      this._brushPreviewEls[i].style.display = 'none';
+    }
+  }
+
+  _updateBrushPreview(e) {
+    const nv = this.nv;
+    if (!nv?.back?.dims) return;
+    if (!this.drawingEnabled) { this._hideBrushPreviews(0); return; }
+
+    const rect = nv.canvas.getBoundingClientRect();
+    const dpr = nv.uiData?.dpr || window.devicePixelRatio || 1;
+    const x = (e.clientX - rect.left) * dpr;
+    const y = (e.clientY - rect.top) * dpr;
+
+    // Which slice tile is under the cursor? (NaN over 3D render / empty space)
+    const mm = nv.screenXY2mm(x, y);
+    if (isNaN(mm[0])) { this._hideBrushPreviews(0); return; }
+    const hoveredAxCorSag = nv.screenSlices[mm[3]].axCorSag;
+
+    const dims = nv.back.dims;
+    const toVox = (m) => {
+      const f = nv.mm2frac([m[0], m[1], m[2]]);
+      return [f[0] * dims[1] - 0.5, f[1] * dims[2] - 0.5, f[2] * dims[3] - 0.5];
+    };
+    // Voxel the stroke would centre on
+    const target = toVox(mm).map(Math.round);
+
+    // Footprint extent in voxels per RAS axis: the 2D pen spans one voxel
+    // along its plane normal (axial→z, coronal→y, sagittal→x); 3D spans all
+    const side = 2 * Math.floor(this.brushSize / 2) + 1;
+    const normalAxis = 2 - hoveredAxCorSag;
+    const extent = [0, 1, 2].map((ax) => (this.brush3D || ax !== normalAxis ? side : 1));
+
+    let shown = 0;
+    for (let s = 0; s < nv.screenSlices.length; s++) {
+      if (nv.screenSlices[s].axCorSag > 2) continue;
+      if (this._placePreviewOnTile(this._getPreviewEl(shown), s, target, extent, toVox, dpr)) {
+        shown++;
+      }
+    }
+    this._hideBrushPreviews(shown);
+  }
+
+  // Project the footprint outline onto slice tile s. Returns true if visible.
+  _placePreviewOnTile(el, s, target, extent, toVox, dpr) {
+    const nv = this.nv;
+    const ltwh = nv.screenSlices[s].leftTopWidthHeight;
+    const cx = ltwh[0] + ltwh[2] / 2;
+    const cy = ltwh[1] + ltwh[3] / 2;
+
+    // Sample the tile's affine screen→voxel mapping at its centre
+    const step = Math.max(4, Math.min(20, ltwh[2] * 0.25, ltwh[3] * 0.25));
+    const mmC = nv.screenXY2mm(cx, cy, s);
+    const mmH = nv.screenXY2mm(cx + step, cy, s);
+    const mmV = nv.screenXY2mm(cx, cy + step, s);
+    if (isNaN(mmC[0]) || isNaN(mmH[0]) || isNaN(mmV[0])) {
+      el.style.display = 'none';
+      return false;
+    }
+    const vC = toVox(mmC);
+    const vH = toVox(mmH);
+    const vV = toVox(mmV);
+    // Voxels-per-device-pixel vectors along screen X and Y
+    const hVec = [(vH[0] - vC[0]) / step, (vH[1] - vC[1]) / step, (vH[2] - vC[2]) / step];
+    const vVec = [(vV[0] - vC[0]) / step, (vV[1] - vC[1]) / step, (vV[2] - vC[2]) / step];
+
+    // Which RAS axis runs along each screen direction in this tile
+    const argmax = (v) => v.reduce((m, c, i) => (Math.abs(c) > Math.abs(v[m]) ? i : m), 0);
+    const axH = argmax(hVec);
+    const axV = argmax(vVec);
+    if (Math.abs(hVec[axH]) < 1e-6 || Math.abs(vVec[axV]) < 1e-6) {
+      el.style.display = 'none';
+      return false;
+    }
+
+    // Solve a*hVec + b*vVec ≈ (target - tile centre voxel) for the pixel
+    // offsets (a, b); least squares projects away the out-of-plane component
+    const d = [target[0] - vC[0], target[1] - vC[1], target[2] - vC[2]];
+    const dot = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+    const hh = dot(hVec, hVec);
+    const hv = dot(hVec, vVec);
+    const vv = dot(vVec, vVec);
+    const det = hh * vv - hv * hv;
+    if (Math.abs(det) < 1e-12) {
+      el.style.display = 'none';
+      return false;
+    }
+    const a = (dot(d, hVec) * vv - dot(d, vVec) * hv) / det;
+    const b = (dot(d, vVec) * hh - dot(d, hVec) * hv) / det;
+    const px = cx + a;
+    const py = cy + b;
+    if (px < ltwh[0] || px > ltwh[0] + ltwh[2] || py < ltwh[1] || py > ltwh[1] + ltwh[3]) {
+      el.style.display = 'none';
+      return false;
+    }
+
+    const w = extent[axH] / Math.abs(hVec[axH]) / dpr;
+    const h = extent[axV] / Math.abs(vVec[axV]) / dpr;
+    const round = this.brushShape === 'circle' && extent[axH] > 1 && extent[axV] > 1;
+    el.style.width = `${w}px`;
+    el.style.height = `${h}px`;
+    el.style.left = `${px / dpr - w / 2}px`;
+    el.style.top = `${py / dpr - h / 2}px`;
+    el.style.borderRadius = round ? '50%' : '2px';
+    el.style.display = 'block';
+    return true;
   }
 
   // Apply the drawing to the current mask
@@ -927,6 +1346,8 @@ export class MaskController {
 
       // Exit drawing mode and show the mask as overlay
       this.drawingEnabled = false;
+      this._removeBrushOverride();
+      this._teardownBrushPreview();
 
       // Update UI
       document.getElementById('enableDrawing')?.classList.remove('active');

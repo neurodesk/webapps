@@ -1,31 +1,45 @@
 # Vessel Surfer
 
-Pilot a small submarine through an enclosed 3D human vessel lumen and race to a marked destination. This is a private homepage easter egg, not a catalog app or standalone release. Tap the small footer diamond five times within four seconds between taps to open it.
+Pilot a small submarine through an enclosed 3D human vessel lumen and race to a marked destination. This is a homepage easter egg, not a catalog app or standalone release. The "Go surfing" link in the homepage footer opens it at `/surf/`.
 
 ## Real human brain data
 
-The default is **IXI322-IOP-0891**, a human brain MRA vessel segmentation published by Bizjak and colleagues in the [IXI vascular segmentation dataset](https://github.com/zbizjak/IXI-vascular-segmentation-Dataset/tree/8f5f632fd0567e8770b09acd9057bdbb1a2ac6b9). It replaces the generated network entirely. The derived density field, surface and 243-segment route graph are bundled at build time. The original NIfTI remains in the pinned Hugging Face dataset. No patient file is fetched from a third party during play.
+The default is the **pial arterial vasculature of Subject 02** from Bollmann and colleagues, *Imaging of the pial arterial vasculature of the human brain in vivo using high-resolution 7T time-of-flight angiography*, [eLife 2022;11:e71186](https://doi.org/10.7554/eLife.71186): a whole-brain 7T time-of-flight acquisition at 140 µm isotropic resolution with its artery segmentation, shared on OSF at [doi:10.17605/OSF.IO/NR6GC](https://doi.org/10.17605/OSF.IO/NR6GC). The derived density field, surface and route graph are bundled at build time. The original NIfTI is retained in the pinned Hugging Face dataset. No patient file is fetched from a third party during play.
 
-Source and derived data are **CC BY-NC-SA 4.0**. See [attribution](public/data/ATTRIBUTION.md) for authors, citations, license, source revision and processing changes. `public/data/ixi322.json` includes the original file checksum. The data is not covered by a more permissive software license.
+See [attribution](public/data/ATTRIBUTION.md) for the citation, source revision, checksum and processing changes. The OSF project does not declare a data license; the article is CC BY 4.0. `public/data/brain.json` includes the original file checksum.
 
-The conversion preserves native voxel spacing, reorients RAS coordinates for display, crops foreground bounds, and applies Gaussian smoothing at sigma 0.5 voxel before extracting the surface. Routes are extracted from the largest connected lumen. Links and smoothed samples are validated against the density field and refined against the actual rendered triangles with a 0.015 mm inward margin. Connections that fail continuous triangle containment are excluded from the derived graph used for spawning and beacon placement. Smaller disconnected regions remain visible in Network view. No vessel dilation, fabricated branches or gap bridging is used. Segmentation artifacts and acquisition resolution remain visible; this is a game rather than a diagnostic model.
+The conversion preserves native voxel spacing, reorients RAS coordinates for display, crops foreground bounds, and applies Gaussian smoothing at sigma 0.5 voxel before extracting the surface. The containment field and routes cover the largest connected arterial lumen at native resolution; the overview mesh adds the next largest components up to a voxel budget, and the remaining components appear as a half-resolution overview-only surface that is never used for collision. Links and smoothed samples are validated against the density field and refined against the actual rendered triangles with a 0.015 mm inward margin; branches too thin to hold that clearance are excluded. No vessel dilation, fabricated branches or gap bridging is used. Segmentation artifacts and acquisition resolution remain visible; this is a game rather than a diagnostic model.
 
-To reproduce the assets, run `pnpm install`, install numpy, scipy, nibabel and scikit-image, download the pinned repository's `Dataset.zip`, then run:
+To reproduce the assets, download the artery segmentation from OSF (`Subject_02/seg/arteries_seg_TOF_hm_xpace_140um_…_VENP10.nii.gz`) and run:
 
 ```sh
-python site/easter-eggs/vessel-surfer/scripts/prepare-human-network.py /path/to/Dataset.zip
+uv run --with numpy,scipy,scikit-image,nibabel \
+  python site/easter-eggs/vessel-surfer/scripts/prepare-human-network.py /path/to/arteries.nii.gz
 ```
 
-## Tunnel and controls
+## Interface
 
-Both the real brain and imported masks use direct, camera-relative free steering. The camera is exactly at the navigation point inside the lumen and follows the player's heading without chase-camera lag. Movement is swept against the source field and actual surface triangles, with a small clearance around the eye. A blocked step advances only as far as is safe; turning and reversing remain available. The opaque vessel surface stays intact. Network view pauses play; resuming returns inside the tunnel.
+The game is one full-screen canvas. A slim top bar carries the link back to the website, the run timer and bump count, and a pause button. The navigation map sits top right while a run is active. One centred panel serves every other state: the start menu with the Dive button, leaderboard, controls and mask import; the pause menu; and the finish screen with the score submission form. The start menu floats over the slowly rotating vessel network. There is no app shell, theme toggle or About, Cite or Privacy dialog; attribution is a single line in the menu.
 
-- Left/right or A/D: turn immediately. Up/down or W/S: pitch immediately.
-- Drag in the tunnel to aim in both axes. Aim into an opening to take a branch.
-- Hold Stop or Shift to brake while turning. Hold Back or B to reverse without changing your view.
-- Set forward speed in Helm controls. Space or the play/pause control pauses/resumes.
+## Steering
 
-Optional local NIfTI imports use free steering (arrows or dragging), braking and reverse. Their navigation/camera point uses trilinear containment and swept movement against the same field as the rendered isosurface. Imports support one scalar 3D segmentation with positive foreground, at most 32 million voxels and 128 MB compressed/decompressed. These custom masks are pooled into a 96³ game grid and reduced to their largest six-connected component. This reduced-resolution importer is separate from the bundled native-resolution human dataset. Files stay in the browser.
+The camera is exactly at the navigation point inside the lumen and follows the heading. Movement is swept against the source field and actual surface triangles with a small clearance around the eye. A blocked step advances only as far as is safe; turning and reversing remain available. Network view is the menu backdrop only.
+
+- **Mouse**: the pointer's offset from the screen centre is the aim, with a dead zone at the centre and a squared response for fine control. Return the pointer to the centre to fly straight.
+- **Touch**: drag anywhere to raise a floating joystick under the finger. Hold the round Stop and Back buttons to brake and reverse.
+- **Keys**: WASD or arrows turn and pitch, Shift brakes, B reverses, Space or Escape pauses.
+- Turn rates ramp toward the demand (`src/controls.js`), so taps nudge and holds sweep.
+- A lumen assist (`src/assist.js`) probes five rays ahead and nudges toward the more open side of the vessel with the authority the player is not using. It never pushes against the player's own input and is off while braking or reversing.
+- Forward speed eases down to 30 percent as the wall ahead gets close, so bends can be taken without bumping.
+- Roll levels gently back toward world-up so the map and the view agree, except on near-vertical headings.
+
+Optional local NIfTI imports use the same controls. Imports support one scalar 3D segmentation with positive foreground, at most 32 million voxels and 128 MB compressed/decompressed. Custom masks are pooled into a 96³ game grid and reduced to their largest six-connected component. Files stay in the browser and practice runs are not ranked.
+
+## Destination challenge and global leaderboard
+
+The challenge uses a fixed destination 12 mm along a connected route from the same launch point in the widest long arterial trunk. Cruising speed is six voxels per second, so it scales with the data's resolution. Points are `max(0, 10000 - ceil(activeSeconds * 20) - wallBumps * 400)`. Time comes from the monotonic browser clock, independent of the simulation's frame-time cap. Pausing or hiding the tab stops the timer. Holding against a wall is one contact; moving away rearms the bump counter.
+
+A run finishes only within the target radius with a clear line of sight through the lumen. The finish screen asks for a name and sends the name, time and bump count to the leaderboard worker in `../vessel-surfer-leaderboard`, which recomputes the points, validates the run and returns the world rank and top ten. The name is remembered on this device. If the server is unreachable, the run is kept in `localStorage` under `vessel-surfer.scores.v1` and the menu shows this device's best runs instead. The server URL is `VITE_LEADERBOARD_URL` at build time (`src/config.js`).
 
 ## Build and validation
 
@@ -36,20 +50,6 @@ pnpm --filter @neurodesk/vessel-surfer-easter-egg test
 pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e
 ```
 
-Unit tests densely sample every real route against the vessel field, exercise camera containment and clear viewing rays over thousands of movement steps, reject exterior camera positions, and cover NIfTI validation and continuous junction traversal. Browser tests exercise the human dataset on desktop/phone, pause/restart, local mask import, retained inputs, braking/turning/reverse, and light/dark interfaces. Public HTTPS page, asset loading and actual tunnel movement are checked through the existing reverse proxy.
+Unit tests densely sample every real route against the vessel field, exercise camera containment over thousands of movement steps, reject exterior camera positions, cover NIfTI validation, junction traversal, the steering model, the lumen assist, roll levelling, and the leaderboard client with and without a server. Browser tests follow the homepage link, exercise the menu states on desktop and phone, keyboard, mouse-aim and joystick steering, touch hold buttons through CDP touch events, the map, timer, mocked global and offline leaderboards, a local mask import, and a complete practice run driven by a mouse-aim autopilot.
 
-The full catalog build remains blocked in this checkout by Easy MP2RAGE's unavailable `wasm-pack`. The required root interface/mobile/workflow commands encounter other apps' missing production bundles; these failures are not counted as passes. Vessel Surfer's own fresh production bundle is tested separately.
-
-Rendering uses [Three.js](https://threejs.org/); NIfTI parsing uses [NIFTI-Reader-JS](https://github.com/rii-mango/NIFTI-Reader-JS). Shared navigation and About/Cite/Privacy use the Neurodesk shell.
-
-Keyboard arrows work with helm buttons focused; hold buttons also support Enter/Space, expose their pressed state, and track keyboard/touch holds independently. Direct steering is tested in place while braking, including screen-relative pitch/yaw and safe movement toward real walls.
-
-## Map and destination challenge
-
-The compact map shows the vessel network, the player's heading and position, the start square, and the gold destination diamond. Switch between top and front projections to resolve depth. The map follows the player and keeps the target in view; the readout gives straight-line distance and relative height. The gold reference route on the brain map follows validated centerlines and does not constrain steering.
-
-The IXI322 challenge uses a fixed destination 12 mm along a connected route from the same spawn. Points are `max(0, 10000 - ceil(activeSeconds * 20) - wallBumps * 400)`. Time comes from the monotonic browser clock, independent of the simulation's frame-time cap. Pausing, opening Network view, hiding the tab, or opening an About/Cite/Privacy dialog stops the timer. Holding against a wall is one contact; moving away rearms the bump counter. Restart resets the run and preserves the destination.
-
-A run finishes only within the target radius with a clear line of sight through the lumen. The five best completed brain runs persist in localStorage under `vessel-surfer.scores.v1`. The table is local to this browser, not a shared online leaderboard. Storage failures do not stop play and are reported on completion. Imported masks get their own map and a practice destination; their results never mix with the brain challenge rankings.
-
-The embed is assembled at `/_play/vessel/` with noindex metadata and a top-level redirect to the homepage. Closing the overlay removes its iframe, stopping the game. Browser tests open it through the actual footer trigger. The build downloads SHA-256-verified data from the immutable Hugging Face revision in `data-manifest.json`; source NIfTI is retained there for provenance and is omitted from the deployed site.
+The embed is assembled at `/surf/` with noindex metadata. The build downloads SHA-256-verified data from the immutable Hugging Face revision in `data-manifest.json`; the source NIfTI is retained there for provenance and is omitted from the deployed site. Rendering uses [Three.js](https://threejs.org/); NIfTI parsing uses [NIFTI-Reader-JS](https://github.com/rii-mango/NIFTI-Reader-JS).

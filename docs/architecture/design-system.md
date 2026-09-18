@@ -138,7 +138,8 @@ an implemented method has no paper or an app has no entry.
 | Deface, BrowserQC | Own palette (`--bg`, `--accent`) and `.upload-button` pair. Ratcheted; migrate the picker to `.nd-file` and delete the palette. |
 | SurfAnnotate, ZARRo | Specialist sidebars with their own panel styling. Ratcheted; migrate section titles and buttons first. |
 | QSMbly and the five inference apps | Already match the reference through `inference-workspace.css`. Their class names map 1:1 (`.sidebar-section` → `.nd-sidebar-section`, `.btn-primary` → `.nd-btn-primary`, `.file-upload-zone` → `.nd-file`, `.viewer-toolbar` → `.nd-viewer-toolbar`, `.console-container` → `.nd-console-container`); migrate when touching them. |
-| dicompare, MRI2VID, Easy MP2RAGE | Not on the shell. Out of scope for the vocabulary; the shared app bar is their only common chrome. |
+| Easy MP2RAGE | Uses the shared workspace through native ESM components, including file fields, three-plane panels, console, status and result rows. |
+| dicompare, MRI2VID | Not on the shell. Out of scope for the vocabulary; the shared app bar is their only common chrome. |
 
 Ratchet values live in `test/design-system.test.mjs` and may only decrease.
 

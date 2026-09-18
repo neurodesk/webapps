@@ -10,6 +10,20 @@ export function steer(heading, up, horizontal, vertical) {
   up.copy(right).cross(heading).normalize();
 }
 
+// Gently roll the camera back toward world-up so the map and the view agree.
+// Near-vertical headings are left alone because "up" is ambiguous there.
+export function level(heading, up, dt, rate = 1.2) {
+  const world = new THREE.Vector3(0, 1, 0);
+  const desired = world.addScaledVector(heading, -heading.y);
+  if (desired.lengthSq() < 0.15) return up;
+  desired.normalize();
+  const right = heading.clone().cross(up).normalize();
+  const angle = Math.atan2(desired.dot(right), desired.dot(up));
+  const step = Math.sign(angle) * Math.min(Math.abs(angle), rate * dt);
+  up.applyAxisAngle(heading, step).normalize();
+  return up;
+}
+
 // Swept movement prevents tunnelling even at low frame rates. A small six-axis
 // clearance keeps the eye away from the wall, and binary search permits safe
 // partial movement instead of alternating between a whole step and a stop.

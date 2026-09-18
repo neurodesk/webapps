@@ -82,7 +82,7 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
   for (const release of plan.releases) {
     if (release.type === 'none') continue;
     const pkg = packages.get(release.name);
-    if (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name) && release.name !== desktopName) continue;
+    if (!pkg || (pkg.group !== 'apps' && !Object.hasOwn(LINKED_PACKAGES, release.name) && release.name !== desktopName)) continue;
     const series = pkg.manifest.releaseSeries;
     if (series !== undefined && !/^(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(series)) {
       throw new Error(`${release.name}: releaseSeries must be MAJOR.MINOR, got ${series}`);
@@ -100,7 +100,7 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
   const embeddedUpdates = [];
   for (const release of plan.releases) {
     const pkg = packages.get(release.name);
-    if (release.type !== 'none' && pkg.group === 'apps') {
+    if (release.type !== 'none' && pkg?.group === 'apps') {
       embeddedUpdates.push(...await embeddedVersionUpdates(pkg.id, release.newVersion, root));
     }
   }
@@ -138,6 +138,8 @@ export async function applyRelease({ plan, workspace, config, packages, embedded
 export const EMBEDDED_VERSION_SITES = Object.freeze({
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
+    { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
+    { file: 'apps/qsmbly/rust-wasm/Cargo.lock', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },
   ],
   vesselboost: [
     { file: 'apps/vesselboost/web/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
