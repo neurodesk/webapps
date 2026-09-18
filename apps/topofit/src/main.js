@@ -1,5 +1,5 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
@@ -7,11 +7,11 @@ import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-i
 import { createElement } from '@neurodesk/webapp-components/core';
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
 import {
-  StageResultList,
+  createResultList,
   bindFileDrop,
   createInfoDialog,
-  renderConsole,
-  renderViewerToolbar,
+  createConsole,
+  createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
 import manifest from '@neurodesk/topofit/manifest';
 
@@ -26,8 +26,8 @@ mountImagingWorkspace({
   mark: 'T',
   controlsContract: { about: '#aboutBtn', privacy: '#privacyBtn' },
 });
-const log = renderConsole({ id: 'technicalLog' });
-$('viewer').append(log.root);
+const log = createConsole({ id: 'technicalLog' });
+$('viewer').append(log);
 const info = createInfoDialog({ id: 'infoDialog' });
 $('aboutBtn').onclick = () => info.open('About TopoFit', $('aboutContent'));
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
@@ -90,7 +90,7 @@ const xrayControl = createElement('label', { className: 'nd-opacity-control', hi
   xrayValue,
 ]);
 
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
   colormap: false,
@@ -110,9 +110,9 @@ const toolbar = renderViewerToolbar({
     },
   })),
 });
-$('viewer').prepend(toolbar.root);
+$('viewer').prepend(toolbar);
 
-const results = new StageResultList({
+const results = createResultList({
   element: $('resultList'),
   stageLabels,
   onView: (stage) => void showResult(stage),
@@ -334,7 +334,7 @@ $('imageInput').onchange = () => {
 };
 $('seriesSelect').onchange = () => void load(importedImages[Number($('seriesSelect').value)]);
 bindFileDrop($('dropZone'), (files) => void importFiles(files));
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent }) => {
     const files = await fetchFiles();
@@ -344,7 +344,7 @@ const exampleControl = renderExampleSelector({
   },
   onStatus: status,
 });
-$('exampleControl').replaceWith(exampleControl.root);
+$('exampleControl').replaceWith(exampleControl);
 
 
 $('findPatches').onchange = () => { $('patchSettings').hidden = !$('findPatches').checked; };

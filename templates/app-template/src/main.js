@@ -3,12 +3,12 @@
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import {
-  StageResultList,
+  createResultList,
   bindFileDrop,
   createInfoDialog,
-  renderConsole,
-  renderViewerToolbar,
-  renderExampleSelector,
+  createConsole,
+  createViewerToolbar,
+  createExampleSelector,
 } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { APP } from "./config.js";
@@ -27,10 +27,10 @@ const workspace = mountImagingWorkspace({
 });
 
 // 2. Viewer chrome: layout tabs above the canvas, technical log below it.
-const toolbar = renderViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false });
-$("viewer").prepend(toolbar.root);
-const log = renderConsole({ id: "technicalLog" });
-$("viewer").append(log.root);
+const toolbar = createViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false });
+$("viewer").prepend(toolbar);
+const log = createConsole({ id: "technicalLog" });
+$("viewer").append(log);
 
 // 3. Information dialog: About and Privacy open from the shared app bar; Cite comes from the registry.
 const info = createInfoDialog();
@@ -38,7 +38,7 @@ $("aboutBtn").onclick = () => info.open(`About ${APP.id}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 // 4. Workflow: input → run → results. Replace the bodies with the science.
-const results = new StageResultList({
+const results = createResultList({
   element: $("resultList"),
   onView: (_stage, result) => status(`${result.file.name} · unchanged input copy`),
   onDownload: (_stage, result) => downloadFile(result.file),
@@ -105,7 +105,7 @@ $("imageInput").addEventListener("change", (event) => {
   if (files.length) void importFiles(Promise.resolve(files));
 });
 bindFileDrop($("dropZone"), importFiles);
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onStatus: status,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
@@ -115,7 +115,7 @@ const exampleControl = renderExampleSelector({
     assertCurrent();
   },
 });
-$("exampleControl").append(exampleControl.root);
+$("exampleControl").append(exampleControl);
 
 $("runButton").addEventListener("click", () => {
   if (!source || loading) return;

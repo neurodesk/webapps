@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.3.1",
+  "version": "0.4.1",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",
@@ -34,7 +34,31 @@
     "./styles/base.css": "./src/styles/base.css",
     "./styles/inference-workspace.css": "./src/styles/inference-workspace.css",
     "./styles/imaging-workspace.css": "./src/styles/imaging-workspace.css",
-    "./example-images": "./src/example-images.js"
+    "./example-images": "./src/example-images.js",
+    "./elements": {
+      "types": "./src/elements/index.d.ts",
+      "default": "./src/elements/index.js"
+    },
+    "./elements/console": {
+      "types": "./src/elements/console.d.ts",
+      "default": "./src/elements/console.js"
+    },
+    "./elements/file-field": {
+      "types": "./src/elements/file-field.d.ts",
+      "default": "./src/elements/file-field.js"
+    },
+    "./elements/result-list": {
+      "types": "./src/elements/result-list.d.ts",
+      "default": "./src/elements/result-list.js"
+    },
+    "./elements/viewer-toolbar": {
+      "types": "./src/elements/viewer-toolbar.d.ts",
+      "default": "./src/elements/viewer-toolbar.js"
+    },
+    "./elements/example-selector": {
+      "types": "./src/elements/example-selector.d.ts",
+      "default": "./src/elements/example-selector.js"
+    }
   },
   "scripts": {
     "build:showcase": "node scripts/build-showcase.mjs",
@@ -43,6 +67,7 @@
     "test": "node --test test/*.test.js && node scripts/test-showcase-browser.mjs",
     "test:unit": "node --test test/*.test.js",
     "test:showcase:browser": "node scripts/test-showcase-browser.mjs",
+    "test:elements:browser": "node scripts/test-elements-browser.mjs",
     "check": "node scripts/check-syntax.mjs"
   },
   "engines": {

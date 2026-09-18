@@ -1,6 +1,6 @@
 {
   "name": "dicom2vid",
-  "version": "0.3.20260916",
+  "version": "0.3.20260918",
   "private": true,
   "type": "module",
   "description": "Client-side, in-browser DICOM/NIfTI/MGZ to video tool",

@@ -15,7 +15,7 @@ import NiiVueGPU, {
   SLICE_TYPE,
 } from '@niivue/niivue'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, renderConsole, renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, createConsole, createExampleSelector } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { readImageFiles, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niimath } from '@niivue/niimath'
@@ -56,8 +56,8 @@ const niftiInput = $<HTMLInputElement>('niftiInput')
 const dicomInput = $<HTMLInputElement>('dicomInput')
 const ovlSlider = $<HTMLInputElement>('ovlSlider')
 const qcBody = $('qcBody')
-const technicalLog = renderConsole({ outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
-$('canvas-container').appendChild(technicalLog.root)
+const technicalLog = createConsole({ id: 'technicalLog', outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
+$('canvas-container').appendChild(technicalLog)
 
 // --- NiiVue setup ---
 // The NiiVue constructor is GPU-free; attachTo() acquires the WebGPU device and
@@ -426,7 +426,7 @@ async function init(): Promise<void> {
   setStatus('Choose an example or open a brain scan.')
 }
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onStatus: setStatus,
   onLoad: async (_example, { fetchFiles, signal, assertCurrent }) => {
@@ -440,7 +440,7 @@ const exampleControl = renderExampleSelector({
     await job
   },
 })
-$('exampleControl').append(exampleControl.root)
+$('exampleControl').append(exampleControl)
 exampleControl.setDisabled(true)
 $('runButton').addEventListener('click', () => {
   const file = sourceFile

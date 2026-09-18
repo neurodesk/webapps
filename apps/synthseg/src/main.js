@@ -1,13 +1,13 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import {
-  StageResultList,
+  createResultList,
   bindFileDrop,
   createInfoDialog,
-  renderConsole,
-  renderViewerToolbar,
+  createConsole,
+  createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile, readNifti } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
@@ -26,8 +26,8 @@ mountImagingWorkspace({
   controlsContract: { privacy: '#privacyBtn', standalone: '#standaloneBtn' },
 });
 const $ = (id) => document.getElementById(id);
-const technicalLog = renderConsole({ id: 'technicalLog' });
-$('viewer').append(technicalLog.root);
+const technicalLog = createConsole({ id: 'technicalLog' });
+$('viewer').append(technicalLog);
 const info = createInfoDialog({ id: 'infoDialog' });
 const layouts = {
   multiplanar: SLICE_TYPE.MULTIPLANAR,
@@ -36,7 +36,7 @@ const layouts = {
   sagittal: SLICE_TYPE.SAGITTAL,
   render: SLICE_TYPE.RENDER,
 };
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   colormap: false,
   download: false,
@@ -57,12 +57,12 @@ const toolbar = renderViewerToolbar({
     },
   })),
 });
-$('viewer').prepend(toolbar.root);
-$('overlayOpacity').id = 'opacity';
+$('viewer').prepend(toolbar);
+toolbar.control('overlayOpacity').id = 'opacity';
 $('opacity').value = '0.6';
 $('opacity').disabled = true;
-$('overlayOpacityValue').textContent = '60%';
-const results = new StageResultList({
+toolbar.control('overlayOpacityValue').textContent = '60%';
+const results = createResultList({
   element: $('resultList'),
   onView: () => {
     if (output && !busy) void show();
@@ -218,7 +218,7 @@ $('seriesSelect').onchange = async () => {
 bindFileDrop($('dropZone'), (files) => {
   if (!busy) void importImages(files);
 });
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles();
@@ -229,12 +229,12 @@ const exampleControl = renderExampleSelector({
   onStatus: status,
 });
 exampleControl.select.id = 'exampleSelect';
-exampleControl.root.querySelector('label').htmlFor = 'exampleSelect';
-$('exampleControl').replaceWith(exampleControl.root);
+exampleControl.querySelector('label').htmlFor = 'exampleSelect';
+$('exampleControl').replaceWith(exampleControl);
 
 $('opacity').oninput = () => {
   const value = Number($('opacity').value);
-  $('overlayOpacityValue').textContent = `${Math.round(value * 100)}%`;
+  toolbar.control('overlayOpacityValue').textContent = `${Math.round(value * 100)}%`;
   if (output && viewer) viewer.setOpacity(1, value);
 };
 $('processButton').onclick = async () => {

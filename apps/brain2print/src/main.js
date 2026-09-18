@@ -1,8 +1,8 @@
 import examples from '../examples.json'
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import { createExampleSelector } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui'
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
 import NiiVueGPU, { SLICE_TYPE } from '@niivue/niivue'
 import { Niimath } from '@niivue/niimath'
@@ -37,14 +37,14 @@ mountImagingWorkspace({
   mark: 'B',
   controlsContract: { about: '#aboutBtn', privacy: '#privacyBtn' },
 })
-const log = renderConsole({ id: 'technicalLog' })
-$('viewer').append(log.root)
+const log = createConsole({ id: 'technicalLog' })
+$('viewer').append(log)
 const info = createInfoDialog()
 $('aboutBtn').onclick = () => info.open('About Brain2Print', $('aboutContent'))
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'))
 const nv = new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] })
 const niimath = new Niimath()
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
   colormap: false,
@@ -62,7 +62,7 @@ const toolbar = renderViewerToolbar({
     },
   })),
 })
-$('viewer').prepend(toolbar.root)
+$('viewer').prepend(toolbar)
 
 function status(message, error = false) {
   $('statusText').textContent = message
@@ -227,7 +227,7 @@ $('meshButton').addEventListener('click', () => void mesh())
 $('downloadButton').addEventListener('click', () => void nv.saveMesh(0, `brain2print.${$('format').value}`))
 bindFileDrop($('dropZone'), (files) => files.then(chooseFiles).catch((error) => status(error instanceof Error ? error.message : String(error), true)))
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     if (!viewerReady) throw new Error('The WebGPU viewer is not ready.');
@@ -238,7 +238,7 @@ const exampleControl = renderExampleSelector({
   },
   onStatus: status,
 });
-$('controls').querySelector('.nd-section-content').prepend(exampleControl.root);
+$('controls').querySelector('.nd-section-content').prepend(exampleControl);
 
 async function init() {
   if (!navigator.gpu) return status('Brain2Print requires a recent WebGPU-capable desktop browser.', true)

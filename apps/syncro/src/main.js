@@ -1,9 +1,9 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import { createElement } from '@neurodesk/webapp-components/core';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { bindInfoTooltips, createInfoDialog, renderConsole, renderFileField, renderViewerToolbar } from '@neurodesk/webapp-components/ui';
+import { bindInfoTooltips, createInfoDialog, createConsole, createFileField, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
 import { zip } from 'fflate';
@@ -51,7 +51,7 @@ const opacityControl = createElement('label', { className: 'nd-opacity-control',
   createElement('input', { id: 'opacity', type: 'range', min: 0, max: 100, step: 5, value: 50, disabled: true, 'aria-label': 'Lesion opacity' }),
   createElement('span', { id: 'opacityValue', text: '50%' }),
 ]);
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
   colormap: false,
@@ -74,9 +74,9 @@ const toolbar = renderViewerToolbar({
     },
   })),
 });
-viewerRegion.prepend(toolbar.root);
-const technicalLog = renderConsole({ id: 'technicalLog', outputId: 'log', copyId: 'copyLog', clearId: 'clearLog' });
-viewerRegion.append(technicalLog.root);
+viewerRegion.prepend(toolbar);
+const technicalLog = createConsole({ id: 'technicalLog', outputId: 'log', copyId: 'copyLog', clearId: 'clearLog' });
+viewerRegion.append(technicalLog);
 bindInfoTooltips(document);
 
 const info = createInfoDialog({ id: 'info', titleId: 'infoTitle', bodyId: 'infoBody' });
@@ -107,13 +107,13 @@ info.body.addEventListener('click', async (event) => {
 });
 
 const fileFields = {
-  primary: renderFileField({ id: 'input', rootId: 'dropZone', text: 'Drop primary NIfTI or DICOM files', label: 'Choose the required primary scan' }),
-  lesion: renderFileField({ id: 'lesion', rootId: 'lesionDropZone', text: 'Drop a binary lesion map', label: 'Choose an optional binary lesion map' }),
-  pathological: renderFileField({ id: 'pathological', rootId: 'pathologicalDropZone', text: 'Drop pathological modality files', label: 'Choose an optional pathological modality scan' }),
+  primary: createFileField({ id: 'input', rootId: 'dropZone', text: 'Drop primary NIfTI or DICOM files', label: 'Choose the required primary scan' }),
+  lesion: createFileField({ id: 'lesion', rootId: 'lesionDropZone', text: 'Drop a binary lesion map', label: 'Choose an optional binary lesion map' }),
+  pathological: createFileField({ id: 'pathological', rootId: 'pathologicalDropZone', text: 'Drop pathological modality files', label: 'Choose an optional pathological modality scan' }),
 };
-$('primaryField').append(fileFields.primary.root);
-$('lesionField').append(fileFields.lesion.root);
-$('pathologicalField').append(fileFields.pathological.root);
+$('primaryField').append(fileFields.primary);
+$('lesionField').append(fileFields.lesion);
+$('pathologicalField').append(fileFields.pathological);
 
 let inputs = { primary: null, lesion: null, pathological: null };
 let outputs = null;
@@ -137,7 +137,7 @@ function setStatus(message, error = false) {
 function setBusy(value) {
   busy = value;
   exampleControl.setDisabled(value);
-  for (const field of Object.values(fileFields)) field.input.disabled = value;
+  for (const field of Object.values(fileFields)) field.disabled = value;
   for (const id of ['ct', 'keepSynth', 'synthsrBackend', 'brainExtractor', 'normalization']) $(id).disabled = value;
   $('clearLesion').disabled = value;
   $('clearPathological').disabled = value;
@@ -351,7 +351,7 @@ for (const [slot, field] of Object.entries(fileFields)) {
   field.onFiles((files) => importScans(slot, files));
 }
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (example, { fetchFiles, assertCurrent }) => {
     const files = await fetchFiles();
@@ -384,8 +384,8 @@ const exampleControl = renderExampleSelector({
   onStatus: setStatus,
 });
 exampleControl.select.id = 'tutorial';
-exampleControl.root.querySelector('label').htmlFor = 'tutorial';
-$('exampleControl').replaceWith(exampleControl.root);
+exampleControl.querySelector('label').htmlFor = 'tutorial';
+$('exampleControl').replaceWith(exampleControl);
 
 
 function clearOptionalInput(slot) {

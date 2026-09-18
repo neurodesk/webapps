@@ -1,10 +1,10 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVueGPU, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import { Niimath } from "@niivue/niimath";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
-import { StageResultList, bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
+import { createResultList, bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 
@@ -58,7 +58,7 @@ function applyLayout(id) {
   }
 }
 
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
   colormap: false,
@@ -72,9 +72,9 @@ const toolbar = renderViewerToolbar({
     ["render", "3D"],
   ].map(([id, label], index) => ({ id, label, active: index === 0, onClick: () => { applyLayout(id); toolbar.setActive(id); } })),
 });
-$("viewer").prepend(toolbar.root);
-const log = renderConsole({ id: "technicalLog" });
-$("viewer").append(log.root);
+$("viewer").prepend(toolbar);
+const log = createConsole({ id: "technicalLog" });
+$("viewer").append(log);
 const info = createInfoDialog({ id: "infoDialog" });
 $("aboutBtn").onclick = () => info.open("About EdgeReg", $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
@@ -246,7 +246,7 @@ for (const [name, slot] of Object.entries(slots)) {
   slot.series.onchange = () => void runTask(`Loading ${name} series…`, () => loadSlot(name, slot.files[Number(slot.series.value)]));
 }
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const [moving, stationary] = await fetchFiles();
@@ -264,10 +264,10 @@ const exampleControl = renderExampleSelector({
   },
   onStatus: status,
 });
-$('inputSection').querySelector('.nd-section-content').prepend(exampleControl.root);
+$('inputSection').querySelector('.nd-section-content').prepend(exampleControl);
 
 
-const results = new StageResultList({
+const results = createResultList({
   element: $("resultList"),
   onView: () => viewers.resliced.drawScene(),
   onDownload: () => downloadFile(output),

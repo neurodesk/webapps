@@ -1,8 +1,8 @@
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { StageResultList, createInfoDialog, renderConsole, renderFileField, renderViewerToolbar } from '@neurodesk/webapp-components/ui';
+import { createResultList, createInfoDialog, createConsole, createFileField, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
@@ -16,8 +16,8 @@ mountImagingWorkspace({
 const info = createInfoDialog({ id: 'infoDialog' });
 $('aboutBtn').onclick = () => info.open('About Brain extraction', $('aboutContent'));
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
-const log = renderConsole({ id: 'technicalLog' });
-$('viewer').append(log.root);
+const log = createConsole({ id: 'technicalLog' });
+$('viewer').append(log);
 let viewer;
 let viewerReady;
 let viewQueue = Promise.resolve();
@@ -33,7 +33,7 @@ const layouts = {
   sagittal: () => { viewer.sliceType = SLICE_TYPE.SAGITTAL; },
   render: () => { viewer.sliceType = SLICE_TYPE.RENDER; },
 };
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false, overlay: false, colormap: false, download: false, screenshot: false,
   views: [
     { id: 'multiplanar', label: '3-Plane', active: true },
@@ -48,10 +48,10 @@ const toolbar = renderViewerToolbar({
     toolbar.setActive(view.id);
   } })),
 });
-$('viewer').prepend(toolbar.root);
-const picker = renderFileField({ id: 'imageInput', rootId: 'dropZone', text: 'Drop NIfTI or DICOM files or folder' });
-$('filePicker').append(picker.root);
-const exampleControl = renderExampleSelector({
+$('viewer').prepend(toolbar);
+const picker = createFileField({ id: 'imageInput', rootId: 'dropZone', text: 'Drop NIfTI or DICOM files or folder' });
+$('filePicker').append(picker);
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles();
@@ -62,10 +62,10 @@ const exampleControl = renderExampleSelector({
   onStatus: status,
 });
 exampleControl.select.id = 'example';
-exampleControl.root.querySelector('label').htmlFor = 'example';
-$('exampleControl').replaceWith(exampleControl.root);
+exampleControl.querySelector('label').htmlFor = 'example';
+$('exampleControl').replaceWith(exampleControl);
 
-const results = new StageResultList({
+const results = createResultList({
   element: $('resultList'),
   onView: (stage, result) => show(result.file, stage),
   onDownload: (_stage, result) => downloadFile(result.file),
@@ -95,7 +95,8 @@ function status(message, error = false) {
 function refreshControls() {
   const busy = state.phase !== 'idle';
   exampleControl.setDisabled(busy);
-  for (const id of ['imageInput', 'folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
+  picker.disabled = busy;
+  for (const id of ['folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
   $('runButton').disabled = busy || !source;
   $('cancelButton').hidden = !busy;
 }

@@ -21,7 +21,7 @@ Two app tracks are supported:
 
 See [docs/architecture/overview.md](docs/architecture/overview.md) and [docs/components/catalog.md](docs/components/catalog.md).
 
-The look of every app comes from one stylesheet, `src/styles/imaging-workspace.css`, and the workflow builders in `src/ui` (`renderFileField`, `renderViewerToolbar`, `renderConsole`, `createInfoDialog`). The monorepo's `docs/architecture/design-system.md` explains the vocabulary and the test that enforces it.
+The look of every app comes from one stylesheet, `src/styles/imaging-workspace.css`, and the light-DOM custom elements in `src/elements` and native dialog builder in `src/ui`. The monorepo's `docs/architecture/design-system.md` explains the vocabulary and the test that enforces it.
 
 ## Quick Start
 
@@ -63,3 +63,5 @@ The showcase app runs at `http://127.0.0.1:8080/` by default and demonstrates th
 This workspace is versioned, tested, and released by the monorepo root workflows.
 The showcase is a contract test and demonstration surface, not a separate Pages
 deployment.
+
+See [Custom elements](docs/components/elements.md) for registration, events, lifecycle, and migration from the former builders.

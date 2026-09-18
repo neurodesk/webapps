@@ -4,7 +4,7 @@ import test from 'node:test';
 
 const source = await readFile(new URL('../web/js/lnm-app.js', import.meta.url), 'utf8');
 const body = source.split('  async setupExamples() {')[1].split('\n  bindEvents() {')[0];
-const setup = new Function('renderExampleSelector', 'fetch', 'document', `return async function() {${body}`) ;
+const setup = new Function('createExampleSelector', 'fetch', 'document', `return async function() {${body}`) ;
 const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
 
 async function loadAdapter() {
@@ -17,9 +17,11 @@ async function loadAdapter() {
       assert.fail('The example must compute its lesion mask');
     },
   };
-  const input = { closest: () => ({ prepend() {} }), classList: { remove() {} } };
-  const document = { baseURI: 'https://example.org/calmar/', getElementById: () => input };
-  await setup(value => { options = value; return { root: {} }; },
+  const selector = {};
+  const scope = {};
+  const input = { closest: () => ({ prepend(element) { assert.equal(element, selector); } }), classList: { remove() {} } };
+  const document = { baseURI: 'https://example.org/calmar/', getElementById: () => input, querySelector: selector => { assert.equal(selector, '.app-container'); return scope; } };
+  await setup(value => { options = value; assert.equal(value.scope, scope); return selector; },
     async () => ({ ok: true, json: async () => examples }), document).call(app);
   return { app, options, loaded };
 }

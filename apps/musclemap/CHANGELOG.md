@@ -5,6 +5,15 @@
 ### Patch Changes
 
 - Clarify that each input's image type describes the uploaded file. Rename View to Preview file and the per-file checkbox to Include in segmentation.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.1
+
+
+### Patch Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.1

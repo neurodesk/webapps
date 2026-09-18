@@ -1,4 +1,4 @@
-import { renderExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 import { SimpleFileIOController, readSingleImage } from '@neurodesk/webapp-components/file-io';
@@ -391,7 +391,8 @@ export class LesionNetworkMappingApp {
     const response = await fetch(new URL('examples.json', document.baseURI));
     if (!response.ok) throw new Error('Could not load the example catalog.');
     const examples = await response.json();
-    this.exampleSelector = renderExampleSelector({
+    this.exampleSelector = createExampleSelector({
+      scope: document.querySelector('.app-container'),
       examples,
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
         const files = await fetchFiles();
@@ -403,7 +404,7 @@ export class LesionNetworkMappingApp {
       onStatus: (message) => this.updateOutput(message),
     });
     const input = document.getElementById('structuralFileInput');
-    input.closest('.section-content').prepend(this.exampleSelector.root);
+    input.closest('.section-content').prepend(this.exampleSelector);
   }
 
   bindEvents() {

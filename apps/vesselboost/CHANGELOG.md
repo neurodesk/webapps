@@ -5,6 +5,15 @@
 ### Patch Changes
 
 - Replace the vessel-only example with an original 3T TOF-MRA control scan from the Lausanne OpenNeuro dataset. Pin the unmodified scan and checksum in the offline inventory, retain acquisition provenance, and add a hosted-data check that rejects sparse vessel-only inputs. Verify example selection through segmentation and NIfTI download in the production browser workflow. Allow the interface audit to wait for full-resolution example imports.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.1
+
+
+### Patch Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.1

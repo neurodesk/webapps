@@ -5,6 +5,15 @@
 ### Patch Changes
 
 - Remove the unsuitable synthetic example and its selector from SeedSeg. Load scans through the file picker or drag and drop.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.1
+
+
+### Patch Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.1

@@ -7,7 +7,7 @@ import { repoRoot } from "../scripts/lib/apps-registry.mjs";
 
 const site = await serveSite(join(repoRoot, "apps", "easy-mp2rage", "dist"));
 const browser = await chromium.launch();
-const bidsDirectory = await mkdtemp(join(process.env.TMPDIR, "mp2rage-bids-"));
+const bidsDirectory = await mkdtemp(join(process.env.TMPDIR || process.env.RUNNER_TEMP || "test-results", "mp2rage-bids-"));
 const anatomy = join(bidsDirectory, "sub-001", "anat");
 await mkdir(anatomy, { recursive: true });
 for (const [input, output] of [

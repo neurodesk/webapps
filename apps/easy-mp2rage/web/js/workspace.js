@@ -2,9 +2,9 @@ import { mountImagingWorkspace } from "../vendor/webapp-components/src/core/moun
 import {
   bindInfoTooltips,
   createInfoDialog,
-  renderConsole,
-  renderFileField,
-  renderViewerToolbar,
+  createConsole,
+  createFileField,
+  createViewerToolbar,
 } from "../vendor/webapp-components/src/ui/index.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -16,12 +16,12 @@ mountImagingWorkspace({
   controlsContract: { privacy: "#privacyButton" },
 });
 
-export const fileField = renderFileField({
+export const fileField = createFileField({
   id: "file",
   rootId: "drop",
   text: "Drop NIfTI or DICOM files or folders",
 });
-$("#fileControl").append(fileField.root);
+$("#fileControl").append(fileField);
 const colormap = document.createElement("select");
 colormap.id = "cmapSel";
 colormap.className = "nd-colormap-select";
@@ -29,7 +29,7 @@ colormap.setAttribute("aria-label", "Colormap");
 for (const name of ["viridis", "gray", "hot", "plasma"]) {
   colormap.add(new Option(name, name));
 }
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   views: [{ id: "multiplanar", label: "3-Plane", active: true }],
   window: false,
   overlay: false,
@@ -38,12 +38,12 @@ const toolbar = renderViewerToolbar({
   screenshot: false,
   actions: [colormap],
 });
-$("#viewer").prepend(toolbar.root);
-export const technicalLog = renderConsole({
+$("#viewer").prepend(toolbar);
+export const technicalLog = createConsole({
   id: "technicalLog",
   outputId: "log",
 });
-$("#viewer").append(technicalLog.root);
+$("#viewer").append(technicalLog);
 const info = createInfoDialog({ id: "privacyDialog" });
 $("#privacyButton").onclick = () => info.open("Privacy", $("#privacyContent"));
 bindInfoTooltips();

@@ -1,7 +1,7 @@
 import './style.css'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createExampleSelector } from '@neurodesk/webapp-components/ui'
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niivue, SLICE_TYPE, SHOW_RENDER, MULTIPLANAR_TYPE } from '@niivue/niivue'
 import { Niimath } from "@niivue/niimath"
@@ -268,7 +268,7 @@ async function loadDicomFiles(files) {
 }
 
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, signal, assertCurrent }) => {
     const [file] = await fetchFiles()
@@ -277,7 +277,7 @@ const exampleControl = renderExampleSelector({
     await runImageTask(() => loadFile(file, signal))
   },
 })
-document.getElementById('exampleControl').append(exampleControl.root)
+document.getElementById('exampleControl').append(exampleControl)
 exampleControl.setDisabled(true)
 
 async function main() {

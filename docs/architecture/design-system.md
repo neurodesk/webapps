@@ -1,9 +1,9 @@
 # Design system
 
-One stylesheet, one markup vocabulary, one set of builders. Every app on the
+One stylesheet, one markup vocabulary, shared custom elements and native builders. Every app on the
 `imaging-workspace` shell is assembled from the classes defined in
 [`packages/components/src/styles/imaging-workspace.css`](../../packages/components/src/styles/imaging-workspace.css)
-and the builders exported from `@neurodesk/webapp-components/ui`. QSMbly is the
+and the elements and builders exported from `@neurodesk/webapp-components/ui`. QSMbly is the
 visual reference; the vocabulary copies its metrics (0.7rem uppercase section
 titles, dashed 40px scan picker, 0.8rem controls, 34px viewer toolbar, 120px
 collapsed console, 4px progress bar). Apps supply words and science, not CSS.
@@ -58,14 +58,14 @@ impact:
 | Field | `<div class="nd-field"><label for="x">Label <small>unit</small></label><select id="x">…</select><p class="nd-hint">Help</p></div>` | |
 | Checkbox | `<label class="nd-check"><input type="checkbox"> Label</label>` | |
 | Equal columns | `<div class="nd-row">…</div>` | |
-| Scan picker | `<label class="nd-file"><input type="file" data-neurodesk-input="image" multiple><svg…/><span>Drop NIfTI or DICOM files or folder</span></label>` + `<p class="nd-file-info">` | `renderFileField()`, `bindFileDrop()` |
+| Scan picker | `<label class="nd-file"><input type="file" data-neurodesk-input="image" multiple><svg…/><span>Drop NIfTI or DICOM files or folder</span></label>` + `<p class="nd-file-info">` | `createFileField()`, `bindFileDrop()` |
 | Buttons | `.nd-btn.nd-btn-primary` (one per workspace), `.nd-btn.nd-btn-secondary`, `.nd-btn-sm`, `.nd-btn-icon`, `.nd-btn-danger` | |
-| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-download-btn">Download</button></div>` | `StageResultList` |
+| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-download-btn">Download</button></div>` | `createResultList` |
 | Message | `<p class="nd-message error|warning|success|info">` | |
 | Help icon | `<span class="nd-info-icon" tabindex="0" aria-label="…">i<span class="nd-info-tooltip">…</span></span>` | `bindInfoTooltips()`, `renderInfoIcon()` |
-| Viewer toolbar | `.nd-viewer-toolbar > .nd-view-tabs > .nd-view-tab` (layout) + `.nd-viewer-actions` (opacity, colormap, window) | `renderViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` |
+| Viewer toolbar | `.nd-viewer-toolbar > .nd-view-tabs > .nd-view-tab` (layout) + `.nd-viewer-actions` (opacity, colormap, window) | `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` |
 | Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, then `.nd-viewer-info` | |
-| Technical log | `.nd-console-container[data-disclosure].collapsed` with header, Copy, Clear | `renderConsole()` |
+| Technical log | `.nd-console-container[data-disclosure].collapsed` with header, Copy, Clear | `createConsole()` |
 | Status | `<footer id="status"><span class="nd-status-label">Status</span><span id="statusText" class="nd-status-text">…</span><span class="nd-status-elapsed"></span><progress></progress><button class="nd-btn-cancel" hidden>×</button></footer>` | |
 | Dialog | `dialog.nd-dialog` with `.nd-dialog-header`, `.nd-dialog-close`, `.nd-dialog-body`; `.nd-dialog-highlight`, `.nd-citation`, `.nd-command` inside | `createInfoDialog()`, `renderCommand()` |
 
@@ -142,3 +142,10 @@ an implemented method has no paper or an app has no entry.
 | dicompare, MRI2VID | Not on the shell. Out of scope for the vocabulary; the shared app bar is their only common chrome. |
 
 Ratchet values live in `test/design-system.test.mjs` and may only decrease.
+
+## Custom element ownership
+
+Interactive widgets use light-DOM custom elements from the shared package.
+Factories return the element itself; append it directly. Keep native details,
+buttons, inputs and dialogs. See the [element contract](../../packages/components/docs/components/elements.md)
+for registration, events, local control lookup and cleanup.

@@ -7,7 +7,7 @@ import { serveSite } from '../../../test-utils/serve-site.mjs';
 
 const site = await serveSite(new URL('../../../dist/', import.meta.url).pathname);
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
-const artifacts = join(process.env.TMPDIR, 'vesselboost-example');
+const artifacts = join(process.env.TMPDIR || process.env.RUNNER_TEMP || 'test-results', 'vesselboost-example');
 await mkdir(artifacts, { recursive: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

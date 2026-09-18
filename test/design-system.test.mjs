@@ -159,9 +159,9 @@ test('vocabulary apps build their interface from the shared classes', async () =
     }
     const scripts = await collect(join(repoRoot, 'apps', app.id), ['.js', '.ts']);
     const source = (await Promise.all(scripts.map((file) => readFile(file, 'utf8')))).join('\n');
-    check(/renderConsole\(/.test(source), 'technical log comes from renderConsole()');
+    check(/createConsole\(/.test(source), 'technical log comes from createConsole()');
     check(/createInfoDialog\(/.test(source), 'information dialogs come from createInfoDialog()');
-    check(/renderViewerToolbar\(/.test(source), 'viewer toolbar comes from renderViewerToolbar()');
+    check(/createViewerToolbar\(/.test(source), 'viewer toolbar comes from createViewerToolbar()');
   }
   assert.deepEqual(failures, []);
 });
@@ -173,7 +173,7 @@ test('the app template is the canonical vocabulary example', async () => {
     assert.ok(html.includes(marker), `template lacks ${marker}`);
   }
   const main = await readFile(join(template, 'src', 'main.js'), 'utf8');
-  for (const call of ['renderViewerToolbar(', 'renderConsole(', 'createInfoDialog(', 'bindFileDrop(']) assert.ok(main.includes(call), `template lacks ${call}`);
+  for (const call of ['createViewerToolbar(', 'createConsole(', 'createInfoDialog(', 'bindFileDrop(']) assert.ok(main.includes(call), `template lacks ${call}`);
 });
 
 test('the shared stylesheet defines the whole vocabulary the template and docs rely on', async () => {

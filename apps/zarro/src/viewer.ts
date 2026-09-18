@@ -10,7 +10,7 @@ import NiiVue, {
   type VolumeChunkSource,
 } from '@niivue/niivue'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import { createExampleSelector } from '@neurodesk/webapp-components/ui'
 import examples from '../examples.json'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import * as zarr from 'zarrita'
@@ -5498,7 +5498,7 @@ async function main(): Promise<void> {
     syncNvSlideView()
   })
 
-  const exampleSelector = renderExampleSelector({
+  const exampleSelector = createExampleSelector({
     examples,
     async onLoad(example, { signal, assertCurrent }) {
       assertCurrent()
@@ -5525,7 +5525,7 @@ async function main(): Promise<void> {
       }
     },
   })
-  els.source.closest('label')?.before(exampleSelector.root)
+  els.source.closest('label')?.before(exampleSelector)
   window.addEventListener('pagehide', () => exampleSelector.destroy(), { once: true })
   for (const input of [els.source, els.zarrUrl, els.dandisetId, els.dandiVersion]) {
     input.addEventListener('input', () => exampleSelector.cancel())

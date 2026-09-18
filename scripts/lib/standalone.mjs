@@ -42,7 +42,7 @@ export async function stageStandaloneAssets(destination) {
   await cp(join(repoRoot, 'registry/standalone.json'), join(destination, 'standalone.json'));
   const components = join(destination, 'shell-adapters/components');
   for (const directory of ['core', 'ui', 'styles']) await mkdir(join(components, directory), { recursive: true });
-  for (const name of ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/renderExampleSelector.js', 'styles/imaging-workspace.css', 'styles/base.css']) {
+  for (const name of ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'styles/imaging-workspace.css', 'styles/base.css']) {
     await cp(join(repoRoot, 'packages/components/src', name), join(components, name));
   }
 }

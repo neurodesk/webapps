@@ -1,10 +1,10 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import { register as registerFireants } from "@fireants/fireants";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
-import { StageResultList, bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from "@neurodesk/webapp-components/ui";
+import { createResultList, bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 import { extractBrain } from "./brain-extraction.js";
@@ -56,7 +56,7 @@ function applyLayout(id) {
   }
 }
 
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
   colormap: false,
@@ -70,9 +70,9 @@ const toolbar = renderViewerToolbar({
     ["render", "3D"],
   ].map(([id, label], index) => ({ id, label, active: index === 0, onClick: () => { applyLayout(id); toolbar.setActive(id); } })),
 });
-$("viewer").prepend(toolbar.root);
-const log = renderConsole({ id: "technicalLog" });
-$("viewer").append(log.root);
+$("viewer").prepend(toolbar);
+const log = createConsole({ id: "technicalLog" });
+$("viewer").append(log);
 const info = createInfoDialog({ id: "infoDialog" });
 $("aboutBtn").onclick = () => info.open("About FireANTs", $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
@@ -241,7 +241,7 @@ for (const [name, slot] of Object.entries(slots)) {
   slot.extract.onclick = () => void runTask(`Brain extracting ${name} image…`, () => brainExtract(name));
 }
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const [moving, stationary] = await fetchFiles();
@@ -259,7 +259,7 @@ const exampleControl = renderExampleSelector({
   },
   onStatus: status,
 });
-$('inputSection').querySelector('.nd-section-content').prepend(exampleControl.root);
+$('inputSection').querySelector('.nd-section-content').prepend(exampleControl);
 
 
 async function brainExtract(name) {
@@ -278,7 +278,7 @@ async function brainExtract(name) {
   $("progress").value = 0;
 }
 
-const results = new StageResultList({
+const results = createResultList({
   element: $("resultList"),
   onView: () => viewers.resliced.drawScene(),
   onDownload: () => downloadFile(output),

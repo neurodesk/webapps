@@ -1,7 +1,7 @@
 import { fileField, technicalLog, setViewerVisible } from "./workspace.js";
 import {
-  StageResultList,
-  renderExampleSelector,
+  createResultList,
+  createExampleSelector,
 } from "../vendor/webapp-components/src/ui/index.js";
 // Easy MP2RAGE T1 Map, in-browser controller.
 // Parses NIfTI in JS (nifti.js), runs the WASM core in a Web Worker, previews
@@ -28,7 +28,7 @@ function ensureWasm() {
 const $ = (s) => document.querySelector(s);
 const log = (message) => technicalLog.log(message);
 let exampleSelector;
-const results = new StageResultList({
+const results = createResultList({
   element: $("#resultList"),
   onView: (key) => {
     $("#viewSel").value = key;
@@ -2575,7 +2575,7 @@ async function setupExamples() {
   const response = await fetch(new URL("examples.json", document.baseURI));
   if (!response.ok) throw new Error("Could not load the example catalog.");
   const examples = await response.json();
-  const selector = renderExampleSelector({
+  const selector = createExampleSelector({
     examples,
     onLoad: async (example, { fetchFiles, assertCurrent }) => {
       if (running)
@@ -2609,7 +2609,7 @@ async function setupExamples() {
     },
     onStatus: (message) => log(message),
   });
-  $(".modeToggle").before(selector.root);
+  $(".modeToggle").before(selector);
   exampleSelector = selector;
 }
 void setupExamples().catch((error) => log(error.message));
