@@ -143,7 +143,7 @@ export function defineExampleSelector(view = globalThis.window) {
     #status(state, text, error = false) {
       this.dataset.exampleState = state;
       this.#message.textContent = text;
-      this.#onStatus(text, error);
+      this.#onStatus?.(text, error);
       this.dispatchEvent(new view.CustomEvent('nd-example-status', {
         bubbles: true,
         composed: true,
