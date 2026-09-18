@@ -76,5 +76,12 @@ export function mountImagingWorkspace(config = {}) {
 
   root.insertBefore(workspace, controls);
   workspace.append(appHeader, controls, viewer, status);
+  if (doc.defaultView?.ResizeObserver) {
+    const observer = new doc.defaultView.ResizeObserver(() => {
+      workspace.style.setProperty('--nd-status-height', `${status.getBoundingClientRect().height}px`);
+    });
+    observer.observe(status);
+    doc.defaultView.addEventListener('pagehide', () => observer.disconnect(), { once: true });
+  }
   return workspace;
 }

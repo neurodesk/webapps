@@ -221,7 +221,7 @@ apps:
     license: GPL-3.0-or-later
     maintainers: [thomshaw92]
     support_status: active
-    shell: static-html
+    shell: imaging-workspace
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false

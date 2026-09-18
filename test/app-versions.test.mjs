@@ -105,6 +105,21 @@ test('mixed shared changesets retain the strongest bump, attribution and dated d
   assert.deepEqual(await readdir(join(root, '.changeset')), ['config.json']);
 });
 
+test('site workspace dependents retain ordinary semver during shared releases', async (t) => {
+  const { root, put, json } = await fixture(t);
+  await put('pnpm-workspace.yaml', 'packages:\n  - apps/*\n  - packages/*\n  - site/easter-eggs/*\n');
+  await put('site/easter-eggs/game/package.json', JSON.stringify({
+    name: 'game', version: '0.1.0', private: true,
+    dependencies: { '@neurodesk/webapp-components': 'workspace:*' },
+  }));
+  await put('.changeset/shared.md', '---\n"@neurodesk/webapp-components": patch\n---\n\nShared styles.\n');
+  const release = await planRelease(root, { date: '20261001' });
+  assert.equal(release.plan.releases.find(item => item.name === 'game').newVersion, '0.1.1');
+  assert.equal(release.plan.releases.find(item => item.name === 'zarro').newVersion, '0.1.20261001');
+  await applyRelease(release);
+  assert.equal((await json('site/easter-eggs/game')).version, '0.1.1');
+});
+
 test('a linked-package changeset releases the app, package and native versions together', async (t) => {
   const { root, put, json } = await fixture(t);
   await put('.changeset/a.md', '---\n"@neurodesk/synthsr": minor\n---\n\nNew synthesis method.\n');

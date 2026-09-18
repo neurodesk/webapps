@@ -5,6 +5,10 @@
 ### Patch Changes
 
 - Include and initialize the Rayon worker helpers required by QSMbly's updated BET runtime.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
+  - @neurodesk/synthsr@0.4.20260918
+  - @neurodesk/brain-extraction@0.1.2
 
 ## 0.1.20260916
 

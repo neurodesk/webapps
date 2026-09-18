@@ -5,14 +5,14 @@ import test from 'node:test';
 const examples = JSON.parse(await readFile(new URL('../../examples.json', import.meta.url)));
 const source = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
 const setupBody = source.split('async function setupExamples() {')[1].split('\nvoid setupExamples()')[0];
-const makeSetup = new Function('renderExampleSelector', 'fetch', 'document', '$', 'running', 'state', 'setAppMode', 'readImageRecord', 'renderTable', 'refreshRunState', 'log', `return async function() {${setupBody}`);
+const makeSetup = new Function('renderExampleSelector', 'fetch', 'document', '$', 'running', 'state', 'setAppMode', 'readImageRecord', 'renderTable', 'refreshRunState', 'log', `let exampleSelector; const clearOutputs = () => {}; const revokeDownloadUrls = () => {}; const setViewerVisible = () => {}; return async function() {${setupBody}`);
 
 test('the synthetic example loads its complete bundle and matched acquisition parameters', async () => {
   let options;
   const state = { files: [], jsons: [] };
   const fields = new Map();
   const $ = id => {
-    if (!fields.has(id)) fields.set(id, { value: '', before() {} });
+    if (!fields.has(id)) fields.set(id, { value: '', before() {}, replaceChildren() {} });
     return fields.get(id);
   };
   $('#taskSel').value = 'b1only';
@@ -39,7 +39,7 @@ for (const stage of ['file read', 'NIfTI decode']) {
     const state = { files: [{ name: 'original_UNI.nii' }], jsons: [] };
     const fields = new Map();
     const $ = id => {
-      if (!fields.has(id)) fields.set(id, { value: 'original', before() {} });
+      if (!fields.has(id)) fields.set(id, { value: 'original', before() {}, replaceChildren() {} });
       return fields.get(id);
     };
     const controller = new AbortController();

@@ -11,6 +11,8 @@
 ### Patch Changes
 
 - Replace the example with real 3 T, 1 mm brain magnitude and phase MRI from the QSMxT OSF dataset, mirrored at a pinned Hugging Face revision with acquisition metadata and provenance.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
 
 ## 0.26.20260916
 

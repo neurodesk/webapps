@@ -6,6 +6,9 @@
 
 - Remove the unsuitable synthetic example and its selector from SeedSeg. Load scans through the file picker or drag and drop.
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
+
 ## 0.3.20260916
 
 ### Patch Changes
