@@ -1,5 +1,11 @@
 # calmar
 
+## 0.4.20260918
+
+### Minor Changes
+
+- Keep ONNX Runtime thread workers inside Calmar's isolation service-worker scope. This fixes SynthStrip hanging after normalization on GitHub Pages when shared runtime worker responses lack isolation headers.
+
 ## 0.3.20260918
 
 ### Patch Changes

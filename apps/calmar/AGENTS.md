@@ -158,3 +158,7 @@ Common issues it catches:
 ## Examples
 
 The example imports only a structural T1. Run analysis computes the lesion mask; never preload a reference lesion mask. Keep confirmation of the computed mask explicit before network mapping. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.
+
+## Threaded runtime hosting
+
+Keep `ort-web` in Calmar's `app_scoped_runtime_families`. Its WASM thread workers must load within `/calmar/`, where the isolation service worker supplies the required headers. Moving them to `/_runtime/` blocks worker startup on GitHub Pages and leaves SynthStrip waiting after normalization.
