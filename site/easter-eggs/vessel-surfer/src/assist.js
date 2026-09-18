@@ -46,7 +46,10 @@ export function assistDemand(probe) {
   };
 }
 
-// Ease off when the wall ahead is close so there is time to take the bend.
+// Ease off when the wall ahead is close so there is time to take the bend, and
+// stop altogether once the nose is on the wall: grinding into it only pins the
+// eye against the surface, so turning away is free instead.
 export function throttle(probe) {
+  if (probe.ahead <= probe.reach * 0.06) return 0;
   return Math.min(1, Math.max(0.3, probe.ahead / (probe.reach * 0.45)));
 }

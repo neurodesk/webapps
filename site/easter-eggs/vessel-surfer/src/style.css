@@ -134,22 +134,27 @@ a:focus-visible {
   position: fixed;
   top: calc(var(--safe-top) + 64px);
   right: calc(var(--safe-right) + 14px);
-  width: 220px;
-  padding: 6px;
-  background: #081c28e6;
-  border: 1px solid #3d6270;
-  border-radius: 12px;
+  width: 264px;
+  padding: 0;
   font-size: 12px;
   color: #d6eff0;
+  pointer-events: none;
 }
+/* The map itself is drawn by the game renderer on the canvas beneath this
+   window, so the window stays transparent and only carries the frame. */
 #map {
   display: block;
   width: 100%;
-  height: 150px;
-  border-radius: 8px;
+  height: 190px;
+  border: 1px solid #3d6270;
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 8px 24px #00000066;
 }
 .map-readout {
-  padding: 6px 4px 2px;
+  padding: 6px 10px 4px;
+  background: #081c28e6;
+  border: 1px solid #3d6270;
+  border-top: 0;
 }
 #map-view {
   width: 100%;
@@ -157,6 +162,80 @@ a:focus-visible {
   padding: 4px;
   font-size: 12px;
   background: #173543;
+  border-radius: 0 0 12px 12px;
+  pointer-events: auto;
+}
+.target-marker {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 1;
+}
+.target-marker__arrow {
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  width: 20px;
+  height: 20px;
+  background: var(--gold);
+  clip-path: polygon(50% 0, 100% 100%, 50% 72%, 0 100%);
+  filter: drop-shadow(0 0 4px #000000aa);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.target-marker.is-offscreen .target-marker__arrow {
+  opacity: 1;
+}
+.target-marker__label {
+  position: absolute;
+  left: 0;
+  top: 14px;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: #071820c9;
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font:
+    700 11px ui-monospace,
+    monospace;
+  white-space: nowrap;
+}
+.target-marker:not(.is-offscreen)::before {
+  content: "";
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--gold);
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px #000000aa;
+}
+.reticle {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid #75f6ef66;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.reticle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin: -2px 0 0 -2px;
+  border-radius: 50%;
+  background: #75f6efaa;
+}
+body.is-running:not(.is-touch) #ocean {
+  cursor: crosshair;
 }
 .hint {
   position: fixed;
@@ -268,6 +347,14 @@ a:focus-visible {
   font-size: 18px;
   font-weight: 650;
   color: var(--gold);
+}
+.scoring {
+  margin: -8px 0 16px;
+  font-size: 14px;
+  color: var(--ink-muted);
+}
+.breakdown {
+  margin: -10px 0 16px;
 }
 .button-row {
   gap: 8px;
@@ -428,11 +515,15 @@ body:not(.is-touch) .helm {
     padding: 8px 10px;
   }
   #navigation-map {
-    width: 150px;
+    width: 170px;
     top: calc(var(--safe-top) + 62px);
   }
   #map {
-    height: 110px;
+    height: 130px;
+  }
+  .helm button {
+    width: 64px;
+    height: 64px;
   }
   .panel__scroll {
     padding: 18px;
@@ -442,7 +533,7 @@ body:not(.is-touch) .helm {
   }
   .hint {
     bottom: calc(var(--safe-bottom) + 12px);
-    right: 120px;
+    right: 236px;
     font-size: 11px;
   }
 }
