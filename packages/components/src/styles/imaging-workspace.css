@@ -457,7 +457,7 @@ nd-imaging-brand {
 .nd-imaging-controls .nd-section-content button.nd-btn:hover:not(:disabled) { border-color: transparent; }
 .nd-imaging-controls .nd-section-content button.nd-btn-secondary:hover:not(:disabled) { border-color: var(--nd-color-border-light); }
 .nd-imaging-controls .nd-section-content .nd-btn-secondary { border-color: var(--nd-color-border); }
-.nd-imaging-controls .nd-section-content .nd-btn-primary { border: 1px solid var(--nd-color-primary); }
+.nd-imaging-controls .nd-section-content .nd-btn-primary { border: 1px solid var(--nd-color-primary); background: var(--nd-color-primary); color: var(--nd-color-bg); }
 .nd-imaging-controls .nd-section-content .nd-btn-primary:hover:not(:disabled) { border-color: var(--nd-color-primary-hover); background: var(--nd-color-primary-hover); }
 
 /* --------------------------------------------------------------------------
@@ -786,3 +786,77 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn):disabled { opacity: 0.45; cursor: not-allowed; }
 .nd-empty-state { margin: 0; color: var(--nd-color-text-dim); font-size: 0.75rem; }
 @media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn, .nd-result-visibility) { min-height: 44px; } }
+
+/* Raster viewers preserve voxel-plane aspect ratio inside the shared panels. */
+.nd-viewer-panel canvas.nd-raster-slice {
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.nd-slice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nd-space-sm);
+  padding: var(--nd-space-sm);
+  background: var(--nd-color-surface);
+}
+.nd-slice-controls label {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: center;
+  gap: var(--nd-space-xs);
+  min-width: 0;
+  color: var(--nd-color-text-muted);
+  font-size: 0.75rem;
+}
+.nd-slice-controls input {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--nd-color-primary);
+}
+.nd-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.nd-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+.nd-data-table :is(th, td) {
+  padding: var(--nd-space-xs);
+  text-align: left;
+  border-bottom: 1px solid var(--nd-color-border);
+  overflow-wrap: anywhere;
+}
+.nd-data-table [role="button"] {
+  cursor: pointer;
+  color: var(--nd-color-primary);
+}
+.nd-imaging-workspace [hidden] {
+  display: none !important;
+}
+@media (pointer: coarse) {
+  .nd-slice-controls input { min-height: 44px; }
+}
+
+.nd-btn-secondary[aria-pressed="true"] {
+  border-color: var(--nd-color-primary);
+  background: var(--nd-color-primary);
+  color: var(--nd-color-bg);
+}
+
+@media (max-width: 1024px) {
+  .nd-imaging-workspace:has(.nd-viewer-canvas-wrapper > .nd-viewer-panel-grid .nd-raster-slice) {
+    padding-bottom: var(--nd-status-height, 4rem);
+  }
+  .nd-imaging-workspace:has(.nd-viewer-canvas-wrapper > .nd-viewer-panel-grid .nd-raster-slice) .nd-imaging-status {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 10;
+  }
+}
+
+.nd-data-table select { min-width: 96px; }
+.nd-data-table th { white-space: nowrap; }

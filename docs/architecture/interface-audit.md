@@ -14,7 +14,7 @@ All 16 registered apps were reviewed on 9 September 2026, starting from `e6ef75e
 | SeedSeg | Compact inference defaults remain. Native section buttons replace mouse-only headings, the technical log starts collapsed, and footer navigation is consolidated. |
 | dicompare | Runtime status occupies normal document space instead of covering the phone workspace. Loading details start collapsed. Workflow cards expose expanded state, and acquisition titles are keyboard-accessible buttons with truncated long names. |
 | Deface | Shared input picker, workflow sections, information dialogs and a console below the viewer. Output opens when processing completes. App CSS is empty. |
-| Easy MP2RAGE | Task selection sits beside input. Sequence parameters and the example image start collapsed. Parameter families follow the selected task, and denoising hides sequence parameters. About contains the full methods and credits. Tutorial and Reset sit beside input. Validation reveals its fields and log; the tutorial opens the panel containing its target. |
+| Easy MP2RAGE | Shared imaging workspace with Input, Processing and Output in the sidebar, persistent three-plane viewer, slice controls, collapsed histogram and technical console, and status footer. Sequence parameters, output settings and workflow help start closed. BIDS sessions use the same viewer. Results use shared View/Download rows; About and Privacy use the shared dialog. Browser coverage exercises ordinary scrolling, the pinned example, T1/B1 maps, downloads and desktop/phone layouts. |
 | NiiMath | Input and Processing use native disclosures. Overlay appearance, Output, and Example images start closed. Processing reveals Output on success. The shared About action retains the scientific documentation handler. |
 | MRI2VID / dicom2vid | Compact input instructions keep file and folder pickers distinct. Extended credits and privacy text live in dialogs connected to the shared bar. Dialogs scroll and close on phones. |
 | BrowserQC | Shared workflow sections, scan picker, information dialogs and console below the viewer. Results open on completion or QC failure. Only scientific metric styles remain. |
@@ -51,7 +51,7 @@ Data workflows exercised for this change include:
 - SynthSR's browser suite checks extensionless and `.IMA` DICOM, multiple converted series, return to NIfTI, invalid-input state preservation, cancellation, and retry.
 
 - SynthSR compact input bounds, shared examples, failed-download state preservation, and real `chris_t1` loading at 188 × 256 × 190 voxels. All 19 shared example URLs returned HTTP 200.
-- Easy MP2RAGE parameter-family selection, tutorial targets, NIfTI denoising, downloads, and About.
+- Easy MP2RAGE parameter-family selection, parameter retention, NIfTI denoising, downloads, and About.
 - MRI2VID NIfTI import and the About and Privacy dialogs.
 - SCT NIfTI import and threshold preservation across disclosure changes.
 - SurfAnnotate surface loading, curvature overlays, ROI filling, and exported labels using cortical fixtures, plus initial panel states using a small OBJ file.

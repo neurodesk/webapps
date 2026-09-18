@@ -1,5 +1,15 @@
 # syncro
 
+## 0.3.20260918
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
+  - @neurodesk/greedy@0.3.20260918
+  - @neurodesk/synthsr@0.4.20260918
+  - @neurodesk/brain-extraction@0.1.2
+
 ## 0.3.20260916
 
 ### Patch Changes

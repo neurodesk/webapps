@@ -1,5 +1,12 @@
 # dicompare
 
+## 0.13.20260918
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
+
 ## 0.13.20260916
 
 ### Patch Changes

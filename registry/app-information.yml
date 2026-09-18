@@ -454,10 +454,15 @@ apps:
         url: https://github.com/niivue/niivue
 
   easy-mp2rage:
+    about:
+      - Computes quantitative T1 maps in milliseconds from Siemens MP2RAGE, corrected for transmit-field inhomogeneity with SA2RAGE or a separately acquired B1 map. It also produces relative B1 maps and denoises UNI images using robust combination.
+      - Load NIfTI images with optional JSON sidecars or uncompressed Siemens DICOM series. T1 mapping uses UNI, INV2 for the brain mask, and a B1 source. SA2RAGE must contain both GRE volumes. Denoising requires UNI, INV1 and INV2. Confirm acquisition parameters against your protocol before processing.
+      - Outputs include corrected and uncorrected T1, relative B1, corrected or denoised UNI, and parameters.json. Inspect orthogonal slices and the intensity histogram, then download individual NIfTI maps or a ZIP bundle. DICOM inputs also support a derived T1 DICOM series with optional de-identification.
+      - BIDS directory mode matches image roles by subject and session. Calculate a session, inspect its output, then download and unload it before processing the next. Only one session is held in memory at a time.
+      - Processing runs locally in Rust and WebAssembly. Images and results remain in the browser. The synthetic example demonstrates the workflow; it does not establish accuracy on patient data.
     builders: The MP2RAGE port was written by Thomas B. Shaw, based on Ashley Stewart's QSMbly.
     packages:
       - { name: Rust → WebAssembly T1-mapping core, url: https://github.com/neurodesk/webapps/tree/main/apps/easy-mp2rage, role: MP2RAGE and SA2RAGE computations }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
     citations:
       - group: T1 mapping
         title: MP2RAGE
@@ -476,10 +481,6 @@ apps:
         title: Robust MP2RAGE combination
         reference: "O'Brien KR, Kober T, Hagmann P, et al. Robust T1-weighted structural brain imaging and morphometry at 7T using MP2RAGE. PLoS ONE. 2014;9(6):e99676."
         doi: 10.1371/journal.pone.0099676
-      - group: Visualization
-        title: NiiVue
-        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
-        url: https://github.com/niivue/niivue
 
   niimath:
     about:
