@@ -1,27 +1,22 @@
 name: standalone
 
 on:
-  pull_request:
-  push:
-    branches: [main, t3code/standalone-app-releases]
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish verified desktop and HPC binaries to GitHub Releases
-        type: boolean
-        default: false
+  schedule:
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: standalone-${{ github.ref }}
-  cancel-in-progress: true
+  group: standalone-daily
+  cancel-in-progress: false
 
 jobs:
   bundle:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    outputs:
+      release_date: ${{ steps.date.outputs.release_date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -37,6 +32,13 @@ jobs:
           rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
           cargo install wasm-pack --version 0.13.1 --locked
       - run: pnpm install --frozen-lockfile
+      - name: Select the UTC release date
+        id: date
+        run: echo "release_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
       - name: Test package contracts
         run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
       - uses: actions/cache@v6
@@ -90,6 +92,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - run: node packages/desktop/node_modules/electron/install.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -182,6 +188,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - run: node packages/desktop/node_modules/electron/install.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -221,8 +231,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    needs: [desktop, models-offline]
+    needs: [bundle, desktop, models-offline]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -233,6 +242,10 @@ jobs:
           node-version: 24
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: desktop-*
