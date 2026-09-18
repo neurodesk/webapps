@@ -1,5 +1,11 @@
 # musclemap
 
+## 1.4.20260918
+
+### Patch Changes
+
+- Clarify that each input's image type describes the uploaded file. Rename View to Preview file and the per-file checkbox to Include in segmentation.
+
 ## 1.4.20260916
 
 ### Patch Changes

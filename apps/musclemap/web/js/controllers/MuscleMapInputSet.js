@@ -250,6 +250,7 @@ export class MuscleMapInputSet {
         controls.className = 'file-entry-controls';
 
         const role = document.createElement('select');
+        role.id = `file-role-${entry.id}`;
         role.className = 'file-role-select';
         role.value = entry.role;
         for (const value of FILE_ROLE_OPTIONS) {
@@ -266,8 +267,8 @@ export class MuscleMapInputSet {
         const viewButton = document.createElement('button');
         viewButton.className = 'btn btn-secondary btn-sm file-view-button';
         viewButton.type = 'button';
-        viewButton.title = 'Show in viewer';
-        viewButton.textContent = 'View';
+        viewButton.title = `Show ${entry.file.name} in the viewer`;
+        viewButton.textContent = 'Preview file';
         viewButton.disabled = entry.role === 'segmentation';
         viewButton.addEventListener('click', () => this.onViewFile(entry.file));
 
@@ -281,9 +282,20 @@ export class MuscleMapInputSet {
           this.updateEntry(entry.id, { runSegmentation: event.target.checked });
         });
         runLabel.appendChild(run);
-        runLabel.appendChild(document.createTextNode('Run segmentation'));
+        runLabel.appendChild(document.createTextNode('Include in segmentation'));
 
-        controls.appendChild(role);
+        const roleField = document.createElement('div');
+        roleField.className = 'nd-field';
+        const roleLabel = document.createElement('label');
+        roleLabel.htmlFor = role.id;
+        roleLabel.textContent = 'Image type of this file';
+        const roleHint = document.createElement('p');
+        roleHint.id = `file-role-hint-${entry.id}`;
+        roleHint.className = 'nd-hint';
+        roleHint.textContent = 'Describes this file for analysis. To view a different image, add its file.';
+        role.setAttribute('aria-describedby', roleHint.id);
+        roleField.append(roleLabel, role, roleHint);
+        controls.appendChild(roleField);
         if (entry.role === 'segmentation') {
           const labelContract = document.createElement('select');
           labelContract.className = 'file-role-select';

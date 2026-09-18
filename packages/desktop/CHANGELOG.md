@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.14.20260918
+
+### Patch Changes
+
+- Include MuscleMap's clearer input image type, preview, and segmentation controls alongside the current app releases.
+
 ## 0.13.20260918
 
 ### Patch Changes
