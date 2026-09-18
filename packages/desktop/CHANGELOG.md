@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.10.20260918
+
+### Patch Changes
+
+- Include Calmar's corrected T1-only stroke example in the offline suite.
+
 ## 0.9.20260918
 
 ### Minor Changes
