@@ -1,10 +1,16 @@
 # @neurodesk/desktop
 
+## 0.14.20260918
+
+### Patch Changes
+
+- Include MuscleMap's clearer input image type, preview, and segmentation controls alongside the current app releases.
+
 ## 0.13.20260918
 
 ### Patch Changes
 
-- Include MuscleMap's clearer input image type, preview, and segmentation controls alongside the Calmar example fix.
+- Include the original TOF-MRA example for VesselBoost alongside the corrected Calmar example.
 
 ## 0.12.20260918
 
