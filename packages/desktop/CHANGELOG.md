@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.10.20260918
+
+### Patch Changes
+
+- Include MuscleMap's clearer input image type, preview, and segmentation controls in the offline suite.
+
 ## 0.9.20260918
 
 ### Minor Changes
