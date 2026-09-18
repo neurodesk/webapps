@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { assembleRuntimeAssetStore } from '../scripts/lib/runtime-assets.mjs';
 
 test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t) => {
@@ -18,7 +19,7 @@ test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t)
     { id: 'musclemap', path: 'musclemap', app_scoped_runtime_families: ['ort-web'] },
     { id: 'vesselboost', path: 'vesselboost' },
     { id: 'spinalcordtoolbox', path: 'sct' },
-    { id: 'calmar', path: 'calmar' },
+    (await loadAppsRegistry()).apps.find(app => app.id === 'calmar'),
     { id: 'seedseg', path: 'seedseg' },
   ];
   const loaders = [
@@ -67,10 +68,10 @@ test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t)
 
   for (const app of apps) {
     const worker = await readFile(join(siteDist, app.path, 'js', 'inference-worker.js'), 'utf8');
-    if (app.id === 'musclemap') {
+    if (app.id === 'musclemap' || app.id === 'calmar') {
       assert.match(worker, /\.\.\/wasm\/ort/);
       assert.doesNotMatch(worker, /_runtime\/ort-web/);
-      await readFile(join(siteDist, app.path, 'wasm', 'ort.webgpu.min.js'));
+      await readFile(join(siteDist, app.path, 'wasm', app.id === 'calmar' ? 'ort.webgpu.bundle.min.mjs' : 'ort.webgpu.min.js'));
     } else {
       assert.match(worker, /\.\.\/\.\.\/_runtime\/ort-web\/1\.21\.0\/ort/);
     }
@@ -81,14 +82,14 @@ test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t)
     for (const [workerUrl, expectedRuntimeUrl] of [
       [
         `https://example.test/${app.path}/js/inference-worker.js`,
-        app.id === 'musclemap'
-          ? 'https://example.test/musclemap/wasm/'
+        ['musclemap', 'calmar'].includes(app.id)
+          ? `https://example.test/${app.path}/wasm/`
           : 'https://example.test/_runtime/ort-web/1.21.0/',
       ],
       [
         `https://example.test/webapps/${app.path}/js/inference-worker.js`,
-        app.id === 'musclemap'
-          ? 'https://example.test/webapps/musclemap/wasm/'
+        ['musclemap', 'calmar'].includes(app.id)
+          ? `https://example.test/webapps/${app.path}/wasm/`
           : 'https://example.test/webapps/_runtime/ort-web/1.21.0/',
       ],
     ]) {
