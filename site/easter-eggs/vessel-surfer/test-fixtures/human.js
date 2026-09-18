@@ -3,17 +3,17 @@ import { gunzipSync } from "node:zlib";
 import { createNetwork } from "../src/network.js";
 const read = (name) =>
   readFileSync(new URL("../public/data/" + name, import.meta.url));
-export const metadata = JSON.parse(read("ixi322.json"));
+export const metadata = JSON.parse(read("brain.json"));
 export const volume = {
   ...metadata,
-  field: new Uint8Array(gunzipSync(read("ixi322-field.gz"))),
+  field: new Uint8Array(gunzipSync(read("brain-field.gz"))),
   valueScale: 255,
 };
-export const network = createNetwork(JSON.parse(read("ixi322-network.json")));
+export const network = createNetwork(JSON.parse(read("brain-network.json")));
 
 import * as THREE from "three";
 import { surfaceGuard } from "../src/surface-guard.js";
-const raw = read("ixi322-surface.bin");
+const raw = read("brain-surface.bin");
 const buffer = raw.buffer.slice(
     raw.byteOffset,
     raw.byteOffset + raw.byteLength,

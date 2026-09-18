@@ -1,0 +1,16 @@
+name = "vessel-surfer-leaderboard"
+main = "src/worker.js"
+compatibility_date = "2026-07-12"
+
+[vars]
+# Browser origins allowed to read and submit scores. Loopback origins are
+# always allowed for local previews.
+ALLOWED_ORIGINS = "https://webapps.neurodesk.org,https://neurodesk.github.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vessel-surfer-leaderboard"
+# scripts/ensure-database.mjs replaces this with the account's database id
+# before every deploy, creating the database on first use.
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

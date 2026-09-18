@@ -821,9 +821,6 @@ importers:
 
   site/easter-eggs/vessel-surfer:
     dependencies:
-      '@neurodesk/webapp-components':
-        specifier: workspace:*
-        version: link:../../../packages/components
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
@@ -843,6 +840,15 @@ importers:
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)
+
+  site/easter-eggs/vessel-surfer-leaderboard:
+    devDependencies:
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      wrangler:
+        specifier: ^3.0.0
+        version: 3.114.17
 
 packages:
 

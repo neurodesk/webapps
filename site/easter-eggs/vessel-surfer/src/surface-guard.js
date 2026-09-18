@@ -30,6 +30,12 @@ export function surfaceGuard(geometry, inwardNormals = false) {
           },
         }
       : {}),
+    surfaceDistance(from, direction, max) {
+      ray.origin.copy(from);
+      ray.direction.copy(direction);
+      const hit = bvh.raycastFirst(ray, THREE.DoubleSide, 0, max);
+      return hit ? hit.distance : max;
+    },
     surfaceClear(from, to) {
       const distance = from.distanceTo(to);
       if (distance < 1e-7) return true;

@@ -7,7 +7,7 @@ const root = new URL("../", import.meta.url);
 const repository = new URL("../../../../", import.meta.url);
 const destination = new URL(".preview/", root);
 await mkdir(destination, { recursive: true });
-await cp(new URL("dist/", root), new URL("_play/vessel/", destination), {
+await cp(new URL("dist/", root), new URL("surf/", destination), {
   recursive: true,
 });
 await writeFile(
@@ -17,7 +17,6 @@ await writeFile(
 for (const name of [
   "landing.js",
   "landing.css",
-  "easter-egg.js",
   "theme.js",
   "app-theme.css",
   "neurodesk-logo.svg",
@@ -37,9 +36,5 @@ await preview({
     host: "127.0.0.1",
     port: 4178,
     strictPort: true,
-    headers: {
-      "Cross-Origin-Opener-Policy": "same-origin",
-      "Cross-Origin-Embedder-Policy": "credentialless",
-    },
   },
 });

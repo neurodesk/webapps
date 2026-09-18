@@ -1,18 +1,17 @@
 {
   "name": "@neurodesk/vessel-surfer-easter-egg",
-  "version": "0.0.20260918",
+  "version": "0.1.20260918",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/fetch-data.mjs && vite build && node scripts/theme-embed.mjs",
+    "build": "node scripts/fetch-data.mjs && vite build && node scripts/finish-build.mjs",
     "preview": "node scripts/preview-site.mjs",
     "test": "node scripts/fetch-data.mjs && node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "eslint ."
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*",
     "nifti-reader-js": "0.8.0",
     "three": "0.180.0",
     "three-mesh-bvh": "0.9.2"
