@@ -8,7 +8,7 @@ const appRoot = new URL('../', import.meta.url);
 const manifest = JSON.parse(await readFile(new URL('package.json', appRoot)));
 const site = await serveSite(new URL('dist/', appRoot).pathname);
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
-const artifacts = join(process.env.TMPDIR, 'qsmbly-upstream-browser');
+const artifacts = join(process.env.TMPDIR || process.env.RUNNER_TEMP || 'test-results', 'qsmbly-upstream-browser');
 await mkdir(artifacts, { recursive: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
