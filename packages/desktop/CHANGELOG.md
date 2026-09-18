@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.12.20260918
+
+### Patch Changes
+
+- Use suite 0.12 for Calmar; concurrent SeedSeg, MuscleMap and VesselBoost publishers already selected 0.10 and 0.11.
+
 ## 0.11.20260918
 
 ### Patch Changes
