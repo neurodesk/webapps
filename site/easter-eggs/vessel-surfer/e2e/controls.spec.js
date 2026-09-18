@@ -75,6 +75,18 @@ test("keys steer while braking, mouse position aims, and a held drag acts as a j
     "data-camera-inside",
     "true",
   );
+  // U-turn: one key press reverses the heading without any aim input.
+  await page.mouse.move(720, 450);
+  await page.waitForTimeout(200);
+  const forward = await heading(page);
+  await page.keyboard.press("r");
+  await expect(page.locator("#ocean")).toHaveAttribute("data-turning", "true");
+  await expect
+    .poll(async () => dot(await heading(page), forward), { timeout: 15000 })
+    .toBeLessThan(-0.9);
+  await expect(page.locator("#ocean")).toHaveAttribute("data-turning", "false");
+  await expect(page.locator("#target-marker .target-marker__label")).toContainText("mm");
+  await expect(page.locator("#reticle")).toBeVisible();
   await page.screenshot({ path: "/tmp/vessel-controls-desktop.png" });
 });
 
@@ -103,6 +115,8 @@ test.describe("touch", () => {
       .toBeLessThan(0.97);
     await touch("touchEnd", 175, 600);
     await expect(page.locator("#stick")).toBeHidden();
+    await expect(page.locator("#turn")).toBeVisible();
+    await expect(page.locator("#reticle")).toBeHidden();
     const brake = await page.locator("#brake").boundingBox();
     await touch("touchStart", brake.x + brake.width / 2, brake.y + brake.height / 2);
     await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "true");

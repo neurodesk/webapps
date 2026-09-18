@@ -29,8 +29,10 @@ test("map follows the player, the timer pauses, and the global leaderboard rende
   await page.locator("#play").click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#target-distance")).toContainText("away");
+  await expect(page.locator("#ocean")).toHaveAttribute("data-map-zoom", "route");
   await page.locator("#map-view").click();
-  await expect(page.locator("#map-view")).toHaveText("Front view · switch");
+  await expect(page.locator("#map-view")).toHaveText("Whole brain · show route");
+  await expect(page.locator("#ocean")).toHaveAttribute("data-map-zoom", "brain");
   await expect
     .poll(async () =>
       Number(await page.locator("#ocean").getAttribute("data-elapsed")),

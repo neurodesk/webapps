@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { Steering, aimFromOffset, combineDemand } from "../src/controls.js";
+import { Steering, UTurn, aimFromOffset, combineDemand } from "../src/controls.js";
 import { assistDemand, probeLumen, throttle } from "../src/assist.js";
 import { level, steer } from "../src/swim.js";
 import { network, volume } from "../test-fixtures/human.js";
@@ -52,7 +52,8 @@ test("lumen probes point the assist toward open vessel and ease off before walls
   assert.ok(probe.ahead > radius, "the route continues ahead");
   const open = throttle(probe);
   assert.ok(open > 0.3 && open <= 1);
-  assert.equal(throttle({ ...probe, ahead: 0 }), 0.3);
+  assert.equal(throttle({ ...probe, ahead: probe.reach * 0.1 }), 0.3);
+  assert.equal(throttle({ ...probe, ahead: 0 }), 0, "nose on the wall stops");
   const demand = assistDemand({ reach: 10, ahead: 5, left: 1, right: 9, up: 5, down: 5 });
   assert.ok(demand.yaw > 0.9 && demand.pitch === 0, "turns toward the open right side");
   const clamped = assistDemand({ reach: 10, ahead: 5, left: 10, right: 0, up: 0, down: 10 });
@@ -75,4 +76,27 @@ test("the camera rolls back toward world-up without changing the heading", () =>
   level(rolled, tilted, 10);
   assert.ok(Math.abs(tilted.dot(rolled)) < 1e-9, "up stays perpendicular");
   assert.ok(tilted.y > 0.999);
+});
+
+test("a U-turn sweeps exactly half a turn toward the requested side, then ends", () => {
+  const turn = new UTurn(2);
+  assert.equal(turn.update(1), 0, "idle turns produce no yaw");
+  assert.ok(turn.begin(-1));
+  assert.ok(!turn.begin(1), "a second request during a turn is ignored");
+  let total = 0;
+  for (let i = 0; i < 40; i++) total += turn.update(1 / 60);
+  assert.ok(turn.active);
+  assert.ok(total < 0, "turns left when asked");
+  for (let i = 0; i < 100; i++) total += turn.update(1 / 60);
+  assert.ok(!turn.active);
+  assert.ok(Math.abs(total + Math.PI) < 1e-9, `half a turn: ${total}`);
+  const heading = new THREE.Vector3(0, 0, 1);
+  const up = new THREE.Vector3(0, 1, 0);
+  const right = new UTurn(4);
+  right.begin(1);
+  while (right.active) steer(heading, up, right.update(1 / 60), 0);
+  assert.ok(heading.z < -0.999999, `reversed heading: ${heading.toArray()}`);
+  right.begin(1);
+  right.cancel();
+  assert.ok(!right.active);
 });

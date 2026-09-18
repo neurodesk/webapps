@@ -8,10 +8,10 @@ import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
 import { Race } from "./race.js";
-import { NavigationMap, humanChallenge } from "./navigation-map.js";
+import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
-import { Steering, aimFromOffset, combineDemand } from "./controls.js";
-import { assistDemand, probeLumen, throttle } from "./assist.js";
+import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
+import { assistDemand, freeDistance, probeLumen, throttle } from "./assist.js";
 import { createLeaderboard, formatTime } from "./leaderboard.js";
 import { LEADERBOARD_URL } from "./config.js";
 import "./style.css";
@@ -26,6 +26,7 @@ try {
   /* Storage can be disabled. */
 }
 const leaderboard = createLeaderboard({ url: LEADERBOARD_URL, storage });
+const SPEED_KEY = "vessel-surfer.speed.v1";
 
 let renderer;
 try {
@@ -64,7 +65,9 @@ function boot() {
   scene.add(fill);
   const vessels = new THREE.Group();
   const beacons = new THREE.Group();
-  scene.add(vessels, beacons);
+  // Gold breadcrumbs along the validated route show the way to the destination.
+  const trail = new THREE.Group();
+  scene.add(vessels, beacons, trail);
   const sub = new THREE.Group();
   const gold = new THREE.MeshStandardMaterial({
     color: 0xf6c653,
@@ -148,6 +151,17 @@ function boot() {
     emissive: 0xb57616,
     emissiveIntensity: 2,
   });
+  const crumbGeometry = new THREE.SphereGeometry(1, 8, 6);
+  const crumbMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffc44d,
+    emissive: 0xff9a1c,
+    emissiveIntensity: 0.9,
+    roughness: 0.4,
+  });
+  // Inside the vessel the distance fades to a deep red so far walls read as
+  // vessel rather than as a black void; the overview keeps the ocean navy.
+  const OCEAN = 0x071820;
+  const DEPTHS = 0x1c0a12;
   let dirty = true;
   orbit.addEventListener("change", () => {
     dirty = true;
@@ -174,7 +188,11 @@ function boot() {
   const steering = new Steering();
   const aim = { yaw: 0, pitch: 0 };
   const stick = { yaw: 0, pitch: 0, pointer: null, x: 0, y: 0 };
-  const navigationMap = new NavigationMap($("map"));
+  const overviewMap = new OverviewMap(renderer, scene, $("map"));
+  const uturn = new UTurn();
+  let turnRequest = false;
+  let coachUntil = 0;
+  let vesselBounds = new THREE.Sphere(new THREE.Vector3(), 60);
   const ocean = $("ocean");
   const running = () => state === "running";
 
@@ -203,6 +221,9 @@ function boot() {
     );
     $("navigation-map").hidden = !target || next === "ready" || next === "loading";
     $("touch").hidden = next !== "running";
+    $("target-marker").hidden = next !== "running";
+    $("reticle").hidden = next !== "running" || coarse;
+    document.body.classList.toggle("is-running", next === "running");
     $("hint").textContent = "";
     dirty = true;
   }
@@ -250,13 +271,15 @@ function boot() {
   }
 
   $("map-view").onclick = () => {
-    navigationMap.axis = navigationMap.axis === 2 ? 1 : 2;
-    const top = navigationMap.axis === 2;
-    $("map-view").textContent = top ? "Top view · switch" : "Front view · switch";
+    const route = overviewMap.toggle() === "route";
+    $("map-view").textContent = route ? "Route · show whole brain" : "Whole brain · show route";
     $("map-view").setAttribute(
       "aria-label",
-      `Switch map to ${top ? "front" : "top"} view`,
+      `Switch map to the ${route ? "whole brain" : "route"}`,
     );
+    // Hand focus back to the game so Space still pauses after the click.
+    if (running()) ocean.focus({ preventScroll: true });
+    dirty = true;
   };
   function clear(group) {
     for (const child of [...group.children]) {
@@ -290,8 +313,13 @@ function boot() {
     camera.position.copy(tunnel.position);
     camera.up.copy(tunnel.up);
     camera.lookAt(tunnel.target);
-    camera.near = Math.max(0.0005, radius * 0.01);
-    camera.far = Math.max(2, radius * 20);
+    // The eye may sit a few hundredths of a millimetre from a wall, and the
+    // corners of the near plane reach further than its centre. A very close
+    // near plane keeps the wall from being clipped, which otherwise opens a
+    // dark window onto the fogged outside. The far plane sits well inside the
+    // fog so long vessels fade instead of ending at a hard edge.
+    camera.near = Math.max(0.0003, radius * 0.003);
+    camera.far = Math.max(4, radius * 40);
     camera.updateProjectionMatrix();
     const distance = Math.min(radius * 1.3, player.distanceTo(ahead) * 0.7);
     const subPoint = player
@@ -307,7 +335,7 @@ function boot() {
       .addScaledVector(tunnel.heading, Math.min(radius * 0.1, distance * 0.1));
     headlamp.intensity = Math.max(0.15, radius * 9);
     headlamp.distance = Math.max(unit * 6, radius * 15);
-    scene.fog.density = 0.12 / Math.max(radius, unit * 0.3);
+    scene.fog.density = 0.09 / Math.max(radius, unit * 0.3);
     const data = $("ocean").dataset;
     data.cameraInside = String(insideMask(volume, camera.position.toArray()));
     data.cameraPosition = JSON.stringify(camera.position.toArray());
@@ -330,6 +358,8 @@ function boot() {
     frameOverview();
     headlamp.visible = !value;
     scene.fog.density = value ? 0.003 : 0.12;
+    scene.fog.color.set(value ? OCEAN : DEPTHS);
+    renderer.setClearColor(value ? OCEAN : DEPTHS);
     orbit.enabled = value;
     for (const child of vessels.children) {
       if (child.name === "overview-surface") child.visible = value;
@@ -337,10 +367,7 @@ function boot() {
     }
     if (value) {
       // Frame whatever vasculature is loaded, whichever resolution it has.
-      const bounds = new THREE.Box3().setFromObject(vessels);
-      const sphere = bounds.isEmpty()
-        ? new THREE.Sphere(new THREE.Vector3(), 60)
-        : bounds.getBoundingSphere(new THREE.Sphere());
+      const sphere = vesselBounds;
       camera.far = Math.max(600, sphere.radius * 12);
       camera.updateProjectionMatrix();
       camera.up.set(0, 1, 0);
@@ -360,8 +387,16 @@ function boot() {
       updateTunnel(0, lumenRadius(volumeOf(), player), true);
     }
   }
+  function measureVessels() {
+    const bounds = new THREE.Box3().setFromObject(vessels);
+    vesselBounds = bounds.isEmpty()
+      ? new THREE.Sphere(new THREE.Vector3(), 60)
+      : bounds.getBoundingSphere(new THREE.Sphere());
+  }
   function reset() {
     const volume = volumeOf();
+    const unit = Math.min(...volume.scale);
+    measureVessels();
     race = new Race(Math.min(...volume.scale) * 0.4);
     lastResult = null;
     travel = 0;
@@ -369,9 +404,12 @@ function boot() {
     keys.clear();
     steering.reset();
     aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    uturn.cancel();
+    turnRequest = false;
     swimUp.set(0, 1, 0);
     route = network ? { ...network.start } : null;
     clear(beacons);
+    clear(trail);
     if (mask) {
       player.fromArray(mask.spawn);
       direction.set(0, 0, 1);
@@ -394,14 +432,46 @@ function boot() {
     beacon.scale.setScalar(targetRadius * 0.7);
     beacons.add(beacon);
     const path = mask ? [] : humanChallenge(network).path;
-    navigationMap.configure(network, mask, player, target, path);
+    overviewMap.configure({
+      bounds: vesselBounds,
+      start: player,
+      target,
+      path,
+      minSpan: mask ? unit * 20 : 18,
+    });
+    if (path.length > 1) {
+      // One crumb per validated route sample and one between each pair; the
+      // samples are 0.25 mm apart inside the lumen, so the midpoints are too.
+      // Each crumb is lowered onto the vessel floor like a runway light, so the
+      // trail is never in the eye's way as the sub passes along the route.
+      const points = [];
+      for (let i = 0; i < path.length; i++) {
+        points.push(path[i]);
+        if (i + 1 < path.length) points.push(path[i].clone().lerp(path[i + 1], 0.5));
+      }
+      const crumbs = new THREE.InstancedMesh(crumbGeometry, crumbMaterial, points.length);
+      crumbs.userData.sharedAsset = true;
+      const matrix = new THREE.Matrix4();
+      const down = new THREE.Vector3(0, -1, 0);
+      const size = unit * 0.22;
+      crumbs.userData.points = points.map((p, i) => {
+        const floor = freeDistance(volume, p, down, unit * 8);
+        const spot = p.clone().addScaledVector(down, Math.max(0, floor - unit * 0.5));
+        matrix.makeScale(size, size, size).setPosition(spot);
+        crumbs.setMatrixAt(i, matrix);
+        return { spot, size };
+      });
+      crumbs.instanceMatrix.needsUpdate = true;
+      trail.add(crumbs);
+    }
     // The validated reference route, for browser verification only.
     $("ocean").dataset.path = JSON.stringify(
       path.map((p) => p.toArray().map((v) => Number(v.toFixed(3)))),
     );
     $("mission-text").textContent = mask
-      ? "Practice run: reach the gold destination in your own vessel mask. Practice runs are not ranked."
-      : "Pilot a tiny submarine through real human brain vessels to the gold destination. Fast runs with few wall bumps score highest.";
+      ? "Practice run: reach the gold ring in your own vessel mask. Practice runs are not ranked."
+      : "Pilot a tiny submarine through real human brain vessels. Follow the gold trail 12 mm to the gold ring.";
+    $("run-breakdown").textContent = "";
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
     $("score").textContent = "0:00.0";
@@ -419,16 +489,27 @@ function boot() {
     if (overview) setView(false);
     race.resume(performance.now());
     showMenu("running");
-    $("hint").textContent = coarse
-      ? "Drag anywhere to steer · hold Stop or Back"
-      : "Aim with the mouse or WASD · Shift brakes · Space pauses";
+    coachUntil = performance.now() + 6000;
+    $("hint").textContent = coach();
     $("ocean").focus({ preventScroll: true });
+  }
+  const steerHint = () =>
+    coarse
+      ? "Drag anywhere to steer · Turn flips around · hold Stop or Back"
+      : "Aim with the mouse or WASD · R turns around · Shift brakes · Space pauses";
+  function coach() {
+    const distance = target ? player.distanceTo(target) : 0;
+    return mask
+      ? `Reach the gold ring, ${distance.toFixed(1)} units away · ${steerHint()}`
+      : `Follow the gold trail to the gold ring, ${distance.toFixed(1)} mm ahead · ${steerHint()}`;
   }
   function pause() {
     if (!running()) return;
     race.pause(performance.now());
     keys.clear();
     steering.reset();
+    uturn.cancel();
+    turnRequest = false;
     aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
     stick.pointer = null;
     $("stick").hidden = true;
@@ -442,6 +523,9 @@ function boot() {
       ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
       : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
     $("run-result").textContent = message;
+    $("run-breakdown").textContent = mask
+      ? ""
+      : `10,000 − ${Math.ceil(lastResult.seconds * 20).toLocaleString()} for time − ${(lastResult.bumps * 400).toLocaleString()} for bumps`;
     showMenu("complete");
     $("submit-form").hidden = Boolean(mask);
     if (!mask) {
@@ -463,6 +547,69 @@ function boot() {
         ? `Saved. You are #${outcome.rank.toLocaleString()} in the world.`
         : `The leaderboard is unreachable (${outcome.error}). Saved on this device instead.`;
   };
+  // Switch the scene between its tunnel appearance and the overview drawn in
+  // the map window: whole surface instead of culled chunks, no fog, no
+  // headlamp, no trail or beacon (the map has its own markers).
+  let subShown = true;
+  let fogDensity = 0.12;
+  function mapPass(on) {
+    for (const child of vessels.children) {
+      if (child.name === "overview-surface") child.visible = on || overview;
+      if (child.name === "tunnel-surface") child.visible = !on && !overview;
+    }
+    if (on) {
+      subShown = sub.visible;
+      fogDensity = scene.fog.density;
+    }
+    sub.visible = on ? false : subShown;
+    scene.fog.density = on ? 0 : fogDensity;
+    trail.visible = !on;
+    beacons.visible = !on;
+    headlamp.visible = !on && !overview;
+  }
+  // Crumbs right under the eye would fill the view, so each one shrinks away
+  // as the sub passes over it and grows back once it is behind.
+  const crumbMatrix = new THREE.Matrix4();
+  function fadeTrail() {
+    const unit = Math.min(...volumeOf().scale);
+    for (const crumbs of trail.children) {
+      crumbs.userData.points.forEach(({ spot, size }, i) => {
+        const t = THREE.MathUtils.smoothstep(
+          player.distanceTo(spot),
+          unit * 2.5,
+          unit * 5,
+        );
+        crumbMatrix.makeScale(size * t, size * t, size * t).setPosition(spot);
+        crumbs.setMatrixAt(i, crumbMatrix);
+      });
+      crumbs.instanceMatrix.needsUpdate = true;
+    }
+  }
+  // A screen-space pointer to the destination: over the ring when it is in
+  // view, otherwise a chevron at the screen edge in its direction.
+  const projected = new THREE.Vector3();
+  function placeTargetMarker() {
+    const marker = $("target-marker");
+    const width = ocean.clientWidth;
+    const height = ocean.clientHeight;
+    projected.copy(target).project(camera);
+    const behind = projected.z > 1;
+    let x = behind ? -projected.x : projected.x;
+    let y = behind ? -projected.y : projected.y;
+    const inView = !behind && Math.abs(x) < 0.9 && Math.abs(y) < 0.82;
+    if (!inView) {
+      const edge = Math.max(Math.abs(x) / 0.9, Math.abs(y) / 0.82, 1e-6);
+      x /= edge;
+      y /= edge;
+    }
+    const px = ((x + 1) / 2) * width;
+    const py = ((1 - y) / 2) * height;
+    marker.classList.toggle("is-offscreen", !inView);
+    marker.style.transform = `translate(${px.toFixed(0)}px, ${py.toFixed(0)}px)`;
+    const angle = Math.atan2(py - height / 2, px - width / 2);
+    marker.firstElementChild.style.transform = `rotate(${(angle + Math.PI / 2).toFixed(3)}rad)`;
+    marker.lastElementChild.textContent = `${player.distanceTo(target).toFixed(1)} ${mask ? "u" : "mm"}`;
+  }
   async function loadDemo() {
     const token = ++loadId;
     showMenu("loading");
@@ -522,8 +669,25 @@ function boot() {
     if (state === "loading" || (!network && !mask)) return;
     reset();
   };
+  const savedSpeed = Number(storage?.getItem(SPEED_KEY));
+  if (savedSpeed >= 0.25 && savedSpeed <= 2) $("speed").value = String(savedSpeed);
+  $("speed-value").textContent = `${$("speed").value}×`;
   $("speed").oninput = () => {
     $("speed-value").textContent = `${$("speed").value}×`;
+    try {
+      storage?.setItem(SPEED_KEY, $("speed").value);
+    } catch {
+      /* Storage can be full or disabled. */
+    }
+  };
+  $("turn").onpointerdown = (e) => {
+    e.preventDefault();
+    turnRequest = true;
+  };
+  $("turn").onkeydown = (e) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    if (!e.repeat) turnRequest = true;
   };
   for (const [id, key] of [
     ["brake", "shift"],
@@ -587,6 +751,11 @@ function boot() {
       }
       return;
     }
+    if (k === "r") {
+      e.preventDefault();
+      if (!e.repeat && running()) turnRequest = true;
+      return;
+    }
     if (flightKeys.includes(k)) {
       e.preventDefault();
       keys.press(`keyboard:${k}`, k);
@@ -606,17 +775,19 @@ function boot() {
     return Math.min(ocean.clientWidth, ocean.clientHeight) * 0.42;
   }
   ocean.addEventListener("pointermove", (e) => {
-    if (!running() || overview) return;
-    if (stick.pointer === e.pointerId) {
-      const dx = e.clientX - stick.x;
-      const dy = e.clientY - stick.y;
-      const scale = Math.min(1, stickRadius / (Math.hypot(dx, dy) || 1));
-      Object.assign(stick, aimFromOffset(dx, dy, stickRadius, 0.1));
-      $("stick").firstElementChild.style.transform =
-        `translate(${dx * scale}px, ${dy * scale}px)`;
-      return;
-    }
+    if (!running() || overview || stick.pointer !== e.pointerId) return;
+    const dx = e.clientX - stick.x;
+    const dy = e.clientY - stick.y;
+    const scale = Math.min(1, stickRadius / (Math.hypot(dx, dy) || 1));
+    Object.assign(stick, aimFromOffset(dx, dy, stickRadius, 0.1));
+    $("stick").firstElementChild.style.transform =
+      `translate(${dx * scale}px, ${dy * scale}px)`;
+  });
+  // Mouse aim is tracked on the window so passing over the map or the top bar
+  // does not drop the turn; only leaving the window centres the aim.
+  window.addEventListener("pointermove", (e) => {
     if (e.pointerType !== "mouse" || stick.pointer !== null) return;
+    if (!running() || overview) return;
     const rect = ocean.getBoundingClientRect();
     Object.assign(
       aim,
@@ -627,8 +798,8 @@ function boot() {
       ),
     );
   });
-  ocean.addEventListener("pointerleave", () => {
-    aim.yaw = aim.pitch = 0;
+  document.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "mouse" && !e.relatedTarget) aim.yaw = aim.pitch = 0;
   });
   ocean.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "touch") document.body.classList.add("is-touch");
@@ -751,6 +922,9 @@ function boot() {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     frameOverview();
+    // The ring marks the dead zone: rest the pointer inside it to fly straight.
+    const dead = Math.round(aimRadius() * 0.08 * 2);
+    $("reticle").style.width = $("reticle").style.height = `${dead}px`;
   }
   new ResizeObserver(resize).observe(ocean);
   ocean.addEventListener("webglcontextlost", (e) => {
@@ -793,10 +967,20 @@ function boot() {
         swimUp,
         Math.max(unit * 4, radius * 6),
       );
-      const assist =
-        braking || reversing ? { yaw: 0, pitch: 0 } : assistDemand(probe);
-      const demand = combineDemand(playerDemand, assist, 0.6);
-      const turn = steering.update(demand.yaw, demand.pitch, dt);
+      if (turnRequest) {
+        turnRequest = false;
+        // Turn toward whichever side has more room.
+        if (uturn.begin(probe.left > probe.right ? -1 : 1)) steering.reset();
+      }
+      const turning = uturn.active;
+      let turn;
+      if (turning) turn = { yaw: uturn.update(dt), pitch: 0 };
+      else {
+        const assist =
+          braking || reversing ? { yaw: 0, pitch: 0 } : assistDemand(probe);
+        const demand = combineDemand(playerDemand, assist, 0.6);
+        turn = steering.update(demand.yaw, demand.pitch, dt);
+      }
       steer(direction, swimUp, turn.yaw, turn.pitch);
       level(direction, swimUp, dt);
       // Cruise at six voxels per second so thin, high-resolution vessels are
@@ -804,7 +988,7 @@ function boot() {
       let speed = Number($("speed").value) * unit * (mask ? 2 : 6);
       if (reversing) speed *= -0.7;
       else speed *= throttle(probe);
-      if (braking) speed = 0;
+      if (braking || turning) speed = 0;
       const next = swim(
         volume,
         player,
@@ -816,13 +1000,15 @@ function boot() {
       player.copy(next);
       blocked = Math.abs(speed) > 0 && moved < Math.abs(speed * dt) * 0.1;
       if (frames % 10 === 0)
-        $("hint").textContent = braking
-          ? "Braking · steer to aim, release to go"
-          : blocked
-            ? "Wall · turn or hold Back to reverse"
-            : coarse
-              ? "Drag anywhere to steer · hold Stop or Back"
-              : "Aim with the mouse or WASD · Shift brakes · Space pauses";
+        $("hint").textContent = turning
+          ? "Turning around…"
+          : braking
+            ? "Braking · steer to aim, release to go"
+            : blocked
+              ? "Wall · aim away, press R to turn around, or hold Back"
+              : performance.now() < coachUntil
+                ? coach()
+                : steerHint();
       sub.quaternion.slerp(
         new THREE.Quaternion().setFromUnitVectors(
           new THREE.Vector3(0, 0, 1),
@@ -838,6 +1024,7 @@ function boot() {
       )
         finish();
       else updateTunnel(dt, radius);
+      if (frames % 3 === 0) fadeTrail();
       dirty = true;
     } else if (overview) {
       orbit.update();
@@ -846,7 +1033,6 @@ function boot() {
     $("score").textContent = formatTime(race.seconds);
     $("bumps").textContent = `${race.bumps} bump${race.bumps === 1 ? "" : "s"}`;
     if (target && !$("navigation-map").hidden) {
-      navigationMap.draw(player, direction);
       const units = mask ? "units" : "mm";
       $("target-distance").textContent =
         `${player.distanceTo(target).toFixed(1)} ${units} away · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
@@ -865,8 +1051,11 @@ function boot() {
     }
     if (dirty) {
       renderer.render(scene, camera);
+      if (target && !overview && !$("navigation-map").hidden)
+        overviewMap.render(player, direction, dt, ocean, mapPass);
       dirty = false;
     }
+    if (running() && target) placeTargetMarker();
     frames++;
     // Read-only telemetry for accessible integrations and browser verification.
     const data = ocean.dataset;
@@ -880,6 +1069,8 @@ function boot() {
     data.bumps = String(race.bumps);
     data.target = target ? JSON.stringify(target.toArray()) : "";
     data.held = [...keys].join(",");
+    data.turning = String(uturn.active);
+    data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [
       ["brake", ["shift"]],
       ["reverse", ["b"]],

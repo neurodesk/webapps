@@ -10,120 +10,142 @@ export function humanChallenge(network) {
   }
   return { target: path.at(-1).clone(), path };
 }
-export class NavigationMap {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.axis = 2;
-    this.lines = [];
-    this.path = [];
+
+// A live 3D overview drawn by the game renderer into a corner of the main
+// canvas: the real vessel surface with the validated route, the start, the
+// destination and the player's heading on top. "Route" framing follows the
+// player heading-up like a car navigator; "Brain" framing shows the whole
+// vasculature from a fixed angle.
+export class OverviewMap {
+  constructor(renderer, scene, window) {
+    this.renderer = renderer;
+    this.scene = scene;
+    this.window = window;
+    this.camera = new THREE.PerspectiveCamera(42, 1, 0.05, 4000);
+    this.zoom = "route";
+    this.background = new THREE.Color(0x08161f);
+    this.forward = new THREE.Vector3(0, 0, 1);
+    this.centre = new THREE.Vector3();
+    this.eye = new THREE.Vector3();
+    this.look = new THREE.Vector3();
+    this.bounds = new THREE.Sphere(new THREE.Vector3(), 60);
+    this.minSpan = 18;
+    this.markers = new THREE.Group();
+    this.markers.name = "map-markers";
+    this.markers.visible = false;
+    const marker = (geometry, color) =>
+      new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color, depthTest: false }),
+      );
+    const cone = new THREE.ConeGeometry(0.5, 1.5, 12);
+    cone.rotateX(Math.PI / 2);
+    this.player = marker(cone, 0x75f6ef);
+    this.destination = marker(new THREE.SphereGeometry(0.55, 14, 10), 0xffd166);
+    this.origin = marker(new THREE.SphereGeometry(0.32, 10, 8), 0xd6eff0);
+    this.route = new THREE.Line(
+      new THREE.BufferGeometry(),
+      new THREE.LineBasicMaterial({ color: 0xf4c768, depthTest: false }),
+    );
+    for (const item of [this.route, this.origin, this.destination, this.player]) {
+      item.renderOrder = 10;
+      this.markers.add(item);
+    }
+    scene.add(this.markers);
   }
-  configure(network, mask, start, target, path) {
+  configure({ bounds, start, target, path, minSpan }) {
+    this.bounds.copy(bounds);
     this.start = start.clone();
     this.target = target.clone();
-    this.path = path;
-    if (!mask)
-      this.lines = network.edges.map((e) =>
-        e.points.map((p) => new THREE.Vector3(...p)),
-      );
-    else {
-      // Project a bounded sample of the same imported volume used by the game.
-      const points = [];
-      const stride = Math.max(
-        1,
-        Math.ceil(mask.field.reduce((sum, v) => sum + Number(v > 0), 0) / 5000),
-      );
-      let seen = 0;
-      for (let i = 0; i < mask.field.length; i++)
-        if (mask.field[i] && seen++ % stride === 0) {
-          const x = i % mask.n,
-            y = Math.floor(i / mask.n) % mask.n,
-            z = Math.floor(i / (mask.n * mask.n));
-          points.push([
-            new THREE.Vector3(
-              (x - mask.n / 2) * mask.scale[0],
-              (y - mask.n / 2) * mask.scale[1],
-              (z - mask.n / 2) * mask.scale[2],
-            ),
-          ]);
-        }
-      this.lines = points;
-    }
-    this.minSpan = mask ? Math.min(...mask.scale) * 20 : 18;
-  }
-  draw(player, heading) {
-    if (!this.target) return;
-    const w = this.canvas.clientWidth,
-      h = this.canvas.clientHeight;
-    if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
-    const ctx = this.canvas.getContext("2d");
-    const axis = this.axis,
-      value = (p) => (axis === 2 ? p.z : p.y);
-    const cx = (player.x + this.target.x) / 2,
-      cy = (value(player) + value(this.target)) / 2;
-    const span = Math.max(
-      this.minSpan,
-      Math.abs(player.x - this.target.x) * 1.6,
-      Math.abs(value(player) - value(this.target)) * 1.6,
+    this.minSpan = minSpan;
+    this.origin.position.copy(start);
+    this.destination.position.copy(target);
+    this.route.geometry.dispose();
+    this.route.geometry = new THREE.BufferGeometry().setFromPoints(
+      path.length > 1 ? path : [start, target],
     );
-    const scale = Math.min(w, h - 18) / span;
-    const project = (p) => [
-      w / 2 + (p.x - cx) * scale,
-      h / 2 + (axis === 2 ? 1 : -1) * (value(p) - cy) * scale,
-    ];
-    ctx.fillStyle = "#081c28";
-    ctx.fillRect(0, 0, w, h);
-    const line = (points, color, width) => {
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.beginPath();
-      points.forEach((p, i) => {
-        const [x, y] = project(p);
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      });
-      ctx.stroke();
-      if (points.length === 1) {
-        const [x, y] = project(points[0]);
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, 1, 1);
-      }
-    };
-    this.lines.forEach((points) => line(points, "#527988", 1.2));
-    if (this.path.length) line(this.path, "#b49853", 2);
-    const [sx, sy] = project(this.start);
-    ctx.strokeStyle = "#d6eff0";
-    ctx.strokeRect(sx - 3, sy - 3, 6, 6);
-    const [tx, ty] = project(this.target);
-    ctx.fillStyle = "#ffd166";
-    ctx.beginPath();
-    ctx.moveTo(tx, ty - 7);
-    ctx.lineTo(tx + 7, ty);
-    ctx.lineTo(tx, ty + 7);
-    ctx.lineTo(tx - 7, ty);
-    ctx.closePath();
-    ctx.fill();
-    const [px, py] = project(player),
-      [hx, hy] = project(player.clone().add(heading));
-    ctx.save();
-    ctx.translate(px, py);
-    ctx.rotate(Math.atan2(hy - py, hx - px));
-    ctx.fillStyle = "#75f6ef";
-    ctx.strokeStyle = "#081c28";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(9, 0);
-    ctx.lineTo(-6, -5);
-    ctx.lineTo(-3, 0);
-    ctx.lineTo(-6, 5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = "#d6eff0";
-    ctx.font = "11px sans-serif";
-    ctx.fillText(axis === 2 ? "TOP · X/Z" : "FRONT · X/Y", 8, 14);
+    this.route.visible = path.length > 1;
+    this.centre.copy(start).lerp(target, 0.5);
+    this.forward.set(0, 0, 1);
+    this.settled = false;
+  }
+  toggle() {
+    this.zoom = this.zoom === "route" ? "brain" : "route";
+    this.settled = false;
+    return this.zoom;
+  }
+  // Frame the view for this frame. Route framing eases so the map does not
+  // jump when the heading swings through a turn.
+  frame(player, heading, dt) {
+    const blend = this.settled ? 1 - Math.exp(-dt * 4) : 1;
+    this.settled = true;
+    const up = new THREE.Vector3(0, 1, 0);
+    let span;
+    if (this.zoom === "brain") {
+      span = this.bounds.radius * 2;
+      this.look.lerp(this.bounds.center, blend);
+      this.eye.lerp(
+        new THREE.Vector3(0.55, 0.75, 0.6)
+          .normalize()
+          .multiplyScalar(this.bounds.radius * 1.8)
+          .add(this.bounds.center),
+        blend,
+      );
+    } else {
+      const level = heading.clone();
+      level.y = 0;
+      if (level.lengthSq() > 0.05)
+        this.forward.lerp(level.normalize(), blend).normalize();
+      span = Math.max(this.minSpan, player.distanceTo(this.target) * 1.7);
+      const centre = player.clone().lerp(this.target, 0.5);
+      this.centre.lerp(centre, blend);
+      this.look.copy(this.centre);
+      this.eye.lerp(
+        this.centre
+          .clone()
+          .addScaledVector(this.forward, -span * 0.75)
+          .addScaledVector(up, span * 0.85),
+        blend,
+      );
+    }
+    this.camera.position.copy(this.eye);
+    this.camera.up.copy(up);
+    this.camera.lookAt(this.look);
+    this.camera.near = Math.max(0.05, span * 0.02);
+    this.camera.far = Math.max(50, span * 12);
+    const size = span * 0.045;
+    this.player.position.copy(player);
+    this.player.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), heading);
+    this.player.scale.setScalar(size);
+    this.destination.scale.setScalar(size);
+    this.origin.scale.setScalar(size);
+    return span;
+  }
+  // Draw into the map window. `pass(true)` switches the scene to its overview
+  // appearance (full surface, no fog) and `pass(false)` restores it.
+  render(player, heading, dt, canvas, pass) {
+    const rect = this.window.getBoundingClientRect();
+    const host = canvas.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return;
+    this.frame(player, heading, dt);
+    const renderer = this.renderer;
+    const x = rect.left - host.left;
+    const y = host.bottom - rect.bottom;
+    this.camera.aspect = rect.width / rect.height;
+    this.camera.updateProjectionMatrix();
+    const clearColor = renderer.getClearColor(new THREE.Color());
+    const size = renderer.getSize(new THREE.Vector2());
+    renderer.setScissorTest(true);
+    renderer.setScissor(x, y, rect.width, rect.height);
+    renderer.setViewport(x, y, rect.width, rect.height);
+    renderer.setClearColor(this.background);
+    pass(true);
+    this.markers.visible = true;
+    renderer.render(this.scene, this.camera);
+    this.markers.visible = false;
+    pass(false);
+    renderer.setClearColor(clearColor);
+    renderer.setScissorTest(false);
+    renderer.setViewport(0, 0, size.x, size.y);
   }
 }
