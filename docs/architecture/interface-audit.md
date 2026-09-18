@@ -185,3 +185,15 @@ mounting, viewer readiness guards, disabled-file-field state, HTML-label accessi
 names, and strict TypeScript declarations. Behavioral tests cover these cases.
 The package's [element reference](../../packages/components/docs/components/elements.md)
 describes registration, events and migration from the removed builders.
+
+Validation passed after a fresh production build of all 25 apps: 50 desktop/phone
+interface checks, mobile layouts and touch navigation for the catalog and every
+app, shared interface workflows, and real DICOM upload checks. Deface's example
+import was skipped on both viewports because the browser lacked a usable WebGPU
+adapter. The separate component browser test passed on desktop and phone,
+including native keyboard, clipboard, file selection and lifecycle behavior.
+
+Desktop and phone screenshots were reviewed for the shared controls and loaded
+examples. Remaining shared-theme findings: light-mode section headings have low
+contrast, and Brain extraction's Choose folder label is dark against a dark
+button. This migration does not change their existing shared color rules.
