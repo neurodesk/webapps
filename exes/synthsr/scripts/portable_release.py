@@ -2,6 +2,7 @@
 """Build and verify portable SynthSR release archives."""
 
 import argparse
+from contextlib import contextmanager
 import gzip
 import hashlib
 import json
@@ -13,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import zipfile
 
 NATIVE_ROOT = Path(__file__).resolve().parent.parent
@@ -144,6 +146,22 @@ def _extract_checked(platform, archive, destination):
                     shutil.copyfileobj(source, output)
 
 
+@contextmanager
+def package_directory():
+    directory = tempfile.TemporaryDirectory(prefix="synthsr package ")
+    try:
+        yield Path(directory.name)
+    finally:
+        for attempt in range(6):
+            try:
+                directory.cleanup()
+                break
+            except PermissionError as error:
+                if getattr(error, "winerror", None) != 32 or attempt == 5:
+                    raise
+                time.sleep(0.1 * 2 ** attempt)
+
+
 def verify_archive(platform, archive, fixture=REPOSITORY_ROOT / "apps/synthsr/test/fixtures/validation.nii.gz"):
     spec = PLATFORMS[platform]
     archive = Path(archive)
@@ -158,8 +176,7 @@ def verify_archive(platform, archive, fixture=REPOSITORY_ROOT / "apps/synthsr/te
     if sys.platform != spec["host"]:
         raise RuntimeError(f"verify {platform} on its native runner")
 
-    with tempfile.TemporaryDirectory(prefix="synthsr package ") as directory:
-        extracted = Path(directory)
+    with package_directory() as extracted:
         _extract_checked(platform, archive, extracted)
         executable = extracted / spec["executable"]
         executable.chmod(0o755)

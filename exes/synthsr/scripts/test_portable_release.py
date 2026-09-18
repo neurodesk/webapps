@@ -1,9 +1,11 @@
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import tarfile
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -92,6 +94,76 @@ class PortableReleaseTests(unittest.TestCase):
         for invalid in ["", "v1.2.3", "1.2/3", "../1.2.3"]:
             with self.assertRaisesRegex(ValueError, "version"):
                 portable_release.archive_name("linux-x64", invalid)
+
+    def test_verified_package_cleanup_retries_a_windows_sharing_violation(self):
+        self.payload("windows-x64")
+        archive = portable_release.build_archive(
+            "windows-x64", "1.2.3", self.target, self.docs, self.dist
+        )
+        cleanup = tempfile.TemporaryDirectory.cleanup
+        failures = []
+        extracted_paths = []
+
+        def locked_cleanup(directory):
+            if not failures:
+                error = PermissionError("executable is still in use")
+                error.winerror = 32
+                failures.append(error)
+                raise error
+            return cleanup(directory)
+
+        def verified_process(command, **kwargs):
+            extracted = Path(kwargs["cwd"])
+            extracted_paths.append(extracted)
+            if "--self-check" in command:
+                return SimpleNamespace(stdout="synthsr 1.2.3\ntarget: x86_64-windows\ncpu: ok\n")
+            (extracted / "validation-output.nii.gz").write_bytes(b"output")
+            (extracted / "validation-output.json").write_text(json.dumps({
+                "executionProvider": "cpu", "threads": 2,
+            }))
+            return SimpleNamespace(stdout="")
+
+        with patch.object(portable_release.sys, "platform", "win32"), \
+             patch.object(portable_release, "release_version", return_value="1.2.3"), \
+             patch.object(portable_release.subprocess, "run", side_effect=verified_process), \
+             patch.object(tempfile.TemporaryDirectory, "cleanup", autospec=True, side_effect=locked_cleanup):
+            validation = portable_release.verify_archive("windows-x64", archive)
+
+        self.assertEqual(len(failures), 1)
+        self.assertIn("packaged CPU inference: ok", validation.read_text())
+        self.assertTrue(extracted_paths)
+        self.assertTrue(all(not path.exists() for path in extracted_paths))
+
+    def test_package_cleanup_does_not_hide_persistent_locks_or_other_errors(self):
+        cleanup = tempfile.TemporaryDirectory.cleanup
+        for winerror, attempts in [(32, 6), (5, 1), (None, 1)]:
+            with self.subTest(winerror=winerror):
+                error = PermissionError("cannot delete package")
+                error.winerror = winerror
+                directories = []
+
+                def fail_cleanup(directory):
+                    directories.append(directory)
+                    raise error
+
+                try:
+                    with patch.object(tempfile.TemporaryDirectory, "cleanup", autospec=True, side_effect=fail_cleanup), \
+                         patch.object(portable_release.time, "sleep") as sleep:
+                        with self.assertRaises(PermissionError) as raised:
+                            with portable_release.package_directory():
+                                pass
+                        self.assertIs(raised.exception, error)
+                        self.assertEqual(len(directories), attempts)
+                        self.assertEqual(sleep.call_count, attempts - 1)
+                finally:
+                    if directories:
+                        cleanup(directories[0])
+
+    def test_package_directory_preserves_verification_failures(self):
+        with self.assertRaisesRegex(ValueError, "inference failed"):
+            with portable_release.package_directory() as directory:
+                raise ValueError("inference failed")
+        self.assertFalse(directory.exists())
 
 
 if __name__ == "__main__":
