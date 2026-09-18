@@ -135,7 +135,7 @@ apps:
     runtime: rust-wasm
     model_manifest: models/qsmbly.manifest.json
     asset_manifest_schema: scientific-assets-v1
-    source: astewartau/qsmbly@6d3a7a984a5af4e57625a6bcf60d5bac11c6873d
+    source: astewartau/qsmbly@6e01b15b43b615639881f35e6b1f7dbc214e0864
     license: MIT
     maintainers: [astewartau]
     support_status: active
@@ -221,7 +221,7 @@ apps:
     license: GPL-3.0-or-later
     maintainers: [thomshaw92]
     support_status: active
-    shell: static-html
+    shell: imaging-workspace
     ci:
       toolchains: [node, rust-wasm]
       shared_runtime: false

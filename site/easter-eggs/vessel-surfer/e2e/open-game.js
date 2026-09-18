@@ -1,11 +1,9 @@
 import { expect } from "@playwright/test";
+// Follow the homepage footer link, then wait for the brain data to load.
 export async function openGame(page) {
   await page.goto("/");
-  for (let i = 0; i < 5; i++) await page.locator("#under-the-surface").click();
-  await expect(page.locator('iframe[title="Vessel Surfer"]')).toBeVisible();
-  const frame = await (
-    await page.locator("iframe").elementHandle()
-  ).contentFrame();
-  await frame.waitForSelector("#play");
-  return frame;
+  await page.getByRole("link", { name: "Go surfing" }).click();
+  await expect(page).toHaveURL(/\/surf\/$/);
+  await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
+  return page;
 }

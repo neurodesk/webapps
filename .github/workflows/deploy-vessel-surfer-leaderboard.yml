@@ -1,0 +1,44 @@
+name: deploy-vessel-surfer-leaderboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/easter-eggs/vessel-surfer-leaderboard/**'
+      - 'site/easter-eggs/vessel-surfer/src/race.js'
+      - '.github/workflows/deploy-vessel-surfer-leaderboard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vessel-surfer-leaderboard
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site/easter-eggs/vessel-surfer-leaderboard
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - name: Test the worker
+        run: pnpm test
+      - name: Create the D1 database on first use
+        run: pnpm ensure-database
+      - name: Apply migrations
+        run: pnpm migrate
+      - name: Deploy the worker
+        run: pnpm deploy

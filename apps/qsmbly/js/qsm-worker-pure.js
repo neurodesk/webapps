@@ -6,13 +6,102 @@
  */
 
 // Import utilities - no fallbacks
-import { scalePhase, computeB0FromUnwrapped } from './worker/utils/PhaseUtils.js';
-import { createThresholdMask, findSeedPoint } from './worker/utils/MaskUtils.js';
+import { scalePhase, ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
+import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js';
-import { computeFieldMap } from './worker/utils/FieldMapping.js';
 import { buildConfigJson } from './modules/ConfigBridge.js';
 import * as QSMConfig from './app/config.js';
 import { createWorkerEmitter, installWorkerRouter } from '../vendor/webapp-components/src/worker/index.js';
+import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
+
+// Deep-learning model registry (id -> spec), populated from the base wasm after init, and
+// the base URL for lazy-loading the DL wasm bundle. See ModelWeights.js.
+let dlRegistry = {};
+let wasmBaseUrl = '';
+const DL_TOTAL_FIELD_MODELS = new Set(['autoqsm', 'nextqsm']); // take the total field (own BFR)
+// Whole-volume nets that would OOM the 32-bit WASM heap on clinical data but have an
+// overlap-tiled variant in qsm-core → run tiled (bounded memory, ~approximate). qsmgan/autoqsm
+// already tile natively (no flag needed); lpcnn/modl-qsm/nextqsm can't tile.
+const DL_TILEABLE = new Set(['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm', 'lpcnn', 'modl-qsm', 'nextqsm']);
+const isDlModel = (id) => Object.prototype.hasOwnProperty.call(dlRegistry, id);
+
+/** Resolve the configured weight-host base to an absolute URL (or '' to use registry URLs). */
+function weightBaseUrl() {
+  const base = QSMConfig.MODEL_WEIGHT_BASE_URL || '';
+  if (!base) return '';
+  return /^https?:\/\//i.test(base) ? base : `${wasmBaseUrl}/${base.replace(/^\//, '')}`;
+}
+
+/** Fetch a DL model's weight files (IndexedDB-cached) with progress reported to the UI. */
+async function downloadWeights(model) {
+  const totalBytes = model.files.reduce((a, f) => a + (Number(f.bytes) || 0), 0);
+  postLog(`Preparing ${model.name} weights (~${(totalBytes / 1e6).toFixed(0)} MB, cached after first download)...`);
+  return fetchModelWeights(model, (idx, name, done, total, cached) => {
+    if (cached) {
+      postLog(`  ${name}: using cached weights`);
+    } else {
+      const frac = total ? done / total : 0;
+      postProgress(0.63 + frac * 0.03,
+        `Downloading ${model.name}: ${(done / 1e6).toFixed(1)}/${(total / 1e6).toFixed(1)} MB`);
+    }
+  }, weightBaseUrl());
+}
+
+// Track which wasm modules already have a rayon pool (each bundle is a separate module/memory
+// with its own threadpool, so each is initialized independently and at most once).
+const _rayonReady = new WeakSet();
+
+/** Boot a wasm-bindgen-rayon threadpool for `mod`, if this is a threaded build on a
+ *  cross-origin-isolated page. No-op (stays single-threaded) otherwise. `threads` bounds the
+ *  pool — for the DL module this also bounds how many tiles run at once (each holds a full
+ *  patch's activations in the single shared heap). */
+async function initRayon(mod, label, threads) {
+  try {
+    if (!mod || typeof mod.initThreadPool !== 'function') return; // single-threaded build
+    if (typeof SharedArrayBuffer === 'undefined' || !self.crossOriginIsolated) {
+      postLog(`  (single-threaded — page is not cross-origin isolated; serve with COOP/COEP for threads)`);
+      return;
+    }
+    if (_rayonReady.has(mod)) return;
+    const hw = Math.max(1, self.navigator?.hardwareConcurrency || 4);
+    const n = Math.max(1, Math.min(threads || hw, hw));
+    await mod.initThreadPool(n);
+    _rayonReady.add(mod);
+    // Let qsm-core use the pool for deep-learning inference too (tract dispatches on rayon's
+    // global pool on wasm). Per module instance: the DL bundle reports separately from the base.
+    mod.set_threads_ready_wasm?.(true);
+    postLog(`Threadpool ready: ${n} threads [${label}]`);
+  } catch (e) {
+    console.warn(`initThreadPool [${label}] failed; continuing single-threaded:`, e);
+  }
+}
+
+/** Run a field-input DL inversion (local or total field → χ) in the lazy-loaded onnx bundle.
+ *  `onProgress(done, total)` reports per-tile progress for tiled nets. `tiling` = the modal's
+ *  dl_tiling settings ({enabled, tile_size, tile_halo}); defaults keep tiling on for supported
+ *  models with a browser-safe 64³ patch. */
+async function runDlFieldInversion(model, field, mask, nx, ny, nz, vsx, vsy, vsz, onProgress, tiling) {
+  const weights = await downloadWeights(model);
+  const dl = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
+  // Bound the DL pool so concurrent tiles don't exhaust the shared 32-bit heap (each tile holds
+  // its own patch activations). 4 is a safe default for ~64³ patches; tunable later.
+  await initRayon(dl, 'dl', 4);
+  postLog(`Running ${model.name} (deep-learning dipole inversion)...`);
+  postProgress(0.7, `${model.name} inference...`);
+  const w2 = weights[1] || new Uint8Array(0);
+  const t = tiling || {};
+  // Tiling on/off comes from the settings modal; default on for models with a tiled variant.
+  const tiled = t.enabled !== undefined ? t.enabled !== false : DL_TILEABLE.has(model.id);
+  // Browser-safe default 64³ patch (core 56 + halo 4): the size the natively-patch-based nets use,
+  // proven not to OOM the 32-bit wasm heap; large core + thin halo minimizes overlap recompute.
+  const tileCore = Number(t.tile_size) || 56;
+  const tileHalo = Number.isFinite(Number(t.tile_halo)) ? Number(t.tile_halo) : 4;
+  if (tiled) postLog(`  tiled inference (${tileCore + 2 * tileHalo}³ patches, bounded memory; approximate vs whole-volume)`);
+  const cb = onProgress || (() => {});
+  return new Float64Array(dl.run_dl_field_inversion_wasm(
+    model.id, field, mask, nx, ny, nz, vsx, vsy, vsz, 0, 0, 1, weights[0], w2, tiled, tileCore, tileHalo, cb,
+  ));
+}
 
 let wasmModule = null;
 const workerMessages = createWorkerEmitter(self);
@@ -117,6 +206,22 @@ async function initializeWasm() {
     const module = await import(jsUrl);
     await module.default(wasmBinaryUrl);
     wasmModule = module;
+    wasmBaseUrl = baseUrl;
+
+    // Spin up the rayon threadpool (threaded builds only, and only on a cross-origin-isolated
+    // page). Parallelizes all classical qsm-core algorithms. Non-threaded builds omit
+    // initThreadPool; a non-isolated page has no SharedArrayBuffer → skip and stay single-thread.
+    await initRayon(wasmModule, 'base');
+
+    // Deep-learning model registry (urls/sizes/hashes) — the base wasm always exposes it;
+    // the heavier onnx wasm bundle is lazy-loaded only when a DL algorithm actually runs.
+    try {
+      if (wasmModule.get_model_registry_wasm) {
+        dlRegistry = parseRegistry(wasmModule.get_model_registry_wasm());
+      }
+    } catch (e) {
+      console.warn('DL model registry unavailable:', e);
+    }
 
     if (wasmModule.wasm_health_check()) {
       postLog(`QSMbly v${wasmModule.get_version()} ready`);
@@ -446,12 +551,28 @@ async function runPipeline(data) {
     const invProgress = (current, total) => {
       postProgress(0.67 + (current / total) * 0.25, `${dipoleMethod.toUpperCase()}: ${current}/${total}`);
     };
-    let qsmResult = new Float64Array(wasmModule.run_dipole_inversion_wasm(
-      localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
-      magField || 3.0, new Float64Array(echoTimesSec),
-      0, 0, 1, magnitudeForInversion,
-      configToml, invProgress,
-    ));
+    let qsmResult;
+    if (isDlModel(dipoleMethod)) {
+      // Deep-learning inversion: fetch weights in JS (WASM can't download) + run in the
+      // lazy-loaded onnx bundle. AutoQSM/NeXtQSM consume the TOTAL field (own BFR); the rest
+      // take the local field from background removal.
+      const model = dlRegistry[dipoleMethod];
+      const isTotalField = DL_TOTAL_FIELD_MODELS.has(dipoleMethod);
+      const invField = isTotalField ? b0Fieldmap : localField;
+      const invMask = isTotalField ? mask : erodedMask;
+      const dlProgress = (done, total) => {
+        const frac = total ? done / total : 0;
+        postProgress(0.7 + frac * 0.22, `${dipoleMethod.toUpperCase()}: tile ${done}/${total}`);
+      };
+      qsmResult = await runDlFieldInversion(model, invField, invMask, nx, ny, nz, vsx, vsy, vsz, dlProgress, pipelineSettings?.dl_tiling);
+    } else {
+      qsmResult = new Float64Array(wasmModule.run_dipole_inversion_wasm(
+        localField, erodedMask, nx, ny, nz, vsx, vsy, vsz,
+        magField || 3.0, new Float64Array(echoTimesSec),
+        0, 0, 1, magnitudeForInversion,
+        configToml, invProgress,
+      ));
+    }
 
     // Already in ppm (pipeline stage handles all unit conversions)
     let qsmMin = Infinity, qsmMax = -Infinity;
@@ -647,23 +768,48 @@ async function runTgvPipeline(data) {
     const fieldstrength = magField || 3.0;
 
     if (nEchoes > 1) {
-      // Multi-echo: field mapping → B0 → convert to phase for TGV
+      // Multi-echo: field mapping → B0 → convert to phase for TGV.
+      // Same shared qsm-core stage the standard pipeline uses, so TGV honours the
+      // ROMEO coherence flags, the b0_estimation choice and the Laplacian handling
+      // that the config carries.
       postLog(`Multi-echo data detected (${nEchoes} echoes), computing B0 field map...`);
+      postProgress(0.15, 'Field mapping...');
 
-      const { b0Fieldmap } = computeFieldMap(wasmModule, {
-        phase4d, magnitude4d, echoTimes, mask,
-        dims, voxelSize, affine, settings: pipelineSettings,
-        postLog, postProgress, sendStageData,
-      });
+      const configToml = wasmModule.config_json_to_toml_wasm(buildConfigJson(pipelineSettings), '');
+      const echoTimesSec = echoTimes.map(t => t / 1000); // ms → seconds
 
-      sendStageData('B0', b0Fieldmap, dims, voxelSize, affine, 'B0 Field Map (Hz)');
-
-      // Convert B0 (Hz) to equivalent phase (radians) for TGV
-      te = echoTimes[0] / 1000;
-      tgvInputPhase = new Float64Array(voxelCount);
-      for (let i = 0; i < voxelCount; i++) {
-        tgvInputPhase[i] = 2 * Math.PI * b0Fieldmap[i] * te;
+      const phasesFlat = new Float64Array(nEchoes * voxelCount);
+      const magsFlat = new Float64Array(nEchoes * voxelCount);
+      for (let e = 0; e < nEchoes; e++) {
+        phasesFlat.set(phase4d[e], e * voxelCount);
+        magsFlat.set(magnitude4d[e], e * voxelCount);
       }
+
+      const fieldResult = wasmModule.run_field_mapping_wasm(
+        phasesFlat, magsFlat, mask,
+        new Float64Array(echoTimesSec),
+        nx, ny, nz, vsx, vsy, vsz,
+        fieldstrength, configToml,
+      );
+
+      // Result is [b0_field_ppm..., phase_offset...] or just [b0_field_ppm...]
+      const b0FieldmapPpm = new Float64Array(fieldResult.slice(0, voxelCount));
+      const phaseOffset = fieldResult.length > voxelCount
+        ? new Float64Array(fieldResult.slice(voxelCount, 2 * voxelCount))
+        : null;
+
+      if (phaseOffset) {
+        sendStageData('phaseOffset', phaseOffset, dims, voxelSize, affine, 'Phase Offset (rad)', false);
+      }
+      sendStageData('B0', b0FieldmapPpm, dims, voxelSize, affine, 'B0 Field Map (ppm)');
+      postProgress(0.40, 'Field mapping complete');
+
+      // TGV takes phase, so undo the stage's Hz→ppm with the same gamma qsm-core used,
+      // then convert with the first echo time. TGV divides this straight back out.
+      te = echoTimesSec[0];
+      tgvInputPhase = ppmFieldToPhase(
+        b0FieldmapPpm, fieldstrength, te, QSMConfig.PHYSICS.GYROMAGNETIC_RATIO,
+      );
       postLog(`Converted B0 to equivalent phase using TE=${(te * 1000).toFixed(2)}ms`);
 
     } else {
@@ -1206,6 +1352,104 @@ function postBETComplete(maskData, coverage) {
 
 function postBETError(message) {
   emitMessage({ type: 'betError', message });
+}
+
+/**
+ * Apply mask operations (`erode:2`, `fill-holes:0`, `signal-erode`, …) through qsm-core's masking
+ * pipeline — the same code the qsmxt pipeline runs, so an interactively refined mask matches the
+ * `--mask ...` section we print. Pure Rust, so it lives in the base wasm bundle.
+ */
+/** HD-BET deep-learning brain extraction (magnitude -> brain mask).
+ *
+ *  A mask *generator*: the result replaces the mask, and any refinements the user adds
+ *  afterwards go through `applyMaskOps` as usual — the same generator-then-refinements split
+ *  qsm-core's `build_mask_section` makes natively.
+ *
+ *  Lives in the lazily-loaded DL bundle (it needs onnx), so this downloads the 123 MB weights
+ *  (IndexedDB-cached after the first run) and boots that bundle's own rayon pool. */
+async function runHdBet(data) {
+  const { magnitude, dims, voxelSize, patch, tileStep, tta } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+
+    const model = dlRegistry['hd-bet'];
+    if (!model) throw new Error('hd-bet is not in the model registry');
+
+    emitMessage({ type: 'hdBetProgress', value: 0.05, text: 'Fetching HD-BET weights...' });
+    const weights = await downloadWeights(model);
+
+    emitMessage({ type: 'hdBetProgress', value: 0.15, text: 'Loading inference bundle...' });
+    const dl = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
+    // Same bound as the tiled inversions (4), and for their sake rather than HD-BET's: the DL
+    // bundle has ONE pool, whoever boots it first sets the size, and `xqsm_tiled` & co. batch
+    // tiles by `rayon::current_num_threads()` — so a 14-thread pool booted here would later run
+    // 14 concurrent tiles, each holding its own activations, and exhaust the 32-bit heap.
+    // HD-BET parallelises *inside* a patch (tract's matmuls), so a small pool costs it time, not
+    // correctness.
+    await initRayon(dl, 'dl', 4);
+
+    const [px, py, pz] = patch;
+    emitMessage({
+      type: 'hdBetLog',
+      message: `Running HD-BET on ${nx}x${ny}x${nz} @ ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm `
+             + `(${px}x${py}x${pz} patches, step ${tileStep ?? 0.5}`
+             + `${tta ? ', mirroring TTA' : ''}). This runs a 30 M-parameter `
+             + `network over every overlapping patch and takes several minutes — progress below.`,
+    });
+
+    // Once patches start landing we can report a real ETA from measured throughput, rather than
+    // the modal's up-front guess.
+    const startedAt = performance.now();
+    const onProgress = (done, total) => {
+      const frac = total ? done / total : 0;
+      let eta = '';
+      if (done > 0 && done < total) {
+        const secsLeft = ((performance.now() - startedAt) / done) * (total - done) / 1000;
+        eta = secsLeft < 60
+          ? ` — ${Math.ceil(secsLeft)}s left`
+          : ` — ~${Math.round(secsLeft / 60)} min left`;
+      }
+      emitMessage({
+        type: 'hdBetProgress',
+        value: 0.2 + frac * 0.75,
+        text: `HD-BET patch ${done}/${total}${eta}`,
+      });
+    };
+
+    const maskData = dl.hd_bet_wasm(
+      new Float64Array(magnitude), nx, ny, nz, vsx, vsy, vsz,
+      weights[0], px, py, pz, tileStep ?? 0.5, !!tta, onProgress,
+    );
+
+    let count = 0;
+    for (let i = 0; i < maskData.length; i++) if (maskData[i]) count++;
+    emitMessage({
+      type: 'hdBetLog',
+      message: `HD-BET mask: ${count}/${maskData.length} voxels (${(100 * count / maskData.length).toFixed(1)}%)`,
+    });
+    emitMessage({ type: 'hdBetProgress', value: 1.0, text: 'Complete' });
+    emitMessage({ type: 'hdBetComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    emitMessage({ type: 'hdBetError', message: error.message || String(error) });
+  }
+}
+
+async function runApplyMaskOps(data) {
+  const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+    const maskData = wasmModule.apply_mask_ops_wasm(
+      new Uint8Array(mask), ops,
+      new Float64Array(inputData || []),
+      new Float64Array(magnitude || []),
+      nx, ny, nz, vsx, vsy, vsz,
+    );
+    emitMessage({ type: 'applyMaskOpsComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    emitMessage({ type: 'applyMaskOpsError', message: error.message || String(error) });
+  }
 }
 
 async function runBET(data) {
@@ -2095,19 +2339,19 @@ async function runBackgroundRemoval(
   } else if (backgroundMethod === 'ismv') {
     postProgress(0.42, 'Preparing iSMV background removal...');
     postLog(`Removing background field using iSMV...`);
-    const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, maxit: 500 };
+    const ismvSettings = pipelineSettings?.ismv || { radius: 5, tol: 0.001, max_iter: 500 };
     // Compute default radius from voxel size if not set (matches QSM.jl: 2 * max(vsz))
     if (ismvSettings.radius == null || isNaN(ismvSettings.radius) || ismvSettings.radius <= 0) {
       ismvSettings.radius = Math.round(Math.max(2, 2 * Math.max(vsx, vsy, vsz)));
       postLog(`  iSMV: computed default radius=${ismvSettings.radius}mm from voxel size`);
     }
-    postLog(`  iSMV params: radius=${ismvSettings.radius}, tol=${ismvSettings.tol}, maxit=${ismvSettings.maxit}`);
+    postLog(`  iSMV params: radius=${ismvSettings.radius}, tol=${ismvSettings.tol}, max_iter=${ismvSettings.max_iter}`);
     const ismvProgress = (current, total) => {
       postProgress(0.42 + (current / total) * 0.20, `iSMV: Iteration ${current}/${total}`);
     };
     const result = wasmModule.ismv_wasm_with_progress(
       b0Fieldmap, mask, nx, ny, nz, vsx, vsy, vsz,
-      ismvSettings.radius, ismvSettings.tol, ismvSettings.maxit,
+      ismvSettings.radius, ismvSettings.tol, ismvSettings.max_iter,
       magField || 3.0, ismvProgress
     );
     localField = new Float64Array(result.slice(0, voxelCount));
@@ -2582,6 +2826,23 @@ async function runSWIPipeline(data) {
   }
 }
 
+// Handle messages from main thread
+/**
+ * Run an export serializer and reply under `type` either way.
+ *
+ * These three replies are awaited by a one-shot listener in the export modal, and
+ * `configTomlResult` is what detaches it. Letting the throw escape to the generic
+ * postError would leave the modal on "Generating..." with the listener still attached,
+ * so a failure is reported as `{ type, error }` on the same channel instead.
+ */
+function exportReply(type, serialize) {
+  try {
+    return { type, result: serialize() };
+  } catch (err) {
+    return { type, error: err?.message || String(err) };
+  }
+}
+
 installWorkerRouter({
   scope: self,
   getServices: async () => ({}),
@@ -2599,6 +2860,13 @@ installWorkerRouter({
 
       case 'runBET':
         await runBET(data);
+        break;
+
+      case 'hdBet':
+        await runHdBet(data);
+        break;
+      case 'applyMaskOps':
+        await runApplyMaskOps(data);
         break;
 
       case 'runSWI':
@@ -2622,16 +2890,19 @@ installWorkerRouter({
         break;
 
       case 'generateCommand':
-        emitMessage({ type: 'commandResult', result: wasmModule.generate_command_wasm(data.configJson, data.maskSection || '') });
+        emitMessage(exportReply('commandResult', () =>
+          wasmModule.generate_command_wasm(data.configJson, data.maskSection || '')));
         break;
 
       case 'generateMethods':
-        emitMessage({ type: 'methodsResult', result: wasmModule.generate_methods_wasm(data.configJson, 'QSMbly', data.maskSection || '') });
+        emitMessage(exportReply('methodsResult', () =>
+          wasmModule.generate_methods_wasm(data.configJson, 'QSMbly', data.maskSection || '')));
         break;
 
       case 'generateConfigToml':
         // Download path: pruned to the selected algorithm (still loads in qsmxt.rs).
-        emitMessage({ type: 'configTomlResult', result: wasmModule.config_json_to_toml_selected_wasm(data.configJson, data.maskSection || '') });
+        emitMessage(exportReply('configTomlResult', () =>
+          wasmModule.config_json_to_toml_selected_wasm(data.configJson, data.maskSection || '')));
         break;
 
       default:

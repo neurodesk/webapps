@@ -40,7 +40,7 @@ export function findSeedPoint(mask, nx, ny, nz) {
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
       for (let k = 0; k < nz; k++) {
-        const idx = i * ny * nz + j * nz + k;
+        const idx = i + j * nx + k * nx * ny;
         if (mask[idx]) {
           sumX += i;
           sumY += j;

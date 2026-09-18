@@ -196,7 +196,7 @@
   border-color: var(--nd-brand-border);
 }
 
-:root[data-neurodesk-app][data-neurodesk-theme="dark"]:not([data-neurodesk-shell="react"]) #controls button {
+:root[data-neurodesk-app][data-neurodesk-theme="dark"]:not([data-neurodesk-shell="react"]) #controls:not(.nd-imaging-controls) button {
   color: var(--nd-brand-text);
   background: var(--nd-brand-pale);
   border-color: var(--nd-brand-border);

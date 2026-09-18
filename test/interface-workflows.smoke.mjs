@@ -19,6 +19,7 @@ const site = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader'] });
 const failures = [];
 async function check(id, workflow) {
+  if (process.env.SMOKE_APPS && !process.env.SMOKE_APPS.split(',').includes(id)) return;
   const app = apps.find(app => app.id === id);
   if (!app) throw new Error(`Unknown app ${id}`);
   const page = await browser.newPage({ viewport:{width:390,height:844}, isMobile:true, hasTouch:true });
@@ -63,12 +64,6 @@ try {
   });
   await check('easy-mp2rage', async page => {
     await expect(page.locator('#parameterPanel')).not.toHaveAttribute('open','');
-    await page.locator('#tutorialBtn').tap();
-    await page.locator('#tourNext').tap();
-    await page.locator('#tourNext').tap();
-    await expect(page.locator('#paramSource')).toBeVisible();
-    await page.locator('#tourSkip').tap();
-    await page.locator('#parameterPanel > summary').tap();
     await page.locator('#taskSel').selectOption('b1only');
     await page.locator('#parameterPanel > summary').tap();
     await expect(page.locator('#mpBlock')).toBeVisible();
@@ -79,11 +74,11 @@ try {
     await page.locator('#file').setInputFiles([nifti('scan_uni.nii'),nifti('scan_inv1.nii',30),nifti('scan_inv2.nii',40)]);
     await expect(page.locator('#run')).toBeEnabled();
     await page.locator('#run').tap();
-    await expect(page.locator('#downloads a').first()).toBeVisible({timeout:60000});
+    await expect(page.locator('#downloads a:visible').first()).toBeVisible({timeout:60000});
     await page.getByRole('button',{name:'About',exact:true}).tap();
-    await expect(page.locator('#aboutDialog')).toContainText('Marques');
-    await page.locator('#aboutDialog .nd-app-dialog__close').tap();
-    await expect(page.locator('#aboutDialog')).toBeHidden();
+    await expect(page.locator('dialog[data-dialog="about"]')).toContainText('MP2RAGE');
+    await page.locator('dialog[data-dialog="about"] .nd-app-dialog__close').tap();
+    await expect(page.locator('dialog[data-dialog="about"]')).toBeHidden();
     page.once('dialog', dialog => dialog.accept());
     await page.locator('#resetAll').tap();
     await expect(page.locator('#downloads a')).toHaveCount(0);

@@ -11,11 +11,15 @@ export async function loadHumanData() {
       );
     return response;
   };
-  const [meta, graph, rawField, rawMesh] = await Promise.all([
-    fetchAsset("ixi322.json").then((r) => r.json()),
-    fetchAsset("ixi322-network.json").then((r) => r.json()),
-    fetchAsset("ixi322-field.gz").then((r) => r.arrayBuffer()),
-    fetchAsset("ixi322-surface.bin").then((r) => r.arrayBuffer()),
+  const [meta, graph, rawField, rawMesh, rawContext] = await Promise.all([
+    fetchAsset("brain.json").then((r) => r.json()),
+    fetchAsset("brain-network.json").then((r) => r.json()),
+    fetchAsset("brain-field.gz").then((r) => r.arrayBuffer()),
+    fetchAsset("brain-surface.bin").then((r) => r.arrayBuffer()),
+    // The wider vasculature is decorative; play continues without it.
+    fetch(base + "brain-context.bin")
+      .then((r) => (r.ok ? r.arrayBuffer() : null))
+      .catch(() => null),
   ]);
   const bytes = new Uint8Array(rawField);
   // Vite may serve .gz with Content-Encoding; fetch then already decompresses it.
@@ -31,22 +35,25 @@ export async function loadHumanData() {
       : bytes;
   if (field.length !== meta.shape.reduce((a, b) => a * b, 1))
     throw new Error("Incomplete human vessel field. Retry loading.");
-  const header = new DataView(rawMesh),
-    vertices = header.getUint32(0, true),
-    indices = header.getUint32(4, true);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.BufferAttribute(new Float32Array(rawMesh, 8, vertices * 3), 3),
-  );
-  geometry.setIndex(
-    new THREE.BufferAttribute(
-      new Uint32Array(rawMesh, 8 + vertices * 12, indices),
-      1,
-    ),
-  );
-  geometry.computeVertexNormals();
-  geometry.computeBoundingSphere();
+  const meshGeometry = (buffer) => {
+    const header = new DataView(buffer);
+    const vertices = header.getUint32(0, true);
+    const count = header.getUint32(4, true);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array(buffer, 8, vertices * 3), 3),
+    );
+    g.setIndex(
+      new THREE.BufferAttribute(new Uint32Array(buffer, 8 + vertices * 12, count), 1),
+    );
+    g.computeVertexNormals();
+    g.computeBoundingSphere();
+    return g;
+  };
+  const geometry = meshGeometry(rawMesh);
+  const indices = geometry.index.count;
+  const context = rawContext && rawContext.byteLength > 8 ? meshGeometry(rawContext) : null;
   // Spatial chunks allow ordinary frustum culling inside the tunnel. All surface
   // triangles remain intact; this is not a cutaway or a change to the vessel.
   const positions = geometry.attributes.position;
@@ -91,5 +98,6 @@ export async function loadHumanData() {
     },
     network: createNetwork(graph),
     geometry,
+    context,
   };
 }

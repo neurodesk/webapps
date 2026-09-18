@@ -8,14 +8,14 @@ import { surfaceGuard } from "../src/surface-guard.js";
 import { sampleMask } from "../src/mask.js";
 const dir = new URL("../public/data/", import.meta.url),
   read = (name) => readFileSync(new URL(name, dir));
-const metadata = JSON.parse(read("ixi322.json")),
-  network = JSON.parse(read("ixi322-network.json"));
+const metadata = JSON.parse(read("brain.json")),
+  network = JSON.parse(read("brain-network.json"));
 const volume = {
   ...metadata,
-  field: new Uint8Array(gunzipSync(read("ixi322-field.gz"))),
+  field: new Uint8Array(gunzipSync(read("brain-field.gz"))),
   valueScale: 255,
 };
-const raw = read("ixi322-surface.bin"),
+const raw = read("brain-surface.bin"),
   buffer = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength),
   view = new DataView(buffer);
 const vertices = view.getUint32(0, true),
@@ -60,14 +60,27 @@ function refine(coords) {
     p.addScaledVector(n, margin - signed + 0.002);
     changed = true;
   }
-  if (sampleMask(volume, p.toArray()) <= 0.54)
-    throw new Error("Surface refinement left the source lumen");
+  // A lumen too thin to hold the clearance is not routable; its branch is
+  // dropped below rather than bridged or widened.
+  if (sampleMask(volume, p.toArray()) <= 0.54) {
+    cache.set(key, null);
+    return null;
+  }
   if (changed) corrected++;
   const point = p.toArray().map((v) => Number(v.toFixed(6)));
   cache.set(key, point);
   return point;
 }
-network.nodes = network.nodes.map(refine);
+const refinedNodes = network.nodes.map(refine);
+let thin = 0;
+network.edges = network.edges.filter((edge) => {
+  if (refinedNodes[edge.a] && refinedNodes[edge.b]) return true;
+  thin++;
+  return false;
+});
+// Nodes that cannot hold the clearance keep their source coordinate; no
+// remaining edge references them.
+network.nodes = network.nodes.map((node, i) => refinedNodes[i] || node);
 for (const edge of network.edges) {
   const pts = [];
   for (let i = 1; i < edge.points.length; i++) {
@@ -83,6 +96,11 @@ for (const edge of network.edges) {
             .toArray(),
         ),
       );
+  }
+  if (pts.some((p) => p === null)) {
+    edge.points = null;
+    thin++;
+    continue;
   }
   pts.push(network.nodes[edge.b]);
   pts[0] = network.nodes[edge.a];
@@ -104,10 +122,11 @@ for (const edge of network.edges) {
   samples += compact.length;
 }
 // Exclude segmentation connections that cannot accommodate a continuous camera
-// path through the actual surface. Retain only the component of the launch route.
+// path through the actual surface, keep the largest routable component, and
+// launch from its widest long trunk.
 const guard = surfaceGuard(geometry, true);
-const startEdge = network.edges[network.start.edge];
 const valid = network.edges.filter((edge) => {
+  if (!edge.points) return false;
   const points = edge.points.map((p) => new THREE.Vector3(...p));
   return points.every((p, i) => {
     if (!guard.surfaceInside(p.toArray())) return false;
@@ -128,34 +147,73 @@ const valid = network.edges.filter((edge) => {
     return true;
   });
 });
-const reached = new Set([startEdge.a, startEdge.b]);
-let added = true;
-while (added) {
-  added = false;
-  for (const edge of valid)
-    if (reached.has(edge.a) || reached.has(edge.b)) {
-      if (!reached.has(edge.a) || !reached.has(edge.b)) added = true;
-      reached.add(edge.a);
-      reached.add(edge.b);
-    }
+const componentOf = new Map();
+let componentCount = 0;
+for (const edge of valid) {
+  if (componentOf.has(edge.a) || componentOf.has(edge.b)) continue;
+  const id = componentCount++;
+  const queue = [edge.a];
+  componentOf.set(edge.a, id);
+  while (queue.length) {
+    const node = queue.pop();
+    for (const other of valid)
+      for (const next of [other.a, other.b])
+        if ((other.a === node || other.b === node) && !componentOf.has(next)) {
+          componentOf.set(next, id);
+          queue.push(next);
+        }
+  }
 }
-network.edges = valid.filter((e) => reached.has(e.a) && reached.has(e.b));
-network.start.edge = network.edges.indexOf(startEdge);
-if (network.start.edge < 0)
-  throw new Error("Launch route failed surface validation");
+const edgeLength = (edge) =>
+  edge.points.reduce(
+    (sum, p, i) =>
+      i ? sum + Math.hypot(...p.map((v, k) => v - edge.points[i - 1][k])) : 0,
+    0,
+  );
+const componentLength = new Map();
+for (const edge of valid)
+  componentLength.set(
+    componentOf.get(edge.a),
+    (componentLength.get(componentOf.get(edge.a)) || 0) + edgeLength(edge),
+  );
+const largest = [...componentLength.entries()].sort((a, b) => b[1] - a[1])[0][0];
+network.edges = valid.filter((e) => componentOf.get(e.a) === largest);
+const degree = new Map();
+for (const edge of network.edges)
+  for (const node of [edge.a, edge.b]) degree.set(node, (degree.get(node) || 0) + 1);
+const trunks = network.edges.filter(
+  (e) => degree.get(e.a) > 2 && degree.get(e.b) > 2 && edgeLength(e) > 4,
+);
+const candidates = trunks.length
+  ? trunks
+  : network.edges.filter((e) => edgeLength(e) > 4);
+if (!candidates.length) throw new Error("No launch trunk survived validation");
+const startEdge = candidates.reduce((best, e) =>
+  e.radius ** 2 * Math.min(15, edgeLength(e)) >
+  best.radius ** 2 * Math.min(15, edgeLength(best))
+    ? e
+    : best,
+);
+network.start = {
+  edge: network.edges.indexOf(startEdge),
+  reverse: false,
+  progress: 0.25,
+};
+metadata.routableComponents = componentCount;
+metadata.routableLengthMm = Number(componentLength.get(largest).toFixed(2));
 metadata.branches = network.edges.length;
 samples = network.edges.reduce((sum, e) => sum + e.points.length, 0);
 metadata.processing = metadata.processing.replace(
   / Route refinement against rendered triangles with a 0.015 mm inward margin\./g,
   "",
 );
-writeFileSync(new URL("ixi322-network.json", dir), JSON.stringify(network));
+writeFileSync(new URL("brain-network.json", dir), JSON.stringify(network));
 metadata.routeSamples = samples;
 metadata.cameraClearanceMm = margin;
 metadata.processing +=
   " Route refinement against rendered triangles with a 0.015 mm inward margin.";
 writeFileSync(
-  new URL("ixi322.json", dir),
+  new URL("brain.json", dir),
   JSON.stringify(metadata, null, 2) + "\n",
 );
-console.log({ corrected, samples });
+console.log({ corrected, samples, thin, components: componentCount, branches: network.edges.length, startRadius: startEdge.radius, startLength: edgeLength(startEdge).toFixed(2) });

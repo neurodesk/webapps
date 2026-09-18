@@ -235,11 +235,67 @@ apps:
   qsmbly:
     builders: QSMbly and its QSM.rs core were created by Ashley Stewart.
     packages:
+      - { name: QSMbly (upstream), url: https://github.com/astewartau/qsmbly, role: upstream browser application by Ashley Stewart }
       - { name: QSM.rs (Rust → WebAssembly), url: https://github.com/astewartau/QSM.rs, role: all QSM algorithms }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
       - { name: dicompare, url: https://github.com/astewartau/dicompare, role: acquisition protocol validation report }
     citations:
+      - group: Dipole inversion
+        title: xQSM
+        reference: "Gao et al., NMR Biomed 2021; doi:10.1002/nbm.4461"
+        doi: 10.1002/nbm.4461
+        code: https://github.com/sunhongfu/xQSM
+      - group: Dipole inversion
+        title: QSMnet
+        reference: "Yoon et al., NeuroImage 2018; doi:10.1016/j.neuroimage.2018.06.030"
+        doi: 10.1016/j.neuroimage.2018.06.030
+        code: https://github.com/SNU-LIST/QSMnet
+      - group: Dipole inversion
+        title: QSMnet+
+        reference: "Jung et al., NeuroImage 2020; doi:10.1016/j.neuroimage.2020.116579"
+        doi: 10.1016/j.neuroimage.2020.116579
+        code: https://github.com/SNU-LIST/QSMnet
+      - group: Dipole inversion
+        title: QSMGAN
+        reference: "Chen et al., NeuroImage 2020; doi:10.1016/j.neuroimage.2019.116389"
+        doi: 10.1016/j.neuroimage.2019.116389
+        code: https://github.com/mmorri10/QSMGAN-LupoLab
+      - group: Dipole inversion
+        title: IR2QSM
+        reference: "Li et al., Med. Phys. 2025; doi:10.1002/mp.17747; arXiv:2406.12300"
+        doi: 10.1002/mp.17747
+        code: https://github.com/YangGaoUQ/IR2QSM
+      - group: Dipole inversion
+        title: LPCNN
+        reference: "Lai et al., MICCAI 2020; doi:10.1007/978-3-030-59713-9_13"
+        doi: 10.1007/978-3-030-59713-9_13
+        code: https://github.com/Sulam-Group/LPCNN
+      - group: Dipole inversion
+        title: MoDL-QSM
+        reference: "Feng et al., NeuroImage 2021; doi:10.1016/j.neuroimage.2021.118376"
+        doi: 10.1016/j.neuroimage.2021.118376
+        code: https://github.com/Ruimin-Feng/MoDL-QSM
+      - group: Dipole inversion
+        title: AutoQSM
+        reference: "Wei et al., NeuroImage 2019; doi:10.1016/j.neuroimage.2019.116064"
+        doi: 10.1016/j.neuroimage.2019.116064
+        code: https://github.com/AMRI-Lab/AutoQSM
+      - group: Dipole inversion
+        title: NeXtQSM
+        reference: "Cognolato et al., NeuroImage 2023; doi:10.1016/j.neuroimage.2022.119729"
+        doi: 10.1016/j.neuroimage.2022.119729
+        code: https://github.com/wayne1123/NeXtQSM
+      - group: Brain extraction
+        title: HD-BET
+        reference: "Isensee et al., Hum Brain Mapp 40(17):4952-4964 (2019); https://doi.org/10.1002/hbm.24750"
+        doi: 10.1002/hbm.24750
+        code: https://github.com/MIC-DKFZ/HD-BET
+      - group: Dipole inversion
+        title: AMP-PE
+        reference: "Huang S, et al. Approximate Message Passing with Parameter Estimation: a probabilistic Bayesian dipole inversion. Magnetic Resonance in Medicine. 2023;90(4):1414-1430."
+        doi: 10.1002/mrm.29722
+        code: https://github.com/EmoryCN2L/QSM_AMP_PE
       - group: Brain extraction
         title: BET (Brain Extraction Tool)
         reference: "Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143–155."
@@ -454,10 +510,15 @@ apps:
         url: https://github.com/niivue/niivue
 
   easy-mp2rage:
+    about:
+      - Computes quantitative T1 maps in milliseconds from Siemens MP2RAGE, corrected for transmit-field inhomogeneity with SA2RAGE or a separately acquired B1 map. It also produces relative B1 maps and denoises UNI images using robust combination.
+      - Load NIfTI images with optional JSON sidecars or uncompressed Siemens DICOM series. T1 mapping uses UNI, INV2 for the brain mask, and a B1 source. SA2RAGE must contain both GRE volumes. Denoising requires UNI, INV1 and INV2. Confirm acquisition parameters against your protocol before processing.
+      - Outputs include corrected and uncorrected T1, relative B1, corrected or denoised UNI, and parameters.json. Inspect orthogonal slices and the intensity histogram, then download individual NIfTI maps or a ZIP bundle. DICOM inputs also support a derived T1 DICOM series with optional de-identification.
+      - BIDS directory mode matches image roles by subject and session. Calculate a session, inspect its output, then download and unload it before processing the next. Only one session is held in memory at a time.
+      - Processing runs locally in Rust and WebAssembly. Images and results remain in the browser. The synthetic example demonstrates the workflow; it does not establish accuracy on patient data.
     builders: The MP2RAGE port was written by Thomas B. Shaw, based on Ashley Stewart's QSMbly.
     packages:
       - { name: Rust → WebAssembly T1-mapping core, url: https://github.com/neurodesk/webapps/tree/main/apps/easy-mp2rage, role: MP2RAGE and SA2RAGE computations }
-      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
     citations:
       - group: T1 mapping
         title: MP2RAGE
@@ -476,10 +537,6 @@ apps:
         title: Robust MP2RAGE combination
         reference: "O'Brien KR, Kober T, Hagmann P, et al. Robust T1-weighted structural brain imaging and morphometry at 7T using MP2RAGE. PLoS ONE. 2014;9(6):e99676."
         doi: 10.1371/journal.pone.0099676
-      - group: Visualization
-        title: NiiVue
-        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
-        url: https://github.com/niivue/niivue
 
   niimath:
     about:

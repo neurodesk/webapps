@@ -144,7 +144,7 @@ try {
         await verifyMobileImageImport(page);
         await checkLayout(page, `${app.id}/image-import/320`);
       }
-      if (await page.locator('.nd-viewer-panel-grid').count()) {
+      if (await page.locator('.nd-viewer-panel-grid:visible').count()) {
         // All three viewer panels must be square (height capped at 360px), inside the page width, and reachable by scrolling.
         for (const viewport of [{ width: 375, height: 667 }, { width: 667, height: 375 }]) {
           await page.setViewportSize(viewport);

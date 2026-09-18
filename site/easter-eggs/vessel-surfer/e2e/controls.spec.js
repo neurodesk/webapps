@@ -1,93 +1,125 @@
 import { openGame } from "./open-game.js";
 import { test, expect } from "@playwright/test";
-test("focused buttons accept flight keys, held inputs brake independently, and steering changes heading immediately", async ({
+
+const heading = async (page) =>
+  JSON.parse(await page.locator("#ocean").getAttribute("data-heading"));
+const dot = (a, b) => a.reduce((sum, v, i) => sum + v * b[i], 0);
+
+test("keys steer while braking, mouse position aims, and a held drag acts as a joystick", async ({
   page,
 }) => {
-  test.setTimeout(90000);
-  let game = await openGame(page);
-  await expect(game.locator("#play")).toBeEnabled({ timeout: 30000 });
-  await game.locator("#play").click();
-  await game.locator("#quick-play").focus();
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openGame(page);
+  await page.locator("#play").click();
+  await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
+  await expect(page.locator("#touch")).toBeHidden();
   await page.keyboard.down("Shift");
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "true");
-  const position = await game.locator("#ocean").getAttribute("data-position");
+  await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "true");
+  const position = await page.locator("#ocean").getAttribute("data-position");
   await page.waitForTimeout(200);
-  expect(await game.locator("#ocean").getAttribute("data-position")).toBe(
+  expect(await page.locator("#ocean").getAttribute("data-position")).toBe(
     position,
   );
-  await game.locator("#brake").hover();
-  await page.mouse.down();
-  await page.mouse.up();
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "true");
-  const initialHeading = JSON.parse(
-    await game.locator("#ocean").getAttribute("data-heading"),
-  );
+  const initial = await heading(page);
   await page.keyboard.down("ArrowRight");
   await expect
-    .poll(async () =>
-      JSON.parse(
-        await game.locator("#ocean").getAttribute("data-heading"),
-      ).reduce((sum, v, i) => sum + v * initialHeading[i], 0),
-    )
+    .poll(async () => dot(await heading(page), initial))
     .toBeLessThan(0.98);
   await page.keyboard.up("ArrowRight");
-  const rightHeading = JSON.parse(
-    await game.locator("#ocean").getAttribute("data-heading"),
-  );
-  expect(
-    rightHeading.reduce((sum, v, i) => sum + v * initialHeading[i], 0),
-  ).toBeLessThan(0.98);
-  expect(await game.locator("#ocean").getAttribute("data-position")).toBe(
-    position,
-  );
+  const turned = await heading(page);
   await page.keyboard.down("ArrowUp");
   await expect
-    .poll(async () =>
-      JSON.parse(
-        await game.locator("#ocean").getAttribute("data-heading"),
-      ).reduce((sum, v, i) => sum + v * rightHeading[i], 0),
-    )
+    .poll(async () => dot(await heading(page), turned))
     .toBeLessThan(0.98);
   await page.keyboard.up("ArrowUp");
-  const upHeading = JSON.parse(
-    await game.locator("#ocean").getAttribute("data-heading"),
+  expect(await page.locator("#ocean").getAttribute("data-position")).toBe(
+    position,
   );
-  expect(
-    upHeading.reduce((sum, v, i) => sum + v * rightHeading[i], 0),
-  ).toBeLessThan(0.98);
-  await expect(game.locator("#ocean")).toHaveAttribute(
+  await expect(page.locator("#ocean")).toHaveAttribute(
     "data-camera-inside",
     "true",
   );
-  await page.keyboard.up("Shift");
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "false");
+  // Mouse aim: an offset from the screen centre turns continuously.
+  const before = await heading(page);
+  await page.mouse.move(720, 450);
+  await page.mouse.move(1000, 450, { steps: 4 });
   await expect
-    .poll(() => game.locator("#ocean").getAttribute("data-position"))
+    .poll(async () => dot(await heading(page), before))
+    .toBeLessThan(0.95);
+  await page.mouse.move(720, 450);
+  await page.waitForTimeout(250);
+  const settled = await heading(page);
+  await page.waitForTimeout(250);
+  expect(dot(await heading(page), settled)).toBeGreaterThan(0.999);
+  // Joystick: hold and drag from anywhere, release to centre.
+  await page.mouse.move(400, 600);
+  await page.mouse.down();
+  await expect(page.locator("#stick")).toBeVisible();
+  await page.mouse.move(400, 540, { steps: 3 });
+  await expect
+    .poll(async () => dot(await heading(page), settled))
+    .toBeLessThan(0.97);
+  await page.mouse.up();
+  await expect(page.locator("#stick")).toBeHidden();
+  await page.keyboard.up("Shift");
+  await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(() => page.locator("#ocean").getAttribute("data-position"))
     .not.toBe(position);
-  // Keyboard activation of a hold button acts for the whole press.
-  await game.locator("#brake").focus();
-  await page.keyboard.down(" ");
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "true");
-  const stopped = await game.locator("#ocean").getAttribute("data-position");
-  await page.waitForTimeout(200);
-  expect(await game.locator("#ocean").getAttribute("data-position")).toBe(
-    stopped,
-  );
-  await page.keyboard.up(" ");
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "false");
-  await game.locator("#play").click();
-  await game.locator("#reverse").click();
-  await expect(game.locator("#ocean")).toHaveAttribute(
+  await page.keyboard.down("b");
+  await expect(page.locator("#reverse")).toHaveAttribute("aria-pressed", "true");
+  await page.waitForTimeout(300);
+  await page.keyboard.up("b");
+  await expect(page.locator("#ocean")).toHaveAttribute(
     "data-camera-inside",
     "true",
   );
-  await page.screenshot({
-    path: "/tmp/vessel-swim-desktop.png",
-    fullPage: false,
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: "/tmp/vessel-swim-phone.png",
-    fullPage: false,
+  await page.screenshot({ path: "/tmp/vessel-controls-desktop.png" });
+});
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test("a finger drag steers through a floating joystick and the hold buttons brake", async ({
+    page,
+  }) => {
+    test.setTimeout(120000);
+    await openGame(page);
+    await page.locator("#play").tap();
+    await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
+    const client = await page.context().newCDPSession(page);
+    const touch = (type, x, y) =>
+      client.send("Input.dispatchTouchEvent", {
+        type,
+        touchPoints: type === "touchEnd" ? [] : [{ x, y }],
+      });
+    const before = await heading(page);
+    await touch("touchStart", 120, 600);
+    await expect(page.locator("#touch")).toBeVisible();
+    await expect(page.locator("#stick")).toBeVisible();
+    await touch("touchMove", 175, 600);
+    await expect
+      .poll(async () => dot(await heading(page), before))
+      .toBeLessThan(0.97);
+    await touch("touchEnd", 175, 600);
+    await expect(page.locator("#stick")).toBeHidden();
+    const brake = await page.locator("#brake").boundingBox();
+    await touch("touchStart", brake.x + brake.width / 2, brake.y + brake.height / 2);
+    await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "true");
+    const position = await page.locator("#ocean").getAttribute("data-position");
+    await page.waitForTimeout(250);
+    expect(await page.locator("#ocean").getAttribute("data-position")).toBe(
+      position,
+    );
+    await page.screenshot({ path: "/tmp/vessel-controls-phone.png" });
+    await touch("touchEnd", 0, 0);
+    await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "false");
+    await expect
+      .poll(() => page.locator("#ocean").getAttribute("data-position"))
+      .not.toBe(position);
+    await expect(page.locator("#ocean")).toHaveAttribute(
+      "data-camera-inside",
+      "true",
+    );
   });
 });

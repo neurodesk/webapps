@@ -177,5 +177,3 @@ fetch('./analytics.json')
   .then(renderAnalytics)
   .catch(() => renderAnalyticsUnavailable('Aggregate analytics could not be loaded.'));
 
-import { bindEasterEgg } from "./easter-egg.js";
-bindEasterEgg();

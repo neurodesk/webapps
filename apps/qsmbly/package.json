@@ -1,6 +1,6 @@
 {
   "name": "qsmbly",
-  "version": "0.26.20260918",
+  "version": "0.27.20260918",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
   "type": "module",
   "scripts": {
@@ -9,14 +9,14 @@
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs --dest .",
     "predev": "pnpm vendor && pnpm runtime-support",
     "prebuild": "pnpm vendor && pnpm runtime-support && bash build.sh",
-    "build": "node ../../scripts/build-static.mjs",
+    "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app qsmbly",
     "lint": "node ../../scripts/check-app-js.mjs .",
     "pretest": "pnpm vendor && pnpm runtime-support",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
     "test:examples": "node --test scripts/test_examples.mjs scripts/test_mask_worker.mjs",
-    "test:e2e": "node ../../test/examples.smoke.mjs --app qsmbly && node scripts/test_startup.mjs"
+    "test:e2e": "node ../../test/examples.smoke.mjs --app qsmbly && node scripts/test_startup.mjs && node scripts/test_upstream.mjs"
   },
   "devDependencies": {
     "jest": "^29.7.0",
@@ -39,7 +39,8 @@
         "QSMbly.png",
         "icon.svg",
         "favicon.ico"
-      ]
+      ],
+      "coiServiceWorker": true
     }
   },
   "private": true,
