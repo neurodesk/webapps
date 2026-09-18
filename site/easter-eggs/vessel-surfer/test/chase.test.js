@@ -6,9 +6,10 @@ import { sampleMask } from "../src/mask.js";
 import { routePose, advanceRoute } from "../src/network.js";
 import { volume, network, metadata } from "../test-fixtures/human.js";
 
-test("default routes are real IXI human data and every route sample stays inside its rendered surface", () => {
-  assert.equal(metadata.subject, "IXI322-IOP-0891-MRA.nii.gz");
-  assert.equal(metadata.license, "CC-BY-NC-SA-4.0");
+test("default routes are real human pial artery data and every route sample stays inside its rendered surface", () => {
+  assert.equal(metadata.subject, "arteries_seg_TOF_hm_xpace_140um_MoCoOn_20200220145234_7_biasCor_noiseCor_VT450_lVT370_VENP10.nii.gz");
+  assert.equal(metadata.paperDoi, "10.7554/eLife.71186");
+  assert.equal(metadata.source, "https://doi.org/10.17605/OSF.IO/NR6GC");
   assert.ok(network.edges.length > 100);
   let min = 1;
   for (const edge of network.edges)
@@ -69,31 +70,36 @@ test("bundled source segmentation matches the published asset checksum", async (
   const { readFile } = await import("node:fs/promises");
   const { createHash } = await import("node:crypto");
   const bytes = await readFile(
-    new URL("../public/data/ixi322-vessels.nii.gz", import.meta.url),
+    new URL("../public/data/source.nii.gz", import.meta.url),
   );
   const expected =
-    "68addc6caedf8fb22c26c0ad8977028fd6eba114e6ef0597e607267ccb45fe1e";
+    "2fd0f6a79977e9985e68bb5de80633518cd2c571fd1bd1151705fc2dc0eabc55";
   assert.equal(createHash("sha256").update(bytes).digest("hex"), expected);
   assert.equal(metadata.sourceSha256, expected);
 });
 
 test("rendered junction obstruction is detected even when the volume ray is clear", () => {
-  const route = advanceRoute(network, network.start, 5, 0);
-  const p = routePose(network, route).position;
+  // Somewhere in the graph a route bends around a rendered corner that the
+  // trilinear field alone would see through. The triangle guard must veto it.
   const fieldOnly = { ...volume, surfaceClear: undefined };
-  let ahead = p.clone();
-  for (let distance = 0.02; distance < 4; distance += 0.02) {
-    const candidate = routePose(
-      network,
-      advanceRoute(network, route, distance, 0),
-    ).position;
-    if (!clearSight(fieldOnly, p, candidate)) break;
-    ahead = candidate;
+  let vetoes = 0;
+  let checked = 0;
+  for (let edge = 0; edge < network.edges.length && vetoes === 0; edge++) {
+    const route = { edge, reverse: false, progress: 0.1 };
+    const p = routePose(network, route).position;
+    let ahead = p.clone();
+    for (let distance = 0.02; distance < 4; distance += 0.02) {
+      const candidate = routePose(
+        network,
+        advanceRoute(network, route, distance, 0),
+      ).position;
+      if (!clearSight(fieldOnly, p, candidate)) break;
+      ahead = candidate;
+    }
+    assert.ok(clearSight(fieldOnly, p, ahead));
+    checked++;
+    if (!clearSight(volume, p, ahead)) vetoes++;
   }
-  assert.ok(clearSight(fieldOnly, p, ahead));
-  assert.equal(
-    clearSight(volume, p, ahead),
-    false,
-    "the actual wall must veto a volume-only view",
-  );
+  assert.ok(checked > 0);
+  assert.ok(vetoes > 0, "the actual wall must veto a volume-only view somewhere");
 });

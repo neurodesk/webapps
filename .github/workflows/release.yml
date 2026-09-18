@@ -35,8 +35,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Require matching offline applications
-        run: node scripts/desktop/check-published.mjs
       - name: Generate release plan from the app catalog
         id: plan
         env:

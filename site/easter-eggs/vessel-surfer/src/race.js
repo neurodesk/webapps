@@ -1,4 +1,4 @@
-export const CHALLENGE = "ixi322-destination-v1";
+export const CHALLENGE = "pial-arteries-v1";
 export const SCORE_KEY = "vessel-surfer.scores.v1";
 export function pointsFor(seconds, bumps) {
   return Math.max(0, 10000 - Math.ceil(seconds * 20) - bumps * 400);

@@ -94,44 +94,48 @@ try {
         if (result.clippedNavigation.length) result.failures.push(`Clipped navigation: ${result.clippedNavigation.join(', ')}`);
         if (result.duplicates.length) result.failures.push(`Duplicate navigation: ${result.duplicates.join(', ')}`);
         const selector = page.locator('select[data-neurodesk-example]');
-        await expect(selector).toHaveCount(1);
-        await expect(selector).toBeVisible();
-        await expect(selector).toHaveAccessibleName('Example');
-        const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
-        expect(ids).toEqual(examples.map(example => example.id));
-        const state = page.locator('[data-neurodesk-examples]');
-        await expect(state).toHaveAttribute('data-example-state', 'idle');
-        const gpuCapability = await page.evaluate(async () => {
-          if (!navigator.gpu) return 'api-unavailable';
-          return await navigator.gpu.requestAdapter() === null ? 'adapter-unavailable' : 'available';
-        });
-        const unsupportedMessage = async () => {
-          const messages = await page.locator('#statusMsg:visible, #statusText:visible').allTextContents();
-          return messages.find(message => /can[’']t initialize WebGPU/i.test(message)) ?? '';
-        };
-        await expect.poll(async () => {
-          if (await selector.isEnabled()) return 'enabled';
-          if (gpuCapability !== 'available' && await unsupportedMessage()) return 'unsupported';
-          return 'waiting';
-        }, { timeout: 120000 }).not.toBe('waiting');
-        if (await selector.isDisabled()) {
-          const message = await unsupportedMessage();
-          expect(gpuCapability).not.toBe('available');
-          expect(message).toMatch(/can[’']t initialize WebGPU/i);
-          result.exampleImport = {
-            status: 'skipped',
-            example: examples[0].id,
-            reason: message,
-            capability: gpuCapability,
-          };
-          console.log(`SKIP ${app.id}/${viewport.width} example import: ${gpuCapability}; ${message}`);
+        if (examples.length === 0) {
+          await expect(selector).toHaveCount(0);
         } else {
-          await selector.selectOption(examples[0].id);
-          await expect.poll(() => state.getAttribute('data-example-state'), { timeout: 180000 }).not.toBe('loading');
-          await expect(state).toHaveAttribute('data-example-state', 'ready');
-          await expect(state).toHaveAttribute('data-example-id', examples[0].id);
-          result.example = examples[0].id;
-          result.exampleImport = { status: 'passed', example: examples[0].id };
+          await expect(selector).toHaveCount(1);
+          await expect(selector).toBeVisible();
+          await expect(selector).toHaveAccessibleName('Example');
+          const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
+          expect(ids).toEqual(examples.map(example => example.id));
+          const state = page.locator('[data-neurodesk-examples]');
+          await expect(state).toHaveAttribute('data-example-state', 'idle');
+          const gpuCapability = await page.evaluate(async () => {
+            if (!navigator.gpu) return 'api-unavailable';
+            return await navigator.gpu.requestAdapter() === null ? 'adapter-unavailable' : 'available';
+          });
+          const unsupportedMessage = async () => {
+            const messages = await page.locator('#statusMsg:visible, #statusText:visible').allTextContents();
+            return messages.find(message => /can[’']t initialize WebGPU/i.test(message)) ?? '';
+          };
+          await expect.poll(async () => {
+            if (await selector.isEnabled()) return 'enabled';
+            if (gpuCapability !== 'available' && await unsupportedMessage()) return 'unsupported';
+            return 'waiting';
+          }, { timeout: 120000 }).not.toBe('waiting');
+          if (await selector.isDisabled()) {
+            const message = await unsupportedMessage();
+            expect(gpuCapability).not.toBe('available');
+            expect(message).toMatch(/can[’']t initialize WebGPU/i);
+            result.exampleImport = {
+              status: 'skipped',
+              example: examples[0].id,
+              reason: message,
+              capability: gpuCapability,
+            };
+            console.log(`SKIP ${app.id}/${viewport.width} example import: ${gpuCapability}; ${message}`);
+          } else {
+            await selector.selectOption(examples[0].id);
+            await expect.poll(() => state.getAttribute('data-example-state', { timeout: 180000 }), { timeout: 180000 }).not.toBe('loading');
+            await expect(state).toHaveAttribute('data-example-state', 'ready');
+            await expect(state).toHaveAttribute('data-example-id', examples[0].id);
+            result.example = examples[0].id;
+            result.exampleImport = { status: 'passed', example: examples[0].id };
+          }
         }
         result.uploads = await page.locator('input[type="file"]').evaluateAll(inputs => inputs.map(input => ({
           id: input.id || input.name || 'unnamed file input',

@@ -202,4 +202,5 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: node --test test/easter-egg.test.mjs
       - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test
+      - run: pnpm --filter @neurodesk/vessel-surfer-leaderboard test
       - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e

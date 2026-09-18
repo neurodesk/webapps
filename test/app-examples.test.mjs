@@ -65,3 +65,7 @@ test('all catalog apps retain a browser workflow command', async () => {
     assert.ok(manifest.scripts['test:e2e']?.trim(), `${app.id}: provide test:e2e`);
   }
 });
+
+test('SeedSeg has withdrawn its unsuitable example', async () => {
+  assert.deepEqual(await loadAppExamples({ id: 'seedseg', ci: { browser_test: true } }), []);
+});

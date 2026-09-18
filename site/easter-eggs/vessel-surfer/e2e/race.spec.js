@@ -1,61 +1,66 @@
 import { openGame } from "./open-game.js";
+import { fixtureMask } from "./fixture-mask.js";
 import { test, expect } from "@playwright/test";
-test("map follows the player, changes projection, and race timer pauses and resets", async ({
+
+const board = [
+  { name: "Ada", points: 9800, seconds: 10, bumps: 0 },
+  { name: "Grace", points: 9300, seconds: 15, bumps: 1 },
+];
+
+test("map follows the player, the timer pauses, and the global leaderboard renders", async ({
   page,
 }) => {
   test.setTimeout(90000);
   await page.setViewportSize({ width: 390, height: 844 });
-  let game = await openGame(page);
-  await expect(game.locator("#play")).toBeEnabled({ timeout: 30000 });
-  await expect(game.locator("#map")).toBeVisible();
-  await expect(game.locator("#target-distance")).toContainText("to target");
-  const target = await game.locator("#ocean").getAttribute("data-target");
-  await game.locator("#map-view").click();
-  await expect(game.locator("#map-view")).toHaveText("Top view");
-  await game.locator("#play").click();
+  const requests = [];
+  await page.route("**/scores*", async (route) => {
+    requests.push(route.request());
+    await route.fulfill({
+      json: { challenge: "pial-arteries-v1", scores: board, total: 2 },
+    });
+  });
+  await openGame(page);
+  await expect(page.locator("#board-status")).toHaveText("Top 2 worldwide");
+  await expect(page.locator("#score-rows tr")).toHaveCount(2);
+  for (const text of ["Ada", "9,800", "0:10.0", "Grace"])
+    await expect(page.locator("#score-rows")).toContainText(text);
+  expect(requests[0].url()).toMatch(/\/scores\?challenge=pial-arteries-v1&limit=10$/);
+  const target = await page.locator("#ocean").getAttribute("data-target");
+  await page.locator("#play").click();
+  await expect(page.locator("#map")).toBeVisible();
+  await expect(page.locator("#target-distance")).toContainText("away");
+  await page.locator("#map-view").click();
+  await expect(page.locator("#map-view")).toHaveText("Front view · switch");
   await expect
     .poll(async () =>
-      Number(await game.locator("#ocean").getAttribute("data-elapsed")),
+      Number(await page.locator("#ocean").getAttribute("data-elapsed")),
     )
     .toBeGreaterThan(1);
-  await game.locator("#play").click();
-  await expect(game.locator("#ocean")).toHaveAttribute("data-state", "paused");
-  const elapsed = await game.locator("#ocean").getAttribute("data-elapsed");
+  await page.locator("#quick-play").click();
+  await expect(page.locator("#ocean")).toHaveAttribute("data-state", "paused");
+  const elapsed = await page.locator("#ocean").getAttribute("data-elapsed");
   await page.waitForTimeout(250);
-  expect(await game.locator("#ocean").getAttribute("data-elapsed")).toBe(
-    elapsed,
-  );
-  await page.screenshot({
-    path: "/tmp/vessel-race-phone.png",
-    fullPage: false,
-  });
-  await game.getByRole("button", { name: "Use light theme" }).click();
-  await page.screenshot({
-    path: "/tmp/vessel-race-phone-light.png",
-    fullPage: false,
-  });
-  await game.locator("#reset").click();
-  await expect(game.locator("#score")).toHaveText("0:00.0");
-  await expect(game.locator("#bumps")).toHaveText("0 bumps");
-  expect(await game.locator("#ocean").getAttribute("data-target")).toBe(target);
-  await game.getByText("High scores · this browser", { exact: true }).click();
-  await expect(game.locator("#score-rows")).toContainText(
-    "No completed runs yet",
-  );
+  expect(await page.locator("#ocean").getAttribute("data-elapsed")).toBe(elapsed);
+  await expect(page.locator("#map")).toBeVisible();
+  await page.screenshot({ path: "/tmp/vessel-race-phone.png" });
+  await page.locator("#menu-button").click();
+  await expect(page.locator("#score")).toHaveText("0:00.0");
+  await expect(page.locator("#bumps")).toHaveText("0 bumps");
+  expect(await page.locator("#ocean").getAttribute("data-target")).toBe(target);
 });
-test("saved rankings survive reload and a real imported run reaches its destination", async ({
+
+test("an unreachable leaderboard falls back to this device's best runs", async ({
   page,
 }) => {
-  test.setTimeout(120000);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  let game = await openGame(page);
-  await expect(game.locator("#play")).toBeEnabled({ timeout: 30000 });
-  await game.evaluate(() =>
+  await page.route("**/scores*", (route) => route.abort());
+  await page.goto("/surf/");
+  await page.evaluate(() =>
     localStorage.setItem(
       "vessel-surfer.scores.v1",
       JSON.stringify([
         {
-          challenge: "ixi322-destination-v1",
+          challenge: "pial-arteries-v1",
+          name: "Me",
           seconds: 10,
           bumps: 0,
           points: 9800,
@@ -63,67 +68,160 @@ test("saved rankings survive reload and a real imported run reaches its destinat
       ]),
     ),
   );
-  game = await openGame(page);
-  await expect(game.locator("#play")).toBeEnabled({ timeout: 30000 });
-  await game.getByText("High scores · this browser", { exact: true }).click();
-  await expect(game.locator("#score-rows")).toContainText("9,800");
-  const buffer = Buffer.alloc(352 + 32 ** 3);
-  buffer.writeInt32LE(348, 0);
-  [3, 32, 32, 32, 1, 1, 1, 1].forEach((v, i) =>
-    buffer.writeInt16LE(v, 40 + i * 2),
+  await page.reload();
+  await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
+  await expect(page.locator("#board-status")).toContainText("offline");
+  await expect(page.locator("#score-rows")).toContainText("Me");
+  await expect(page.locator("#score-rows")).toContainText("9,800");
+});
+
+test("a practice run in an imported mask reaches its destination with mouse aim", async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/scores*", (route) =>
+    route.fulfill({ json: { scores: board, total: 2 } }),
   );
-  buffer.writeInt16LE(2, 70);
-  buffer.writeInt16LE(8, 72);
-  for (let i = 0; i < 4; i++) buffer.writeFloatLE(1, 76 + i * 4);
-  buffer.writeFloatLE(352, 108);
-  buffer.write("n+1\0", 344);
-  for (let z = 3; z < 29; z++)
-    for (let y = 10; y < 22; y++)
-      for (let x = 10; x < 22; x++) buffer[352 + x + 32 * (y + 32 * z)] = 1;
-  await game.locator("#dataset summary").click();
-  await game
-    .locator("#mask")
-    .setInputFiles({
-      name: "race-tunnel.nii",
-      mimeType: "application/octet-stream",
-      buffer,
-    });
-  await expect(game.locator("#load-status")).toContainText("Loaded");
-  await game.getByText("Helm controls", { exact: true }).click();
-  await game.locator("#speed").fill("2");
-  await game.locator("#play").click();
-  await page.keyboard.down("Shift");
-  await expect(game.locator("#brake")).toHaveAttribute("aria-pressed", "true");
-  const data = await game
-    .locator("#ocean")
-    .evaluate((el) => ({ ...el.dataset }));
-  const p = JSON.parse(data.position),
-    target = JSON.parse(data.target),
-    d = target.map((v, i) => v - p[i]);
-  const reverse = d[2] < 0;
-  if (reverse) for (let i = 0; i < 3; i++) d[i] *= -1;
-  const length = Math.hypot(...d),
-    h = -Math.atan2(d[0], d[2]),
-    v = Math.asin(d[1] / length);
-  const box = await game.locator("#ocean").boundingBox(),
-    x = box.x + box.width / 2,
-    y = box.y + box.height / 2;
-  await page.mouse.move(x, y);
-  await page.mouse.down();
-  await page.mouse.move(x + h / 0.006, y - v / 0.006, { steps: 1 });
-  await page.mouse.up();
-  if (reverse) await page.keyboard.down("b");
-  await page.keyboard.up("Shift");
-  await expect(game.locator("#ocean")).toHaveAttribute(
-    "data-state",
-    "complete",
-    { timeout: 90000 },
-  );
-  await page.keyboard.up("b");
-  await expect(game.locator("#run-result")).toContainText("Practice complete");
-  await expect(game.locator("#score-rows")).toContainText("9,800");
-  await page.screenshot({
-    path: "/tmp/vessel-race-finish.png",
-    fullPage: false,
+  await openGame(page);
+  await page.getByText("Surf your own vessel mask", { exact: true }).click();
+  await page.locator("#mask").setInputFiles({
+    name: "race-tunnel.nii",
+    mimeType: "application/octet-stream",
+    buffer: fixtureMask(),
   });
+  await expect(page.locator("#load-status")).toContainText("Loaded");
+  await expect(page.locator("#mission-text")).toContainText("Practice run");
+  await page.getByText("Controls", { exact: true }).click();
+  await page.locator("#speed").fill("2");
+  await page.locator("#play").click();
+  await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
+  // A tiny autopilot: point the mouse away from the centre in proportion to
+  // the angle between the heading and the destination.
+  const ocean = page.locator("#ocean");
+  const centre = [720, 450];
+  for (let i = 0; i < 1200; i++) {
+    const data = await ocean.evaluate((el) => ({ ...el.dataset }));
+    if (data.state === "complete") break;
+    const p = JSON.parse(data.position);
+    const h = JSON.parse(data.heading);
+    const t = JSON.parse(data.target);
+    const d = t.map((v, k) => v - p[k]);
+    const length = Math.hypot(...d) || 1;
+    const desired = d.map((v) => v / length);
+    // The camera frame: looking along +z with +y up, "right" is -x.
+    const right = [-h[2], 0, h[0]];
+    const rightLength = Math.hypot(...right) || 1;
+    right.forEach((v, k) => (right[k] = v / rightLength));
+    const up = [
+      right[1] * h[2] - right[2] * h[1],
+      right[2] * h[0] - right[0] * h[2],
+      right[0] * h[1] - right[1] * h[0],
+    ];
+    const dotWith = (a) => a.reduce((sum, v, k) => sum + v * desired[k], 0);
+    let yaw = dotWith(right);
+    const pitch = dotWith(up);
+    if (dotWith(h) < 0 && Math.abs(yaw) < 0.3) yaw = 1;
+    await page.mouse.move(centre[0] + yaw * 500, centre[1] - pitch * 500);
+    await page.waitForTimeout(60);
+  }
+  await expect(ocean).toHaveAttribute("data-state", "complete");
+  await expect(page.locator("#run-result")).toContainText("Practice complete");
+  await expect(page.locator("#submit-form")).toBeHidden();
+  await expect(page.locator("#score-rows")).toContainText("Ada");
+  await page.screenshot({ path: "/tmp/vessel-race-finish.png" });
+  await page.locator("#play").click();
+  await expect(ocean).toHaveAttribute("data-state", "running");
+  await expect(page.locator("#score")).not.toHaveText("0:00.0");
+});
+
+test("the brain challenge can be completed and saved to the global leaderboard", async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const posted = [];
+  await page.route("**/scores*", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      const entry = request.postDataJSON();
+      posted.push(entry);
+      const points = Math.max(
+        0,
+        10000 - Math.ceil(entry.seconds * 20) - entry.bumps * 400,
+      );
+      await route.fulfill({
+        status: 201,
+        json: { rank: 1, scores: [{ ...entry, points }, ...board] },
+      });
+    } else await route.fulfill({ json: { scores: board, total: 2 } });
+  });
+  await openGame(page);
+  await page.getByText("Controls", { exact: true }).click();
+  await page.locator("#speed").fill("2");
+  await page.locator("#play").click();
+  const ocean = page.locator("#ocean");
+  await expect(ocean).toHaveAttribute("data-state", "running");
+  // Pure pursuit along the validated reference route with mouse aim.
+  const dist = (a, b) => Math.hypot(...a.map((v, k) => v - b[k]));
+  for (let i = 0; i < 1500; i++) {
+    const data = await ocean.evaluate((el) => ({ ...el.dataset }));
+    if (data.state === "complete") break;
+    const p = JSON.parse(data.position);
+    const h = JSON.parse(data.heading);
+    const up = JSON.parse(data.up);
+    const path = JSON.parse(data.path);
+    let nearest = 0;
+    path.forEach((q, k) => {
+      if (dist(q, p) < dist(path[nearest], p)) nearest = k;
+    });
+    let waypoint = JSON.parse(data.target);
+    for (let k = nearest; k < path.length; k++)
+      if (dist(path[k], p) > 1.2) {
+        waypoint = path[k];
+        break;
+      }
+    const length = dist(waypoint, p) || 1;
+    const desired = waypoint.map((v, k) => (v - p[k]) / length);
+    const right = [
+      h[1] * up[2] - h[2] * up[1],
+      h[2] * up[0] - h[0] * up[2],
+      h[0] * up[1] - h[1] * up[0],
+    ];
+    const dotWith = (a) => a.reduce((sum, v, k) => sum + v * desired[k], 0);
+    let yaw = dotWith(right);
+    let pitch = dotWith(up);
+    if (dotWith(h) < 0) {
+      yaw = Math.sign(yaw) || 1;
+      pitch = Math.sign(pitch);
+    }
+    await page.mouse.move(720 + yaw * 500, 450 - pitch * 500);
+    await page.waitForTimeout(40);
+  }
+  await expect(ocean).toHaveAttribute("data-state", "complete");
+  await expect(page.locator("#run-result")).toContainText("points");
+  await expect(page.locator("#submit-form")).toBeVisible();
+  await page.locator("#player-name").fill("  Test Pilot  ");
+  await page.locator("#submit").click();
+  await expect(page.locator("#submit-status")).toHaveText(
+    "Saved. You are #1 in the world.",
+  );
+  expect(posted).toHaveLength(1);
+  expect(posted[0]).toMatchObject({
+    challenge: "pial-arteries-v1",
+    name: "Test Pilot",
+    bumps: Number(await ocean.getAttribute("data-bumps")),
+  });
+  expect(posted[0].seconds).toBeCloseTo(
+    Number(await ocean.getAttribute("data-elapsed")),
+    2,
+  );
+  await expect(page.locator("#score-rows tr.is-you")).toContainText("Test Pilot");
+  await expect(page.locator("#submit")).toBeDisabled();
+  await page.screenshot({ path: "/tmp/vessel-race-brain-finish.png" });
+  await page.reload();
+  await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
+  expect(await page.evaluate(() => localStorage.getItem("vessel-surfer.name.v1"))).toBe(
+    "Test Pilot",
+  );
 });

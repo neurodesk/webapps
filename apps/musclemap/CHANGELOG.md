@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Clarify that each input's image type describes the uploaded file. Rename View to Preview file and the per-file checkbox to Include in segmentation.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.1
 
