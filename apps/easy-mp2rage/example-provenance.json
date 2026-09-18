@@ -1,0 +1,13 @@
+{
+  "dataset": "MP2RAGE-related-scripts reference brain",
+  "source": "https://github.com/JosePMarques/MP2RAGE-related-scripts/tree/7a4ba42864c399354d21e84fc11e3d8911428871/data",
+  "revision": "7a4ba42864c399354d21e84fc11e3d8911428871",
+  "license": "GPL-3.0",
+  "attribution": "José P. Marques and contributors, MP2RAGE-related-scripts",
+  "citation": "Marques JP, Gruetter R (2013). New Developments and Applications of the MP2RAGE Sequence: Focusing the Contrast and High Spatial Resolution R1 Mapping. PLoS ONE 8:e69294. doi:10.1371/journal.pone.0069294",
+  "protocolSource": "https://github.com/JosePMarques/MP2RAGE-related-scripts/blob/7a4ba42864c399354d21e84fc11e3d8911428871/DemoForR1Correction.m",
+  "magneticFieldStrengthTesla": 7,
+  "dimensions": [218, 220, 143],
+  "processing": "UNI, INV1 and INV2: lossless gzip only. B1: source Sa2RAGE_B1map.nii.gz divided by 1000 and stored as float32 relative B1, following DemoForR1Correction.m. No resampling, cropping, masking or synthetic image generation.",
+  "limitations": "The repository supplies no participant demographics or explicit defacing statement. This example uses an already measured B1 map; it does not demonstrate estimating B1 from raw SA2RAGE contrasts."
+}

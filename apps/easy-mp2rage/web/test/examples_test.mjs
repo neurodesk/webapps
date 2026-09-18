@@ -7,7 +7,7 @@ const source = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
 const setupBody = source.split('async function setupExamples() {')[1].split('\nvoid setupExamples()')[0];
 const makeSetup = new Function('createExampleSelector', 'fetch', 'document', '$', 'running', 'state', 'setAppMode', 'readImageRecord', 'renderTable', 'refreshRunState', 'log', `let exampleSelector; const clearOutputs = () => {}; const revokeDownloadUrls = () => {}; const setViewerVisible = () => {}; return async function() {${setupBody}`);
 
-test('the synthetic example loads its complete bundle and matched acquisition parameters', async () => {
+test('the real brain example loads its complete bundle and matched acquisition parameters', async () => {
   let options;
   const selector = {};
   const state = { files: [], jsons: [] };
@@ -23,10 +23,10 @@ test('the synthetic example loads its complete bundle and matched acquisition pa
   await setup();
   const files = examples[0].files.map(file => new File(['volume'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
-  assert.deepEqual(state.files.map(file => file.name), ['phantom_UNI.nii.gz', 'phantom_INV2.nii.gz', 'phantom_SA2RAGE.nii.gz']);
-  assert.equal($('#mp_tr').value, 4.3);
-  assert.equal($('#mp_ti1').value, 0.840);
-  assert.equal($('#sa_trflash').value, 0.005);
+  assert.deepEqual(state.files.map(file => file.name), ['MP2RAGE_UNI.nii.gz', 'MP2RAGE_INV1.nii.gz', 'MP2RAGE_INV2.nii.gz', 'B1map_relative.nii.gz']);
+  assert.equal($('#mp_tr').value, 6);
+  assert.equal($('#mp_ti1').value, 0.8);
+  assert.equal($('#b1_type').value, 'relative');
   assert.equal($('#taskSel').value, 'b1only');
 });
 

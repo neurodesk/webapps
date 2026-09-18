@@ -1,3 +1,4 @@
+import { anatomicalGrid } from "./orientation.js";
 import { fileField, technicalLog, setViewerVisible } from "./workspace.js";
 import {
   createResultList,
@@ -981,7 +982,7 @@ async function onResult(res, uni, task, mode, t0) {
   lastViews = views;
   setupViews(views);
   await buildDownloads(task, mode, uni);
-  resetPlanes(dims); // axial ~2/3 up, coronal/sagittal mid
+  resetPlanes(dims, aff); // axial ~2/3 up, coronal/sagittal mid
   setViewerVisible(true);
   showView($("#viewSel").value);
   b1SanityWarn(task);
@@ -1177,8 +1178,8 @@ let lastViews = null; // result view list, so input previews can offer a way bac
 const planeIdx = { ax: 0, co: 0, sa: 0 }; // current slice index per orthogonal plane
 
 // default slice positions for a freshly shown volume: axial ~2/3 up, others mid
-function resetPlanes(dims) {
-  const [nx, ny, nz] = dims;
+function resetPlanes(dims, affine) {
+  const [nx, ny, nz] = anatomicalGrid(dims, affine).dims;
   planeIdx.ax = Math.round(((nz - 1) * 2) / 3);
   planeIdx.co = ny >> 1;
   planeIdx.sa = nx >> 1;
@@ -1251,7 +1252,7 @@ function previewInput(f, includeResultViews = true) {
   // subject's outputs in the view selector.
   const extra = includeResultViews ? lastViews || [] : [];
   setupViews([["__preview", label], ...extra]);
-  resetPlanes(dims);
+  resetPlanes(dims, f.affine);
   setViewerVisible(true);
   $("#viewSel").value = "__preview";
   showView("__preview");
@@ -1260,22 +1261,23 @@ function previewInput(f, includeResultViews = true) {
 }
 
 function drawPlane(canvas, o, plane, idx) {
-  const [nx, ny, nz] = o.dims;
+  const grid = anatomicalGrid(o.dims, o.affine);
+  const [nx, ny, nz] = grid.dims;
   const cmap = CMAPS[$("#cmapSel").value] || CMAPS.gray;
   const [lo, hi] = o.range;
   let w, h, at;
   if (plane === "ax") {
     w = nx;
     h = ny;
-    at = (x, y) => o.data[x + nx * (y + ny * idx)];
+    at = (x, y) => o.data[grid.index(x, y, idx)];
   } else if (plane === "co") {
     w = nx;
     h = nz;
-    at = (x, y) => o.data[x + nx * (idx + ny * y)];
+    at = (x, y) => o.data[grid.index(x, idx, y)];
   } else {
     w = ny;
     h = nz;
-    at = (x, y) => o.data[idx + nx * (x + ny * y)];
+    at = (x, y) => o.data[grid.index(idx, x, y)];
   }
   canvas.width = w;
   canvas.height = h;
@@ -1304,7 +1306,7 @@ function drawPlane(canvas, o, plane, idx) {
 }
 
 function drawSlices(o) {
-  const [nx, ny, nz] = o.dims;
+  const [nx, ny, nz] = anatomicalGrid(o.dims, o.affine).dims;
   const maxOf = { ax: nz - 1, co: ny - 1, sa: nx - 1 };
   for (const [p, id] of [
     ["ax", "#slice_ax"],
@@ -2603,7 +2605,7 @@ async function setupExamples() {
         }
       }
       $("#paramSource").value = "manual";
-      $("#paramSrcNote").textContent = "Matched synthetic example acquisition";
+      $("#paramSrcNote").textContent = "Published example acquisition settings";
       renderTable();
       refreshRunState();
     },

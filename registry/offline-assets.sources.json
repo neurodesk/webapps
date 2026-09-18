@@ -1801,21 +1801,27 @@
     ],
     "easy-mp2rage": [
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_UNI.nii.gz",
-        "sha256": "6b3867a8e8a15fa66078c5774dea3a13ef52e42711ff1dc55a3c87ac8bde6449",
-        "bytes": 7362,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_UNI.nii.gz",
+        "sha256": "9d6823388d2b24bdbed27773fea461f8f25a6723dbe8b74c33b1400d358d8c27",
+        "bytes": 11235272,
         "kind": "example"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_INV2.nii.gz",
-        "sha256": "f5879939b7c003db69c84eb110a0d0ac0496bad5b2b79989502c03e16856024f",
-        "bytes": 1761,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_INV1.nii.gz",
+        "sha256": "4883c1c3bc2c195b3812c481163c172b205c9026e030e35de33c076427c0324e",
+        "bytes": 6647924,
         "kind": "example"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/easy-mp2rage/synthetic-mp2rage/phantom_SA2RAGE.nii.gz",
-        "sha256": "ad03c7dd1e9fba223f209052a2fdc1a9510626bac62b0c3042f28f5c20b84a02",
-        "bytes": 2501,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_INV2.nii.gz",
+        "sha256": "cf63efa154f2765e50531651c64e75bd3cdc8b2b1a11166f94e851976684ab56",
+        "bytes": 7930922,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/B1_relative.nii.gz",
+        "sha256": "3b9782220d5a2470494bc1acea1acf63ad31836aaa4613a1829377c61c618098",
+        "bytes": 10760495,
         "kind": "example"
       }
     ],

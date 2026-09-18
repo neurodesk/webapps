@@ -1,6 +1,6 @@
 {
   "name": "easy-mp2rage",
-  "version": "0.4.20260918",
+  "version": "0.5.20260918",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-or-later",
@@ -11,8 +11,8 @@
     "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app easy-mp2rage",
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "bash tools/build_wasm.sh",
-    "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs",
-    "test:examples": "node --test web/test/examples_test.mjs",
+    "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs && node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
+    "test:examples": "node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
     "test:e2e": "node ../../test/examples.smoke.mjs --app easy-mp2rage && node ../../test/easy-mp2rage-workspace.smoke.mjs",
     "predev": "pnpm run build"
   }
