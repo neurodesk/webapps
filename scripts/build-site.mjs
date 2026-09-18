@@ -58,8 +58,7 @@ for (const app of registry.apps) {
   await rm(join(destination, 'shell-adapters/components'), { recursive: true, force: true });
 }
 
-await cp(join(repoRoot, 'site/easter-eggs/vessel-surfer/dist'), join(siteDist, '_play/vessel'), { recursive: true });
-await cp(join(repoRoot, 'site/easter-egg.js'), join(siteDist, 'easter-egg.js'));
+await cp(join(repoRoot, 'site/easter-eggs/vessel-surfer/dist'), join(siteDist, 'surf'), { recursive: true });
 
 await assembleRuntimeAssetStore({ repoRoot, siteDist, registry });
 
