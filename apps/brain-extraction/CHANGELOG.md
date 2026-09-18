@@ -4,21 +4,17 @@
 
 ### Patch Changes
 
+- Include and initialize the Rayon worker helpers required by QSMbly's updated BET runtime.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.3.1
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.1
   - @neurodesk/synthsr@0.4.20260918
   - @neurodesk/brain-extraction@0.1.3
 
-
-### Patch Changes
-
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.0
-
-- Include and initialize the Rayon worker helpers required by QSMbly's updated BET runtime.
-- Updated dependencies
-  - @neurodesk/webapp-components@0.3.1
   - @neurodesk/synthsr@0.4.20260918
   - @neurodesk/brain-extraction@0.1.2
 

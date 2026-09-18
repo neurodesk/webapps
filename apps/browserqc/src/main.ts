@@ -56,7 +56,7 @@ const niftiInput = $<HTMLInputElement>('niftiInput')
 const dicomInput = $<HTMLInputElement>('dicomInput')
 const ovlSlider = $<HTMLInputElement>('ovlSlider')
 const qcBody = $('qcBody')
-const technicalLog = createConsole({ outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
+const technicalLog = createConsole({ id: 'technicalLog', outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
 $('canvas-container').appendChild(technicalLog)
 
 // --- NiiVue setup ---
