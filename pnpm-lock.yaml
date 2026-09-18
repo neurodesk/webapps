@@ -38,9 +38,6 @@ importers:
       turbo:
         specifier: ^2.0.0
         version: 2.10.4
-      wrangler:
-        specifier: ^3.0.0
-        version: 3.114.17
       yaml:
         specifier: ^2.8.1
         version: 2.9.0

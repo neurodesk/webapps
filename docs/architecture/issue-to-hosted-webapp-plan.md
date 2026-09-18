@@ -1,6 +1,7 @@
 # Issue-driven webapp requests with agentic builds and hosted previews
 
 Status: ready for implementation planning review
+Note (2026-09-18): the Cloudflare Pages deployment workflow, `wrangler.toml` and `site.cloudflare_project` were removed from the repository. Hosted previews would need a different host or a new Pages project.
 Prepared: 2026-08-30
 Rigor: high
 
