@@ -28,7 +28,7 @@
 
 ### Patch Changes
 
-- Include Calmar's corrected T1-only stroke example in the offline suite.
+- Remove SeedSeg's unsuitable synthetic example from the offline suite.
 
 ## 0.9.20260918
 

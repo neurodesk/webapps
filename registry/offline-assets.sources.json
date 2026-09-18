@@ -843,12 +843,6 @@
         "bytes": 283584,
         "kind": "python-wheel",
         "license": null
-      },
-      {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/seedseg/synthetic-signal-voids/synthetic_prostate_signal_voids.nii",
-        "sha256": "9a18fb7089db325bda31a51740df0f4043cb7f71e8689b8adb4e571e3d066c8f",
-        "bytes": 2359648,
-        "kind": "example"
       }
     ],
     "dicompare": [
