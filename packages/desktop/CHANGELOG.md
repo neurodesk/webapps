@@ -4,7 +4,13 @@
 
 ### Patch Changes
 
-- Include VesselBoost’s original TOF-MRA example alongside the corrected Calmar example.
+- Include the original TOF-MRA example for VesselBoost alongside the corrected Calmar example.
+
+## 0.12.20260918
+
+### Patch Changes
+
+- Use suite 0.12 for Calmar; concurrent SeedSeg, MuscleMap and VesselBoost publishers already selected 0.10 and 0.11.
 
 ## 0.11.20260918
 
