@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    <script>
+      if (window.top === window.self)
+        location.replace(new URL("../../", location.href));
+    </script>
+    <meta name="theme-color" content="#071820" />
+    <title>Vessel Surfer — Neurodesk</title>
+  </head>
+  <body>
+    <aside id="controls">
+      <div class="mission">
+        <span class="eyebrow">A tiny deep-brain expedition</span>
+        <h1>
+          Small sub.<br />
+          Big adventure.
+        </h1>
+        <p>
+          Slip into the current. Follow the vessels. See where your curiosity
+          takes you.
+        </p>
+      </div>
+      <section class="nd-sidebar-section">
+        <h2>Your mission</h2>
+        <p id="mission-text">
+          Reach the gold destination on the map. Finish quickly and avoid wall
+          bumps.
+        </p>
+        <p id="run-result" role="status" hidden></p>
+        <button id="play" class="primary" disabled>Loading ocean…</button>
+        <div class="button-row">
+          <button id="view" aria-pressed="true">Network view</button
+          ><button id="reset">Restart</button>
+        </div>
+      </section>
+      <details class="nd-sidebar-section">
+        <summary>Helm controls</summary>
+        <div class="section-body">
+          <p id="help">
+            Steer with WASD / arrows, or drag to aim. Up/down pitch and
+            left/right turn. Hold Stop or Shift to brake while turning; hold
+            Back or B to reverse. Space pauses. Aim into an opening to take a
+            branch.
+          </p>
+          <p class="muted">
+            Drag to orbit in network view. Scroll or pinch to zoom.
+          </p>
+          <label for="speed"
+            >Cruising speed <output id="speed-value">1×</output></label
+          ><input
+            id="speed"
+            type="range"
+            min="0.5"
+            max="2"
+            step="0.25"
+            value="1"
+          />
+        </div>
+      </details>
+      <details id="highscores" class="nd-sidebar-section">
+        <summary>High scores · this browser</summary>
+        <div class="section-body">
+          <p>
+            IXI322 destination challenge. 10,000 points minus 20 per second and
+            400 per bump. Timer pauses with the game. Highest score wins.
+          </p>
+          <table class="scores-table">
+            <thead>
+              <tr>
+                <th>Points</th>
+                <th>Time</th>
+                <th>Bumps</th>
+              </tr>
+            </thead>
+            <tbody id="score-rows"></tbody>
+          </table>
+          <p id="score-storage" class="muted">
+            Best five completed runs, saved on this device. Imported masks are
+            practice only.
+          </p>
+        </div>
+      </details>
+      <details id="dataset" class="nd-sidebar-section">
+        <summary>Explore your segmentation</summary>
+        <div class="section-body">
+          <label for="mask">Vessel mask (.nii or .nii.gz)</label
+          ><input id="mask" type="file" data-neurodesk-input="dataset" />
+          <p class="muted">
+            Load a 3D binary or labeled NIfTI mask. Positive voxels become
+            vessels. The largest connected region is explored, at a reduced game
+            resolution. Files stay in this browser.
+          </p>
+          <p id="load-status" role="status"></p>
+          <button id="demo">Restore human brain</button>
+        </div>
+      </details>
+      <p id="source-label" class="source-label">
+        Human brain · IXI322 MRA · loading segmentation
+      </p>
+      <div hidden>
+        <button id="about" data-neurodesk-control="about">About</button
+        ><button id="cite" data-neurodesk-control="cite">Cite</button
+        ><button id="privacy" data-neurodesk-control="privacy">Privacy</button>
+      </div>
+    </aside>
+    <main id="viewer" aria-label="Vessel Surfer game">
+      <canvas
+        id="ocean"
+        tabindex="0"
+        aria-label="3D vessel network. Use arrow keys to navigate and Space to pause."
+      ></canvas>
+      <div class="hud">
+        <span class="pill"><i></i> <span id="mode">SONAR ONLINE</span></span
+        ><span class="pill"
+          ><strong id="score">0:00.0</strong> ·
+          <span id="bumps">0 bumps</span></span
+        >
+      </div>
+      <aside id="navigation-map" aria-label="Navigation map">
+        <canvas
+          id="map"
+          width="240"
+          height="170"
+          role="img"
+          aria-label="Vessel map: cyan arrow is you, gold diamond is the destination, white square is the start"
+        ></canvas>
+        <div class="map-key">▲ You · ◆ Target · □ Start</div>
+        <div id="target-distance">Loading destination…</div>
+        <button id="map-view" aria-label="Switch map to front view">
+          Front view
+        </button>
+      </aside>
+      <div id="intro" class="scene-caption">
+        <span class="eyebrow">Vessel Surfer</span>
+        <h2>A different kind<br />of brain wave.</h2>
+        <p>Your yellow submarine is ready to dive.</p>
+      </div>
+      <div class="telemetry">
+        <span id="location">Cerebral current</span
+        ><span id="distance">0 mm traveled</span>
+      </div>
+      <div id="touch" class="helm" aria-label="Submarine controls">
+        <button id="quick-play" aria-label="Launch or pause voyage">Dive</button
+        ><button id="brake" aria-label="Hold to brake">Stop</button
+        ><button id="reverse" aria-label="Hold to reverse" hidden>Back</button
+        ><button id="left" aria-label="Steer left">←</button
+        ><button id="up" aria-label="Pitch up">↑</button
+        ><button id="down" aria-label="Pitch down">↓</button
+        ><button id="right" aria-label="Steer right">→</button>
+      </div>
+    </main>
+    <footer id="status">
+      <span class="status-dot"></span
+      ><span id="statusText" role="status">Preparing the vessel network…</span
+      ><span class="footer-note">A Neurodesk easter egg</span>
+    </footer>
+    <dialog id="info">
+      <h2 id="info-title"></h2>
+      <p id="info-text"></p>
+      <form method="dialog">
+        <button class="nd-app-dialog__close">Back to the helm</button>
+      </form>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

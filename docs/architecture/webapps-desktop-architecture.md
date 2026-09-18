@@ -2,11 +2,12 @@
 
 ## Distributions
 
-One Electron application contains all 24 webapps and their complete runtime assets. The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. Every app offers both a smaller suite without models and a complete suite with models included, after its available upstream Neurodesk containers.
+One Electron application contains all 24 webapps and their complete runtime assets. The supported desktop targets are macOS ARM64, Linux x64 and Windows x64. Each release ships one archive per platform plus one platform-independent model pack, after the app's available upstream Neurodesk containers. The models are byte-identical on every platform, so publishing them once instead of four times removes about 6 GB from each release.
 
 | Distribution | Execution profile |
 | --- | --- |
 | Desktop suite | Local or airgapped workstation; one File menu selects any app |
+| Model pack | The same models for every platform; extracted once for offline or shared HPC use |
 | Apptainer SIF | The same Linux suite with its system libraries, Xvfb and an init process; graphical HPC use and JSON automation jobs |
 | Existing native executables | Separate Greedy, SynthSR, SynthSeg and SYNcro releases on the platforms listed in the catalog |
 
@@ -16,17 +17,19 @@ The suite runs the browser's compiled WebAssembly, WebGPU and Python pipelines. 
 
 `registry/offline-assets.sources.json` declares external inputs. The lock records their exact URLs, hashes, sizes and dependencies. Assembly verifies the cache and copies the complete dependency closure into the release, including neural-network weights, templates, atlases, WebAssembly, Pyodide and Python wheels. Large files stay out of Git.
 
-The desktop host serves app files through a loopback server. HTTPS requests resolve exclusively to verified packaged files. Unlisted requests fail. In the model-inclusive edition there is no network fallback or model downloader. Profiles begin empty during tests. `--verify` checks the packaged site and model files against the manifest.
+The desktop host serves app files through a loopback server. HTTPS requests resolve exclusively to verified packaged files. Unlisted requests fail. Only manifest-listed models may come from the pack, the cache or the network. Profiles begin empty during tests. `--verify` checks the packaged site and model files against the manifest.
 
 The renderer uses Electron's sandbox with context isolation and no Node integration. Local OME-Zarr access requires an explicit directory selection or `--zarr DIRECTORY`; the resulting temporary URL cannot escape that directory through path traversal or symlinks.
 
-## Edition without models
+## Models
 
-`without-models.mjs` derives the smaller edition from the verified full bundle. It removes every locked model and matching site copy, including MuscleMap's split model. The manifest retains exact source URLs, hashes and sizes. Local model pieces are reconstructed from their pinned complete model.
+`without-models.mjs` derives the shipped platform bundle from the verified full bundle. It removes every locked model and matching site copy, including MuscleMap's split model. The manifest retains exact source URLs, hashes and sizes. Local model pieces are reconstructed from their pinned complete model.
 
-Only these declared models can be downloaded. The main process verifies model bytes before serving them, caches verified downloads, and reuses them on later runs. Concurrent requests share one download; corrupt downloads are rejected and retried on the next request. App and runtime files remain bundled. The model-inclusive edition never enables this path.
+`models-pack.mjs` writes those same models into `webapps-VERSION-models.tar.gz`. Each entry is named after the SHA-256 of its contents, which is the layout of the model cache the application already keeps. Split model files stay out of the pack because the application derives them from their pinned parent at runtime.
 
-Both editions are built and tested on all three platforms and as Apptainer images. The package tests exercise an actual first-use model download in the smaller edition, plus all-app startup. Tests verify offline cache reuse and rejection of corrupt or unlisted models.
+The main process resolves a model from the pack directory first, then the cache, then the network. `NEURODESK_MODELS_DIR` names the pack directory and must be an absolute path. A pack file is served in place after its size and checksum match, so a read-only pack can be shared between users and bind-mounted into HPC jobs. Nothing is ever written into the pack. Without a pack, the main process verifies downloaded model bytes before serving them, caches them, and reuses them on later runs. Concurrent requests share one download. Corrupt downloads are rejected and retried on the next request.
+
+One edition is built and tested on all three platforms and as Apptainer images. The package tests exercise an actual first-use model download plus all-app startup. A separate job extracts the published pack, sets `NEURODESK_MODELS_DIR`, and runs the offline workflow suite inside a network namespace with no route out. Tests verify pack resolution without cache writes, offline cache reuse, and rejection of corrupt or unlisted models.
 
 ## HPC execution
 
@@ -40,11 +43,11 @@ WebGPU methods require compatible GPU hardware and drivers. All 24 representativ
 
 ## Release and interface contract
 
-`registry/standalone.json` supplies real GitHub binary URLs, platform information, checksums, model-inclusion claims and upstream Neurodesk container choices. The shared dialog renders it for every app, including VesselBoost and SynthSeg. Compilation commands are not standalone downloads. The lightNIIng bar link is removed; the required ecosystem statement remains in About.
+`registry/standalone.json` supplies real GitHub binary URLs, platform information, checksums, the model pack record and upstream Neurodesk container choices. The published `suite` entry holds four platform downloads and one `models` record. The shared dialog renders it for every app, including VesselBoost and SynthSeg. Compilation commands are not standalone downloads. The lightNIIng bar link is removed; the required ecosystem statement remains in About.
 
-The release workflow builds the locked bundle, tests each platform, tests the installed executables and builds/tests the SIF. Publication requires every distribution job to pass. Files larger than GitHub's asset limit are split into numbered parts. The dialog groups downloads in bordered sections and hides extraction commands inside installation disclosures. Hashes remain in machine-readable release metadata. Installation instructions include local reassembly commands; no network access is needed after transferring the complete set.
+The release workflow builds the locked bundle, tests each platform, tests the installed executables and builds/tests the SIF. Publication requires every distribution job to pass. Files larger than GitHub's asset limit are split into numbered parts. The dialog lists the platform downloads in one bordered section, offers the model pack as a clearly optional extra, and hides extraction commands inside installation disclosures. Hashes remain in machine-readable release metadata. Installation instructions include local reassembly commands; no network access is needed after transferring the complete set.
 
-`publish.mjs` verifies the individual parts and reassembled archive hashes, uploads a draft release and publishes it after the complete artifact set is present. Its generated catalog records every app version and the source revision. Web deployment refuses a catalog without a matching published suite and checks that the actual binary URLs resolve. The deployed-interface test opens every app's Standalone dialog and checks its release links.
+`publish.mjs` verifies the individual parts and reassembled archive hashes of the four platform archives and the model pack, requires the passing networkless pack run, uploads a draft release and publishes it after the complete artifact set is present. Its generated catalog records every app version and the source revision. Web deployment uses the last imported suite catalog independently of current app versions. The deployed-interface test opens every app's Standalone dialog and checks its release links.
 
 Upstream Neurodesk containers are optional alternatives. Docker pulls use published Docker Hub tags. Apptainer downloads use exact filenames from Neurocommand's `cvmfs/log.txt` and the official Neurodesk worker endpoint. The suite SIF carries the tested webapp pipelines and bundled assets. See [container assignments](standalone-container-research.md) for verified upstream versions and unavailable releases.
 
@@ -54,8 +57,8 @@ Upstream Neurodesk containers are optional alternatives. Docker pulls use publis
 
 Every app must have an executable offline workflow test. Unknown workflows fail. New apps automatically enter the full hosted-CI workflow list; the existing hardware exceptions are explicit and documented. App authors must declare new assets and exercise the scientific stages they add. The host records missing and external requests as test failures.
 
-`pnpm release` automatically adds a dated suite release whenever an app is released. A second suite on the same UTC date advances its minor version so published files remain immutable. Explicit desktop changesets use the same date scheme.
+`pnpm release` versions individual apps without adding a desktop release. The `standalone` workflow builds and publishes the complete Electron and HPC suite only on its daily 03:23 UTC cron schedule. It includes all apps from the default branch commit selected for that run. The bundle job selects one UTC date, and every job uses it to stamp the desktop version as `MAJOR.MINOR.YYYYMMDD`. Explicit desktop changesets still control the committed release series.
 
-Before deployment, every catalog app version must appear in the released suite, and the catalog must match the current desktop package version. Adding an experimental app or disabling its web-release flag does not bypass that gate. The generator, catalog validation, offline tests, publication checks and deployed-interface checks enforce the contract in code.
+Web releases and deployments do not wait for the desktop suite. The published suite records the app versions it contains, which can trail web releases until the next daily build. Import its `standalone-catalog.json` into `registry/standalone.json` to update website download links. The generator, catalog validation, offline tests and publication checks continue to require desktop coverage for every app.
 
 For installation and scheduler examples, read [the packaged user guide](../../packages/desktop/STANDALONE.md).

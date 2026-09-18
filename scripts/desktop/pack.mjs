@@ -7,18 +7,16 @@ import { loadBundle, verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
 const projectDir = join(root, 'packages/desktop');
-const light = process.env.NEURODESK_MODELS === 'without';
-const resources = join(projectDir, light ? 'resources-light' : 'resources');
+const resources = join(projectDir, 'resources-light');
 const require = createRequire(join(projectDir, 'package.json'));
 const { build } = require('electron-builder');
-// Model weights dominate these archives; moderate compression avoids spending
-// tens of minutes on the hosted runner for a small download-size difference.
+// Runtime wheels and WebAssembly dominate these archives; moderate compression
+// avoids spending tens of minutes on the hosted runner for a small size difference.
 process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
 await verifyBundle(resources);
 const artifacts = await build({ projectDir, publish: 'never', config: {
   executableName: 'neurodesk-webapps',
   extraResources: [{ from: resources, to: 'offline' }],
-  ...(light ? { artifactName: 'webapps-${version}-without-models-${os}-${arch}.${ext}' } : {}),
 } });
 const executable = process.platform === 'darwin'
   ? join(projectDir, 'release/mac-arm64/neurodesk-webapps.app/Contents/MacOS/neurodesk-webapps')
@@ -30,7 +28,7 @@ const packagedResources = process.platform === 'darwin'
   ? resolve(executable, '../../Resources/offline')
   : join(resolve(executable, '..'), 'resources/offline');
 await verifyBundle(packagedResources);
-if (((await loadBundle(packagedResources)).modelsIncluded !== false) !== !light) throw new Error('Packaged model edition does not match the requested edition');
+if ((await loadBundle(packagedResources)).modelsIncluded !== false) throw new Error('The packaged bundle still carries models; package resources-light');
 await new Promise((resolve, reject) => {
   const child = spawn(process.execPath, [join(root, 'scripts/desktop/smoke.mjs')], {
     stdio: 'inherit',
@@ -42,5 +40,5 @@ await new Promise((resolve, reject) => {
 const version = JSON.parse(await readFile(join(projectDir, 'package.json'))).version;
 const platform = { darwin: 'macos-arm64', linux: 'linux-x64', win32: 'windows-x64' }[process.platform];
 for (const path of artifacts.filter(path => /\.(zip|tar\.gz)$/.test(path))) {
-  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform, modelsIncluded: !light }));
+  console.log(await prepareReleaseFiles(path, join(projectDir, 'release/github'), { version, platform }));
 }

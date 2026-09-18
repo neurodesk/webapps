@@ -159,4 +159,4 @@ Common issues it catches:
 
 ## Examples
 
-The example imports a matched structural T1 and lesion mask through mask review; keep confirmation explicit before network mapping. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.
+The example imports only a structural T1. Run analysis computes the lesion mask; never preload a reference lesion mask. Keep confirmation of the computed mask explicit before network mapping. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.

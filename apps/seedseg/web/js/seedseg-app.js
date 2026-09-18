@@ -1,4 +1,4 @@
-import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -63,7 +63,7 @@ class SeedSegApp {
     // Controllers
     this.fileIOController = new SeedSegInputSet({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFileLoaded: (file) => (this.inputReady = this.onFileLoaded(file))
+      onFileLoaded: (file) => this.onFileLoaded(file)
     });
 
     this.dicomController = new SeedSegDicomInput({
@@ -102,7 +102,6 @@ class SeedSegApp {
     // Setup
     await this.setupViewer();
     this.setupEventListeners();
-    await this.setupExamples();
     this.setupInfoTooltips();
 
     // Log threading support
@@ -125,26 +124,6 @@ class SeedSegApp {
   }
 
   // ==================== Event Listeners ====================
-
-  async setupExamples() {
-    const response = await fetch(new URL('examples.json', document.baseURI));
-    if (!response.ok) throw new Error('Could not load the example catalog.');
-    const examples = await response.json();
-    this.exampleSelector = createExampleSelector({
-      scope: document.querySelector('.app-container'),
-      examples,
-      onLoad: async (example, { fetchFiles, assertCurrent }) => {
-        const files = await fetchFiles();
-        assertCurrent();
-        this._buckets = { t1w: [], other: [] };
-        await this._handleUnifiedFiles(files, { assumeT1w: true });
-        await this.inputReady;
-      },
-      onStatus: (message) => this.updateOutput(message),
-    });
-    const input = document.getElementById('unifiedFiles');
-    input.closest('.section-content').prepend(this.exampleSelector);
-  }
 
   setupEventListeners() {
     // Unified file input
@@ -316,7 +295,7 @@ class SeedSegApp {
     });
   }
 
-  _handleUnifiedFiles(files, options = {}) {
+  _handleUnifiedFiles(files) {
     const niftiFiles = [];
     const dicomFiles = [];
 
@@ -340,7 +319,7 @@ class SeedSegApp {
     }
 
     if (niftiFiles.length > 0) {
-      this._addFilesToBuckets(niftiFiles, options);
+      this._addFilesToBuckets(niftiFiles);
     }
   }
 
@@ -362,7 +341,7 @@ class SeedSegApp {
         this._buckets.t1w.push(file);
         t1wAssigned = true;
       } else if (assumeT1w && !t1wAssigned) {
-        // Converted scans and declared T1 examples assign their first image to T1w.
+        // Converted scans assign their first image to T1w.
         this._buckets.t1w.push(file);
         t1wAssigned = true;
       } else {

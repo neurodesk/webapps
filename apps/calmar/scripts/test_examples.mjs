@@ -10,7 +10,13 @@ const examples = JSON.parse(await readFile(new URL('../examples.json', import.me
 async function loadAdapter() {
   let options;
   const loaded = [];
-  const app = { updateOutput() {}, async setStructural(file) { loaded.push(file); }, async startUploadedLesionMaskReview(file) { loaded.push(file); } };
+  const app = {
+    updateOutput() {},
+    async setStructural(file) { loaded.push(file); },
+    async startUploadedLesionMaskReview() {
+      assert.fail('The example must compute its lesion mask');
+    },
+  };
   const selector = {};
   const scope = {};
   const input = { closest: () => ({ prepend(element) { assert.equal(element, selector); } }), classList: { remove() {} } };
@@ -22,9 +28,10 @@ async function loadAdapter() {
 
 test('selecting the example imports its complete scientific inputs without running processing', async () => {
   const { options, loaded } = await loadAdapter();
+  assert.deepEqual(examples[0].files.map(file => file.role), ['structural']);
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
-  assert.equal(loaded.length, 2);
+  assert.equal(loaded.length, 1);
   assert.deepEqual(loaded.map(file => file.name), examples[0].files.map(file => file.name));
 });
 
@@ -43,7 +50,8 @@ test('failed download leaves inputs untouched and can be retried', async () => {
     fetchFiles: async () => { throw new Error('Download failed'); }, assertCurrent() {},
   }), /Download failed/);
   assert.deepEqual(loaded, []);
+  assert.deepEqual(examples[0].files.map(file => file.role), ['structural']);
   const files = examples[0].files.map(file => new File(['example'], file.name));
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
-  assert.equal(loaded.length, 2);
+  assert.equal(loaded.length, 1);
 });

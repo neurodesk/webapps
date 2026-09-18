@@ -1,27 +1,22 @@
 name: standalone
 
 on:
-  pull_request:
-  push:
-    branches: [main, t3code/standalone-app-releases]
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: Publish verified desktop and HPC binaries to GitHub Releases
-        type: boolean
-        default: false
+  schedule:
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
 
 concurrency:
-  group: standalone-${{ github.ref }}
-  cancel-in-progress: true
+  group: standalone-daily
+  cancel-in-progress: false
 
 jobs:
   bundle:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    outputs:
+      release_date: ${{ steps.date.outputs.release_date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
@@ -37,6 +32,13 @@ jobs:
           rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
           cargo install wasm-pack --version 0.13.1 --locked
       - run: pnpm install --frozen-lockfile
+      - name: Select the UTC release date
+        id: date
+        run: echo "release_date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
       - name: Test package contracts
         run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
       - uses: actions/cache@v6
@@ -60,6 +62,16 @@ jobs:
           path: offline-resources.tar.gz
           compression-level: 0
           if-no-files-found: error
+      - name: Build the platform-independent model pack
+        run: |
+          node scripts/desktop/without-models.mjs
+          node scripts/desktop/models-pack.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-models-pack
+          path: packages/desktop/release/github/
+          compression-level: 0
+          if-no-files-found: error
 
   desktop:
     needs: bundle
@@ -67,13 +79,10 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-22.04, macos-15, windows-latest]
-        models: [included, without]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 100
-    env:
-      NEURODESK_MODELS: ${{ matrix.models }}
     steps:
-      - name: Free Linux runner storage for model-inclusive archives
+      - name: Free Linux runner storage for the suite archives
         if: runner.os == 'Linux'
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -83,13 +92,16 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - run: node packages/desktop/node_modules/electron/install.js
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: offline-resources
       - run: tar -xzf offline-resources.tar.gz -C packages/desktop
       - name: Prepare the package without models
-        if: matrix.models == 'without'
         shell: bash
         run: |
           node scripts/desktop/without-models.mjs
@@ -152,7 +164,7 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
-          name: desktop-${{ matrix.os }}-${{ matrix.models }}
+          name: desktop-${{ matrix.os }}
           path: |
             desktop-reports/
             desktop-workflow-reports/
@@ -162,9 +174,64 @@ jobs:
           compression-level: 0
           if-no-files-found: error
 
+  models-offline:
+    needs: bundle
+    runs-on: ubuntu-22.04
+    timeout-minutes: 100
+    steps:
+      - name: Free Linux runner storage for the suite archives
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
+      - run: node packages/desktop/node_modules/electron/install.js
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: offline-resources
+      - run: tar -xzf offline-resources.tar.gz -C packages/desktop
+      - run: node scripts/desktop/without-models.mjs
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-models-pack
+          path: models-release
+      - name: Install the model pack the way the release notes describe
+        run: |
+          mkdir models-pack
+          cat $(ls models-release | grep -E 'models\.tar\.gz(\.part[0-9]+)?$' | sort | sed 's|^|models-release/|') > models.tar.gz
+          tar -xzf models.tar.gz -C models-pack
+          rm models.tar.gz
+      - name: Select workflow coverage from the complete app registry
+        run: echo "NEURODESK_TEST_APP=$(node scripts/desktop/ci-apps.mjs)" >> "$GITHUB_ENV"
+      # A model served from the pack is read in place, so an empty profile cache
+      # after a completed workflow is the proof that nothing was downloaded.
+      - name: Test offline computations and exports against the extracted model pack
+        run: xvfb-run -a node scripts/desktop/smoke.mjs
+        env:
+          NEURODESK_BUNDLE: ${{ github.workspace }}/packages/desktop/resources-light
+          NEURODESK_MODELS_DIR: ${{ github.workspace }}/models-pack
+          NEURODESK_TEST_REPORT: reports/desktop-workflow-reports
+          NEURODESK_WORKFLOWS: '1'
+          NEURODESK_SOFTWARE_RENDERING: '1'
+      # Uploading one directory drops its name, so the report keeps the same
+      # layout the desktop jobs produce and publish.mjs reads.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: desktop-models-offline
+          path: reports/
+          compression-level: 0
+          if-no-files-found: error
+
   publish:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    needs: desktop
+    needs: [bundle, desktop, models-offline]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -175,6 +242,10 @@ jobs:
           node-version: 24
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - run: pnpm install --frozen-lockfile
+      - name: Set the daily desktop version
+        run: node scripts/desktop/daily-version.mjs
+        env:
+          DESKTOP_RELEASE_DATE: ${{ needs.bundle.outputs.release_date }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: desktop-*

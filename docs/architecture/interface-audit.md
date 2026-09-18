@@ -153,7 +153,7 @@ Production checks passed at desktop and phone sizes. The phone suite now opens S
 
 ### Standalone download choices
 
-All 24 apps share the simplified download dialog: Neurodesk Docker and official Apptainer downloads first, then the webapp suite without models, followed by model-inclusive downloads. Bordered shared sections separate the choices. Hashes and upstream preparation boilerplate are absent; multipart extraction commands are collapsed. TopoFit's Docker link is labeled as a candidate build because that is the only published Docker tag; its official Apptainer image is listed separately.
+All 24 apps share the simplified download dialog. Neurodesk Docker and official Apptainer downloads come first, then the webapp suite archive for each platform, then the optional model pack for offline use. Bordered shared sections separate the choices. Hashes and upstream preparation boilerplate are absent; multipart extraction commands are collapsed. TopoFit's Docker link is labeled as a candidate build because that is the only published Docker tag; its official Apptainer image is listed separately.
 
 MuscleMap, QSMbly, Spinal Cord Toolbox, SynthSeg, TopoFit and VesselBoost also show an OpenRecon section between the Neurodesk containers and webapp downloads. It links to the official Siemens teamplay C2P exchange, the OpenRecon build repository and the app's recipe. QSMbly maps to the QSMxT container. Availability is explicit data in `registry/standalone.json`; apps without a registered scanner package omit this section. The deployed Standalone smoke test checks both links and visibility across the catalog.
 

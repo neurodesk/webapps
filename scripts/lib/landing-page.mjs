@@ -167,6 +167,7 @@ export function renderLandingPage(registry) {
     <div class="site-footer__inner">
       <p><strong>Neurodesk Webapps</strong><span>Open, local-first tools for neuroimaging.</span></p>
       <nav aria-label="Footer navigation">
+        <button type="button" id="under-the-surface" class="footer-mystery" aria-label="Explore below the surface">◇</button>
         <a href="https://neurodesk.org/">About Neurodesk</a>
         <a href="https://lightniing.org/">lightNIIng</a>
         <a href="https://github.com/neurodesk/webapps">View source</a>

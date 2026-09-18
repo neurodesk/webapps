@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { app, BrowserWindow, dialog, net, session, Menu } from 'electron';
 import { appendFile, mkdir } from 'node:fs/promises';
-import { join, resolve, basename } from 'node:path';
+import { join, resolve, basename, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { canonicalUrl, loadBundle, verifyBundle } from './bundle.js';
 import { readJob, runJob } from './jobs.js';
@@ -28,8 +28,10 @@ app.whenReady().then(async () => {
 try {
   const bundle = await loadBundle(root);
   const job = argument('--job') ? await readJob(resolve(argument('--job'))) : null;
-  const models = createModelResolver(root, bundle, join(app.getPath('userData'), 'models'));
-  const local = await startOfflineServer(root, { resolveFile: models.file, modelsIncluded: bundle.modelsIncluded !== false });
+  const pack = process.env.NEURODESK_MODELS_DIR;
+  if (pack && !isAbsolute(pack)) throw new Error('NEURODESK_MODELS_DIR must be an absolute path to an extracted model pack');
+  const models = createModelResolver(root, bundle, join(app.getPath('userData'), 'models'), { pack });
+  const local = await startOfflineServer(root, { resolveFile: models.file });
   server = local.server;
   const offlineSession = session.fromPartition('offline');
   const downloads = [];

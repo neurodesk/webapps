@@ -9,6 +9,31 @@ async function workflow(name) {
   return YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
 }
 
+test('desktop builds and publication run only on the daily schedule', async () => {
+  const flow = await workflow('standalone');
+  assert.deepEqual(flow.on, { schedule: [{ cron: '23 3 * * *' }] });
+  assert.equal(flow.concurrency['cancel-in-progress'], false);
+  assert.equal(flow.jobs.publish.if, undefined);
+  assert.deepEqual(flow.jobs.publish.needs, ['bundle', 'desktop', 'models-offline']);
+  assert.ok(flow.jobs.bundle.steps.some(step => step.run === 'pnpm build'));
+  assert.equal(flow.jobs.bundle.outputs.release_date, '${{ steps.date.outputs.release_date }}');
+  for (const [name, job] of Object.entries(flow.jobs)) {
+    const checkout = job.steps.find(step => step.uses?.startsWith('actions/checkout@'));
+    assert.equal(checkout.with?.ref, undefined, 'use the scheduled run commit for every job');
+    const stamp = job.steps.find(step => step.run === 'node scripts/desktop/daily-version.mjs');
+    assert.equal(stamp.env.DESKTOP_RELEASE_DATE, name === 'bundle'
+      ? '${{ steps.date.outputs.release_date }}'
+      : '${{ needs.bundle.outputs.release_date }}');
+  }
+});
+
+test('web releases and deployments do not wait for the desktop suite', async () => {
+  for (const name of ['release', 'deploy-pages', 'deploy-cloudflare']) {
+    const flow = await workflow(name);
+    assert.doesNotMatch(JSON.stringify(flow), /scripts\/desktop\/|standalone\.yml/);
+  }
+});
+
 test('routine CI uses the lightweight SCT gate and full inference runs independently', async () => {
   const ci = await workflow('ci');
   const full = await workflow('sct-full-tests');

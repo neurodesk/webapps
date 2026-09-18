@@ -19,7 +19,10 @@ export async function loadStandalone(registry, root = repoRoot) {
       throw new Error(`${id}: OpenRecon requires a package label and recipe name`);
     }
   }
-  if (value.suite) validateDownloads(value.suite.downloads, 'suite');
+  if (value.suite) {
+    validateDownloads(value.suite.downloads, 'suite');
+    if (value.suite.models) validateDownloads([value.suite.models], 'suite model pack');
+  }
   return value;
 }
 
@@ -30,8 +33,7 @@ function validateDownloads(downloads, id) {
       if (!/^https:\/\/github\.com\/neurodesk\/webapps\/releases\/download\//.test(file.url)) throw new Error(`${id}: invalid download URL`);
       if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error(`${id}: download must have a checksum`);
     }
-    if (!download.platform || !download.version || !['desktop', 'cli', 'container'].includes(download.kind)) throw new Error(`${id}: incomplete release metadata`);
-    if (typeof download.modelsIncluded !== 'boolean') throw new Error(`${id}: declare whether models are included`);
+    if (!download.platform || !download.version || !['desktop', 'cli', 'container', 'models'].includes(download.kind)) throw new Error(`${id}: incomplete release metadata`);
   }
 }
 

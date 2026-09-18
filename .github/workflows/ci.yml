@@ -192,3 +192,18 @@ jobs:
           pnpm exec playwright install --with-deps chromium
       - name: Test ${{ matrix.app }} in a browser
         run: pnpm --filter ${{ matrix.app }} test:e2e
+
+  homepage-easter-egg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: node --test test/easter-egg.test.mjs
+      - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test
+      - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test:e2e

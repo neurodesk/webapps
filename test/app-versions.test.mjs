@@ -117,22 +117,39 @@ test('a linked-package changeset releases the app, package and native versions t
   assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
 });
 
-test('an app release automatically versions the complete desktop suite', async (t) => {
+test('an app release leaves the desktop suite version unchanged', async (t) => {
   const { root, put, json } = await fixture(t);
   await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
   await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nUpdated offline app.\n');
   const release = await planRelease(root, { date: '20261001' });
-  assert.equal(release.plan.releases.find(item => item.name === '@neurodesk/desktop')?.newVersion, '0.1.20261001');
+  assert.ok(!release.plan.releases.some(item => item.name === '@neurodesk/desktop'));
   await applyRelease(release);
-  assert.equal((await json('packages/desktop')).version, '0.1.20261001');
+  assert.equal((await json('packages/desktop')).version, '0.1.20260930');
 });
 
-test('same-day app updates get a distinct immutable suite version', async (t) => {
+test('daily desktop stamping preserves app versions and can be repeated across jobs', async (t) => {
+  const { root, put, json } = await fixture(t);
+  await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.9.20260930', private: true }));
+  const app = await json('apps/zarro');
+  const options = { cwd: root, env: { ...process.env, DESKTOP_RELEASE_DATE: '20261001' } };
+  const script = join(repoRoot, 'scripts/desktop/daily-version.mjs');
+  for (let i = 0; i < 2; i += 1) {
+    await run(process.execPath, [script], options);
+    assert.equal((await json('packages/desktop')).version, '0.9.20261001');
+    assert.deepEqual(await json('apps/zarro'), app);
+  }
+  await assert.rejects(run(process.execPath, [script], {
+    ...options, env: { ...process.env, DESKTOP_RELEASE_DATE: '20260230' },
+  }), /Invalid release date/);
+  assert.equal((await json('packages/desktop')).version, '0.9.20261001');
+});
+
+test('same-day app updates do not release the desktop suite', async (t) => {
   const { root, put } = await fixture(t);
   await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));
   await put('.changeset/app.md', '---\n"zarro": patch\n---\n\nSame-day offline fix.\n');
   const release = await planRelease(root, { date: '20260930', sameDay: true });
-  assert.equal(release.plan.releases.find(item => item.name === '@neurodesk/desktop')?.newVersion, '0.2.20260930');
+  assert.ok(!release.plan.releases.some(item => item.name === '@neurodesk/desktop'));
 });
 
 test('an app release uses the strongest linked bump and updates pinned dependents to the final date', async (t) => {

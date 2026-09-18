@@ -24,3 +24,7 @@ for each app are recorded in `registry/apps.yml`.
 Model and atlas licences are separate from application source licences. Scientific
 asset manifests record their known licence and provenance; `NOASSERTION` means the
 licence must be clarified before redistribution beyond the existing project scope.
+
+## Homepage easter egg data
+
+The IXI322 human MRA segmentation and derived geometry used by the homepage game are CC BY-NC-SA 4.0. Attribution, pinned source and modifications are in `site/easter-eggs/vessel-surfer/public/data/ATTRIBUTION.md`. Assets are downloaded from the pinned Hugging Face revision in `data-manifest.json` during build; this data license is separate from the site source license.

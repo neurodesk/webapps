@@ -1,0 +1,10 @@
+{
+  "revision": "7727117a76bea28a5c616ad802222be5ab1ae3f2",
+  "files": {
+    "ixi322-vessels.nii.gz": "68addc6caedf8fb22c26c0ad8977028fd6eba114e6ef0597e607267ccb45fe1e",
+    "ixi322.json": "5d44fa0b36de1b0fa9a7f9cdebb1bd15b54f31979aa5b11486cfcd848a8ee211",
+    "ixi322-network.json": "38288477669084b474829530660ba3281bfaa7275d9949a307ae1003fa1dfee6",
+    "ixi322-surface.bin": "b42cbfe81b6997926b4a0e70bbad2acb5fe624a892398c7ea4d42ac0a8602015",
+    "ixi322-field.gz": "0c6604047701e7379ff836d1772b5e2fcac281dab8e45c3c1329006fd462203a"
+  }
+}

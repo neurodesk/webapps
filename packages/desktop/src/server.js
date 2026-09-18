@@ -12,7 +12,7 @@ export const mimeType = path => ({
   '.png': 'image/png', '.jpg': 'image/jpeg', '.woff2': 'font/woff2', '.txt': 'text/plain',
 }[extname(path)] || 'application/octet-stream');
 
-export async function startOfflineServer(root, { port = 0, resolveFile, modelsIncluded = true } = {}) {
+export async function startOfflineServer(root, { port = 0, resolveFile } = {}) {
   const mounts = new Map();
   const server = createServer(async (request, response) => {
     try {
@@ -45,7 +45,7 @@ export async function startOfflineServer(root, { port = 0, resolveFile, modelsIn
         'Cache-Control': 'no-store',
       };
       if (path.endsWith('.html')) {
-        const html = (await readFile(path, 'utf8')).replace(/<html\b/, `<html data-neurodesk-offline data-neurodesk-models-included="${modelsIncluded}"`);
+        const html = (await readFile(path, 'utf8')).replace(/<html\b/, '<html data-neurodesk-offline');
         response.writeHead(200, headers).end(request.method === 'HEAD' ? undefined : html);
       } else {
         headers['Content-Length'] = details.size;

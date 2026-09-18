@@ -398,10 +398,8 @@ export class LesionNetworkMappingApp {
         const files = await fetchFiles();
         assertCurrent();
         const structural = files[example.files.findIndex(file => file.role === 'structural')];
-        const lesion = files[example.files.findIndex(file => file.role === 'lesion')];
         await this.setStructural(structural);
         assertCurrent();
-        await this.startUploadedLesionMaskReview(lesion);
       },
       onStatus: (message) => this.updateOutput(message),
     });

@@ -1,0 +1,7 @@
+# apps/<name>/public/_headers  → copied by Vite to dist/_headers, served by Cloudflare Pages.
+# Production COOP/COEP so SharedArrayBuffer / threaded ONNX Runtime works.
+# Vite's server.headers only cover the DEV server — this is the production equivalent.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
