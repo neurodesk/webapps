@@ -1,6 +1,22 @@
 # @neurodesk/desktop
 
+## 0.13.20260918
+
+### Patch Changes
+
+- Include VesselBoost’s original TOF-MRA example alongside the corrected Calmar example.
+
 ## 0.11.20260918
+
+### Patch Changes
+
+- Reserve a distinct offline suite version for Calmar's corrected example while the SeedSeg suite release is in progress.
+
+## 0.10.20260918
+
+### Patch Changes
+
+- Include Calmar's corrected T1-only stroke example in the offline suite.
 
 ## 0.9.20260918
 

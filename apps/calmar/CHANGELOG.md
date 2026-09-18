@@ -1,5 +1,11 @@
 # calmar
 
+## 0.3.20260918
+
+### Patch Changes
+
+- Load only the structural T1 in the stroke example so Run analysis computes the lesion mask for review before network mapping.
+
 ## 0.3.20260916
 
 ### Patch Changes
