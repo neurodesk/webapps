@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -17,6 +18,8 @@ test('composite site contains one checksum-verified runtime store', async () => 
 
 test('only declared app-scoped runtime families remain in composite app copies', async () => {
   const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
+  const ortHashes = new Map(manifest.families.find(family => family.id === 'ort-web').files.map(file => [file.name, file.sha256]));
   for (const app of registry.apps) {
     const appDist = join(dist, app.path);
     if (app.app_scoped_runtime_families.includes('dcm2niix')) {
@@ -34,9 +37,14 @@ test('only declared app-scoped runtime families remain in composite app copies',
         for (const name of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']) {
           assert.ok(ortFiles.includes(name), `${app.id}: missing ${name}`);
         }
+        const standaloneWasm = await readdir(join(repoRoot, 'apps', app.id, 'dist', 'wasm'));
+        const expectedFiles = standaloneWasm.filter(name => name.startsWith('ort')).sort();
+        assert.ok(expectedFiles.length > 0, `${app.id}: standalone ORT files are missing`);
+        assert.deepEqual(ortFiles, expectedFiles, `${app.id}: composite must preserve its standalone ORT files`);
         for (const name of ortFiles) {
-          assert.deepEqual(await readFile(join(appDist, 'wasm', name)),
-            await readFile(join(dist, '_runtime', 'ort-web', '1.21.0', name)), `${app.id}: scoped ${name}`);
+          assert.ok(ortHashes.has(name), `${app.id}: unpinned ORT file ${name}`);
+          const bytes = await readFile(join(appDist, 'wasm', name));
+          assert.equal(createHash('sha256').update(bytes).digest('hex'), ortHashes.get(name), `${app.id}: scoped ${name} checksum`);
         }
       } else {
         assert.deepEqual(ortFiles, [], `${app.id} retains app-local ORT files`);
