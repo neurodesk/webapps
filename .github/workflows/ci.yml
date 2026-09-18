@@ -137,7 +137,9 @@ jobs:
       - name: Enforce scientific-asset and hosting budgets
         run: pnpm audit:artifacts
       - name: Test shared runtime assembly
-        run: node --test test/runtime-assets.test.mjs
+        run: node --test test/runtime-assets.test.mjs test/runtime-assets-rewrite.test.mjs test/runtime-worker-scope.test.mjs
+      - name: Load threaded models with service-worker isolation
+        run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
       - name: Audit interface consistency across the catalog
