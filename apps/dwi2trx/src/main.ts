@@ -78,7 +78,7 @@ for (const [id, title] of dialogs) {
   dialog.setContent($(id + 'Content'))
   if (id === 'vecDlg' || id === 'genVecDlg') dialog.root.classList.add('nd-dialog-wide')
 }
-const consoleView = createConsole({ outputId: 'consoleOutput' })
+const consoleView = createConsole({ id: 'technicalLog', outputId: 'consoleOutput' })
 $('canvas-container').append(consoleView)
 const toolbar = createViewerToolbar({
   views: [], window: false, overlay: false, colormap: false, download: false, screenshot: false,

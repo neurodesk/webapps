@@ -60,7 +60,7 @@ const niftiInput = $<HTMLInputElement>('niftiInput')
 const dicomInput = $<HTMLInputElement>('dicomInput')
 const methodDescription = $('methodDescription')
 const webgpuDialog = createInfoDialog({ id: 'webgpuDialog' })
-const technicalLog = createConsole({ outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
+const technicalLog = createConsole({ id: 'technicalLog', outputId: 'consoleOutput', copyId: 'copyLogBtn', clearId: 'clearLogBtn' })
 $('viewer').appendChild(technicalLog)
 
 // --- NiiVue setup ---
