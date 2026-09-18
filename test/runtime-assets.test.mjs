@@ -31,19 +31,18 @@ test('only declared app-scoped runtime families remain in composite app copies',
       const wasm = await readdir(join(appDist, 'wasm'));
       const ortFiles = wasm.filter((name) => name.startsWith('ort')).sort();
       if (app.app_scoped_runtime_families.includes('ort-web')) {
-        assert.deepEqual(ortFiles, [
-          'ort-wasm-simd-threaded.jsep.mjs',
-          'ort-wasm-simd-threaded.jsep.wasm',
-          'ort-wasm-simd-threaded.mjs',
-          'ort-wasm-simd-threaded.wasm',
-          'ort.webgpu.bundle.min.mjs',
-          'ort.webgpu.min.js',
-        ]);
+        for (const name of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm', 'ort.webgpu.bundle.min.mjs']) {
+          assert.ok(ortFiles.includes(name), `${app.id}: missing ${name}`);
+        }
+        for (const name of ortFiles) {
+          assert.deepEqual(await readFile(join(appDist, 'wasm', name)),
+            await readFile(join(dist, '_runtime', 'ort-web', '1.21.0', name)), `${app.id}: scoped ${name}`);
+        }
       } else {
         assert.deepEqual(ortFiles, [], `${app.id} retains app-local ORT files`);
       }
     } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+      if (error.code !== 'ENOENT' || app.app_scoped_runtime_families.includes('ort-web')) throw error;
     }
   }
 });
@@ -67,4 +66,18 @@ test('composite references shared runtimes from the root store', async () => {
     }
   }
   assert.ok(workers >= 5, `expected at least five composite inference workers, found ${workers}`);
+});
+
+
+test('no app loads threaded runtimes outside its service-worker scope', async () => {
+  const registry = await loadAppsRegistry();
+  for (const app of registry.apps) {
+    const directory = join(dist, app.path);
+    for (const file of await readdir(directory, { recursive: true })) {
+      if (!/\.(?:html|m?js)$/.test(file)) continue;
+      const source = await readFile(join(directory, file), 'utf8');
+      assert.doesNotMatch(source, /_runtime\/(?:ort-web|mindgrab-cpu|dcm2niix)\//,
+        `${app.id}/${file}: threaded runtime escapes the app service-worker scope`);
+    }
+  }
 });
