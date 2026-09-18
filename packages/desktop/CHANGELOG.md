@@ -1,5 +1,35 @@
 # @neurodesk/desktop
 
+## 0.14.20260918
+
+### Patch Changes
+
+- Include MuscleMap's clearer input image type, preview, and segmentation controls alongside the current app releases.
+
+## 0.13.20260918
+
+### Patch Changes
+
+- Include the original TOF-MRA example for VesselBoost alongside the corrected Calmar example.
+
+## 0.12.20260918
+
+### Patch Changes
+
+- Use suite 0.12 for Calmar; concurrent SeedSeg, MuscleMap and VesselBoost publishers already selected 0.10 and 0.11.
+
+## 0.11.20260918
+
+### Patch Changes
+
+- Reserve a distinct offline suite version for Calmar's corrected example while the SeedSeg suite release is in progress.
+
+## 0.10.20260918
+
+### Patch Changes
+
+- Remove SeedSeg's unsuitable synthetic example from the offline suite.
+
 ## 0.9.20260918
 
 ### Minor Changes

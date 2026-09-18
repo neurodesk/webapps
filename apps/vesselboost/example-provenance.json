@@ -1,0 +1,25 @@
+{
+  "dataset": "Lausanne_TOF-MRA_Aneurysm_Cohort",
+  "snapshot": "1.0.1",
+  "source": "https://openneuro.org/datasets/ds003949/versions/1.0.1",
+  "sourceFile": "sub-000/ses-20110101/anat/sub-000_ses-20110101_angio.nii.gz",
+  "downloadUrl": "https://openneuro.org/crn/datasets/ds003949/snapshots/1.0.1/files/sub-000:ses-20110101:anat:sub-000_ses-20110101_angio.nii.gz",
+  "license": "CC0-1.0",
+  "citation": "Di Noto et al. Towards Automated Brain Aneurysm Detection in TOF-MRA: Open Data, Weak Labels, and Anatomical Knowledge. Neuroinformatics (2022). https://doi.org/10.1007/s12021-022-09597-0",
+  "group": "control",
+  "modality": "TOF-MRA",
+  "seriesDescription": "TOF_3D_multi-slab",
+  "magneticFieldStrengthTesla": 3,
+  "dimensions": [
+    350,
+    448,
+    160
+  ],
+  "spacingMillimeters": [
+    0.46875,
+    0.46875,
+    0.7
+  ],
+  "processing": "None. Original acquisition bytes; no segmentation, masking, cropping, resampling or intensity quantization.",
+  "sha256": "8e1e772825aafbdf898e0c06e9482640098d9722514b59566957bc3ff22cc2b2"
+}

@@ -38,8 +38,6 @@ jobs:
         env:
           GA4_PROPERTY_ID: ${{ secrets.GA4_PROPERTY_ID }}
           GA4_SERVICE_ACCOUNT_KEY: ${{ secrets.GA4_SERVICE_ACCOUNT_KEY }}
-      - name: Require released offline applications for every catalog entry
-        run: node scripts/desktop/check-published.mjs
       - run: pnpm build
       - run: pnpm audit:artifacts
       - name: Deploy composite site

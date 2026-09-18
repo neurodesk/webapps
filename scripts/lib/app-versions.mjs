@@ -79,18 +79,6 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
   const plan = await getReleasePlan(root, undefined, config);
   if (plan.preState) throw new Error('Date releases do not support Changesets prerelease mode.');
   const desktopName = '@neurodesk/desktop';
-  const desktop = packages.get(desktopName);
-  const changedApps = plan.releases.filter(item => item.type !== 'none' && packages.get(item.name)?.group === 'apps');
-  if (desktop && changedApps.length && !plan.releases.some(item => item.name === desktopName && item.type !== 'none')) {
-    plan.releases = plan.releases.filter(item => item.name !== desktopName);
-    plan.releases.push({
-      name: desktopName,
-      type: 'patch',
-      oldVersion: desktop.manifest.version,
-      newVersion: desktop.manifest.version,
-      changesets: [...new Set(changedApps.flatMap(item => item.changesets))],
-    });
-  }
   for (const release of plan.releases) {
     if (release.type === 'none') continue;
     const pkg = packages.get(release.name);
@@ -101,7 +89,7 @@ export async function planRelease(root = repoRoot, { date = releaseDate(), sameD
     }
     release.newVersion = nextVersion(release.oldVersion, series === undefined ? release.type : 'patch', date);
     if (series !== undefined) release.newVersion = `${series}.${date}`;
-    // GitHub suite artifacts are immutable, including explicit same-day app fixes.
+    // GitHub suite artifacts are immutable, including explicit same-day desktop changes.
     if (release.name === desktopName && release.newVersion === release.oldVersion) {
       release.newVersion = nextVersion(release.oldVersion, 'minor', date);
     }

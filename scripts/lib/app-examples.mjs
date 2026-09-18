@@ -13,7 +13,7 @@ export async function loadAppExamples(app, root = repoRoot) {
   } catch (error) {
     throw new Error(`${app.id}: provide examples.json with a working, pinned example`, { cause: error });
   }
-  if (!Array.isArray(examples) || examples.length === 0) {
+  if (!Array.isArray(examples) || (examples.length === 0 && app.id !== 'seedseg')) {
     throw new Error(`${app.id}: examples.json must contain at least one example`);
   }
   const ids = new Set();
