@@ -8,6 +8,7 @@ import { renderInstallationNotes } from './release-notes.mjs';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
 import { loadAppsRegistry } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
+import { recordUrls, reusePlan } from '../lib/release-reuse.mjs';
 
 const directory = resolve(process.argv[2] || 'release-artifacts');
 const registry = await loadAppsRegistry();
@@ -31,44 +32,70 @@ const find = name => {
   return matches[0];
 };
 const platforms = ['macos-arm64', 'linux-x64', 'windows-x64', 'linux-x64-apptainer'];
-const downloads = [];
 const uploads = new Set();
-for (const modelsIncluded of [false, true]) {
-  for (const platform of platforms) {
-    const path = find(`${platform}${modelsIncluded ? '' : '-without-models'}.json`);
-    const metadata = JSON.parse(await readFile(path));
-    if (metadata.version !== version || metadata.modelsIncluded !== modelsIncluded) throw new Error(`Incomplete ${platform}`);
-    const primary = find(basename(new URL(metadata.url).pathname));
-    if (await fileHash(primary) !== metadata.sha256) throw new Error(`Corrupt ${primary}`);
-    uploads.add(primary);
-    const complete = createHash('sha256');
-    for (const part of metadata.parts || []) {
-      const partPath = find(part.filename);
-      if (await fileHash(partPath) !== part.sha256) throw new Error(`Corrupt ${partPath}`);
-      for await (const chunk of createReadStream(partPath)) complete.update(chunk);
-      uploads.add(partPath);
-    }
-    if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
-    downloads.push(metadata);
-    uploads.add(path);
+async function releaseRecord(platform) {
+  const path = find(`${platform}.json`);
+  const metadata = JSON.parse(await readFile(path));
+  if (metadata.version !== version || metadata.platform !== platform) throw new Error(`Incomplete ${platform}`);
+  const primary = find(basename(new URL(metadata.url).pathname));
+  if (await fileHash(primary) !== metadata.sha256) throw new Error(`Corrupt ${primary}`);
+  const built = [primary, path];
+  const complete = createHash('sha256');
+  for (const part of metadata.parts || []) {
+    const partPath = find(part.filename);
+    if (await fileHash(partPath) !== part.sha256) throw new Error(`Corrupt ${partPath}`);
+    for await (const chunk of createReadStream(partPath)) complete.update(chunk);
+    built.push(partPath);
   }
+  if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
+  return { metadata, built };
 }
-for (const models of ['included', 'without']) {
-  for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) {
-    const matching = files.filter(path => path.includes(`desktop-${os}-${models}/`) && path.endsWith('/packaged-desktop-reports/startup.json'));
-    if (matching.length !== 1) throw new Error(`Missing installed-app tests for ${os}`);
-    const results = JSON.parse(await readFile(matching[0]));
-    const expected = registry.apps.map(app => app.id).sort();
-    if (JSON.stringify(results.map(result => result.app).sort()) !== JSON.stringify(expected) || results.some(result => !result.passed)) throw new Error(`Incomplete installed-app tests for ${os}`);
+const available = async urls => {
+  for (const url of urls) {
+    const response = await fetch(url, { method: 'HEAD' }).catch(() => null);
+    if (!response?.ok) return false;
   }
-  if (!files.some(path => path.includes(`desktop-ubuntu-22.04-${models}/`) && path.endsWith('/container-reports/batch.json'))) throw new Error(`Missing ${models} HPC batch tests`);
+  return true;
+};
+const entries = [];
+for (const platform of platforms) entries.push(await releaseRecord(platform));
+entries.push(await releaseRecord('any'));
+if (entries.at(-1).metadata.kind !== 'models') throw new Error('The platform-independent model pack is missing');
+const published = [];
+for (const [index, { record, candidate }] of reusePlan(catalog.suite, entries.map(entry => entry.metadata)).entries()) {
+  if (candidate && await available(recordUrls(candidate))) {
+    console.log(`Reusing the published ${record.platform} ${record.kind} from ${candidate.version}`);
+    published.push(candidate);
+    continue;
+  }
+  if (candidate) console.log(`The published ${record.platform} ${record.kind} is unavailable, so its bytes are uploaded again`);
+  for (const path of entries[index].built) uploads.add(path);
+  published.push(record);
 }
-catalog.suite = { version, revision, apps: await Promise.all(registry.apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version }))), downloads };
+const downloads = published.slice(0, platforms.length);
+const models = published.at(-1);
+const expectedApps = registry.apps.map(app => app.id).sort();
+async function checkReport(artifact, report, { complete }) {
+  const matching = files.filter(path => path.includes(`${artifact}/`) && path.endsWith(`/${report}/startup.json`));
+  if (matching.length !== 1) throw new Error(`Missing ${report} from ${artifact}`);
+  const results = JSON.parse(await readFile(matching[0]));
+  if (results.some(result => !result.passed)) throw new Error(`Failed ${report} in ${artifact}`);
+  if (complete && JSON.stringify(results.map(result => result.app).sort()) !== JSON.stringify(expectedApps)) throw new Error(`Incomplete ${report} in ${artifact}`);
+  return results;
+}
+for (const os of ['ubuntu-22.04', 'macos-15', 'windows-latest']) await checkReport(`desktop-${os}`, 'packaged-desktop-reports', { complete: true });
+if (!files.some(path => path.includes('desktop-ubuntu-22.04/') && path.endsWith('/container-reports/batch.json'))) throw new Error('Missing HPC batch tests');
+// The pack replaces the model-inclusive edition, so a networkless run against
+// an extracted pack is the evidence that offline installations still work.
+const offline = await checkReport('desktop-models-offline', 'desktop-workflow-reports', { complete: false });
+if (!offline.some(result => result.workflow)) throw new Error('The offline model pack test ran no workflow');
+if (offline.some(result => result.downloaded !== 0)) throw new Error('The offline model pack test downloaded a model instead of reading the pack');
+catalog.suite = { version, revision, apps: await Promise.all(registry.apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version }))), downloads, models };
 const metadataPath = join(directory, 'standalone-catalog.json');
 await writeFile(metadataPath, `${JSON.stringify(catalog, null, 2)}\n`);
 uploads.add(metadataPath);
 const notesPath = join(directory, 'release-notes.md');
-await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.apps.length} applications are available in two editions. **Without models** downloads and caches models when needed. **Models included** bundles all model and runtime assets for offline use.\n\nDownload every archive part for your platform and its installation instructions. macOS targets Apple silicon; Linux and Windows target x86-64. The Apptainer SIF supports HPC GUI sessions and JSON batch jobs. WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports, and a Docker batch job with networking disabled. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n\n${renderInstallationNotes(downloads)}`);
+await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.apps.length} applications ship in one archive per platform. It downloads and caches a model the first time that model is needed. The separate model pack holds every model for every platform. Install the pack when the machine has no internet access, or share one extracted copy across an HPC cluster.\n\nDownload every archive part for your platform and its installation instructions. macOS targets Apple silicon; Linux and Windows target x86-64. The Apptainer SIF supports HPC GUI sessions and JSON batch jobs. WebGPU methods require compatible GPU hardware.\n\nEvery installed application was launched with a fresh profile on macOS, Linux and Windows. CI also tested offline computations and exports against an extracted model pack with networking denied, and a Docker batch job with networking disabled. Model accuracy and hardware-specific GPU coverage are documented in the repository test reports.\n\nSource: ${revision}\n\n${renderInstallationNotes(downloads, models)}`);
 if (process.argv.includes('--prepare-only')) {
   console.log(metadataPath);
 } else {
