@@ -97,7 +97,7 @@ apps:
     maintainers: [neurodesk]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [dcm2niix]
+    app_scoped_runtime_families: [ort-web, dcm2niix]
     ci:
       toolchains: [node]
       shared_runtime: true
@@ -161,7 +161,7 @@ apps:
     maintainers: [astewartau]
     support_status: active
     shell: static-html
-    app_scoped_runtime_families: [dcm2niix]
+    app_scoped_runtime_families: [ort-web, dcm2niix]
     ci:
       toolchains: [node]
       shared_runtime: true

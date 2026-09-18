@@ -5,10 +5,10 @@ export default defineConfig({
   timeout: 120000,
   workers: 1,
   webServer: {
-    command: 'pnpm build && pnpm preview --port 4189 --strictPort',
+    command: 'pnpm preview --port 4189 --strictPort',
     url: 'http://127.0.0.1:4189/brain-extraction/',
     reuseExistingServer: !process.env.CI,
-    timeout: 600000,
+    timeout: 60000,
   },
   use: {
     baseURL: 'http://127.0.0.1:4189/brain-extraction/',
