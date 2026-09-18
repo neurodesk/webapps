@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -17,6 +18,8 @@ test('composite site contains one checksum-verified runtime store', async () => 
 
 test('only declared app-scoped runtime families remain in composite app copies', async () => {
   const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
+  const ortHashes = new Map(manifest.families.find(family => family.id === 'ort-web').files.map(file => [file.name, file.sha256]));
   for (const app of registry.apps) {
     const appDist = join(dist, app.path);
     if (app.app_scoped_runtime_families.includes('dcm2niix')) {
@@ -31,19 +34,20 @@ test('only declared app-scoped runtime families remain in composite app copies',
       const wasm = await readdir(join(appDist, 'wasm'));
       const ortFiles = wasm.filter((name) => name.startsWith('ort')).sort();
       if (app.app_scoped_runtime_families.includes('ort-web')) {
-        assert.deepEqual(ortFiles, [
-          'ort-wasm-simd-threaded.jsep.mjs',
-          'ort-wasm-simd-threaded.jsep.wasm',
-          'ort-wasm-simd-threaded.mjs',
-          'ort-wasm-simd-threaded.wasm',
-          'ort.webgpu.bundle.min.mjs',
-          'ort.webgpu.min.js',
-        ]);
+        const standaloneWasm = await readdir(join(repoRoot, 'apps', app.id, 'dist', 'wasm'));
+        const expectedFiles = standaloneWasm.filter(name => name.startsWith('ort')).sort();
+        assert.ok(expectedFiles.length > 0, `${app.id}: standalone ORT files are missing`);
+        assert.deepEqual(ortFiles, expectedFiles, `${app.id}: composite must preserve its standalone ORT files`);
+        for (const name of ortFiles) {
+          assert.ok(ortHashes.has(name), `${app.id}: unpinned ORT file ${name}`);
+          const bytes = await readFile(join(appDist, 'wasm', name));
+          assert.equal(createHash('sha256').update(bytes).digest('hex'), ortHashes.get(name), `${app.id}: scoped ${name} checksum`);
+        }
       } else {
         assert.deepEqual(ortFiles, [], `${app.id} retains app-local ORT files`);
       }
     } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+      if (error.code !== 'ENOENT' || app.app_scoped_runtime_families.includes('ort-web')) throw error;
     }
   }
 });
