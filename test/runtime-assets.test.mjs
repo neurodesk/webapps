@@ -31,14 +31,11 @@ test('only declared app-scoped runtime families remain in composite app copies',
       const wasm = await readdir(join(appDist, 'wasm'));
       const ortFiles = wasm.filter((name) => name.startsWith('ort')).sort();
       if (app.app_scoped_runtime_families.includes('ort-web')) {
-        assert.deepEqual(ortFiles, [
-          'ort-wasm-simd-threaded.jsep.mjs',
-          'ort-wasm-simd-threaded.jsep.wasm',
-          'ort-wasm-simd-threaded.mjs',
-          'ort-wasm-simd-threaded.wasm',
-          'ort.webgpu.bundle.min.mjs',
-          'ort.webgpu.min.js',
-        ]);
+        const setup = await readFile(join(repoRoot, 'apps', app.id, 'web', 'setup.sh'), 'utf8');
+        const declaration = setup.match(/\bort-web:([^\s]+)/);
+        assert.ok(declaration, `${app.id}: declare the app-scoped ORT files in web/setup.sh`);
+        const expected = declaration[1].split(',').sort();
+        assert.deepEqual(ortFiles, expected, `${app.id}: app-scoped ORT inventory`);
       } else {
         assert.deepEqual(ortFiles, [], `${app.id} retains app-local ORT files`);
       }
