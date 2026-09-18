@@ -1,14 +1,15 @@
 [
   {
-    "id": "brain-mra",
-    "label": "Brain MR angiography",
-    "description": "A compact angiography volume for trying vessel segmentation. This reduced-resolution demonstration does not assess clinical vessel accuracy.",
-    "expectedResult": "A downloadable vessel segmentation.",
+    "id": "lausanne-tof",
+    "label": "Time-of-flight (TOF) brain angiography",
+    "description": "Original 3T TOF-MRA scan from a control subject in the Lausanne OpenNeuro dataset (CC0, 28 MB). Use the Default (TOF MRA) model to segment vessels.",
+    "expectedResult": "A vessel segmentation to inspect over the original TOF scan and download as NIfTI.",
     "files": [
       {
         "role": "image",
-        "name": "chris_MRA.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/vesselboost/brain-mra/chris_MRA.nii.gz"
+        "name": "sub-000_ses-20110101_angio.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0a35af062d07f36ff2935f8c1454e1ca2f80da86/examples/vesselboost/lausanne-tof/sub-000_ses-20110101_angio.nii.gz",
+        "sha256": "8e1e772825aafbdf898e0c06e9482640098d9722514b59566957bc3ff22cc2b2"
       }
     ]
   }
