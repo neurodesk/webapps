@@ -1,10 +1,17 @@
 # spinalcordtoolbox
 
+## 0.4.20260918
+
+### Minor Changes
+
+- Keep ONNX thread workers inside each application's service-worker scope so model loading completes on static hosting. Test threaded model loading across the composite site before deployment.
+
 ## 0.3.20260918
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.3.1
   - @neurodesk/webapp-components@0.4.1
 

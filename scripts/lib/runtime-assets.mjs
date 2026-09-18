@@ -55,6 +55,11 @@ async function rewriteFile(file, runtimeRoot, app, relativePath) {
   let source = await readFile(file, 'utf8');
   const original = source;
 
+  if (app && /(['"])(?:\.\.?\/)*wasm\/ort[^'"]+\1/.test(source)
+      && !app.app_scoped_runtime_families?.includes('ort-web')) {
+    throw new Error(`${app.id}: threaded ONNX Runtime requires app_scoped_runtime_families: [ort-web]; shared workers escape the COI service-worker scope`);
+  }
+
   if (app?.app_scoped_runtime_families?.includes('ort-web')) {
     source = source.replace(
       /(ort\.env\.wasm\.wasmPaths\s*=\s*)(['"])((?:\.\.?\/)*wasm\/)\2/g,
