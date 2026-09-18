@@ -1,5 +1,13 @@
 # easy-mp2rage
 
+## 0.5.20260918
+
+### Minor Changes
+
+- Replace the synthetic example with the original 7 T MP2RAGE reference brain: UNI, INV1, INV2 and a measured B1 map. Apply the published acquisition settings and documented relative-B1 scaling, preserve image geometry, and include pinned provenance and licensing. Verify real-brain T1 mapping, denoising and downloads in the browser.
+
+  Use the NIfTI affine to orient native viewer slices, so sagittally stored data displays under the correct anatomical plane labels without changing processing or downloads.
+
 ## 0.4.20260918
 
 ### Minor Changes

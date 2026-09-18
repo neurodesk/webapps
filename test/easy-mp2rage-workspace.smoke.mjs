@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, cp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, cp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { serveSite } from "../test-utils/serve-site.mjs";
+import { readNifti } from "../apps/easy-mp2rage/web/js/nifti.js";
 import { repoRoot } from "../scripts/lib/apps-registry.mjs";
 
 const site = await serveSite(join(repoRoot, "apps", "easy-mp2rage", "dist"));
@@ -58,13 +59,13 @@ try {
         path: join(artifacts, `mp2rage-${width}-entry.png`),
       });
     if (width === 1440) {
-      const url = "**/phantom_UNI.nii.gz";
+      const url = "**/MP2RAGE_UNI.nii.gz";
       await page.route(url, (route) =>
         route.fulfill({ status: 503, body: "Unavailable" })
       );
       await page
         .locator("[data-neurodesk-example]")
-        .selectOption("synthetic-mp2rage");
+        .selectOption("marques-brain");
       await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute(
         "data-example-state",
         "error"
@@ -74,8 +75,8 @@ try {
     }
     await page
       .locator("[data-neurodesk-example]")
-      .selectOption("synthetic-mp2rage");
-    await expect(page.locator("#run")).toBeEnabled({ timeout: 60000 });
+      .selectOption("marques-brain");
+    await expect(page.locator("#run")).toBeEnabled({ timeout: 180000 });
     const primaryColour = await page.locator("#run").evaluate((el) => ({
       actual: getComputedStyle(el).backgroundColor,
       expected: getComputedStyle(el)
@@ -103,7 +104,7 @@ try {
     await page.locator("#parameterPanel > summary").click();
     await page.locator("#parameterPanel > summary").click();
     await expect(page.locator("#mp_tr")).toHaveValue("4.4");
-    await page.locator("#mp_tr").fill("4.3");
+    await page.locator("#mp_tr").fill("6");
     // Wheel input must reach the run action without Playwright auto-scrolling it.
     await page.evaluate(() => {
       window.scrollTo(0, 0);
@@ -128,7 +129,7 @@ try {
     await page.locator("#parameterPanel > summary").click();
     await page.locator("#run").click();
     await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(4, {
-      timeout: 60000,
+      timeout: 180000,
     });
     await expect(page.locator("#viewerWrap")).toBeVisible();
     await expect(page.locator("#emptyState")).toBeHidden();
@@ -136,11 +137,26 @@ try {
     await expect(page.locator("#viewStat")).toContainText("B1");
     const downloadEvent = page.waitForEvent("download");
     await page.locator("#resultList .nd-download-btn").first().click();
-    assert.equal((await downloadEvent).suggestedFilename(), "T1map.nii.gz");
+    const download = await downloadEvent;
+    assert.equal(download.suggestedFilename(), "T1map.nii.gz");
+    const bytes = await readFile(await download.path());
+    const t1 = await readNifti(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    assert.deepEqual(t1.dims.slice(0, 3), [218, 220, 143]);
+    const positive = Array.from(t1.data).filter(value => value > 0).sort((a, b) => a - b);
+    assert.ok(positive.length > 1000000, "the result contains a full brain volume");
+    const median = positive[Math.floor(positive.length / 2)];
+    assert.ok(median > 800 && median < 2500, `brain T1 median: ${median} ms`);
+    assert.ok(t1.data.every(Number.isFinite), "T1 output is finite");
+    await page.locator("#resultList .nd-view-btn").first().click();
     for (const id of ["slice_ax", "slice_co", "slice_sa"]) {
       await page.locator(`#${id}`).fill("2");
       await expect(page.locator(`#${id}`)).toHaveValue("2");
+      const midpoint = await page.locator(`#${id}`).evaluate(el => Math.floor(Number(el.max) / 2));
+      await page.locator(`#${id}`).fill(String(midpoint));
     }
+    assert.deepEqual(await page.locator("#cax").evaluate(el => [el.width, el.height]), [143, 218]);
+    assert.deepEqual(await page.locator("#cco").evaluate(el => [el.width, el.height]), [143, 220]);
+    assert.deepEqual(await page.locator("#csa").evaluate(el => [el.width, el.height]), [218, 220]);
     const overflow = await page.evaluate(() => {
       const width = innerWidth;
       return [
@@ -170,6 +186,13 @@ try {
         path: join(artifacts, `mp2rage-${width}-light.png`),
         fullPage: true,
       });
+    await page.locator("#taskSel").selectOption("denoise");
+    await page.locator("#run").click();
+    await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(1, { timeout: 180000 });
+    await expect(page.locator("#viewStat")).toContainText("UNI-DEN");
+    const denoisedDownload = page.waitForEvent("download");
+    await page.locator("#resultList .nd-download-btn").click();
+    assert.equal((await denoisedDownload).suggestedFilename(), "UNI_denoised.nii.gz");
     await page.locator("#modeBids").click();
     await expect(page.locator("#bidsRow")).toBeVisible();
     await expect(page.locator("#viewer .nd-viewer-canvas-wrapper")).toHaveCount(
@@ -180,7 +203,7 @@ try {
     await expect(page.locator("#bidsSummary")).toContainText("1 session");
     await page.locator("#bidsNext").click();
     await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(1, {
-      timeout: 60000,
+      timeout: 180000,
     });
     await expect(
       page.locator("#viewer > .nd-viewer-canvas-wrapper > #viewerWrap")
