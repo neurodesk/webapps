@@ -771,7 +771,7 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 }
 
 /* --------------------------------------------------------------------------
-   12. Result rows (StageResultList / QSMbly stage list): View/visibility · label · Download
+   12. Result rows (nd-result-list / QSMbly stage list): View/visibility · label · Download
    -------------------------------------------------------------------------- */
 .nd-volume-toggle { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .nd-volume-toggle .nd-stage-label { flex: 1; min-width: 0; color: var(--nd-color-text); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -786,3 +786,10 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn):disabled { opacity: 0.45; cursor: not-allowed; }
 .nd-empty-state { margin: 0; color: var(--nd-color-text-dim); font-size: 0.75rem; }
 @media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn, .nd-result-visibility) { min-height: 44px; } }
+
+/* Light-DOM component hosts retain the block layout of their former containers. */
+nd-file-field,
+nd-result-list,
+nd-example-selector {
+  display: block;
+}

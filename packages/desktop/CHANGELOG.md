@@ -1,5 +1,7 @@
 # @neurodesk/desktop
 
+## 0.8.20260918
+
 ## 0.8.20260917
 
 ### Patch Changes

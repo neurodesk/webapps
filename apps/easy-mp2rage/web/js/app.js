@@ -1,4 +1,4 @@
-import { renderExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
+import { createExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
 // Easy MP2RAGE T1 Map, in-browser controller.
 // Parses NIfTI in JS (nifti.js), runs the WASM core in a Web Worker, previews
 // with a self-contained canvas viewer, and offers client-side downloads. Your
@@ -1573,7 +1573,7 @@ async function setupExamples() {
   const response = await fetch(new URL('examples.json', document.baseURI));
   if (!response.ok) throw new Error('Could not load the example catalog.');
   const examples = await response.json();
-  const selector = renderExampleSelector({
+  const selector = createExampleSelector({
     examples,
     onLoad: async (example, { fetchFiles, assertCurrent }) => {
       if (running) throw new Error('Stop processing before loading an example.');
@@ -1597,6 +1597,6 @@ async function setupExamples() {
     },
     onStatus: message => log(message),
   });
-  $('.modeToggle').before(selector.root);
+  $('.modeToggle').before(selector);
 }
 void setupExamples().catch(error => log(error.message));

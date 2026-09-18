@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { renderConsole } from '../src/ui/renderConsole.js';
+import { createConsole } from '../src/elements/console.js';
 import { createInfoDialog, renderCommand } from '../src/ui/renderInfoDialog.js';
-import { renderFileField, bindFileDrop } from '../src/ui/renderFileField.js';
+import { createFileField } from '../src/elements/file-field.js';
+import { bindFileDrop } from '../src/ui/renderFileField.js';
 import { bindInfoTooltips, renderInfoIcon } from '../src/ui/bindInfoTooltips.js';
-import { renderViewerToolbar } from '../src/ui/renderViewerToolbar.js';
-import { StageResultList } from '../src/ui/StageResultList.js';
+import { createViewerToolbar } from '../src/elements/viewer-toolbar.js';
+import { createResultList } from '../src/elements/result-list.js';
 import { readFile } from 'node:fs/promises';
 
 function dom(html = '<!doctype html><body></body>') {
@@ -19,18 +20,18 @@ test('sidebar grids let long result labels shrink within their available width',
   assert.match(css, /\.nd-imaging-controls \.nd-section-content\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 });
 
-test('renderFileField produces the shared scan picker contract', () => {
+test('createFileField produces the shared scan picker contract', () => {
   const document = dom();
-  const field = renderFileField({ id: 'imageInput', text: 'Drop NIfTI or DICOM files' }, document);
-  document.body.append(field.root);
-  assert.equal(field.root.className, 'nd-file');
+  const field = createFileField({ id: 'imageInput', text: 'Drop NIfTI or DICOM files' }, document);
+  document.body.append(field);
+  assert.equal(field.querySelector('label').className, 'nd-file');
   assert.equal(field.input.type, 'file');
   assert.equal(field.input.multiple, true);
   assert.equal(field.input.getAttribute('accept'), null, 'scan pickers must not filter filenames');
   assert.equal(field.input.dataset.neurodeskInput, 'image');
-  assert.equal(field.root.querySelector('svg').namespaceURI, 'http://www.w3.org/2000/svg');
+  assert.equal(field.querySelector('svg').namespaceURI, 'http://www.w3.org/2000/svg');
   assert.equal(field.text.textContent, 'Drop NIfTI or DICOM files');
-  const model = renderFileField({ id: 'modelInput', kind: 'model', accept: '.onnx', multiple: false }, document);
+  const model = createFileField({ id: 'modelInput', kind: 'model', accept: '.onnx', multiple: false }, document);
   assert.equal(model.input.dataset.neurodeskInput, 'model');
   assert.equal(model.input.getAttribute('accept'), '.onnx');
   assert.equal(model.input.multiple, false);
@@ -56,26 +57,26 @@ test('bindFileDrop toggles the dragover state and forwards dropped files', async
   assert.deepEqual(await received[0], [file]);
 });
 
-test('renderConsole builds a collapsed, keyboard-accessible technical log with Copy and Clear', () => {
+test('createConsole builds a collapsed, keyboard-accessible technical log with Copy and Clear', () => {
   const document = dom();
-  const log = renderConsole({ id: 'technicalLog' }, document);
-  document.body.append(log.root);
-  assert.equal(log.root.className, 'nd-console-container collapsed');
-  assert.ok(log.root.hasAttribute('data-disclosure'));
-  const toggle = log.root.querySelector('.nd-console-title');
+  const log = createConsole({ id: 'technicalLog' }, document);
+  document.body.append(log);
+  assert.equal(log.className, 'nd-console-container collapsed');
+  assert.ok(log.hasAttribute('data-disclosure'));
+  const toggle = log.querySelector('.nd-console-title');
   assert.equal(toggle.tagName, 'BUTTON');
   assert.equal(toggle.getAttribute('aria-expanded'), 'false');
   assert.equal(log.output.hidden, true);
-  assert.deepEqual([...log.root.querySelectorAll('.nd-console-clear')].map((button) => button.textContent), ['Copy', 'Clear']);
+  assert.deepEqual([...log.querySelectorAll('.nd-console-clear')].map((button) => button.textContent), ['Copy', 'Clear']);
   toggle.click();
-  assert.equal(log.root.classList.contains('collapsed'), false);
+  assert.equal(log.classList.contains('collapsed'), false);
   log.log('hello');
   assert.match(log.output.textContent, /hello/);
-  log.root.querySelector('#technicalLogClear').click();
+  log.querySelector('#technicalLogClear').click();
   assert.equal(log.output.textContent, '');
   log.close();
   log.log('failure', 'error');
-  assert.equal(log.root.classList.contains('collapsed'), false, 'errors reveal the log');
+  assert.equal(log.classList.contains('collapsed'), false, 'errors reveal the log');
 });
 
 test('createInfoDialog renders one centered dialog frame and swaps content', () => {
@@ -121,23 +122,23 @@ test('bindInfoTooltips shows tooltips on focus and hides them on blur', () => {
   assert.equal(tooltip.hidden, true);
 });
 
-test('renderViewerToolbar renders only the requested controls', () => {
+test('createViewerToolbar renders only the requested controls', () => {
   const document = dom();
-  const toolbar = renderViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false }, document);
+  const toolbar = createViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false }, document);
   assert.deepEqual([...toolbar.viewTabs.querySelectorAll('.nd-view-tab')].map((tab) => tab.textContent), ['3-Plane', 'Axial', 'Coronal', 'Sagittal', '3D']);
   assert.equal(toolbar.actions.children.length, 0);
   toolbar.setActive('axial');
   assert.deepEqual([...toolbar.viewTabs.querySelectorAll('.active')].map((tab) => tab.dataset.view), ['axial']);
-  const full = renderViewerToolbar({}, document);
+  const full = createViewerToolbar({}, document);
   for (const id of ['windowMin', 'rangeMin', 'overlayOpacity', 'colormapSelect', 'downloadCurrentVolume', 'screenshotViewer']) {
-    assert.ok(full.root.querySelector(`#${id}`), `${id} rendered by default`);
+    assert.ok(full.control(id), `${id} rendered by default`);
   }
 });
 
-test('StageResultList uses visibility checkboxes only for toggleable results', () => {
+test('createResultList uses visibility checkboxes only for toggleable results', () => {
   const document = dom('<!doctype html><body><div id="results"></div></body>');
   const changes = [];
-  const results = new StageResultList({
+  const results = createResultList({
     element: document.getElementById('results'),
     stageLabels: { surface: 'Left pial surface' },
     onVisibilityChange: (stage, visible) => changes.push([stage, visible]),
@@ -185,4 +186,9 @@ test('result selection and colour swatches use shared theme tokens', async () =>
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /#controls \.nd-result-selected\s*\{[^}]*box-shadow: 0 0 0 2px var\(--nd-color-primary\)/);
   assert.match(css, /\.nd-result-swatch\s*\{[^}]*border: 1px solid var\(--nd-color-border\)/);
+});
+
+test('custom element hosts retain block layout in the shared stylesheet', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /nd-file-field,\s*nd-result-list,\s*nd-example-selector\s*\{\s*display: block;/);
 });

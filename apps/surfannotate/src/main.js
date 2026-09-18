@@ -1,6 +1,6 @@
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import './styles.css';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import examples from '../examples.json';
 
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -650,7 +650,7 @@ async function init() {
   // as well as redraw.
   window.addEventListener('resize', scheduleMarkers);
 
-  const exampleSelector = renderExampleSelector({
+  const exampleSelector = createExampleSelector({
     examples,
     onStatus: setStatus,
     async onLoad(example, { fetchFiles, assertCurrent }) {
@@ -663,7 +663,7 @@ async function init() {
       });
     },
   });
-  ui.surfaceInput.closest('label').before(exampleSelector.root);
+  ui.surfaceInput.closest('label').before(exampleSelector);
   window.addEventListener('pagehide', () => exampleSelector.destroy(), { once: true });
 
   ui.surfaceInput.addEventListener('change', (event) => {

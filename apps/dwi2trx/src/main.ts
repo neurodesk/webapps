@@ -1,5 +1,5 @@
 import examples from '../examples.json'
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
+import { createExampleSelector } from '@neurodesk/webapp-components/ui'
 /**
  * dwi2trx — browser-only diffusion MRI pipeline (WASM + WebGPU; no data leaves
  * the machine). The compact workflow reveals tensor maps and streamlines as
@@ -9,7 +9,7 @@ import { renderExampleSelector } from '@neurodesk/webapp-components/ui'
 
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui'
+import { createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui'
 import NiiVueGPU, { SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue'
 import { cropB0Volume, fitTensor } from './dwi2trx/dtifit'
 import {
@@ -78,13 +78,13 @@ for (const [id, title] of dialogs) {
   dialog.setContent($(id + 'Content'))
   if (id === 'vecDlg' || id === 'genVecDlg') dialog.root.classList.add('nd-dialog-wide')
 }
-const consoleView = renderConsole({ outputId: 'consoleOutput' })
-$('canvas-container').append(consoleView.root)
-const toolbar = renderViewerToolbar({
+const consoleView = createConsole({ outputId: 'consoleOutput' })
+$('canvas-container').append(consoleView)
+const toolbar = createViewerToolbar({
   views: [], window: false, overlay: false, colormap: false, download: false, screenshot: false,
   actions: [$('sliceType')],
 })
-$('canvas-container').prepend(toolbar.root)
+$('canvas-container').prepend(toolbar)
 $('viewSection').querySelector('label[for="sliceType"]')?.remove()
 
 const maskFitBtn = $<HTMLButtonElement>('maskFitBtn')
@@ -151,7 +151,7 @@ let shownView: 'input' | 'maps' | 'tracts' | null = null
 let loadSeq = 0
 let inputAbortController: AbortController | null = null
 
-let exampleControl: ReturnType<typeof renderExampleSelector> | undefined
+let exampleControl: ReturnType<typeof createExampleSelector> | undefined
 
 function setStatus(msg: string, error = false): void {
   statusEl.textContent = msg
@@ -1278,7 +1278,7 @@ function setFaFloor(): void {
   nv.updateGLVolume()
 }
 
-exampleControl = renderExampleSelector({
+exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles()
@@ -1298,6 +1298,6 @@ exampleControl = renderExampleSelector({
   },
   onStatus: setStatus,
 })
-$('inputSection').querySelector('.nd-section-content')?.prepend(exampleControl.root)
+$('inputSection').querySelector('.nd-section-content')?.prepend(exampleControl)
 window.addEventListener('pagehide', () => exampleControl?.destroy())
 render()

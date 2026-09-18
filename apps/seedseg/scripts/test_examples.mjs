@@ -11,7 +11,7 @@ import { createNiftiFromVolume, parseNiftiVolume } from '../../../packages/compo
 const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url)));
 const source = await readFile(new URL('../web/js/seedseg-app.js', import.meta.url), 'utf8');
 const body = source.split('  async setupExamples() {')[1].split('\n  setupEventListeners() {')[0];
-const makeSetup = new Function('renderExampleSelector', 'fetch', 'document', `return async function() {${body}`);
+const makeSetup = new Function('createExampleSelector', 'fetch', 'document', `return async function() {${body}`);
 
 test('synthetic example uses reproducible physical coordinates and three dark inclusions', () => {
   const volume = createProstateSignalVoidPhantom();
@@ -39,9 +39,11 @@ test('selecting the hosted synthetic example imports its file without starting p
       loaded.push(...files);
     },
   };
-  const setup = makeSetup(value => { options = value; return { root: {} }; },
+  const selector = {};
+  const scope = {};
+  const setup = makeSetup(value => { options = value; assert.equal(value.scope, scope); return selector; },
     async () => ({ ok: true, json: async () => examples }),
-    { baseURI: 'https://example.org/seedseg/', getElementById: () => ({ closest: () => ({ prepend() {} }) }) });
+    { baseURI: 'https://example.org/seedseg/', getElementById: () => ({ closest: () => ({ prepend(element) { assert.equal(element, selector); } }) }), querySelector: selector => { assert.equal(selector, '.app-container'); return scope; } });
   await setup.call(app);
   const file = new File([createNiftiFromVolume(createProstateSignalVoidPhantom())], 'synthetic_prostate_signal_voids.nii');
   await options.onLoad(examples[0], { fetchFiles: async () => [file], assertCurrent() {} });

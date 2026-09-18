@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.4.0
+
+### Minor Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 ## 0.3.0
 
 ### Minor Changes

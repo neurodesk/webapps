@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { renderExampleSelector, renderSidebarSection } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, renderSidebarSection } from '@neurodesk/webapp-components/ui';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import examples from '../../../examples.json';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
@@ -9,10 +9,11 @@ export default function ExampleInput() {
   const { addFromData, attachData, createSchemaForItem, toggleEditing, isProcessing } = useWorkspace();
   const actions = useRef({ addFromData, attachData, createSchemaForItem, toggleEditing });
   actions.current = { addFromData, attachData, createSchemaForItem, toggleEditing };
-  const selector = useRef<ReturnType<typeof renderExampleSelector> | null>(null);
+  const selector = useRef<ReturnType<typeof createExampleSelector> | null>(null);
 
   useEffect(() => {
-    const control = renderExampleSelector({
+    const control = createExampleSelector({
+      scope: host.current?.parentElement ?? undefined,
       examples,
       async onLoad(example, { fetchFiles, assertCurrent }) {
         const files = await fetchFiles();
@@ -29,7 +30,7 @@ export default function ExampleInput() {
       },
     });
     selector.current = control;
-    const section = renderSidebarSection({ title: 'Example input', content: control.root });
+    const section = renderSidebarSection({ title: 'Example input', content: control });
     host.current?.append(section.root);
     return () => {
       control.destroy();

@@ -14,7 +14,7 @@ const TOGGLE_SELECTOR = [
  * without recreating any controls.
  */
 export function bindSectionDisclosure(section, root = section.ownerDocument) {
-  if (bindings.has(section)) return bindings.get(section);
+  if (bindings.has(section)) return bindings.get(section).observer;
   const button = section.querySelector(TOGGLE_SELECTOR);
   const panel = section.querySelector(':scope > [data-disclosure-panel]');
   if (!button || !panel) throw new Error('A disclosure needs a toggle button and content panel');
@@ -27,7 +27,7 @@ export function bindSectionDisclosure(section, root = section.ownerDocument) {
     panel.hidden = collapsed;
     panel.inert = collapsed || section.classList.contains('step-disabled');
   };
-  button.addEventListener('click', () => {
+  const toggle = () => {
     if (section.classList.contains('collapsed') && section.dataset.disclosureGroup) {
       for (const other of root.querySelectorAll('[data-disclosure-group]')) {
         if (other !== section && other.dataset.disclosureGroup === section.dataset.disclosureGroup) other.classList.add('collapsed');
@@ -35,14 +35,23 @@ export function bindSectionDisclosure(section, root = section.ownerDocument) {
     }
     section.classList.toggle('collapsed');
     sync();
-  });
+  };
+  button.addEventListener('click', toggle);
   const observer = new section.ownerDocument.defaultView.MutationObserver(sync);
   observer.observe(section, { attributes: true, attributeFilter: ['class'] });
-  bindings.set(section, observer);
+  bindings.set(section, { observer, button, toggle });
   sync();
   return observer;
 }
 
 export function bindSectionDisclosures(root = document) {
   for (const section of root.querySelectorAll('[data-disclosure]')) bindSectionDisclosure(section, root);
+}
+
+export function unbindSectionDisclosure(section) {
+  const binding = bindings.get(section);
+  if (!binding) return;
+  binding.observer.disconnect();
+  binding.button.removeEventListener('click', binding.toggle);
+  bindings.delete(section);
 }

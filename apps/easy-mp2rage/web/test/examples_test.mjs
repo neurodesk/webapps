@@ -5,18 +5,19 @@ import test from 'node:test';
 const examples = JSON.parse(await readFile(new URL('../../examples.json', import.meta.url)));
 const source = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
 const setupBody = source.split('async function setupExamples() {')[1].split('\nvoid setupExamples()')[0];
-const makeSetup = new Function('renderExampleSelector', 'fetch', 'document', '$', 'running', 'state', 'setAppMode', 'readImageRecord', 'renderTable', 'refreshRunState', 'log', `return async function() {${setupBody}`);
+const makeSetup = new Function('createExampleSelector', 'fetch', 'document', '$', 'running', 'state', 'setAppMode', 'readImageRecord', 'renderTable', 'refreshRunState', 'log', `return async function() {${setupBody}`);
 
 test('the synthetic example loads its complete bundle and matched acquisition parameters', async () => {
   let options;
+  const selector = {};
   const state = { files: [], jsons: [] };
   const fields = new Map();
   const $ = id => {
-    if (!fields.has(id)) fields.set(id, { value: '', before() {} });
+    if (!fields.has(id)) fields.set(id, { value: '', before(element) { assert.equal(element, selector); } });
     return fields.get(id);
   };
   $('#taskSel').value = 'b1only';
-  const setup = makeSetup(value => { options = value; return { root: {} }; },
+  const setup = makeSetup(value => { options = value; return selector; },
     async () => ({ ok: true, json: async () => examples }), { baseURI: 'https://example.org/easy-mp2rage/' },
     $, false, state, () => {}, async file => ({ name: file.name }), () => {}, () => {}, () => {});
   await setup();
@@ -32,6 +33,7 @@ test('the synthetic example loads its complete bundle and matched acquisition pa
 for (const stage of ['file read', 'NIfTI decode']) {
   test(`cancelled example preserves replacement inputs and parameters during ${stage}`, async () => {
     let options;
+    const selector = {};
     let resume;
     let entered;
     const paused = new Promise(resolve => { entered = resolve; });
@@ -39,7 +41,7 @@ for (const stage of ['file read', 'NIfTI decode']) {
     const state = { files: [{ name: 'original_UNI.nii' }], jsons: [] };
     const fields = new Map();
     const $ = id => {
-      if (!fields.has(id)) fields.set(id, { value: 'original', before() {} });
+      if (!fields.has(id)) fields.set(id, { value: 'original', before(element) { assert.equal(element, selector); } });
       return fields.get(id);
     };
     const controller = new AbortController();
@@ -51,7 +53,7 @@ for (const stage of ['file read', 'NIfTI decode']) {
     }, () => 'UNI');
     const file = new File(['image'], 'phantom_UNI.nii');
     if (stage === 'file read') file.arrayBuffer = async () => { entered(); await gate; return new ArrayBuffer(1); };
-    const setup = makeSetup(value => { options = value; return { root: {} }; },
+    const setup = makeSetup(value => { options = value; return selector; },
       async () => ({ ok: true, json: async () => examples }), { baseURI: 'https://example.org/easy-mp2rage/' },
       $, false, state, () => {}, readRecord, () => {}, () => {}, () => {});
     await setup();

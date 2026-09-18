@@ -1,8 +1,8 @@
 import examples from '../examples.json';
-import { renderExampleSelector } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { bindFileDrop, createInfoDialog, renderConsole, renderViewerToolbar } from '@neurodesk/webapp-components/ui';
+import { bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from './volume.js';
 import { configureNativeDownloads, nativeDownloads } from './native-release.js';
@@ -32,7 +32,7 @@ const layouts = {
   sagittal: () => { viewer.sliceType = SLICE_TYPE.SAGITTAL; },
   render: () => { viewer.sliceType = SLICE_TYPE.RENDER; },
 };
-const toolbar = renderViewerToolbar({
+const toolbar = createViewerToolbar({
   window: false, overlay: false, colormap: false, download: false, screenshot: false,
   views: [
     { id: 'multiplanar', label: '3-Plane', active: true },
@@ -42,9 +42,9 @@ const toolbar = renderViewerToolbar({
     { id: 'render', label: '3D' },
   ].map((view) => ({ ...view, onClick: () => { if (!viewer) return; layouts[view.id](); viewer.drawScene(); toolbar.setActive(view.id); } })),
 });
-viewerRegion.prepend(toolbar.root);
-const log = renderConsole({ id: 'technicalLog' });
-viewerRegion.append(log.root);
+viewerRegion.prepend(toolbar);
+const log = createConsole({ id: 'technicalLog' });
+viewerRegion.append(log);
 const info = createInfoDialog({ id: 'infoDialog' });
 const dialogContent = (kind) => $(`${kind}Content`);
 $('aboutBtn').onclick = () => info.open('About SynthSR', dialogContent('about'));
@@ -194,7 +194,7 @@ $('seriesSelect').onchange = async () => {
   if (!await load(importedImages[Number($('seriesSelect').value)])) $('seriesSelect').value = String(importedImages.indexOf(source));
 };
 
-const exampleControl = renderExampleSelector({
+const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
     const files = await fetchFiles();
@@ -205,8 +205,8 @@ const exampleControl = renderExampleSelector({
   onStatus: status,
 });
 exampleControl.select.id = 'exampleSelect';
-exampleControl.root.querySelector('label').htmlFor = 'exampleSelect';
-$('exampleControl').replaceWith(exampleControl.root);
+exampleControl.querySelector('label').htmlFor = 'exampleSelect';
+$('exampleControl').replaceWith(exampleControl);
 
 
 $('mode').onchange = () => {

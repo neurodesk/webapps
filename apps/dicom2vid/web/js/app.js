@@ -1,4 +1,4 @@
-import { renderExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
+import { createExampleSelector } from '../vendor/webapp-components/src/ui/index.js';
 // MRI2VID controller. Runs entirely on the client: ingest files, group DICOM
 // series, read the selected volume, window and preview it, and encode a video.
 // Public examples download on request; user-selected image data stays local.
@@ -802,7 +802,7 @@ async function setupExamples() {
   const response = await fetch(new URL('examples.json', document.baseURI));
   if (!response.ok) throw new Error('Could not load the example catalog.');
   const examples = await response.json();
-  const selector = renderExampleSelector({
+  const selector = createExampleSelector({
     examples,
     onLoad: async (example, { fetchFiles, assertCurrent }) => {
       const files = await fetchFiles();
@@ -812,6 +812,6 @@ async function setupExamples() {
     },
     onStatus: setStatus,
   });
-  $('dropZone').before(selector.root);
+  $('dropZone').before(selector);
 }
 void setupExamples().catch(error => setStatus(error.message, true));

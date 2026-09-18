@@ -1,5 +1,13 @@
 # zarro
 
+## 0.3.20260918
+
+### Patch Changes
+
+- Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.0
+
 ## 0.3.20260916
 
 ### Patch Changes

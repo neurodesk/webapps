@@ -74,8 +74,9 @@ export class ConsoleOutput {
 
   async copyToClipboard() {
     const text = this.getText();
-    if (!globalThis.navigator?.clipboard) return false;
-    await globalThis.navigator.clipboard.writeText(text);
+    const navigator = this.element?.ownerDocument.defaultView?.navigator || globalThis.navigator;
+    if (!navigator?.clipboard) return false;
+    await navigator.clipboard.writeText(text);
     return true;
   }
 }

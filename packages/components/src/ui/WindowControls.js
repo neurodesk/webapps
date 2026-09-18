@@ -19,7 +19,10 @@ export class WindowControls {
     return true;
   }
 
-  element(id) { return this.root.getElementById(id); }
+  element(id) {
+    if (typeof this.root.control === 'function') return this.root.control(id);
+    return this.root.getElementById(id);
+  }
   range(volume) { const min = volume.global_min ?? 0; const max = volume.global_max ?? 1; return { min, max, span: max - min || 1 }; }
   commit(volume) { this.updateVolume(volume); this.sync(); }
 

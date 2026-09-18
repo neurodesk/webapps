@@ -48,6 +48,8 @@ Common issues it catches:
 
 ## Key Conventions
 
+- The shared example selector is an `nd-example-selector` element returned by `createExampleSelector`. Its upload scope is this app's `.app-container`; append the element directly and retain cancellation before replacement imports.
+
 - Consecutive identical log messages with the same level and source appear once. Clear resets this state; a changed level or source is a new entry.
 
 - The inference worker is a **module worker** (`type: 'module'`); load nifti-reader-js lazily inside the message handler (`niftiReady` promise) — top-level `await import(...)` causes Chromium to drop the first messages.

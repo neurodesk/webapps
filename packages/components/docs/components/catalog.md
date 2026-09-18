@@ -27,7 +27,7 @@ Opens, closes, toggles, and detects modal state using the `active` class by defa
 
 Reusable multi-echo state and UI binding for magnitude/phase navigation.
 
-### `StageResultList`
+### `createResultList`
 
 Renders worker output stages with view and download actions. Results with a
 boolean `visible` field use a visibility checkbox. The controlled callback is
@@ -58,12 +58,12 @@ The markup and metrics are defined once in `styles/imaging-workspace.css`
 (see `docs/architecture/design-system.md` in the monorepo). These builders emit
 that markup so apps never hand-write it:
 
-- `renderFileField({ id, text, kind, multiple, accept, directory })` — the shared `.nd-file` scan picker; `bindFileDrop(target, handler)` adds drag-and-drop with folder expansion to any element.
-- `renderViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` — layout tabs plus optional window/level, overlay opacity, colormap, download and screenshot controls; every control is optional.
-- `renderConsole({ id, title, collapsed })` — the collapsed technical log with Copy and Clear, bound to a `ConsoleOutput`; errors reopen it.
+- `createFileField({ id, text, kind, multiple, accept, directory })` — the shared `.nd-file` scan picker; `bindFileDrop(target, handler)` adds drag-and-drop with folder expansion to any element.
+- `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` — layout tabs plus optional window/level, overlay opacity, colormap, download and screenshot controls; every control is optional.
+- `createConsole({ id, title, collapsed })` — the collapsed technical log with Copy and Clear, bound to a `ConsoleOutput`; errors reopen it.
 - `createInfoDialog({ id })` — one centered, viewport-bounded `dialog.nd-dialog` whose `open(title, content, { wide })` swaps About, Cite, Privacy or Standalone content; `renderCommand({ id, command })` renders a copyable terminal command.
 - `bindInfoTooltips(root)` / `renderInfoIcon(text)` — the small "i" help icons with positioned tooltips.
-- `bindSectionDisclosure(section)` — binds a single class-driven disclosure (used by `renderConsole`).
+- `bindSectionDisclosure(section)` — binds a single class-driven disclosure (used by `createConsole`).
 
 ## File I/O
 

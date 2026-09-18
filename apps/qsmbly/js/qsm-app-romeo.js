@@ -1,4 +1,4 @@
-import { renderExampleSelector, bindSectionDisclosures, ConsoleOutput } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, bindSectionDisclosures, ConsoleOutput } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 // Import extracted utility modules
@@ -460,7 +460,8 @@ class QSMApp {
     const response = await fetch(new URL('examples.json', document.baseURI));
     if (!response.ok) throw new Error('Could not load the example catalog.');
     const examples = await response.json();
-    this.exampleSelector = renderExampleSelector({
+    this.exampleSelector = createExampleSelector({
+      scope: document.querySelector('.app-container'),
       examples,
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
         const files = await fetchFiles();
@@ -472,7 +473,7 @@ class QSMApp {
       onStatus: (message) => this.updateOutput(message),
     });
     const input = document.getElementById('unifiedFiles');
-    input.closest('.section-content').prepend(this.exampleSelector.root);
+    input.closest('.section-content').prepend(this.exampleSelector);
   }
 
   setupEventListeners() {
