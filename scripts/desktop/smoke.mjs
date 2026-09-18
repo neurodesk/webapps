@@ -16,6 +16,7 @@ const executablePath = process.env.NEURODESK_EXECUTABLE || require('electron');
 const bundle = JSON.parse(await readFile(join(resources, 'manifest.json')));
 const environment = { ...process.env };
 delete environment.ELECTRON_RUN_AS_NODE;
+const remoteModels = new Set(Object.values(bundle.assets).filter(asset => asset.remote && asset.kind === 'model').map(asset => asset.sha256));
 const results = [];
 let modelDownloadTested = false;
 for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || process.env.NEURODESK_TEST_APP.split(',').includes(app.id))) {
@@ -67,11 +68,13 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     await page.locator('#neurodeskStandaloneDialog').getByRole('button', { name: 'Close', exact: true }).click();
     const workflow = process.env.NEURODESK_WORKFLOWS ? await verifyWorkflow(app.id, page, { root, resources, desktop }) : null;
     const blocked = await desktop.evaluate(() => globalThis.neurodeskOffline.blockedRequests);
-    // An installed pack serves models in place, so anything in this profile's
-    // cache was fetched over the network instead.
-    const downloaded = await readdir(join(userData, 'models')).catch(() => []);
-    if (process.env.NEURODESK_MODELS_DIR && downloaded.length) errors.push(`Downloaded ${downloaded.length} models although a model pack is installed`);
-    results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, downloaded: downloaded.length, workflow });
+    // An installed pack serves each model asset in place, so an asset hash in
+    // this profile's cache was fetched over the network instead. Slices derived
+    // from a packed asset are cached by their own hash and are not downloads.
+    const cached = await readdir(join(userData, 'models')).catch(() => []);
+    const downloaded = cached.filter(name => remoteModels.has(name)).length;
+    if (process.env.NEURODESK_MODELS_DIR && downloaded) errors.push(`Downloaded ${downloaded} models although a model pack is installed`);
+    results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, downloaded, workflow });
   } catch (error) {
     errors.push(error.message);
     results.push({ app: app.id, passed: false, errors, missing });
