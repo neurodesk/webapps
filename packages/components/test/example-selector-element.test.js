@@ -311,3 +311,18 @@ test('completed selection survives removal and reconnecting rebinds replacement 
   assert.equal(control.dataset.exampleId, undefined);
   control.destroy();
 });
+
+test('resolved upload scope exposes misplaced selectors to the interface audit', () => {
+  const { window } = new JSDOM('<main><input type="file"><aside></aside></main>');
+  const doc = window.document;
+  const selector = createExampleSelector({ examples, onLoad: async () => {} }, doc);
+  const misplaced = doc.querySelector('aside');
+  misplaced.append(selector);
+  assert.equal(selector.uploadScope, misplaced);
+  assert.equal(selector.uploadScope.querySelector('input[type="file"]'), null);
+  selector.scope = doc.querySelector('main');
+  assert.equal(selector.uploadScope.querySelector('input[type="file"]'), doc.querySelector('input'));
+  selector.remove();
+  assert.equal(selector.uploadScope, undefined);
+  window.close();
+});

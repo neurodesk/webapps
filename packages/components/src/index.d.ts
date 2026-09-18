@@ -34,7 +34,7 @@ export function renderSidebarSection(config?: {
   setDisabled(disabled: boolean): void;
   setBadge(text: string, className?: string): void;
 };
-export function bindFileDrop(target: Element, handler: ((files: Promise<File[]>) => void) | null, doc?: Document): { handler: ((files: Promise<File[]>) => void) | null; destroy(): void };
+export function bindFileDrop(target: Element, handler: ((files: Promise<File[]>) => void) | null, doc?: Document, isDisabled?: () => boolean): { handler: ((files: Promise<File[]>) => void) | null; destroy(): void };
 
 export interface InfoDialog {
   root: HTMLDialogElement;

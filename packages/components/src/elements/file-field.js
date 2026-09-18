@@ -1,5 +1,5 @@
 import { defineElement, upgradeProperties } from './define.js';
-import { bindFileDrop } from '../ui/renderFileField.js';
+import { bindFileDrop } from '../ui/bindFileDrop.js';
 
 let nextId = 0;
 const DEFAULT_TEXT = 'Drop NIfTI or DICOM files';

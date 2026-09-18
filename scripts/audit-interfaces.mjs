@@ -97,6 +97,9 @@ try {
         await expect(selector).toHaveCount(1);
         await expect(selector).toBeVisible();
         await expect(selector).toHaveAccessibleName('Example');
+        const uploadScopeHasPicker = await selector.evaluate(select =>
+          Boolean(select.closest('nd-example-selector')?.uploadScope?.querySelector('input[type="file"]')));
+        expect(uploadScopeHasPicker, `${app.id}: example upload scope must contain a file picker`).toBe(true);
         const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
         expect(ids).toEqual(examples.map(example => example.id));
         const state = page.locator('[data-neurodesk-examples]');

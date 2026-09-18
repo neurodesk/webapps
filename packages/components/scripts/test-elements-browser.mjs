@@ -39,6 +39,7 @@ const fixture = `<!doctype html>
 
     const byId = id => document.getElementById(id);
     const state = window.fixture = { files: {}, downloads: [], jobs: [], updates: [] };
+    state.beforeUpgrade = ['firstConsole', 'firstToolbar'].map(id => getComputedStyle(byId(id)).display);
     for (const id of ['firstToolbar', 'secondToolbar']) {
       byId(id).options = { overlay: false, colormap: false, screenshot: false };
     }
@@ -104,6 +105,9 @@ try {
     try {
       await page.goto(site.origin);
       await page.waitForFunction(() => window.fixture?.ready);
+      assert.deepEqual(await page.evaluate(() => window.fixture.beforeUpgrade), ['block', 'block']);
+      assert.deepEqual(await page.evaluate(() => ['firstConsole', 'firstToolbar'].map(id =>
+        getComputedStyle(document.getElementById(id)).display)), ['flex', 'flex']);
       assert.equal(await page.evaluate(() => {
         const ids = [...document.querySelectorAll('[id]')].map(element => element.id);
         return new Set(ids).size === ids.length;

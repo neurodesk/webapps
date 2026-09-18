@@ -46,9 +46,9 @@ for (const file of files) {
   output = output.replaceAll('exampleControl.root', 'exampleControl');
   output = output.replace(/(fileFields\.(?:primary|lesion|pathological))\.root/g, '$1');
   if (file.endsWith('workflow-vocabulary.test.js')) {
-    output = output.replace("import { createFileField, bindFileDrop } from '../src/ui/createFileField.js';", "import { createFileField } from '../src/elements/file-field.js';\nimport { bindFileDrop } from '../src/ui/renderFileField.js';");
+    output = output.replace("import { createFileField, bindFileDrop } from '../src/ui/createFileField.js';", "import { createFileField } from '../src/elements/file-field.js';\nimport { bindFileDrop } from '../src/ui/bindFileDrop.js';");
   }
-  output = output.replaceAll('ui/createFileField.js', 'ui/renderFileField.js');
+  output = output.replaceAll('ui/createFileField.js', 'ui/bindFileDrop.js');
   if (output === source) continue;
   await writeFile(file, output);
   changed++;

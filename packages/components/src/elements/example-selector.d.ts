@@ -31,6 +31,7 @@ export interface ExampleSelectorElement<T extends AppExample = AppExample> exten
   onLoad: ExampleSelectorOptions<T>['onLoad'];
   onStatus: NonNullable<ExampleSelectorOptions<T>['onStatus']>;
   scope: HTMLElement | undefined;
+  readonly uploadScope: HTMLElement | undefined;
   disabled: boolean;
   readonly select: HTMLSelectElement;
   cancel(): void;

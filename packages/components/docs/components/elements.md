@@ -56,7 +56,9 @@ contract. The context supplies `signal`, `fetchFiles`, and `assertCurrent`.
 Call `assertCurrent` after asynchronous preparation before committing results.
 Set `scope` to the workflow containing replacement uploads; otherwise the
 selector uses the nearest imaging workspace, declared `[data-example-scope]`,
-form, `#workspace`, or its parent. Use separate scopes for independent workflows.
+form, `#workspace`, or its parent. Use separate scopes for independent workflows. The read-only `uploadScope` property
+reports the connected element's resolved scope. The interface audit requires it
+to contain a file picker, catching selectors mounted outside their upload workflow.
 
 Elements retain their child nodes across moves and reconnection. Console and
 file-field listeners do not accumulate on reconnect. Example downloads survive

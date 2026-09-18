@@ -51,6 +51,7 @@ export function defineExampleSelector(view = globalThis.window) {
     set onLoad(value) { this.#onLoad = value; }
     get onStatus() { return this.#onStatus; }
     set onStatus(value) { this.#onStatus = value; }
+    get uploadScope() { return this.#boundScope; }
     get scope() { return this.#scope; }
     set scope(value) {
       this.#scope = value;

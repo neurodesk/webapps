@@ -4,7 +4,7 @@ import { JSDOM } from 'jsdom';
 import { createConsole } from '../src/elements/console.js';
 import { createInfoDialog, renderCommand } from '../src/ui/renderInfoDialog.js';
 import { createFileField } from '../src/elements/file-field.js';
-import { bindFileDrop } from '../src/ui/renderFileField.js';
+import { bindFileDrop } from '../src/ui/bindFileDrop.js';
 import { bindInfoTooltips, renderInfoIcon } from '../src/ui/bindInfoTooltips.js';
 import { createViewerToolbar } from '../src/elements/viewer-toolbar.js';
 import { createResultList } from '../src/elements/result-list.js';
@@ -190,5 +190,5 @@ test('result selection and colour swatches use shared theme tokens', async () =>
 
 test('custom element hosts retain block layout in the shared stylesheet', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
-  assert.match(css, /nd-file-field,\s*nd-result-list,\s*nd-example-selector\s*\{\s*display: block;/);
+  assert.match(css, /nd-console,\s*nd-viewer-toolbar,\s*nd-file-field,\s*nd-result-list,\s*nd-example-selector\s*\{\s*display: block;/);
 });

@@ -10,6 +10,6 @@ export * from './renderSidebarSection.js';
 export * from './bindSectionDisclosures.js';
 export * from './WindowControls.js';
 export * from './renderInfoDialog.js';
-export * from './renderFileField.js';
+export * from './bindFileDrop.js';
 export * from './bindInfoTooltips.js';
 export * from '../elements/index.js';

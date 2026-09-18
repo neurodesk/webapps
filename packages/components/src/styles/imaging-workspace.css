@@ -788,6 +788,8 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 @media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn, .nd-result-visibility) { min-height: 44px; } }
 
 /* Light-DOM component hosts retain the block layout of their former containers. */
+nd-console,
+nd-viewer-toolbar,
 nd-file-field,
 nd-result-list,
 nd-example-selector {
