@@ -29,17 +29,23 @@ try {
   const welcome = page.locator('#welcomeLater');
   if (await welcome.isVisible()) await welcome.click();
   const selector = page.getByRole('combobox', { name: 'Example', exact: true });
-  await expect(selector).toHaveCount(1);
-  await expect(selector).toBeVisible();
-  await expect(selector).toBeEnabled({ timeout: 120000 });
-  const state = page.locator('[data-neurodesk-examples]');
-  await expect(state).toHaveAttribute('data-example-state', 'idle');
-  for (const example of examples) {
-    await selector.selectOption(example.id);
-    await expect(state).toHaveAttribute('data-example-state', 'ready', { timeout: 180000 });
-    await expect(state).toHaveAttribute('data-example-id', example.id);
-    await expect(selector).toBeEnabled();
-    console.log(`PASS ${app.id}: imported ${example.id}`);
+  if (examples.length === 0) {
+    await expect(selector).toHaveCount(0);
+    await expect(page.locator('input[data-neurodesk-input="image"]').first()).toBeEnabled();
+    console.log(`PASS ${app.id}: local scan input available without examples`);
+  } else {
+    await expect(selector).toHaveCount(1);
+    await expect(selector).toBeVisible();
+    await expect(selector).toBeEnabled({ timeout: 120000 });
+    const state = page.locator('[data-neurodesk-examples]');
+    await expect(state).toHaveAttribute('data-example-state', 'idle');
+    for (const example of examples) {
+      await selector.selectOption(example.id);
+      await expect(state).toHaveAttribute('data-example-state', 'ready', { timeout: 180000 });
+      await expect(state).toHaveAttribute('data-example-id', example.id);
+      await expect(selector).toBeEnabled();
+      console.log(`PASS ${app.id}: imported ${example.id}`);
+    }
   }
   if (app.id === 'niimath') {
     const { readFile } = await import('node:fs/promises');

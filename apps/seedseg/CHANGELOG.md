@@ -1,5 +1,11 @@
 # seedseg
 
+## 0.3.20260918
+
+### Patch Changes
+
+- Remove the unsuitable synthetic example and its selector from SeedSeg. Load scans through the file picker or drag and drop.
+
 ## 0.3.20260916
 
 ### Patch Changes

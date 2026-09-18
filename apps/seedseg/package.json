@@ -1,6 +1,6 @@
 {
   "name": "seedseg",
-  "version": "0.3.20260916",
+  "version": "0.3.20260918",
   "private": true,
   "type": "module",
   "description": "Browser-based prostate fiducial marker segmentation.",
@@ -14,7 +14,6 @@
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "pnpm vendor && pnpm runtime-support",
     "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs",
-    "test:examples": "node --test scripts/test_examples.mjs",
     "test:e2e": "node ../../test/examples.smoke.mjs --app seedseg"
   },
   "dependencies": {
