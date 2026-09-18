@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.8.20260917
+
+### Patch Changes
+
+- Publish an offline suite containing TopoFit 0.7.20260917.
+
 ## 0.7.20260917
 
 ## 0.7.20260916

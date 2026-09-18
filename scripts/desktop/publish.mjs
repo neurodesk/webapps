@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { setTimeout } from 'node:timers/promises';
 import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
@@ -75,9 +76,27 @@ if (process.argv.includes('--prepare-only')) {
   try { existing = JSON.parse(gh(['release', 'view', tag, '--json', 'isDraft'])); } catch {}
   if (existing && !existing.isDraft) throw new Error('Refusing to replace an already published release');
   if (!existing) gh(['release', 'create', tag, '--draft', '--target', revision, '--title', `Neurodesk Webapps ${version}`, '--notes-file', notesPath]);
+  // The release-asset API returns transient 500s under load, and each suite
+  // carries gigabytes per platform. Resume completed uploads and retry the rest.
+  const uploaded = new Map(JSON.parse(gh(['release', 'view', tag, '--json', 'assets'])).assets.map(asset => [asset.name, asset.size]));
   for (const path of uploads) {
-    console.log(`Uploading ${basename(path)}`);
-    gh(['release', 'upload', tag, path, '--clobber']);
+    const name = basename(path);
+    const { size } = await stat(path);
+    if (uploaded.get(name) === size) {
+      console.log(`Keeping ${name}`);
+      continue;
+    }
+    for (let attempt = 1; ; attempt += 1) {
+      console.log(`Uploading ${name}`);
+      try {
+        gh(['release', 'upload', tag, path, '--clobber']);
+        break;
+      } catch (error) {
+        if (attempt === 5) throw error;
+        console.log(`Upload failed (${error.message.trim().split('\n')[0]}); retrying in ${attempt * 30} s`);
+        await setTimeout(attempt * 30000);
+      }
+    }
   }
   gh(['release', 'edit', tag, '--draft=false', '--latest=false']);
   console.log(`Published ${tag}`);
