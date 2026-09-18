@@ -23,6 +23,22 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
+// Rayon threadpool bootstrap for wasm. JS must `await init_thread_pool(n)` once after module
+// init (before any rayon-backed call) on a cross-origin-isolated page. Only present in threaded
+// (`parallel`) builds; single-threaded builds omit it and the JS falls back gracefully.
+#[cfg(feature = "parallel")]
+pub use wasm_bindgen_rayon::init_thread_pool;
+
+/// Build a JS `Error` to throw across the wasm_bindgen boundary.
+///
+/// `JsValue::from_str` throws a bare string, which leaves `error.message`
+/// undefined in the worker's `catch (error) { postError(error.message) }` —
+/// so the user sees "undefined" instead of the failure. A real `Error` carries
+/// the message through unchanged.
+fn js_err(e: impl std::fmt::Display) -> JsValue {
+    js_sys::Error::new(&e.to_string()).into()
+}
+
 /// Gyromagnetic ratio of hydrogen protons (Hz/T)
 const GYROMAGNETIC_RATIO: f64 = 42.576e6;
 
@@ -1736,6 +1752,132 @@ pub fn bet_wasm(
     mask
 }
 
+/// Tell qsm-core that this module's rayon thread pool is up, so deep-learning inference may use
+/// it (tract dispatches on rayon's global pool on wasm).
+///
+/// Call it right after `initThreadPool` resolves, on the same module — each wasm instance has its
+/// own flag, and the lazily-loaded DL bundle is a separate instance from the base one. Without it
+/// inference stays single-threaded, which is what a page that is not cross-origin isolated needs:
+/// there `initThreadPool` never runs and rayon's global pool cannot be built.
+///
+/// Only the DL bundle has it (the base bundle has no inference); JS calls it optionally.
+#[cfg(all(feature = "parallel", feature = "onnx"))]
+#[wasm_bindgen]
+pub fn set_threads_ready_wasm(ready: bool) {
+    qsm_core::models::onnx::set_wasm_threads_available(ready);
+}
+
+/// HD-BET deep-learning brain extraction: magnitude → brain mask.
+///
+/// A mask **generator** (it replaces the mask rather than refining one), so JS runs this and
+/// then hands the result to [`apply_mask_ops_wasm`] for any refinements that follow — the same
+/// generator-then-refinements split `build_mask_section` makes natively.
+///
+/// Weights are not bundled: JS fetches `hd-bet.onnx` from the model registry (123 MB,
+/// IndexedDB-cached) and passes the bytes, exactly as for the DL inversion models. Only the DL
+/// bundle has this; the base bundle has no inference.
+///
+/// `patch_x/y/z` must be multiples of 32×32×16. **The browser wants 128×128×64**
+/// (`HdBetParams::low_memory`, peak ≈1.9 GB): HD-BET's native 192×192×96 peaks at ≈4.5 GB, over
+/// wasm32's 4 GB address space. Below roughly 128×128×64, patches that fall wholly inside the
+/// brain start being labelled background.
+///
+/// `tile_step` is the sliding-window stride as a fraction of the patch, in `(0, 1]`. nnU-Net's
+/// 0.5 (50 % overlap) is the quality default; larger strides mean fewer patches and a
+/// proportionally shorter run, at softer patch seams.
+///
+/// `progress_callback(done, total)` reports completed sliding-window patches.
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+pub fn hd_bet_wasm(
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    weights: &[u8],
+    patch_x: usize, patch_y: usize, patch_z: usize,
+    tile_step: f64,
+    tta: bool,
+    progress_callback: &js_sys::Function,
+) -> Result<Vec<u8>, JsValue> {
+    let n = nx * ny * nz;
+    if magnitude.len() != n {
+        return Err(JsValue::from_str(&format!(
+            "HD-BET: magnitude has {} voxels, expected {n} for {nx}x{ny}x{nz}",
+            magnitude.len()
+        )));
+    }
+    console_log!(
+        "WASM HD-BET: {}x{}x{} @ {:.2}x{:.2}x{:.2}mm, patch {}x{}x{}, step {:.2}, tta={}",
+        nx, ny, nz, vsx, vsy, vsz, patch_x, patch_y, patch_z, tile_step, tta
+    );
+
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    // qsm-core validates `tile_step` in (0, 1] and the patch divisibility, so a bad value comes
+    // back as a readable error rather than a panic.
+    let params = qsm_core::bet::HdBetParams {
+        patch: (patch_x, patch_y, patch_z),
+        tile_step,
+        mirror_tta: tta,
+    };
+
+    let callback = progress_callback.clone();
+    qsm_core::bet::hd_bet(magnitude, &grid, weights, &params, move |done, total| {
+        let _ = callback.call2(
+            &JsValue::NULL,
+            &JsValue::from_f64(done as f64),
+            &JsValue::from_f64(total as f64),
+        );
+    })
+    .map_err(|e| JsValue::from_str(&format!("HD-BET: {e}")))
+}
+
+/// Apply mask operations to an existing mask, through qsm-core's masking pipeline.
+///
+/// One implementation for every host: this is the same `qsm_core::pipeline::apply_mask_ops` the
+/// qsmxt pipeline runs, so a mask refined here step-by-step matches the one the `--mask ...`
+/// section we print would produce.
+///
+/// # Arguments
+/// * `mask` - current binary mask (0/1), `nx * ny * nz`
+/// * `ops` - comma-separated qsmxt mask ops, e.g. `"erode:2"`, `"fill-holes:0"`, `"signal-erode"`
+/// * `input_data` - the image a generator thresholds (the mask input; may be a phase-quality map)
+/// * `magnitude` - the magnitude image, used by the ops that need real signal (BET, HD-BET,
+///   signal-gated erosion). Pass an empty array when there is none; those ops then error rather
+///   than silently gating on `input_data`.
+/// * `nx`, `ny`, `nz` - dimensions; `vsx`, `vsy`, `vsz` - voxel sizes in mm
+#[wasm_bindgen]
+pub fn apply_mask_ops_wasm(
+    mask: &[u8],
+    ops: &str,
+    input_data: &[f64],
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+) -> Result<Vec<u8>, JsValue> {
+    let parsed: Vec<qsmxt_config::MaskOp> = ops
+        .split(',')
+        .map(|o| o.trim())
+        .filter(|o| !o.is_empty())
+        .map(qsmxt_config::parse_mask_op)
+        .collect::<Result<_, _>>()
+        .map_err(|e| JsValue::from_str(&format!("{e}")))?;
+    if parsed.is_empty() {
+        return Ok(mask.to_vec());
+    }
+    // `to_mask_sections` converts generator + refinements; all_ops() hands them back in order, so
+    // this works whether or not the first op happens to be a generator.
+    let section = qsmxt_config::MaskSection {
+        input: qsmxt_config::MaskingInput::Magnitude,
+        generator: parsed[0].clone(),
+        refinements: parsed[1..].to_vec(),
+    };
+    let core = qsmxt_config::to_mask_sections(std::slice::from_ref(&section));
+    let meta = qsmxt_config::to_scan_metadata((nx, ny, nz), (vsx, vsy, vsz), &[], 0.0, (0.0, 0.0, 1.0));
+    let magnitude = (!magnitude.is_empty()).then_some(magnitude);
+    qsm_core::pipeline::apply_mask_ops(mask.to_vec(), &core[0].all_ops(), input_data, magnitude, &meta)
+        .map_err(|e| JsValue::from_str(&format!("{e}")))
+}
+
 /// Run BET with progress callback (aligned with FSL-BET2)
 ///
 /// The callback receives (current_iteration, total_iterations)
@@ -1902,7 +2044,7 @@ pub fn hermitian_inner_product_wasm(
 /// # Arguments
 /// * `phases_flat` - Flattened phase data [echo0, echo1, ...], each echo is nx*ny*nz
 /// * `mags_flat` - Flattened magnitude data [echo0, echo1, ...], each echo is nx*ny*nz
-/// * `tes` - Echo times in ms
+/// * `tes` - Echo times (any consistent unit; only ratios are used)
 /// * `mask` - Binary mask (nx * ny * nz)
 /// * `nx`, `ny`, `nz` - Dimensions
 /// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
@@ -1959,12 +2101,12 @@ pub fn mcpc3ds_single_coil_wasm(
 /// Calculate B0 field from unwrapped phase using weighted averaging
 ///
 /// Implements calculateB0_unwrapped from MriResearchTools.jl
-/// Formula: B0 = (1000 / 2pi) * sum(phase / TE * weight) / sum(weight)
+/// Formula: B0 = (1 / 2pi) * sum(phase / TE * weight) / sum(weight)
 ///
 /// # Arguments
 /// * `unwrapped_phases_flat` - Flattened unwrapped phases [echo0, echo1, ...]
 /// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in ms
+/// * `tes` - Echo times in seconds
 /// * `mask` - Binary mask
 /// * `weight_type` - Weighting type: "phase_snr", "phase_var", "average", "tes", "mag"
 /// * `n_total` - Number of voxels per echo
@@ -2003,122 +2145,6 @@ pub fn calculate_b0_weighted_wasm(
 
     console_log!("WASM calculate_b0_weighted complete");
     b0
-}
-
-/// Full MCPC-3D-S + B0 calculation pipeline
-///
-/// Combines phase offset removal with weighted B0 calculation.
-/// This is the main entry point for multi-echo B0 mapping.
-///
-/// # Arguments
-/// * `phases_flat` - Flattened wrapped phases [echo0, echo1, ...]
-/// * `mags_flat` - Flattened magnitudes [echo0, echo1, ...]
-/// * `tes` - Echo times in ms
-/// * `mask` - Binary mask
-/// * `nx`, `ny`, `nz` - Dimensions
-/// * `sigma_x`, `sigma_y`, `sigma_z` - Smoothing sigma for phase offset
-/// * `weight_type` - B0 weighting type
-///
-/// # Returns
-/// Flattened [b0, phase_offset, corrected_phases...]
-/// - First n_total elements: B0 in Hz
-/// - Next n_total elements: phase offset
-/// - Remaining n_echoes * n_total elements: corrected phases
-#[wasm_bindgen]
-#[allow(clippy::too_many_arguments)]
-pub fn mcpc3ds_b0_pipeline_wasm(
-    phases_flat: &[f64],
-    mags_flat: &[f64],
-    tes: &[f64],
-    mask: &[u8],
-    nx: usize, ny: usize, nz: usize,
-    vsx: f64, vsy: f64, vsz: f64,
-    sigma_x: f64, sigma_y: f64, sigma_z: f64,
-    weight_type: &str,
-    do_bipolar_correction: bool,
-    unwrap_method: &str,
-    romeo_individual: bool,
-    romeo_correct_global: bool,
-) -> Vec<f64> {
-    let n_echoes = tes.len();
-    let n_total = nx * ny * nz;
-
-    console_log!("WASM field_mapping: {}x{}x{}, {} echoes, unwrap={}, individual={}, correct_global={}, weight={}, bipolar={}",
-                 nx, ny, nz, n_echoes, unwrap_method, romeo_individual, romeo_correct_global, weight_type, do_bipolar_correction);
-
-    // Use slices into the flat input instead of cloning (~990 MB savings for large data)
-    let phases: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &phases_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-    let mags: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-
-    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
-    let wt = qsm_core::utils::multi_echo::B0WeightType::from_str(weight_type);
-
-    // Step 1: Phase offset removal (always uses ROMEO internally for HIP unwrapping)
-    let (mut corrected_phases, phase_offset) = qsm_core::utils::multi_echo::phase_offset_removal(
-        &phases, &mags, tes, mask,
-        [sigma_x, sigma_y, sigma_z], [0, 1],
-        qsm_core::unwrap::UnwrapMethod::Romeo,
-        &grid,
-    );
-
-    // Step 2: Bipolar correction (after offset removal, before unwrapping — matches MriResearchTools.jl)
-    if do_bipolar_correction && n_echoes >= 3 {
-        console_log!("WASM bipolar correction (post-offset-removal)");
-        let mag_refs: Vec<&[f64]> = (0..n_echoes)
-            .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-            .collect();
-        qsm_core::utils::multi_echo::bipolar_correction(
-            &mut corrected_phases, &mag_refs, tes, mask,
-            [sigma_x, sigma_y, sigma_z], &grid,
-        );
-    }
-
-    // Step 3: Multi-echo unwrapping (user-selected method)
-    let mag_refs: Vec<&[f64]> = (0..n_echoes)
-        .map(|e| &mags_flat[e * n_total..(e + 1) * n_total])
-        .collect();
-    let unwrapped: Vec<Vec<f64>> = match unwrap_method {
-        "laplacian" => {
-            // Per-echo Laplacian unwrapping (matching Julia's laplacian_combine)
-            // No inter-echo alignment — Laplacian removes harmonic component
-            // independently per echo, and calculate_b0_weighted handles
-            // the per-echo phase/TE division and averaging
-            corrected_phases.iter()
-                .map(|phase| qsm_core::unwrap::laplacian_unwrap(phase, mask, &grid))
-                .collect()
-        }
-        _ => {
-            let params = qsm_core::unwrap::romeo::RomeoParams {
-                individual: romeo_individual,
-                correct_global: romeo_correct_global,
-                ..Default::default()
-            };
-            qsm_core::unwrap::romeo::unwrap_romeo_multi_echo(
-                &corrected_phases, &mag_refs, tes, mask,
-                &params, &grid,
-            )
-        }
-    };
-
-    // Step 4: Weighted B0 averaging
-    let b0 = qsm_core::utils::multi_echo::calculate_b0_weighted(
-        &unwrapped, &mags, tes, mask, wt, &grid,
-    );
-
-    // Flatten output: b0, phase_offset, then all corrected phases
-    let mut result = Vec::with_capacity((2 + n_echoes) * n_total);
-    result.extend(b0);
-    result.extend(phase_offset);
-    for phase in &corrected_phases {
-        result.extend(phase);
-    }
-
-    console_log!("WASM mcpc3ds_b0_pipeline complete");
-    result
 }
 
 /// Multi-echo linear fit with magnitude weighting
@@ -2946,6 +2972,21 @@ config_defaults!(get_mcpc3ds_defaults, qsmxt_config::config::Mcpc3dsConfig);
 config_defaults!(get_linear_fit_defaults, qsmxt_config::config::LinearFitConfig);
 config_defaults!(get_homogeneity_defaults, qsmxt_config::config::HomogeneityConfig);
 
+/// Signal-gated erosion defaults. Its parameters live inline in qsmxt-config's `MaskOp` rather
+/// than in a `*Config` struct, so this reads them straight off qsm-core's defaults (the QSM-CI
+/// harmonization setting) instead of going through `config_defaults!`.
+#[wasm_bindgen]
+pub fn get_signal_erode_defaults() -> String {
+    let d = qsm_core::utils::SignalErosionParams::default();
+    serde_json::json!({
+        "threshold": d.threshold,
+        "depth_cap": d.depth_cap,
+        "global_erosions": d.global_erosions,
+        "bias_sigma": d.bias_sigma,
+        "min_component": d.min_component,
+    }).to_string()
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -2958,6 +2999,36 @@ mod tests {
     fn test_version() {
         let version = get_version();
         assert!(!version.is_empty());
+    }
+
+    // A stage used to parse its config with `.unwrap_or_default()`, so a config that
+    // failed to parse ran qsm-core's default algorithms and parameters instead of the
+    // user's — silently, and indistinguishably from a successful run.
+
+    #[test]
+    fn parse_pipeline_config_rejects_malformed_toml() {
+        let err = parse_pipeline_config("this is not toml {{{").unwrap_err();
+        assert!(err.contains("failed to parse"), "unexpected message: {err}");
+    }
+
+    #[test]
+    fn parse_pipeline_config_rejects_the_error_string_a_failed_serializer_used_to_return() {
+        // config_json_to_toml_wasm used to hand back "ERROR: ..." as though it were TOML,
+        // and no caller checked for it. It now throws, but the parse must reject it too.
+        assert!(parse_pipeline_config("ERROR: bad config").is_err());
+    }
+
+    #[test]
+    fn parse_pipeline_config_keeps_the_users_algorithm() {
+        let toml = "[bg_removal]\nalgorithm = \"pdf\"\n";
+        let config = parse_pipeline_config(toml).expect("valid config should parse");
+        let default = qsmxt_config::PipelineConfig::default();
+
+        assert_eq!(config.bg_removal.algorithm, qsmxt_config::BfAlgorithm::Pdf);
+        assert_ne!(
+            config.bg_removal.algorithm, default.bg_removal.algorithm,
+            "fixture must differ from the default, or it cannot detect a silent fallback",
+        );
     }
 }
 
@@ -2974,53 +3045,69 @@ mod tests {
 fn config_from_json(
     config_json: &str,
     mask_section: &str,
-) -> Result<qsmxt_config::PipelineConfig, String> {
-    let mut config: qsmxt_config::PipelineConfig =
-        serde_json::from_str(config_json).map_err(|e| format!("ERROR: {}", e))?;
+) -> Result<qsmxt_config::PipelineConfig, JsValue> {
+    let mut config: qsmxt_config::PipelineConfig = serde_json::from_str(config_json)
+        .map_err(|e| js_err(format!("config JSON is not a valid PipelineConfig: {e}")))?;
     apply_mask_section(&mut config, mask_section);
     Ok(config)
 }
 
+/// Parse the pipeline config a stage runs under.
+///
+/// This must never fall back to a default. The config carries the user's chosen
+/// algorithms and parameters; substituting qsm-core's defaults for it produces a
+/// complete, plausible result from a pipeline the user did not ask for.
+///
+/// Split from `config_from_toml` so it is testable off-wasm — `js_sys` values cannot
+/// be constructed on the host target.
+fn parse_pipeline_config(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, String> {
+    qsmxt_config::PipelineConfig::from_toml(config_toml)
+        .map_err(|e| format!("pipeline config failed to parse: {e}"))
+}
+
+fn config_from_toml(config_toml: &str) -> Result<qsmxt_config::PipelineConfig, JsValue> {
+    parse_pipeline_config(config_toml).map_err(js_err)
+}
+
 /// Serialize a config (JSON, plus CLI-style mask string) to canonical TOML —
-/// identical to what the qsmxt.rs CLI writes (all algorithms). Returns "ERROR: ..." on failure.
+/// identical to what the qsmxt.rs CLI writes (all algorithms). Throws on failure.
 #[wasm_bindgen]
-pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => config.to_toml().unwrap_or_else(|e| format!("ERROR: {}", e)),
-        Err(e) => e,
-    }
+pub fn config_json_to_toml_wasm(config_json: &str, mask_section: &str) -> Result<String, JsValue> {
+    config_from_json(config_json, mask_section)?
+        .to_toml()
+        .map_err(|e| js_err(format!("could not serialize config to TOML: {e}")))
 }
 
 /// Like config_json_to_toml_wasm, but prunes inversion/bg_removal to the selected
 /// algorithm only (the omitted ones round-trip as defaults). For the downloadable
-/// settings file. Returns "ERROR: ..." on failure.
+/// settings file. Throws on failure.
 #[wasm_bindgen]
-pub fn config_json_to_toml_selected_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => config.to_toml_selected().unwrap_or_else(|e| format!("ERROR: {}", e)),
-        Err(e) => e,
-    }
+pub fn config_json_to_toml_selected_wasm(
+    config_json: &str,
+    mask_section: &str,
+) -> Result<String, JsValue> {
+    config_from_json(config_json, mask_section)?
+        .to_toml_selected()
+        .map_err(|e| js_err(format!("could not serialize config to TOML: {e}")))
 }
 
-/// Generate a qsmxt CLI command from a config (JSON + mask string).
-/// Returns the command string, or an error message prefixed with "ERROR: ".
+/// Generate a qsmxt CLI command from a config (JSON + mask string). Throws on failure.
 #[wasm_bindgen]
-pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => qsmxt_config::generate_command(&config),
-        Err(e) => e,
-    }
+pub fn generate_command_wasm(config_json: &str, mask_section: &str) -> Result<String, JsValue> {
+    Ok(qsmxt_config::generate_command(&config_from_json(config_json, mask_section)?))
 }
 
 /// Generate a methods section with citations from a config (JSON + mask string).
 /// `tool` should be "qsmxt.rs" or "QSMbly" to credit the correct tool.
-/// Returns markdown text, or an error message prefixed with "ERROR: ".
+/// Returns markdown text. Throws on failure.
 #[wasm_bindgen]
-pub fn generate_methods_wasm(config_json: &str, tool: &str, mask_section: &str) -> String {
-    match config_from_json(config_json, mask_section) {
-        Ok(config) => qsmxt_config::methods::generate_methods_for(&config, tool),
-        Err(e) => e,
-    }
+pub fn generate_methods_wasm(
+    config_json: &str,
+    tool: &str,
+    mask_section: &str,
+) -> Result<String, JsValue> {
+    let config = config_from_json(config_json, mask_section)?;
+    Ok(qsmxt_config::methods::generate_methods_for(&config, tool))
 }
 
 /// Parse a CLI-style mask string ("input,gen,refine,...") into the config's mask
@@ -3055,20 +3142,20 @@ fn apply_mask_section(config: &mut qsmxt_config::PipelineConfig, mask_section: &
     }];
 }
 
-/// Return the default PipelineConfig as a TOML string.
+/// Return the default PipelineConfig as a TOML string. Throws on failure.
 #[wasm_bindgen]
-pub fn get_default_config_toml_wasm() -> String {
+pub fn get_default_config_toml_wasm() -> Result<String, JsValue> {
     qsmxt_config::PipelineConfig::default()
         .to_toml()
-        .unwrap_or_else(|e| format!("ERROR: {}", e))
+        .map_err(|e| js_err(format!("could not serialize the default config to TOML: {e}")))
 }
 
-/// Return the default PipelineConfig as a JSON string.
+/// Return the default PipelineConfig as a JSON string. Throws on failure.
 #[wasm_bindgen]
-pub fn get_default_config_json_wasm() -> String {
+pub fn get_default_config_json_wasm() -> Result<String, JsValue> {
     qsmxt_config::PipelineConfig::default()
         .to_json()
-        .unwrap_or_else(|e| format!("ERROR: {}", e))
+        .map_err(|e| js_err(format!("could not serialize the default config to JSON: {e}")))
 }
 
 /// Validate a TOML config string. Returns empty string on success, error message on failure.
@@ -3098,7 +3185,7 @@ pub fn run_field_mapping_wasm(
     vsx: f64, vsy: f64, vsz: f64,
     field_strength: f64,
     config_toml: &str,
-) -> Vec<f64> {
+) -> Result<Vec<f64>, JsValue> {
     let n_echoes = echo_times.len();
     let n_total = nx * ny * nz;
 
@@ -3112,8 +3199,7 @@ pub fn run_field_mapping_wasm(
     };
     let mag_opt: Option<&[&[f64]]> = if mags.is_empty() { None } else { Some(&mags) };
 
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+    let config = config_from_toml(config_toml)?;
     let (fm_config, _, _, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (0.0, 0.0, 1.0),
@@ -3123,19 +3209,12 @@ pub fn run_field_mapping_wasm(
         &phases, mag_opt, mask, &meta, &fm_config, &mut |_, _| {},
     );
 
-    match result {
-        Ok(r) => {
-            let mut out = r.b0_field_ppm;
-            if let Some(offset) = r.phase_offset {
-                out.extend(offset);
-            }
-            out
-        }
-        Err(e) => {
-            console_log!("run_field_mapping_wasm error: {}", e);
-            vec![0.0; n_total]
-        }
+    let r = result.map_err(|e| js_err(format!("field mapping failed: {e}")))?;
+    let mut out = r.b0_field_ppm;
+    if let Some(offset) = r.phase_offset {
+        out.extend(offset);
     }
+    Ok(out)
 }
 
 /// Run background removal: total field → local field (ppm).
@@ -3150,10 +3229,8 @@ pub fn run_bg_removal_wasm(
     field_strength: f64,
     config_toml: &str,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
-    let n_total = nx * ny * nz;
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
     let (_, bg_config, _, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), &[], field_strength, (0.0, 0.0, 1.0),
@@ -3169,18 +3246,10 @@ pub fn run_bg_removal_wasm(
         },
     );
 
-    match result {
-        Ok(r) => {
-            let mut out = r.local_field_ppm;
-            let mask_f64: Vec<f64> = r.eroded_mask.iter().map(|&m| m as f64).collect();
-            out.extend(mask_f64);
-            out
-        }
-        Err(e) => {
-            console_log!("run_bg_removal_wasm error: {}", e);
-            vec![0.0; n_total * 2]
-        }
-    }
+    let r = result.map_err(|e| js_err(format!("background removal failed: {e}")))?;
+    let mut out = r.local_field_ppm;
+    out.extend(r.eroded_mask.iter().map(|&m| m as f64));
+    Ok(out)
 }
 
 /// Run dipole inversion: local field → susceptibility (ppm).
@@ -3198,10 +3267,8 @@ pub fn run_dipole_inversion_wasm(
     magnitude: &[f64],
     config_toml: &str,
     progress_callback: &js_sys::Function,
-) -> Vec<f64> {
-    let n_total = nx * ny * nz;
-    let config = qsmxt_config::PipelineConfig::from_toml(config_toml)
-        .unwrap_or_default();
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
     let (_, _, inv_config, _) = qsmxt_config::to_pipeline_stages(&config);
     let meta = qsmxt_config::to_scan_metadata(
         (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (bx, by, bz),
@@ -3219,13 +3286,7 @@ pub fn run_dipole_inversion_wasm(
         },
     );
 
-    match result {
-        Ok(chi) => chi,
-        Err(e) => {
-            console_log!("run_dipole_inversion_wasm error: {}", e);
-            vec![0.0; n_total]
-        }
-    }
+    result.map_err(|e| js_err(format!("dipole inversion failed: {e}")))
 }
 
 /// Apply QSM referencing (mean subtraction or none).
@@ -3256,4 +3317,254 @@ pub fn hz_to_ppm_wasm(field_hz: &[f64], field_strength: f64) -> Vec<f64> {
 #[wasm_bindgen]
 pub fn rads_to_ppm_wasm(field_rads: &[f64], field_strength: f64) -> Vec<f64> {
     qsm_core::pipeline::rads_to_ppm(field_rads, field_strength)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chi-separation (susceptibility source separation)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Treat an empty slice as "input not provided" (`None`) for the separation dispatcher.
+/// A free fn (not a closure) so the borrow is properly higher-ranked over the lifetime.
+fn opt_slice(s: &[f64]) -> Option<&[f64]> {
+    if s.is_empty() { None } else { Some(s) }
+}
+
+/// Run a **classical** χ-separation method (r2star-qsm / decompose / chi-sep-ilsqr /
+/// chi-sep-medi / wavesep / hc-chisep — the method comes from `config_toml`).
+///
+/// Provide whatever the chosen method needs; pass an empty slice for inputs it doesn't use.
+/// Returns `[chi_pos ; chi_neg ; chi_total]` concatenated (`3 * nx*ny*nz`). `magnitude_multi`
+/// is voxel-major `(n_voxels, n_echoes)`.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn run_separation_wasm(
+    local_field_ppm: &[f64], qsm: &[f64], mask: &[u8],
+    r2prime: &[f64], r2star: &[f64], magnitude_rss: &[f64], magnitude_multi: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    echo_times: &[f64], field_strength: f64,
+    bx: f64, by: f64, bz: f64,
+    config_toml: &str,
+) -> Result<Vec<f64>, JsValue> {
+    let config = config_from_toml(config_toml)?;
+    let sep_config = qsmxt_config::bridge::to_separation_config(&config);
+    let meta = qsmxt_config::to_scan_metadata(
+        (nx, ny, nz), (vsx, vsy, vsz), echo_times, field_strength, (bx, by, bz),
+    );
+    let inputs = qsm_core::pipeline::SeparationInputs {
+        local_field_ppm, qsm, mask,
+        r2prime: opt_slice(r2prime), r2star: opt_slice(r2star),
+        magnitude_rss: opt_slice(magnitude_rss), magnitude_multi: opt_slice(magnitude_multi),
+        se_magnitude_multi: None,
+    };
+    let r = qsm_core::pipeline::run_separation(inputs, &meta, &sep_config, &mut |_, _| {})
+        .map_err(|e| js_err(format!("susceptibility separation failed: {e}")))?;
+    let mut out = r.chi_pos;
+    out.extend(r.chi_neg);
+    out.extend(r.chi_total);
+    Ok(out)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Relaxometry — R2 (EPG from MESE) and R2' = R2* − R2
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// R2 map (1/s) from multi-echo spin-echo magnitude via EPG (models B1 < 1 refocusing).
+/// `magnitude_multi` is voxel-major `(n_voxels, n_echoes)`; `echo_times` in seconds.
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn r2_epg_wasm(
+    magnitude_multi: &[f64], mask: &[u8], echo_times: &[f64],
+    nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
+) -> Vec<f64> {
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let (r2, _b1) = qsm_core::relaxometry::r2_epg(
+        magnitude_multi, mask, echo_times, &grid, &qsm_core::relaxometry::R2EpgParams::default(), None,
+    );
+    r2
+}
+
+/// R2' (1/s) = R2* − R2 (clamped ≥ 0 inside the mask). Inputs in 1/s.
+#[wasm_bindgen]
+pub fn r2prime_wasm(r2star: &[f64], r2: &[f64], mask: &[u8]) -> Vec<f64> {
+    qsm_core::relaxometry::r2prime(r2star, r2, mask)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deep-learning model registry (metadata for the JS weight fetcher/cache)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// JSON array describing every registered deep-learning model: `id`, `name`, `stage`,
+/// `size_divisor`, `inputs`/`outputs`, and per-file `{name, url, sha256, bytes}`. The JS
+/// layer uses this to fetch + cache weights (WASM can't download itself) and to size the
+/// download UI.
+#[wasm_bindgen]
+pub fn get_model_registry_wasm() -> String {
+    let arr: Vec<serde_json::Value> = qsm_core::models::all_models().iter().map(|m| {
+        let files: Vec<serde_json::Value> = m.files.iter().map(|f| serde_json::json!({
+            "name": f.name, "url": f.url, "sha256": f.sha256, "bytes": f.bytes,
+        })).collect();
+        serde_json::json!({
+            "id": m.id, "name": m.name, "stage": format!("{:?}", m.stage),
+            "size_divisor": m.size_divisor, "available": m.is_available(),
+            "inputs": m.inputs, "outputs": m.outputs, "files": files,
+        })
+    }).collect();
+    serde_json::to_string(&serde_json::Value::Array(arr)).unwrap_or_else(|_| "[]".into())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deep-learning inference (ONNX). WASM can't download weights, so JS fetches the
+// bytes (see get_model_registry_wasm) and passes them in. Requires the `onnx` feature.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// DL dipole inversion from a **field** → susceptibility (ppm). `model_id` picks the net:
+/// xqsm/qsmnet/qsmnet-plus/qsmgan/ir2qsm/lpcnn/modl-qsm take a **local** field; autoqsm and
+/// nextqsm take the **total** field (they do their own background removal). `weights2` is only
+/// used by nextqsm (its second U-Net); pass an empty slice otherwise.
+///
+/// `tiled` requests overlap-tiled inference (bounded memory) for the whole-volume nets that
+/// otherwise OOM the 32-bit WASM heap on clinical-size data (xqsm, qsmnet, ir2qsm, …). It is an
+/// **approximation** — the result matches whole-volume at r≈0.94 but drifts ~30% in low
+/// spatial frequencies — so callers should label tiled output as approximate. Models that are
+/// already patch-based (qsmgan, autoqsm) ignore the flag; nets with global k-space steps
+/// (lpcnn, modl-qsm, nextqsm) can't be tiled and fall back to whole-volume.
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn run_dl_field_inversion_wasm(
+    model_id: &str, field_ppm: &[f64], mask: &[u8],
+    nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
+    bx: f64, by: f64, bz: f64,
+    weights: &[u8], weights2: &[u8], tiled: bool, tile_core: usize, tile_halo: usize,
+    progress_callback: &js_sys::Function,
+) -> Result<Vec<f64>, JsValue> {
+    use qsm_core::inversion as inv;
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let bdir = (bx, by, bz);
+    // Per-tile progress → JS (done, total). Non-tiled nets never call it (bar just sits at start).
+    let prog_cb = progress_callback.clone();
+    let on_tile = move |done: usize, total: usize| {
+        let _ = prog_cb.call2(&JsValue::null(), &JsValue::from(done as u32), &JsValue::from(total as u32));
+    };
+    // Browser memory is the constraint (unlike native): the proven-safe patch is ~64³, matching
+    // the natively-patch-based nets (qsmgan/autoqsm). Caller passes core/halo; 0 → a 64³-patch
+    // default (core 48 + halo 8). This is much smaller than qsm-core's native TileConfig default.
+    let cfg = if tile_core > 0 {
+        inv::TileConfig { core: tile_core, halo: tile_halo }
+    } else {
+        inv::TileConfig { core: 56, halo: 4 } // 64³ patch (browser-safe), minimal overlap waste
+    };
+    // Tiled variants for the fully-convolutional whole-volume nets (bounded WASM memory).
+    let tiled_res = if tiled {
+        match model_id {
+            "xqsm" => Some(inv::xqsm_tiled(field_ppm, mask, &grid, weights, &cfg, on_tile)),
+            "qsmnet" => Some(inv::qsmnet_tiled(field_ppm, mask, &grid, weights, &inv::QsmnetNorm::qsmnet(), &cfg, on_tile)),
+            "qsmnet-plus" => Some(inv::qsmnet_tiled(field_ppm, mask, &grid, weights, &inv::QsmnetNorm::qsmnet_plus(), &cfg, on_tile)),
+            "ir2qsm" => Some(inv::ir2qsm_tiled(field_ppm, mask, &grid, weights, &cfg, on_tile)),
+            // FFT-unrolled nets: whole-algorithm tiling (off-design, approximate — the UI warns).
+            "lpcnn" => Some(inv::lpcnn_tiled(field_ppm, mask, &grid, bdir, weights, &cfg, on_tile)),
+            "modl-qsm" => Some(inv::modl_qsm_tiled(field_ppm, mask, &grid, bdir, weights, &cfg, on_tile)),
+            "nextqsm" => Some(inv::nextqsm_tiled(field_ppm, mask, &grid, bdir, weights, weights2, &cfg, on_tile)),
+            _ => None, // not-yet-tiled or intrinsically un-tileable → whole-volume below
+        }
+    } else {
+        None
+    };
+    let res = match tiled_res {
+        Some(r) => r,
+        None => match model_id {
+            "xqsm" => inv::xqsm(field_ppm, mask, &grid, weights),
+            "qsmnet" => inv::qsmnet(field_ppm, mask, &grid, weights, &inv::QsmnetNorm::qsmnet()),
+            "qsmnet-plus" => inv::qsmnet(field_ppm, mask, &grid, weights, &inv::QsmnetNorm::qsmnet_plus()),
+            "qsmgan" => inv::qsmgan(field_ppm, mask, &grid, weights),
+            "ir2qsm" => inv::ir2qsm(field_ppm, mask, &grid, weights),
+            "lpcnn" => inv::lpcnn(field_ppm, mask, &grid, bdir, weights),
+            "modl-qsm" => inv::modl_qsm(field_ppm, mask, &grid, bdir, weights),
+            "autoqsm" => inv::autoqsm(field_ppm, mask, &grid, weights),
+            "nextqsm" => inv::nextqsm(field_ppm, mask, &grid, bdir, weights, weights2),
+            other => {
+                return Err(js_err(format!(
+                    "run_dl_field_inversion_wasm: unknown model '{other}'"
+                )));
+            }
+        },
+    };
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
+}
+
+/// DL background removal (BFRnet): total field → local field (ppm). BFRnet preserves the
+/// brain edge (no erosion).
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn run_dl_bg_removal_wasm(
+    model_id: &str, field_ppm: &[f64], mask: &[u8],
+    nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
+    weights: &[u8],
+) -> Result<Vec<f64>, JsValue> {
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let res = match model_id {
+        "bfrnet" => qsm_core::bgremove::bfrnet(field_ppm, mask, &grid, weights),
+        other => {
+            return Err(js_err(format!("run_dl_bg_removal_wasm: unknown model '{other}'")));
+        }
+    };
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
+}
+
+/// End-to-end DL reconstruction from wrapped **phase**: iqsm/iqsm-plus → susceptibility (ppm);
+/// iqfm → local field (ppm). `phases_flat` is `n_echoes` volumes concatenated (voxel-major per
+/// echo); `echo_times` in seconds; `b0` field strength (T).
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn run_dl_phase_recon_wasm(
+    model_id: &str, phases_flat: &[f64], n_echoes: usize, mask: &[u8],
+    nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
+    echo_times: &[f64], b0: f64, bx: f64, by: f64, bz: f64,
+    weights: &[u8],
+) -> Result<Vec<f64>, JsValue> {
+    use qsm_core::inversion as inv;
+    let n = nx * ny * nz;
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let phases: Vec<&[f64]> = (0..n_echoes).map(|e| &phases_flat[e * n..(e + 1) * n]).collect();
+    let mags: Vec<&[f64]> = Vec::new(); // uniform weighting (magnitude combine handled upstream)
+    let bdir = (bx, by, bz);
+    let (sign, erode) = (-1.0, 3);
+    let res = match model_id {
+        "iqsm" => inv::iqsm_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, sign, erode, weights),
+        "iqsm-plus" => inv::iqsm_plus_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, bdir, sign, erode, weights),
+        "iqfm" => inv::iqfm_multi_echo(&phases, &mags, mask, &grid, echo_times, b0, sign, erode, weights),
+        other => {
+            return Err(js_err(format!("run_dl_phase_recon_wasm: unknown model '{other}'")));
+        }
+    };
+    res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))
+}
+
+/// DL χ-separation (susep-net / chi-sepnet) from local field + QSM + R2' → `[chi_pos ; chi_neg ;
+/// chi_total]` concatenated (`3 * nx*ny*nz`).
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+#[allow(clippy::too_many_arguments)]
+pub fn run_dl_separation_wasm(
+    model_id: &str, local_field_ppm: &[f64], qsm: &[f64], r2prime: &[f64], mask: &[u8],
+    nx: usize, ny: usize, nz: usize, vsx: f64, vsy: f64, vsz: f64,
+    weights: &[u8],
+) -> Result<Vec<f64>, JsValue> {
+    use qsm_core::separation as sep;
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let res = match model_id {
+        "susep-net" => sep::susep_net(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::SusepNetNorm::default()),
+        "chi-sepnet" => sep::chisepnet(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::ChiSepNetNorm::default()),
+        other => {
+            return Err(js_err(format!("run_dl_separation_wasm: unknown model '{other}'")));
+        }
+    };
+    let (pos, neg, tot) = res.map_err(|e| js_err(format!("{model_id} inference failed: {e}")))?;
+    let mut out = pos;
+    out.extend(neg);
+    out.extend(tot);
+    Ok(out)
 }

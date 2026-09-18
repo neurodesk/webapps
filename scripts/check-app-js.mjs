@@ -11,6 +11,7 @@ const generatedOrVendoredDirectories = new Set([
   'nifti-js',
   'node_modules',
   'pkg',
+  'pkg-dl',
   'preprocessing-wasm',
   'vendor',
   'wasm',
