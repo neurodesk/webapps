@@ -10,6 +10,9 @@ self.onmessage = async ({ data: job }) => {
       const { runBet } = await import('@neurodesk/brain-extraction/bet');
       const runtime = await import(/* @vite-ignore */ new URL('bet/qsm_wasm.js', job.assetBase).href);
       await runtime.default();
+      if (runtime.initThreadPool) {
+        await runtime.initThreadPool(Math.min(8, navigator.hardwareConcurrency || 4));
+      }
       result = runBet({ volume, runtime, fractionalIntensity: job.fractionalIntensity, onProgress });
     } else if (job.method === 'mindgrab') {
       const { runMindgrab } = await import('@neurodesk/brain-extraction/mindgrab');

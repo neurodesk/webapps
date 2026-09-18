@@ -1,5 +1,17 @@
 # qsmbly
 
+## 0.27.20260918
+
+### Minor Changes
+
+- Sync QSMbly with upstream 6e01b15: update QSM.rs to 0.35.0 and qsmxt-config to 9.21.0, add threaded classical and lazy-loaded deep-learning WASM, HD-BET, signal-based mask refinement and reconstruction fixes. Preserve the shared shell and real brain example, and credit the upstream application in About.
+
+## 0.26.20260918
+
+### Patch Changes
+
+- Replace the example with real 3 T, 1 mm brain magnitude and phase MRI from the QSMxT OSF dataset, mirrored at a pinned Hugging Face revision with acquisition metadata and provenance.
+
 ## 0.26.20260916
 
 ### Minor Changes

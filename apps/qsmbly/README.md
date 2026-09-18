@@ -8,6 +8,16 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 
 [ACCESS QSMbly HERE](https://qsmbly.neurodesk.org/)
 
+This application integrates [Ashley Stewart's upstream QSMbly](upstream.json)
+at commit `6e01b15b43b615639881f35e6b1f7dbc214e0864`. See [upstream.json](upstream.json)
+for the pinned dependencies and monorepo adaptations. The shared shell, example
+catalog, worker channels and release tooling belong to this repository.
+
+To prepare a future sync, clone upstream on the storage volume and run
+`python3 scripts/merge-qsmbly-upstream.py <clone> --base <last-imported-commit> --target <new-commit>`
+from the repository root. Review the candidate merges under `$TMPDIR/qsmbly-upstream-merge`
+before applying them. The script does not change checkout files.
+
 ## Features
 
 - **Completely Private**: All processing happens locally in your browser — your data never leaves your computer
@@ -47,18 +57,30 @@ pnpm --filter qsmbly dev
    ```bash
    cargo install wasm-pack
    ```
+3. Install the pinned toolchain for threaded WASM:
+   ```bash
+   rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+   ```
 
 ### Build and Run
 ```bash
-# Standard build (maximum browser compatibility)
+# Threaded classical and lazy-loaded deep-learning bundles
 ./build.sh
 
 # SIMD-accelerated build (faster, requires modern browsers)
 ./build.sh --simd
 
+# Single-threaded bundles for hosts without cross-origin isolation
+./build.sh --no-threads
+
 # Start development server
 ./run.sh
 ```
+
+Run `pnpm --filter qsmbly build` from the repository root to assemble the themed
+production application. The deep-learning bundle always uses SIMD128. Model
+weights download on first use from a pinned Hugging Face revision and are checked
+against the QSM.rs model registry's sizes and SHA-256 hashes.
 
 ### SIMD Acceleration
 
@@ -73,9 +95,15 @@ The `--simd` flag enables 128-bit SIMD vectorization for faster processing of it
 
 ### Running Tests
 ```bash
-npm install
-npm test
+pnpm --filter qsmbly test
+pnpm --filter qsmbly test:examples
+pnpm --filter qsmbly test:e2e
 ```
+
+Run these commands from the repository root. Browser tests download the pinned
+brain example and xQSM weights, reconstruct an image, and check the About link
+and HD-BET controls. They verify workflow execution, not the accuracy of every
+available reconstruction model.
 
 ## Repository Structure
 

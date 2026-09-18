@@ -1,4 +1,4 @@
-import { readFile, access } from 'node:fs/promises';
+import { readFile, access, readdir } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -20,6 +20,14 @@ async function ensureBet() {
     await Promise.all(['qsm_wasm.js', 'qsm_wasm_bg.wasm'].map(name => access(new URL(`wasm/${name}`, qsmRoot))));
   } catch {
     execFileSync('bash', ['build.sh'], { cwd: qsmRoot, stdio: 'inherit' });
+  }
+  const snippets = new URL('wasm/snippets/', qsmRoot);
+  try {
+    for (const name of await readdir(snippets, { recursive: true })) {
+      if (name.endsWith('.js')) assets.set(`bet/snippets/${name}`, new URL(name, snippets));
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
   }
 }
 function extractionAssets() {

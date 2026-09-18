@@ -24,6 +24,10 @@ export class QsmPipelineController {
 
     // Pipeline state
     this.pipelineRunning = false;
+    // Callbacks to run when `cancel()` terminates the worker. Cancelling is a hard
+    // `worker.terminate()` — nothing comes back from the worker afterwards — so any job waiting
+    // on a worker message has to be settled from here or it hangs forever. See `onCancel`.
+    this.cancelHandlers = new Set();
     this.results = {};
     this.stageOrder = [];
     this.pendingStageResolve = null;
@@ -41,6 +45,31 @@ export class QsmPipelineController {
 
   isRunning() {
     return this.pipelineRunning;
+  }
+
+  /**
+   * Register a callback to run if the worker is cancelled, for jobs that await a worker
+   * message. `cancel()` terminates the worker, so the reply never arrives and the job's promise
+   * would never settle — the callback is its chance to settle and clean up.
+   *
+   * @param {Function} fn
+   * @returns {Function} unregister — call it when the job finishes normally
+   */
+  onCancel(fn) {
+    this.cancelHandlers.add(fn);
+    return () => this.cancelHandlers.delete(fn);
+  }
+
+  beginCancellableJob(onCancel) {
+    this.pipelineRunning = true;
+    const unregister = this.onCancel(onCancel);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      unregister();
+      this.pipelineRunning = false;
+    };
   }
 
   hasResult(stage) {
@@ -237,6 +266,13 @@ export class QsmPipelineController {
     if (!this.pipelineRunning) return;
 
     this.updateOutput("Cancelling pipeline...");
+
+    // Settle anything awaiting a worker message first: after `terminate()` no reply can arrive,
+    // so these promises would otherwise hang and leave the UI stuck mid-run.
+    for (const fn of [...this.cancelHandlers]) {
+      try { fn(); } catch (e) { console.warn('cancel handler failed:', e); }
+    }
+    this.cancelHandlers.clear();
 
     // Terminate the worker to stop all processing
     if (this.workerSession) {

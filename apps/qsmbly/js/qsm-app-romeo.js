@@ -1,8 +1,9 @@
-import { renderExampleSelector, bindSectionDisclosures, ConsoleOutput } from '@neurodesk/webapp-components/ui';
+import { renderExampleSelector, bindSectionDisclosures, ConsoleOutput, createInfoDialog } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 // Import extracted utility modules
 import { createThresholdMask } from '@neurodesk/webapp-components/volume';
+import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import {
   parseNiftiHeader,
   isGzipped,
@@ -110,6 +111,7 @@ class QSMApp {
 
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
+    this.hdBetModal = null;
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
@@ -160,6 +162,9 @@ class QSMApp {
 
     await this.setupViewer();
     this.setupUIControls();
+    this.hdBetModal = createInfoDialog({ id: 'hdBetSettingsModal' });
+    this.hdBetModal.title.textContent = 'HD-BET settings';
+    this.hdBetModal.setContent(document.getElementById('hdBetSettingsTemplate'));
     this.setupEventListeners();
     this.syncSidebarFromSettings();
     this.updateDownloadButtons();
@@ -199,6 +204,7 @@ class QSMApp {
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
       initializeWorker: () => this.pipelineExecutor?.initialize(),
+      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
       config: window.QSMConfig
     });
 
@@ -555,14 +561,13 @@ class QSMApp {
       await this.previewMask();
       this.maskOpsHistory = ['threshold:otsu'];
       this.updateOutput("Applying robust refinement (dilate, fill holes, erode x2)...");
-      this.dilateMask3D();
-      this.maskOpsHistory.push('dilate:1');
-      this.fillHoles3D();
+      await this.dilateMask3D();
+      this._pushMaskOp('dilate');
+      await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
-      this.erodeMask3D();
-      this.maskOpsHistory.push('erode:1');
-      this.erodeMask3D();
-      this.maskOpsHistory.push('erode:1');
+      await this.erodeMask3D(2);
+      this._pushMaskOp('erode');
+      this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Robust mask complete");
     });
@@ -579,6 +584,8 @@ class QSMApp {
 
     // BET brain extraction button - opens settings modal
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
+
+    document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
 
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
@@ -660,6 +667,12 @@ class QSMApp {
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
 
     // BET settings modal
+    document.getElementById('closeHdBetSettings')?.addEventListener('click', () => this.hdBetModal?.close());
+    document.getElementById('resetHdBetSettings')?.addEventListener('click', () => this.resetHdBetSettings());
+    document.getElementById('runHdBetWithSettings')?.addEventListener('click', () => this.runHdBetWithSettings());
+    document.getElementById('hdBetTileStep')?.addEventListener('change', () => this.updateHdBetEstimate());
+    document.getElementById('hdBetTta')?.addEventListener('change', () => this.updateHdBetEstimate());
+
     document.getElementById('closeBetSettings')?.addEventListener('click', () => this.betModal?.close());
     document.getElementById('resetBetSettings')?.addEventListener('click', () => this.resetBetSettings());
     document.getElementById('runBetWithSettings')?.addEventListener('click', () => this.runBetWithSettings());
@@ -723,7 +736,7 @@ class QSMApp {
     // Morphological operation buttons
     document.getElementById('fillHoles')?.addEventListener('click', async () => {
       this.updateOutput("Filling holes in mask...");
-      this.fillHoles3D();
+      await this.fillHoles3D();
       this.maskOpsHistory.push('fill-holes:0');
       await this.displayCurrentMask();
       this.updateOutput("Holes filled");
@@ -731,18 +744,27 @@ class QSMApp {
 
     document.getElementById('erodeMask')?.addEventListener('click', async () => {
       this.updateOutput("Eroding mask...");
-      this.erodeMask3D();
-      this.maskOpsHistory.push('erode:1');
+      await this.erodeMask3D();
+      this._pushMaskOp('erode');
       await this.displayCurrentMask();
       this.updateOutput("Mask eroded");
     });
 
     document.getElementById('dilateMask')?.addEventListener('click', async () => {
       this.updateOutput("Dilating mask...");
-      this.dilateMask3D();
-      this.maskOpsHistory.push('dilate:1');
+      await this.dilateMask3D();
+      this._pushMaskOp('dilate');
       await this.displayCurrentMask();
       this.updateOutput("Mask dilated");
+    });
+
+    document.getElementById('signalErodeMask')?.addEventListener('click', async () => {
+      this.updateOutput("Signal-gated erosion (removing low-signal boundary voxels)...");
+      if (await this.signalErodeMask3D()) {
+        this.maskOpsHistory.push('signal-erode');
+        await this.displayCurrentMask();
+        this.updateOutput("Low-signal boundary removed");
+      }
     });
 
     document.getElementById('resetMask')?.addEventListener('click', async () => {
@@ -766,12 +788,20 @@ class QSMApp {
     });
 
     document.getElementById('brushSize')?.addEventListener('input', (e) => {
-      this.brushSize = parseInt(e.target.value);
+      this.setBrushSize(parseInt(e.target.value));
       document.getElementById('brushSizeValue').textContent = this.brushSize;
-      if (this.drawingEnabled) {
-        this.nv.setPenValue(this.brushMode === 'add' ? 1 : 0, false);
-        this.nv.opts.penSize = this.brushSize;
-      }
+    });
+
+    document.getElementById('brush3D')?.addEventListener('change', (e) => {
+      this.setBrush3D(e.target.checked);
+    });
+
+    document.getElementById('brushShapeSquare')?.addEventListener('click', () => {
+      this.setBrushShape('square');
+    });
+
+    document.getElementById('brushShapeCircle')?.addEventListener('click', () => {
+      this.setBrushShape('circle');
     });
 
     document.getElementById('undoDraw')?.addEventListener('click', () => {
@@ -1736,6 +1766,7 @@ class QSMApp {
       if (generateButtons) generateButtons.style.opacity = '0.5';
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
+      document.getElementById('runHdBet')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
@@ -1755,6 +1786,7 @@ class QSMApp {
         if (generateButtons) generateButtons.style.opacity = '1';
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
+        document.getElementById('runHdBet')?.removeAttribute('disabled');
       }
     }
   }
@@ -1948,6 +1980,10 @@ class QSMApp {
     // BET button
     const betBtn = document.getElementById('runBET');
     if (betBtn) betBtn.disabled = !canGenerate;
+
+    // HD-BET button (same preconditions as BET: it needs the magnitude image)
+    const hdBetBtn = document.getElementById('runHdBet');
+    if (hdBetBtn) hdBetBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -2156,39 +2192,70 @@ class QSMApp {
   }
 
   // 3D morphological erosion - delegates to MaskController
-  erodeMask3D() {
-    // Sync mask to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
-
-    this.maskController.erodeMask3D();
-
-    // Sync back
-    this.currentMaskData = this.maskController.currentMaskData;
+  // Append an erode/dilate op to the mask history, collapsing successive same-type ops into a
+  // single iteration count (so three erode clicks record `erode:3`, not `erode:1,erode:1,erode:1`).
+  // This keeps the generated `--mask ...` string and the methods prose concise and correct.
+  _pushMaskOp(type) {
+    const h = this.maskOpsHistory;
+    const last = h[h.length - 1];
+    const m = last && /^(erode|dilate):(\d+)$/.exec(last);
+    if (m && m[1] === type) {
+      h[h.length - 1] = `${type}:${parseInt(m[2], 10) + 1}`;
+    } else {
+      h.push(`${type}:1`);
+    }
   }
 
-  // 3D morphological dilation - delegates to MaskController
-  dilateMask3D() {
-    // Sync mask to controller
+  /**
+   * Mask refinements — all delegate to MaskController, which runs them through qsm-core in the
+   * worker (one implementation shared with the qsmxt pipeline), so they are async now.
+   */
+  async applyMaskOps(ops) {
     this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
+    // Keep the controller's geometry when this side doesn't have it. Generators that derive it
+    // themselves (HD-BET) leave `this.maskDims` unset here, and overwriting it with null made
+    // every following refinement bail out.
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
-    this.maskController.dilateMask3D();
+    const changed = await this.maskController.applyMaskOps(ops);
 
-    // Sync back
     this.currentMaskData = this.maskController.currentMaskData;
+    return changed;
   }
 
-  // Fill holes in 3D mask - delegates to MaskController
-  fillHoles3D() {
-    // Sync mask to controller
-    this.maskController.currentMaskData = this.currentMaskData;
-    this.maskController.maskDims = this.maskDims;
+  async erodeMask3D(iterations = 1) { return this.applyMaskOps(`erode:${iterations}`); }
+  async dilateMask3D(iterations = 1) { return this.applyMaskOps(`dilate:${iterations}`); }
+  async fillHoles3D(maxSize = 0) { return this.applyMaskOps(`fill-holes:${maxSize}`); }
+  async signalErodeMask3D() { return this.applyMaskOps('signal-erode'); }
 
-    this.maskController.fillHoles3D();
+  /**
+   * HD-BET deep-learning brain extraction — a mask *generator*, so it replaces the mask and
+   * resets the op history (as BET and Threshold do). Delegates to MaskController.
+   */
+  async runHdBetMask(options) {
+    this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
+    this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
-    // Sync back
-    this.currentMaskData = this.maskController.currentMaskData;
+    const ok = await this.maskController.runHdBetMask(options);
+    if (ok) {
+      this.currentMaskData = this.maskController.currentMaskData;
+      this.originalMaskData = this.maskController.originalMaskData;
+      // HD-BET derives the geometry itself from the prepared header, so publish it here too —
+      // the refinements that follow read it from this side.
+      this.maskDims = this.maskController.maskDims;
+      this.voxelSize = this.maskController.voxelSize;
+
+      // The same post-generation wiring the Threshold and BET generators do: reveal the
+      // Refine Mask panel (#maskOperations starts hidden), publish the mask to Results, and
+      // refresh the run button.
+      const opsPanel = document.getElementById('maskOperations');
+      if (opsPanel) opsPanel.style.display = 'block';
+      this.showStageButtons();
+      this.addStageButton('mask', 'Brain Mask');
+      this.updateEchoInfo();
+    }
+    return ok;
   }
 
   // Clear mask completely - delegates to MaskController
@@ -2232,6 +2299,16 @@ class QSMApp {
   setBrushSize(size) {
     this.brushSize = size;
     this.maskController.setBrushSize(size);
+  }
+
+  // Toggle 3D brush - delegates to MaskController
+  setBrush3D(enabled) {
+    this.maskController.setBrush3D(enabled);
+  }
+
+  // Set brush shape (square or circle) - delegates to MaskController
+  setBrushShape(shape) {
+    this.maskController.setBrushShape(shape);
   }
 
   // Apply the drawing to the current mask - delegates to MaskController
@@ -2533,6 +2610,29 @@ class QSMApp {
       this.updateEchoInfo();
       console.error(error);
     }
+  }
+
+  /**
+   * Mark a worker job cancellable: flip the shared run state, light up the Stop button, and
+   * register `onCancel` so a hard `worker.terminate()` can settle the job instead of leaving it
+   * hanging. Same state the pipeline and SWI runs use, so one Stop button covers them all.
+   *
+   * @param {Function} onCancel - settle/clean up the job (the worker will not reply)
+   * @returns {Function} call when the job finishes normally
+   */
+  beginCancellableJob(onCancel) {
+    const ex = this.pipelineExecutor;
+    if (!ex) return () => {};
+    const finish = ex.beginCancellableJob(onCancel);
+    const btn = document.getElementById('cancelPipeline');
+    if (btn) btn.disabled = false;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      finish();
+      if (btn) btn.disabled = true;
+    };
   }
 
   cancelPipeline() {
@@ -3010,9 +3110,7 @@ class QSMApp {
         const erosions = this.betSettings.erosions || 0;
         if (erosions > 0) {
           this.updateOutput(`Applying ${erosions} erosion step(s)...`);
-          for (let i = 0; i < erosions; i++) {
-            this.erodeMask3D();
-          }
+          await this.erodeMask3D(erosions);
           await this.displayCurrentMask();
           this.updateOutput(`BET mask complete with ${erosions} erosion(s)`);
         }
@@ -3245,6 +3343,92 @@ class QSMApp {
   }
 
   // BET Settings Modal
+  // HD-BET's patch is pinned by the 4 GB wasm address space; see the modal copy.
+  static HD_BET_PATCH = [128, 128, 64];
+
+  /** Patch count for the loaded volume, or null if the geometry isn't known yet. */
+  estimateHdBetPatches(tileStep) {
+    const mc = this.maskController;
+    if (!mc?.ensureGeometry?.()) return null;
+    return estimateHdBetPatches(mc.maskDims, mc.voxelSize, QSMApp.HD_BET_PATCH, tileStep);
+  }
+
+  updateHdBetEstimate() {
+    const el = document.getElementById('hdBetEstimate');
+    if (!el) return;
+    const tileStep = parseFloat(document.getElementById('hdBetTileStep')?.value) || 0.5;
+    const tta = !!document.getElementById('hdBetTta')?.checked;
+    const patches = this.estimateHdBetPatches(tileStep);
+
+    if (patches === null) {
+      el.textContent = 'Run Prepare first to estimate.';
+      return;
+    }
+    const passes = patches * (tta ? 8 : 1);
+    el.innerHTML = `About <strong>${patches}</strong> patch${patches === 1 ? '' : 'es'}`
+      + (tta ? ` &times; 8 mirrored passes = <strong>${passes}</strong> network runs` : '')
+      + `. At roughly 10-15 s per run in the browser that is on the order of `
+      + `<strong>${this.formatHdBetDuration(passes)}</strong> — an upper bound, since the volume `
+      + `is cropped to its non-zero region first.`;
+  }
+
+  /** Rough minutes for `passes` network runs, as a range rather than false precision. */
+  formatHdBetDuration(passes) {
+    const lo = Math.round((passes * 10) / 60);
+    const hi = Math.round((passes * 15) / 60);
+    if (hi < 1) return 'under a minute';
+    return lo === hi ? `${hi} minutes` : `${lo}-${hi} minutes`;
+  }
+
+  openHdBetSettingsModal() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput('Prepare the mask input first — HD-BET needs the magnitude image.');
+      return;
+    }
+    document.getElementById('hdBetTileStep').value = String(this.hdBetSettings?.tileStep ?? 0.5);
+    document.getElementById('hdBetTta').checked = !!this.hdBetSettings?.tta;
+
+    // The weight note is always shown: whether they are already cached is only known to the
+    // worker (it owns the model registry), and "first run" already says it happens once.
+    const note = document.getElementById('hdBetWeightsNote');
+    if (note) note.hidden = false;
+
+    this.updateHdBetEstimate();
+    this.hdBetModal?.root.showModal();
+  }
+
+  resetHdBetSettings() {
+    document.getElementById('hdBetTileStep').value = '0.5';
+    document.getElementById('hdBetTta').checked = false;
+    this.updateHdBetEstimate();
+  }
+
+  async runHdBetWithSettings() {
+    this.hdBetSettings = {
+      tileStep: parseFloat(document.getElementById('hdBetTileStep').value) || 0.5,
+      tta: !!document.getElementById('hdBetTta').checked,
+    };
+    this.hdBetModal?.close();
+
+    const patch = QSMApp.HD_BET_PATCH;
+    const { tileStep, tta } = this.hdBetSettings;
+    this.updateOutput('Starting HD-BET brain extraction...');
+    if (await this.runHdBetMask({ patch, tileStep, tta })) {
+      // qsmxt's `hd-bet` op encodes the patch and `:tta`, but has no field for the tile step —
+      // so a non-default overlap cannot be expressed in the command we print. Say so rather than
+      // letting the exported command quietly disagree with what just ran.
+      if (tileStep !== 0.5) {
+        this.updateOutput(
+          `Note: the exported qsmxt command runs HD-BET at its default step of 0.5, not the `
+          + `${tileStep} you chose — the pinned qsmxt-config has no field for it. The mask shown `
+          + `here is the one you asked for.`);
+      }
+      this.maskOpsHistory = [`hd-bet:${patch.join('x')}${tta ? ':tta' : ''}`];
+      await this.displayCurrentMask();
+      this.updateOutput('HD-BET mask created');
+    }
+  }
+
   openBetSettingsModal() {
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 
@@ -3322,13 +3506,19 @@ class QSMApp {
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
     const unsubscribe = this.pipelineExecutor.subscribe((message) => {
       if (message.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = message.result;
+        if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : message.result;
       } else if (message.type === 'methodsResult') {
-        const raw = message.result;
-        if (methodsRaw) methodsRaw.textContent = raw;
-        if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
+        if (message.error) {
+          if (methodsRaw) methodsRaw.textContent = `ERROR: ${message.error}`;
+          if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
+        } else {
+          const raw = message.result;
+          if (methodsRaw) methodsRaw.textContent = raw;
+          if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
+        }
       } else if (message.type === 'configTomlResult') {
-        this._lastToml = message.result;
+        // Last message back — safe to detach. A null _lastToml disables the download.
+        this._lastToml = message.error ? null : message.result;
         unsubscribe();
       }
     });

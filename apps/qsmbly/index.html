@@ -19,6 +19,7 @@
   </script>
 
   <meta charset="UTF-8">
+  <script src="coi-serviceworker.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QSMbly | Quantitative Susceptibility Mapping</title>
   <link rel="icon" href="favicon.ico" type="image/x-icon">
@@ -42,6 +43,10 @@
       var s = document.createElement("script");
       var local = location.hostname === "localhost" || location.hostname === "127.0.0.1";
       s.src = local ? "/qsm-nav.js" : "https://qsmxt.github.io/qsm-nav.js";
+      // This page is cross-origin isolated (COEP, for wasm threads), which blocks
+      // no-cors subresources. GitHub Pages sends Access-Control-Allow-Origin: *,
+      // so request it with CORS or the bar silently fails to load.
+      s.crossOrigin = "anonymous";
       s.dataset.current = "bly"; // mounts at the top of <body> — pinned above both landing and app
       document.head.appendChild(s);
     })();
@@ -110,57 +115,27 @@
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               </div>
               <h3>Completely private</h3>
-              <p>Your data never leaves your device. All processing happens locally, so there's no need to de-identify scans first.</p>
+              <p>Your data never leaves your device, so there's no need to de-identify scans first.</p>
             </div>
             <div class="landing-card">
               <div class="landing-card-icon">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               </div>
               <h3>Zero installation</h3>
-              <p>No Python, MATLAB, or Docker. Just open the page &mdash; the whole pipeline is compiled to WebAssembly.</p>
+              <p>No Python, MATLAB, or Docker. The whole pipeline is compiled to WebAssembly.</p>
             </div>
             <div class="landing-card">
               <div class="landing-card-icon">
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
               </div>
-              <h3>20+ algorithms</h3>
-              <p>A full pipeline: phase unwrapping, background field removal, and dipole inversion &mdash; mix and match to suit your data.</p>
-            </div>
-            <div class="landing-card">
-              <div class="landing-card-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </div>
-              <h3>Interactive</h3>
-              <p>Inspect every stage with a built-in NiiVue viewer. Adjust masking and contrast and see results in real time.</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="landing-section">
-          <h2>How it works</h2>
-          <div class="landing-steps">
-            <div class="landing-step">
-              <h3>Load data</h3>
-              <p>Drop DICOM or NIfTI magnitude and phase images &mdash; or load the bundled example dataset.</p>
-            </div>
-            <div class="landing-step">
-              <h3>Set parameters</h3>
-              <p>Enter echo times and field strength. These auto-fill from JSON sidecars when available.</p>
-            </div>
-            <div class="landing-step">
-              <h3>Mask &amp; configure</h3>
-              <p>Generate a brain mask and pick an algorithm for each pipeline stage.</p>
-            </div>
-            <div class="landing-step">
-              <h3>Run &amp; explore</h3>
-              <p>Reconstruct your susceptibility map and explore every intermediate result.</p>
+              <h3>Every QSM.rs algorithm</h3>
+              <p>Phase unwrapping, background field removal, and two dozen dipole inversion methods. Mix and match to suit your data.</p>
             </div>
           </div>
         </section>
 
         <section class="landing-sibling">
-          <h2>The same engine as QSMxT</h2>
-          <p>QSMbly runs the exact reconstruction algorithms as <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>, the BIDS-native command-line QSM toolbox. Both are powered by the shared <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a> Rust core. Experiment here in the browser, then scale up to QSMxT for batch processing on your own machine.</p>
+          <p>QSMbly runs the same reconstruction code as <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>, the command-line QSM pipeline: both are built on <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a>. Try methods here, then scale up with QSMxT when you have a whole study to process.</p>
           <button class="landing-btn-primary" id="landingLaunchBottom" type="button" onclick="document.getElementById('landingLaunch').click()">
             Get started
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -407,6 +382,14 @@
             </svg>
             BET
           </button>
+          <button class="nd-btn nd-btn-secondary nd-btn-sm" id="runHdBet" title="HD-BET brain extraction. Processing can take several minutes; first use downloads 123 MB of model weights." disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8c-2.2 0-4 1.8-4 4s1.8 4 4 4 4-1.8 4-4"/>
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+            </svg>
+            HD-BET
+          </button>
         </div>
 
         <div class="mask-preview-buttons" id="thresholdModeButtons" style="display: none;">
@@ -446,6 +429,9 @@
               <button class="btn btn-secondary btn-sm" id="dilateMask" title="Expand mask boundaries">
                 Dilate
               </button>
+              <button class="nd-btn nd-btn-secondary nd-btn-sm" id="signalErodeMask" title="Signal-gated erosion: remove only low-signal boundary voxels (sinus / skull-base dropout), keeping dark interior structures">
+                Signal Erode
+              </button>
               <button class="btn btn-secondary btn-sm" id="resetMask" title="Reset to threshold-based mask">
                 Reset
               </button>
@@ -473,6 +459,14 @@
               <div class="brush-size-control" id="brushSizeControl" style="display: none;">
                 <label class="param-label" style="font-size: 0.7rem;">Brush Size: <span id="brushSizeValue">2</span></label>
                 <input type="range" id="brushSize" min="1" max="10" value="2" class="threshold-slider">
+                <div class="nd-row">
+                  <button class="nd-btn nd-btn-secondary nd-btn-sm active" id="brushShapeSquare" title="Square brush (cube when 3D)">Square</button>
+                  <button class="nd-btn nd-btn-secondary nd-btn-sm" id="brushShapeCircle" title="Circle brush (sphere when 3D)">Circle</button>
+                </div>
+                <label class="nd-check" title="Paint through neighbouring slices instead of only the current slice">
+                  <input type="checkbox" id="brush3D">
+                  <span>3D brush</span>
+                </label>
               </div>
               <div class="drawing-actions" id="drawingActions" style="display: none;">
                 <button class="btn btn-secondary btn-sm" id="undoDraw" title="Undo last stroke">
@@ -582,6 +576,18 @@
                 <option value="whqsm">WH-QSM</option>
                 <option value="hdqsm">HD-QSM</option>
                 <option value="ilsqr">iLSQR</option>
+                <option value="amp-pe">AMP-PE</option>
+                <optgroup label="Deep learning (downloads weights)">
+                  <option value="xqsm">xQSM</option>
+                  <option value="qsmnet">QSMnet</option>
+                  <option value="qsmnet-plus">QSMnet+</option>
+                  <option value="qsmgan">QSMGAN</option>
+                  <option value="ir2qsm">IR2QSM</option>
+                  <option value="lpcnn">LPCNN</option>
+                  <option value="modl-qsm">MoDL-QSM</option>
+                  <option value="autoqsm">AutoQSM</option>
+                  <option value="nextqsm">NeXtQSM</option>
+                </optgroup>
               </select>
             </div>
           </div>
@@ -891,7 +897,7 @@
           <!-- QSMART Settings -->
           <div id="qsmart_settings" class="method-settings" style="display: none;">
             <div class="method-links">
-              <a href="https://doi.org/10.1016/j.neuroimage.2021.117701" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2021.117701"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
+              <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2020.117701"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
               <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener" title="Code: QSMART"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
             </div>
 
@@ -1440,7 +1446,38 @@
               <option value="whqsm">WH-QSM (Weak-Harmonic)</option>
               <option value="hdqsm">HD-QSM (Hybrid Data Fidelity)</option>
               <option value="ilsqr">iLSQR (iterative Least Squares QR)</option>
+              <option value="amp-pe">AMP-PE (Approximate Message Passing)</option>
+              <optgroup label="Deep learning (downloads weights)">
+                <option value="xqsm">xQSM</option>
+                <option value="qsmnet">QSMnet</option>
+                <option value="qsmnet-plus">QSMnet+</option>
+                <option value="qsmgan">QSMGAN</option>
+                <option value="ir2qsm">IR2QSM</option>
+                <option value="lpcnn">LPCNN</option>
+                <option value="modl-qsm">MoDL-QSM</option>
+                <option value="autoqsm">AutoQSM</option>
+                <option value="nextqsm">NeXtQSM</option>
+              </optgroup>
             </select>
+          </div>
+
+          <!-- Deep-learning tiling controls (shown for DL inversion methods). In the browser DL nets
+               run overlap-tiled to fit the 32-bit wasm heap; these expose/adjust that. -->
+          <div id="dl_inversion_settings" class="method-settings" style="display: none;">
+            <div class="nd-field">
+              <label  for="dlTiled">
+                <input type="checkbox" id="dlTiled" checked> Tiled inference (bounded memory)
+              </label>
+            </div>
+            <div class="nd-field">
+              <label  for="dlTileSize">Tile core size (voxels)</label>
+              <input type="number" id="dlTileSize" value="56" min="16" max="192" step="8">
+            </div>
+            <div class="nd-field">
+              <label  for="dlTileHalo">Tile halo (voxels)</label>
+              <input type="number" id="dlTileHalo" value="4" min="0" max="32" step="1">
+            </div>
+            <div id="dlTilingWarning" class="nd-message warning" style="display: none;"></div>
           </div>
 
           <!-- TKD Settings -->
@@ -1872,6 +1909,28 @@
       </div>
     </div>
   </div>
+
+  <template id="hdBetSettingsTemplate">
+    <p class="nd-hint">HD-BET brain extraction can take several minutes. Stop cancels processing.</p>
+    <p class="nd-hint" id="hdBetWeightsNote" hidden>First use downloads 123 MB of model weights under CC-BY-NC-4.0, then caches them in your browser.</p>
+    <div class="nd-field">
+      <label for="hdBetTileStep">Patch step</label>
+      <select id="hdBetTileStep">
+        <option value="0.5">0.5 (default)</option>
+        <option value="0.75">0.75 (faster)</option>
+        <option value="1">1.0 (fastest, seams possible)</option>
+      </select>
+      <p class="nd-hint">Smaller steps overlap more patches to reduce seams.</p>
+    </div>
+    <label class="nd-check"><input type="checkbox" id="hdBetTta"> Mirroring augmentation</label>
+    <p class="nd-hint">Averages eight mirrored predictions per patch and takes roughly eight times longer.</p>
+    <p class="nd-hint">Patch size is fixed at 128 × 128 × 64 to fit browser memory.</p>
+    <p class="nd-hint" id="hdBetEstimate"></p>
+    <div class="nd-row">
+      <button class="nd-btn nd-btn-secondary" id="resetHdBetSettings">Reset defaults</button>
+      <button class="nd-btn nd-btn-primary" id="runHdBetWithSettings">Run HD-BET</button>
+    </div>
+  </template>
 
   <!-- Privacy Modal -->
   <!-- About Modal -->
