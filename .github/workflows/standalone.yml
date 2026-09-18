@@ -207,14 +207,16 @@ jobs:
         env:
           NEURODESK_BUNDLE: ${{ github.workspace }}/packages/desktop/resources-light
           NEURODESK_MODELS_DIR: ${{ github.workspace }}/models-pack
-          NEURODESK_TEST_REPORT: desktop-workflow-reports
+          NEURODESK_TEST_REPORT: reports/desktop-workflow-reports
           NEURODESK_WORKFLOWS: '1'
           NEURODESK_SOFTWARE_RENDERING: '1'
+      # Uploading one directory drops its name, so the report keeps the same
+      # layout the desktop jobs produce and publish.mjs reads.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: always()
         with:
           name: desktop-models-offline
-          path: desktop-workflow-reports/
+          path: reports/
           compression-level: 0
           if-no-files-found: error
 
