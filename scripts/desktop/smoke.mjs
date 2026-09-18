@@ -1,5 +1,5 @@
 import { _electron as electron } from '@playwright/test';
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -67,7 +67,11 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     await page.locator('#neurodeskStandaloneDialog').getByRole('button', { name: 'Close', exact: true }).click();
     const workflow = process.env.NEURODESK_WORKFLOWS ? await verifyWorkflow(app.id, page, { root, resources, desktop }) : null;
     const blocked = await desktop.evaluate(() => globalThis.neurodeskOffline.blockedRequests);
-    results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, workflow });
+    // An installed pack serves models in place, so anything in this profile's
+    // cache was fetched over the network instead.
+    const downloaded = await readdir(join(userData, 'models')).catch(() => []);
+    if (process.env.NEURODESK_MODELS_DIR && downloaded.length) errors.push(`Downloaded ${downloaded.length} models although a model pack is installed`);
+    results.push({ app: app.id, passed: !errors.length && !missing.length && !blocked.length, errors, missing, blocked, downloaded: downloaded.length, workflow });
   } catch (error) {
     errors.push(error.message);
     results.push({ app: app.id, passed: false, errors, missing });

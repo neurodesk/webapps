@@ -89,6 +89,7 @@ if (!files.some(path => path.includes('desktop-ubuntu-22.04/') && path.endsWith(
 // an extracted pack is the evidence that offline installations still work.
 const offline = await checkReport('desktop-models-offline', 'desktop-workflow-reports', { complete: false });
 if (!offline.some(result => result.workflow)) throw new Error('The offline model pack test ran no workflow');
+if (offline.some(result => result.downloaded !== 0)) throw new Error('The offline model pack test downloaded a model instead of reading the pack');
 catalog.suite = { version, revision, apps: await Promise.all(registry.apps.map(async app => ({ id: app.id, version: JSON.parse(await readFile(`apps/${app.id}/package.json`)).version }))), downloads, models };
 const metadataPath = join(directory, 'standalone-catalog.json');
 await writeFile(metadataPath, `${JSON.stringify(catalog, null, 2)}\n`);
