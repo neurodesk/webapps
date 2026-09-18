@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.11.20260918
+
+### Patch Changes
+
+- Reserve a distinct offline suite version for Calmar's corrected example while the SeedSeg suite release is in progress.
+
 ## 0.10.20260918
 
 ### Patch Changes
