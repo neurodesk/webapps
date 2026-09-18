@@ -97,9 +97,12 @@ try {
         await expect(selector).toHaveCount(1);
         await expect(selector).toBeVisible();
         await expect(selector).toHaveAccessibleName('Example');
-        const uploadScopeHasPicker = await selector.evaluate(select =>
-          Boolean(select.closest('nd-example-selector')?.uploadScope?.querySelector('input[type="file"]')));
-        expect(uploadScopeHasPicker, `${app.id}: example upload scope must contain a file picker`).toBe(true);
+        // DICOMpare mounts its picker on From data; Zarro uses remote URLs.
+        if (app.id === 'dicompare') await page.getByRole('button', { name: 'From data', exact: true }).click();
+        const replacementInput = app.id === 'zarro' ? '#zarrUrl' : 'input[type="file"]';
+        await expect.poll(() => selector.evaluate((select, input) =>
+          Boolean(select.closest('nd-example-selector')?.uploadScope?.querySelector(input)), replacementInput),
+        { message: `${app.id}: example upload scope must contain its replacement input` }).toBe(true);
         const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
         expect(ids).toEqual(examples.map(example => example.id));
         const state = page.locator('[data-neurodesk-examples]');

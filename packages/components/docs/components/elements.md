@@ -57,8 +57,9 @@ Call `assertCurrent` after asynchronous preparation before committing results.
 Set `scope` to the workflow containing replacement uploads; otherwise the
 selector uses the nearest imaging workspace, declared `[data-example-scope]`,
 form, `#workspace`, or its parent. Use separate scopes for independent workflows. The read-only `uploadScope` property
-reports the connected element's resolved scope. The interface audit requires it
-to contain a file picker, catching selectors mounted outside their upload workflow.
+reports the connected element's resolved scope. The interface audit opens the
+replacement-input view and requires that scope to contain a file picker (or
+Zarro's URL input), catching selectors mounted outside their replacement-input workflow.
 
 Elements retain their child nodes across moves and reconnection. Console and
 file-field listeners do not accumulate on reconnect. Example downloads survive

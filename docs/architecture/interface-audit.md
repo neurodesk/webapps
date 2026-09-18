@@ -199,6 +199,8 @@ contrast, and Brain extraction's Choose folder label is dark against a dark
 button. This migration does not change their existing shared color rules.
 
 PR review follow-up: the audit now checks that each example selector's actual
-upload-listener scope contains a file picker. Console and toolbar hosts also
+upload-listener scope contains a replacement input:
+a file picker, or Zarro's URL field. For DICOMpare, the audit opens From data
+to mount the picker. Console and toolbar hosts also
 retain block layout before registration; the browser regression check verifies
 that their initialized flex layout remains intact.
