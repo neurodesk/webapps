@@ -2623,16 +2623,14 @@ class QSMApp {
   beginCancellableJob(onCancel) {
     const ex = this.pipelineExecutor;
     if (!ex) return () => {};
-    ex.pipelineRunning = true;
-    const unregister = ex.onCancel(onCancel);
+    const finish = ex.beginCancellableJob(onCancel);
     const btn = document.getElementById('cancelPipeline');
     if (btn) btn.disabled = false;
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      unregister();
-      ex.pipelineRunning = false;
+      finish();
       if (btn) btn.disabled = true;
     };
   }

@@ -8,7 +8,7 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 
 [ACCESS QSMbly HERE](https://qsmbly.neurodesk.org/)
 
-This application integrates [Ashley Stewart's upstream QSMbly](https://github.com/astewartau/qsmbly)
+This application integrates [Ashley Stewart's upstream QSMbly](upstream.json)
 at commit `6e01b15b43b615639881f35e6b1f7dbc214e0864`. See [upstream.json](upstream.json)
 for the pinned dependencies and monorepo adaptations. The shared shell, example
 catalog, worker channels and release tooling belong to this repository.

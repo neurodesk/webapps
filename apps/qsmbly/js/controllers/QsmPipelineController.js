@@ -60,6 +60,18 @@ export class QsmPipelineController {
     return () => this.cancelHandlers.delete(fn);
   }
 
+  beginCancellableJob(onCancel) {
+    this.pipelineRunning = true;
+    const unregister = this.onCancel(onCancel);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      unregister();
+      this.pipelineRunning = false;
+    };
+  }
+
   hasResult(stage) {
     return !!this.results[stage]?.file;
   }

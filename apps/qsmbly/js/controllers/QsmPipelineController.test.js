@@ -14,6 +14,22 @@ function makeExecutor() {
 }
 
 describe('QsmPipelineController cancellation', () => {
+  test('completed jobs release cancellation without affecting a later job', () => {
+    const ex = makeExecutor();
+    const cancelled = jest.fn();
+    const finish = ex.beginCancellableJob(cancelled);
+    expect(ex.isRunning()).toBe(true);
+    finish();
+    expect(ex.isRunning()).toBe(false);
+    const nextCancelled = jest.fn();
+    ex.beginCancellableJob(nextCancelled);
+    finish();
+    expect(ex.isRunning()).toBe(true);
+    ex.cancel();
+    expect(cancelled).not.toHaveBeenCalled();
+    expect(nextCancelled).toHaveBeenCalledTimes(1);
+  });
+
   test('cancel runs registered handlers and terminates the worker', () => {
     const ex = makeExecutor();
     const worker = ex.workerSession;
