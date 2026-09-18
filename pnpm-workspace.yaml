@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+  - "site/easter-eggs/*"
 allowBuilds:
   cbor-extract: false
   core-js: false
