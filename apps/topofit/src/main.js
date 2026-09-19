@@ -158,7 +158,6 @@ async function ensureViewer() {
         isDragDropEnabled: false,
         backgroundColor: [0.04, 0.06, 0.08, 1],
         meshXRay: Number(xrayInput.value),
-        meshThicknessOn2D: 1,
       });
       await viewer.attachTo('gl1');
       viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -200,6 +199,7 @@ async function setMeshVisible(stage, visible, input) {
   try {
     const nv = await ensureViewer();
     if (!meshSceneReady) {
+      nv.meshThicknessOn2D = Infinity;
       await nv.removeAllMeshes();
       await nv.loadVolumes([{ url: source, name: source.name }]);
       loadedMeshes.clear();
@@ -260,6 +260,7 @@ async function showResult(stage) {
       if (firstPatch) nv.setCrosshairPos(firstPatch.center_ras_mm);
     } else {
       const patch = surfaceAnalysis?.flat_patches?.[stage];
+      nv.meshThicknessOn2D = patch ? 1 : Infinity;
       await nv.loadVolumes([{ url: source, name: source.name }]);
       await nv.loadMeshes([{
         url: file,
