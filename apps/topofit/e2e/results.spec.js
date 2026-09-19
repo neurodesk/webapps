@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { writeFreeSurfer } from '../../../packages/topofit/src/results.js';
 import { analyzeSurfaces } from '../../../packages/topofit/src/surface-analysis.js';
 import { readVolume } from '../../../packages/topofit/src/volume.js';
@@ -362,4 +363,26 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await page.locator('#imageInput').setInputFiles(scan());
   await expect(page.locator('#analyzeButton')).toBeDisabled();
   await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
+});
+
+test('cortical surfaces export as printable STL through niimath', async ({ page }) => {
+  await deliverSurfaces(page);
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Left pial surface' }).getByRole('checkbox').check();
+  await page.locator('#stlButton').click();
+  await expect(page.locator('#infoDialog')).toBeVisible();
+  await expect(page.locator('#stlSurfaceList')).toHaveText('left pial surface');
+  await expect(page.locator('#stlReduce')).toHaveValue('25');
+  await expect(page.locator('#stlSmooth')).toHaveValue('0');
+  // The stub delivers a tetrahedron, so keep every triangle: this checks the format, not niimath's simplifier.
+  await page.locator('#stlReduce').fill('100');
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#stlSaveButton').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('lh.pial.stl');
+  const stl = await readFile(await download.path());
+  expect(stl.length).toBe(84 + 4 * 50);
+  expect(stl.readUInt32LE(80)).toBe(4);
+  expect(stl.subarray(0, 80).every((byte) => byte === 0)).toBe(true);
+  await expect(page.locator('#statusText')).toContainText('lh.pial.stl · 4 triangles');
 });
