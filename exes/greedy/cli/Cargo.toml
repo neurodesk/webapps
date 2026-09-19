@@ -6,4 +6,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 greedy-rs-core = { path = "../core" }
