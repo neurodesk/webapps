@@ -5,7 +5,7 @@ import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { createElement } from '@neurodesk/webapp-components/core';
-import { downloadFile } from '@neurodesk/webapp-components/file-io';
+import { downloadArrayBuffer, downloadFile } from '@neurodesk/webapp-components/file-io';
 import {
   createResultList,
   bindFileDrop,
@@ -122,6 +122,59 @@ const results = createResultList({
     if (file) downloadFile(file);
   },
 });
+
+// Printable STL: niimath simplifies and smooths each surface, TopoFit writes the STL.
+function stlStages() {
+  const available = [...surfaceStages].filter((stage) => reconstruction?.surfaces?.vertices[stage.replace('-', '.')]);
+  const ticked = available.filter((stage) => visibleMeshes.has(stage));
+  return ticked.length ? ticked : available;
+}
+
+async function exportStl(stages, reduce, smooth) {
+  $('stlButton').disabled = true;
+  status(`Preparing ${stages.length} printable ${stages.length === 1 ? 'surface' : 'surfaces'}…`);
+  const stlWorker = new Worker(new URL('./stl-worker.js', import.meta.url), { type: 'module' });
+  try {
+    const files = await new Promise((resolve, reject) => {
+      stlWorker.onmessage = ({ data }) => {
+        if (data.type === 'progress') status(`Simplifying surface ${data.done} of ${data.total}…`);
+        if (data.type === 'result') resolve(data.files);
+        if (data.type === 'error') reject(new Error(data.message));
+      };
+      stlWorker.onerror = (event) => reject(new Error(event.message || 'The STL worker could not run.'));
+      stlWorker.postMessage({
+        reduce,
+        smooth,
+        surfaces: stages.map((stage) => ({
+          name: `${stage.replace('-', '.')}.stl`,
+          vertices: reconstruction.surfaces.vertices[stage.replace('-', '.')],
+          faces: reconstruction.surfaces.faces[stage.slice(0, 2)],
+        })),
+      });
+    });
+    for (const file of files) downloadArrayBuffer(file.bytes, file.name, 'model/stl');
+    status(`Saved ${files.map((file) => `${file.name} · ${file.triangles.toLocaleString()} triangles`).join(', ')}`);
+  } catch (error) {
+    status(`STL export failed: ${error.message}`, true);
+  } finally {
+    stlWorker.terminate();
+    $('stlButton').disabled = false;
+  }
+}
+
+$('stlButton').onclick = () => {
+  const stages = stlStages();
+  if (!stages.length) return;
+  info.open('Save printable STL', $('stlContent'));
+  info.body.querySelector('#stlSurfaceList').textContent = stages.map((stage) => stageLabels[stage].toLowerCase()).join(', ');
+  info.body.querySelector('#stlSaveButton').onclick = () => {
+    const reduce = info.body.querySelector('#stlReduce');
+    const smooth = info.body.querySelector('#stlSmooth');
+    if (!reduce.reportValidity() || !smooth.reportValidity()) return;
+    info.close();
+    void exportStl(stages, Number(reduce.value) / 100, Number(smooth.value));
+  };
+};
 
 function resultLabel(stage) {
   const patch = /^(LH|RH)(\d+)$/.exec(stage);
@@ -293,6 +346,7 @@ async function load(file) {
     reconstruction = null;
     outputs = new Map();
     results.render();
+    $('stlButton').hidden = true;
     $('outputSection').open = false;
     $('fileInfo').hidden = false;
     $('fileInfo').textContent = file.name;
@@ -389,6 +443,7 @@ async function run(analysisOnly = false) {
     reconstruction = null;
     outputs = new Map();
     results.render();
+    $('stlButton').hidden = true;
   }
   setBusy(true);
   $('progress').value = 0;
@@ -438,6 +493,7 @@ async function run(analysisOnly = false) {
         id,
         surfaceStages.has(id) ? { visible: false } : { description: resultLabel(id) },
       ])));
+      $('stlButton').hidden = !reconstruction;
       $('outputSection').open = true;
       $('progress').value = 1;
       active.terminate();

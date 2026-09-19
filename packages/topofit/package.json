@@ -10,6 +10,7 @@
   "exports": {
     ".": "./src/index.js",
     "./browser": "./src/browser.js",
+    "./results": "./src/results.js",
     "./manifest": "./model.manifest.json",
     "./cortex-atlas-manifest": "./cortex-atlas.manifest.json"
   },

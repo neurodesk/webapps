@@ -1,7 +1,7 @@
 # Greedy Rust
 
 Rust implementation of the three production Greedy workflows (`-d 3`):
-SSD/NMI affine, nonlinear NMI stationary-velocity, and reslice. Native CLI
+SSD/NMI affine or rigid registration, nonlinear NMI stationary-velocity, and reslice. Native CLI
 plus a `wasm-bindgen` API. The core has two dependencies (`flate2`, and
 `rayon` behind the default `parallel` feature) and no unsafe code.
 
@@ -78,6 +78,7 @@ the JavaScript package, Cargo workspace, and lockfile.
 
 ```sh
 greedy-rs -d 3 -a -m SSD -i fixed.nii.gz moving.nii.gz -o aff.mat -ia-image-centers -n 100x50x10
+greedy-rs -d 3 -a -dof 6 -m NMI -i fixed.nii.gz moving.nii.gz -o rigid.mat -ia-image-centers
 greedy-rs -d 3 -m NMI -i fixed.nii.gz moving.nii.gz -it aff.mat -o warp.nii.gz -sv -n 100x50x10
 greedy-rs -d 3 -rf fixed.nii.gz -rm moving.nii.gz out.nii.gz -r warp.nii.gz aff.mat
 greedy-rs -d 3 -rf fixed.nii.gz -rm mask.nii.gz warped-mask.nii.gz -ri NN -r warp.nii.gz aff.mat
@@ -86,7 +87,13 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
+- Affine registration uses 12 degrees of freedom by default. `-dof 6` limits
+  the result to rigid-body translation and rotation.
 - Reslicing is linear by default. Use `-ri NN` for masks and label maps.
+  Scalar 4-D inputs are resliced volume by volume with one transform chain;
+  their number of time points, temporal spacing, and temporal units are kept.
+  Encoded volumes stream to an atomic temporary output instead of retaining a
+  second complete 4-D copy in memory.
 - `-rb VALUE` sets the value outside the moving image field of view. `-rb auto`
   uses the lower of zero and the moving image's finite minimum, which preserves
   the air background of CT images while retaining zero for magnitude images.

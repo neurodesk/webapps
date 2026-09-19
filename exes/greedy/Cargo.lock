@@ -107,6 +107,7 @@ dependencies = [
 name = "greedy-rs"
 version = "0.3.20260918"
 dependencies = [
+ "flate2",
  "greedy-rs-core",
 ]
 

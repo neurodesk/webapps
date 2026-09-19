@@ -1,5 +1,7 @@
+use std::io::Write;
+
 #[cfg(feature = "gzip")]
-use std::io::{Read, Write};
+use std::io::Read;
 
 #[cfg(feature = "gzip")]
 use flate2::{Compression, read::GzDecoder, write::GzEncoder};
@@ -70,6 +72,18 @@ pub struct NiftiImage {
 }
 
 #[derive(Clone, Debug)]
+pub struct NiftiSeries {
+    pub grid: Grid,
+    /// Volumes are contiguous in NIfTI order.
+    pub data: Vec<f32>,
+    pub scalar_type: ScalarType,
+    pub timepoints: usize,
+    pub time_spacing: f32,
+    /// NIfTI temporal unit bits (8 seconds, 16 milliseconds, 24 microseconds).
+    pub time_units: u8,
+}
+
+#[derive(Clone, Debug)]
 pub struct VectorField {
     pub grid: Grid,
     /// Interleaved x, y, z vectors in LPS millimetres for encoded warps; the
@@ -86,6 +100,8 @@ struct Header {
     slope: f32,
     intercept: f32,
     grid: Grid,
+    time_spacing: f32,
+    time_units: u8,
 }
 
 fn voxel_count(dims: [usize; 3]) -> Result<usize> {
@@ -259,6 +275,12 @@ fn parse_header(b: &[u8]) -> Result<Header> {
             dims: [dims[1], dims[2], dims[3]],
             lps_from_voxel: Mat4(lps),
         },
+        time_spacing: if pixdim[4].is_finite() && pixdim[4] != 0.0 {
+            pixdim[4].abs()
+        } else {
+            1.0
+        },
+        time_units: b[123] & 0x38,
     })
 }
 
@@ -398,13 +420,7 @@ fn f64_at(b: &[u8], o: usize, le: bool) -> f64 {
     f64::from_bits(u64_at(b, o, le))
 }
 
-pub fn decode_image(bytes: &[u8]) -> Result<NiftiImage> {
-    let raw = unpack(bytes)?;
-    let h = parse_header(&raw)?;
-    if h.dims[0] != 3 && h.dims[4..].iter().any(|&d| d != 1) {
-        return Err(Error("expected a scalar 3-D NIfTI image".into()));
-    }
-    let count = voxel_count(h.grid.dims)?;
+fn decode_scalars(raw: &[u8], h: &Header, count: usize) -> Result<Vec<f32>> {
     let bytes = count
         .checked_mul(h.datatype.bytes())
         .ok_or_else(|| Error("NIfTI data size overflow".into()))?;
@@ -418,12 +434,7 @@ pub fn decode_image(bytes: &[u8]) -> Result<NiftiImage> {
     let mut data = Vec::with_capacity(count);
     for i in 0..count {
         data.push(
-            sample(
-                &raw,
-                h.offset + i * h.datatype.bytes(),
-                h.datatype,
-                h.little,
-            ) * h.slope
+            sample(raw, h.offset + i * h.datatype.bytes(), h.datatype, h.little) * h.slope
                 + h.intercept,
         );
     }
@@ -434,16 +445,54 @@ pub fn decode_image(bytes: &[u8]) -> Result<NiftiImage> {
             "NIfTI image contains non-finite voxels; masks are not supported".into(),
         ));
     }
+    Ok(data)
+}
+
+fn decoded_scalar_type(h: &Header) -> ScalarType {
+    if (h.slope != 1.0 || h.intercept != 0.0)
+        && !matches!(h.datatype, ScalarType::F32 | ScalarType::F64)
+    {
+        ScalarType::F32
+    } else {
+        h.datatype
+    }
+}
+
+pub fn decode_image(bytes: &[u8]) -> Result<NiftiImage> {
+    let raw = unpack(bytes)?;
+    let h = parse_header(&raw)?;
+    if h.dims[0] != 3 && h.dims[4..].iter().any(|&d| d != 1) {
+        return Err(Error("expected a scalar 3-D NIfTI image".into()));
+    }
+    let data = decode_scalars(&raw, &h, voxel_count(h.grid.dims)?)?;
+    let scalar_type = decoded_scalar_type(&h);
     Ok(NiftiImage {
         grid: h.grid,
         data,
-        scalar_type: if (h.slope != 1.0 || h.intercept != 0.0)
-            && !matches!(h.datatype, ScalarType::F32 | ScalarType::F64)
-        {
-            ScalarType::F32
-        } else {
-            h.datatype
-        },
+        scalar_type,
+    })
+}
+
+pub fn decode_series(bytes: &[u8]) -> Result<NiftiSeries> {
+    let raw = unpack(bytes)?;
+    let h = parse_header(&raw)?;
+    if !matches!(h.dims[0], 3 | 4) || h.dims[5..].iter().any(|&d| d != 1) {
+        return Err(Error("expected a scalar 3-D or 4-D NIfTI image".into()));
+    }
+    let spatial = voxel_count(h.grid.dims)?;
+    let timepoints = if h.dims[0] == 4 { h.dims[4] } else { 1 };
+    let count = spatial
+        .checked_mul(timepoints)
+        .ok_or_else(|| Error("NIfTI voxel count overflow".into()))?;
+    let data = decode_scalars(&raw, &h, count)?;
+    let scalar_type = decoded_scalar_type(&h);
+    Ok(NiftiSeries {
+        grid: h.grid,
+        data,
+        scalar_type,
+        timepoints,
+        time_spacing: h.time_spacing,
+        time_units: h.time_units,
     })
 }
 
@@ -494,19 +543,40 @@ fn push_f32(out: &mut [u8], at: usize, value: f32) {
     out[at..at + 4].copy_from_slice(&value.to_le_bytes());
 }
 
-fn header(grid: &Grid, kind: ScalarType, components: usize) -> Result<Vec<u8>> {
+fn header(
+    grid: &Grid,
+    kind: ScalarType,
+    components: usize,
+    timepoints: usize,
+    time_spacing: f32,
+    time_units: u8,
+) -> Result<Vec<u8>> {
     if grid.dims.iter().any(|&d| d == 0 || d > i16::MAX as usize) {
         return Err(Error("NIfTI dimensions must be in 1..=32767".into()));
     }
     let mut out = vec![0_u8; 352];
     out[..4].copy_from_slice(&348_i32.to_le_bytes());
-    push_i16(&mut out, 40, if components == 1 { 3 } else { 5 });
+    if timepoints == 0 || timepoints > i16::MAX as usize {
+        return Err(Error("NIfTI timepoints must be in 1..=32767".into()));
+    }
+    push_i16(
+        &mut out,
+        40,
+        if components == 3 {
+            5
+        } else if timepoints > 1 {
+            4
+        } else {
+            3
+        },
+    );
     for (i, dim) in grid.dims.iter().enumerate() {
         push_i16(&mut out, 42 + i * 2, *dim as i16);
     }
     for i in 4..8 {
         push_i16(&mut out, 40 + i * 2, 1);
     }
+    push_i16(&mut out, 48, timepoints as i16);
     if components == 3 {
         push_i16(&mut out, 48, 1);
         push_i16(&mut out, 50, 3);
@@ -515,7 +585,7 @@ fn header(grid: &Grid, kind: ScalarType, components: usize) -> Result<Vec<u8>> {
     push_i16(&mut out, 72, (kind.bytes() * 8) as i16);
     push_f32(&mut out, 108, 352.0);
     push_f32(&mut out, 112, 1.0);
-    out[123] = 10;
+    out[123] = 2 | (time_units & 0x38);
     push_i16(&mut out, 254, 1);
     push_f32(&mut out, 76, 1.0);
     for c in 0..3 {
@@ -525,6 +595,7 @@ fn header(grid: &Grid, kind: ScalarType, components: usize) -> Result<Vec<u8>> {
             .sqrt();
         push_f32(&mut out, 80 + c * 4, norm as f32);
     }
+    push_f32(&mut out, 92, time_spacing);
     let mut ras = grid.lps_from_voxel.0;
     for value in &mut ras[0] {
         *value = -*value;
@@ -544,19 +615,34 @@ fn header(grid: &Grid, kind: ScalarType, components: usize) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-fn encode_scalar(out: &mut Vec<u8>, value: f32, kind: ScalarType) {
+fn write_scalar(out: &mut (impl Write + ?Sized), value: f32, kind: ScalarType) -> Result<()> {
     match kind {
-        ScalarType::U8 => out.push(value as u8),
-        ScalarType::I8 => out.push(value as i8 as u8),
-        ScalarType::I16 => out.extend_from_slice(&(value as i16).to_le_bytes()),
-        ScalarType::U16 => out.extend_from_slice(&(value as u16).to_le_bytes()),
-        ScalarType::I32 => out.extend_from_slice(&(value as i32).to_le_bytes()),
-        ScalarType::U32 => out.extend_from_slice(&(value as u32).to_le_bytes()),
-        ScalarType::I64 => out.extend_from_slice(&(value as i64).to_le_bytes()),
-        ScalarType::U64 => out.extend_from_slice(&(value as u64).to_le_bytes()),
-        ScalarType::F32 => out.extend_from_slice(&value.to_le_bytes()),
-        ScalarType::F64 => out.extend_from_slice(&(value as f64).to_le_bytes()),
+        ScalarType::U8 => out.write_all(&[value as u8]),
+        ScalarType::I8 => out.write_all(&[value as i8 as u8]),
+        ScalarType::I16 => out.write_all(&(value as i16).to_le_bytes()),
+        ScalarType::U16 => out.write_all(&(value as u16).to_le_bytes()),
+        ScalarType::I32 => out.write_all(&(value as i32).to_le_bytes()),
+        ScalarType::U32 => out.write_all(&(value as u32).to_le_bytes()),
+        ScalarType::I64 => out.write_all(&(value as i64).to_le_bytes()),
+        ScalarType::U64 => out.write_all(&(value as u64).to_le_bytes()),
+        ScalarType::F32 => out.write_all(&value.to_le_bytes()),
+        ScalarType::F64 => out.write_all(&(value as f64).to_le_bytes()),
     }
+    .map_err(|error| Error(format!("NIfTI write: {error}")))
+}
+
+pub fn write_scalars(
+    out: &mut (impl Write + ?Sized),
+    values: &[f32],
+    kind: ScalarType,
+) -> Result<()> {
+    if values.iter().any(|value| !value.is_finite()) {
+        return Err(Error("NIfTI image contains non-finite voxels".into()));
+    }
+    for &value in values {
+        write_scalar(out, value, kind)?;
+    }
+    Ok(())
 }
 
 fn maybe_gzip(raw: Vec<u8>, gzip: bool) -> Result<Vec<u8>> {
@@ -581,13 +667,31 @@ pub fn encode_image(image: &NiftiImage, gzip: bool) -> Result<Vec<u8>> {
     if image.data.len() != voxel_count(image.grid.dims)? {
         return Err(Error("image data do not match grid dimensions".into()));
     }
-    if image.data.iter().any(|value| !value.is_finite()) {
-        return Err(Error("NIfTI image contains non-finite voxels".into()));
+    let mut raw = header(&image.grid, image.scalar_type, 1, 1, 1.0, 8)?;
+    write_scalars(&mut raw, &image.data, image.scalar_type)?;
+    maybe_gzip(raw, gzip)
+}
+
+pub fn encode_series_header(series: &NiftiSeries) -> Result<Vec<u8>> {
+    header(
+        &series.grid,
+        series.scalar_type,
+        1,
+        series.timepoints,
+        series.time_spacing,
+        series.time_units,
+    )
+}
+
+pub fn encode_series(series: &NiftiSeries, gzip: bool) -> Result<Vec<u8>> {
+    let count = voxel_count(series.grid.dims)?
+        .checked_mul(series.timepoints)
+        .ok_or_else(|| Error("NIfTI voxel count overflow".into()))?;
+    if series.data.len() != count {
+        return Err(Error("series data do not match grid dimensions".into()));
     }
-    let mut raw = header(&image.grid, image.scalar_type, 1)?;
-    for &value in &image.data {
-        encode_scalar(&mut raw, value, image.scalar_type);
-    }
+    let mut raw = encode_series_header(series)?;
+    write_scalars(&mut raw, &series.data, series.scalar_type)?;
     maybe_gzip(raw, gzip)
 }
 
@@ -621,7 +725,7 @@ pub fn encode_vector_field(field: &VectorField, gzip: bool) -> Result<Vec<u8>> {
             "NIfTI vector field contains non-finite values".into(),
         ));
     }
-    let mut raw = header(&field.grid, ScalarType::F32, 3)?;
+    let mut raw = header(&field.grid, ScalarType::F32, 3, 1, 1.0, 8)?;
     let data = quantized_warp_vectors(field)?;
     for c in 0..3 {
         for value in &data {
