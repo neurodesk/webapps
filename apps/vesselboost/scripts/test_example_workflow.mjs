@@ -6,7 +6,8 @@ import * as nifti from 'nifti-reader-js';
 import { serveSite } from '../../../test-utils/serve-site.mjs';
 
 const deployedUrl = process.env.VESSELBOOST_URL;
-const site = deployedUrl ? null : await serveSite(new URL('../../../dist/', import.meta.url).pathname, { isolationHeaders: false });
+// Serve the app's own production build; the composite site is not assembled in per-app CI jobs.
+const site = deployedUrl ? null : await serveSite(new URL('../dist/', import.meta.url).pathname, { isolationHeaders: false });
 const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle', '--use-angle=swiftshader'] });
 const artifacts = join(process.env.TMPDIR || process.env.RUNNER_TEMP || 'test-results', 'vesselboost-example');
 await mkdir(artifacts, { recursive: true });
@@ -18,7 +19,7 @@ try {
     if (message.type() === 'error') console.error(message.text());
   });
   await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
-  await page.goto(deployedUrl || `${site.origin}/vesselboost/`);
+  await page.goto(deployedUrl || `${site.origin}/`);
   await page.waitForFunction(() => crossOriginIsolated && navigator.serviceWorker.controller !== null);
   const openSection = async id => {
     const toggle = page.locator(`#${id} [data-disclosure-toggle]`);
