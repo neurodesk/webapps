@@ -6,7 +6,8 @@ import { gzipSync } from 'node:zlib';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { validateAssetManifest } from './lib/scientific-assets.mjs';
 
-const maxCloudflareAsset = 25 * 1024 * 1024;
+// Per-file budget: keeps every artifact well below GitHub Pages' 100 MB file limit.
+const maxFileBytes = 25 * 1024 * 1024;
 const maxPagesSite = 750 * 1024 * 1024;
 const defaultMaxAppSize = 100 * 1024 * 1024;
 const maxFileCount = 20_000;
@@ -39,7 +40,7 @@ async function walk(directory) {
       const app = selectedApp || path.match(/^dist\/([^/]+)\//)?.[1];
       if (app && app !== '_runtime') appSizes.set(app, (appSizes.get(app) || 0) + size);
       if (/\.(onnx|pt|pth|safetensors|nii(?:\.gz)?|mgh|mgz)$/i.test(entry.name)) forbidden.push(path);
-      if (size > maxCloudflareAsset) oversized.push(`${path} (${size} bytes)`);
+      if (size > maxFileBytes) oversized.push(`${path} (${size} bytes)`);
     }
   }
 }
@@ -94,7 +95,7 @@ for (const [app, size] of appSizes) {
 if (forbidden.length || oversized.length || manifestErrors.length || budgetErrors.length) {
   throw new Error([
     forbidden.length ? `Scientific assets must live in immutable external manifests:\n${forbidden.join('\n')}` : '',
-    oversized.length ? `Assets exceed Cloudflare Pages' 25 MiB limit:\n${oversized.join('\n')}` : '',
+    oversized.length ? `Assets exceed the 25 MiB per-file budget:\n${oversized.join('\n')}` : '',
     manifestErrors.length ? `Invalid scientific asset manifests:\n${manifestErrors.join('\n')}` : '',
     budgetErrors.length ? `Composite-site capacity budget exceeded:\n${budgetErrors.join('\n')}` : '',
   ].filter(Boolean).join('\n\n'));
