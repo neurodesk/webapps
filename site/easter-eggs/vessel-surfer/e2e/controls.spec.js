@@ -135,11 +135,14 @@ test.describe("touch", () => {
         type,
         touchPoints: type === "touchEnd" ? [] : [{ x, y }],
       });
+    // Release the brake first: the braking hint would overwrite the message.
+    await page.keyboard.up("Shift");
     await orient(page, 40, 30);
     await touch("touchStart", 120, 600);
     await touch("touchEnd", 120, 600);
     await expect(page.locator("#hint")).toContainText("recentred");
     await expect(page.locator("#stick")).toBeHidden();
+    await page.keyboard.down("Shift");
     await orient(page, 40, 30);
     await page.waitForTimeout(600);
     const recentred = await heading(page);
