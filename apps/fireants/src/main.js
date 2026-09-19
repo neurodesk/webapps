@@ -284,6 +284,24 @@ const results = createResultList({
   onDownload: () => downloadFile(output),
 });
 
+const CPU_TIMEOUT_MS = 45 * 60 * 1000;
+let progressStage = "";
+
+// Engine log lines look like "--- Stage 1: Rigid (...) ---", "  Scale 4: fixed[...] x 200 iters"
+// and "    iter 50/200 loss=...". Turn them into one short status line per update.
+function describeProgress(line) {
+  const stage = /^--- Stage \d+: (\w+)/.exec(line.trim());
+  if (stage) {
+    progressStage = stage[1];
+    return `${progressStage} stage…`;
+  }
+  const scale = /^\s*Scale (\d+):.*?(\d+) iters/.exec(line);
+  if (scale) return `${progressStage || "Registration"} · scale ${scale[1]} · ${scale[2]} iterations`;
+  const iter = /^\s*iter (\d+)\/(\d+)/.exec(line);
+  if (iter) return `${progressStage || "Registration"} · iteration ${iter[1]} of ${iter[2]}`;
+  return null;
+}
+
 async function runRegistration(fixed, moving, backend, transform, onProgress) {
   const controller = new AbortController();
   registrationController = controller;
@@ -298,10 +316,12 @@ async function runRegistration(fixed, moving, backend, transform, onProgress) {
       signal: controller.signal,
       gzip: true,
       verbose: 2,
+      // CPU registration of 1 mm whole-brain images can take well over the engine's default 15 minutes.
+      timeoutMs: backend === "cpu" ? CPU_TIMEOUT_MS : undefined,
       onLog: (line) => {
         log.log(line);
-        const message = line.trim();
-        if (/^(Rigid|Affine|Greedy|SyN)(?: GPU)?(?: scale|:)/i.test(message)) onProgress(message);
+        const message = describeProgress(line);
+        if (message) onProgress(message);
       },
     });
   } finally {
@@ -335,6 +355,7 @@ async function register() {
   const backend = $("useGpu").checked ? "webgpu" : "cpu";
   const transform = $("useSyn").checked ? "syn" : "greedy";
   const started = performance.now();
+  progressStage = "";
   let phase = `Starting ${transform} registration on ${backend}`;
   timer = setInterval(() => {
     $("elapsed").textContent = `${Math.round((performance.now() - started) / 1000)} s`;

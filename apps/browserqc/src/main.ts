@@ -106,6 +106,8 @@ const ac = { signal: listeners.signal }
 // until reload. A timeout rejects instead so the queue moves on. Generous — these
 // finish in seconds; this only fires on a genuine stall.
 const WORKER_TIMEOUT_MS = 60_000
+// Segmentation on CPU or software GL takes minutes, not seconds.
+const SEGMENTATION_TIMEOUT_MS = 15 * 60_000
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms} ms`)), ms)
@@ -289,10 +291,15 @@ async function runSegment(file: File): Promise<void> {
     const { segment } = await import('@brainchop/mindgrab')
     const t1 = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
     if (!(t1 instanceof Uint8Array)) throw new Error('could not serialize the input volume')
+    // MindGrab's auto mode falls back to WebGL when WebGPU has no adapter; on a software GL
+    // stack that never finishes, so adapter-less browsers use the CPU bundle instead.
+    const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null
+    const backend = adapter ? 'auto' : 'cpu'
+    if (!adapter) setStatus('Segmenting on the CPU (no WebGPU adapter)… first run downloads the model')
     const result = await withTimeout(segment(t1, {
-      model: '16chan18cls', worker: true, backend: 'auto',
+      model: '16chan18cls', worker: true, backend,
       assetPath: `${import.meta.env.BASE_URL}brainchop/`,
-    }), WORKER_TIMEOUT_MS, 'segmentation')
+    }), SEGMENTATION_TIMEOUT_MS, 'segmentation')
     const bytes = new Uint8Array(result.image)
     if (isCleanedUp) return // teardown may have run during the reslice/nifti imports
     await nv.addVolume({

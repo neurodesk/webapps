@@ -11,6 +11,7 @@
       <details class="nd-sidebar-section" id="inputSection" open>
         <summary class="nd-section-title">Input image</summary>
         <div class="nd-section-content">
+          <div id="exampleControl"></div>
           <label class="nd-file" id="dropZone">
             <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI or DICOM files">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -18,7 +19,6 @@
           </label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
           <select id="seriesSelect" aria-label="Input image or DICOM series" hidden></select>
-          <div id="exampleControl"></div>
         </div>
       </details>
       <details class="nd-sidebar-section" id="taskSection" open>

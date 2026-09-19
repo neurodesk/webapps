@@ -1,8 +1,8 @@
 [
   {
     "id": "t1-brain",
-    "label": "T1-weighted brain MRI",
-    "description": "An anatomical brain volume for previewing axial, coronal and sagittal slice videos.",
+    "label": "T1-weighted head MRI",
+    "description": "A whole-head anatomical volume for previewing axial, coronal and sagittal slice videos.",
     "expectedResult": "A downloadable video of the selected brain slices.",
     "files": [
       {
