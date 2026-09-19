@@ -197,6 +197,7 @@ function boot() {
   // off | requesting | on | unavailable
   let tiltState = "off";
   let tiltTimer = 0;
+  let tiltRecentres = 0;
   const overviewMap = new OverviewMap(renderer, scene, $("map"));
   const uturn = new UTurn();
   let turnRequest = false;
@@ -902,6 +903,8 @@ function boot() {
     if (e.pointerType === "mouse") return;
     if (tiltState === "on") {
       tilt.reset();
+      tiltRecentres++;
+      coachUntil = 0;
       $("hint").textContent = "Tilt recentred · hold the phone still here to fly straight";
       return;
     }
@@ -1179,6 +1182,7 @@ function boot() {
     data.turning = String(uturn.active);
     data.blocked = String(blocked);
     data.tilt = tiltState;
+    data.tiltRecentres = String(tiltRecentres);
     data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [
       ["brake", ["shift"]],

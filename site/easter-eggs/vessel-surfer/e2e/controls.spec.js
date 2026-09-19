@@ -140,7 +140,7 @@ test.describe("touch", () => {
     await orient(page, 40, 30);
     await touch("touchStart", 120, 600);
     await touch("touchEnd", 120, 600);
-    await expect(page.locator("#hint")).toContainText("recentred");
+    await expect(page.locator("#ocean")).toHaveAttribute("data-tilt-recentres", "1");
     await expect(page.locator("#stick")).toBeHidden();
     await page.keyboard.down("Shift");
     await orient(page, 40, 30);
