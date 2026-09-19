@@ -106,6 +106,11 @@ try {
           await expect.poll(() => selector.evaluate((select, input) =>
             Boolean(select.closest('nd-example-selector')?.uploadScope?.querySelector(input)), replacementInput),
           { message: `${app.id}: example upload scope must contain its replacement input` }).toBe(true);
+          // Users should see the example before they are asked for their own image.
+          await expect.poll(() => selector.evaluate((select, input) => {
+            const replacement = select.closest('nd-example-selector')?.uploadScope?.querySelector(input);
+            return Boolean(replacement && select.compareDocumentPosition(replacement) & Node.DOCUMENT_POSITION_FOLLOWING);
+          }, replacementInput), { message: `${app.id}: example selector must precede its replacement input` }).toBe(true);
           const ids = await selector.locator('option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
           expect(ids).toEqual(examples.map(example => example.id));
           const state = page.locator('[data-neurodesk-examples]');

@@ -1,7 +1,7 @@
 [
   {
     "id": "t1-head",
-    "label": "T1-weighted head · 5 MB",
+    "label": "T1-weighted head MRI",
     "description": "Whole-head MRI for comparing brain extraction methods.",
     "expectedResult": "A brain mask and brain-extracted NIfTI image.",
     "files": [
@@ -14,7 +14,7 @@
   },
   {
     "id": "t2-head",
-    "label": "T2-weighted head · 4 MB",
+    "label": "T2-weighted head MRI",
     "description": "Whole-head MRI for comparing brain extraction methods.",
     "expectedResult": "A brain mask and brain-extracted NIfTI image.",
     "files": [

@@ -16,7 +16,7 @@
     "build": "node ../../scripts/build-static.mjs",
     "pretest": "pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
-    "test:e2e": "playwright test",
+    "test:e2e": "playwright test && node scripts/test_example_workflow.mjs",
     "test:shared": "node --test test/shared-components-parity.test.js",
     "test:examples": "node --test scripts/test_examples.mjs",
     "test:example-data": "node --test scripts/test_example_data.mjs",
