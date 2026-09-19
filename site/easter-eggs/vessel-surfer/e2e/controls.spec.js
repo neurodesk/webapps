@@ -87,6 +87,14 @@ test("keys steer while braking, mouse position aims, and a held drag acts as a j
   await expect(page.locator("#ocean")).toHaveAttribute("data-turning", "false");
   await expect(page.locator("#target-marker .target-marker__label")).toContainText("mm");
   await expect(page.locator("#reticle")).toBeVisible();
+  // Speed changes mid-run from the keyboard and the in-run slider.
+  await expect(page.locator("#speed-panel")).toBeVisible();
+  const speedBefore = Number(await page.locator("#speed-hud").inputValue());
+  await page.keyboard.press("+");
+  await expect(page.locator("#speed-hud")).toHaveValue(String(speedBefore + 0.25));
+  await expect(page.locator("#speed-hud-value")).toHaveText(`${speedBefore + 0.25}×`);
+  await page.locator("#speed-hud").fill("3");
+  await expect(page.locator("#speed-value")).toHaveText("3×");
   await page.screenshot({ path: "/tmp/vessel-controls-desktop.png" });
 });
 

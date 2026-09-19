@@ -24,15 +24,15 @@ test("map follows the player, the timer pauses, and the global leaderboard rende
   await expect(page.locator("#score-rows tr")).toHaveCount(2);
   for (const text of ["Ada", "9,800", "0:10.0", "Grace"])
     await expect(page.locator("#score-rows")).toContainText(text);
-  expect(requests[0].url()).toMatch(/\/scores\?challenge=pial-arteries-v1&limit=10$/);
+  expect(requests[0].url()).toMatch(/\/scores\?challenge=pial-arteries-v2&limit=10$/);
   const target = await page.locator("#ocean").getAttribute("data-target");
   await page.locator("#play").click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#target-distance")).toContainText("away");
-  await expect(page.locator("#ocean")).toHaveAttribute("data-map-zoom", "route");
-  await page.locator("#map-view").click();
-  await expect(page.locator("#map-view")).toHaveText("Whole brain · show route");
   await expect(page.locator("#ocean")).toHaveAttribute("data-map-zoom", "brain");
+  await page.locator("#map-view").click();
+  await expect(page.locator("#map-view")).toHaveText("Route · show whole brain");
+  await expect(page.locator("#ocean")).toHaveAttribute("data-map-zoom", "route");
   await expect
     .poll(async () =>
       Number(await page.locator("#ocean").getAttribute("data-elapsed")),
@@ -58,14 +58,14 @@ test("an unreachable leaderboard falls back to this device's best runs", async (
   await page.goto("/surf/");
   await page.evaluate(() =>
     localStorage.setItem(
-      "vessel-surfer.scores.v1",
+      "vessel-surfer.scores.v2",
       JSON.stringify([
         {
-          challenge: "pial-arteries-v1",
+          challenge: "pial-arteries-v2",
           name: "Me",
           seconds: 10,
           bumps: 0,
-          points: 9800,
+          points: 8000,
         },
       ]),
     ),
@@ -74,13 +74,13 @@ test("an unreachable leaderboard falls back to this device's best runs", async (
   await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
   await expect(page.locator("#board-status")).toContainText("offline");
   await expect(page.locator("#score-rows")).toContainText("Me");
-  await expect(page.locator("#score-rows")).toContainText("9,800");
+  await expect(page.locator("#score-rows")).toContainText("8,000");
 });
 
 test("a practice run in an imported mask reaches its destination with mouse aim", async ({
   page,
 }) => {
-  test.setTimeout(150000);
+  test.setTimeout(300000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.route("**/scores*", (route) =>
     route.fulfill({ json: { scores: board, total: 2 } }),
@@ -95,7 +95,7 @@ test("a practice run in an imported mask reaches its destination with mouse aim"
   await expect(page.locator("#load-status")).toContainText("Loaded");
   await expect(page.locator("#mission-text")).toContainText("Practice run");
   await page.getByText("Controls", { exact: true }).click();
-  await page.locator("#speed").fill("2");
+  await page.locator("#speed").fill("3");
   await page.locator("#play").click();
   await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
   // A tiny autopilot: point the mouse away from the centre in proportion to
@@ -140,7 +140,7 @@ test("a practice run in an imported mask reaches its destination with mouse aim"
 test("the brain challenge can be completed and saved to the global leaderboard", async ({
   page,
 }) => {
-  test.setTimeout(150000);
+  test.setTimeout(300000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const posted = [];
   await page.route("**/scores*", async (route) => {
@@ -150,7 +150,7 @@ test("the brain challenge can be completed and saved to the global leaderboard",
       posted.push(entry);
       const points = Math.max(
         0,
-        10000 - Math.ceil(entry.seconds * 20) - entry.bumps * 400,
+        Math.round(80000 / Math.max(1, entry.seconds)) - entry.bumps * 400,
       );
       await route.fulfill({
         status: 201,
@@ -160,13 +160,13 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   });
   await openGame(page);
   await page.getByText("Controls", { exact: true }).click();
-  await page.locator("#speed").fill("2");
+  await page.locator("#speed").fill("3");
   await page.locator("#play").click();
   const ocean = page.locator("#ocean");
   await expect(ocean).toHaveAttribute("data-state", "running");
   // Pure pursuit along the validated reference route with mouse aim.
   const dist = (a, b) => Math.hypot(...a.map((v, k) => v - b[k]));
-  for (let i = 0; i < 1500; i++) {
+  for (let i = 0; i < 4000; i++) {
     const data = await ocean.evaluate((el) => ({ ...el.dataset }));
     if (data.state === "complete") break;
     const p = JSON.parse(data.position);
@@ -197,11 +197,15 @@ test("the brain challenge can be completed and saved to the global leaderboard",
       yaw = Math.sign(yaw) || 1;
       pitch = Math.sign(pitch);
     }
+    // Pinned on a wall: let go so the lumen assist finds the opening.
+    if (data.blocked === "true") yaw = pitch = 0;
     await page.mouse.move(720 + yaw * 500, 450 - pitch * 500);
     await page.waitForTimeout(40);
   }
   await expect(ocean).toHaveAttribute("data-state", "complete");
   await expect(page.locator("#run-result")).toContainText("points");
+  await expect(page.locator("#run-breakdown")).toContainText("Speed score");
+  await expect(page.locator("#run-breakdown")).toContainText("Wall penalty");
   await expect(page.locator("#submit-form")).toBeVisible();
   await page.locator("#player-name").fill("  Test Pilot  ");
   await page.locator("#submit").click();
@@ -210,7 +214,7 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   );
   expect(posted).toHaveLength(1);
   expect(posted[0]).toMatchObject({
-    challenge: "pial-arteries-v1",
+    challenge: "pial-arteries-v2",
     name: "Test Pilot",
     bumps: Number(await ocean.getAttribute("data-bumps")),
   });

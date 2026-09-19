@@ -36,8 +36,8 @@
         aria-label="3D vessel map: cyan arrow is you, gold line and sphere are the route and destination, white dot is the start"
       ></div>
       <div id="target-distance" class="map-readout">Loading destination…</div>
-      <button id="map-view" aria-label="Switch map to the whole brain">
-        Route · show whole brain
+      <button id="map-view" aria-label="Switch map to the route">
+        Whole brain · zoom to route
       </button>
     </aside>
     <div id="target-marker" class="target-marker" hidden aria-hidden="true">
@@ -45,6 +45,20 @@
       <span class="target-marker__label"></span>
     </div>
     <div id="reticle" class="reticle" hidden aria-hidden="true"></div>
+    <div id="speed-panel" class="speed-panel" hidden>
+      <label for="speed-hud">
+        Speed <output id="speed-hud-value">0.5×</output>
+      </label>
+      <input
+        id="speed-hud"
+        type="range"
+        min="0.25"
+        max="3"
+        step="0.25"
+        value="0.5"
+        aria-label="Cruising speed"
+      />
+    </div>
     <p id="hint" class="hint" role="status"></p>
     <div id="stick" class="stick" hidden aria-hidden="true">
       <div class="stick__knob"></div>
@@ -65,11 +79,12 @@
           gold trail 12 mm to the gold ring.
         </p>
         <p class="scoring" data-show="loading ready">
-          You start with 10,000 points and lose 20 per second and 400 per wall
-          bump. Reach the ring fast and clean.
+          Speed score: 80,000 ÷ your seconds. Wall penalty: 400 per bump. Go
+          faster with the speed slider, + / − or the mouse wheel, but every
+          bump costs you.
         </p>
         <p id="run-result" class="result" role="status" data-show="complete"></p>
-        <p id="run-breakdown" class="muted breakdown" data-show="complete"></p>
+        <div id="run-breakdown" class="breakdown" data-show="complete"></div>
         <button id="play" class="primary" disabled>Loading brain…</button>
         <div class="button-row" data-show="paused complete">
           <button id="reset" data-show="paused">Restart</button>
@@ -118,7 +133,8 @@
               further out, the faster the turn. Or steer with WASD / arrow
               keys. On a phone, drag anywhere to steer. R or the Turn button
               flips you around, Shift or Stop brakes, B or Back reverses, and
-              Space pauses. The sub gently follows the vessel; aim into an
+              Space pauses. Change speed any time with the slider, + / − or
+              the mouse wheel. The sub gently follows the vessel; aim into an
               opening to take a branch. Facing a wall stops you so you can
               turn away without a bump.
             </p>
@@ -129,7 +145,7 @@
               id="speed"
               type="range"
               min="0.25"
-              max="2"
+              max="3"
               step="0.25"
               value="0.5"
             />

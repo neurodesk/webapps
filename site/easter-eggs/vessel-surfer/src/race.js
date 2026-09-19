@@ -1,7 +1,19 @@
-export const CHALLENGE = "pial-arteries-v1";
-export const SCORE_KEY = "vessel-surfer.scores.v1";
+// v2: the 33 mm route (v1 was 12 mm) and the speed-versus-accuracy score.
+export const CHALLENGE = "pial-arteries-v2";
+export const SCORE_KEY = "vessel-surfer.scores.v2";
+// Points reward speed and punish wall contact separately so the trade-off is
+// visible: a faster run earns more, every bump costs a fixed amount, and the
+// leaderboard server recomputes both from the submitted time and bump count.
+export const SPEED_POINTS = 80000;
+export const BUMP_PENALTY = 400;
+export function speedScore(seconds) {
+  return Math.round(SPEED_POINTS / Math.max(1, seconds));
+}
+export function bumpPenalty(bumps) {
+  return bumps * BUMP_PENALTY;
+}
 export function pointsFor(seconds, bumps) {
-  return Math.max(0, 10000 - Math.ceil(seconds * 20) - bumps * 400);
+  return Math.max(0, speedScore(seconds) - bumpPenalty(bumps));
 }
 export class Race {
   constructor(clearance = 0.1) {

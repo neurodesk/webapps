@@ -1,14 +1,58 @@
 import * as THREE from "three";
-import { advanceRoute, routePose } from "./network.js";
+import { lumenRadius } from "./chase.js";
 
-export function humanChallenge(network) {
-  let route = { ...network.start };
-  const path = [routePose(network, route).position];
-  for (let i = 0; i < 48; i++) {
-    route = advanceRoute(network, route, 0.25);
-    path.push(routePose(network, route).position);
+// The challenge route: the longest simple path through the route graph from
+// the launch point, in either direction, using only branches whose lumen
+// stays at least `floor` millimetres wide. The graph is a forest, so the
+// search is a plain depth-first walk. The route is sampled every `spacing`
+// millimetres for the trail and the map; the destination is its last point.
+export function humanChallenge(network, volume, { floor = 0.15, spacing = 0.25 } = {}) {
+  const minRadius = new Map();
+  for (const edge of network.edges) {
+    let radius = Infinity;
+    const steps = Math.max(2, Math.ceil(edge.length / 0.5));
+    for (let i = 0; i <= steps; i++)
+      radius = Math.min(radius, lumenRadius(volume, edge.curve.getPointAt(i / steps)));
+    minRadius.set(edge.id, radius);
   }
-  return { target: path.at(-1).clone(), path };
+  const visited = new Set();
+  const longest = (node, from) => {
+    let best = { length: 0, edges: [] };
+    for (const edge of network.adjacency[node]) {
+      if (edge.id === from || visited.has(edge.id) || minRadius.get(edge.id) < floor) continue;
+      visited.add(edge.id);
+      const branch = longest(edge.a === node ? edge.b : edge.a, edge.id);
+      visited.delete(edge.id);
+      if (branch.length + edge.length > best.length)
+        best = { length: branch.length + edge.length, edges: [edge.id, ...branch.edges] };
+    }
+    return best;
+  };
+  const start = network.edges[network.start.edge];
+  visited.add(start.id);
+  const candidates = [false, true].map((reverse) => {
+    const first = (reverse ? network.start.progress : 1 - network.start.progress) * start.length;
+    const rest = longest(reverse ? start.a : start.b, start.id);
+    return { reverse, length: first + rest.length, edges: rest.edges };
+  });
+  const choice = candidates.sort((a, b) => b.length - a.length)[0];
+  // Walk the chosen edges in order, sampling by arc length.
+  const path = [];
+  let node = null;
+  const sample = (edge, fromT, toT) => {
+    const count = Math.max(1, Math.round((Math.abs(toT - fromT) * edge.length) / spacing));
+    for (let i = path.length ? 1 : 0; i <= count; i++)
+      path.push(edge.curve.getPointAt(fromT + ((toT - fromT) * i) / count));
+  };
+  sample(start, network.start.progress, choice.reverse ? 0 : 1);
+  node = choice.reverse ? start.a : start.b;
+  for (const id of choice.edges) {
+    const edge = network.edges[id];
+    const forward = edge.a === node;
+    sample(edge, forward ? 0 : 1, forward ? 1 : 0);
+    node = forward ? edge.b : edge.a;
+  }
+  return { target: path.at(-1).clone(), path, length: choice.length };
 }
 
 // A live 3D overview drawn by the game renderer into a corner of the main
@@ -22,7 +66,7 @@ export class OverviewMap {
     this.scene = scene;
     this.window = window;
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.05, 4000);
-    this.zoom = "route";
+    this.zoom = "brain";
     this.background = new THREE.Color(0x08161f);
     this.forward = new THREE.Vector3(0, 0, 1);
     this.centre = new THREE.Vector3();

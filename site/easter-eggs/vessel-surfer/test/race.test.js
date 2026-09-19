@@ -21,7 +21,7 @@ test("active elapsed time counts slow frames and excludes pauses", () => {
   race.resume(100000);
   const result = race.finish(103000);
   assert.equal(result.seconds, 15);
-  assert.equal(result.points, 9700);
+  assert.equal(result.points, 5333);
   assert.equal(race.finish(200000), null);
 });
 test("a wall contact counts once until movement separates the player from it", () => {
@@ -38,7 +38,10 @@ test("a wall contact counts once until movement separates the player from it", (
   race.movement(0.05, 0.05);
   race.movement(0.05, 0);
   assert.equal(race.bumps, 2);
-  assert.equal(pointsFor(15, 2), 8900);
+  assert.equal(pointsFor(15, 2), 5333 - 800, "speed score minus wall penalty");
+  assert.equal(pointsFor(10, 0), 8000);
+  assert.ok(pointsFor(10, 0) > pointsFor(20, 0), "faster runs earn more");
+  assert.ok(pointsFor(20, 0) > pointsFor(20, 1), "every bump costs");
   assert.equal(pointsFor(999, 100), 0);
 });
 test("completed scores persist, rank fairly, and keep only five valid results", () => {
@@ -51,7 +54,7 @@ test("completed scores persist, rank fairly, and keep only five valid results", 
     saveScore(storage, { seconds, bumps: 0, points: pointsFor(seconds, 0) });
   assert.deepEqual(
     readScores(storage).map((r) => r.points),
-    [9800, 9600, 9400, 9200, 9000],
+    [8000, 4000, 2667, 2000, 1600],
   );
   data.set(SCORE_KEY, "not json");
   assert.deepEqual(readScores(storage), []);
@@ -65,16 +68,24 @@ test("completed scores persist, rank fairly, and keep only five valid results", 
           throw Error();
         },
       },
-      { seconds: 10, bumps: 0, points: 9800 },
+      { seconds: 10, bumps: 0, points: 8000 },
     ),
     false,
   );
 });
 test("the fixed real-brain destination has a continuous in-vessel reference route", () => {
-  const a = humanChallenge(network),
-    b = humanChallenge(network);
+  const a = humanChallenge(network, volume),
+    b = humanChallenge(network, volume);
   assert.deepEqual(a.target.toArray(), b.target.toArray());
   assert.ok(a.target.distanceTo(a.path[0]) > 2);
+  assert.ok(a.length > 30 && a.length < 60, `route length ${a.length} mm`);
+  let along = 0;
+  for (let i = 1; i < a.path.length; i++) {
+    const step = a.path[i].distanceTo(a.path[i - 1]);
+    assert.ok(step > 0.05 && step < 0.5, `sample spacing ${step}`);
+    along += step;
+  }
+  assert.ok(Math.abs(along - a.length) < 1, "samples cover the whole route");
   for (const p of a.path) assert.ok(insideMask(volume, p.toArray()));
   let position = a.path[0].clone();
   for (const next of a.path.slice(1))
