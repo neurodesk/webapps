@@ -18,7 +18,7 @@
     <canvas
       id="ocean"
       tabindex="0"
-      aria-label="3D vessel tunnel. Steer with the arrow keys or WASD, R turns around, Shift brakes, Space pauses."
+      aria-label="3D vessel tunnel. Steer with the arrow keys or WASD, or tilt a phone. R turns around, Shift brakes, Space pauses."
     ></canvas>
     <header class="topbar">
       <a class="back" href="../">← Neurodesk Webapps</a>
@@ -44,7 +44,6 @@
       <span class="target-marker__arrow"></span>
       <span class="target-marker__label"></span>
     </div>
-    <div id="reticle" class="reticle" hidden aria-hidden="true"></div>
     <div id="speed-panel" class="speed-panel" hidden>
       <label for="speed-hud">
         Speed <output id="speed-hud-value">0.5×</output>
@@ -80,8 +79,7 @@
         </p>
         <p class="scoring" data-show="loading ready">
           Speed score: 80,000 ÷ your seconds. Wall penalty: 400 per bump. Go
-          faster with the speed slider, + / − or the mouse wheel, but every
-          bump costs you.
+          faster with + / − or the speed slider, but every bump costs you.
         </p>
         <p id="run-result" class="result" role="status" data-show="complete"></p>
         <div id="run-breakdown" class="breakdown" data-show="complete"></div>
@@ -129,14 +127,14 @@
           <summary>Controls</summary>
           <div class="section-body">
             <p id="help">
-              Move the mouse away from the centre ring to turn that way; the
-              further out, the faster the turn. Or steer with WASD / arrow
-              keys. On a phone, drag anywhere to steer. R or the Turn button
+              On a computer, steer with the arrow keys or WASD: left and right
+              turn, up and down pitch. On a phone, tilt it: roll to turn, lean
+              to pitch, and tap the screen to recentre. R or the Turn button
               flips you around, Shift or Stop brakes, B or Back reverses, and
-              Space pauses. Change speed any time with the slider, + / − or
-              the mouse wheel. The sub gently follows the vessel; aim into an
-              opening to take a branch. Facing a wall stops you so you can
-              turn away without a bump.
+              Space pauses. Change speed any time with + / − or the slider.
+              The sub gently follows the vessel; steer into an opening to take
+              a branch. Facing a wall stops you so you can turn away without a
+              bump.
             </p>
             <label for="speed">
               Cruising speed <output id="speed-value">0.5×</output>

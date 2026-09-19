@@ -77,7 +77,25 @@ test("an unreachable leaderboard falls back to this device's best runs", async (
   await expect(page.locator("#score-rows")).toContainText("8,000");
 });
 
-test("a practice run in an imported mask reaches its destination with mouse aim", async ({
+// Keyboard autopilot: each tick holds the arrow keys for a share of the tick
+// proportional to the demanded turn, which the steering ramp smooths.
+async function steerWithKeys(page, yaw, pitch, tick = 60) {
+  const held = [];
+  if (Math.abs(yaw) > 0.08) held.push([yaw > 0 ? "ArrowRight" : "ArrowLeft", Math.abs(yaw)]);
+  if (Math.abs(pitch) > 0.08) held.push([pitch > 0 ? "ArrowUp" : "ArrowDown", Math.abs(pitch)]);
+  for (const [key] of held) await page.keyboard.down(key);
+  const order = [...held].sort((a, b) => a[1] - b[1]);
+  let elapsed = 0;
+  for (const [key, share] of order) {
+    const until = Math.min(1, share) * tick;
+    if (until > elapsed) await page.waitForTimeout(until - elapsed);
+    elapsed = Math.max(elapsed, until);
+    await page.keyboard.up(key);
+  }
+  if (tick > elapsed) await page.waitForTimeout(tick - elapsed);
+}
+
+test("a practice run in an imported mask reaches its destination with the keyboard", async ({
   page,
 }) => {
   test.setTimeout(300000);
@@ -98,10 +116,9 @@ test("a practice run in an imported mask reaches its destination with mouse aim"
   await page.locator("#speed").fill("3");
   await page.locator("#play").click();
   await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
-  // A tiny autopilot: point the mouse away from the centre in proportion to
-  // the angle between the heading and the destination.
+  // A tiny autopilot: hold the arrow keys in proportion to the angle between
+  // the heading and the destination.
   const ocean = page.locator("#ocean");
-  const centre = [720, 450];
   for (let i = 0; i < 1200; i++) {
     const data = await ocean.evaluate((el) => ({ ...el.dataset }));
     if (data.state === "complete") break;
@@ -124,8 +141,7 @@ test("a practice run in an imported mask reaches its destination with mouse aim"
     let yaw = dotWith(right);
     const pitch = dotWith(up);
     if (dotWith(h) < 0 && Math.abs(yaw) < 0.3) yaw = 1;
-    await page.mouse.move(centre[0] + yaw * 500, centre[1] - pitch * 500);
-    await page.waitForTimeout(60);
+    await steerWithKeys(page, yaw, pitch);
   }
   await expect(ocean).toHaveAttribute("data-state", "complete");
   await expect(page.locator("#run-result")).toContainText("Practice complete");
@@ -164,7 +180,7 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   await page.locator("#play").click();
   const ocean = page.locator("#ocean");
   await expect(ocean).toHaveAttribute("data-state", "running");
-  // Pure pursuit along the validated reference route with mouse aim.
+  // Pure pursuit along the validated reference route with the arrow keys.
   const dist = (a, b) => Math.hypot(...a.map((v, k) => v - b[k]));
   for (let i = 0; i < 4000; i++) {
     const data = await ocean.evaluate((el) => ({ ...el.dataset }));
@@ -199,8 +215,7 @@ test("the brain challenge can be completed and saved to the global leaderboard",
     }
     // Pinned on a wall: let go so the lumen assist finds the opening.
     if (data.blocked === "true") yaw = pitch = 0;
-    await page.mouse.move(720 + yaw * 500, 450 - pitch * 500);
-    await page.waitForTimeout(40);
+    await steerWithKeys(page, yaw, pitch);
   }
   await expect(ocean).toHaveAttribute("data-state", "complete");
   await expect(page.locator("#run-result")).toContainText("points");

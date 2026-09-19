@@ -214,42 +214,6 @@ a:focus-visible {
   transform: rotate(45deg);
   box-shadow: 0 0 6px #000000aa;
 }
-.reticle {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border: 1px solid #75f6ef66;
-  border-radius: 50%;
-  pointer-events: none;
-}
-.reticle::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  margin: -2px 0 0 -2px;
-  border-radius: 50%;
-  background: #75f6efaa;
-}
-body.is-running:not(.is-touch) #ocean {
-  cursor: crosshair;
-}
-.hint {
-  position: fixed;
-  left: calc(var(--safe-left) + 14px);
-  right: calc(var(--safe-right) + 14px);
-  bottom: calc(var(--safe-bottom) + 14px);
-  margin: 0;
-  font:
-    12px ui-monospace,
-    monospace;
-  color: var(--ink-muted);
-  text-shadow: 0 1px 8px var(--deep);
-  pointer-events: none;
-}
 .stick {
   position: fixed;
   width: 120px;
