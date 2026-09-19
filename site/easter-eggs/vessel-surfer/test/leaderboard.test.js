@@ -33,7 +33,7 @@ test("reads and submits through the server when it is reachable", async () => {
   const top = await board.top(5);
   assert.equal(top.scope, "global");
   assert.equal(top.rows[0].name, "Ada");
-  assert.equal(calls[0].url, "https://api.example/scores?challenge=pial-arteries-v1&limit=5");
+  assert.equal(calls[0].url, "https://api.example/scores?challenge=pial-arteries-v2&limit=5");
   const saved = await board.submit(result, "  Grace  ");
   assert.equal(saved.scope, "global");
   assert.equal(saved.rank, 3);

@@ -39,6 +39,8 @@ test("assist fills unused authority only", () => {
   assert.ok(Math.abs(half.yaw - 0.75) < 1e-9);
   const opposed = combineDemand({ yaw: -0.2, pitch: 0.1 }, { yaw: 1, pitch: -1 }, 0.6);
   assert.deepEqual(opposed, { yaw: -0.2, pitch: 0.1 }, "never fights the player");
+  const resting = combineDemand({ yaw: 0.01, pitch: -0.02 }, { yaw: -1, pitch: 1 }, 1);
+  assert.ok(resting.yaw < -0.9 && resting.pitch > 0.9, "a resting pointer does not veto the assist");
 });
 
 test("lumen probes point the assist toward open vessel and ease off before walls", () => {

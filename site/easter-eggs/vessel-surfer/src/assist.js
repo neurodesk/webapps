@@ -14,11 +14,11 @@ export function freeDistance(volume, from, direction, max) {
   return max;
 }
 
-// Probe a cone around the heading: straight ahead and about 30 degrees to each
-// side and up and down in the camera frame.
-export function probeLumen(volume, position, heading, up, reach) {
+// Probe a cone around the heading: straight ahead and about 30 degrees (or
+// `angle` radians) to each side and up and down in the camera frame.
+export function probeLumen(volume, position, heading, up, reach, angle = 0.52) {
   const right = heading.clone().cross(up).normalize();
-  const spread = Math.tan(0.52);
+  const spread = Math.tan(angle);
   const ray = (h, v) =>
     heading
       .clone()

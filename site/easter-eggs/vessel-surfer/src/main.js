@@ -1,13 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
-import { routePose } from "./network.js";
 import { insideMask } from "./mask.js";
 import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
-import { Race } from "./race.js";
+import { Race, BUMP_PENALTY, SPEED_POINTS, bumpPenalty, speedScore } from "./race.js";
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
 import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
@@ -27,6 +26,9 @@ try {
 }
 const leaderboard = createLeaderboard({ url: LEADERBOARD_URL, storage });
 const SPEED_KEY = "vessel-surfer.speed.v1";
+const SPEED_MIN = 0.25;
+const SPEED_MAX = 3;
+const SPEED_STEP = 0.25;
 
 let renderer;
 try {
@@ -175,11 +177,12 @@ function boot() {
   let human = null;
   let humanPromise = null;
   let travel = 0;
-  let route = null;
   let race = new Race();
   let lastResult = null;
   let target = null;
   let targetRadius = 0.35;
+  let routeLength = 0;
+  let challenge = null;
   let blocked = false;
   const player = new THREE.Vector3();
   const direction = new THREE.Vector3(0, 1, 0);
@@ -221,6 +224,7 @@ function boot() {
     );
     $("navigation-map").hidden = !target || next === "ready" || next === "loading";
     $("touch").hidden = next !== "running";
+    $("speed-panel").hidden = next !== "running";
     $("target-marker").hidden = next !== "running";
     $("reticle").hidden = next !== "running" || coarse;
     document.body.classList.toggle("is-running", next === "running");
@@ -272,7 +276,7 @@ function boot() {
 
   $("map-view").onclick = () => {
     const route = overviewMap.toggle() === "route";
-    $("map-view").textContent = route ? "Route · show whole brain" : "Whole brain · show route";
+    $("map-view").textContent = route ? "Route · show whole brain" : "Whole brain · zoom to route";
     $("map-view").setAttribute(
       "aria-label",
       `Switch map to the ${route ? "whole brain" : "route"}`,
@@ -344,13 +348,30 @@ function boot() {
   }
   // On wide screens the menu panel sits centred, so shift the overview's
   // projection to keep the vasculature visible beside it.
-  function frameOverview() {
+  // On wide screens the menu panel sits centred, so the overview is centred in
+  // the free strip to its left and pushed back far enough to fit there whole.
+  function overviewStrip() {
     const width = ocean.clientWidth;
+    const panel = Math.min(440, width - 24);
+    const free = (width - panel) / 2;
+    return { width, free, wide: width > 900 };
+  }
+  function frameOverview() {
+    const { width, free, wide } = overviewStrip();
     const height = ocean.clientHeight;
-    if (overview && width > 900)
-      camera.setViewOffset(width, height, width * 0.24, 0, width, height);
+    if (overview && wide)
+      camera.setViewOffset(width, height, width / 2 - free / 2, 0, width, height);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
+  }
+  function overviewDistance(radius) {
+    const { width, free, wide } = overviewStrip();
+    const height = ocean.clientHeight;
+    const visible = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const fit = (ratio) => (2 * radius) / (visible * ratio);
+    const byHeight = fit(0.8 * (height / width) * (width / height));
+    const byWidth = fit((0.85 * (wide ? free : width)) / height);
+    return Math.max(radius * 2.4, byHeight, byWidth);
   }
   function setView(value) {
     dirty = true;
@@ -374,7 +395,7 @@ function boot() {
       camera.position
         .set(0.55, 0.4, 0.75)
         .normalize()
-        .multiplyScalar(sphere.radius * 2.4)
+        .multiplyScalar(overviewDistance(sphere.radius))
         .add(sphere.center);
       orbit.target.copy(sphere.center);
       orbit.minDistance = sphere.radius * 0.2;
@@ -407,7 +428,6 @@ function boot() {
     uturn.cancel();
     turnRequest = false;
     swimUp.set(0, 1, 0);
-    route = network ? { ...network.start } : null;
     clear(beacons);
     clear(trail);
     if (mask) {
@@ -421,17 +441,20 @@ function boot() {
         player.clone();
       targetRadius = Math.min(...mask.scale) * 0.7;
     } else {
-      const pose = routePose(network, route);
-      player.copy(pose.position);
-      direction.copy(pose.direction);
-      target = humanChallenge(network).target;
+      challenge ||= humanChallenge(network, volume);
+      // Spawn on the route, facing along it: the route may leave the launch
+      // point against the edge's stored direction.
+      player.copy(challenge.path[0]);
+      direction.copy(challenge.path[1]).sub(challenge.path[0]).normalize();
+      target = challenge.target.clone();
       targetRadius = 0.35;
     }
     const beacon = new THREE.Mesh(beaconGeometry, beaconMaterial);
     beacon.position.copy(target);
     beacon.scale.setScalar(targetRadius * 0.7);
     beacons.add(beacon);
-    const path = mask ? [] : humanChallenge(network).path;
+    const path = mask ? [] : challenge.path;
+    routeLength = mask ? player.distanceTo(target) : challenge.length;
     overviewMap.configure({
       bounds: vesselBounds,
       start: player,
@@ -470,8 +493,8 @@ function boot() {
     );
     $("mission-text").textContent = mask
       ? "Practice run: reach the gold ring in your own vessel mask. Practice runs are not ranked."
-      : "Pilot a tiny submarine through real human brain vessels. Follow the gold trail 12 mm to the gold ring.";
-    $("run-breakdown").textContent = "";
+      : `Pilot a tiny submarine through real human brain vessels. Follow the gold trail ${Math.round(routeLength)} mm to the gold ring.`;
+    $("run-breakdown").replaceChildren();
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
     $("score").textContent = "0:00.0";
@@ -495,13 +518,13 @@ function boot() {
   }
   const steerHint = () =>
     coarse
-      ? "Drag anywhere to steer · Turn flips around · hold Stop or Back"
-      : "Aim with the mouse or WASD · R turns around · Shift brakes · Space pauses";
+      ? "Drag anywhere to steer · Turn flips around · hold Stop or Back · slider sets speed"
+      : "Aim with the mouse or WASD · +/− or wheel sets speed · R turns around · Shift brakes · Space pauses";
   function coach() {
     const distance = target ? player.distanceTo(target) : 0;
     return mask
       ? `Reach the gold ring, ${distance.toFixed(1)} units away · ${steerHint()}`
-      : `Follow the gold trail to the gold ring, ${distance.toFixed(1)} mm ahead · ${steerHint()}`;
+      : `Follow the gold trail to the gold ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
   }
   function pause() {
     if (!running()) return;
@@ -523,9 +546,31 @@ function boot() {
       ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
       : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
     $("run-result").textContent = message;
-    $("run-breakdown").textContent = mask
-      ? ""
-      : `10,000 − ${Math.ceil(lastResult.seconds * 20).toLocaleString()} for time − ${(lastResult.bumps * 400).toLocaleString()} for bumps`;
+    const breakdown = $("run-breakdown");
+    breakdown.replaceChildren();
+    if (!mask) {
+      const average = routeLength / Math.max(lastResult.seconds, 0.001);
+      const rows = [
+        ["Speed score", `+${speedScore(lastResult.seconds).toLocaleString()}`, `${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${SPEED_POINTS.toLocaleString()} ÷ seconds`, "plus"],
+        ["Wall penalty", `−${bumpPenalty(lastResult.bumps).toLocaleString()}`, `${lastResult.bumps} bump${lastResult.bumps === 1 ? "" : "s"} × ${BUMP_PENALTY}`, "minus"],
+        ["Points", lastResult.points.toLocaleString(), "speed score minus wall penalty", "total"],
+      ];
+      for (const [label, value, note, kind] of rows) {
+        const row = document.createElement("div");
+        row.className = `breakdown__row is-${kind}`;
+        const name = document.createElement("span");
+        name.className = "breakdown__label";
+        name.textContent = label;
+        const amount = document.createElement("strong");
+        amount.className = "breakdown__value";
+        amount.textContent = value;
+        const detail = document.createElement("span");
+        detail.className = "breakdown__note";
+        detail.textContent = note;
+        row.append(name, amount, detail);
+        breakdown.append(row);
+      }
+    }
     showMenu("complete");
     $("submit-form").hidden = Boolean(mask);
     if (!mask) {
@@ -624,6 +669,7 @@ function boot() {
       human = data;
       mask = null;
       network = human.network;
+      challenge = null;
       clear(vessels);
       const overviewMesh = new THREE.Mesh(human.geometry, vesselMaterial);
       overviewMesh.name = "overview-surface";
@@ -669,17 +715,38 @@ function boot() {
     if (state === "loading" || (!network && !mask)) return;
     reset();
   };
-  const savedSpeed = Number(storage?.getItem(SPEED_KEY));
-  if (savedSpeed >= 0.25 && savedSpeed <= 2) $("speed").value = String(savedSpeed);
-  $("speed-value").textContent = `${$("speed").value}×`;
-  $("speed").oninput = () => {
-    $("speed-value").textContent = `${$("speed").value}×`;
+  // One cruising speed, shown on the menu slider and the in-run slider, and
+  // adjustable mid-run from the keyboard and the mouse wheel.
+  const speedInputs = [$("speed"), $("speed-hud")];
+  function setSpeed(value, announce = false) {
+    const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(value / SPEED_STEP) * SPEED_STEP));
+    for (const input of speedInputs) input.value = String(clamped);
+    for (const id of ["speed-value", "speed-hud-value"]) $(id).textContent = `${clamped}×`;
     try {
-      storage?.setItem(SPEED_KEY, $("speed").value);
+      storage?.setItem(SPEED_KEY, String(clamped));
     } catch {
       /* Storage can be full or disabled. */
     }
+    if (announce && running()) $("hint").textContent = `Speed ${clamped}× · faster earns more points, bumps cost ${BUMP_PENALTY}`;
+    return clamped;
+  }
+  const cruise = () => Number($("speed").value);
+  const savedSpeed = Number(storage?.getItem(SPEED_KEY));
+  setSpeed(savedSpeed >= SPEED_MIN && savedSpeed <= SPEED_MAX ? savedSpeed : 0.5);
+  for (const input of speedInputs)
+    input.oninput = () => setSpeed(Number(input.value));
+  $("speed-hud").onchange = () => {
+    if (running()) ocean.focus({ preventScroll: true });
   };
+  ocean.addEventListener(
+    "wheel",
+    (e) => {
+      if (!running() || overview) return;
+      e.preventDefault();
+      setSpeed(cruise() + (e.deltaY < 0 ? SPEED_STEP : -SPEED_STEP), true);
+    },
+    { passive: false },
+  );
   $("turn").onpointerdown = (e) => {
     e.preventDefault();
     turnRequest = true;
@@ -754,6 +821,13 @@ function boot() {
     if (k === "r") {
       e.preventDefault();
       if (!e.repeat && running()) turnRequest = true;
+      return;
+    }
+    if (["+", "=", "-", "_", "]", "["].includes(k)) {
+      if (!running()) return;
+      e.preventDefault();
+      const faster = k === "+" || k === "=" || k === "]";
+      setSpeed(cruise() + (faster ? SPEED_STEP : -SPEED_STEP), true);
       return;
     }
     if (flightKeys.includes(k)) {
@@ -976,16 +1050,28 @@ function boot() {
       let turn;
       if (turning) turn = { yaw: uturn.update(dt), pitch: 0 };
       else {
+        // Pinned on a wall (stopped by the throttle or blocked last frame),
+        // the assist looks further round (60 degrees) and steers toward the
+        // open side with full strength; only a deliberate input overrides it.
+        const pinned = blocked || throttle(probe) === 0;
         const assist =
-          braking || reversing ? { yaw: 0, pitch: 0 } : assistDemand(probe);
-        const demand = combineDemand(playerDemand, assist, 0.6);
+          braking || reversing
+            ? { yaw: 0, pitch: 0 }
+            : assistDemand(
+                pinned
+                  ? probeLumen(volume, player, direction, swimUp, probe.reach, 1.05)
+                  : probe,
+              );
+        const demand = pinned
+          ? combineDemand(playerDemand, assist, 1, 0.25)
+          : combineDemand(playerDemand, assist, 0.6);
         turn = steering.update(demand.yaw, demand.pitch, dt);
       }
       steer(direction, swimUp, turn.yaw, turn.pitch);
       level(direction, swimUp, dt);
       // Cruise at six voxels per second so thin, high-resolution vessels are
       // as navigable as coarse ones.
-      let speed = Number($("speed").value) * unit * (mask ? 2 : 6);
+      let speed = cruise() * unit * (mask ? 2 : 6);
       if (reversing) speed *= -0.7;
       else speed *= throttle(probe);
       if (braking || turning) speed = 0;
@@ -1070,6 +1156,7 @@ function boot() {
     data.target = target ? JSON.stringify(target.toArray()) : "";
     data.held = [...keys].join(",");
     data.turning = String(uturn.active);
+    data.blocked = String(blocked);
     data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [
       ["brake", ["shift"]],
