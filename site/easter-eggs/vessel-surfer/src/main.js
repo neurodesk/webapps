@@ -10,6 +10,7 @@ import { Race, BUMP_PENALTY, SPEED_POINTS, bumpPenalty, speedScore } from "./rac
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
 import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
+import { Tilt } from "./tilt.js";
 import { assistDemand, freeDistance, probeLumen, throttle } from "./assist.js";
 import { createLeaderboard, formatTime } from "./leaderboard.js";
 import { LEADERBOARD_URL } from "./config.js";
@@ -189,8 +190,13 @@ function boot() {
   const swimUp = new THREE.Vector3(0, 1, 0);
   const keys = new HeldInputs();
   const steering = new Steering();
-  const aim = { yaw: 0, pitch: 0 };
+  // Desktop steers with the keyboard only. Phones steer by tilting; the drag
+  // joystick is the fallback when motion sensors are unavailable or refused.
   const stick = { yaw: 0, pitch: 0, pointer: null, x: 0, y: 0 };
+  const tilt = new Tilt();
+  // off | requesting | on | unavailable
+  let tiltState = "off";
+  let tiltTimer = 0;
   const overviewMap = new OverviewMap(renderer, scene, $("map"));
   const uturn = new UTurn();
   let turnRequest = false;
@@ -226,7 +232,6 @@ function boot() {
     $("touch").hidden = next !== "running";
     $("speed-panel").hidden = next !== "running";
     $("target-marker").hidden = next !== "running";
-    $("reticle").hidden = next !== "running" || coarse;
     document.body.classList.toggle("is-running", next === "running");
     $("hint").textContent = "";
     dirty = true;
@@ -424,7 +429,7 @@ function boot() {
     blocked = false;
     keys.clear();
     steering.reset();
-    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    stick.yaw = stick.pitch = 0;
     uturn.cancel();
     turnRequest = false;
     swimUp.set(0, 1, 0);
@@ -513,13 +518,56 @@ function boot() {
     race.resume(performance.now());
     showMenu("running");
     coachUntil = performance.now() + 6000;
+    if (coarse) enableTilt();
     $("hint").textContent = coach();
     $("ocean").focus({ preventScroll: true });
   }
   const steerHint = () =>
     coarse
-      ? "Drag anywhere to steer · Turn flips around · hold Stop or Back · slider sets speed"
-      : "Aim with the mouse or WASD · +/− or wheel sets speed · R turns around · Shift brakes · Space pauses";
+      ? tiltState === "unavailable"
+        ? "Drag anywhere to steer · Turn flips around · hold Stop or Back"
+        : "Tilt the phone to steer · tap to recentre · Turn flips around · hold Stop or Back"
+      : "Arrow keys or WASD steer · +/− sets speed · R turns around · Shift brakes · Space pauses";
+  // Motion steering starts from a user gesture (the Dive tap) because iOS
+  // only grants orientation events after DeviceOrientationEvent.requestPermission.
+  // Without a sensor sample soon after, the drag joystick takes over.
+  function onOrientation(event) {
+    if (tiltState === "unavailable") return;
+    if (tiltState !== "on") {
+      tiltState = "on";
+      clearTimeout(tiltTimer);
+    }
+    tilt.update(event, screen.orientation?.angle ?? window.orientation ?? 0);
+  }
+  async function enableTilt() {
+    if (tiltState === "on" || tiltState === "unavailable") {
+      tilt.reset();
+      return;
+    }
+    tiltState = "requesting";
+    tilt.reset();
+    try {
+      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+        const answer = await DeviceOrientationEvent.requestPermission();
+        if (answer !== "granted") throw new Error("Motion access refused.");
+      }
+      if (typeof DeviceOrientationEvent === "undefined")
+        throw new Error("No motion sensors.");
+    } catch {
+      tiltState = "unavailable";
+      $("hint").textContent = coach();
+      return;
+    }
+    window.addEventListener("deviceorientation", onOrientation);
+    clearTimeout(tiltTimer);
+    tiltTimer = setTimeout(() => {
+      if (tiltState === "requesting") {
+        tiltState = "unavailable";
+        window.removeEventListener("deviceorientation", onOrientation);
+        if (running()) $("hint").textContent = coach();
+      }
+    }, 1500);
+  }
   function coach() {
     const distance = target ? player.distanceTo(target) : 0;
     return mask
@@ -533,9 +581,10 @@ function boot() {
     steering.reset();
     uturn.cancel();
     turnRequest = false;
-    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    stick.yaw = stick.pitch = 0;
     stick.pointer = null;
     $("stick").hidden = true;
+    tilt.reset();
     showMenu("paused");
   }
   function finish() {
@@ -716,7 +765,7 @@ function boot() {
     reset();
   };
   // One cruising speed, shown on the menu slider and the in-run slider, and
-  // adjustable mid-run from the keyboard and the mouse wheel.
+  // adjustable mid-run from the keyboard.
   const speedInputs = [$("speed"), $("speed-hud")];
   function setSpeed(value, announce = false) {
     const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(value / SPEED_STEP) * SPEED_STEP));
@@ -738,15 +787,6 @@ function boot() {
   $("speed-hud").onchange = () => {
     if (running()) ocean.focus({ preventScroll: true });
   };
-  ocean.addEventListener(
-    "wheel",
-    (e) => {
-      if (!running() || overview) return;
-      e.preventDefault();
-      setSpeed(cruise() + (e.deltaY < 0 ? SPEED_STEP : -SPEED_STEP), true);
-    },
-    { passive: false },
-  );
   $("turn").onpointerdown = (e) => {
     e.preventDefault();
     turnRequest = true;
@@ -842,12 +882,9 @@ function boot() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pause();
   });
-  // Mouse: the pointer's offset from the screen centre is the aim. Touch or a
-  // held button: a floating joystick anchored where the drag began.
+  // Touch without motion sensors: a floating joystick anchored where the drag
+  // began. With tilt steering, a tap on the canvas recentres the neutral pose.
   const stickRadius = 56;
-  function aimRadius() {
-    return Math.min(ocean.clientWidth, ocean.clientHeight) * 0.42;
-  }
   ocean.addEventListener("pointermove", (e) => {
     if (!running() || overview || stick.pointer !== e.pointerId) return;
     const dx = e.clientX - stick.x;
@@ -857,35 +894,22 @@ function boot() {
     $("stick").firstElementChild.style.transform =
       `translate(${dx * scale}px, ${dy * scale}px)`;
   });
-  // Mouse aim is tracked on the window so passing over the map or the top bar
-  // does not drop the turn; only leaving the window centres the aim.
-  window.addEventListener("pointermove", (e) => {
-    if (e.pointerType !== "mouse" || stick.pointer !== null) return;
-    if (!running() || overview) return;
-    const rect = ocean.getBoundingClientRect();
-    Object.assign(
-      aim,
-      aimFromOffset(
-        e.clientX - (rect.left + rect.width / 2),
-        e.clientY - (rect.top + rect.height / 2),
-        aimRadius(),
-      ),
-    );
-  });
-  document.addEventListener("pointerout", (e) => {
-    if (e.pointerType === "mouse" && !e.relatedTarget) aim.yaw = aim.pitch = 0;
-  });
   ocean.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "touch") document.body.classList.add("is-touch");
     if (!running() || overview || stick.pointer !== null) return;
     e.preventDefault();
     ocean.focus({ preventScroll: true });
+    if (e.pointerType === "mouse") return;
+    if (tiltState === "on") {
+      tilt.reset();
+      $("hint").textContent = "Tilt recentred · hold the phone still here to fly straight";
+      return;
+    }
     ocean.setPointerCapture(e.pointerId);
     stick.pointer = e.pointerId;
     stick.x = e.clientX;
     stick.y = e.clientY;
     stick.yaw = stick.pitch = 0;
-    aim.yaw = aim.pitch = 0;
     $("stick").style.left = `${e.clientX}px`;
     $("stick").style.top = `${e.clientY}px`;
     $("stick").firstElementChild.style.transform = "";
@@ -996,9 +1020,6 @@ function boot() {
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     frameOverview();
-    // The ring marks the dead zone: rest the pointer inside it to fly straight.
-    const dead = Math.round(aimRadius() * 0.08 * 2);
-    $("reticle").style.width = $("reticle").style.height = `${dead}px`;
   }
   new ResizeObserver(resize).observe(ocean);
   ocean.addEventListener("webglcontextlost", (e) => {
@@ -1026,12 +1047,12 @@ function boot() {
         yaw:
           (keys.has("arrowright") || keys.has("d") ? 1 : 0) -
           (keys.has("arrowleft") || keys.has("a") ? 1 : 0) +
-          aim.yaw +
+          tilt.yaw +
           stick.yaw,
         pitch:
           (keys.has("arrowup") || keys.has("w") ? 1 : 0) -
           (keys.has("arrowdown") || keys.has("s") ? 1 : 0) +
-          aim.pitch +
+          tilt.pitch +
           stick.pitch,
       };
       const probe = probeLumen(
@@ -1089,9 +1110,9 @@ function boot() {
         $("hint").textContent = turning
           ? "Turning around…"
           : braking
-            ? "Braking · steer to aim, release to go"
+            ? "Braking · steer, release to go"
             : blocked
-              ? "Wall · aim away, press R to turn around, or hold Back"
+              ? "Wall · steer away, press R or Turn to turn around, or hold Back"
               : performance.now() < coachUntil
                 ? coach()
                 : steerHint();
@@ -1157,6 +1178,7 @@ function boot() {
     data.held = [...keys].join(",");
     data.turning = String(uturn.active);
     data.blocked = String(blocked);
+    data.tilt = tiltState;
     data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [
       ["brake", ["shift"]],
