@@ -30,7 +30,7 @@ surface files are not a printing format. niimath simplifies each mesh to a
 chosen fraction of its triangles (10 to 100%, default 25) and optionally
 smooths it (0 to 20 Humphrey iterations, default 0); TopoFit writes a binary
 STL in millimetres per surface. Ticked surfaces are exported, or all four when
-none is ticked. A 245,762-vertex hemisphere reduces in well under a second.
+none is ticked. A 245,762-vertex hemisphere reduces in under a second.
 
 Because the published `@niivue/niimath` WebAssembly build compiles mesh support
 without `HAVE_FORMATS`, it can only write mz3, and its fluent JavaScript API

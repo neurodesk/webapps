@@ -170,10 +170,7 @@ $('stlButton').onclick = () => {
   info.body.querySelector('#stlSaveButton').onclick = () => {
     const reduce = info.body.querySelector('#stlReduce');
     const smooth = info.body.querySelector('#stlSmooth');
-    if (!reduce.checkValidity() || !smooth.checkValidity()) {
-      status('Keep 10 to 100% of the triangles and smooth 0 to 20 times.', true);
-      return;
-    }
+    if (!reduce.reportValidity() || !smooth.reportValidity()) return;
     info.close();
     void exportStl(stages, Number(reduce.value) / 100, Number(smooth.value));
   };

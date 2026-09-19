@@ -121,13 +121,13 @@
       <p class="nd-hint">Exporting: <span id="stlSurfaceList"></span>. Tick surfaces in Output to export only those.</p>
       <div class="nd-field">
         <label for="stlReduce">Reduce to <small>% of triangles</small></label>
-        <input id="stlReduce" type="number" min="10" max="100" step="5" value="25">
+        <input id="stlReduce" type="number" min="10" max="100" step="5" value="25" required>
       </div>
       <div class="nd-field">
         <label for="stlSmooth">Smoothing iterations</label>
-        <input id="stlSmooth" type="number" min="0" max="20" step="1" value="0">
+        <input id="stlSmooth" type="number" min="0" max="20" step="1" value="0" required>
       </div>
-      <button id="stlSaveButton" class="nd-btn nd-btn-primary" type="button">Save STL</button>
+      <button id="stlSaveButton" class="nd-btn nd-btn-secondary" type="button">Save STL</button>
     </template>
     <template id="privacyContent">
       <p>Your scan and reconstructed surfaces stay in this browser. Pretrained models are downloaded from Hugging Face; the optional example is downloaded from OpenNeuro.</p>

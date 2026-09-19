@@ -8,13 +8,12 @@
 import createNiimath from '@niivue/niimath/niimath.js';
 import { readMz3, writeMz3, writeStl } from '@neurodesk/topofit/results';
 
-let modulePromise;
 const output = [];
 
 self.onmessage = async ({ data }) => {
   try {
-    modulePromise ??= createNiimath({ print: (line) => output.push(line), printErr: (line) => output.push(line) });
-    const niimath = await modulePromise;
+    // One worker per export, terminated afterwards, so the module is not worth caching.
+    const niimath = await createNiimath({ print: (line) => output.push(line), printErr: (line) => output.push(line) });
     const files = [];
     for (const surface of data.surfaces) {
       output.length = 0;

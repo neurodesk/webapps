@@ -373,6 +373,10 @@ test('cortical surfaces export as printable STL through niimath', async ({ page 
   await expect(page.locator('#stlSurfaceList')).toHaveText('left pial surface');
   await expect(page.locator('#stlReduce')).toHaveValue('25');
   await expect(page.locator('#stlSmooth')).toHaveValue('0');
+  // An empty field must not become "-r 0", which niimath rejects.
+  await page.locator('#stlReduce').fill('');
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#infoDialog')).toBeVisible();
   // The stub delivers a tetrahedron, so keep every triangle: this checks the format, not niimath's simplifier.
   await page.locator('#stlReduce').fill('100');
   const [download] = await Promise.all([
