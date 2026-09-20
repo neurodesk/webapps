@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-leaderboard
 
+## 0.1.20260920
+
+### Patch Changes
+
+- 7e4f0ae: Vessel Surfer: four selectable tracks (Trunk run, Sprint, Grand tour, Narrows), each a fixed route through the pial artery graph with its own leaderboard, points scale and minimum plausible time; the route is marked by flat gold arrows on the vessel wall that point the way, replacing the floor spheres, and the straight-line destination pointer is gone because it pointed through walls.
+
 ## 0.1.20260919
 
 ### Patch Changes
