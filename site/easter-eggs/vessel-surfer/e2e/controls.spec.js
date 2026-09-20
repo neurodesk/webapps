@@ -113,7 +113,7 @@ test("keys steer while braking, a held mouse drag steers, and a resting mouse re
   await page.mouse.click(slider.x + slider.width - 2, slider.y + slider.height / 2);
   await expect(page.locator("#speed-hud")).toHaveValue("3");
   await expect(page.locator("#speed-value")).toHaveText("3×");
-  await page.screenshot({ path: "/tmp/vessel-controls-desktop.png" });
+  await page.screenshot({ path: test.info().outputPath("vessel-controls-desktop.png") });
 });
 
 test.describe("touch", () => {
@@ -180,7 +180,7 @@ test.describe("touch", () => {
     expect(await page.locator("#ocean").getAttribute("data-position")).toBe(
       position,
     );
-    await page.screenshot({ path: "/tmp/vessel-controls-phone.png" });
+    await page.screenshot({ path: test.info().outputPath("vessel-controls-phone.png") });
     await touch("touchEnd", 0, 0);
     await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "false");
     await expect

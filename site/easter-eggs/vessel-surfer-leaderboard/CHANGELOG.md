@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-leaderboard
 
+## 0.1.20260921
+
+### Patch Changes
+
+- Remove custom vessel-mask uploads and their parser, worker, practice mode and tests. Save completed zero-point runs on every leaderboard, including Grand Tour. Keep failed saves retryable, report local persistence accurately, and prevent stale leaderboard reads or track changes from overwriting submission results. Cover Grand Tour submission with the actual server handler, including retry and reload.
+
 ## 0.1.20260920
 
 ### Patch Changes

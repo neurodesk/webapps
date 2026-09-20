@@ -11,7 +11,7 @@ for the global leaderboard shown in the game.
   returns its world rank and the current top ten. Points are recomputed on the
   server with the game's own `pointsFor`, names are trimmed to 16 printable
   characters, implausible times are rejected and each address may save at most
-  30 runs per hour. Only the name, time and bump count are stored, together
+  30 runs per hour. Completed zero-point runs are accepted and rank below positive scores. Only the name, time and bump count are stored, together
   with a salted hash of the address used for rate limiting.
 
 Browser access is limited to the origins in `ALLOWED_ORIGINS` plus loopback
