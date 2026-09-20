@@ -60,6 +60,18 @@ test('checkbox state and listeners survive detach, reconnect and moving the elem
   window.close();
 });
 
+test('toggleable results can also offer an independent View action', () => {
+  const { window } = new JSDOM();
+  const calls = [];
+  const result = { visible: false, viewable: true };
+  const element = createResultList({ onView: (...args) => calls.push(args) }, window.document);
+  element.render({ surface: result });
+  element.querySelector('.nd-view-btn').click();
+  assert.deepEqual(calls, [['surface', result]]);
+  assert.equal(element.querySelector('input').checked, false);
+  window.close();
+});
+
 test('factory migrates placeholders in place and preserves callbacks and attributes', () => {
   const { window } = new JSDOM('<main><div id="results" class="custom" aria-label="Outputs"></div><p>After</p></main>');
   const calls = [];

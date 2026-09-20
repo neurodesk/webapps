@@ -109,8 +109,9 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
 
 async function expectCorticalOverlay(page, label = 'Left white surface') {
   const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
-  await row.getByRole('checkbox').check();
+  await row.getByRole('button', { name: 'View', exact: true }).click();
   await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
   await expect(page.locator('#viewerError')).toBeHidden();
   const canvas = await page.locator('#gl1').boundingBox();
   const slices = [[0, 0], [1, 0], [0, 1]].map(([column, line]) => ({
@@ -124,19 +125,69 @@ async function expectCorticalOverlay(page, label = 'Left white surface') {
   await row.getByRole('checkbox').uncheck();
   await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
   for (const [index, clip] of slices.entries()) {
-    expect(visible[index].equals(await page.screenshot({ clip })), `Surface must change slice ${index}`).toBe(false);
+    const hidden = await page.screenshot({ clip });
+    const fraction = await page.evaluate(async (screenshots) => {
+      const pixels = await Promise.all(screenshots.map(async (base64) => {
+        const image = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+        const canvas = new OffscreenCanvas(image.width, image.height);
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0);
+        image.close();
+        return context.getImageData(0, 0, canvas.width, canvas.height).data;
+      }));
+      let changed = 0;
+      for (let i = 0; i < pixels[0].length; i += 4) {
+        if ([0, 1, 2].some((channel) => Math.abs(pixels[0][i + channel] - pixels[1][i + channel]) > 10)) changed += 1;
+      }
+      return changed / (pixels[0].length / 4);
+    }, [visible[index], hidden].map((image) => image.toString('base64')));
+    expect(fraction, `Surface boundary must intersect slice ${index}`).toBeGreaterThan(0);
+    expect(fraction, `Surface boundary must leave the anatomy on slice ${index} exposed`).toBeLessThan(0.15);
   }
   await row.getByRole('checkbox').check();
   await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
 }
 
-test('cortical surfaces overlay all three slices in 3-Plane', async ({ page }, testInfo) => {
+test('cortical surface boundaries appear on all three slices in 3-Plane', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1024, height: 1100 });
   await deliverSurfaces(page);
   await expectCorticalOverlay(page);
   await page.screenshot({ path: testInfo.outputPath('cortical-overlay.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath('cortical-overlay-phone.png'), fullPage: true });
+});
+
+test('View isolates each surface in 3D while the MRI stays on the 2D slices only', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1024, height: 1100 });
+  await deliverSurfaces(page);
+  for (const label of ['Left white surface', 'Right pial surface', 'Left mid-surface']) {
+    const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
+    await row.getByRole('button', { name: 'View', exact: true }).click();
+    await expect(row.getByRole('checkbox')).toBeEnabled();
+    await expect(row.getByRole('checkbox')).toBeChecked();
+    await expect(page.locator('#resultList input:checked')).toHaveCount(1);
+    await expect(page.getByRole('radio', { name: 'Render view', exact: true })).toHaveAttribute('data-state', 'on');
+    await expect(page.locator('#imageLabel')).toHaveText(label.toUpperCase());
+  }
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Volumes', exact: true }).click();
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
+  const canvas = await page.locator('#gl1').boundingBox();
+  const render = {
+    x: canvas.x + canvas.width / 2,
+    y: canvas.y + canvas.height / 2,
+    width: Math.floor(canvas.width / 2),
+    height: Math.floor(canvas.height / 2),
+  };
+  const axial = { ...render, x: canvas.x };
+  const before3D = await page.screenshot({ clip: render });
+  const before2D = await page.screenshot({ clip: axial });
+  await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect.poll(async () => before2D.equals(await page.screenshot({ clip: axial }))).toBe(false);
+  expect(before3D.equals(await page.screenshot({ clip: render })), 'MRI visibility must not affect the 3D surface').toBe(true);
+  await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('surface-boundaries-and-3d.png') });
 });
 
 test('bilateral mid-surfaces can be overlaid, viewed in 3D and downloaded without analysis', async ({ page }, testInfo) => {
@@ -462,6 +513,15 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces.png') });
   await page.getByRole('radio', { name: 'Render view', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces-3d.png') });
+  for (const label of ['Left white surface', 'Left pial surface', 'Left mid-surface', 'Right mid-surface']) {
+    const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
+    await row.getByRole('button', { name: 'View', exact: true }).click();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
+    await expect(page.locator('#resultList input:checked')).toHaveCount(1);
+    await page.screenshot({ path: testInfo.outputPath(`${label.replaceAll(' ', '-')}-3d.png`) });
+  }
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('real-boundaries-and-surface.png') });
 });
 
 test('analysis runs in its own worker and can be repeated or cancelled without reconstruction', async ({ page }) => {

@@ -33,6 +33,14 @@ export function defineResultList(view = globalThis.window) {
       for (const stage of stageOrder) {
         const result = results[stage];
         const label = this.stageLabels[stage] || result?.description || stage;
+        const viewButton = () => createElement('button', {
+          className: 'nd-view-btn',
+          type: 'button',
+          title: 'View',
+          text: 'View',
+          ownerDocument: doc,
+          onclick: () => emit('nd-view', { stage, result }),
+        });
         const viewControl = typeof result?.visible === 'boolean'
           ? createElement('label', {
             className: 'nd-result-visibility',
@@ -50,19 +58,13 @@ export function defineResultList(view = globalThis.window) {
               input: event.currentTarget,
             }),
           })])
-          : createElement('button', {
-            className: 'nd-view-btn',
-            type: 'button',
-            title: 'View',
-            text: 'View',
-            ownerDocument: doc,
-            onclick: () => emit('nd-view', { stage, result }),
-          });
+          : viewButton();
         this.append(createElement('div', {
           className: 'nd-volume-toggle',
           ownerDocument: doc,
         }, [
           viewControl,
+          ...(typeof result?.visible === 'boolean' && result.viewable ? [viewButton()] : []),
           createElement('span', {
             className: 'nd-stage-label',
             text: label,
