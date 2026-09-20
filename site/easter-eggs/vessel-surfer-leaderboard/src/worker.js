@@ -1,4 +1,4 @@
-import { CHALLENGE, CHALLENGES as TRACK_IDS, pointsFor, trackFor } from "../../vessel-surfer/src/race.js";
+import { CHALLENGE, SCORE_CHALLENGES as TRACK_IDS, pointsFor, trackFor } from "../../vessel-surfer/src/race.js";
 
 export const NAME_LIMIT = 16;
 export const MAX_LIMIT = 100;

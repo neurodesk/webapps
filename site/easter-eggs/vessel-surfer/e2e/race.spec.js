@@ -137,7 +137,7 @@ test("Grand Tour saves to the real leaderboard handler after a retry and survive
     await route.fulfill({ status: response.status, json: await response.json() });
   });
   await openGame(page);
-  await page.locator('[data-track="pial-arteries-v2-tour"]').click();
+  await page.locator('[data-track="pial-arteries-v3-tour"]').click();
   await page.getByText("Controls", { exact: true }).click();
   await page.locator("#speed").fill("3");
   await page.locator("#play").click();
@@ -195,7 +195,7 @@ test("Grand Tour saves to the real leaderboard handler after a retry and survive
   );
   expect(posted).toHaveLength(2);
   expect(posted[0]).toMatchObject({
-    challenge: "pial-arteries-v2-tour",
+    challenge: "pial-arteries-v3-tour",
     name: "Test Pilot",
     bumps: Number(await ocean.getAttribute("data-bumps")),
   });

@@ -28,13 +28,13 @@ export const TRACKS = [
     minSeconds: 4,
   },
   {
-    challenge: "pial-arteries-v2-tour",
+    challenge: "pial-arteries-v3-tour",
     name: "Grand tour",
-    blurb: "From a far branch tip across the whole trunk. The longest wide route.",
-    start: { node: 144 },
+    blurb: "A clear start in a far branch, then across the whole trunk.",
+    start: { node: 144, inset: 1.25 },
     floor: 0.15,
-    length: 40.4,
-    speedPoints: 96000,
+    length: 39.2,
+    speedPoints: 93000,
     minSeconds: 10,
   },
   {
@@ -50,9 +50,14 @@ export const TRACKS = [
 ];
 export const CHALLENGE = TRACKS[0].challenge;
 export const CHALLENGES = TRACKS.map((track) => track.challenge);
+// Keep scores and submissions from already-open tabs on the old course valid.
+const RETIRED_TRACKS = [
+  { challenge: "pial-arteries-v2-tour", speedPoints: 96000, minSeconds: 10 },
+];
+export const SCORE_CHALLENGES = [...CHALLENGES, ...RETIRED_TRACKS.map((track) => track.challenge)];
 export const SCORE_KEY = "vessel-surfer.scores.v2";
 export function trackFor(challenge = CHALLENGE) {
-  return TRACKS.find((track) => track.challenge === challenge) || null;
+  return [...TRACKS, ...RETIRED_TRACKS].find((track) => track.challenge === challenge) || null;
 }
 // Points reward speed and punish wall contact separately so the trade-off is
 // visible: a faster run earns more, every bump costs a fixed amount, and the
@@ -124,7 +129,7 @@ function validScores(storage) {
     if (!Array.isArray(rows)) return [];
     return rows.filter(
       (r) =>
-        CHALLENGES.includes(r.challenge) &&
+        SCORE_CHALLENGES.includes(r.challenge) &&
         Number.isFinite(r.seconds) &&
         r.seconds >= 0 &&
         Number.isInteger(r.bumps) &&

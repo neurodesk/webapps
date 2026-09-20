@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-leaderboard
 
+## 0.1.20260922
+
+### Patch Changes
+
+- Move the Grand Tour start 1.25 mm past the branch-tip bend so it launches without an immediate wall stop, including at maximum speed. Update the route distance and score scale, use a separate leaderboard for the revised course, and preserve submissions from the previous course.
+
 ## 0.1.20260921
 
 ### Patch Changes

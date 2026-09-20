@@ -42,7 +42,7 @@ test("entries are validated and points are recomputed on the server", () => {
     { challenge: CHALLENGE, seconds: "10", bumps: 0 },
     { challenge: CHALLENGE, seconds: 10, bumps: 1.5 },
     { challenge: CHALLENGE, seconds: 10, bumps: -1 },
-    { challenge: "pial-arteries-v2-tour", seconds: 9, bumps: 0 },
+    { challenge: "pial-arteries-v3-tour", seconds: 9, bumps: 0 },
   ])
     assert.throws(() => validateEntry(bad), /./, JSON.stringify(bad));
   for (const track of TRACKS) {
