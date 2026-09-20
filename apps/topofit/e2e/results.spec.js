@@ -461,6 +461,12 @@ test('STL export defaults to all four cortical surfaces', async ({ page }, testI
   await page.locator('#stlReduce').fill('100');
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
+    const size = await page.locator('#stlReduce').evaluate((input) => ({
+      height: input.getBoundingClientRect().height,
+      font: Number.parseFloat(getComputedStyle(input).fontSize),
+    }));
+    expect(size.height).toBeGreaterThanOrEqual(width < 780 ? 44 : 30);
+    if (width < 780) expect(size.font).toBeGreaterThanOrEqual(16);
     await page.screenshot({ path: testInfo.outputPath(`stl-${width}.png`), fullPage: true });
   }
   const downloads = [];

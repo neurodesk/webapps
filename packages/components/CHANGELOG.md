@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.4.2
+
+### Patch Changes
+
+- Style dialog inputs with the shared field controls and give them 44 px touch targets and 16 px text on phones. Verify TopoFit's STL settings at desktop and phone widths.
+
 ## 0.4.1
 
 ### Patch Changes

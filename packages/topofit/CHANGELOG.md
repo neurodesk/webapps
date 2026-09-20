@@ -4,6 +4,12 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.2
+
+
+### Patch Changes
+
 - a213c53: Export cortical surfaces as printable STL from TopoFit: a dialog sets the triangle fraction to keep (10 to 100%, default 25) and Humphrey smoothing iterations (0 to 20, default 0), niimath simplifies and smooths each surface, and the app writes a binary STL per surface.
 
   STL export uses the shared busy and cancellation controls so replacement input cannot receive stale downloads.
