@@ -15,8 +15,10 @@ for (const width of [1440, 390]) {
     await page.screenshot({ path: test.info().outputPath("grand-tour-menu.png") });
     await page.locator("#play").click();
     const ocean = page.locator("#ocean");
-    await expect.poll(async () => Number(await ocean.getAttribute("data-elapsed")),
-      { timeout: 15000 }).toBeGreaterThan(5);
+    // Physics caps each frame's delta, while the race clock counts real time.
+    // Software rendering on CI therefore needs longer to cover this distance.
+    await expect.poll(async () => Number(await ocean.getAttribute("data-distance")),
+      { timeout: 30000 }).toBeGreaterThan(10);
     await page.locator("#quick-play").click();
     await expect(ocean).toHaveAttribute("data-bumps", "0");
     await expect(ocean).toHaveAttribute("data-blocked", "false");
