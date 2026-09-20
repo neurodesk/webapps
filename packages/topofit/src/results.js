@@ -1,3 +1,5 @@
+import { midSurface } from './patches.js';
+
 const encoder = new TextEncoder();
 
 export function writeFreeSurfer(vertices, faces, sourceName = 'topofit-web') {
@@ -52,4 +54,21 @@ export function readFloat32Asset(bytes) {
   const output = new Float32Array(bytes.byteLength / 4);
   for (let i = 0; i < output.length; i += 1) output[i] = view.getFloat32(i * 4, true);
   return output;
+}
+
+export function writeSurfaceFiles(vertices, faces) {
+  return ['lh', 'rh'].flatMap((hemisphere) => {
+    const surfaces = {
+      white: vertices[`${hemisphere}.white`],
+      mid: midSurface(vertices[`${hemisphere}.white`], vertices[`${hemisphere}.pial`]),
+      pial: vertices[`${hemisphere}.pial`],
+      registration: vertices[`${hemisphere}.registration`],
+    };
+    return Object.entries(surfaces).map(([surface, points]) => ({
+      id: `${hemisphere}-${surface}`,
+      name: `${hemisphere}.${surface === 'mid' ? 'mid.white' : surface}`,
+      mediaType: 'application/vnd.freesurfer.surface',
+      bytes: writeFreeSurfer(points, faces[hemisphere]),
+    }));
+  });
 }

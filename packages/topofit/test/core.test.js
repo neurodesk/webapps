@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { estimateBrainAffine } from '../src/affine.js';
 import { runTopofit } from '../src/pipeline.js';
-import { writeFreeSurfer } from '../src/results.js';
+import { writeFreeSurfer, writeSurfaceFiles } from '../src/results.js';
 import {
   axisAlignedVoxelSpacing,
   cropAndNormalize,
@@ -96,4 +96,35 @@ test('FreeSurfer writer emits triangular geometry and volume metadata', () => {
   assert.equal(view.getInt32(headerEnd, false), 3);
   assert.equal(view.getInt32(headerEnd + 4, false), 1);
   assert.match(new TextDecoder().decode(bytes.slice(-180)), /valid = 1/);
+});
+
+test('reconstruction export includes complete bilateral mid-surfaces without optional analysis', () => {
+  const white = Float64Array.from([-12.25, 4.5, 7, -8, 6, 8, -14, 10, 9]);
+  const pial = Float64Array.from(white, (value, i) => value + [0.5, -1, 2][i % 3]);
+  const vertices = {};
+  const faces = {};
+  for (const side of ['lh', 'rh']) {
+    vertices[`${side}.white`] = white;
+    vertices[`${side}.pial`] = pial;
+    vertices[`${side}.registration`] = white;
+    faces[side] = Int32Array.from([0, 1, 2]);
+  }
+  const original = structuredClone(vertices);
+  const files = writeSurfaceFiles(vertices, faces);
+  for (const side of ['lh', 'rh']) {
+    const file = files.find(({ id }) => id === `${side}-mid`);
+    assert.equal(file.name, `${side}.mid.white`);
+    const bytes = new Uint8Array(file.bytes);
+    let offset = 3;
+    for (let lines = 0; lines < 2;) if (bytes[offset++] === 10) lines += 1;
+    const view = new DataView(file.bytes);
+    assert.equal(view.getInt32(offset), 3);
+    assert.equal(view.getInt32(offset + 4), 1);
+    offset += 8;
+    for (let i = 0; i < white.length; i += 1) assert.equal(view.getFloat32(offset + i * 4), (white[i] + pial[i]) / 2);
+    offset += white.length * 4;
+    assert.deepEqual(Array.from({ length: 3 }, (_, i) => view.getInt32(offset + i * 4)), [0, 1, 2]);
+  }
+  assert.equal(files.length, 8);
+  assert.deepEqual(vertices, original);
 });

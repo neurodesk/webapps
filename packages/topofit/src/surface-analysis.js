@@ -61,6 +61,7 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
         patch_id: id,
         surface: `${hemisphere}.mid`,
         center_ras_mm: patch.center,
+        center_vertex_index: patch.centerVertexIndex,
         normal_ras: normal,
         center_lps_mm: patch.center.map((v, axis) => axis < 2 ? -v : v),
         normal_lps: normal.map((v, axis) => axis < 2 ? -v : v),
@@ -89,12 +90,20 @@ export async function analyzeSurfaces({ source, vertices, faces, estimateNormals
   if (settings && !eligibleFaceCount) throw new Error(roi ? 'ROI contains no eligible cortical patch.' : 'No eligible cortical faces in the requested hemisphere.');
   const analysis = {
     depth_fraction: 0.5,
+    coordinate_system: 'Scanner RAS (positions in mm; normals dimensionless)',
+    patch_center_method: 'Mid-surface member vertex nearest the area-weighted patch centroid',
+    patch_normal_method: 'Unit fitted-plane normal, oriented white-to-pial',
     normal_method: 'Area-weighted mid-surface vertex normals, oriented white-to-pial',
     flat_patch_definition: settings ? { schema_version: 2, ...settings, cortex_mask: 'fsaverage_cortex_via_registration', medial_wall_margin_mm: 5, min_ribbon_separation_mm: 0.5, min_normal_coherence: 0.9, region: roi ? 'roi' : 'cortex' } : null,
     flat_patch_status: settings ? Object.keys(flatPatches).length ? 'PATCHES_FOUND' : 'NO_PATCH_MEETS_CRITERIA' : 'NOT_REQUESTED',
     flat_patches: flatPatches,
   };
   if (settings) {
+    const csv = ['patch_id,surface,center_vertex_index,x_ras_mm,y_ras_mm,z_ras_mm,nx_ras,ny_ras,nz_ras,area_mm2,rms_distance_mm'];
+    for (const patch of Object.values(flatPatches)) {
+      csv.push([patch.patch_id, patch.surface, patch.center_vertex_index, ...patch.center_ras_mm, ...patch.normal_ras, patch.area_mm2, patch.rms_distance_mm].join(','));
+    }
+    files.push({ id: 'patch-coordinates', name: 'topofit_patch_coordinates_ras.csv', mediaType: 'text/csv', bytes: encoder.encode(`${csv.join('\n')}\n`).buffer });
     files.push(jsonFile('patch-geometry', 'topofit_patch_geometry.json', { depth_fraction: 0.5, patches: geometries }));
     if (Object.keys(flatPatches).length) {
       files.push({ id: 'patch-qc', name: 'topofit_patch_qc.nii', mediaType: 'application/nifti', bytes: patchQc(source, geometries, flatPatches) });

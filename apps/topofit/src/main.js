@@ -42,6 +42,7 @@ let importedImages = [];
 let timer;
 let started;
 let surfaceAnalysis;
+let selectedPatch;
 let reconstruction;
 let operation = 'Reconstruction';
 let preparation;
@@ -49,23 +50,28 @@ let meshSceneReady = false;
 let viewerBusy = false;
 const loadedMeshes = new Map();
 const visibleMeshes = new Set();
-const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-pial', 'rh-pial']);
+const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
 const stageLabels = {
   qc: 'Source-grid QC overlay',
   'lh-white': 'Left white surface',
   'rh-white': 'Right white surface',
+  'lh-mid': 'Left mid-surface',
+  'rh-mid': 'Right mid-surface',
   'lh-pial': 'Left pial surface',
   'rh-pial': 'Right pial surface',
   provenance: 'Processing manifest',
   'lh-normals': 'Left mid-surface normals',
   'rh-normals': 'Right mid-surface normals',
   'patch-qc': 'Cortical patches and normals',
+  'patch-coordinates': 'Patch coordinates and normals (RAS)',
   'patch-geometry': 'Paired patch geometry and local normals',
   'surface-analysis': 'Surface analysis measurements',
 };
 const meshColors = {
   'lh-white': [0.35, 0.7, 1, 1],
   'rh-white': [1, 0.7, 0.3, 1],
+  'lh-mid': [0.2, 0.85, 0.75, 1],
+  'rh-mid': [1, 0.55, 0.65, 1],
   'lh-pial': [0.15, 0.35, 1, 1],
   'rh-pial': [1, 0.25, 0.15, 1],
 };
@@ -128,6 +134,31 @@ function resultLabel(stage) {
   return patch ? `${patch[1] === 'LH' ? 'Left' : 'Right'} flat patch ${Number(patch[2])}` : stageLabels[stage] || stage;
 }
 
+function showPatchMeasurements(patch) {
+  selectedPatch = patch;
+  $('patchMeasurements').hidden = !patch;
+  $('patchCopyStatus').textContent = '';
+  $('patchMeasurementTitle').textContent = patch ? resultLabel(patch.patch_id) : '';
+  const format = (values, decimals) => values.map((value, axis) => `${'RAS'[axis]} ${value.toFixed(decimals)}`).join(' · ');
+  $('patchCenter').value = patch ? format(patch.center_ras_mm, 3) : '';
+  $('patchNormal').value = patch ? format(patch.normal_ras, 6) : '';
+}
+
+$('copyPatchCoordinates').onclick = async () => {
+  if (!selectedPatch) return;
+  const patch = selectedPatch;
+  try {
+    await navigator.clipboard.writeText(JSON.stringify({
+      coordinate_system: 'Scanner RAS',
+      normal_method: 'Unit fitted-plane normal, oriented white-to-pial',
+      ...patch,
+    }, null, 2));
+    if (selectedPatch === patch) $('patchCopyStatus').textContent = 'Copied full-precision patch measurements.';
+  } catch {
+    if (selectedPatch === patch) $('patchCopyStatus').textContent = 'Clipboard unavailable. Download Patch coordinates and normals (RAS) instead.';
+  }
+};
+
 function status(message, error = false) {
   $('statusText').textContent = message;
   $('statusText').classList.toggle('error', error);
@@ -138,6 +169,8 @@ function setBusy(value) {
   busy = value;
   exampleControl.setDisabled(value);
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value;
+  for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || viewerBusy;
+  $('copyPatchCoordinates').disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
   $('analyzeButton').disabled = value || viewerBusy || !reconstruction;
   $('cancelButton').hidden = !value;
@@ -146,7 +179,7 @@ function setBusy(value) {
 
 function setViewerBusy(value) {
   viewerBusy = value;
-  for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value;
+  for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || busy;
   $('runButton').disabled = value || busy || !source;
   $('analyzeButton').disabled = value || busy || !reconstruction;
 }
@@ -172,6 +205,7 @@ async function ensureViewer() {
 }
 
 async function resetMeshes(nv) {
+  showPatchMeasurements(null);
   await nv.removeAllMeshes();
   loadedMeshes.clear();
   visibleMeshes.clear();
@@ -191,7 +225,7 @@ async function showSource() {
 
 async function setMeshVisible(stage, visible, input) {
   const file = outputs.get(stage);
-  if (!file || !surfaceStages.has(stage) || viewerBusy) {
+  if (!file || !surfaceStages.has(stage) || viewerBusy || busy) {
     input.checked = !visible;
     return;
   }
@@ -199,6 +233,7 @@ async function setMeshVisible(stage, visible, input) {
   try {
     const nv = await ensureViewer();
     if (!meshSceneReady) {
+      showPatchMeasurements(null);
       nv.meshThicknessOn2D = Infinity;
       await nv.removeAllMeshes();
       await nv.loadVolumes([{ url: source, name: source.name }]);
@@ -236,7 +271,7 @@ async function setMeshVisible(stage, visible, input) {
 
 async function showResult(stage) {
   const file = outputs.get(stage);
-  if (!file) return;
+  if (!file || busy) return;
   if (file.type === 'application/json' || file.type === 'text/csv') {
     const content = document.createElement('pre');
     content.className = 'nd-console-output';
@@ -257,7 +292,10 @@ async function showResult(stage) {
       $('imageLabel').textContent = stage === 'patch-qc' ? 'PATCHES · WHITE 2400 · PIAL 2700 · MID 3000 · NORMAL 4095' : 'ORIGINAL IMAGE · TOPOFIT QC';
       toolbar.setActive('multiplanar');
       const firstPatch = stage === 'patch-qc' && Object.values(surfaceAnalysis?.flat_patches || {})[0];
-      if (firstPatch) nv.setCrosshairPos(firstPatch.center_ras_mm);
+      if (firstPatch) {
+        nv.setCrosshairPos(firstPatch.center_ras_mm);
+        showPatchMeasurements(firstPatch);
+      }
     } else {
       const patch = surfaceAnalysis?.flat_patches?.[stage];
       nv.meshThicknessOn2D = patch ? 1 : Infinity;
@@ -271,6 +309,7 @@ async function showResult(stage) {
       $('imageLabel').textContent = resultLabel(stage);
       toolbar.setActive('multiplanar');
       if (patch) {
+        showPatchMeasurements(patch);
         nv.setCrosshairPos(patch.center_ras_mm);
         $('imageLabel').textContent = `${resultLabel(stage)} · ${patch.area_mm2.toFixed(1)} mm² · RMS ${patch.rms_distance_mm.toFixed(3)} mm`;
       }
@@ -290,6 +329,7 @@ async function load(file) {
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
+    showPatchMeasurements(null);
     source = file;
     reconstruction = null;
     outputs = new Map();
@@ -354,7 +394,6 @@ $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion')
 async function run(analysisOnly = false) {
   if (!source || busy || viewerBusy || (analysisOnly && !reconstruction)) return;
   if (analysisOnly && !$('estimateNormals').checked && !$('findPatches').checked) {
-    $('surfaceAnalysisSettings').open = true;
     status('Choose normals, flat patches, or both.', true);
     return;
   }
@@ -378,7 +417,6 @@ async function run(analysisOnly = false) {
       roiBuffer = await images[0].arrayBuffer();
     } catch (error) {
       if (preparation !== currentPreparation) return;
-      $('surfaceAnalysisSettings').open = true;
       $('patchQuality').open = true;
       status(error.message, true);
       setBusy(false);
@@ -422,6 +460,7 @@ async function run(analysisOnly = false) {
       status(data.message, true);
     }
     if (data.type === 'result') {
+      showPatchMeasurements(null);
       surfaceAnalysis = data.provenance.surfaceAnalysis;
       if (analysisOnly) outputs = new Map(reconstruction.files);
       for (const output of data.files) {
