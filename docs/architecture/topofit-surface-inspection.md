@@ -7,8 +7,9 @@ representative point and fitted normal in scanner RAS coordinates.
 
 `runTopofit(options).files` includes `lh-mid` and `rh-mid` even when optional
 surface analysis is disabled. Their FreeSurfer files use `.mid.white` names so
-NiiVue recognizes the mesh format. The existing result-list checkboxes view them
-in 3-Plane or 3D, and Download saves the complete meshes.
+NiiVue recognizes the mesh format. Each result's View button opens that surface
+alone in 3D. Checkboxes combine surfaces for comparison or STL export, and
+Download saves the complete meshes.
 
 Selecting a flat patch centers the crosshair on `center_ras_mm` and displays that
 point with `normal_ras`. The readout remains the selected patch's measurement
@@ -53,6 +54,13 @@ when the selected patch or QC overlay is hidden or removed. Removal events fire
 before model mutation in rc.13, so readers use a microtask, matching FreeBrowse's
 own event adapter. Surface lookup uses output filenames rather than mutable
 array indices.
+
+Surface scenes use the `crosscut` slice shader with a 1 mm thickness, while 3D
+uses the normal shaded mesh. A volume clip plane at depth -1 removes the entire
+MRI ray march without removing slice images or clipping meshes. Original-image
+and QC scenes reset the plane to the disabled depth 2. X-ray defaults to zero so
+hidden folds do not show through the surface. The View action replaces the mesh
+scene and opens Render; ACSR retains the boundary-only slices beside the 3D mesh.
 
 The embedding uses an open shadow root because FreeBrowse's published Tailwind
 utilities are global and marked important. Both its stylesheet and the shared

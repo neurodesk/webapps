@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.4.4
+
+### Patch Changes
+
+- 4959500: Add an individual 3D View action for cortical surfaces, hide the MRI volume in surface scenes, and draw thin surface boundaries on the 2D slices. Keep visibility checkboxes for comparisons and STL export.
+
 ## 0.4.3
 
 ### Patch Changes

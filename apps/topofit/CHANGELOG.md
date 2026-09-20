@@ -1,5 +1,17 @@
 # topofit
 
+## 0.10.20260920
+
+### Minor Changes
+
+- 4959500: Add an individual 3D View action for cortical surfaces, hide the MRI volume in surface scenes, and draw thin surface boundaries on the 2D slices. Keep visibility checkboxes for comparisons and STL export.
+
+### Patch Changes
+
+- Updated dependencies [4959500]
+  - @neurodesk/webapp-components@0.4.4
+  - @neurodesk/topofit@0.10.20260920
+
 ## 0.9.20260920
 
 ### Minor Changes

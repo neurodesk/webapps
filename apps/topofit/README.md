@@ -19,12 +19,14 @@ pnpm --filter topofit test:e2e
 For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release directory and `VITE_TOPOFIT_ASSET_BASE=/model-assets/`. See [`packages/topofit/validation/README.md`](../../packages/topofit/validation/README.md) for the pinned-container comparison.
 
 The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
-NIfTI, and a JSON processing manifest. White, mid-surface and pial checkboxes can be
-combined over the anatomical slices or in 3D. FreeBrowse provides axial, coronal,
+NIfTI, and a JSON processing manifest. Each surface's View button opens it alone
+in 3D, with the MRI volume clipped away so the skull cannot obscure it. White,
+mid-surface and pial checkboxes combine surfaces for comparison or STL export.
+The 2D slices show thin surface boundaries. FreeBrowse provides axial, coronal,
 sagittal, ACS, ACSR and Render views. ACSR shows all three slices with the 3D
 render; Render shows the surface in 3D. Its sidebar offers volume and surface
 visibility, contrast, color and opacity controls. The X-ray control appears while a
-cortical surface is visible and defaults to 10%. Registration spheres are retained
+cortical surface is visible and defaults to 0%. Registration spheres are retained
 internally for atlas mapping and excluded from the browser output list. DICOM
 import uses the shared dcm2niix worker. Images and results are not uploaded to a processing service.
 

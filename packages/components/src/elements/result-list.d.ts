@@ -1,6 +1,7 @@
 export interface StageResult {
   description?: string;
   visible?: boolean;
+  viewable?: boolean;
   [key: string]: unknown;
 }
 
