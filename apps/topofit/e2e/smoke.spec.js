@@ -197,7 +197,7 @@ test('surface checkboxes show multiple meshes and expose the X-ray control', asy
   const visibleSurface = await canvas.screenshot();
   expect(visibleSurface.equals(hiddenSurface)).toBe(false);
   await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
-  await expect(page.locator('#meshXRay')).toHaveValue('0.1');
+  await expect(page.locator('#meshXRay')).toHaveValue('0');
   await left.uncheck();
   await expect(left).toBeEnabled();
   const hiddenAgain = await canvas.screenshot();

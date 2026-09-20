@@ -77,14 +77,14 @@ const meshColors = {
   'lh-pial': [0.15, 0.35, 1, 1],
   'rh-pial': [1, 0.25, 0.15, 1],
 };
-const xrayValue = createElement('span', { id: 'meshXRayValue', text: '10%' });
+const xrayValue = createElement('span', { id: 'meshXRayValue', text: '0%' });
 const xrayInput = createElement('input', {
   id: 'meshXRay',
   type: 'range',
   min: 0,
   max: 1,
   step: 0.05,
-  value: 0.1,
+  value: 0,
   'aria-label': 'Mesh X-ray',
   oninput: (event) => {
     const value = Number(event.currentTarget.value);
@@ -326,6 +326,7 @@ async function resetMeshes(nv) {
 async function showSource() {
   const nv = await ensureViewer();
   await resetMeshes(nv);
+  nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
   $('emptyState').hidden = true;
@@ -344,7 +345,8 @@ async function setMeshVisible(stage, visible, input) {
     if (visible && !meshSceneReady) {
       displayedResult = null;
       showPatchMeasurements(null);
-      nv.meshThicknessOn2D = Infinity;
+      nv.meshThicknessOn2D = 1;
+      nv.setClipPlane([-1, 0, 0]);
       await nv.removeAllMeshes();
       await nv.loadVolumes([{ url: source, name: source.name }]);
       visibleMeshes.clear();
@@ -353,7 +355,7 @@ async function setMeshVisible(stage, visible, input) {
     }
     const index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
     if (index < 0) {
-      if (visible) await nv.addMesh({ url: file, name: file.name, color: meshColors[stage] });
+      if (visible) await nv.addMesh({ url: file, name: file.name, color: meshColors[stage], sliceShaderType: 'crosscut' });
     } else {
       await nv.setMesh(index, { opacity: visible ? 1 : 0 });
     }
@@ -386,6 +388,7 @@ async function showResult(stage) {
     const nv = await ensureViewer();
     await resetMeshes(nv);
     if (stage === 'qc' || stage === 'patch-qc') {
+      nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
       await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: 0.75, ...overlay }]);
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -398,15 +401,24 @@ async function showResult(stage) {
       }
     } else {
       const patch = surfaceAnalysis?.flat_patches?.[stage];
-      nv.meshThicknessOn2D = patch ? 1 : Infinity;
+      nv.meshThicknessOn2D = 1;
+      // Clip the entire MRI in 3D; slice images and mesh rendering are unaffected.
+      nv.setClipPlane([-1, 0, 0]);
       await nv.loadVolumes([{ url: source, name: source.name }]);
       await nv.loadMeshes([{
         url: file,
         name: file.name,
-        ...(patch ? { color: [1, 0.85, 0, 1], sliceShaderType: 'crosscut' } : {}),
+        sliceShaderType: 'crosscut',
+        ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
+        ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
       }]);
-      nv.sliceType = SLICE_TYPE.MULTIPLANAR;
-      displayedResult = stage;
+      nv.sliceType = surfaceStages.has(stage) ? SLICE_TYPE.RENDER : SLICE_TYPE.MULTIPLANAR;
+      meshSceneReady = surfaceStages.has(stage);
+      displayedResult = surfaceStages.has(stage) ? null : stage;
+      if (surfaceStages.has(stage)) {
+        const mesh = nv.meshes[0];
+        nv.setCrosshairPos([0, 1, 2].map((axis) => (mesh.extentsMin[axis] + mesh.extentsMax[axis]) / 2));
+      }
       $('imageLabel').textContent = resultLabel(stage);
       if (patch) {
         showPatchMeasurements(patch);
@@ -578,7 +590,7 @@ async function run(analysisOnly = false) {
       }
       results.render(Object.fromEntries([...outputs].map(([id]) => [
         id,
-        surfaceStages.has(id) ? { visible: false } : { description: resultLabel(id) },
+        surfaceStages.has(id) ? { visible: false, viewable: true } : { description: resultLabel(id) },
       ])));
       $('stlButton').hidden = !reconstruction;
       $('outputSection').open = true;
