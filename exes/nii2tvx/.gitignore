@@ -1,0 +1,6 @@
+nii2tvx
+nii2tvx_asan
+nii2tvx.mjs
+nii2tvx.wasm
+*.dSYM/
+*.tvx

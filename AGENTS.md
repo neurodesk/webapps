@@ -88,6 +88,20 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   1.4.20260909 — once that ships, drop the direct `callMain` path and `writeMz3`/`readMz3` for the fluent
   API's own STL output.
 
+## nii2tvx and disconnectome
+
+- `exes/nii2tvx` is the C tool (the first non-Rust entry in `exes/`); `apps/disconnectome`
+  is its web front end. `nii2tvx.c` is split by `#ifndef __EMSCRIPTEN__`: above it the query
+  core, buffer in and numbers out, no file I/O and no zlib, which is the whole 21 KB WASM
+  surface; below it file reading, TRK/TCK conversion and `main`. Keep that boundary or the
+  browser build grows a filesystem.
+- The browser owns gzip (`DecompressionStream`); `mask_open` takes uncompressed NIfTI bytes.
+- The TSV must match the CLI byte for byte, so JavaScript formats fractions with a `%g`
+  reimplementation, not `toPrecision`: the two differ on `nan`/`NaN`, on `3.24086e-05` versus
+  `0.0000324086`, and on `1e-07` versus `1e-7`. `make test` enforces it.
+- Lesions must sit on the atlas grid (MNI152 1 mm, 182x218x182, sform). The app refuses
+  anything else and points at SYNcro, which normalizes to exactly that template.
+
 ## Native executables (exes/)
 
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`
