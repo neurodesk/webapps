@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260925
+
+### Patch Changes
+
+- Recover from sustained vessel-wall stalls by selecting a swept-clear escape direction, turning in place, and moving away slowly. Keep wall stops visible even when the proximity throttle is zero, preserve manual overrides, and replay captured and symmetric wall poses through the same movement controller as the game.
+
 ## 0.1.20260924
 
 ### Patch Changes

@@ -39,7 +39,7 @@ test("a local segmentation loads, is explored on a phone, and the brain can be r
   );
   expect(Math.abs(heading[0])).toBeGreaterThan(0.05);
   await page.keyboard.up("Shift");
-  await page.screenshot({ path: "/tmp/vessel-import-phone.png" });
+  await page.screenshot({ path: test.info().outputPath("vessel-import-phone.png") });
   await page.keyboard.press("Escape");
   await expect(page.locator("#ocean")).toHaveAttribute("data-state", "paused");
   await page.locator("#menu-button").click();

@@ -12,7 +12,7 @@ for (const width of [1440, 390])
     await page.getByText("Controls", { exact: true }).click();
     await page.locator("#speed").fill("1.5");
     await expect(page.locator("#speed-value")).toHaveText("1.5×");
-    await page.screenshot({ path: `/tmp/vessel-surfer-${width}-menu.png` });
+    await page.screenshot({ path: test.info().outputPath(`vessel-surfer-${width}-menu.png`) });
     await page.evaluate(() => {
       window.tunnelFailures = [];
       function checkTunnel() {
@@ -35,7 +35,7 @@ for (const width of [1440, 390])
         Number(await page.locator("#ocean").getAttribute("data-distance")),
       )
       .toBeGreaterThan(0.5);
-    await page.screenshot({ path: `/tmp/vessel-surfer-${width}-dive.png` });
+    await page.screenshot({ path: test.info().outputPath(`vessel-surfer-${width}-dive.png`) });
     await page.keyboard.press("Space");
     await expect(page.locator("#ocean")).toHaveAttribute("data-state", "paused");
     await expect(page.locator("#menu")).toContainText("Paused");
@@ -63,7 +63,7 @@ for (const width of [1440, 390])
     expect(await page.locator("#ocean").getAttribute("data-distance")).toBe(
       distance,
     );
-    await page.screenshot({ path: `/tmp/vessel-surfer-${width}-paused.png` });
+    await page.screenshot({ path: test.info().outputPath(`vessel-surfer-${width}-paused.png`) });
     await page.locator("#play").click();
     await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
     await page.keyboard.press("Escape");
