@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/vessel-surfer-easter-egg",
-  "version": "0.1.20260922",
+  "version": "0.1.20260923",
   "private": true,
   "type": "module",
   "scripts": {
