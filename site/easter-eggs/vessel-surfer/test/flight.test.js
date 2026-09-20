@@ -2,10 +2,33 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
 import { Flight } from "../src/flight.js";
-import { volume } from "../test-fixtures/human.js";
+import { network, volume } from "../test-fixtures/human.js";
+import { humanChallenge } from "../src/navigation-map.js";
+import { TRACKS } from "../src/race.js";
 import { clearSight } from "../src/chase.js";
 import { insideMask } from "../src/mask.js";
 import { surfaceGuard } from "../src/surface-guard.js";
+
+for (const cruise of [0.5, 1, 3]) {
+  test(`Grand tour has a clear five-second launch at ${cruise}× without steering`, () => {
+    const { path, directions } = humanChallenge(network, volume, TRACKS[2]);
+    const position = path[0].clone();
+    const heading = directions[0].clone();
+    const up = new THREE.Vector3(0, 1, 0);
+    up.addScaledVector(heading, -up.dot(heading)).normalize();
+    const flight = new Flight();
+    let travel = 0;
+    for (let frame = 0; frame < 300; frame++) {
+      const previous = position.clone();
+      const result = flight.step(volume, position, heading, up, { dt: 1 / 60, cruise });
+      assert.equal(result.blocked, false, `wall stop after ${frame / 60} seconds`);
+      assert.ok(clearSight(volume, previous, position), "never crosses the wall");
+      travel += result.moved;
+    }
+    assert.ok(travel > cruise * Math.min(...volume.scale) * 6 * 5 * 0.9,
+      "launch keeps moving instead of slowing to a crawl");
+  });
+}
 
 // Captured from the paused Narrows run, 49.649 seconds and six bumps.
 const captured = () => ({

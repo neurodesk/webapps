@@ -57,10 +57,17 @@ export function humanChallenge(network, volume, track = TRACKS[0], spacing = 0.2
     ({ edges, length } = longest(node, -1));
     if (!edges.length) throw new Error(`Track ${track.challenge} has no route.`);
   }
+  let remainingInset = path.length ? 0 : track.start.inset ?? 0;
   for (const id of edges) {
     const edge = network.edges[id];
     const forward = edge.a === node;
-    sample(edge, forward ? 0 : 1, forward ? 1 : 0);
+    // Leaf tips can begin with a tight bend. A track may launch further along
+    // the route, with the map, arrows and measured race sharing that start.
+    const inset = Math.min(remainingInset, edge.length);
+    remainingInset -= inset;
+    const from = forward ? inset / edge.length : 1 - inset / edge.length;
+    if (inset < edge.length) sample(edge, from, forward ? 1 : 0);
+    length -= inset;
     node = forward ? edge.b : edge.a;
   }
   // The trail arrows need a direction at every sample.

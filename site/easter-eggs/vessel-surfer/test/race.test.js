@@ -88,8 +88,8 @@ test("each track keeps its own best runs on the device", () => {
   saveScore(storage, { seconds: 20, bumps: 0, points: pointsFor(20, 0) });
   assert.deepEqual(readScores(storage).map((r) => r.points), [4000]);
   assert.deepEqual(readScores(storage, "pial-arteries-v2-sprint").map((r) => r.points), [3200]);
-  assert.deepEqual(readScores(storage, "pial-arteries-v2-tour"), []);
-  assert.equal(new Race(0.1, "pial-arteries-v2-tour").challenge, "pial-arteries-v2-tour");
+  assert.deepEqual(readScores(storage, "pial-arteries-v3-tour"), []);
+  assert.equal(new Race(0.1, "pial-arteries-v3-tour").challenge, "pial-arteries-v3-tour");
 });
 test("every track has a continuous in-vessel route of its declared length", () => {
   assert.equal(new Set(CHALLENGES).size, TRACKS.length, "challenge ids are unique");

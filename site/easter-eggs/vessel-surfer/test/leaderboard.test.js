@@ -34,8 +34,8 @@ test("reads and submits through the server when it is reachable", async () => {
   assert.equal(top.scope, "global");
   assert.equal(top.rows[0].name, "Ada");
   assert.equal(calls[0].url, "https://api.example/scores?challenge=pial-arteries-v2&limit=5");
-  await board.top(3, "pial-arteries-v2-tour");
-  assert.equal(calls[1].url, "https://api.example/scores?challenge=pial-arteries-v2-tour&limit=3");
+  await board.top(3, "pial-arteries-v3-tour");
+  assert.equal(calls[1].url, "https://api.example/scores?challenge=pial-arteries-v3-tour&limit=3");
   calls.length = 0;
   const saved = await board.submit(result, "  Grace  ");
   assert.equal(saved.scope, "global");
@@ -82,7 +82,7 @@ test("Grand Tour completions persist on the server, including zero-point runs", 
     storage: memoryStorage(),
     fetch: (url, init) => handle(new Request(url, init), { store }),
   });
-  const challenge = "pial-arteries-v2-tour";
+  const challenge = "pial-arteries-v3-tour";
   for (const bumps of [0, 4]) {
     const result = { challenge, seconds: 60, bumps, points: pointsFor(60, bumps, challenge) };
     const saved = await board.submit(result, `Pilot ${bumps}`);
@@ -90,8 +90,12 @@ test("Grand Tour completions persist on the server, including zero-point runs", 
   }
   const reloaded = await board.top(10, challenge);
   assert.equal(reloaded.total, 2);
-  assert.deepEqual(reloaded.rows.map(({ points }) => points), [1600, 0]);
+  assert.deepEqual(reloaded.rows.map(({ points }) => points), [1550, 0]);
   assert.equal((await board.top(10, "pial-arteries-v2")).total, 0, "track boards stay separate");
+  const legacy = { challenge: "pial-arteries-v2-tour", seconds: 60, bumps: 0, points: 1600 };
+  assert.equal((await board.submit(legacy, "Old course")).scope, "global");
+  assert.equal((await board.top(10, legacy.challenge)).rows[0].points, 1600);
+  assert.equal((await board.top(10, challenge)).total, 2, "old course scores stay separate");
 });
 
 test("a failed local write is not reported as a saved score", async () => {

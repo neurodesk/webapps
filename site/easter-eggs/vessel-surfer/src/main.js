@@ -5,7 +5,7 @@ import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { Flight } from "./flight.js";
 import { createRouteArrowGeometry } from "./route-arrow.js";
-import { Race, BUMP_PENALTY, TRACKS, bumpPenalty, speedScore, trackFor } from "./race.js";
+import { Race, BUMP_PENALTY, TRACKS, bumpPenalty, speedScore } from "./race.js";
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
 import { aimFromOffset } from "./controls.js";
@@ -185,7 +185,9 @@ function boot() {
   let routeLength = 0;
   let challenge = null;
   const challenges = new Map();
-  let track = trackFor(storage?.getItem(TRACK_KEY)) || TRACKS[0];
+  const savedTrack = storage?.getItem(TRACK_KEY);
+  let track = TRACKS.find((item) => item.challenge ===
+    (savedTrack === "pial-arteries-v2-tour" ? "pial-arteries-v3-tour" : savedTrack)) || TRACKS[0];
   const player = new THREE.Vector3();
   const direction = new THREE.Vector3(0, 1, 0);
   const swimUp = new THREE.Vector3(0, 1, 0);

@@ -1,4 +1,4 @@
-import { CHALLENGE, CHALLENGES, pointsFor, readScores, saveScore } from "./race.js";
+import { CHALLENGE, SCORE_CHALLENGES, pointsFor, readScores, saveScore } from "./race.js";
 
 export const NAME_KEY = "vessel-surfer.name.v1";
 export const NAME_LIMIT = 16;
@@ -84,7 +84,7 @@ export function createLeaderboard({
     },
     async submit(result, name) {
       const track = result.challenge || challenge;
-      if (!CHALLENGES.includes(track)) throw new Error("Unknown track.");
+      if (!SCORE_CHALLENGES.includes(track)) throw new Error("Unknown track.");
       const entry = {
         challenge: track,
         name: cleanName(name),
