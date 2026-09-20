@@ -20,6 +20,38 @@ export function clearSight(volume, from, to, margin = 0.53) {
       return false;
   return volume.surfaceClear ? volume.surfaceClear(from, to) : true;
 }
+// How roomy the lumen is around a point: the mean free distance along the six
+// axis directions, capped at four voxels. Unlike lumenRadius, touching one
+// wall barely changes it, so it suits fog, lighting and the far plane.
+export function lumenExtent(volume, position) {
+  const unit = Math.min(...volume.scale);
+  const cap = unit * 4;
+  let total = 0;
+  for (const axis of [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, 0, 1),
+  ])
+    for (const sign of [-1, 1]) {
+      let free = cap;
+      for (let d = unit * 0.1; d <= cap; d += unit * 0.1) {
+        if (
+          sampleMask(
+            volume,
+            position
+              .clone()
+              .addScaledVector(axis, d * sign)
+              .toArray(),
+          ) <= 0.53
+        ) {
+          free = Math.max(0, d - unit * 0.1);
+          break;
+        }
+      }
+      total += free;
+    }
+  return total / 6;
+}
 export function lumenRadius(volume, position) {
   const unit = Math.min(...volume.scale);
   let radius = unit * 4;

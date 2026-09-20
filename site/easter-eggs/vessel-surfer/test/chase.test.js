@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { TunnelCamera, clearSight } from "../src/chase.js";
-import { sampleMask } from "../src/mask.js";
+import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "../src/chase.js";
+import { insideMask, sampleMask } from "../src/mask.js";
 import { routePose, advanceRoute } from "../src/network.js";
 import { volume, network, metadata } from "../test-fixtures/human.js";
 
@@ -102,4 +102,31 @@ test("rendered junction obstruction is detected even when the volume ray is clea
   }
   assert.ok(checked > 0);
   assert.ok(vetoes > 0, "the actual wall must veto a volume-only view somewhere");
+});
+
+test("touching one wall of a wide vessel barely changes the lumen extent", () => {
+  const start = routePose(network, network.start).position;
+  const unit = Math.min(...volume.scale);
+  const open = lumenExtent(volume, start);
+  assert.ok(open > unit * 2, `roomy at the launch point: ${open}`);
+  // Slide toward the nearest wall until just inside the lumen.
+  let axis = null,
+    best = Infinity;
+  for (const candidate of [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+  ]) {
+    let d = 0;
+    while (insideMask(volume, start.clone().addScaledVector(candidate, d + unit * 0.05).toArray())) d += unit * 0.05;
+    if (d < best) (best = d), (axis = candidate);
+  }
+  const pinned = start.clone().addScaledVector(axis, best);
+  assert.ok(insideMask(volume, pinned.toArray()));
+  assert.ok(lumenRadius(volume, pinned) < unit * 0.5, "the nearest wall is at hand");
+  // Touching one of six sides costs at most that side, so the mean stays roomy.
+  assert.ok(lumenExtent(volume, pinned) > Math.max(open * 0.4, unit * 1.5), `still roomy: ${lumenExtent(volume, pinned)} vs ${open}`);
 });

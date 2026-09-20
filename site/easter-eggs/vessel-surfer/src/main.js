@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { insideMask } from "./mask.js";
-import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
+import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
@@ -357,9 +357,16 @@ function boot() {
   function volumeOf() {
     return mask || human.volume;
   }
+  // Fog, lighting and the far plane follow how roomy the vessel is, smoothed
+  // over about half a second. They must not follow the distance to the
+  // nearest wall: brushing one wall of a wide trunk would otherwise thicken
+  // the fog until every other wall vanished into the dark.
+  let viewRadius = 0;
   function updateTunnel(dt, radius, snap = false) {
     const volume = volumeOf();
     const unit = Math.min(...volume.scale);
+    const extent = Math.max(unit * 1.5, lumenExtent(volume, player));
+    viewRadius = snap || !viewRadius ? extent : viewRadius + (extent - viewRadius) * (1 - Math.exp(-dt * 2));
     const ahead = player
       .clone()
       .addScaledVector(direction, Math.max(unit * 0.1, radius * 0.5));
@@ -383,7 +390,7 @@ function boot() {
     // dark window onto the fogged outside. The far plane sits well inside the
     // fog so long vessels fade instead of ending at a hard edge.
     camera.near = Math.max(0.0003, radius * 0.003);
-    camera.far = Math.max(4, radius * 40);
+    camera.far = Math.max(4, viewRadius * 40);
     camera.updateProjectionMatrix();
     const distance = Math.min(radius * 1.3, player.distanceTo(ahead) * 0.7);
     const subPoint = player
@@ -397,9 +404,10 @@ function boot() {
     headlamp.position
       .copy(player)
       .addScaledVector(tunnel.heading, Math.min(radius * 0.1, distance * 0.1));
-    headlamp.intensity = Math.max(0.15, radius * 9);
-    headlamp.distance = Math.max(unit * 6, radius * 15);
-    scene.fog.density = 0.09 / Math.max(radius, unit * 0.3);
+    headlamp.intensity = viewRadius * 9;
+    headlamp.distance = Math.max(unit * 6, viewRadius * 15);
+    scene.fog.density = 0.09 / viewRadius;
+    $("ocean").dataset.fogDensity = scene.fog.density.toFixed(3);
     const data = $("ocean").dataset;
     data.cameraInside = String(insideMask(volume, camera.position.toArray()));
     data.cameraPosition = JSON.stringify(camera.position.toArray());
