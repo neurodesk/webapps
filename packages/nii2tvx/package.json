@@ -1,0 +1,17 @@
+{
+  "name": "@neurodesk/nii2tvx",
+  "version": "0.1.20260920",
+  "private": true,
+  "type": "module",
+  "description": "Lesion-to-tract disconnection queries (nii2tvx) as WebAssembly",
+  "license": "BSD-2-Clause",
+  "exports": {
+    ".": "./src/index.js",
+    "./wasm": "./wasm/nii2tvx.mjs"
+  },
+  "files": ["src", "wasm", "LICENSE", "README.md"],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/index.js"
+  }
+}
