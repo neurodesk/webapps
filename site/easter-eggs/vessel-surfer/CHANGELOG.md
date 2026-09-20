@@ -1,5 +1,17 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260924
+
+### Patch Changes
+
+- Vessel Surfer: on a computer, click and hold anywhere to raise a floating joystick under the pointer and drag to steer; a resting or moving pointer still never steers. The U-turn now sweeps about a fixed axis so it ends facing exactly backwards from any pitched or rolled heading.
+
+## 0.1.20260923
+
+### Patch Changes
+
+- 1c3fa84: Vessel Surfer: fog, headlamp and the far plane now follow how roomy the vessel is (a smoothed mean of the free distance in six directions) instead of the distance to the nearest wall, so brushing one wall of a wide trunk no longer blacks out the whole view.
+
 ## 0.1.20260922
 
 ### Patch Changes

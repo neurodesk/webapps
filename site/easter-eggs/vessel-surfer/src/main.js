@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { insideMask } from "./mask.js";
-import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
+import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
@@ -217,6 +217,7 @@ function boot() {
   let tiltRecentres = 0;
   const overviewMap = new OverviewMap(renderer, scene, $("map"));
   const uturn = new UTurn();
+  const uturnAxis = new THREE.Vector3(0, 1, 0);
   let turnRequest = false;
   let coachUntil = 0;
   let vesselBounds = new THREE.Sphere(new THREE.Vector3(), 60);
@@ -357,9 +358,16 @@ function boot() {
   function volumeOf() {
     return mask || human.volume;
   }
+  // Fog, lighting and the far plane follow how roomy the vessel is, smoothed
+  // over about half a second. They must not follow the distance to the
+  // nearest wall: brushing one wall of a wide trunk would otherwise thicken
+  // the fog until every other wall vanished into the dark.
+  let viewRadius = 0;
   function updateTunnel(dt, radius, snap = false) {
     const volume = volumeOf();
     const unit = Math.min(...volume.scale);
+    const extent = Math.max(unit * 1.5, lumenExtent(volume, player));
+    viewRadius = snap || !viewRadius ? extent : viewRadius + (extent - viewRadius) * (1 - Math.exp(-dt * 2));
     const ahead = player
       .clone()
       .addScaledVector(direction, Math.max(unit * 0.1, radius * 0.5));
@@ -383,7 +391,7 @@ function boot() {
     // dark window onto the fogged outside. The far plane sits well inside the
     // fog so long vessels fade instead of ending at a hard edge.
     camera.near = Math.max(0.0003, radius * 0.003);
-    camera.far = Math.max(4, radius * 40);
+    camera.far = Math.max(4, viewRadius * 40);
     camera.updateProjectionMatrix();
     const distance = Math.min(radius * 1.3, player.distanceTo(ahead) * 0.7);
     const subPoint = player
@@ -397,9 +405,10 @@ function boot() {
     headlamp.position
       .copy(player)
       .addScaledVector(tunnel.heading, Math.min(radius * 0.1, distance * 0.1));
-    headlamp.intensity = Math.max(0.15, radius * 9);
-    headlamp.distance = Math.max(unit * 6, radius * 15);
-    scene.fog.density = 0.09 / Math.max(radius, unit * 0.3);
+    headlamp.intensity = viewRadius * 9;
+    headlamp.distance = Math.max(unit * 6, viewRadius * 15);
+    scene.fog.density = 0.09 / viewRadius;
+    $("ocean").dataset.fogDensity = scene.fog.density.toFixed(3);
     const data = $("ocean").dataset;
     data.cameraInside = String(insideMask(volume, camera.position.toArray()));
     data.cameraPosition = JSON.stringify(camera.position.toArray());
@@ -587,7 +596,7 @@ function boot() {
       ? tiltState === "unavailable"
         ? "Drag anywhere to steer · Turn flips around · hold Stop or Back"
         : "Tilt the phone to steer · tap to recentre · Turn flips around · hold Stop or Back"
-      : "Arrow keys or WASD steer · +/− sets speed · R turns around · Shift brakes · Space pauses";
+      : "Arrow keys or WASD steer, or click and drag · +/− sets speed · R turns around · Shift brakes · Space pauses";
   // Motion steering starts from a user gesture (the Dive tap) because iOS
   // only grants orientation events after DeviceOrientationEvent.requestPermission.
   // Without a sensor sample soon after, the drag joystick takes over.
@@ -920,8 +929,10 @@ function boot() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pause();
   });
-  // Touch without motion sensors: a floating joystick anchored where the drag
-  // began. With tilt steering, a tap on the canvas recentres the neutral pose.
+  // A floating joystick anchored where a drag began: the mouse on a computer
+  // (only while the button is held, so a resting pointer never steers and is
+  // free to reach the controls) and touch on a phone without motion sensors.
+  // With tilt steering, a tap on the canvas recentres the neutral pose.
   const stickRadius = 56;
   ocean.addEventListener("pointermove", (e) => {
     if (!running() || overview || stick.pointer !== e.pointerId) return;
@@ -937,7 +948,7 @@ function boot() {
     if (!running() || overview || stick.pointer !== null) return;
     e.preventDefault();
     ocean.focus({ preventScroll: true });
-    if (e.pointerType === "mouse") return;
+    if (e.button !== 0 && e.pointerType === "mouse") return;
     if (tiltState === "on") {
       tilt.reset();
       tiltRecentres++;
@@ -1105,7 +1116,12 @@ function boot() {
       if (turnRequest) {
         turnRequest = false;
         // Turn toward whichever side has more room.
-        if (uturn.begin(probe.left > probe.right ? -1 : 1)) steering.reset();
+        if (uturn.begin(probe.left > probe.right ? -1 : 1)) {
+          steering.reset();
+          // Sweep about the up axis as it is now, so the turn ends facing
+          // exactly backwards even from a pitched or rolled heading.
+          uturnAxis.copy(swimUp);
+        }
       }
       const turning = uturn.active;
       let turn;
@@ -1128,8 +1144,13 @@ function boot() {
           : combineDemand(playerDemand, assist, 0.6);
         turn = steering.update(demand.yaw, demand.pitch, dt);
       }
-      steer(direction, swimUp, turn.yaw, turn.pitch);
-      level(direction, swimUp, dt);
+      if (turning) {
+        direction.applyAxisAngle(uturnAxis, -turn.yaw).normalize();
+        swimUp.copy(uturnAxis);
+      } else {
+        steer(direction, swimUp, turn.yaw, turn.pitch);
+        level(direction, swimUp, dt);
+      }
       // Cruise at six voxels per second so thin, high-resolution vessels are
       // as navigable as coarse ones.
       let speed = cruise() * unit * (mask ? 2 : 6);
