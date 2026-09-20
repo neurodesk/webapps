@@ -25,7 +25,7 @@ async function settle(page) {
   return last.heading;
 }
 
-test("keys steer while braking and the mouse neither aims nor blocks the speed slider", async ({
+test("keys steer while braking, a held mouse drag steers, and a resting mouse reaches the slider", async ({
   page,
 }) => {
   test.setTimeout(120000);
@@ -60,17 +60,22 @@ test("keys steer while braking and the mouse neither aims nor blocks the speed s
     "data-camera-inside",
     "true",
   );
-  // The mouse is not a control on a computer: moving or dragging it leaves the
-  // heading alone, so the pointer is free to reach the speed slider.
+  // A resting or merely moving mouse never steers, so the pointer is free to
+  // reach the speed slider; a held drag raises a joystick that does.
   const settled = await settle(page);
   await page.mouse.move(720, 450);
   await page.mouse.move(1300, 200, { steps: 4 });
-  await page.mouse.move(400, 600);
-  await page.mouse.down();
-  await page.mouse.move(400, 500, { steps: 3 });
-  await page.mouse.up();
   await page.waitForTimeout(300);
   expect(dot(await heading(page), settled)).toBeGreaterThan(0.999);
+  await expect(page.locator("#stick")).toBeHidden();
+  await page.mouse.move(400, 600);
+  await page.mouse.down();
+  await expect(page.locator("#stick")).toBeVisible();
+  await page.mouse.move(460, 600, { steps: 3 });
+  await expect
+    .poll(async () => dot(await heading(page), settled))
+    .toBeLessThan(0.97);
+  await page.mouse.up();
   await expect(page.locator("#stick")).toBeHidden();
   await page.keyboard.up("Shift");
   await expect(page.locator("#brake")).toHaveAttribute("aria-pressed", "false");
@@ -85,15 +90,17 @@ test("keys steer while braking and the mouse neither aims nor blocks the speed s
     "data-camera-inside",
     "true",
   );
-  // U-turn: one key press reverses the heading.
-  await page.waitForTimeout(200);
-  const forward = await heading(page);
+  // U-turn: one key press reverses the heading. Brake meanwhile so the lumen
+  // assist does not move the baseline while the turn runs.
+  await page.keyboard.down("Shift");
+  const forward = await settle(page);
   await page.keyboard.press("r");
   await expect(page.locator("#ocean")).toHaveAttribute("data-turning", "true");
   await expect
     .poll(async () => dot(await heading(page), forward), { timeout: 15000 })
     .toBeLessThan(-0.9);
   await expect(page.locator("#ocean")).toHaveAttribute("data-turning", "false");
+  await page.keyboard.up("Shift");
   await expect(page.locator("#ocean")).toHaveAttribute("data-tilt", "off");
   // Speed changes mid-run from the keyboard and the in-run slider.
   await expect(page.locator("#speed-panel")).toBeVisible();
