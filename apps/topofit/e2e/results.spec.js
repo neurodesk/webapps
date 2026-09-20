@@ -102,7 +102,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
     await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
-    await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
+    await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
   }
   await page.screenshot({ path: testInfo.outputPath('surfaces-desktop.png') });
 });
@@ -150,11 +150,11 @@ test('bilateral mid-surfaces can be overlaid, viewed in 3D and downloaded withou
     const download = await downloading;
     expect(download.suggestedFilename()).toBe(`${side}.mid.white`);
     expect(await readFile(await download.path())).toEqual(Buffer.from(files.find((file) => file.id === `${side}-mid`).bytes));
-    await page.getByRole('button', { name: '3D', exact: true }).click();
-    await expect(page.locator('.nd-view-tab.active')).toHaveText('3D');
+    await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+    await expect(page.getByRole('radio', { name: 'Render view', exact: true })).toHaveAttribute('data-state', 'on');
     await expect(page.locator('#viewerError')).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath(`${side}-mid-3d.png`) });
-    await page.getByRole('button', { name: '3-Plane', exact: true }).click();
+    await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
     await row.getByRole('checkbox').uncheck();
   }
   await page.locator('#estimateNormals').check();
@@ -232,12 +232,13 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
 
   await expect(page.locator('#location')).toContainText(selected.center_ras_mm.map(Math.round).join('×'));
   await expect(page.locator('#viewerError')).toBeHidden();
-  await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
+  await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
   const canvas = await page.locator('#gl1').boundingBox();
   const axial = { x: canvas.x, y: canvas.y + canvas.height / 2, width: Math.floor(canvas.width / 2), height: Math.floor(canvas.height / 2) };
   const sliceImage = async (visible) => {
     await page.evaluate((enabled) => { window.patchRenderingEnabled = enabled; }, visible);
-    await page.getByRole('button', { name: '3-Plane', exact: true }).click();
+    await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+    await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
     return page.screenshot({ clip: axial });
   };
   await page.screenshot({ path: testInfo.outputPath('patch-before-scroll.png') });
@@ -261,6 +262,19 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await normals.getByRole('button', { name: 'Download', exact: true }).click();
   expect((await downloading).suggestedFilename()).toBe('lh.mid.normals.csv');
   await page.screenshot({ path: testInfo.outputPath('computed-patch.png') });
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect(page.locator('#patchMeasurements')).toBeHidden();
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Cortical patches and normals' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#patchMeasurements')).toBeVisible();
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Volumes', exact: true }).click();
+  const qcVolume = page.locator('.freebrowse-root p').filter({ hasText: /^topofit_patch_qc\.nii$/ }).locator('../..');
+  await qcVolume.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect(page.locator('#patchMeasurements')).toBeHidden();
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
   await expectCorticalOverlay(page);
   await expect(page.locator('#patchMeasurements')).toBeHidden();
   await patch.getByRole('button', { name: 'View', exact: true }).click();
@@ -398,7 +412,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Left flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1', { timeout: 30_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
-  await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
+  await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
   await page.screenshot({ path: testInfo.outputPath('real-selected-patch.png') });
   const canvas = await page.locator('#gl1').boundingBox();
   for (const [column, row] of [[0, 0], [1, 0], [0, 1]]) {
@@ -446,7 +460,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await expect(page.locator('#imageLabel')).toContainText('RIGHT MID-SURFACE');
   await expect(page.locator('#viewerError')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces.png') });
-  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces-3d.png') });
 });
 
@@ -574,4 +588,74 @@ test('STL export defaults to all four cortical surfaces', async ({ page }, testI
     const stl = await readFile(await download.path());
     expect(stl.readUInt32LE(80)).toBe(4);
   }
+});
+
+test('FreeBrowse surface controls stay synchronized with TopoFit results', async ({ page }, testInfo) => {
+  await deliverSurfaces(page);
+  const left = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
+  const right = page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true });
+  await left.check();
+  await expect(left).toBeEnabled();
+  await right.check();
+  await expect(right).toBeEnabled();
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
+  const leftSurface = page.locator('.freebrowse-root p').filter({ hasText: /^lh\.mid\.white$/ }).locator('../..');
+  await expect(leftSurface).toBeVisible();
+  await leftSurface.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect(left).not.toBeChecked();
+  await left.check();
+  await expect(left).toBeEnabled();
+  await leftSurface.getByTitle('Delete surface', { exact: true }).click();
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(left).not.toBeChecked();
+  await right.uncheck();
+  await expect(right).toBeEnabled();
+  await right.check();
+  await expect(right).toBeEnabled();
+  await left.check();
+  await expect(left).toBeEnabled();
+  await expect(leftSurface).toBeVisible();
+  await expect(page.locator('.freebrowse-root p').filter({ hasText: /^rh\.mid\.white$/ })).toBeVisible();
+  await page.getByRole('radio', { name: 'Axial view', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Axial view', exact: true })).toHaveAttribute('data-state', 'on');
+  await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('freebrowse-desktop.png') });
+  await page.getByRole('tab', { name: 'Volumes', exact: true }).click();
+  await page.getByTitle('Delete volume', { exact: true }).click();
+  await page.getByRole('button', { name: 'Remove', exact: true }).click();
+  await left.uncheck();
+  await expect(left).toBeEnabled();
+  await expect(left).not.toBeChecked();
+  await expect(right).toBeChecked();
+  await expect(page.locator('#imageLabel')).toHaveText('RIGHT MID-SURFACE');
+  await left.check();
+  await expect(left).toBeEnabled();
+  await right.check();
+  await expect(right).toBeEnabled();
+  await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
+
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#freebrowseViewer').scrollIntoViewIfNeeded();
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await expect(leftSurface).toBeVisible();
+  const outsideViewport = await page.locator('.freebrowse-root').evaluate((root) => [...root.querySelectorAll('button')]
+    .filter((button) => button.checkVisibility())
+    .filter((button) => button.getBoundingClientRect().right > window.innerWidth + 1)
+    .map((button) => button.title || button.textContent));
+  expect(outsideViewport).toEqual([]);
+  const targets = await page.locator('.freebrowse-root > header button').evaluateAll((buttons) => buttons.filter((button) => button.checkVisibility()).map((button) => {
+    const { width, height } = button.getBoundingClientRect();
+    return { name: button.title, width, height, minWidth: getComputedStyle(button).minWidth, minHeight: getComputedStyle(button).minHeight };
+  }));
+  expect(targets.filter(({ width, height }) => width < 44 || height < 44)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('freebrowse-phone.png') });
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
+  await page.locator('[data-neurodesk-theme-toggle]').click();
+  await expect(page.locator('.freebrowse-root')).not.toHaveClass(/\bdark\b/);
+  await page.locator('#freebrowseViewer').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('freebrowse-phone-light.png') });
+  await expect(page.locator('.freebrowse-root h1')).toBeHidden();
+  await expect(page.getByTitle('Switch to light mode', { exact: true })).toBeHidden();
 });

@@ -914,6 +914,7 @@ apps:
       - { name: FreeSurfer, url: https://surfer.nmr.mgh.harvard.edu/, role: fsaverage cortical eligibility atlas }
       - { name: BrainNet, url: https://github.com/simnibs/brainnet, role: TopoFit and TReGA pretrained models }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive volume and surface viewer }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: niimath, url: https://github.com/rordenlab/niimath, role: 1 mm RAS conforming }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }

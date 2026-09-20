@@ -30,21 +30,45 @@ Coordinates are source/scanner RAS millimetres; normals are dimensionless RAS
 components. Neither is FreeSurfer registration-sphere or voxel coordinates.
 The patch geometry JSON separately exports per-vertex positions and normals.
 
-## Design comparison
+## Viewer integration
 
-The native design keeps scientific geometry in `packages/topofit` and selection
-and display in `apps/topofit`. The existing NiiVue `locationChange` event continues
-to report cursor position separately from patch measurements.
+TopoFit mounts the published `freebrowse@2.5.0-next.1` from the
+[niivue-mono migration branch](https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration)
+at commit `1e6c35ca5d529f999d9537f2b220573f038c84e6`. Its NiiVue peer is pinned
+to `1.0.0-rc.13`; other apps retain their existing versions.
 
-The alternative was the [FreeBrowse migration integration](https://github.com/freesurfer/freebrowse/issues/38#issuecomment-5688546796).
-Its [`mountFreeBrowse` API](https://github.com/pwighton/freebrowse/blob/20260707-niivue-mono-migration/frontend/src/mount.tsx)
-mounts a complete React viewer and owns canvas attachment. The header is always
-rendered; hiding its sidebar/footer does not supply a headless API. Its footer
-shows cursor RAS, not patch normals. Published `freebrowse@2.5.0-next.1` pins
-NiiVue rc.13 while TopoFit uses patched rc.11. Two independent design candidates
-and a comparison favored native integration: FreeBrowse would still need the
-same geometry/readout work and add a viewer upgrade and UI ownership changes.
+`mountViewer(element, options)` in `apps/topofit/src/freebrowse-viewer.js` returns
+`{ nv, ready, destroy }`. FreeBrowse owns the React UI and canvas attachment;
+TopoFit owns the source image, reconstruction outputs and selected patch.
+Callers await `ready` before loading files into the same NiiVue instance. A small
+NiiVue subclass observes the actual attachment promise because FreeBrowse's
+public mount handle does not expose readiness. Attachment failures reach the
+normal input error path. Teardown releases React listeners and NiiVue resources;
+back-forward cached pages retain the mounted viewer.
 
-The chosen scope inspects detected patches. It does not implement arbitrary
-surface-point picking or editing. Geometry unit tests and browser tests cover
-midpoint export, RAS measurement accuracy, selection, downloads and reset.
+FreeBrowse supplies view selection, volume and surface controls, and viewer
+settings. TopoFit retains its X-ray control and scientific output list. NiiVue
+mesh and volume events synchronize the output controls and clear measurements
+when the selected patch or QC overlay is hidden or removed. Removal events fire
+before model mutation in rc.13, so readers use a microtask, matching FreeBrowse's
+own event adapter. Surface lookup uses output filenames rather than mutable
+array indices.
+
+The embedding uses an open shadow root because FreeBrowse's published Tailwind
+utilities are global and marked important. Both its stylesheet and the shared
+imaging-workspace stylesheet are installed inside that root. Shared embedding
+rules map colors to Neurodesk tokens, adapt the toolbar/sidebar to narrow
+viewers, and hide FreeBrowse's duplicate branding and private theme switch.
+The shell controls the theme. A small DOM adapter supplies labels for icon-only
+tabs and visibility buttons. These selectors are a pinned-package compatibility
+contract covered by browser tests. No FreeBrowse bundle or internal store is
+patched or imported. Backend access, URL loading and canvas drop imports are
+disabled; TopoFit's input flow remains responsible for reconstruction inputs.
+The renderer retains WebGL2 for the verified two-sided patch intersections.
+
+Two design candidates compared the public mount API with the public React
+component. The independent comparison favored mount because React exposes the
+same complete viewer without additional composition slots and would duplicate
+mount configuration and cleanup. Both candidates identified event-driven mesh
+state as necessary. Scientific geometry and detected-patch measurements remain
+in their existing modules; arbitrary surface-point inspection is outside scope.
