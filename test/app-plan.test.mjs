@@ -31,6 +31,27 @@ test('app registration and lockfile updates stay scoped to that webapp', async (
   assert.equal(plan.allApps, false);
 });
 
+test('homepage easter-egg changes select no catalog apps', async () => {
+  const registry = await loadAppsRegistry();
+  const plan = createAppPlan(registry, [
+    'site/easter-eggs/vessel-surfer/src/main.js',
+    'site/easter-eggs/vessel-surfer-leaderboard/src/worker.js',
+    'site/easter-eggs/vessel-surfer/package.json',
+    '.changeset/vessel-surfer-tracks.md',
+  ]);
+  assert.deepEqual(plan.selected, []);
+  assert.deepEqual(plan.browserApps.include, []);
+  assert.equal(plan.allApps, false);
+});
+
+test('shared homepage files still select the complete app catalog', async () => {
+  const registry = await loadAppsRegistry();
+  for (const path of ['site/landing.js', 'site/app-theme.css', 'scripts/lib/landing-page.mjs']) {
+    const plan = createAppPlan(registry, [path]);
+    assert.equal(plan.selected.length, registry.apps.length, path);
+  }
+});
+
 test('shared module changes select the complete app catalog', async () => {
   const registry = await loadAppsRegistry();
   const plan = createAppPlan(registry, ['packages/components/src/ui/ProgressManager.js']);
