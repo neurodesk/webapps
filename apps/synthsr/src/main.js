@@ -268,5 +268,11 @@ function download(blob, name) {
 $('saveBtn').onclick = () => output && download(output, output.name);
 $('reportBtn').onclick = () => provenance && download(new Blob([JSON.stringify(provenance, null, 2)], { type: 'application/json' }), output.name.replace('.nii', '.json'));
 
-if (!navigator.gpu) { $('backend').value = 'wasm'; status('Ready · WebGPU unavailable; CPU processing selected'); }
+void (async () => {
+  // navigator.gpu can exist without a usable adapter (headless or blocklisted GPUs); check the adapter, not the API.
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+  if (adapter) return;
+  $('backend').value = 'wasm';
+  status('Ready · WebGPU unavailable; CPU processing selected');
+})();
 window.addEventListener('pagehide', () => { exampleControl.cancel(); importAbort?.abort(); worker?.terminate(); clearInterval(timer); });

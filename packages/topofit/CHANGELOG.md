@@ -8,6 +8,8 @@
 
   STL export uses the shared busy and cancellation controls so replacement input cannot receive stale downloads.
 
+## 0.7.20260919
+
 ## 0.7.20260918
 
 ### Patch Changes

@@ -3,9 +3,9 @@ import { CHALLENGE, pointsFor } from "../../vessel-surfer/src/race.js";
 export const NAME_LIMIT = 16;
 export const MAX_LIMIT = 100;
 export const SUBMISSIONS_PER_HOUR = 30;
-// The shortest believable run: the fixed route is 12 mm and the fastest
-// cruising speed is twelve voxels per second (about 1.7 mm/s at 140 um).
-export const MIN_SECONDS = 3;
+// The shortest believable run: the fixed route is 33 mm and the fastest
+// cruising speed is eighteen voxels per second (about 2.5 mm/s at 140 um).
+export const MIN_SECONDS = 8;
 export const MAX_SECONDS = 3600;
 export const CHALLENGES = new Set([CHALLENGE]);
 

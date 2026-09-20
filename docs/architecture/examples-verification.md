@@ -19,11 +19,11 @@ inventories record all declared files and checksums. Large files stay outside Gi
 | MuscleMap | In-vivo head-to-upper-thigh MRI; excludes lower legs. Source license is CC BY-NC-SA 2.0. |
 | VesselBoost | Brain MR angiography with visible vessels. |
 | Spinal Cord Toolbox | Cord-centred T2 MRI. |
-| CALMaR | Matched T1 and lesion mask for lesion processing. |
-| QSMbly | Complete four-echo magnitude/phase images and acquisition metadata. |
-| SeedSeg | Labelled synthetic T1 prostate signal-void phantom; software demonstration only. |
+| CALMaR | Stroke T1 from OpenNeuro ds004884; the app computes the lesion mask for review before network mapping. |
+| QSMbly | Real 3 T single-echo magnitude and phase images with acquisition metadata from the QSMxT example dataset. |
+| SeedSeg | No example. The synthetic phantom was withdrawn on 2026-09-18 as unsuitable. |
 | dicompare | Complete 120-slice DICOM series, used as matching reference and test acquisition. |
-| Easy MP2RAGE | Synthetic UNI, INV2 and SA2RAGE inputs with matching acquisition parameters. |
+| Easy MP2RAGE | Real 7 T UNI, INV1, INV2 and measured B1 images from the Marques MP2RAGE reference dataset. |
 | MRI2VID | Full-head anatomical MRI for video rendering. |
 | SurfAnnotate | Actual cortical surface for landmark annotation and JSON export. |
 | ZARRo | Cell microscopy stack, first channel/time point, with four resolution levels and three planes. |
@@ -35,17 +35,9 @@ inventories record all declared files and checksums. Large files stay outside Gi
 | BrowserQC | Anatomical MRI plus matching BIDS metadata. |
 | NiiMath | Anatomical T1/T2 inputs for image arithmetic. |
 
-SeedSeg's phantom contains three idealized signal voids. It is not patient data
-and does not validate implanted-gold-marker detection. A real seed42-model run
-with production bias correction and softmax produced no detections at threshold
-0.1 (maximum probability 0.000356). The full four-model browser ensemble also
-completed and downloaded its consensus NIfTI with zero foreground at the default
-threshold. The example text makes this limitation
-explicit. Do not interpret a successful software run as clinical validation.
+SeedSeg has no example: its synthetic phantom was withdrawn because a real seed42 run produced no detections on it, so it could not demonstrate marker detection.
 
-The MP2RAGE phantom exercises parameter handling and quantitative processing;
-it is not clinical validation either. Its real WASM T1 output agreed with the
-forward-model golden within 0.000151 ms, with exact NIfTI round-trip values.
+The MP2RAGE example produces a B1-corrected T1 map from real brain data; the browser test checks the map's grid, finiteness and a plausible median T1.
 
 ## Enforcement
 
@@ -104,3 +96,28 @@ cannot verify its real image import. Forced software WebGPU initializes the
 viewer but fails during volume loading with Dawn’s external-instance error.
 Its unsupported-WebGPU guidance and shared interface remain testable; the
 positive workflow needs a hardware GPU runner.
+
+## Independent rerun, 2026-09-19
+
+Every app's example was rerun from a fresh production build with hosted bytes on an
+8-core host without a hardware GPU. Selecting the example and running the main
+action with default settings produced sensible output for ants, greedy, edgereg,
+niimath, qsmbly, easy-mp2rage, surfannotate, zarro, vesselboost, dicom2vid,
+dicompare, spinalcordtoolbox, topofit and calmar. brain-extraction, synthsr and
+syncro (TRACE-only and CT examples) completed on their CPU paths. The rerun found
+and fixed: FireANTs exceeded the engine's 15-minute watchdog on CPU and showed no
+progress; the registration apps' empty viewer claimed to be loading default
+images; MuscleMap's 90 % overlap default took hours without WebGPU; BrowserQC did
+not ship the CPU MindGrab bundle and timed out segmentation after one minute;
+SynthSR selected WebGPU whenever the API existed even without an adapter; and
+brain extraction's automatic mode fell back to software WebGL, which never
+finished. Seven apps placed the Example control after the file picker; the
+control now precedes the picker everywhere and the interface audit enforces it.
+
+Still open: SYNcro's TRACE plus T1 example needs a 2.8 GiB GPU buffer or more
+than 2 GB of typed array on the CPU path; SynthSeg needs 1.8 GiB of GPU buffer;
+CALMaR's "Lesion mask (native)" download was cancelled in headless Chromium while
+its other downloads worked; deface, brain2print and dwi2trx tractography need a
+hardware WebGPU adapter to verify. Browser tests still mock the example bytes in
+the registration apps, and dwi2trx, synthseg, musclemap, calmar and
+spinalcordtoolbox have no browser example test.

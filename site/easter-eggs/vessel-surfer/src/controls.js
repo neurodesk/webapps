@@ -38,11 +38,14 @@ export class Steering {
 // Combine player demand with the lumen assist. The assist only fills the
 // authority the player is not using and never pushes against the direction
 // the player is already steering, so deliberate steering always wins.
-export function combineDemand(player, assist, strength) {
+// Inputs below `threshold` are treated as no input, so a pointer resting just
+// outside the dead zone cannot veto the assist while the nose is on a wall.
+export function combineDemand(player, assist, strength, threshold = 0.05) {
   const yaw = clamp(player.yaw);
   const pitch = clamp(player.pitch);
   const authority = Math.max(0, 1 - Math.min(1, Math.hypot(yaw, pitch)));
-  const agree = (input, help) => (input * help < 0 ? 0 : help);
+  const agree = (input, help) =>
+    Math.abs(input) >= threshold && input * help < 0 ? 0 : help;
   return {
     yaw: clamp(yaw + agree(yaw, assist.yaw) * strength * authority),
     pitch: clamp(pitch + agree(pitch, assist.pitch) * strength * authority),

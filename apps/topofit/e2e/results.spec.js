@@ -97,7 +97,37 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
   await page.screenshot({ path: testInfo.outputPath('surfaces-desktop.png') });
 });
 
+async function expectCorticalOverlay(page) {
+  const row = page.locator('.nd-volume-toggle').filter({ hasText: 'Left white surface' });
+  await row.getByRole('checkbox').check();
+  await expect(page.locator('#viewerError')).toBeHidden();
+  const canvas = await page.locator('#gl1').boundingBox();
+  const slices = [[0, 0], [1, 0], [0, 1]].map(([column, line]) => ({
+    x: canvas.x + column * canvas.width / 2,
+    y: canvas.y + line * canvas.height / 2,
+    width: Math.floor(canvas.width / 2),
+    height: Math.floor(canvas.height / 2),
+  }));
+  const visible = [];
+  for (const clip of slices) visible.push(await page.screenshot({ clip }));
+  await row.getByRole('checkbox').uncheck();
+  for (const [index, clip] of slices.entries()) {
+    expect(visible[index].equals(await page.screenshot({ clip })), `Surface must change slice ${index}`).toBe(false);
+  }
+  await row.getByRole('checkbox').check();
+}
+
+test('cortical surfaces overlay all three slices in 3-Plane', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1024, height: 1100 });
+  await deliverSurfaces(page);
+  await expectCorticalOverlay(page);
+  await page.screenshot({ path: testInfo.outputPath('cortical-overlay.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('cortical-overlay-phone.png'), fullPage: true });
+});
+
 test('computed patches, local normals and QC can be viewed and downloaded', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1024, height: 1100 });
   const white = [];
   const faces = [];
   for (let y = 0; y < 14; y += 1) {
@@ -176,6 +206,7 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await normals.getByRole('button', { name: 'Download', exact: true }).click();
   expect((await downloading).suggestedFilename()).toBe('lh.mid.normals.csv');
   await page.screenshot({ path: testInfo.outputPath('computed-patch.png') });
+  await expectCorticalOverlay(page);
 });
 
 test('surface-analysis controls preserve edited settings when collapsed and pass them to the worker', async ({ page }, testInfo) => {
@@ -317,12 +348,14 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await page.getByText('Right flat patch 1', { exact: true }).locator('..').getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Right flat patch 1');
   await page.screenshot({ path: testInfo.outputPath('reanalyzed-right-patch.png') });
+  await expectCorticalOverlay(page);
   for (const label of ['Left white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
   }
+  await page.screenshot({ path: testInfo.outputPath('real-cortical-overlays.png') });
 });
 
 test('analysis runs in its own worker and can be repeated or cancelled without reconstruction', async ({ page }) => {

@@ -11,6 +11,13 @@
 - Updated dependencies [a213c53]
   - @neurodesk/topofit@0.7.20260920
 
+## 0.7.20260919
+
+### Patch Changes
+
+- Restore full cortical surface overlays in the 3-Plane view. The September 14 flat-patch fix applied 1 mm slice clipping to every mesh; limit that clipping to flat patches and restore full overlays when switching back to cortical surfaces. Add browser pixel checks for all three slices and the patch-to-surface transition.
+  - @neurodesk/topofit@0.7.20260919
+
 ## 0.7.20260918
 
 ### Patch Changes

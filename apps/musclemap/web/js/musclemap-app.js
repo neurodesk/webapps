@@ -1574,6 +1574,13 @@ class MuscleMapApp {
     if (this.inferenceExecutor.webgpuAvailable) {
       const group = document.getElementById('webgpuGroup');
       if (group) group.classList.remove('hidden');
+      return;
+    }
+    // Sliding-window overlap above 50 % multiplies CPU inference time into hours for a body scan.
+    const overlapSelect = document.getElementById('overlapSelect');
+    if (overlapSelect && parseFloat(overlapSelect.value) > 0.5) {
+      overlapSelect.value = '0.5';
+      this.updateOutput('WebGPU unavailable · sliding window overlap set to 50% for CPU processing.');
     }
   }
 
