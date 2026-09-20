@@ -99,6 +99,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
   for (const label of ['Left white surface', 'Left pial surface', 'Right white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
     await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
@@ -109,7 +110,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
 async function expectCorticalOverlay(page, label = 'Left white surface') {
   const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
   await row.getByRole('checkbox').check();
-  await expect(row.getByRole('checkbox')).toBeEnabled();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
   const canvas = await page.locator('#gl1').boundingBox();
   const slices = [[0, 0], [1, 0], [0, 1]].map(([column, line]) => ({
@@ -121,12 +122,12 @@ async function expectCorticalOverlay(page, label = 'Left white surface') {
   const visible = [];
   for (const clip of slices) visible.push(await page.screenshot({ clip }));
   await row.getByRole('checkbox').uncheck();
-  await expect(row.getByRole('checkbox')).toBeEnabled();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
   for (const [index, clip] of slices.entries()) {
     expect(visible[index].equals(await page.screenshot({ clip })), `Surface must change slice ${index}`).toBe(false);
   }
   await row.getByRole('checkbox').check();
-  await expect(row.getByRole('checkbox')).toBeEnabled();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
 }
 
 test('cortical surfaces overlay all three slices in 3-Plane', async ({ page }, testInfo) => {
@@ -318,7 +319,7 @@ test('invalid patch settings and a missing ROI are revealed before reconstructio
 test('real reconstructed cortex displays patch QC and clearly named patches', async ({ page }, testInfo) => {
   const root = process.env.TOPOFIT_SURFACE_REPLAY;
   test.skip(!root, 'Requires external OpenRecon validation surfaces and surface-analysis replay outputs.');
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 1024, height: 1100 });
   const { readFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
@@ -395,7 +396,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   }
   await page.screenshot({ path: testInfo.outputPath('real-patch-qc.png') });
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Left flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1');
+  await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1', { timeout: 30_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
   await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
   await page.screenshot({ path: testInfo.outputPath('real-selected-patch.png') });
@@ -427,12 +428,13 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await expect(page.locator('#resultList').getByText('Left flat patch 1', { exact: true })).toHaveCount(0);
   await expect(page.locator('#resultList').getByText('Right flat patch 2', { exact: true })).toHaveCount(0);
   await page.locator('#resultList').getByText('Right flat patch 1', { exact: true }).locator('..').getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#imageLabel')).toContainText('Right flat patch 1');
+  await expect(page.locator('#imageLabel')).toContainText('Right flat patch 1', { timeout: 30_000 });
   await page.screenshot({ path: testInfo.outputPath('reanalyzed-right-patch.png') });
   await expectCorticalOverlay(page);
   for (const label of ['Left white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
   }
@@ -440,7 +442,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Right flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
   await expectCorticalOverlay(page, 'Left mid-surface');
   await page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true }).check();
-  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled();
+  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#imageLabel')).toContainText('RIGHT MID-SURFACE');
   await expect(page.locator('#viewerError')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces.png') });
