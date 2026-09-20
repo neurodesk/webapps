@@ -7,8 +7,8 @@ representative point and fitted normal in scanner RAS coordinates.
 
 `runTopofit(options).files` includes `lh-mid` and `rh-mid` even when optional
 surface analysis is disabled. Their FreeSurfer files use `.mid.white` names so
-NiiVue recognizes the mesh format. Each result's View button opens that surface
-alone in 3D. Checkboxes combine surfaces for comparison or STL export, and
+NiiVue recognizes the mesh format. Each result's View button selects that surface
+alone in the current layout. Checkboxes combine surfaces for comparison or STL export, and
 Download saves the complete meshes.
 
 Selecting a flat patch centers the crosshair on `center_ras_mm` and displays that
@@ -16,6 +16,18 @@ point with `normal_ras`. The readout remains the selected patch's measurement
 when the user moves the crosshair. Copy preserves full precision; the patch CSV
 exports every detected patch. New scans and replacement analysis clear stale
 selections.
+
+The technical log records surface analysis measurements and the processing
+manifest. Neither appears as a View or Download row. Patch coordinates and
+geometry remain downloadable scientific outputs.
+
+Optional normal arrows use the same `surfaceNormals` implementation as the CSV
+export. A separate display worker caches each hemisphere's normals, spatially
+samples vertices in scanner RAS, and returns an MZ3 glyph mesh. Arrow tips are
+`midpoint + length * outward_unit_normal`; spacing and length are in millimetres.
+Glyph meshes follow visible mid-surfaces and never enter scientific outputs or
+STL selection. The worker and its cache are discarded on replacement input or
+reconstruction. FreeBrowse hiding or removing a glyph mesh disables the option.
 
 ## Scientific contract
 
@@ -57,10 +69,13 @@ array indices.
 
 Surface scenes use the `crosscut` slice shader with a 1 mm thickness, while 3D
 uses the normal shaded mesh. A volume clip plane at depth -1 removes the entire
-MRI ray march without removing slice images or clipping meshes. Original-image
+MRI ray march without removing slice images or clipping meshes. Explicit source
+volume opacity changes in FreeBrowse show or hide the 3D anatomy and retain that
+choice across surface selections. A new input resets to hidden. Original-image
 and QC scenes reset the plane to the disabled depth 2. X-ray defaults to zero so
 hidden folds do not show through the surface. The View action replaces the mesh
-scene and opens Render; ACSR retains the boundary-only slices beside the 3D mesh.
+scene without changing the selected layout. ACS retains boundary-only slices,
+ACSR shows them beside the 3D mesh, and Render keeps the standalone 3D view.
 
 The embedding uses an open shadow root because FreeBrowse's published Tailwind
 utilities are global and marked important. Both its stylesheet and the shared
