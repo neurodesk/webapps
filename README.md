@@ -73,10 +73,11 @@ Pages settings and point its DNS CNAME at the GitHub Pages hostname.
 The workflow verifies cross-origin isolation against the deployed Pages URL, not
 only against a local server.
 
-`.github/workflows/deploy-cloudflare.yml` is a manual alternative that uploads the
-same artifact to one Cloudflare Pages project (`neurodesk-webapps`). Cloudflare can
-apply the generated `_headers` file directly; GitHub Pages uses each imaging app's
-COI service-worker fallback for cross-origin isolation.
+GitHub Pages is the only site host. It ignores the generated `_headers` file, so each
+imaging app uses its COI service-worker fallback for cross-origin isolation; the
+`_headers` file remains in the artifact for standalone dists and header-aware hosts.
+The Cloudflare secrets in this repository serve only the Vessel Surfer leaderboard
+worker (`site/easter-eggs/vessel-surfer-leaderboard`).
 
 `pnpm audit:artifacts` enforces site, app, file-count, per-file, and duplication
 budgets. See [ADR-0002](docs/adr/0002-hosting-capacity-and-runtime-store.md) for the

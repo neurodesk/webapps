@@ -31,7 +31,6 @@ export async function loadAppsRegistry(path = registryPath) {
   const categoryIds = new Set();
 
   if (!registry?.site?.domain) errors.push('site.domain is required');
-  if (!registry?.site?.cloudflare_project) errors.push('site.cloudflare_project is required');
   if (!GA4_MEASUREMENT_ID.test(registry?.site?.analytics?.measurement_id ?? '')) {
     errors.push('site.analytics.measurement_id must be a GA4 measurement id');
   }

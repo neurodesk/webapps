@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-07-13
+- Amended: 2026-09-18, the optional Cloudflare Pages deployment was removed; GitHub Pages is the only host.
 
 ## Context
 
