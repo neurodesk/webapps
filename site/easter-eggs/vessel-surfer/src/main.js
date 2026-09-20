@@ -5,13 +5,13 @@ import { insideMask } from "./mask.js";
 import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
-import { level, steer, swim } from "./swim.js";
+import { Flight } from "./flight.js";
 import { Race, BUMP_PENALTY, TRACKS, bumpPenalty, speedScore, trackFor } from "./race.js";
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
-import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
+import { aimFromOffset } from "./controls.js";
 import { Tilt } from "./tilt.js";
-import { assistDemand, freeDistance, probeLumen, throttle } from "./assist.js";
+import { freeDistance } from "./assist.js";
 import { createLeaderboard, formatTime } from "./leaderboard.js";
 import { LEADERBOARD_URL } from "./config.js";
 import "./style.css";
@@ -201,12 +201,11 @@ function boot() {
   let challenge = null;
   const challenges = new Map();
   let track = trackFor(storage?.getItem(TRACK_KEY)) || TRACKS[0];
-  let blocked = false;
   const player = new THREE.Vector3();
   const direction = new THREE.Vector3(0, 1, 0);
   const swimUp = new THREE.Vector3(0, 1, 0);
   const keys = new HeldInputs();
-  const steering = new Steering();
+  const flight = new Flight();
   // Desktop steers with the keyboard only. Phones steer by tilting; the drag
   // joystick is the fallback when motion sensors are unavailable or refused.
   const stick = { yaw: 0, pitch: 0, pointer: null, x: 0, y: 0 };
@@ -216,8 +215,6 @@ function boot() {
   let tiltTimer = 0;
   let tiltRecentres = 0;
   const overviewMap = new OverviewMap(renderer, scene, $("map"));
-  const uturn = new UTurn();
-  const uturnAxis = new THREE.Vector3(0, 1, 0);
   let turnRequest = false;
   let coachUntil = 0;
   let vesselBounds = new THREE.Sphere(new THREE.Vector3(), 60);
@@ -490,11 +487,9 @@ function boot() {
     race = new Race(Math.min(...volume.scale) * 0.4, track.challenge);
     lastResult = null;
     travel = 0;
-    blocked = false;
     keys.clear();
-    steering.reset();
+    flight.reset();
     stick.yaw = stick.pitch = 0;
-    uturn.cancel();
     turnRequest = false;
     swimUp.set(0, 1, 0);
     clear(beacons);
@@ -647,8 +642,7 @@ function boot() {
     if (!running()) return;
     race.pause(performance.now());
     keys.clear();
-    steering.reset();
-    uturn.cancel();
+    flight.reset();
     turnRequest = false;
     stick.yaw = stick.pitch = 0;
     stick.pointer = null;
@@ -659,7 +653,7 @@ function boot() {
   function finish() {
     lastResult = race.finish(performance.now());
     keys.clear();
-    steering.reset();
+    flight.reset();
     const message = mask
       ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
       : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
@@ -1090,8 +1084,6 @@ function boot() {
     if (running()) {
       race.tick(performance.now());
       const volume = volumeOf();
-      const unit = Math.min(...volume.scale);
-      const radius = lumenRadius(volume, player);
       const braking = keys.has("shift");
       const reversing = keys.has("b");
       const playerDemand = {
@@ -1106,67 +1098,13 @@ function boot() {
           tilt.pitch +
           stick.pitch,
       };
-      const probe = probeLumen(
-        volume,
-        player,
-        direction,
-        swimUp,
-        Math.max(unit * 4, radius * 6),
+      const { moved, speed, radius, turning, blocked } = flight.step(
+        volume, player, direction, swimUp,
+        { dt, cruise: cruise(), rate: mask ? 2 : 6, braking, reversing, playerDemand, turnRequest },
       );
-      if (turnRequest) {
-        turnRequest = false;
-        // Turn toward whichever side has more room.
-        if (uturn.begin(probe.left > probe.right ? -1 : 1)) {
-          steering.reset();
-          // Sweep about the up axis as it is now, so the turn ends facing
-          // exactly backwards even from a pitched or rolled heading.
-          uturnAxis.copy(swimUp);
-        }
-      }
-      const turning = uturn.active;
-      let turn;
-      if (turning) turn = { yaw: uturn.update(dt), pitch: 0 };
-      else {
-        // Pinned on a wall (stopped by the throttle or blocked last frame),
-        // the assist looks further round (60 degrees) and steers toward the
-        // open side with full strength; only a deliberate input overrides it.
-        const pinned = blocked || throttle(probe) === 0;
-        const assist =
-          braking || reversing
-            ? { yaw: 0, pitch: 0 }
-            : assistDemand(
-                pinned
-                  ? probeLumen(volume, player, direction, swimUp, probe.reach, 1.05)
-                  : probe,
-              );
-        const demand = pinned
-          ? combineDemand(playerDemand, assist, 1, 0.25)
-          : combineDemand(playerDemand, assist, 0.6);
-        turn = steering.update(demand.yaw, demand.pitch, dt);
-      }
-      if (turning) {
-        direction.applyAxisAngle(uturnAxis, -turn.yaw).normalize();
-        swimUp.copy(uturnAxis);
-      } else {
-        steer(direction, swimUp, turn.yaw, turn.pitch);
-        level(direction, swimUp, dt);
-      }
-      // Cruise at six voxels per second so thin, high-resolution vessels are
-      // as navigable as coarse ones.
-      let speed = cruise() * unit * (mask ? 2 : 6);
-      if (reversing) speed *= -0.7;
-      else speed *= throttle(probe);
-      if (braking || turning) speed = 0;
-      const next = swim(
-        volume,
-        player,
-        direction.clone().multiplyScalar(dt * speed),
-      );
-      const moved = player.distanceTo(next);
+      turnRequest = false;
       race.movement(Math.abs(dt * speed), moved);
       travel += moved;
-      player.copy(next);
-      blocked = Math.abs(speed) > 0 && moved < Math.abs(speed * dt) * 0.1;
       if (frames % 10 === 0)
         $("hint").textContent = turning
           ? "Turning around…"
@@ -1236,8 +1174,8 @@ function boot() {
     data.bumps = String(race.bumps);
     data.target = target ? JSON.stringify(target.toArray()) : "";
     data.held = [...keys].join(",");
-    data.turning = String(uturn.active);
-    data.blocked = String(blocked);
+    data.turning = String(flight.uturn.active);
+    data.blocked = String(flight.blocked);
     data.tilt = tiltState;
     data.track = track.challenge;
     data.tiltRecentres = String(tiltRecentres);

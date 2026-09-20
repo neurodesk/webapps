@@ -62,7 +62,7 @@ test("map follows the player, the timer pauses, and the global leaderboard rende
   await page.waitForTimeout(250);
   expect(await page.locator("#ocean").getAttribute("data-elapsed")).toBe(elapsed);
   await expect(page.locator("#map")).toBeVisible();
-  await page.screenshot({ path: "/tmp/vessel-race-phone.png" });
+  await page.screenshot({ path: test.info().outputPath("vessel-race-phone.png") });
   await page.locator("#menu-button").click();
   await expect(page.locator("#score")).toHaveText("0:00.0");
   await expect(page.locator("#bumps")).toHaveText("0 bumps");
@@ -165,7 +165,7 @@ test("a practice run in an imported mask reaches its destination with the keyboa
   await expect(page.locator("#run-result")).toContainText("Practice complete");
   await expect(page.locator("#submit-form")).toBeHidden();
   await expect(page.locator("#score-rows")).toContainText("Ada");
-  await page.screenshot({ path: "/tmp/vessel-race-finish.png" });
+  await page.screenshot({ path: test.info().outputPath("vessel-race-finish.png") });
   await page.locator("#play").click();
   await expect(ocean).toHaveAttribute("data-state", "running");
   await expect(page.locator("#score")).not.toHaveText("0:00.0");
@@ -257,7 +257,7 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   );
   await expect(page.locator("#score-rows tr.is-you")).toContainText("Test Pilot");
   await expect(page.locator("#submit")).toBeDisabled();
-  await page.screenshot({ path: "/tmp/vessel-race-brain-finish.png" });
+  await page.screenshot({ path: test.info().outputPath("vessel-race-brain-finish.png") });
   await page.reload();
   await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
   expect(await page.evaluate(() => localStorage.getItem("vessel-surfer.name.v1"))).toBe(
