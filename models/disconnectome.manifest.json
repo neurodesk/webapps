@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "app": "disconnectome",
+  "license": "BSD-2-Clause",
+  "grid": {
+    "template": "MNI152 1mm",
+    "dim": [
+      182,
+      218,
+      182
+    ],
+    "note": "lesion masks must match exactly; SYNcro normalizes to this template"
+  },
+  "assets": [
+    {
+      "filename": "atlas/hcp1065_avg_tracts.tvx.gz",
+      "bytes": 21795029,
+      "sha256": "8ab8de4423b2ee59e20ca5e7d73776f0a6f3de0569b64cc0597eb507526df458"
+    },
+    {
+      "filename": "tracts/hcp1065_display.trx",
+      "bytes": 18878370,
+      "sha256": "8d6baf379e008d5d6fd8a6429c1a0b59b42e78f2c845a998958f9b57cfed19a8"
+    }
+  ],
+  "examples": [
+    {
+      "filename": "examples/wM2017_T1w.nii.gz",
+      "bytes": 4116093,
+      "sha256": "fb3b019e01b6f4ddc41a62483dac1c69c6f932fb424b94f84695a6e05b6a14a5"
+    },
+    {
+      "filename": "examples/wM2017_T1w_lesion.nii.gz",
+      "bytes": 27516,
+      "sha256": "acf44fa20fc5b07645896af4ce2ce6d511984a39328e6b0307626a29914e175e"
+    },
+    {
+      "filename": "examples/wM2018_T1w.nii.gz",
+      "bytes": 4308759,
+      "sha256": "05bdd591734d2701c505497e73e110b7bbd1d94037d94fc588a1a98087a00349"
+    },
+    {
+      "filename": "examples/wM2018_T1w_lesion.nii.gz",
+      "bytes": 24540,
+      "sha256": "2aa2901cc8b0813a45f716d90c145e20359bcc6c78c39c4ede0fd3afedb744f5"
+    },
+    {
+      "filename": "examples/wM2208_T1w.nii.gz",
+      "bytes": 5022139,
+      "sha256": "6d375dee1900c7082476fb1e9ef1587bd1a475de68dbbc63e8a7126090ccea34"
+    },
+    {
+      "filename": "examples/wM2208_T1w_lesion.nii.gz",
+      "bytes": 11085,
+      "sha256": "528caafca903fa8bb69f947ade038c40bf612a3b041df51952cbc474eed142f7"
+    }
+  ],
+  "display_atlas": {
+    "source": "exes/nii2tvx/scripts/make_display_atlas.py",
+    "streamline_fraction": 0.2,
+    "floor": 150,
+    "point_spacing_mm": 3,
+    "positions": "float16",
+    "note": "display only; every reported fraction comes from the full-resolution TVX atlas"
+  },
+  "source": {
+    "tracts": "https://brain.labsolver.org/hcp_trk_atlas.html",
+    "citation": "Yeh FC. Population-based tract-to-region connectome of the human brain. NeuroImage. 2022;258:119361.",
+    "doi": "10.1016/j.neuroimage.2022.119361",
+    "tool": "https://github.com/neurolabusc/nii2tvx"
+  },
+  "repository": "neurodeskorg/webapps",
+  "revision": "main",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/main/disconnectome/"
+}
