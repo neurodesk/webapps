@@ -157,9 +157,10 @@ test('cortical surface boundaries appear on all three slices in 3-Plane', async 
   await page.screenshot({ path: testInfo.outputPath('cortical-overlay-phone.png'), fullPage: true });
 });
 
-test('View isolates each surface in 3D while the MRI stays on the 2D slices only', async ({ page }, testInfo) => {
+test('surface scenes hide 3D anatomy by default and honor FreeBrowse visibility changes', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1024, height: 1100 });
   await deliverSurfaces(page);
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
   for (const label of ['Left white surface', 'Right pial surface', 'Left mid-surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('button', { name: 'View', exact: true }).click();
@@ -184,10 +185,51 @@ test('View isolates each surface in 3D while the MRI stays on the 2D slices only
   const before2D = await page.screenshot({ clip: axial });
   await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
   await expect.poll(async () => before2D.equals(await page.screenshot({ clip: axial }))).toBe(false);
-  expect(before3D.equals(await page.screenshot({ clip: render })), 'MRI visibility must not affect the 3D surface').toBe(true);
+  expect(before3D.equals(await page.screenshot({ clip: render })), 'Hiding already-clipped anatomy must leave the 3D view unchanged').toBe(true);
   await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect.poll(async () => before3D.equals(await page.screenshot({ clip: render })), {
+    message: 'Explicitly showing anatomy in FreeBrowse must reveal it in 3D',
+  }).toBe(false);
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled();
+  const anatomyAfterSelection = await page.screenshot({ clip: render });
+  await page.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect.poll(async () => anatomyAfterSelection.equals(await page.screenshot({ clip: render })), {
+    message: 'Anatomy must remain visible after selecting another surface, until explicitly hidden',
+  }).toBe(false);
   await page.getByTitle('Hide sidebar', { exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('surface-boundaries-and-3d.png') });
+});
+
+test('surface selection preserves ACS and the other selected layouts', async ({ page }, testInfo) => {
+  await deliverSurfaces(page);
+  for (const mode of ['Multi view', 'Axial view', 'Coronal view', 'Sagittal view', 'Multi+Render', 'Render view']) {
+    await page.locator('.nd-volume-toggle').filter({ hasText: 'Source-grid QC overlay' }).getByRole('button', { name: 'View', exact: true }).click();
+    await expect(page.locator('#runButton')).toBeEnabled();
+    const layout = page.getByRole('radio', { name: mode, exact: true });
+    await layout.click();
+    const left = page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true });
+    await left.check();
+    await expect(left).toBeEnabled();
+    await expect(layout).toHaveAttribute('data-state', 'on');
+    const row = page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' });
+    await row.getByRole('button', { name: 'View', exact: true }).click();
+    await expect(row.getByRole('checkbox')).toBeEnabled();
+    await expect(layout).toHaveAttribute('data-state', 'on');
+    await expect(page.locator('#resultList input:checked')).toHaveCount(1);
+    if (mode === 'Multi view') {
+      await page.screenshot({ path: testInfo.outputPath('acs-surface.png') });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.locator('#freebrowseViewer').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: testInfo.outputPath('acs-surface-phone.png') });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      const withBoundary = await page.locator('#gl1').screenshot();
+      await row.getByRole('checkbox').uncheck();
+      await expect(row.getByRole('checkbox')).toBeEnabled();
+      expect(withBoundary.equals(await page.locator('#gl1').screenshot())).toBe(false);
+      await expect(layout).toHaveAttribute('data-state', 'on');
+    }
+  }
 });
 
 test('bilateral mid-surfaces can be overlaid, viewed in 3D and downloaded without analysis', async ({ page }, testInfo) => {
@@ -213,6 +255,48 @@ test('bilateral mid-surfaces can be overlaid, viewed in 3D and downloaded withou
   await expect(page.locator('#statusText')).toContainText('Surface analysis ready');
   await expect(page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeVisible();
+});
+
+test('normal arrows follow mid-surfaces with adjustable spacing and length', async ({ page }, testInfo) => {
+  await deliverSurfaces(page);
+  const mid = page.locator('.nd-volume-toggle').filter({ hasText: 'Left mid-surface' });
+  await mid.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(mid.getByRole('checkbox')).toBeEnabled();
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await page.locator('#normalArrowSettings summary').click();
+  const before = await page.locator('#gl1').screenshot();
+  await page.locator('#showNormalArrows').check();
+  await expect(page.locator('#normalArrowStatus')).toHaveText('4 outward arrows · 8 mm spacing · 3 mm length');
+  expect(before.equals(await page.locator('#gl1').screenshot())).toBe(false);
+  await page.locator('#normalArrowDensity').selectOption('12');
+  await expect(page.locator('#normalArrowStatus')).toHaveText('1 outward arrow · 12 mm spacing · 3 mm length');
+  await page.locator('#normalArrowLength').fill('6');
+  await page.locator('#normalArrowLength').blur();
+  await expect(page.locator('#normalArrowStatus')).toContainText('6 mm length');
+  await page.screenshot({ path: testInfo.outputPath('normal-arrows.png') });
+  await mid.getByRole('checkbox').uncheck();
+  await expect(page.locator('#normalArrowStatus')).toContainText('Select a mid-surface');
+  await mid.getByRole('checkbox').check();
+  await expect(page.locator('#normalArrowStatus')).toContainText('1 outward arrow');
+  await page.getByTitle('Show sidebar', { exact: true }).click();
+  await page.getByRole('tab', { name: 'Surfaces', exact: true }).click();
+  const arrows = page.locator('.freebrowse-root p').filter({ hasText: /^lh\.normals-arrows\.mz3$/ }).locator('../..');
+  await arrows.getByRole('button', { name: 'Toggle visibility', exact: true }).click();
+  await expect(page.locator('#showNormalArrows')).not.toBeChecked();
+  await expect(arrows).toHaveCount(0);
+  await page.getByTitle('Hide sidebar', { exact: true }).click();
+  await page.locator('#showNormalArrows').check();
+  await expect(page.locator('#normalArrowStatus')).toContainText('1 outward arrow');
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#normalArrowStatus')).toContainText('1 outward arrow');
+  await page.getByRole('radio', { name: 'Multi view', exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('#normalArrowSettings').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('normal-arrow-controls-phone.png') });
+  await page.locator('#freebrowseViewer').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('normal-arrows-phone.png') });
+  await page.locator('#imageInput').setInputFiles(scan());
+  await expect(page.locator('#showNormalArrows')).not.toBeChecked();
 });
 
 test('computed patches, local normals and QC can be viewed and downloaded', async ({ page }, testInfo) => {
@@ -257,6 +341,9 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
     };
   }, geometry.patches.LH01.faces.length * 3);
   await deliverSurfaces(page, result);
+  await expect(page.locator('#resultList')).not.toContainText('Surface analysis measurements');
+  await expect(page.locator('#technicalLog')).toContainText('Surface analysis measurements');
+  await expect(page.locator('#technicalLog')).toContainText('Area-weighted mid-surface vertex normals');
   expect(await page.locator('#controls').evaluate((controls) => {
     const right = controls.getBoundingClientRect().right;
     return [...controls.querySelectorAll('.nd-download-btn')].every((button) => button.getBoundingClientRect().right <= right);
@@ -522,6 +609,17 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   }
   await page.getByRole('radio', { name: 'Multi+Render', exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath('real-boundaries-and-surface.png') });
+  await page.locator('#normalArrowSettings summary').click();
+  await page.locator('#showNormalArrows').check();
+  await expect(page.locator('#normalArrowStatus')).toContainText('outward arrows', { timeout: 30_000 });
+  await page.getByRole('radio', { name: 'Render view', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('real-normal-arrows.png') });
+  await page.locator('#normalArrowDensity').selectOption('12');
+  await expect(page.locator('#normalArrowStatus')).toContainText('12 mm spacing');
+  await page.locator('#normalArrowLength').fill('6');
+  await page.locator('#normalArrowLength').blur();
+  await expect(page.locator('#normalArrowStatus')).toContainText('6 mm length');
+  await page.screenshot({ path: testInfo.outputPath('real-normal-arrows-sparse-long.png') });
 });
 
 test('analysis runs in its own worker and can be repeated or cancelled without reconstruction', async ({ page }) => {
@@ -536,10 +634,11 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await expect(page.locator('#statusText')).toContainText('Surface analysis ready');
   await expect(page.getByText('Left mid-surface normals', { exact: true })).toBeVisible();
   await expect(page.getByRole('checkbox', { name: 'Show Left white surface' })).toBeVisible();
-  await page.locator('.nd-volume-toggle').filter({ hasText: 'Processing manifest' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#infoDialog')).toContainText('original-qc');
-  await expect(page.locator('#infoDialog')).toContainText('lh.mid.normals.csv');
-  await page.locator('#infoDialog').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('#resultList')).not.toContainText('Processing manifest');
+  await expect(page.locator('#resultList')).not.toContainText('Surface analysis measurements');
+  const manifest = page.locator('#technicalLog .nd-console-message').filter({ hasText: 'Processing manifest' }).last();
+  await expect(manifest).toContainText('original-qc');
+  await expect(manifest).toContainText('lh.mid.normals.csv');
   await page.route('**/fsaverage-cortex.bin', () => {});
   await page.locator('#findPatches').check();
   await page.locator('#analyzeButton').click();

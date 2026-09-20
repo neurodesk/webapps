@@ -88,7 +88,7 @@
       <details class="nd-sidebar-section" id="outputSection">
         <summary class="nd-section-title">Output</summary>
         <div class="nd-section-content">
-          <p class="nd-hint">View inspects one surface in 3D. Checkboxes combine surfaces for comparison or STL export. ACSR shows their boundaries on the MRI slices.</p>
+          <p class="nd-hint">View selects one surface without changing your layout. Slices show surface boundaries; Render shows the surface in 3D. Checkboxes combine surfaces for comparison or STL export.</p>
           <section id="patchMeasurements" class="nd-sidebar-section" aria-labelledby="patchMeasurementTitle" hidden>
             <p id="patchMeasurementTitle" class="nd-hint"></p>
             <div class="nd-section-content">
@@ -106,6 +106,26 @@
             </div>
           </section>
           <div id="resultList"></div>
+          <details class="nd-sidebar-section" id="normalArrowSettings">
+            <summary class="nd-section-title">Normal arrows</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="showNormalArrows" type="checkbox"> Plot mid-surface normals</label>
+              <div class="nd-field">
+                <label for="normalArrowDensity">Density</label>
+                <select id="normalArrowDensity">
+                  <option value="12">Sparse · 12 mm spacing</option>
+                  <option value="8" selected>Medium · 8 mm spacing</option>
+                  <option value="5">Dense · 5 mm spacing</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="normalArrowLength">Arrow length <small>mm</small></label>
+                <input id="normalArrowLength" type="number" min="0.5" max="10" step="0.5" value="3" required>
+              </div>
+              <p class="nd-hint">Arrows point outward from visible mid-surfaces. Slice views show only intersections near the current slice.</p>
+              <p id="normalArrowStatus" class="nd-hint" role="status">Select a mid-surface to plot its normals.</p>
+            </div>
+          </details>
           <button id="stlButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Save printable STL…</button>
         </div>
       </details>

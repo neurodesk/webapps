@@ -50,7 +50,10 @@ let reconstruction;
 let operation = 'Reconstruction';
 let preparation;
 let meshSceneReady = false;
+let anatomyIn3D = false;
 let viewerBusy = false;
+let normalArrowWorker;
+let normalArrowKey = '';
 const visibleMeshes = new Set();
 const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
 const stageLabels = {
@@ -61,13 +64,11 @@ const stageLabels = {
   'rh-mid': 'Right mid-surface',
   'lh-pial': 'Left pial surface',
   'rh-pial': 'Right pial surface',
-  provenance: 'Processing manifest',
   'lh-normals': 'Left mid-surface normals',
   'rh-normals': 'Right mid-surface normals',
   'patch-qc': 'Cortical patches and normals',
   'patch-coordinates': 'Patch coordinates and normals (RAS)',
   'patch-geometry': 'Paired patch geometry and local normals',
-  'surface-analysis': 'Surface analysis measurements',
 };
 const meshColors = {
   'lh-white': [0.35, 0.7, 1, 1],
@@ -121,6 +122,62 @@ const results = createResultList({
   },
 });
 
+for (const id of ['showNormalArrows', 'normalArrowDensity', 'normalArrowLength']) {
+  $(id).onchange = () => {
+    if ($('normalArrowLength').reportValidity()) void refreshNormalArrows();
+  };
+}
+
+const arrowName = (hemisphere) => `${hemisphere}.normals-arrows.mz3`;
+const isNormalArrow = (mesh) => ['lh', 'rh'].some((hemisphere) => mesh.name === arrowName(hemisphere));
+
+async function removeNormalArrows() {
+  for (let index = viewer.meshes.length - 1; index >= 0; index -= 1) {
+    if (isNormalArrow(viewer.meshes[index])) await viewer.removeMesh(index);
+  }
+}
+
+async function refreshNormalArrows() {
+  if (!viewer || viewerBusy || busy || !$('normalArrowLength').checkValidity()) return;
+  const hemispheres = ['lh', 'rh'].filter((side) => visibleMeshes.has(`${side}-mid`));
+  const spacing = Number($('normalArrowDensity').value);
+  const length = Number($('normalArrowLength').value);
+  const key = $('showNormalArrows').checked && hemispheres.length ? `${hemispheres}:${spacing}:${length}` : '';
+  if (key === normalArrowKey) return;
+  normalArrowKey = key;
+  setViewerBusy(true);
+  try {
+    await removeNormalArrows();
+    if (!key) {
+      $('normalArrowStatus').textContent = hemispheres.length ? 'Normal arrows hidden.' : 'Select a mid-surface to plot its normals.';
+      return;
+    }
+    $('normalArrowStatus').textContent = 'Preparing normal arrows…';
+    const initialize = !normalArrowWorker;
+    normalArrowWorker ||= new Worker(new URL('./normal-arrows-worker.js', import.meta.url), { type: 'module' });
+    const arrows = await new Promise((resolve, reject) => {
+      normalArrowWorker.onmessage = ({ data }) => data.error ? reject(new Error(data.error)) : resolve(data.arrows);
+      normalArrowWorker.onerror = (event) => reject(new Error(event.message || 'Normal arrow worker failed.'));
+      normalArrowWorker.postMessage({ hemispheres, spacing, length, ...(initialize ? { surfaces: reconstruction.surfaces } : {}) });
+    });
+    for (const { hemisphere, bytes } of arrows) {
+      const name = arrowName(hemisphere);
+      await viewer.addMesh({ url: new File([bytes], name), name, color: [1, 0.85, 0.15, 1], sliceShaderType: 'crosscut' });
+    }
+    const count = arrows.reduce((sum, arrow) => sum + arrow.count, 0);
+    $('normalArrowStatus').textContent = `${count.toLocaleString()} outward ${count === 1 ? 'arrow' : 'arrows'} · ${spacing} mm spacing · ${length} mm length`;
+  } catch (error) {
+    normalArrowWorker?.terminate();
+    normalArrowWorker = null;
+    await removeNormalArrows();
+    normalArrowKey = '';
+    $('showNormalArrows').checked = false;
+    $('normalArrowStatus').textContent = `Normal arrows unavailable: ${error.message}`;
+  } finally {
+    setViewerBusy(false);
+  }
+}
+
 // Printable STL: niimath simplifies and smooths each surface, TopoFit writes the STL.
 function stlStages() {
   const available = [...surfaceStages].filter((stage) => reconstruction?.surfaces?.vertices[stage.replace('-', '.')]);
@@ -129,7 +186,7 @@ function stlStages() {
 }
 
 function exportStl(stages, reduce, smooth) {
-  if (busy) return;
+  if (busy || viewerBusy) return;
   operation = 'STL export';
   setBusy(true);
   status(`Preparing ${stages.length} printable ${stages.length === 1 ? 'surface' : 'surfaces'}…`);
@@ -235,7 +292,7 @@ function setBusy(value) {
   $('copyPatchCoordinates').disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
   $('analyzeButton').disabled = value || viewerBusy || !reconstruction;
-  $('stlButton').disabled = value;
+  $('stlButton').disabled = value || viewerBusy;
   $('cancelButton').hidden = !value;
   if (!value) clearInterval(timer);
 }
@@ -244,10 +301,12 @@ function setViewerBusy(value) {
   viewerBusy = value;
   if (!value && viewer) syncMeshControls();
   $('freebrowseViewer').inert = value || busy;
+  exampleControl.setDisabled(value || busy);
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value || busy;
   for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || busy;
   $('runButton').disabled = value || busy || !source;
   $('analyzeButton').disabled = value || busy || !reconstruction;
+  $('stlButton').disabled = value || busy;
 }
 
 async function ensureViewer() {
@@ -269,6 +328,16 @@ async function ensureViewer() {
       });
       viewer.addEventListener('volumeRemoved', () => { meshSceneReady = false; });
       viewer.addEventListener('documentLoaded', () => { meshSceneReady = false; });
+      for (const event of ['meshRemoved', 'meshUpdated']) {
+        viewer.addEventListener(event, ({ detail }) => {
+          if (!viewerBusy && isNormalArrow(detail.mesh) && (event === 'meshRemoved' || detail.mesh.opacity === 0)) $('showNormalArrows').checked = false;
+        });
+      }
+      viewer.addEventListener('volumeUpdated', ({ detail: { volume, changes } }) => {
+        if (viewerBusy || busy || !viewer.meshes.length || volume.name !== source?.name || changes.opacity === undefined) return;
+        anatomyIn3D = changes.opacity > 0;
+        viewer.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
+      });
       viewer.addEventListener('locationChange', (event) => {
         $('location').textContent = event.detail.string;
       });
@@ -311,12 +380,15 @@ function syncMeshControls() {
       $('imageLabel').textContent = 'VIEWER SCENE';
     }
   }
+  queueMicrotask(() => void refreshNormalArrows());
 }
 
 async function resetMeshes(nv) {
   displayedResult = null;
   showPatchMeasurements(null);
   await nv.removeAllMeshes();
+  normalArrowKey = '';
+  $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
   visibleMeshes.clear();
   meshSceneReady = false;
   xrayControl.hidden = true;
@@ -325,6 +397,7 @@ async function resetMeshes(nv) {
 
 async function showSource() {
   const nv = await ensureViewer();
+  anatomyIn3D = false;
   await resetMeshes(nv);
   nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
@@ -346,12 +419,12 @@ async function setMeshVisible(stage, visible, input) {
       displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = 1;
-      nv.setClipPlane([-1, 0, 0]);
+      nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       await nv.removeAllMeshes();
+      normalArrowKey = '';
       await nv.loadVolumes([{ url: source, name: source.name }]);
       visibleMeshes.clear();
       meshSceneReady = true;
-      nv.sliceType = SLICE_TYPE.MULTIPLANAR;
     }
     const index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
     if (index < 0) {
@@ -402,8 +475,8 @@ async function showResult(stage) {
     } else {
       const patch = surfaceAnalysis?.flat_patches?.[stage];
       nv.meshThicknessOn2D = 1;
-      // Clip the entire MRI in 3D; slice images and mesh rendering are unaffected.
-      nv.setClipPlane([-1, 0, 0]);
+      // Hide the MRI in 3D until the user explicitly shows it in FreeBrowse.
+      nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       await nv.loadVolumes([{ url: source, name: source.name }]);
       await nv.loadMeshes([{
         url: file,
@@ -412,7 +485,6 @@ async function showResult(stage) {
         ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
         ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
       }]);
-      nv.sliceType = surfaceStages.has(stage) ? SLICE_TYPE.RENDER : SLICE_TYPE.MULTIPLANAR;
       meshSceneReady = surfaceStages.has(stage);
       displayedResult = surfaceStages.has(stage) ? null : stage;
       if (surfaceStages.has(stage)) {
@@ -437,13 +509,17 @@ async function showResult(stage) {
 }
 
 async function load(file) {
-  if (!file || busy) return;
+  if (!file || busy || viewerBusy) return;
   setBusy(true);
   try {
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
     showPatchMeasurements(null);
     source = file;
     reconstruction = null;
+    normalArrowWorker?.terminate();
+    normalArrowWorker = null;
+    $('showNormalArrows').checked = false;
+    $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
     outputs = new Map();
     results.render();
     $('stlButton').hidden = true;
@@ -579,13 +655,20 @@ async function run(analysisOnly = false) {
       if (analysisOnly) outputs = new Map(reconstruction.files);
       for (const output of data.files) {
         if (output.id.endsWith('-registration')) continue;
+        if (output.id === 'surface-analysis' || output.id === 'provenance') {
+          const title = output.id === 'surface-analysis' ? 'Surface analysis measurements' : 'Processing manifest';
+          log.log(`${title}\n${new TextDecoder().decode(output.bytes)}`);
+          continue;
+        }
         outputs.set(output.id, new File([output.bytes], output.name, { type: output.mediaType }));
       }
       if (!analysisOnly && data.surfaces) {
+        normalArrowWorker?.terminate();
+        normalArrowWorker = null;
         reconstruction = {
           surfaces: data.surfaces,
           provenance: data.provenance,
-          files: new Map([...outputs].filter(([id]) => surfaceStages.has(id) || id === 'qc' || id === 'provenance')),
+          files: new Map([...outputs].filter(([id]) => surfaceStages.has(id) || id === 'qc')),
         };
       }
       results.render(Object.fromEntries([...outputs].map(([id]) => [
@@ -643,6 +726,7 @@ $('cancelButton').onclick = () => {
 };
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) return;
+  normalArrowWorker?.terminate();
   exampleControl.destroy();
   worker?.terminate();
   embeddedViewer?.destroy();

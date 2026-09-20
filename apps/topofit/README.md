@@ -19,8 +19,9 @@ pnpm --filter topofit test:e2e
 For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release directory and `VITE_TOPOFIT_ASSET_BASE=/model-assets/`. See [`packages/topofit/validation/README.md`](../../packages/topofit/validation/README.md) for the pinned-container comparison.
 
 The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
-NIfTI, and a JSON processing manifest. Each surface's View button opens it alone
-in 3D, with the MRI volume clipped away so the skull cannot obscure it. White,
+NIfTI. The processing manifest is recorded in the technical log. Each surface's View button selects it alone
+without changing the current layout. Slice views show its boundaries, while Render
+shows it in 3D with the MRI clipped away so the skull cannot obscure it. White,
 mid-surface and pial checkboxes combine surfaces for comparison or STL export.
 The 2D slices show thin surface boundaries. FreeBrowse provides axial, coronal,
 sagittal, ACS, ACSR and Render views. ACSR shows all three slices with the 3D
@@ -29,6 +30,20 @@ visibility, contrast, color and opacity controls. The X-ray control appears whil
 cortical surface is visible and defaults to 0%. Registration spheres are retained
 internally for atlas mapping and excluded from the browser output list. DICOM
 import uses the shared dcm2niix worker. Images and results are not uploaded to a processing service.
+
+Explicitly enabling the source volume in FreeBrowse also reveals the anatomy in
+3D. That choice persists across surface selections; loading a new scan restores
+the default of hiding anatomy in 3D surface scenes.
+
+Under Output, open **Normal arrows** and enable **Plot mid-surface normals**.
+Arrows appear on visible mid-surfaces without requiring a separate analysis run.
+Choose Sparse, Medium or Dense spacing and an arrow length from 0.5 to 10 mm.
+Arrows use the exported area-weighted vertex normals, oriented white-to-pial,
+with their bases at scanner-RAS mid-surface vertices. Spatial sampling separates
+the bases by at least 12, 8 or 5 mm, including across neighboring folds.
+The display follows surface visibility and preserves the selected layout.
+Slice views show only arrow geometry intersecting the slice slab; 3D shows the
+complete arrows. Display settings do not change the exported normals or STL.
 
 **Save printable STL…** in Output converts surfaces for 3D printing: FreeSurfer
 surface files are not a printing format. niimath simplifies each mesh to a
@@ -48,8 +63,9 @@ or find flat cortical patches. Patch radius, count and hemisphere are available
 when the search is enabled; quality thresholds and a native-grid ROI are under
 **Patch quality and region**. Advanced settings and Surface analysis stay visible.
 
-Results include individual patch surfaces, patch-and-normal QC, measurements
-and paired ribbon geometry. Patches are labeled "Left flat patch 1", "Right flat patch 1", and so on.
+Results include individual patch surfaces, patch-and-normal QC and paired ribbon
+geometry. Analysis measurements are recorded in the technical log. Patches are
+labeled "Left flat patch 1", "Right flat patch 1", and so on.
 Numbers follow flatness within each hemisphere, not area; the ranking is
 described in `packages/topofit/README.md`.
 Select one to center the 3-Plane viewer on it and show its RAS point in millimetres
