@@ -3,7 +3,7 @@
 A Cloudflare Worker with a D1 database that stores completed Vessel Surfer runs
 for the global leaderboard shown in the game.
 
-- `GET /scores?challenge=pial-arteries-v1&limit=10` returns the best runs
+- `GET /scores?challenge=pial-arteries-v2&limit=10` returns the best runs
   (highest points, then fastest) and the total number of saved runs.
 - `POST /scores` with `{ challenge, name, seconds, bumps }` saves a run and
   returns its world rank and the current top ten. Points are recomputed on the

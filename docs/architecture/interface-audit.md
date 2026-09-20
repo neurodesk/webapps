@@ -204,3 +204,15 @@ a file picker, or Zarro's URL field. For DICOMpare, the audit opens From data
 to mount the picker. Console and toolbar hosts also
 retain block layout before registration; the browser regression check verifies
 that their initialized flex layout remains intact.
+
+## Example rerun and fixes, 19 September 2026
+
+Every example was rerun end to end from a fresh build with hosted bytes; results
+and the remaining open items are in `examples-verification.md`. The Example
+control now precedes the file picker in every app and in the template, and
+`scripts/audit-interfaces.mjs` fails when a selector follows its replacement
+input. FireANTs gained a 45-minute CPU budget and real progress messages,
+BrowserQC ships the CPU MindGrab bundle with a 15-minute segmentation budget,
+SynthSR and brain extraction check for a WebGPU adapter rather than the API, and
+MuscleMap starts at 50 % overlap without WebGPU. VesselBoost's hosted example
+workflow now runs as part of its browser tests.

@@ -46,6 +46,14 @@ jobs:
           GA4_SERVICE_ACCOUNT_KEY: ${{ secrets.GA4_SERVICE_ACCOUNT_KEY }}
       - run: pnpm build
       - run: pnpm audit:artifacts
+      - name: Install runtime startup test browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          pnpm exec playwright install --with-deps chromium
+      - name: Verify threaded model loading before deployment
+        run: |
+          node --test test/runtime-assets.test.mjs
+          pnpm test:runtime-startup
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

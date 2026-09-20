@@ -1,17 +1,17 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
-import { routePose } from "./network.js";
 import { insideMask } from "./mask.js";
 import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
-import { Race } from "./race.js";
-import { NavigationMap, humanChallenge } from "./navigation-map.js";
+import { Race, BUMP_PENALTY, SPEED_POINTS, bumpPenalty, speedScore } from "./race.js";
+import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
-import { Steering, aimFromOffset, combineDemand } from "./controls.js";
-import { assistDemand, probeLumen, throttle } from "./assist.js";
+import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
+import { Tilt } from "./tilt.js";
+import { assistDemand, freeDistance, probeLumen, throttle } from "./assist.js";
 import { createLeaderboard, formatTime } from "./leaderboard.js";
 import { LEADERBOARD_URL } from "./config.js";
 import "./style.css";
@@ -26,6 +26,10 @@ try {
   /* Storage can be disabled. */
 }
 const leaderboard = createLeaderboard({ url: LEADERBOARD_URL, storage });
+const SPEED_KEY = "vessel-surfer.speed.v1";
+const SPEED_MIN = 0.25;
+const SPEED_MAX = 3;
+const SPEED_STEP = 0.25;
 
 let renderer;
 try {
@@ -64,7 +68,9 @@ function boot() {
   scene.add(fill);
   const vessels = new THREE.Group();
   const beacons = new THREE.Group();
-  scene.add(vessels, beacons);
+  // Gold breadcrumbs along the validated route show the way to the destination.
+  const trail = new THREE.Group();
+  scene.add(vessels, beacons, trail);
   const sub = new THREE.Group();
   const gold = new THREE.MeshStandardMaterial({
     color: 0xf6c653,
@@ -148,6 +154,17 @@ function boot() {
     emissive: 0xb57616,
     emissiveIntensity: 2,
   });
+  const crumbGeometry = new THREE.SphereGeometry(1, 8, 6);
+  const crumbMaterial = new THREE.MeshStandardMaterial({
+    color: 0xffc44d,
+    emissive: 0xff9a1c,
+    emissiveIntensity: 0.9,
+    roughness: 0.4,
+  });
+  // Inside the vessel the distance fades to a deep red so far walls read as
+  // vessel rather than as a black void; the overview keeps the ocean navy.
+  const OCEAN = 0x071820;
+  const DEPTHS = 0x1c0a12;
   let dirty = true;
   orbit.addEventListener("change", () => {
     dirty = true;
@@ -161,20 +178,31 @@ function boot() {
   let human = null;
   let humanPromise = null;
   let travel = 0;
-  let route = null;
   let race = new Race();
   let lastResult = null;
   let target = null;
   let targetRadius = 0.35;
+  let routeLength = 0;
+  let challenge = null;
   let blocked = false;
   const player = new THREE.Vector3();
   const direction = new THREE.Vector3(0, 1, 0);
   const swimUp = new THREE.Vector3(0, 1, 0);
   const keys = new HeldInputs();
   const steering = new Steering();
-  const aim = { yaw: 0, pitch: 0 };
+  // Desktop steers with the keyboard only. Phones steer by tilting; the drag
+  // joystick is the fallback when motion sensors are unavailable or refused.
   const stick = { yaw: 0, pitch: 0, pointer: null, x: 0, y: 0 };
-  const navigationMap = new NavigationMap($("map"));
+  const tilt = new Tilt();
+  // off | requesting | on | unavailable
+  let tiltState = "off";
+  let tiltTimer = 0;
+  let tiltRecentres = 0;
+  const overviewMap = new OverviewMap(renderer, scene, $("map"));
+  const uturn = new UTurn();
+  let turnRequest = false;
+  let coachUntil = 0;
+  let vesselBounds = new THREE.Sphere(new THREE.Vector3(), 60);
   const ocean = $("ocean");
   const running = () => state === "running";
 
@@ -203,6 +231,9 @@ function boot() {
     );
     $("navigation-map").hidden = !target || next === "ready" || next === "loading";
     $("touch").hidden = next !== "running";
+    $("speed-panel").hidden = next !== "running";
+    $("target-marker").hidden = next !== "running";
+    document.body.classList.toggle("is-running", next === "running");
     $("hint").textContent = "";
     dirty = true;
   }
@@ -250,13 +281,15 @@ function boot() {
   }
 
   $("map-view").onclick = () => {
-    navigationMap.axis = navigationMap.axis === 2 ? 1 : 2;
-    const top = navigationMap.axis === 2;
-    $("map-view").textContent = top ? "Top view · switch" : "Front view · switch";
+    const route = overviewMap.toggle() === "route";
+    $("map-view").textContent = route ? "Route · show whole brain" : "Whole brain · zoom to route";
     $("map-view").setAttribute(
       "aria-label",
-      `Switch map to ${top ? "front" : "top"} view`,
+      `Switch map to the ${route ? "whole brain" : "route"}`,
     );
+    // Hand focus back to the game so Space still pauses after the click.
+    if (running()) ocean.focus({ preventScroll: true });
+    dirty = true;
   };
   function clear(group) {
     for (const child of [...group.children]) {
@@ -290,8 +323,13 @@ function boot() {
     camera.position.copy(tunnel.position);
     camera.up.copy(tunnel.up);
     camera.lookAt(tunnel.target);
-    camera.near = Math.max(0.0005, radius * 0.01);
-    camera.far = Math.max(2, radius * 20);
+    // The eye may sit a few hundredths of a millimetre from a wall, and the
+    // corners of the near plane reach further than its centre. A very close
+    // near plane keeps the wall from being clipped, which otherwise opens a
+    // dark window onto the fogged outside. The far plane sits well inside the
+    // fog so long vessels fade instead of ending at a hard edge.
+    camera.near = Math.max(0.0003, radius * 0.003);
+    camera.far = Math.max(4, radius * 40);
     camera.updateProjectionMatrix();
     const distance = Math.min(radius * 1.3, player.distanceTo(ahead) * 0.7);
     const subPoint = player
@@ -307,7 +345,7 @@ function boot() {
       .addScaledVector(tunnel.heading, Math.min(radius * 0.1, distance * 0.1));
     headlamp.intensity = Math.max(0.15, radius * 9);
     headlamp.distance = Math.max(unit * 6, radius * 15);
-    scene.fog.density = 0.12 / Math.max(radius, unit * 0.3);
+    scene.fog.density = 0.09 / Math.max(radius, unit * 0.3);
     const data = $("ocean").dataset;
     data.cameraInside = String(insideMask(volume, camera.position.toArray()));
     data.cameraPosition = JSON.stringify(camera.position.toArray());
@@ -316,13 +354,30 @@ function boot() {
   }
   // On wide screens the menu panel sits centred, so shift the overview's
   // projection to keep the vasculature visible beside it.
-  function frameOverview() {
+  // On wide screens the menu panel sits centred, so the overview is centred in
+  // the free strip to its left and pushed back far enough to fit there whole.
+  function overviewStrip() {
     const width = ocean.clientWidth;
+    const panel = Math.min(440, width - 24);
+    const free = (width - panel) / 2;
+    return { width, free, wide: width > 900 };
+  }
+  function frameOverview() {
+    const { width, free, wide } = overviewStrip();
     const height = ocean.clientHeight;
-    if (overview && width > 900)
-      camera.setViewOffset(width, height, width * 0.24, 0, width, height);
+    if (overview && wide)
+      camera.setViewOffset(width, height, width / 2 - free / 2, 0, width, height);
     else camera.clearViewOffset();
     camera.updateProjectionMatrix();
+  }
+  function overviewDistance(radius) {
+    const { width, free, wide } = overviewStrip();
+    const height = ocean.clientHeight;
+    const visible = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    const fit = (ratio) => (2 * radius) / (visible * ratio);
+    const byHeight = fit(0.8 * (height / width) * (width / height));
+    const byWidth = fit((0.85 * (wide ? free : width)) / height);
+    return Math.max(radius * 2.4, byHeight, byWidth);
   }
   function setView(value) {
     dirty = true;
@@ -330,6 +385,8 @@ function boot() {
     frameOverview();
     headlamp.visible = !value;
     scene.fog.density = value ? 0.003 : 0.12;
+    scene.fog.color.set(value ? OCEAN : DEPTHS);
+    renderer.setClearColor(value ? OCEAN : DEPTHS);
     orbit.enabled = value;
     for (const child of vessels.children) {
       if (child.name === "overview-surface") child.visible = value;
@@ -337,17 +394,14 @@ function boot() {
     }
     if (value) {
       // Frame whatever vasculature is loaded, whichever resolution it has.
-      const bounds = new THREE.Box3().setFromObject(vessels);
-      const sphere = bounds.isEmpty()
-        ? new THREE.Sphere(new THREE.Vector3(), 60)
-        : bounds.getBoundingSphere(new THREE.Sphere());
+      const sphere = vesselBounds;
       camera.far = Math.max(600, sphere.radius * 12);
       camera.updateProjectionMatrix();
       camera.up.set(0, 1, 0);
       camera.position
         .set(0.55, 0.4, 0.75)
         .normalize()
-        .multiplyScalar(sphere.radius * 2.4)
+        .multiplyScalar(overviewDistance(sphere.radius))
         .add(sphere.center);
       orbit.target.copy(sphere.center);
       orbit.minDistance = sphere.radius * 0.2;
@@ -360,18 +414,28 @@ function boot() {
       updateTunnel(0, lumenRadius(volumeOf(), player), true);
     }
   }
+  function measureVessels() {
+    const bounds = new THREE.Box3().setFromObject(vessels);
+    vesselBounds = bounds.isEmpty()
+      ? new THREE.Sphere(new THREE.Vector3(), 60)
+      : bounds.getBoundingSphere(new THREE.Sphere());
+  }
   function reset() {
     const volume = volumeOf();
+    const unit = Math.min(...volume.scale);
+    measureVessels();
     race = new Race(Math.min(...volume.scale) * 0.4);
     lastResult = null;
     travel = 0;
     blocked = false;
     keys.clear();
     steering.reset();
-    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    stick.yaw = stick.pitch = 0;
+    uturn.cancel();
+    turnRequest = false;
     swimUp.set(0, 1, 0);
-    route = network ? { ...network.start } : null;
     clear(beacons);
+    clear(trail);
     if (mask) {
       player.fromArray(mask.spawn);
       direction.set(0, 0, 1);
@@ -383,25 +447,60 @@ function boot() {
         player.clone();
       targetRadius = Math.min(...mask.scale) * 0.7;
     } else {
-      const pose = routePose(network, route);
-      player.copy(pose.position);
-      direction.copy(pose.direction);
-      target = humanChallenge(network).target;
+      challenge ||= humanChallenge(network, volume);
+      // Spawn on the route, facing along it: the route may leave the launch
+      // point against the edge's stored direction.
+      player.copy(challenge.path[0]);
+      direction.copy(challenge.path[1]).sub(challenge.path[0]).normalize();
+      target = challenge.target.clone();
       targetRadius = 0.35;
     }
     const beacon = new THREE.Mesh(beaconGeometry, beaconMaterial);
     beacon.position.copy(target);
     beacon.scale.setScalar(targetRadius * 0.7);
     beacons.add(beacon);
-    const path = mask ? [] : humanChallenge(network).path;
-    navigationMap.configure(network, mask, player, target, path);
+    const path = mask ? [] : challenge.path;
+    routeLength = mask ? player.distanceTo(target) : challenge.length;
+    overviewMap.configure({
+      bounds: vesselBounds,
+      start: player,
+      target,
+      path,
+      minSpan: mask ? unit * 20 : 18,
+    });
+    if (path.length > 1) {
+      // One crumb per validated route sample and one between each pair; the
+      // samples are 0.25 mm apart inside the lumen, so the midpoints are too.
+      // Each crumb is lowered onto the vessel floor like a runway light, so the
+      // trail is never in the eye's way as the sub passes along the route.
+      const points = [];
+      for (let i = 0; i < path.length; i++) {
+        points.push(path[i]);
+        if (i + 1 < path.length) points.push(path[i].clone().lerp(path[i + 1], 0.5));
+      }
+      const crumbs = new THREE.InstancedMesh(crumbGeometry, crumbMaterial, points.length);
+      crumbs.userData.sharedAsset = true;
+      const matrix = new THREE.Matrix4();
+      const down = new THREE.Vector3(0, -1, 0);
+      const size = unit * 0.22;
+      crumbs.userData.points = points.map((p, i) => {
+        const floor = freeDistance(volume, p, down, unit * 8);
+        const spot = p.clone().addScaledVector(down, Math.max(0, floor - unit * 0.5));
+        matrix.makeScale(size, size, size).setPosition(spot);
+        crumbs.setMatrixAt(i, matrix);
+        return { spot, size };
+      });
+      crumbs.instanceMatrix.needsUpdate = true;
+      trail.add(crumbs);
+    }
     // The validated reference route, for browser verification only.
     $("ocean").dataset.path = JSON.stringify(
       path.map((p) => p.toArray().map((v) => Number(v.toFixed(3)))),
     );
     $("mission-text").textContent = mask
-      ? "Practice run: reach the gold destination in your own vessel mask. Practice runs are not ranked."
-      : "Pilot a tiny submarine through real human brain vessels to the gold destination. Fast runs with few wall bumps score highest.";
+      ? "Practice run: reach the gold ring in your own vessel mask. Practice runs are not ranked."
+      : `Pilot a tiny submarine through real human brain vessels. Follow the gold trail ${Math.round(routeLength)} mm to the gold ring.`;
+    $("run-breakdown").replaceChildren();
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
     $("score").textContent = "0:00.0";
@@ -419,19 +518,74 @@ function boot() {
     if (overview) setView(false);
     race.resume(performance.now());
     showMenu("running");
-    $("hint").textContent = coarse
-      ? "Drag anywhere to steer · hold Stop or Back"
-      : "Aim with the mouse or WASD · Shift brakes · Space pauses";
+    coachUntil = performance.now() + 6000;
+    if (coarse) enableTilt();
+    $("hint").textContent = coach();
     $("ocean").focus({ preventScroll: true });
+  }
+  const steerHint = () =>
+    coarse
+      ? tiltState === "unavailable"
+        ? "Drag anywhere to steer · Turn flips around · hold Stop or Back"
+        : "Tilt the phone to steer · tap to recentre · Turn flips around · hold Stop or Back"
+      : "Arrow keys or WASD steer · +/− sets speed · R turns around · Shift brakes · Space pauses";
+  // Motion steering starts from a user gesture (the Dive tap) because iOS
+  // only grants orientation events after DeviceOrientationEvent.requestPermission.
+  // Without a sensor sample soon after, the drag joystick takes over.
+  function onOrientation(event) {
+    if (tiltState === "unavailable") return;
+    if (tiltState !== "on") {
+      tiltState = "on";
+      clearTimeout(tiltTimer);
+    }
+    tilt.update(event, screen.orientation?.angle ?? window.orientation ?? 0);
+  }
+  async function enableTilt() {
+    if (tiltState === "on" || tiltState === "unavailable") {
+      tilt.reset();
+      return;
+    }
+    tiltState = "requesting";
+    tilt.reset();
+    try {
+      if (typeof DeviceOrientationEvent?.requestPermission === "function") {
+        const answer = await DeviceOrientationEvent.requestPermission();
+        if (answer !== "granted") throw new Error("Motion access refused.");
+      }
+      if (typeof DeviceOrientationEvent === "undefined")
+        throw new Error("No motion sensors.");
+    } catch {
+      tiltState = "unavailable";
+      $("hint").textContent = coach();
+      return;
+    }
+    window.addEventListener("deviceorientation", onOrientation);
+    clearTimeout(tiltTimer);
+    tiltTimer = setTimeout(() => {
+      if (tiltState === "requesting") {
+        tiltState = "unavailable";
+        window.removeEventListener("deviceorientation", onOrientation);
+        if (running()) $("hint").textContent = coach();
+      }
+    }, 1500);
+  }
+  function coach() {
+    const distance = target ? player.distanceTo(target) : 0;
+    return mask
+      ? `Reach the gold ring, ${distance.toFixed(1)} units away · ${steerHint()}`
+      : `Follow the gold trail to the gold ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
   }
   function pause() {
     if (!running()) return;
     race.pause(performance.now());
     keys.clear();
     steering.reset();
-    aim.yaw = aim.pitch = stick.yaw = stick.pitch = 0;
+    uturn.cancel();
+    turnRequest = false;
+    stick.yaw = stick.pitch = 0;
     stick.pointer = null;
     $("stick").hidden = true;
+    tilt.reset();
     showMenu("paused");
   }
   function finish() {
@@ -442,6 +596,31 @@ function boot() {
       ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
       : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
     $("run-result").textContent = message;
+    const breakdown = $("run-breakdown");
+    breakdown.replaceChildren();
+    if (!mask) {
+      const average = routeLength / Math.max(lastResult.seconds, 0.001);
+      const rows = [
+        ["Speed score", `+${speedScore(lastResult.seconds).toLocaleString()}`, `${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${SPEED_POINTS.toLocaleString()} ÷ seconds`, "plus"],
+        ["Wall penalty", `−${bumpPenalty(lastResult.bumps).toLocaleString()}`, `${lastResult.bumps} bump${lastResult.bumps === 1 ? "" : "s"} × ${BUMP_PENALTY}`, "minus"],
+        ["Points", lastResult.points.toLocaleString(), "speed score minus wall penalty", "total"],
+      ];
+      for (const [label, value, note, kind] of rows) {
+        const row = document.createElement("div");
+        row.className = `breakdown__row is-${kind}`;
+        const name = document.createElement("span");
+        name.className = "breakdown__label";
+        name.textContent = label;
+        const amount = document.createElement("strong");
+        amount.className = "breakdown__value";
+        amount.textContent = value;
+        const detail = document.createElement("span");
+        detail.className = "breakdown__note";
+        detail.textContent = note;
+        row.append(name, amount, detail);
+        breakdown.append(row);
+      }
+    }
     showMenu("complete");
     $("submit-form").hidden = Boolean(mask);
     if (!mask) {
@@ -463,6 +642,69 @@ function boot() {
         ? `Saved. You are #${outcome.rank.toLocaleString()} in the world.`
         : `The leaderboard is unreachable (${outcome.error}). Saved on this device instead.`;
   };
+  // Switch the scene between its tunnel appearance and the overview drawn in
+  // the map window: whole surface instead of culled chunks, no fog, no
+  // headlamp, no trail or beacon (the map has its own markers).
+  let subShown = true;
+  let fogDensity = 0.12;
+  function mapPass(on) {
+    for (const child of vessels.children) {
+      if (child.name === "overview-surface") child.visible = on || overview;
+      if (child.name === "tunnel-surface") child.visible = !on && !overview;
+    }
+    if (on) {
+      subShown = sub.visible;
+      fogDensity = scene.fog.density;
+    }
+    sub.visible = on ? false : subShown;
+    scene.fog.density = on ? 0 : fogDensity;
+    trail.visible = !on;
+    beacons.visible = !on;
+    headlamp.visible = !on && !overview;
+  }
+  // Crumbs right under the eye would fill the view, so each one shrinks away
+  // as the sub passes over it and grows back once it is behind.
+  const crumbMatrix = new THREE.Matrix4();
+  function fadeTrail() {
+    const unit = Math.min(...volumeOf().scale);
+    for (const crumbs of trail.children) {
+      crumbs.userData.points.forEach(({ spot, size }, i) => {
+        const t = THREE.MathUtils.smoothstep(
+          player.distanceTo(spot),
+          unit * 2.5,
+          unit * 5,
+        );
+        crumbMatrix.makeScale(size * t, size * t, size * t).setPosition(spot);
+        crumbs.setMatrixAt(i, crumbMatrix);
+      });
+      crumbs.instanceMatrix.needsUpdate = true;
+    }
+  }
+  // A screen-space pointer to the destination: over the ring when it is in
+  // view, otherwise a chevron at the screen edge in its direction.
+  const projected = new THREE.Vector3();
+  function placeTargetMarker() {
+    const marker = $("target-marker");
+    const width = ocean.clientWidth;
+    const height = ocean.clientHeight;
+    projected.copy(target).project(camera);
+    const behind = projected.z > 1;
+    let x = behind ? -projected.x : projected.x;
+    let y = behind ? -projected.y : projected.y;
+    const inView = !behind && Math.abs(x) < 0.9 && Math.abs(y) < 0.82;
+    if (!inView) {
+      const edge = Math.max(Math.abs(x) / 0.9, Math.abs(y) / 0.82, 1e-6);
+      x /= edge;
+      y /= edge;
+    }
+    const px = ((x + 1) / 2) * width;
+    const py = ((1 - y) / 2) * height;
+    marker.classList.toggle("is-offscreen", !inView);
+    marker.style.transform = `translate(${px.toFixed(0)}px, ${py.toFixed(0)}px)`;
+    const angle = Math.atan2(py - height / 2, px - width / 2);
+    marker.firstElementChild.style.transform = `rotate(${(angle + Math.PI / 2).toFixed(3)}rad)`;
+    marker.lastElementChild.textContent = `${player.distanceTo(target).toFixed(1)} ${mask ? "u" : "mm"}`;
+  }
   async function loadDemo() {
     const token = ++loadId;
     showMenu("loading");
@@ -477,6 +719,7 @@ function boot() {
       human = data;
       mask = null;
       network = human.network;
+      challenge = null;
       clear(vessels);
       const overviewMesh = new THREE.Mesh(human.geometry, vesselMaterial);
       overviewMesh.name = "overview-surface";
@@ -522,8 +765,37 @@ function boot() {
     if (state === "loading" || (!network && !mask)) return;
     reset();
   };
-  $("speed").oninput = () => {
-    $("speed-value").textContent = `${$("speed").value}×`;
+  // One cruising speed, shown on the menu slider and the in-run slider, and
+  // adjustable mid-run from the keyboard.
+  const speedInputs = [$("speed"), $("speed-hud")];
+  function setSpeed(value, announce = false) {
+    const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Math.round(value / SPEED_STEP) * SPEED_STEP));
+    for (const input of speedInputs) input.value = String(clamped);
+    for (const id of ["speed-value", "speed-hud-value"]) $(id).textContent = `${clamped}×`;
+    try {
+      storage?.setItem(SPEED_KEY, String(clamped));
+    } catch {
+      /* Storage can be full or disabled. */
+    }
+    if (announce && running()) $("hint").textContent = `Speed ${clamped}× · faster earns more points, bumps cost ${BUMP_PENALTY}`;
+    return clamped;
+  }
+  const cruise = () => Number($("speed").value);
+  const savedSpeed = Number(storage?.getItem(SPEED_KEY));
+  setSpeed(savedSpeed >= SPEED_MIN && savedSpeed <= SPEED_MAX ? savedSpeed : 0.5);
+  for (const input of speedInputs)
+    input.oninput = () => setSpeed(Number(input.value));
+  $("speed-hud").onchange = () => {
+    if (running()) ocean.focus({ preventScroll: true });
+  };
+  $("turn").onpointerdown = (e) => {
+    e.preventDefault();
+    turnRequest = true;
+  };
+  $("turn").onkeydown = (e) => {
+    if (e.key !== " " && e.key !== "Enter") return;
+    e.preventDefault();
+    if (!e.repeat) turnRequest = true;
   };
   for (const [id, key] of [
     ["brake", "shift"],
@@ -587,6 +859,18 @@ function boot() {
       }
       return;
     }
+    if (k === "r") {
+      e.preventDefault();
+      if (!e.repeat && running()) turnRequest = true;
+      return;
+    }
+    if (["+", "=", "-", "_", "]", "["].includes(k)) {
+      if (!running()) return;
+      e.preventDefault();
+      const faster = k === "+" || k === "=" || k === "]";
+      setSpeed(cruise() + (faster ? SPEED_STEP : -SPEED_STEP), true);
+      return;
+    }
     if (flightKeys.includes(k)) {
       e.preventDefault();
       keys.press(`keyboard:${k}`, k);
@@ -599,48 +883,36 @@ function boot() {
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) pause();
   });
-  // Mouse: the pointer's offset from the screen centre is the aim. Touch or a
-  // held button: a floating joystick anchored where the drag began.
+  // Touch without motion sensors: a floating joystick anchored where the drag
+  // began. With tilt steering, a tap on the canvas recentres the neutral pose.
   const stickRadius = 56;
-  function aimRadius() {
-    return Math.min(ocean.clientWidth, ocean.clientHeight) * 0.42;
-  }
   ocean.addEventListener("pointermove", (e) => {
-    if (!running() || overview) return;
-    if (stick.pointer === e.pointerId) {
-      const dx = e.clientX - stick.x;
-      const dy = e.clientY - stick.y;
-      const scale = Math.min(1, stickRadius / (Math.hypot(dx, dy) || 1));
-      Object.assign(stick, aimFromOffset(dx, dy, stickRadius, 0.1));
-      $("stick").firstElementChild.style.transform =
-        `translate(${dx * scale}px, ${dy * scale}px)`;
-      return;
-    }
-    if (e.pointerType !== "mouse" || stick.pointer !== null) return;
-    const rect = ocean.getBoundingClientRect();
-    Object.assign(
-      aim,
-      aimFromOffset(
-        e.clientX - (rect.left + rect.width / 2),
-        e.clientY - (rect.top + rect.height / 2),
-        aimRadius(),
-      ),
-    );
-  });
-  ocean.addEventListener("pointerleave", () => {
-    aim.yaw = aim.pitch = 0;
+    if (!running() || overview || stick.pointer !== e.pointerId) return;
+    const dx = e.clientX - stick.x;
+    const dy = e.clientY - stick.y;
+    const scale = Math.min(1, stickRadius / (Math.hypot(dx, dy) || 1));
+    Object.assign(stick, aimFromOffset(dx, dy, stickRadius, 0.1));
+    $("stick").firstElementChild.style.transform =
+      `translate(${dx * scale}px, ${dy * scale}px)`;
   });
   ocean.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "touch") document.body.classList.add("is-touch");
     if (!running() || overview || stick.pointer !== null) return;
     e.preventDefault();
     ocean.focus({ preventScroll: true });
+    if (e.pointerType === "mouse") return;
+    if (tiltState === "on") {
+      tilt.reset();
+      tiltRecentres++;
+      coachUntil = 0;
+      $("hint").textContent = "Tilt recentred · hold the phone still here to fly straight";
+      return;
+    }
     ocean.setPointerCapture(e.pointerId);
     stick.pointer = e.pointerId;
     stick.x = e.clientX;
     stick.y = e.clientY;
     stick.yaw = stick.pitch = 0;
-    aim.yaw = aim.pitch = 0;
     $("stick").style.left = `${e.clientX}px`;
     $("stick").style.top = `${e.clientY}px`;
     $("stick").firstElementChild.style.transform = "";
@@ -778,12 +1050,12 @@ function boot() {
         yaw:
           (keys.has("arrowright") || keys.has("d") ? 1 : 0) -
           (keys.has("arrowleft") || keys.has("a") ? 1 : 0) +
-          aim.yaw +
+          tilt.yaw +
           stick.yaw,
         pitch:
           (keys.has("arrowup") || keys.has("w") ? 1 : 0) -
           (keys.has("arrowdown") || keys.has("s") ? 1 : 0) +
-          aim.pitch +
+          tilt.pitch +
           stick.pitch,
       };
       const probe = probeLumen(
@@ -793,18 +1065,40 @@ function boot() {
         swimUp,
         Math.max(unit * 4, radius * 6),
       );
-      const assist =
-        braking || reversing ? { yaw: 0, pitch: 0 } : assistDemand(probe);
-      const demand = combineDemand(playerDemand, assist, 0.6);
-      const turn = steering.update(demand.yaw, demand.pitch, dt);
+      if (turnRequest) {
+        turnRequest = false;
+        // Turn toward whichever side has more room.
+        if (uturn.begin(probe.left > probe.right ? -1 : 1)) steering.reset();
+      }
+      const turning = uturn.active;
+      let turn;
+      if (turning) turn = { yaw: uturn.update(dt), pitch: 0 };
+      else {
+        // Pinned on a wall (stopped by the throttle or blocked last frame),
+        // the assist looks further round (60 degrees) and steers toward the
+        // open side with full strength; only a deliberate input overrides it.
+        const pinned = blocked || throttle(probe) === 0;
+        const assist =
+          braking || reversing
+            ? { yaw: 0, pitch: 0 }
+            : assistDemand(
+                pinned
+                  ? probeLumen(volume, player, direction, swimUp, probe.reach, 1.05)
+                  : probe,
+              );
+        const demand = pinned
+          ? combineDemand(playerDemand, assist, 1, 0.25)
+          : combineDemand(playerDemand, assist, 0.6);
+        turn = steering.update(demand.yaw, demand.pitch, dt);
+      }
       steer(direction, swimUp, turn.yaw, turn.pitch);
       level(direction, swimUp, dt);
       // Cruise at six voxels per second so thin, high-resolution vessels are
       // as navigable as coarse ones.
-      let speed = Number($("speed").value) * unit * (mask ? 2 : 6);
+      let speed = cruise() * unit * (mask ? 2 : 6);
       if (reversing) speed *= -0.7;
       else speed *= throttle(probe);
-      if (braking) speed = 0;
+      if (braking || turning) speed = 0;
       const next = swim(
         volume,
         player,
@@ -816,13 +1110,15 @@ function boot() {
       player.copy(next);
       blocked = Math.abs(speed) > 0 && moved < Math.abs(speed * dt) * 0.1;
       if (frames % 10 === 0)
-        $("hint").textContent = braking
-          ? "Braking · steer to aim, release to go"
-          : blocked
-            ? "Wall · turn or hold Back to reverse"
-            : coarse
-              ? "Drag anywhere to steer · hold Stop or Back"
-              : "Aim with the mouse or WASD · Shift brakes · Space pauses";
+        $("hint").textContent = turning
+          ? "Turning around…"
+          : braking
+            ? "Braking · steer, release to go"
+            : blocked
+              ? "Wall · steer away, press R or Turn to turn around, or hold Back"
+              : performance.now() < coachUntil
+                ? coach()
+                : steerHint();
       sub.quaternion.slerp(
         new THREE.Quaternion().setFromUnitVectors(
           new THREE.Vector3(0, 0, 1),
@@ -838,6 +1134,7 @@ function boot() {
       )
         finish();
       else updateTunnel(dt, radius);
+      if (frames % 3 === 0) fadeTrail();
       dirty = true;
     } else if (overview) {
       orbit.update();
@@ -846,7 +1143,6 @@ function boot() {
     $("score").textContent = formatTime(race.seconds);
     $("bumps").textContent = `${race.bumps} bump${race.bumps === 1 ? "" : "s"}`;
     if (target && !$("navigation-map").hidden) {
-      navigationMap.draw(player, direction);
       const units = mask ? "units" : "mm";
       $("target-distance").textContent =
         `${player.distanceTo(target).toFixed(1)} ${units} away · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
@@ -865,8 +1161,11 @@ function boot() {
     }
     if (dirty) {
       renderer.render(scene, camera);
+      if (target && !overview && !$("navigation-map").hidden)
+        overviewMap.render(player, direction, dt, ocean, mapPass);
       dirty = false;
     }
+    if (running() && target) placeTargetMarker();
     frames++;
     // Read-only telemetry for accessible integrations and browser verification.
     const data = ocean.dataset;
@@ -880,6 +1179,11 @@ function boot() {
     data.bumps = String(race.bumps);
     data.target = target ? JSON.stringify(target.toArray()) : "";
     data.held = [...keys].join(",");
+    data.turning = String(uturn.active);
+    data.blocked = String(blocked);
+    data.tilt = tiltState;
+    data.tiltRecentres = String(tiltRecentres);
+    data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [
       ["brake", ["shift"]],
       ["reverse", ["b"]],

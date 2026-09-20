@@ -120,6 +120,15 @@ function finish(job) {
   refreshControls();
   return true;
 }
+// MindGrab's "auto" falls back to WebGL when WebGPU has no adapter; on a software GL stack that
+// never finishes, so route adapter-less browsers to the CPU module instead.
+async function resolveMindgrabBackend(requested) {
+  if (requested !== 'auto') return requested;
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
+  if (adapter) return 'auto';
+  status('No WebGPU adapter · using CPU processing');
+  return 'cpu';
+}
 function resetOutputs() {
   outputs = source ? { original: { description: 'Original', file: source } } : {};
   results.render(outputs);
@@ -205,7 +214,7 @@ $('folderInput').onchange = event => {
   event.target.value = '';
   if (files.length) importImages(Promise.resolve(files));
 };
-$('runButton').onclick = () => {
+$('runButton').onclick = async () => {
   if (!source || state.phase !== 'idle') return;
   if ($('method').value === 'bet' && !$('threshold').reportValidity()) return;
   resetOutputs();
@@ -241,7 +250,7 @@ $('runButton').onclick = () => {
     job.worker.onerror = event => {
       if (finish(job)) status(event.message || 'The processing worker failed. Reload and try again.', true);
     };
-    job.worker.postMessage({ file: source, method, backend: $('mindgrabBackend').value, fractionalIntensity: Number($('threshold').value), assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
+    job.worker.postMessage({ file: source, method, backend: await resolveMindgrabBackend($('mindgrabBackend').value), fractionalIntensity: Number($('threshold').value), assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
   } catch (error) {
     if (finish(job)) status(error.message, true);
   }

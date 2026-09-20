@@ -19,6 +19,7 @@
     "test:examples": "node --test test/app-examples.test.mjs",
     "test:registry": "node --test test/registry.test.mjs",
     "app-plan": "node scripts/app-plan.mjs",
+    "test:runtime-startup": "node test/runtime-startup.smoke.mjs",
     "test:smoke": "node test/composite-site.smoke.mjs",
     "test:interface-workflows": "node test/interface-workflows.smoke.mjs",
     "test:image-uploads": "node test/image-upload.smoke.mjs",

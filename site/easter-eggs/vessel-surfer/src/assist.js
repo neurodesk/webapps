@@ -14,11 +14,11 @@ export function freeDistance(volume, from, direction, max) {
   return max;
 }
 
-// Probe a cone around the heading: straight ahead and about 30 degrees to each
-// side and up and down in the camera frame.
-export function probeLumen(volume, position, heading, up, reach) {
+// Probe a cone around the heading: straight ahead and about 30 degrees (or
+// `angle` radians) to each side and up and down in the camera frame.
+export function probeLumen(volume, position, heading, up, reach, angle = 0.52) {
   const right = heading.clone().cross(up).normalize();
-  const spread = Math.tan(0.52);
+  const spread = Math.tan(angle);
   const ray = (h, v) =>
     heading
       .clone()
@@ -46,7 +46,10 @@ export function assistDemand(probe) {
   };
 }
 
-// Ease off when the wall ahead is close so there is time to take the bend.
+// Ease off when the wall ahead is close so there is time to take the bend, and
+// stop altogether once the nose is on the wall: grinding into it only pins the
+// eye against the surface, so turning away is free instead.
 export function throttle(probe) {
+  if (probe.ahead <= probe.reach * 0.06) return 0;
   return Math.min(1, Math.max(0.3, probe.ahead / (probe.reach * 0.45)));
 }

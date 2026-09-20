@@ -2611,7 +2611,7 @@ async function setupExamples() {
     },
     onStatus: (message) => log(message),
   });
-  $(".modeToggle").before(selector);
+  $("#fileControl").before(selector);
   exampleSelector = selector;
 }
 void setupExamples().catch((error) => log(error.message));
