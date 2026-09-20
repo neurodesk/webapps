@@ -413,18 +413,6 @@ input[type="range"] {
   background: transparent;
   accent-color: var(--gold);
 }
-input[type="file"] {
-  padding: 6px;
-}
-input::file-selector-button {
-  min-height: 32px;
-  margin-right: 8px;
-  border-radius: 8px;
-  border: 1px solid var(--line);
-  background: #142b34;
-  color: var(--ink);
-  font: inherit;
-}
 .muted,
 .credit {
   color: var(--ink-muted);

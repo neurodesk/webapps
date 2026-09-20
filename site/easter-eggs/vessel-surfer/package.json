@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/vessel-surfer-easter-egg",
-  "version": "0.1.20260925",
+  "version": "0.1.20260927",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,6 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "nifti-reader-js": "0.8.0",
     "three": "0.180.0",
     "three-mesh-bvh": "0.9.2"
   },

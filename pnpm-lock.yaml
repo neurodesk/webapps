@@ -821,9 +821,6 @@ importers:
 
   site/easter-eggs/vessel-surfer:
     dependencies:
-      nifti-reader-js:
-        specifier: 0.8.0
-        version: 0.8.0
       three:
         specifier: 0.180.0
         version: 0.180.0

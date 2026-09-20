@@ -102,8 +102,8 @@ export function createLeaderboard({
         });
         return { scope: "global", rank: data.rank, rows: data.scores };
       } catch (error) {
-        saveScore(storage, { ...result, challenge: track, name: entry.name });
-        return { scope: "local", rows: local(track), error: error.message };
+        const savedLocally = saveScore(storage, { ...result, challenge: track, name: entry.name });
+        return { scope: "local", rows: local(track), savedLocally, error: error.message };
       }
     },
   };

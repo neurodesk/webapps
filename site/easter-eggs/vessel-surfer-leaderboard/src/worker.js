@@ -40,7 +40,7 @@ export function validateEntry(body) {
   if (!Number.isInteger(bumps) || bumps < 0 || bumps > 999)
     throw new ValidationError("Bump count is out of range.");
   const points = pointsFor(seconds, bumps, challenge);
-  if (points <= 0) throw new ValidationError("This run scores no points.");
+  // Zero is a valid completed score after wall penalties, on every track.
   return {
     challenge,
     name: cleanName(body.name),

@@ -1,5 +1,17 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260927
+
+### Patch Changes
+
+- Remove custom vessel-mask uploads and their parser, worker, practice mode and tests. Save completed zero-point runs on every leaderboard, including Grand Tour. Keep failed saves retryable, report local persistence accurately, and prevent stale leaderboard reads or track changes from overwriting submission results. Cover Grand Tour submission with the actual server handler, including retry and reload.
+
+## 0.1.20260926
+
+### Patch Changes
+
+- Correct the guiding chevrons, which pointed backward after their wall-plane rotation. Rotate the geometry toward the destination while preserving its inward-facing normal, and test the rendered tip against all four track routes.
+
 ## 0.1.20260925
 
 ### Patch Changes
