@@ -1,6 +1,6 @@
-import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
-import { writeFreeSurfer } from '../../../packages/topofit/src/results.js';
+import { test, expect } from '@playwright/test';
+import { writeSurfaceFiles } from '../../../packages/topofit/src/results.js';
 import { analyzeSurfaces } from '../../../packages/topofit/src/surface-analysis.js';
 import { readVolume } from '../../../packages/topofit/src/volume.js';
 
@@ -42,8 +42,16 @@ function scan() {
 }
 
 async function deliverSurfaces(page, analysisResult = { files: [], analysis: null }) {
-  const surface = writeFreeSurfer(new Float32Array([2, 2, 2, 12, 2, 2, 2, 12, 2, 2, 2, 12]), new Int32Array([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]));
-  await page.addInitScript(({ bytes, qc, analysisFiles, analysis }) => {
+  const vertices = {};
+  const faces = {};
+  for (const side of ['lh', 'rh']) {
+    vertices[`${side}.white`] = Float32Array.from([2, 2, 2, 12, 2, 2, 2, 12, 2, 2, 2, 12]);
+    vertices[`${side}.pial`] = Float32Array.from(vertices[`${side}.white`], (value) => value + 1);
+    vertices[`${side}.registration`] = vertices[`${side}.white`];
+    faces[side] = Int32Array.from([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3]);
+  }
+  const surfaceFiles = writeSurfaceFiles(vertices, faces);
+  await page.addInitScript(({ surfaceFiles, qc, analysisFiles, analysis }) => {
     const NativeWorker = window.Worker;
     window.Worker = class extends NativeWorker {
       constructor(url, options) {
@@ -55,7 +63,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
         window.lastTopofitJob = job;
         window.reconstructionRuns = (window.reconstructionRuns || 0) + 1;
         for (let i = 0; i < 100; i += 1) this.onmessage({ data: { type: 'progress', value: i / 100, message: 'Loading topofit-t1w-1mm-white-order-6.onnx…' } });
-        const files = ['lh', 'rh'].flatMap((h) => ['white', 'pial', 'registration'].map((s) => ({ id: `${h}-${s}`, name: `${h}.${s}`, mediaType: 'application/vnd.freesurfer.surface', bytes: Uint8Array.from(bytes).buffer })));
+        const files = surfaceFiles.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes).buffer }));
         files.push({ id: 'qc', name: 'qc.nii', mediaType: 'application/nifti', bytes: Uint8Array.from(qc).buffer });
         files.push(...analysisFiles.map((file) => ({ ...file, bytes: Uint8Array.from(file.bytes).buffer })));
         const vertices = {};
@@ -70,7 +78,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
       }
     };
   }, {
-    bytes: Array.from(new Uint8Array(surface)),
+    surfaceFiles: surfaceFiles.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
     qc: Array.from(scan().buffer),
     analysis: analysisResult.analysis,
     analysisFiles: analysisResult.files.map((file) => ({ ...file, bytes: Array.from(new Uint8Array(file.bytes)) })),
@@ -81,6 +89,7 @@ async function deliverSurfaces(page, analysisResult = { files: [], analysis: nul
   await page.locator('#runButton').click();
   await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
   await expect(page.locator('#imageLabel')).toContainText(analysisResult.analysis ? 'PATCHES' : 'TOPOFIT QC');
+  return surfaceFiles;
 }
 
 test('anatomical surfaces remain multiplanar, registration outputs are hidden, and repeated progress logs once', async ({ page }, testInfo) => {
@@ -90,6 +99,7 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
   for (const label of ['Left white surface', 'Left pial surface', 'Right white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
     await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
@@ -97,9 +107,10 @@ test('anatomical surfaces remain multiplanar, registration outputs are hidden, a
   await page.screenshot({ path: testInfo.outputPath('surfaces-desktop.png') });
 });
 
-async function expectCorticalOverlay(page) {
-  const row = page.locator('.nd-volume-toggle').filter({ hasText: 'Left white surface' });
+async function expectCorticalOverlay(page, label = 'Left white surface') {
+  const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
   await row.getByRole('checkbox').check();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
   const canvas = await page.locator('#gl1').boundingBox();
   const slices = [[0, 0], [1, 0], [0, 1]].map(([column, line]) => ({
@@ -111,10 +122,12 @@ async function expectCorticalOverlay(page) {
   const visible = [];
   for (const clip of slices) visible.push(await page.screenshot({ clip }));
   await row.getByRole('checkbox').uncheck();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
   for (const [index, clip] of slices.entries()) {
     expect(visible[index].equals(await page.screenshot({ clip })), `Surface must change slice ${index}`).toBe(false);
   }
   await row.getByRole('checkbox').check();
+  await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
 }
 
 test('cortical surfaces overlay all three slices in 3-Plane', async ({ page }, testInfo) => {
@@ -124,6 +137,31 @@ test('cortical surfaces overlay all three slices in 3-Plane', async ({ page }, t
   await page.screenshot({ path: testInfo.outputPath('cortical-overlay.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath('cortical-overlay-phone.png'), fullPage: true });
+});
+
+test('bilateral mid-surfaces can be overlaid, viewed in 3D and downloaded without analysis', async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1024, height: 1100 });
+  const files = await deliverSurfaces(page);
+  for (const [side, label] of [['lh', 'Left mid-surface'], ['rh', 'Right mid-surface']]) {
+    await expectCorticalOverlay(page, label);
+    const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
+    const downloading = page.waitForEvent('download');
+    await row.getByRole('button', { name: 'Download', exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe(`${side}.mid.white`);
+    expect(await readFile(await download.path())).toEqual(Buffer.from(files.find((file) => file.id === `${side}-mid`).bytes));
+    await page.getByRole('button', { name: '3D', exact: true }).click();
+    await expect(page.locator('.nd-view-tab.active')).toHaveText('3D');
+    await expect(page.locator('#viewerError')).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath(`${side}-mid-3d.png`) });
+    await page.getByRole('button', { name: '3-Plane', exact: true }).click();
+    await row.getByRole('checkbox').uncheck();
+  }
+  await page.locator('#estimateNormals').check();
+  await page.locator('#analyzeButton').click();
+  await expect(page.locator('#statusText')).toContainText('Surface analysis ready');
+  await expect(page.getByRole('checkbox', { name: 'Show Left mid-surface', exact: true })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeVisible();
 });
 
 test('computed patches, local normals and QC can be viewed and downloaded', async ({ page }, testInfo) => {
@@ -176,6 +214,22 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await patch.getByRole('button', { name: 'View', exact: true }).click();
   await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1');
   const selected = result.analysis.flat_patches.LH01;
+  const format = (values, decimals) => values.map((value, axis) => `${'RAS'[axis]} ${value.toFixed(decimals)}`).join(' · ');
+  await expect(page.locator('#patchCenter')).toHaveValue(format(selected.center_ras_mm, 3));
+  await expect(page.locator('#patchNormal')).toHaveValue(format(selected.normal_ras, 6));
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Copy patch RAS measurements' }).click();
+  await expect(page.locator('#patchCopyStatus')).toContainText('Copied full-precision');
+  const copied = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  expect(copied.center_ras_mm).toEqual(selected.center_ras_mm);
+  expect(copied.normal_ras).toEqual(selected.normal_ras);
+  const coordinatesDownload = page.waitForEvent('download');
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Patch coordinates and normals (RAS)' }).getByRole('button', { name: 'Download', exact: true }).click();
+  const coordinates = await coordinatesDownload;
+  expect(coordinates.suggestedFilename()).toBe('topofit_patch_coordinates_ras.csv');
+  const csv = (await readFile(await coordinates.path(), 'utf8')).trim().split('\n');
+  expect(csv[1].split(',').slice(3, 9).map(Number)).toEqual([...selected.center_ras_mm, ...selected.normal_ras]);
+
   await expect(page.locator('#location')).toContainText(selected.center_ras_mm.map(Math.round).join('×'));
   await expect(page.locator('#viewerError')).toBeHidden();
   await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
@@ -192,6 +246,7 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   await page.mouse.move(axial.x + axial.width / 2, axial.y + axial.height / 2);
   for (let i = 0; i < 8; i += 1) await page.mouse.wheel(0, 120);
   await expect(page.locator('#location')).not.toContainText(selected.center_ras_mm.map(Math.round).join('×'));
+  await expect(page.locator('#patchCenter')).toHaveValue(format(selected.center_ras_mm, 3));
   const scrolledPatch = await sliceImage(true);
   const scrolledWithoutPatch = await sliceImage(false);
   expect(scrolledPatch.equals(scrolledWithoutPatch), 'A patch outside the current slice must not be projected onto it').toBe(true);
@@ -207,18 +262,32 @@ test('computed patches, local normals and QC can be viewed and downloaded', asyn
   expect((await downloading).suggestedFilename()).toBe('lh.mid.normals.csv');
   await page.screenshot({ path: testInfo.outputPath('computed-patch.png') });
   await expectCorticalOverlay(page);
+  await expect(page.locator('#patchMeasurements')).toBeHidden();
+  await patch.getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#patchMeasurements')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('patch-ras-phone.png'), fullPage: true });
+  await page.locator('.nd-app-bar [data-neurodesk-theme-toggle]').click();
+  await page.screenshot({ path: testInfo.outputPath('patch-ras-phone-light.png'), fullPage: true });
+  await page.locator('#imageInput').setInputFiles(scan());
+  await expect(page.locator('#patchMeasurements')).toBeHidden();
+  await expect(page.locator('#patchCenter')).toHaveValue('');
 });
 
-test('surface-analysis controls preserve edited settings when collapsed and pass them to the worker', async ({ page }, testInfo) => {
+test('settings stay visible and pass edited values to the worker', async ({ page }, testInfo) => {
   await deliverSurfaces(page);
-  await page.locator('#surfaceAnalysisSettings > summary').click();
+  for (const id of ['advancedSettings', 'surfaceAnalysisSettings']) {
+    await expect(page.locator(`#${id}`)).toHaveJSProperty('tagName', 'SECTION');
+    await expect(page.locator(`#${id} > summary`)).toHaveCount(0);
+    await page.locator(`#${id}Title`).click();
+  }
+  await expect(page.locator('#conform')).toBeVisible();
+  await expect(page.locator('#thickness')).toBeVisible();
   await page.locator('#estimateNormals').check();
   await page.locator('#findPatches').check();
   await page.locator('#patchCount').fill('2');
   await page.locator('#patchRadius').fill('8');
   await page.locator('#patchHemisphere').selectOption('lh');
-  await page.locator('#surfaceAnalysisSettings > summary').click();
-  await page.locator('#surfaceAnalysisSettings > summary').click();
   await expect(page.locator('#patchRadius')).toHaveValue('8');
   await page.locator('#runButton').click();
   await expect.poll(() => page.evaluate(() => window.lastTopofitJob.patches)).toEqual({ count: 2, radius: 8, hemisphere: 'lh', maxRms: 0.5, minAreaFraction: 0.25 });
@@ -231,20 +300,17 @@ test('surface-analysis controls preserve edited settings when collapsed and pass
 
 test('invalid patch settings and a missing ROI are revealed before reconstruction', async ({ page }) => {
   await deliverSurfaces(page);
-  await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#findPatches').check();
   await page.locator('#patchCount').fill('0');
-  await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#runButton').click();
-  await expect(page.locator('#surfaceAnalysisSettings')).toHaveAttribute('open', '');
+  await expect(page.locator('#estimateNormals')).toBeVisible();
   await expect(page.locator('#patchCount')).toBeFocused();
   await page.locator('#patchCount').fill('3');
   await page.locator('#patchQuality > summary').click();
   await page.locator('#patchRegion').selectOption('roi');
-  await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#runButton').click();
   await expect(page.locator('#patchRoi')).toBeAttached();
-  await expect(page.locator('#surfaceAnalysisSettings')).toHaveAttribute('open', '');
+  await expect(page.locator('#estimateNormals')).toBeVisible();
   await expect(page.locator('#patchQuality')).toHaveAttribute('open', '');
   await expect(page.locator('#runButton')).toBeEnabled();
   expect(await page.evaluate(() => window.lastTopofitJob.patches)).toBeNull();
@@ -253,7 +319,7 @@ test('invalid patch settings and a missing ROI are revealed before reconstructio
 test('real reconstructed cortex displays patch QC and clearly named patches', async ({ page }, testInfo) => {
   const root = process.env.TOPOFIT_SURFACE_REPLAY;
   test.skip(!root, 'Requires external OpenRecon validation surfaces and surface-analysis replay outputs.');
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await page.setViewportSize({ width: 1024, height: 1100 });
   const { readFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
@@ -263,11 +329,28 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
     ...['lh', 'rh'].flatMap((h) => ['white', 'pial', 'registration'].map((s) => ({ id: `${h}-${s}`, name: `${h}.${s}`, mediaType: 'application/vnd.freesurfer.surface' }))),
     ...outputs,
   ];
+  const replayVertices = {};
+  const replayFaces = {};
+  for (const file of files.filter(({ id }) => /^(lh|rh)-(white|pial|registration)$/.test(id))) {
+    const bytes = await readFile(join(root, 'surfaces', file.name));
+    let offset = 3;
+    for (let lines = 0; lines < 2;) if (bytes[offset++] === 10) lines += 1;
+    const count = bytes.readInt32BE(offset);
+    const faceCount = bytes.readInt32BE(offset + 4);
+    offset += 8;
+    replayVertices[file.name] = Float64Array.from({ length: count * 3 }, (_, i) => bytes.readFloatBE(offset + i * 4));
+    offset += count * 12;
+    replayFaces[file.id.slice(0, 2)] = Int32Array.from({ length: faceCount * 3 }, (_, i) => bytes.readInt32BE(offset + i * 4));
+  }
+  const mids = writeSurfaceFiles(replayVertices, replayFaces).filter(({ id }) => id.endsWith('-mid'));
+  files.push(...mids.map(({ id, name, mediaType }) => ({ id, name, mediaType })));
   const atlasPath = join(root, 'atlas/fsaverage-cortex.bin');
   await page.route('**/fsaverage-cortex.bin', (route) => route.fulfill({ path: atlasPath, contentType: 'application/octet-stream' }));
   const paths = new Map(files.map((file) => [file.name, join(root, outputs.includes(file) ? 'outputs' : 'surfaces', file.name)]));
   await page.route('**/__topofit_fixture__/*', (route) => {
     const name = new URL(route.request().url()).pathname.split('/').pop();
+    const mid = mids.find((file) => file.name === name);
+    if (mid) return route.fulfill({ body: Buffer.from(mid.bytes), contentType: 'application/octet-stream' });
     const path = paths.get(name);
     return path ? route.fulfill({ path, contentType: 'application/octet-stream' }) : route.abort();
   });
@@ -308,12 +391,12 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   await expect(page.locator('#resultList')).not.toContainText(/registration/i);
   for (const side of ['Left', 'Right']) {
     for (let index = 1; index <= 3; index += 1) {
-      await expect(page.getByText(`${side} flat patch ${index}`, { exact: true })).toHaveCount(1);
+      await expect(page.locator('#resultList').getByText(`${side} flat patch ${index}`, { exact: true })).toHaveCount(1);
     }
   }
   await page.screenshot({ path: testInfo.outputPath('real-patch-qc.png') });
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Left flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1');
+  await expect(page.locator('#imageLabel')).toContainText('Left flat patch 1', { timeout: 30_000 });
   await expect(page.locator('#viewerError')).toBeHidden();
   await expect(page.locator('.nd-view-tab.active')).toHaveText('3-Plane');
   await page.screenshot({ path: testInfo.outputPath('real-selected-patch.png') });
@@ -336,26 +419,35 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   for (let i = 0; i < 30; i += 1) await page.mouse.wheel(0, 120);
   await expect.poll(() => patchPixels(page, axial), { message: 'Scrolling away must hide the real cortical patch on that slice' }).toBe(0);
   await page.screenshot({ path: testInfo.outputPath('real-patch-scrolled-away.png') });
-  await page.locator('#surfaceAnalysisSettings > summary').click();
   await page.locator('#findPatches').check();
   await page.locator('#patchCount').fill('1');
   await page.locator('#patchHemisphere').selectOption('rh');
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#statusText')).toContainText('Surface analysis ready', { timeout: 90_000 });
-  await expect(page.getByText('Right flat patch 1', { exact: true })).toHaveCount(1);
-  await expect(page.getByText('Left flat patch 1', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Right flat patch 2', { exact: true })).toHaveCount(0);
-  await page.getByText('Right flat patch 1', { exact: true }).locator('..').getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#imageLabel')).toContainText('Right flat patch 1');
+  await expect(page.locator('#resultList').getByText('Right flat patch 1', { exact: true })).toHaveCount(1);
+  await expect(page.locator('#resultList').getByText('Left flat patch 1', { exact: true })).toHaveCount(0);
+  await expect(page.locator('#resultList').getByText('Right flat patch 2', { exact: true })).toHaveCount(0);
+  await page.locator('#resultList').getByText('Right flat patch 1', { exact: true }).locator('..').getByRole('button', { name: 'View', exact: true }).click();
+  await expect(page.locator('#imageLabel')).toContainText('Right flat patch 1', { timeout: 30_000 });
   await page.screenshot({ path: testInfo.outputPath('reanalyzed-right-patch.png') });
   await expectCorticalOverlay(page);
   for (const label of ['Left white surface', 'Right pial surface']) {
     const row = page.locator('.nd-volume-toggle').filter({ hasText: label });
     await row.getByRole('checkbox').check();
+    await expect(row.getByRole('checkbox')).toBeEnabled({ timeout: 30_000 });
     await expect(page.locator('#imageLabel')).toContainText(label.includes('white') ? 'WHITE' : 'PIAL');
     await expect(page.locator('#viewerError')).toBeHidden();
   }
   await page.screenshot({ path: testInfo.outputPath('real-cortical-overlays.png') });
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Right flat patch 1' }).getByRole('button', { name: 'View', exact: true }).click();
+  await expectCorticalOverlay(page, 'Left mid-surface');
+  await page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Show Right mid-surface', exact: true })).toBeEnabled({ timeout: 30_000 });
+  await expect(page.locator('#imageLabel')).toContainText('RIGHT MID-SURFACE');
+  await expect(page.locator('#viewerError')).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces.png') });
+  await page.getByRole('button', { name: '3D', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('real-mid-surfaces-3d.png') });
 });
 
 test('analysis runs in its own worker and can be repeated or cancelled without reconstruction', async ({ page }) => {
@@ -364,7 +456,7 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await deliverSurfaces(page);
   await expect(page.locator('#analyzeButton')).toBeEnabled();
   await page.locator('#analyzeButton').click();
-  await expect(page.locator('#surfaceAnalysisSettings')).toHaveAttribute('open', '');
+  await expect(page.locator('#estimateNormals')).toBeVisible();
   await page.locator('#estimateNormals').check();
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#statusText')).toContainText('Surface analysis ready');
@@ -378,6 +470,7 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await page.locator('#findPatches').check();
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#statusText')).toContainText('Analyzing reconstructed surfaces');
+  for (const button of await page.locator('#resultList button').all()) await expect(button).toBeDisabled();
   await page.locator('#cancelButton').click();
   await expect(page.locator('#statusText')).toContainText('Surface analysis cancelled');
   await expect(page.getByText('Left mid-surface normals', { exact: true })).toBeVisible();

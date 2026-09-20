@@ -25,8 +25,8 @@
         <summary class="nd-section-title">Surface reconstruction</summary>
         <div class="nd-section-content">
           <input id="model" type="hidden" value="t1w-1mm">
-          <details class="nd-sidebar-section" id="advancedSettings">
-            <summary class="nd-section-title">Advanced settings</summary>
+          <section class="nd-sidebar-section" id="advancedSettings" aria-labelledby="advancedSettingsTitle">
+            <p class="nd-hint" id="advancedSettingsTitle"><strong>Advanced settings</strong></p>
             <div class="nd-section-content">
               <label class="nd-check"><input id="conform" type="checkbox" checked> Conform to the 1 mm RAS model grid</label>
               <div class="nd-field">
@@ -34,10 +34,10 @@
                 <select id="thickness"><option value="0">Thin</option><option value="1" selected>Standard</option><option value="2">Wide</option><option value="3">Widest</option></select>
               </div>
             </div>
-          </details>
+          </section>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Reconstruct cortex</button>
-          <details class="nd-sidebar-section" id="surfaceAnalysisSettings">
-            <summary class="nd-section-title">Surface analysis</summary>
+          <section class="nd-sidebar-section" id="surfaceAnalysisSettings" aria-labelledby="surfaceAnalysisSettingsTitle">
+            <p class="nd-hint" id="surfaceAnalysisSettingsTitle"><strong>Surface analysis</strong></p>
             <div class="nd-section-content">
               <label class="nd-check"><input id="estimateNormals" type="checkbox"> Export mid-surface normals</label>
               <label class="nd-check"><input id="findPatches" type="checkbox"> Find flat cortical patches</label>
@@ -81,13 +81,29 @@
                 </details>
               </div>
             </div>
-          </details>
+          </section>
           <button id="analyzeButton" class="nd-btn nd-btn-secondary" type="button" disabled>Run surface analysis</button>
         </div>
       </details>
       <details class="nd-sidebar-section" id="outputSection">
         <summary class="nd-section-title">Output</summary>
         <div class="nd-section-content">
+          <section id="patchMeasurements" class="nd-sidebar-section" aria-labelledby="patchMeasurementTitle" hidden>
+            <p id="patchMeasurementTitle" class="nd-hint"></p>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="patchCenter">Mid-surface point · RAS <small>mm</small></label>
+                <input id="patchCenter" type="text" readonly>
+              </div>
+              <div class="nd-field">
+                <label for="patchNormal">Outward patch normal · RAS</label>
+                <input id="patchNormal" type="text" readonly>
+              </div>
+              <p class="nd-hint">R = right, A = anterior, S = superior. The unit normal fits the patch plane and points from white to pial. These values describe the selected patch, not the moving crosshair.</p>
+              <button id="copyPatchCoordinates" class="nd-btn nd-btn-secondary" type="button">Copy patch RAS measurements</button>
+              <p id="patchCopyStatus" class="nd-hint" role="status"></p>
+            </div>
+          </section>
           <div id="resultList"></div>
           <button id="stlButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Save printable STL…</button>
         </div>
@@ -111,10 +127,10 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" aria-label="Cancel reconstruction" hidden>×</button>
     </footer>
     <template id="aboutContent">
-      <p>TopoFit estimates left and right white, pial, and spherical-registration surfaces from one brain MRI. This browser implementation runs the pinned BrainNet model locally from verified ONNX artifacts.</p>
+      <p>TopoFit estimates left and right white, mid, pial, and spherical-registration surfaces from one brain MRI. This browser implementation runs the pinned BrainNet model locally from verified ONNX artifacts.</p>
       <p>Optional surface analysis exports area-weighted mid-surface normals and finds connected cortical patches. Patch selection follows OpenRecon's atlas exclusion, geodesic radius, plane-fit error, area and normal-coherence criteria. The input must be a T1-weighted scan.</p>
       <p>Patches that pass every criterion are ranked by flatness: plane-fit RMS plus radius × (1 − normal coherence), lowest first. Area is only an acceptance threshold. Each hemisphere keeps the best-ranked patches that share no vertices with a higher-ranked patch, so Left flat patch 1 is the flattest left patch.</p>
-      <p>Patch QC shows white and pial boundaries, the mid-surface and a normal glyph. Its line is the true in-plane component at physical scale. A center dot points toward increasing source slice positions; a cross points toward decreasing positions. Select a patch row to center the viewer on that patch.</p>
+      <p>Patch QC shows white and pial boundaries, the mid-surface and a normal glyph. Its line is the true in-plane component at physical scale. A center dot points toward increasing source slice positions; a cross points toward decreasing positions. Select a patch row to center the viewer on that patch and inspect its mid-surface point and outward fitted-plane normal in scanner RAS. Copy preserves full precision; the patch coordinates CSV exports all detected patches.</p>
     </template>
     <template id="stlContent">
       <p>FreeSurfer surfaces are not a 3D-printing format. niimath simplifies and smooths each surface, then TopoFit writes a binary STL in millimetres.</p>

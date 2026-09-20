@@ -2,7 +2,7 @@
 
 Browser packaging for BrainNet TopoFit 0.5.1. The package preserves the pinned
 OpenRecon workflow's TReGA alignment, order-6 cortical topology, bilateral
-white/pial/registration surfaces, and source-grid QC output.
+white/pial/registration surfaces, derived mid-surfaces, and source-grid QC output.
 
 The model release is external. Create a Python 3.11 environment from
 `requirements-export.txt`, then run:
@@ -30,6 +30,15 @@ policy. The downloaded processing manifest contains SHA-256 hashes for the
 input, conformed tensor, model inputs, assets, and outputs; elapsed time is kept
 outside that stable manifest.
 
+## Mid-surfaces
+
+Reconstruction always exports `lh.mid.white` and `rh.mid.white`, with IDs
+`lh-mid` and `rh-mid`. Each uses its hemisphere's original triangle indices and
+the corresponding white/pial vertex midpoints in scanner RAS millimetres.
+Positions are computed in Float64 and stored as Float32 in FreeSurfer format.
+The `.white` suffix lets mesh viewers recognize the file type; these files
+contain the mid-surface, not the white boundary. Reanalysis retains their hashes.
+
 ## Surface analysis
 
 Set `estimateNormals: true` to export bilateral mid-surface positions and unit
@@ -51,12 +60,19 @@ candidates that share no vertices with a higher-ranked patch, up to `count`
 `NO_PATCH_MEETS_CRITERIA` without lowering thresholds.
 
 Each accepted patch has a viewable FreeSurfer mid-surface. The analysis JSON
-records its RAS and LPS center and representative unit normal, area, RMS,
+records its RAS and LPS center and outward fitted-plane unit normal, area, RMS,
 coherence, score and median ribbon separation. `topofit_patch_geometry.json`
 contains source vertex indices, local triangles, paired white/mid/pial RAS
 coordinates, local unit normals and ribbon separations. This is the container's
 geometry schema in JSON instead of NPZ. CSV and JSON coordinates use millimetres;
-normals are dimensionless. Per-vertex normals use all incident mid-surface
+normals are dimensionless. `center_vertex_index` identifies the mid-surface
+member vertex nearest the area-weighted patch centroid; `center_ras_mm` is that
+vertex's scanner RAS position. `normal_ras` is the unit fitted-plane normal,
+oriented white-to-pial. `topofit_patch_coordinates_ras.csv` exports one row per
+patch with that vertex index, RAS position and normal, area and plane-fit RMS.
+A search with no accepted patches produces only its CSV header.
+
+Per-vertex normals use all incident mid-surface
 triangles and are individually oriented toward the corresponding pial vertex.
 
 `topofit_patch_qc.nii` is a source-grid overlay with white boundaries at 2400,

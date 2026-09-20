@@ -18,8 +18,8 @@ pnpm --filter topofit test:e2e
 
 For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release directory and `VITE_TOPOFIT_ASSET_BASE=/model-assets/`. See [`packages/topofit/validation/README.md`](../../packages/topofit/validation/README.md) for the pinned-container comparison.
 
-The browser offers four anatomical FreeSurfer triangular surface files, a source-grid QC
-NIfTI, and a JSON processing manifest. White and pial surface checkboxes can be
+The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
+NIfTI, and a JSON processing manifest. White, mid-surface and pial checkboxes can be
 combined over the anatomical slices or in 3D. The X-ray control appears while a
 cortical surface is visible and defaults to 10%. Registration spheres are retained
 internally for atlas mapping and excluded from the browser output list. DICOM
@@ -29,8 +29,8 @@ import uses the shared dcm2niix worker. Images and results are not uploaded to a
 surface files are not a printing format. niimath simplifies each mesh to a
 chosen fraction of its triangles (10 to 100%, default 25) and optionally
 smooths it (0 to 20 Humphrey iterations, default 0); TopoFit writes a binary
-STL in millimetres per surface. Ticked surfaces are exported, or all four when
-none is ticked. A 245,762-vertex hemisphere reduces in under a second.
+STL in millimetres per white or pial surface. Ticked white and pial surfaces are
+exported, or all four when none of those is ticked. A 245,762-vertex hemisphere reduces in under a second.
 
 Because the published `@niivue/niimath` WebAssembly build compiles mesh support
 without `HAVE_FORMATS`, it can only write mz3, and its fluent JavaScript API
@@ -38,20 +38,30 @@ appends `-odt` where niimath's mesh mode expects the output name. The app
 therefore drives the same WebAssembly module directly and writes the STL
 itself; both limits are fixed upstream for the release after 1.4.20260909.
 
-Open **Surface analysis** before reconstruction to export mid-surface normals
+Use **Surface analysis** before reconstruction to export mid-surface normals
 or find flat cortical patches. Patch radius, count and hemisphere are available
 when the search is enabled; quality thresholds and a native-grid ROI are under
-**Patch quality and region**. Closing a section preserves its settings.
+**Patch quality and region**. Advanced settings and Surface analysis stay visible.
 
 Results include individual patch surfaces, patch-and-normal QC, measurements
 and paired ribbon geometry. Patches are labeled "Left flat patch 1", "Right flat patch 1", and so on.
 Numbers follow flatness within each hemisphere, not area; the ranking is
 described in `packages/topofit/README.md`.
-Select one to center the 3-Plane viewer on it. Meshes are clipped to a 1 mm
+Select one to center the 3-Plane viewer on it and show its RAS point in millimetres
+and outward unit plane normal. The point is a mid-surface member vertex nearest
+the patch centroid. The readout stays fixed when the crosshair moves. **Copy patch
+RAS measurements** copies full precision, and **Patch coordinates and normals
+(RAS)** downloads all patches as CSV.
+
+Patch meshes are clipped to a 1 mm
 band around each slice so scrolling away does not project the patch onto other regions.
 Selected patches use yellow, two-sided slice intersections so the brain image
 and surface orientation do not hide the patch.
-Download the normals CSV or geometry JSON for local analysis. The output schema
+The complete mid-surfaces are the corresponding white/pial vertex midpoints;
+they are available without running surface analysis. Their downloads are
+`lh.mid.white` and `rh.mid.white`, using FreeSurfer triangular mesh format.
+
+Download the per-vertex normals CSV or geometry JSON for local analysis. The output schema
 and OpenRecon comparison command are documented in `packages/topofit/README.md`.
 
 After reconstruction, edit **Surface analysis** and select **Run surface analysis**
