@@ -488,3 +488,88 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await expect(page.locator('#analyzeButton')).toBeDisabled();
   await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
 });
+
+test('cortical surfaces export as printable STL through niimath', async ({ page }) => {
+  await deliverSurfaces(page);
+  await page.locator('.nd-volume-toggle').filter({ hasText: 'Left pial surface' }).getByRole('checkbox').check();
+  await page.locator('#stlButton').click();
+  await expect(page.locator('#infoDialog')).toBeVisible();
+  await expect(page.locator('#stlSurfaceList')).toHaveText('left pial surface');
+  await expect(page.locator('#stlReduce')).toHaveValue('25');
+  await expect(page.locator('#stlSmooth')).toHaveValue('0');
+  // An empty field must not become "-r 0", which niimath rejects.
+  await page.locator('#stlReduce').fill('');
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#infoDialog')).toBeVisible();
+  // The stub delivers a tetrahedron, so keep every triangle: this checks the format, not niimath's simplifier.
+  await page.locator('#stlReduce').fill('100');
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#stlSaveButton').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('lh.pial.stl');
+  const stl = await readFile(await download.path());
+  expect(stl.length).toBe(84 + 4 * 50);
+  expect(stl.readUInt32LE(80)).toBe(4);
+  expect(stl.subarray(0, 80).every((byte) => byte === 0)).toBe(true);
+  await expect(page.locator('#statusText')).toContainText('lh.pial.stl · 4 triangles');
+});
+
+test('STL export serializes processing and cancellation rejects late results', async ({ page }) => {
+  await deliverSurfaces(page);
+  await page.evaluate(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      postMessage(job, ...rest) {
+        if (!job.surfaces) return super.postMessage(job, ...rest);
+        window.finishStl = () => this.onmessage({ data: {
+          type: 'result',
+          files: [{ name: 'stale.stl', bytes: new ArrayBuffer(84), triangles: 0 }],
+        } });
+      }
+    };
+  });
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  await page.locator('#stlButton').click();
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#imageInput')).toBeDisabled();
+  await expect(page.locator('#runButton')).toBeDisabled();
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#stlButton')).toBeEnabled();
+  await expect(page.locator('#statusText')).toContainText('STL export cancelled');
+  await page.locator('#imageInput').setInputFiles({ ...scan(), name: 'replacement.nii' });
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await page.evaluate(() => window.finishStl());
+  await expect(page.locator('#statusText')).not.toContainText('Saved');
+  expect(downloads).toEqual([]);
+});
+
+test('STL export defaults to all four cortical surfaces', async ({ page }, testInfo) => {
+  await deliverSurfaces(page);
+  await page.locator('#stlButton').click();
+  await expect(page.locator('#stlSurfaceList')).toContainText('right pial surface');
+  await page.locator('#stlReduce').fill('100');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const size = await page.locator('#stlReduce').evaluate((input) => ({
+      height: input.getBoundingClientRect().height,
+      font: Number.parseFloat(getComputedStyle(input).fontSize),
+    }));
+    expect(size.height).toBeGreaterThanOrEqual(width < 780 ? 44 : 30);
+    if (width < 780) expect(size.font).toBeGreaterThanOrEqual(16);
+    await page.screenshot({ path: testInfo.outputPath(`stl-${width}.png`), fullPage: true });
+  }
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download));
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#statusText')).toContainText('Saved');
+  await expect.poll(() => downloads.length).toBe(4);
+  expect(downloads.map((download) => download.suggestedFilename()).sort()).toEqual([
+    'lh.pial.stl', 'lh.white.stl', 'rh.pial.stl', 'rh.white.stl',
+  ]);
+  for (const download of downloads) {
+    const stl = await readFile(await download.path());
+    expect(stl.readUInt32LE(80)).toBe(4);
+  }
+});

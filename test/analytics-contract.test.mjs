@@ -32,7 +32,7 @@ test('all app sources rely on the shared page-view-only analytics bootstrap', as
 });
 
 test('deployments generate static analytics without exposing credentials to the site', async () => {
-  for (const workflow of ['deploy-pages.yml', 'deploy-cloudflare.yml']) {
+  for (const workflow of ['deploy-pages.yml']) {
     const source = await readFile(join(repoRoot, '.github', 'workflows', workflow), 'utf8');
     assert.match(source, /node scripts\/write-analytics\.mjs --allow-missing-credentials/);
     assert.match(source, /GA4_PROPERTY_ID: \$\{\{ secrets\.GA4_PROPERTY_ID \}\}/);

@@ -28,7 +28,7 @@ test('desktop builds and publication run only on the daily schedule', async () =
 });
 
 test('web releases and deployments do not wait for the desktop suite', async () => {
-  for (const name of ['release', 'deploy-pages', 'deploy-cloudflare']) {
+  for (const name of ['release', 'deploy-pages']) {
     const flow = await workflow(name);
     assert.doesNotMatch(JSON.stringify(flow), /scripts\/desktop\/|standalone\.yml/);
   }

@@ -348,6 +348,79 @@ fn evaluate(
     ))
 }
 
+fn rigid_matrix(parameters: [f64; 6]) -> Mat4 {
+    let [tx, ty, tz, rx, ry, rz] = parameters;
+    let (sx, cx) = rx.sin_cos();
+    let (sy, cy) = ry.sin_cos();
+    let (sz, cz) = rz.sin_cos();
+    Mat4([
+        [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx, tx],
+        [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx, ty],
+        [-sy, cy * sx, cy * cx, tz],
+        [0.0, 0.0, 0.0, 1.0],
+    ])
+}
+
+fn rigid_parameters(matrix: Mat4) -> [f64; 6] {
+    let ry = (-matrix.0[2][0]).clamp(-1.0, 1.0).asin();
+    let cy = ry.cos();
+    let (rx, rz) = if cy.abs() > 1e-8 {
+        (
+            matrix.0[2][1].atan2(matrix.0[2][2]),
+            matrix.0[1][0].atan2(matrix.0[0][0]),
+        )
+    } else {
+        (0.0, (-matrix.0[0][1]).atan2(matrix.0[1][1]))
+    };
+    [matrix.0[0][3], matrix.0[1][3], matrix.0[2][3], rx, ry, rz]
+}
+
+fn evaluate_rigid(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    bins: &Option<(Vec<u8>, Vec<u8>)>,
+    scaled: [f64; 12],
+    scale: [f64; 12],
+    metric: AffineMetric,
+) -> Result<(f64, [f64; 12])> {
+    let rigid = std::array::from_fn(|index| scaled[index] / scale[index]);
+    let transform = rigid_matrix(rigid);
+    let (value, affine_gradient) = match (metric, bins) {
+        (AffineMetric::Ssd, _) => ssd_score_gradient(fixed, moving, transform)?,
+        (AffineMetric::Nmi, Some((fixed_bins, moving_bins))) => {
+            let (value, gradient) =
+                nmi_score_gradient_binned(fixed, fixed_bins, moving, moving_bins, transform)?;
+            (-10_000.0 * value, gradient.map(|entry| -10_000.0 * entry))
+        }
+        (AffineMetric::Nmi, None) => unreachable!("NMI bins are computed per level"),
+    };
+    let mut gradient = [0.0; 12];
+    gradient[0] = affine_gradient[0];
+    gradient[1] = affine_gradient[4];
+    gradient[2] = affine_gradient[8];
+    let epsilon = 1e-6;
+    for angle in 3..6 {
+        let mut before = rigid;
+        let mut after = rigid;
+        before[angle] -= epsilon;
+        after[angle] += epsilon;
+        let before = rigid_matrix(before);
+        let after = rigid_matrix(after);
+        gradient[angle] = (0..3)
+            .flat_map(|row| (0..3).map(move |column| (row, column)))
+            .map(|(row, column)| {
+                affine_gradient[row * 4 + column + 1]
+                    * (after.0[row][column] - before.0[row][column])
+                    / (2.0 * epsilon)
+            })
+            .sum();
+    }
+    Ok((
+        value,
+        std::array::from_fn(|index| gradient[index] / scale[index]),
+    ))
+}
+
 fn dot(left: [f64; 12], right: [f64; 12]) -> f64 {
     left.into_iter().zip(right).map(|(a, b)| a * b).sum()
 }
@@ -599,45 +672,23 @@ fn line_search(
     }
 }
 
-/// Greedy's Netlib L-BFGS path: five corrections, More--Thuente line search,
-/// and an evaluation (not iteration) budget.
-pub fn optimize(
-    fixed: &NiftiImage,
-    moving: &NiftiImage,
-    initial: Mat4,
-    metric: AffineMetric,
+fn lbfgs(
+    mut x: [f64; 12],
     options: AffineOptions,
-) -> Result<Mat4> {
-    if options.iterations == 0 {
-        return Ok(initial);
-    }
-    let scale = [
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-    ];
-    let mut x = std::array::from_fn(|index| parameters(initial)[index] * scale[index]);
-    let bins = match metric {
-        AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
-        AffineMetric::Ssd => None,
-    };
-    let (mut value, mut gradient) = evaluate(fixed, moving, &bins, x, scale, metric)?;
+    active: usize,
+    mut evaluate: impl FnMut([f64; 12]) -> Result<ValueGradient>,
+) -> Result<[f64; 12]> {
+    let (mut value, mut gradient) = evaluate(x)?;
     let (mut best_value, mut best_x) = (value, x);
     if options.verbose {
         println!(
-            "  N=12   NUMBER OF CORRECTIONS=5       INITIAL VALUES F= {:.6}   GNORM= {:.6}\n   I   NFN    FUNC        GNORM       STEPLENGTH",
+            "  N={active}   NUMBER OF CORRECTIONS=5       INITIAL VALUES F= {:.6}   GNORM= {:.6}\n   I   NFN    FUNC        GNORM       STEPLENGTH",
             value,
             norm(gradient)
         );
+    }
+    if norm(gradient) == 0.0 {
+        return Ok(x);
     }
     // `vnl_lbfgs` checks its limit after each evaluation. Consequently a
     // limit of one still evaluates the initial More--Thuente trial; preserve
@@ -670,7 +721,7 @@ pub fn optimize(
         let start_step = if history.is_empty() { first_step } else { 1.0 };
         let outcome = {
             let mut trial = |candidate| {
-                let result = evaluate(fixed, moving, &bins, candidate, scale, metric)?;
+                let result = evaluate(candidate)?;
                 evaluations += 1;
                 if result.0 < best_value {
                     best_value = result.0;
@@ -709,8 +760,87 @@ pub fn optimize(
             break;
         }
     }
+    Ok(best_x)
+}
+
+/// Greedy's Netlib L-BFGS path: five corrections, More--Thuente line search,
+/// and an evaluation (not iteration) budget.
+pub fn optimize(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    initial: Mat4,
+    metric: AffineMetric,
+    options: AffineOptions,
+) -> Result<Mat4> {
+    if options.iterations == 0 {
+        return Ok(initial);
+    }
+    let scale = [
+        1.0,
+        fixed.grid.dims[0] as f64,
+        fixed.grid.dims[1] as f64,
+        fixed.grid.dims[2] as f64,
+        1.0,
+        fixed.grid.dims[0] as f64,
+        fixed.grid.dims[1] as f64,
+        fixed.grid.dims[2] as f64,
+        1.0,
+        fixed.grid.dims[0] as f64,
+        fixed.grid.dims[1] as f64,
+        fixed.grid.dims[2] as f64,
+    ];
+    let x = std::array::from_fn(|index| parameters(initial)[index] * scale[index]);
+    let bins = match metric {
+        AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
+        AffineMetric::Ssd => None,
+    };
+    let best = lbfgs(x, options, 12, |candidate| {
+        evaluate(fixed, moving, &bins, candidate, scale, metric)
+    })?;
     Ok(matrix(std::array::from_fn(|index| {
-        best_x[index] / scale[index]
+        best[index] / scale[index]
+    })))
+}
+
+pub fn optimize_rigid(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    initial: Mat4,
+    metric: AffineMetric,
+    options: AffineOptions,
+) -> Result<Mat4> {
+    if options.iterations == 0 {
+        return Ok(initial);
+    }
+    let extent = (0..3)
+        .map(|column| {
+            let spacing = (0..3)
+                .map(|row| fixed.grid.lps_from_voxel.0[row][column].powi(2))
+                .sum::<f64>()
+                .sqrt();
+            spacing * fixed.grid.dims[column] as f64
+        })
+        .fold(1.0, f64::max);
+    let scale = [
+        1.0, 1.0, 1.0, extent, extent, extent, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+    ];
+    let parameters = rigid_parameters(initial);
+    let x = std::array::from_fn(|index| {
+        if index < 6 {
+            parameters[index] * scale[index]
+        } else {
+            0.0
+        }
+    });
+    let bins = match metric {
+        AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
+        AffineMetric::Ssd => None,
+    };
+    let best = lbfgs(x, options, 6, |candidate| {
+        evaluate_rigid(fixed, moving, &bins, candidate, scale, metric)
+    })?;
+    Ok(rigid_matrix(std::array::from_fn(|index| {
+        best[index] / scale[index]
     })))
 }
 
@@ -750,9 +880,85 @@ pub fn register(
     Ok(transform)
 }
 
+pub fn register_rigid(
+    fixed: NiftiImage,
+    moving: NiftiImage,
+    metric: AffineMetric,
+    iterations: [usize; 3],
+    verbose: bool,
+) -> Result<Mat4> {
+    if iterations == [0, 0, 0] {
+        return Ok(image_centers(&fixed.grid, &moving.grid));
+    }
+    let fixed_pyramid = build_pyramid(fixed)?;
+    let moving_pyramid = build_pyramid(moving)?;
+    let mut transform = image_centers(&fixed_pyramid[0].grid, &moving_pyramid[0].grid);
+    for level in 0..3 {
+        transform = optimize_rigid(
+            &fixed_pyramid[level],
+            &moving_pyramid[level],
+            transform,
+            metric,
+            AffineOptions {
+                iterations: iterations[level],
+                verbose,
+            },
+        )?;
+        if verbose {
+            println!("END OF LEVEL {level:3}\nLevel {level:3}  Final RAS Transform:");
+            for row in transform.0 {
+                println!("{:9.4}{:9.4}{:9.4}{:9.4}", row[0], row[1], row[2], row[3]);
+            }
+        }
+    }
+    Ok(transform)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{dot, line_search, norm};
+    use super::{AffineMetric, dot, evaluate_rigid, line_search, norm, rigid_matrix, score};
+    use crate::{Grid, Mat4, NiftiImage, ScalarType};
+
+    #[test]
+    fn rigid_ssd_gradient_matches_centered_differences() {
+        let grid = Grid {
+            dims: [6, 5, 4],
+            lps_from_voxel: Mat4::IDENTITY,
+        };
+        let fixed = NiftiImage {
+            grid: grid.clone(),
+            data: (0..120)
+                .map(|index| {
+                    let x = (index % 6) as f32;
+                    let y = ((index / 6) % 5) as f32;
+                    let z = (index / 30) as f32;
+                    x * x + 2.0 * y + 0.5 * z * z
+                })
+                .collect(),
+            scalar_type: ScalarType::F32,
+        };
+        let mut moving = fixed.clone();
+        moving.data.rotate_left(7);
+        let parameters = [0.2, -0.1, 0.3, 0.02, -0.03, 0.04];
+        let scaled = std::array::from_fn(|index| if index < 6 { parameters[index] } else { 0.0 });
+        let (_, gradient) =
+            evaluate_rigid(&fixed, &moving, &None, scaled, [1.0; 12], AffineMetric::Ssd).unwrap();
+        let step = 1e-3;
+        for index in 0..6 {
+            let mut plus = parameters;
+            let mut minus = parameters;
+            plus[index] += step;
+            minus[index] -= step;
+            let numeric = (score(&fixed, &moving, rigid_matrix(plus), AffineMetric::Ssd).unwrap()
+                - score(&fixed, &moving, rigid_matrix(minus), AffineMetric::Ssd).unwrap())
+                / (2.0 * step);
+            assert!(
+                (gradient[index] - numeric).abs() < 0.02,
+                "parameter {index}: {} != {numeric}",
+                gradient[index]
+            );
+        }
+    }
 
     #[test]
     fn more_thuente_accepts_a_strong_wolfe_quadratic_step() {

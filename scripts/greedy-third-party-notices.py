@@ -47,6 +47,10 @@ def cargo_tree(target):
             'cargo',
             'tree',
             '--locked',
+            # CI sets CARGO_TERM_COLOR=always, and a repeated subtree's "(*)" marker then
+            # arrives wrapped in ANSI escapes that the line parser below cannot read.
+            '--color',
+            'never',
             '-p',
             'greedy-rs',
             '--target',

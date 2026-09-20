@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- Keep Advanced settings and Surface analysis visible as fixed groups instead of collapsible sections.
+
 - Updated dependencies
   - @neurodesk/topofit@0.8.20260920
 
@@ -15,7 +17,20 @@
 
 ### Patch Changes
 
-- Keep Advanced settings and Surface analysis visible as fixed groups instead of collapsible sections.
+- Style dialog inputs with the shared field controls and give them 44 px touch targets and 16 px text on phones. Verify TopoFit's STL settings at desktop and phone widths.
+- efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.2
+  - @neurodesk/topofit@0.7.20260920
+
+
+### Patch Changes
+
+- a213c53: Export cortical surfaces as printable STL from TopoFit: a dialog sets the triangle fraction to keep (10 to 100%, default 25) and Humphrey smoothing iterations (0 to 20, default 0), niimath simplifies and smooths each surface, and the app writes a binary STL per surface.
+
+  STL export uses the shared busy and cancellation controls so replacement input cannot receive stale downloads.
+
+- Updated dependencies [a213c53]
   - @neurodesk/topofit@0.7.20260920
 
 ## 0.7.20260919

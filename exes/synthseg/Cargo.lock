@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "synthseg"
-version = "0.3.20260918"
+version = "0.3.20260920"
 dependencies = [
  "flate2",
  "metal",

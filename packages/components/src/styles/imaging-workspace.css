@@ -307,7 +307,7 @@ nd-imaging-brand {
 /* --------------------------------------------------------------------------
    3. Fields (QSMbly: 0.8rem labels, 0.8rem controls, 0.7rem hints)
    -------------------------------------------------------------------------- */
-.nd-imaging-controls .nd-section-content :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) {
   width: 100%;
   min-height: 30px;
   margin: 0;
@@ -320,12 +320,12 @@ nd-imaging-brand {
   font-size: 0.8rem;
   transition: border-color var(--nd-transition-fast), box-shadow var(--nd-transition-fast);
 }
-.nd-imaging-controls .nd-section-content :is(select, textarea, input):focus {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(select, textarea, input):focus {
   outline: none;
   border-color: var(--nd-color-primary);
   box-shadow: 0 0 0 3px var(--nd-color-primary-glow);
 }
-.nd-imaging-controls .nd-section-content select {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) select {
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b99ad' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -333,7 +333,7 @@ nd-imaging-brand {
   background-position: right 12px center;
   padding-right: 36px;
 }
-.nd-imaging-controls .nd-section-content :is(select, input, button):disabled { opacity: 0.5; cursor: not-allowed; }
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(select, input, button):disabled { opacity: 0.5; cursor: not-allowed; }
 .nd-imaging-controls .nd-section-content input[type="range"] { width: 100%; margin: 0; accent-color: var(--nd-color-primary); }
 
 .nd-field { display: grid; gap: 2px; min-width: 0; }
@@ -598,6 +598,7 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-dialog-body { max-height: calc(min(85vh, 85dvh) - 60px); overflow-y: auto; padding: var(--nd-space-lg); font-size: 0.875rem; line-height: 1.55; }
 .nd-dialog-body > :first-child { margin-top: 0; }
 .nd-dialog-body > :last-child { margin-bottom: 0; }
+.nd-dialog-body > .nd-field { margin-bottom: var(--nd-space-sm); }
 .nd-dialog-body p { margin: 0 0 var(--nd-space-sm); }
 .nd-dialog-body h3 { margin: var(--nd-space-lg) 0 var(--nd-space-xs); padding-bottom: var(--nd-space-xs); border-bottom: 1px solid var(--nd-color-border); color: var(--nd-color-primary); font-size: 0.9rem; font-weight: 600; }
 .nd-dialog-body h3:first-child { margin-top: 0; }
@@ -652,8 +653,8 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 
 /* Touch targets: coarse pointers and phone widths (narrow windows are touch far more often than not). */
 @media (pointer: coarse), (max-width: 780px) {
-  .nd-imaging-controls .nd-section-content :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 44px; }
-  .nd-imaging-controls .nd-section-content :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
+  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 44px; }
+  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
   .nd-viewer-toolbar :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
   .nd-viewer-toolbar select { font-size: 16px; }
   .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }

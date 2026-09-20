@@ -26,6 +26,24 @@ test("map follows the player, the timer pauses, and the global leaderboard rende
     await expect(page.locator("#score-rows")).toContainText(text);
   expect(requests[0].url()).toMatch(/\/scores\?challenge=pial-arteries-v2&limit=10$/);
   const target = await page.locator("#ocean").getAttribute("data-target");
+  // Tracks: each has its own board; the choice is remembered and changes the route.
+  await expect(page.locator("#tracks .track")).toHaveCount(4);
+  await expect(page.locator("#board-title")).toHaveText("Trunk run leaderboard");
+  await page.locator('#tracks .track[data-track="pial-arteries-v2-sprint"]').click();
+  await expect(page.locator("#ocean")).toHaveAttribute("data-track", "pial-arteries-v2-sprint");
+  await expect(page.locator("#board-title")).toHaveText("Sprint leaderboard");
+  await expect(page.locator("#mission-text")).toContainText("Sprint");
+  await expect
+    .poll(() => page.locator("#ocean").getAttribute("data-target"))
+    .not.toBe(target);
+  expect(requests.at(-1).url()).toMatch(/challenge=pial-arteries-v2-sprint&limit=10$/);
+  await page.reload();
+  await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
+  await expect(page.locator("#ocean")).toHaveAttribute("data-track", "pial-arteries-v2-sprint");
+  await page.locator('#tracks .track[data-track="pial-arteries-v2"]').click();
+  await expect
+    .poll(() => page.locator("#ocean").getAttribute("data-target"))
+    .toBe(target);
   await page.locator("#play").click();
   await expect(page.locator("#map")).toBeVisible();
   await expect(page.locator("#target-distance")).toContainText("away");

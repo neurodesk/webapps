@@ -39,7 +39,6 @@
     "@playwright/test": "^1.44.0",
     "jsdom": "^24.0.0",
     "turbo": "^2.0.0",
-    "wrangler": "^3.0.0",
     "yaml": "^2.8.1"
   }
 }

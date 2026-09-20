@@ -8,6 +8,7 @@ import {
   SCORE_KEY,
 } from "../src/race.js";
 import { humanChallenge } from "../src/navigation-map.js";
+import { TRACKS, CHALLENGES, trackFor } from "../src/race.js";
 import { network, volume } from "../test-fixtures/human.js";
 import { insideMask } from "../src/mask.js";
 import { swim } from "../src/swim.js";
@@ -43,6 +44,13 @@ test("a wall contact counts once until movement separates the player from it", (
   assert.ok(pointsFor(10, 0) > pointsFor(20, 0), "faster runs earn more");
   assert.ok(pointsFor(20, 0) > pointsFor(20, 1), "every bump costs");
   assert.equal(pointsFor(999, 100), 0);
+  assert.equal(pointsFor(10, 0, "pial-arteries-v2-sprint"), 3200, "track points scale the speed score");
+  assert.equal(pointsFor(10, 0, "no-such-track"), 8000, "unknown tracks fall back to the standard points");
+  for (const track of TRACKS)
+    assert.ok(
+      Math.abs(track.speedPoints / track.length - 80000 / 33.6) / (80000 / 33.6) < 0.02,
+      `${track.name} pays about the same per millimetre`,
+    );
 });
 test("completed scores persist, rank fairly, and keep only five valid results", () => {
   const data = new Map(),
@@ -73,22 +81,41 @@ test("completed scores persist, rank fairly, and keep only five valid results", 
     false,
   );
 });
-test("the fixed real-brain destination has a continuous in-vessel reference route", () => {
-  const a = humanChallenge(network, volume),
-    b = humanChallenge(network, volume);
-  assert.deepEqual(a.target.toArray(), b.target.toArray());
-  assert.ok(a.target.distanceTo(a.path[0]) > 2);
-  assert.ok(a.length > 30 && a.length < 60, `route length ${a.length} mm`);
-  let along = 0;
-  for (let i = 1; i < a.path.length; i++) {
-    const step = a.path[i].distanceTo(a.path[i - 1]);
-    assert.ok(step > 0.05 && step < 0.5, `sample spacing ${step}`);
-    along += step;
+test("each track keeps its own best runs on the device", () => {
+  const data = new Map();
+  const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+  saveScore(storage, { challenge: "pial-arteries-v2-sprint", seconds: 10, bumps: 0, points: pointsFor(10, 0, "pial-arteries-v2-sprint") });
+  saveScore(storage, { seconds: 20, bumps: 0, points: pointsFor(20, 0) });
+  assert.deepEqual(readScores(storage).map((r) => r.points), [4000]);
+  assert.deepEqual(readScores(storage, "pial-arteries-v2-sprint").map((r) => r.points), [3200]);
+  assert.deepEqual(readScores(storage, "pial-arteries-v2-tour"), []);
+  assert.equal(new Race(0.1, "pial-arteries-v2-tour").challenge, "pial-arteries-v2-tour");
+});
+test("every track has a continuous in-vessel route of its declared length", () => {
+  assert.equal(new Set(CHALLENGES).size, TRACKS.length, "challenge ids are unique");
+  const ends = new Set();
+  for (const track of TRACKS) {
+    assert.equal(trackFor(track.challenge), track);
+    assert.ok(track.minSeconds < track.length / 2.5, `${track.name} allows a flat-out run`);
+    const a = humanChallenge(network, volume, track),
+      b = humanChallenge(network, volume, track);
+    assert.deepEqual(a.target.toArray(), b.target.toArray(), "deterministic");
+    assert.ok(Math.abs(a.length - track.length) < 0.3, `${track.name}: ${a.length} mm vs ${track.length}`);
+    assert.equal(a.directions.length, a.path.length);
+    ends.add(a.path[0].toArray().join() + ">" + a.target.toArray().join());
+    let along = 0;
+    for (let i = 1; i < a.path.length; i++) {
+      const step = a.path[i].distanceTo(a.path[i - 1]);
+      assert.ok(step > 0.05 && step < 0.5, `${track.name} sample spacing ${step}`);
+      assert.ok(a.directions[i - 1].dot(a.path[i].clone().sub(a.path[i - 1]).normalize()) > 0.99);
+      along += step;
+    }
+    assert.ok(Math.abs(along - a.length) < 1, "samples cover the whole route");
+    for (const p of a.path) assert.ok(insideMask(volume, p.toArray()));
+    let position = a.path[0].clone();
+    for (const next of a.path.slice(1))
+      position = swim(volume, position, next.clone().sub(position));
+    assert.ok(position.distanceTo(a.target) < 0.001, `${track.name} is flyable end to end`);
   }
-  assert.ok(Math.abs(along - a.length) < 1, "samples cover the whole route");
-  for (const p of a.path) assert.ok(insideMask(volume, p.toArray()));
-  let position = a.path[0].clone();
-  for (const next of a.path.slice(1))
-    position = swim(volume, position, next.clone().sub(position));
-  assert.ok(position.distanceTo(a.target) < 0.001);
+  assert.equal(ends.size, TRACKS.length, "tracks are distinct");
 });

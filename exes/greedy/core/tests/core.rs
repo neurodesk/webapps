@@ -1,9 +1,10 @@
 use greedy_rs_core::{
-    AffineMetric, Grid, Interpolation, Mat4, NiftiImage, ScalarType, Transform, VectorField,
-    affine_matrix, affine_parameters, decode_image, decode_vector_field, downsample_grid,
-    encode_image, encode_vector_field, gaussian_smooth, grids_match, image_centers,
-    nmi_score_gradient_affine, register_affine, register_nmi_svf, reslice, reslice_with_background,
-    reslice_with_interpolation, score_affine, ssd_score_gradient,
+    AffineMetric, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries, ScalarType, Transform,
+    VectorField, affine_matrix, affine_parameters, decode_image, decode_series,
+    decode_vector_field, downsample_grid, encode_image, encode_series, encode_vector_field,
+    gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine, register_affine,
+    register_nmi_svf, register_rigid, reslice, reslice_with_background, reslice_with_interpolation,
+    score_affine, ssd_score_gradient,
 };
 
 fn grid(dims: [usize; 3]) -> Grid {
@@ -73,6 +74,24 @@ fn nifti_scalar_and_vector_round_trip() {
             .data,
         vec![[0.4, -0.6, 0.0]]
     );
+}
+
+#[test]
+fn nifti_four_dimensional_series_round_trip() {
+    let series = NiftiSeries {
+        grid: grid([2, 2, 2]),
+        data: (0..24).map(|value| value as f32).collect(),
+        scalar_type: ScalarType::I16,
+        timepoints: 3,
+        time_spacing: 2.5,
+        time_units: 8,
+    };
+    let decoded = decode_series(&encode_series(&series, cfg!(feature = "gzip")).unwrap()).unwrap();
+    assert_eq!(decoded.data, series.data);
+    assert_eq!(decoded.timepoints, 3);
+    assert_eq!(decoded.time_spacing, 2.5);
+    assert_eq!(decoded.time_units, 8);
+    assert!(grids_match(&decoded.grid, &series.grid, 0.0));
 }
 
 #[test]
@@ -380,6 +399,52 @@ fn affine_ssd_search_reduces_a_shifted_image_cost() {
         final_score < initial,
         "{final_score} is not below {initial}"
     );
+}
+
+#[test]
+fn rigid_search_stays_rigid_and_reduces_cost() {
+    let fixed = NiftiImage {
+        grid: grid([16, 16, 16]),
+        data: (0..4096)
+            .map(|index| {
+                let x = (index % 16) as f32;
+                let y = ((index / 16) % 16) as f32;
+                (-0.1 * ((x - 7.0).powi(2) + (y - 8.0).powi(2))).exp()
+            })
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let mut moving = fixed.clone();
+    for z in 0..16 {
+        for y in 0..16 {
+            for x in 0..16 {
+                moving.data[x + 16 * (y + 16 * z)] =
+                    fixed.data[(x + 2).min(15) + 16 * (y + 16 * z)];
+            }
+        }
+    }
+    let initial = score_affine(&fixed, &moving, Mat4::IDENTITY, AffineMetric::Ssd).unwrap();
+    let transform = register_rigid(
+        fixed.clone(),
+        moving.clone(),
+        AffineMetric::Ssd,
+        [0, 0, 10],
+        false,
+    )
+    .unwrap();
+    let final_score = score_affine(&fixed, &moving, transform, AffineMetric::Ssd).unwrap();
+    assert!(
+        final_score < initial,
+        "{final_score} is not below {initial}"
+    );
+    for row in 0..3 {
+        for other in 0..3 {
+            let dot = (0..3)
+                .map(|column| transform.0[row][column] * transform.0[other][column])
+                .sum::<f64>();
+            assert!((dot - if row == other { 1.0 } else { 0.0 }).abs() < 1e-10);
+        }
+    }
 }
 
 #[test]
