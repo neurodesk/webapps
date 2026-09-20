@@ -1,6 +1,11 @@
 import { execFileSync } from 'node:child_process';
 
 const NON_CODE_PREFIXES = ['docs/', '.changeset/'];
+// Self-contained packages outside apps/ with their own CI job (the homepage
+// easter egg and its leaderboard worker run under `homepage-easter-egg`).
+// Changes there select no catalog apps. Shared homepage files directly under
+// site/ still count as shared changes.
+const SELF_CONTAINED_PREFIXES = ['site/easter-eggs/'];
 const NON_CODE_FILES = new Set([
   'README.md',
   'LICENSES.md',
@@ -38,7 +43,11 @@ export function selectAffectedApps(registry, changedPaths = []) {
       directlyChanged.add(match[1]);
       continue;
     }
-    if (NON_CODE_FILES.has(path) || NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    if (
+      NON_CODE_FILES.has(path) ||
+      NON_CODE_PREFIXES.some((prefix) => path.startsWith(prefix)) ||
+      SELF_CONTAINED_PREFIXES.some((prefix) => path.startsWith(prefix))
+    ) {
       continue;
     }
     sharedChange = true;
