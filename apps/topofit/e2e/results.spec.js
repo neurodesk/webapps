@@ -453,3 +453,26 @@ test('STL export serializes processing and cancellation rejects late results', a
   await expect(page.locator('#statusText')).not.toContainText('Saved');
   expect(downloads).toEqual([]);
 });
+
+test('STL export defaults to all four cortical surfaces', async ({ page }, testInfo) => {
+  await deliverSurfaces(page);
+  await page.locator('#stlButton').click();
+  await expect(page.locator('#stlSurfaceList')).toContainText('right pial surface');
+  await page.locator('#stlReduce').fill('100');
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({ path: testInfo.outputPath(`stl-${width}.png`), fullPage: true });
+  }
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download));
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#statusText')).toContainText('Saved');
+  await expect.poll(() => downloads.length).toBe(4);
+  expect(downloads.map((download) => download.suggestedFilename()).sort()).toEqual([
+    'lh.pial.stl', 'lh.white.stl', 'rh.pial.stl', 'rh.white.stl',
+  ]);
+  for (const download of downloads) {
+    const stl = await readFile(await download.path());
+    expect(stl.readUInt32LE(80)).toBe(4);
+  }
+});
