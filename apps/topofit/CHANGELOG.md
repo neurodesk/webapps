@@ -1,5 +1,18 @@
 # topofit
 
+## 0.8.20260920
+
+### Minor Changes
+
+- Add bilateral mid-surface viewing and FreeSurfer downloads, available without optional analysis. Show detected flat patches' mid-surface points and outward fitted-plane normals in scanner RAS, with full-precision copying and a CSV export. Include the center vertex index and coordinate definitions in the analysis metadata, preserve mid-surface hashes during reanalysis, and clear stale patch readouts when the scan or view changes.
+
+### Patch Changes
+
+- Keep Advanced settings and Surface analysis visible as fixed groups instead of collapsible sections.
+
+- Updated dependencies
+  - @neurodesk/topofit@0.8.20260920
+
 ## 0.7.20260920
 
 ### Patch Changes

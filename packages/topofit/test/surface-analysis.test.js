@@ -50,7 +50,11 @@ test('analysis exports corresponding local coordinates, normals, measurements an
   const data = new Int16Array(qc.bytes, 352);
   assert.ok(data.includes(3000));
   assert.ok(data.includes(4095));
-  assert.equal(result.files.filter((f) => f.mediaType === 'text/csv').length, 2);
+  assert.equal(result.files.filter((f) => f.mediaType === 'text/csv').length, 3);
+  assert.deepEqual(patch.center_ras_mm, geometry.mid_ras_mm[geometry.vertex_indices.indexOf(patch.center_vertex_index)]);
+  const csv = new TextDecoder().decode(result.files.find((file) => file.id === 'patch-coordinates').bytes).trim().split('\n');
+  assert.match(csv[0], /x_ras_mm,y_ras_mm,z_ras_mm,nx_ras,ny_ras,nz_ras/);
+  assert.deepEqual(csv[1].split(',').slice(3, 9).map(Number), [...patch.center_ras_mm, ...patch.normal_ras]);
 });
 
 test('normals-only analysis never downloads an atlas', async () => {
@@ -97,7 +101,7 @@ test('post-reconstruction analysis replaces prior products and provenance withou
   const buffer = writeInt16Nifti(data.source, new Int16Array(8000), 'scan');
   const provenance = {
     inputSha256: 'original-input', runtime: { cortexAtlasSha256: 'previous-atlas' }, roiSha256: 'previous-roi',
-    outputSha256: Object.fromEntries([...Object.keys(data.vertices), 'topofit_qc.nii', 'obsolete.nii'].map((name) => [name, `hash-${name}`])),
+    outputSha256: Object.fromEntries([...Object.keys(data.vertices), 'lh.mid.white', 'rh.mid.white', 'topofit_qc.nii', 'obsolete.nii'].map((name) => [name, `hash-${name}`])),
   };
   const first = await runSurfaceAnalysis({ buffer, surfaces, provenance, patches: { radius: 10, hemisphere: 'lh', count: 1, minAreaFraction: 0.1 }, estimateNormals: true, loadAtlas: data.loadAtlas, cortexAtlasSha256: 'atlas' });
   assert.deepEqual(Object.keys(first.provenance.surfaceAnalysis.flat_patches), ['LH01']);
@@ -110,6 +114,9 @@ test('post-reconstruction analysis replaces prior products and provenance withou
   assert.equal(second.provenance.outputSha256['obsolete.nii'], undefined);
   assert.equal(second.provenance.outputSha256['topofit_qc.nii'], 'hash-topofit_qc.nii');
   assert.equal(second.provenance.inputSha256, 'original-input');
+  assert.equal(second.provenance.outputSha256['lh.mid.white'], 'hash-lh.mid.white');
+  assert.equal(second.provenance.outputSha256['rh.mid.white'], 'hash-rh.mid.white');
+  assert.equal(second.provenance.outputSha256['topofit_patch_coordinates_ras.csv'], undefined);
   assert.deepEqual(surfaces, before);
   assert.equal(provenance.roiSha256, 'previous-roi');
   for (const file of second.files.filter((file) => file.id !== 'provenance')) {
@@ -119,4 +126,26 @@ test('post-reconstruction analysis replaces prior products and provenance withou
   }
   const saved = JSON.parse(new TextDecoder().decode(second.files.find((file) => file.id === 'provenance').bytes));
   assert.deepEqual(saved, second.provenance);
+});
+
+test('patch coordinates and plane normals remain scanner RAS on translated oblique anatomy', async () => {
+  const data = fixture();
+  const transform = (points) => Float64Array.from(points, (_, i) => {
+    const base = i - i % 3;
+    const [x, y, z] = points.subarray(base, base + 3);
+    return [10 - y, x - 7, z + 0.3 * x][i % 3];
+  });
+  for (const side of ['lh', 'rh']) {
+    for (const surface of ['white', 'pial']) data.vertices[`${side}.${surface}`] = transform(data.vertices[`${side}.${surface}`]);
+  }
+  data.source.affine = [[0, -1, 0, 10], [1, 0, 0, -7], [0.3, 0, 1, 0], [0, 0, 0, 1]];
+  const result = await analyzeSurfaces({ ...data, patches: { radius: 10, hemisphere: 'lh', count: 1, minAreaFraction: 0.1 } });
+  const patch = result.analysis.flat_patches.LH01;
+  const expected = [0, -0.3 / Math.hypot(1, 0.3), 1 / Math.hypot(1, 0.3)];
+  for (let axis = 0; axis < 3; axis += 1) {
+    assert.ok(Math.abs(patch.normal_ras[axis] - expected[axis]) < 1e-10);
+    const index = patch.center_vertex_index * 3 + axis;
+    assert.equal(patch.center_ras_mm[axis], (data.vertices['lh.white'][index] + data.vertices['lh.pial'][index]) / 2);
+  }
+  assert.ok(Math.abs(Math.hypot(...patch.normal_ras) - 1) < 1e-12);
 });

@@ -3,7 +3,7 @@ import { conformVolume } from './conform.js';
 import { createQcVolume } from './qc.js';
 import { analyzeSurfaces, readPatchRoi } from './surface-analysis.js';
 import { validatePatchOptions } from './patches.js';
-import { readFloat32Asset, readInt32Asset, writeFreeSurfer } from './results.js';
+import { readFloat32Asset, readInt32Asset, writeSurfaceFiles } from './results.js';
 import {
   applyAffine,
   cropAndNormalize,
@@ -197,18 +197,7 @@ export async function runTopofit(options) {
     lh: readInt32Asset(facesLeftBytes),
     rh: readInt32Asset(facesRightBytes),
   };
-  const files = [];
-  for (const hemisphere of ['lh', 'rh']) {
-    for (const surface of ['white', 'pial', 'registration']) {
-      const name = `${hemisphere}.${surface}`;
-      files.push({
-        id: name.replace('.', '-'),
-        name,
-        mediaType: 'application/vnd.freesurfer.surface',
-        bytes: writeFreeSurfer(vertices[name], faces[hemisphere]),
-      });
-    }
-  }
+  const files = writeSurfaceFiles(vertices, faces);
   let analysis;
   if (options.estimateNormals || patches) {
     onProgress(0.94, 'Estimating cortical surface normals…');
@@ -274,7 +263,7 @@ export async function runSurfaceAnalysis({ buffer, surfaces, provenance: reconst
   delete provenance.runtime.cortexAtlasSha256;
   provenance.surfaceAnalysis = result.analysis;
   provenance.outputSha256 = Object.fromEntries(
-    [...Object.keys(surfaces.vertices), 'topofit_qc.nii'].map((name) => [name, reconstruction.outputSha256[name]]),
+    [...Object.keys(surfaces.vertices), 'lh.mid.white', 'rh.mid.white', 'topofit_qc.nii'].map((name) => [name, reconstruction.outputSha256[name]]),
   );
   if (roi) provenance.roiSha256 = await sha256(roiBuffer);
   if (patches) provenance.runtime.cortexAtlasSha256 = cortexAtlasSha256;

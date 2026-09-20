@@ -18,9 +18,14 @@ export function validatePatchOptions(options = {}) {
   return settings;
 }
 
+export function midSurface(white, pial) {
+  if (white.length !== pial.length || white.length % 3) throw new Error('Surfaces must have corresponding vertices.');
+  return Float64Array.from(white, (v, i) => (v + pial[i]) / 2);
+}
+
 export function surfaceNormals(white, pial, faces) {
   if (white.length !== pial.length || white.length % 3 || faces.length % 3) throw new Error('Surfaces must have corresponding triangular topology.');
-  const middle = Float64Array.from(white, (v, i) => (v + pial[i]) / 2);
+  const middle = midSurface(white, pial);
   const normals = new Float64Array(middle.length);
   for (let f = 0; f < faces.length; f += 3) {
     const [a, b, c] = Array.from(faces.subarray(f, f + 3), (i) => point(middle, i));
@@ -254,7 +259,7 @@ export function findPatches(vertices, faces, eligible, options = {}) {
     if (indices.some((i) => used[i])) continue;
     for (const i of indices) used[i] = 1;
     const nearest = indices.reduce((a, b) => distance(point(vertices, a), candidate.center) <= distance(point(vertices, b), candidate.center) ? a : b);
-    accepted.push({ ...candidate, center: point(vertices, nearest), indices, faces: selectedFaces });
+    accepted.push({ ...candidate, center: point(vertices, nearest), centerVertexIndex: nearest, indices, faces: selectedFaces });
     if (accepted.length === settings.count) break;
   }
   return accepted;
