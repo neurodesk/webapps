@@ -70,6 +70,6 @@
     "tool": "https://github.com/neurolabusc/nii2tvx"
   },
   "repository": "neurodeskorg/webapps",
-  "revision": "main",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/main/disconnectome/"
+  "revision": "07f2b163ac3e4858948323c97fa6556d4b8688db",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07f2b163ac3e4858948323c97fa6556d4b8688db/disconnectome/"
 }
