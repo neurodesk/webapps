@@ -1,6 +1,6 @@
 {
   "name": "topofit",
-  "version": "0.10.20260920",
+  "version": "0.11.20260920",
   "private": true,
   "type": "module",
   "scripts": {
