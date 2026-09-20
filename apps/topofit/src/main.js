@@ -1,6 +1,7 @@
 import examples from '../examples.json';
 import { createExampleSelector } from '@neurodesk/webapp-components/ui';
-import NiiVue, { SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
+import { SLICE_TYPE } from '@niivue/niivue';
+import { mountViewer } from './freebrowse-viewer.js';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -34,6 +35,7 @@ $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
 
 let viewer;
 let viewerReady;
+let embeddedViewer;
 let source;
 let worker;
 let busy = false;
@@ -43,12 +45,12 @@ let timer;
 let started;
 let surfaceAnalysis;
 let selectedPatch;
+let displayedResult;
 let reconstruction;
 let operation = 'Reconstruction';
 let preparation;
 let meshSceneReady = false;
 let viewerBusy = false;
-const loadedMeshes = new Map();
 const visibleMeshes = new Set();
 const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
 const stageLabels = {
@@ -102,21 +104,11 @@ const toolbar = createViewerToolbar({
   colormap: false,
   download: false,
   screenshot: false,
+  views: [],
   actions: [xrayControl],
-  views: [
-    { id: 'multiplanar', label: '3-Plane', active: true },
-    { id: 'render', label: '3D' },
-  ].map((view) => ({
-    ...view,
-    onClick: () => {
-      if (!viewer) return;
-      viewer.sliceType = view.id === 'render' ? SLICE_TYPE.RENDER : SLICE_TYPE.MULTIPLANAR;
-      viewer.drawScene();
-      toolbar.setActive(view.id);
-    },
-  })),
 });
 $('viewer').prepend(toolbar);
+toolbar.hidden = true;
 
 const results = createResultList({
   element: $('resultList'),
@@ -236,8 +228,9 @@ function status(message, error = false) {
 
 function setBusy(value) {
   busy = value;
+  $('freebrowseViewer').inert = value || viewerBusy;
   exampleControl.setDisabled(value);
-  for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value;
+  for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value || viewerBusy;
   for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || viewerBusy;
   $('copyPatchCoordinates').disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
@@ -249,6 +242,9 @@ function setBusy(value) {
 
 function setViewerBusy(value) {
   viewerBusy = value;
+  if (!value && viewer) syncMeshControls();
+  $('freebrowseViewer').inert = value || busy;
+  for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value || busy;
   for (const control of $('resultList').querySelectorAll('button, input')) control.disabled = value || busy;
   $('runButton').disabled = value || busy || !source;
   $('analyzeButton').disabled = value || busy || !reconstruction;
@@ -257,27 +253,70 @@ function setViewerBusy(value) {
 async function ensureViewer() {
   if (!viewerReady) {
     viewerReady = (async () => {
-      viewer = new NiiVue({
+      embeddedViewer = mountViewer($('freebrowseViewer'), {
         isDragDropEnabled: false,
         backgroundColor: [0.04, 0.06, 0.08, 1],
         meshXRay: Number(xrayInput.value),
+        backend: 'webgl2',
       });
-      await viewer.attachTo('gl1');
-      viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
-      viewer.showRender = SHOW_RENDER.ALWAYS;
-      viewer.createExtensionContext().on('locationChange', (event) => {
+      viewer = await embeddedViewer.ready;
+      toolbar.hidden = false;
+      viewer.addEventListener('change', (event) => {
+        if (event.detail.property === 'meshXRay') {
+          xrayInput.value = String(viewer.meshXRay);
+          xrayValue.textContent = `${Math.round(viewer.meshXRay * 100)}%`;
+        }
+      });
+      viewer.addEventListener('volumeRemoved', () => { meshSceneReady = false; });
+      viewer.addEventListener('documentLoaded', () => { meshSceneReady = false; });
+      viewer.addEventListener('locationChange', (event) => {
         $('location').textContent = event.detail.string;
       });
+      for (const event of ['meshLoaded', 'meshRemoved', 'meshUpdated', 'volumeLoaded', 'volumeRemoved', 'volumeUpdated']) {
+        viewer.addEventListener(event, () => queueMicrotask(syncMeshControls));
+      }
       return viewer;
-    })();
+    })().catch((error) => {
+      embeddedViewer?.destroy();
+      viewerReady = null;
+      viewer = null;
+      throw error;
+    });
   }
   return viewerReady;
 }
 
+function syncMeshControls() {
+  if (viewerBusy) return;
+  visibleMeshes.clear();
+  for (const stage of surfaceStages) {
+    const mesh = viewer.meshes.find((mesh) => mesh.name === outputs.get(stage)?.name);
+    const visible = !!mesh && mesh.opacity > 0;
+    if (visible) visibleMeshes.add(stage);
+    const input = $('resultList').querySelector(`input[aria-label="Show ${stageLabels[stage]}"]`);
+    if (input) input.checked = visible;
+  }
+  xrayControl.hidden = visibleMeshes.size === 0;
+  if (!displayedResult) {
+    $('imageLabel').textContent = visibleMeshes.size
+      ? Object.keys(meshColors).filter((id) => visibleMeshes.has(id)).map((id) => stageLabels[id]).join(' · ').toUpperCase()
+      : viewer.volumes.some((volume) => volume.name === source?.name) ? 'ORIGINAL IMAGE' : 'VIEWER SCENE';
+  }
+  if (displayedResult) {
+    const files = displayedResult === 'qc' || displayedResult === 'patch-qc' ? viewer.volumes : viewer.meshes;
+    const displayed = files.find((file) => file.name === outputs.get(displayedResult)?.name);
+    if (!displayed || displayed.opacity === 0) {
+      showPatchMeasurements(null);
+      displayedResult = null;
+      $('imageLabel').textContent = 'VIEWER SCENE';
+    }
+  }
+}
+
 async function resetMeshes(nv) {
+  displayedResult = null;
   showPatchMeasurements(null);
   await nv.removeAllMeshes();
-  loadedMeshes.clear();
   visibleMeshes.clear();
   meshSceneReady = false;
   xrayControl.hidden = true;
@@ -302,31 +341,22 @@ async function setMeshVisible(stage, visible, input) {
   setViewerBusy(true);
   try {
     const nv = await ensureViewer();
-    if (!meshSceneReady) {
+    if (visible && !meshSceneReady) {
+      displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = Infinity;
       await nv.removeAllMeshes();
       await nv.loadVolumes([{ url: source, name: source.name }]);
-      loadedMeshes.clear();
       visibleMeshes.clear();
       meshSceneReady = true;
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
-      toolbar.setActive('multiplanar');
     }
-    if (!loadedMeshes.has(stage)) {
-      const index = nv.meshes.length;
-      await nv.addMesh({ url: file, name: file.name, color: meshColors[stage] });
-      loadedMeshes.set(stage, index);
+    const index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+    if (index < 0) {
+      if (visible) await nv.addMesh({ url: file, name: file.name, color: meshColors[stage] });
     } else {
-      await nv.setMesh(loadedMeshes.get(stage), { opacity: visible ? 1 : 0 });
+      await nv.setMesh(index, { opacity: visible ? 1 : 0 });
     }
-    if (visible) visibleMeshes.add(stage);
-    else visibleMeshes.delete(stage);
-    input.checked = visible;
-    xrayControl.hidden = visibleMeshes.size === 0;
-    $('imageLabel').textContent = visibleMeshes.size
-      ? Object.keys(meshColors).filter((id) => visibleMeshes.has(id)).map((id) => stageLabels[id]).join(' · ').toUpperCase()
-      : 'ORIGINAL IMAGE';
     nv.drawScene();
     $('emptyState').hidden = true;
     $('viewerError').hidden = true;
@@ -360,7 +390,7 @@ async function showResult(stage) {
       await nv.loadVolumes([{ url: source, name: source.name }, { url: file, name: file.name, opacity: 0.75, ...overlay }]);
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
       $('imageLabel').textContent = stage === 'patch-qc' ? 'PATCHES · WHITE 2400 · PIAL 2700 · MID 3000 · NORMAL 4095' : 'ORIGINAL IMAGE · TOPOFIT QC';
-      toolbar.setActive('multiplanar');
+      displayedResult = stage;
       const firstPatch = stage === 'patch-qc' && Object.values(surfaceAnalysis?.flat_patches || {})[0];
       if (firstPatch) {
         nv.setCrosshairPos(firstPatch.center_ras_mm);
@@ -376,8 +406,8 @@ async function showResult(stage) {
         ...(patch ? { color: [1, 0.85, 0, 1], sliceShaderType: 'crosscut' } : {}),
       }]);
       nv.sliceType = SLICE_TYPE.MULTIPLANAR;
+      displayedResult = stage;
       $('imageLabel').textContent = resultLabel(stage);
-      toolbar.setActive('multiplanar');
       if (patch) {
         showPatchMeasurements(patch);
         nv.setCrosshairPos(patch.center_ras_mm);
@@ -599,4 +629,9 @@ $('cancelButton').onclick = () => {
   $('progress').value = 0;
   status(`${operation} cancelled. ${reconstruction ? 'Your reconstructed surfaces remain available.' : 'Your original image is unchanged.'}`);
 };
-window.addEventListener('pagehide', () => { exampleControl.destroy(); worker?.terminate(); });
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) return;
+  exampleControl.destroy();
+  worker?.terminate();
+  embeddedViewer?.destroy();
+});

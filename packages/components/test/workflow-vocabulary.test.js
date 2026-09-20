@@ -214,3 +214,12 @@ test('dialog fields share sidebar styling and touch sizing', async () => {
   assert.ok(sharedFields.some((line) => line.includes('font-size: 16px')));
   assert.ok(sharedFields.some((line) => line.includes(':focus')));
 });
+
+test('embedded FreeBrowse keeps one app bar and fits narrow viewers', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-viewer-embed\s*\{[^}]*position: absolute/);
+  assert.match(css, /\.nd-freebrowse\s*\{[^}]*container: nd-freebrowse \/ inline-size/);
+  assert.match(css, /\.nd-freebrowse \.freebrowse-root > header h1,[\s\S]*?display: none !important/);
+  assert.match(css, /@container nd-freebrowse \(max-width: 700px\)/);
+  assert.match(css, /\.nd-freebrowse button\s*\{[^}]*min-height: 44px/);
+});

@@ -870,3 +870,89 @@ nd-example-selector {
 
 .nd-data-table select { min-width: 96px; }
 .nd-data-table th { white-space: nowrap; }
+
+/* Embedded FreeBrowse 2.5: its own stylesheet stays inside an open shadow root. */
+.nd-viewer-embed {
+  position: absolute;
+  inset: 0;
+}
+.nd-freebrowse {
+  height: 100%;
+  min-width: 0;
+  container: nd-freebrowse / inline-size;
+}
+.nd-freebrowse .freebrowse-root,
+.nd-freebrowse .freebrowse-root.dark {
+  --background: var(--nd-color-bg);
+  --foreground: var(--nd-color-text);
+  --card: var(--nd-color-surface);
+  --card-foreground: var(--nd-color-text);
+  --popover: var(--nd-color-surface);
+  --popover-foreground: var(--nd-color-text);
+  --primary: var(--nd-color-primary);
+  --primary-foreground: var(--nd-color-bg);
+  --secondary: var(--nd-color-surface);
+  --secondary-foreground: var(--nd-color-text);
+  --muted: var(--nd-color-surface);
+  --muted-foreground: var(--nd-color-text-muted);
+  --accent: var(--nd-color-surface);
+  --accent-foreground: var(--nd-color-text);
+  --border: var(--nd-color-border);
+  --input: var(--nd-color-border);
+  --ring: var(--nd-color-primary);
+  font-family: inherit;
+}
+.nd-freebrowse .freebrowse-root > div.flex {
+  position: relative;
+  min-height: 0;
+}
+.nd-freebrowse .freebrowse-root > header {
+  padding: 4px 8px !important;
+}
+.nd-freebrowse .freebrowse-root > header h1,
+.nd-freebrowse button[title="Switch to light mode"],
+.nd-freebrowse button[title="Switch to dark mode"] {
+  display: none !important;
+}
+.nd-freebrowse .freebrowse-root > header > div {
+  flex-wrap: wrap !important;
+  gap: 4px !important;
+}
+.nd-freebrowse .freebrowse-root > header > div > div {
+  padding: 0 !important;
+}
+.nd-freebrowse .freebrowse-root > header button {
+  min-width: 34px;
+  min-height: 34px;
+}
+@container nd-freebrowse (max-width: 700px) {
+  .nd-freebrowse .freebrowse-root > header > div > div {
+    max-width: 100%;
+  }
+  .nd-freebrowse .freebrowse-root > header span:not(.sr-only) {
+    font-size: 12px !important;
+  }
+  .nd-freebrowse .freebrowse-root > header > div > div > div {
+    gap: 4px !important;
+  }
+  .nd-freebrowse .freebrowse-root > header [role="group"] span {
+    display: none !important;
+  }
+  .nd-freebrowse .freebrowse-root > div > aside {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 10;
+    max-width: 100%;
+  }
+  .nd-freebrowse .freebrowse-root > header button,
+  .nd-freebrowse button {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  .nd-freebrowse :is(input, select) {
+    min-height: 44px !important;
+    font-size: 16px !important;
+  }
+}

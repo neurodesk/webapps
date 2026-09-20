@@ -20,7 +20,10 @@ For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release d
 
 The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
 NIfTI, and a JSON processing manifest. White, mid-surface and pial checkboxes can be
-combined over the anatomical slices or in 3D. The X-ray control appears while a
+combined over the anatomical slices or in 3D. FreeBrowse provides axial, coronal,
+sagittal, ACS, ACSR and Render views. ACSR shows all three slices with the 3D
+render; Render shows the surface in 3D. Its sidebar offers volume and surface
+visibility, contrast, color and opacity controls. The X-ray control appears while a
 cortical surface is visible and defaults to 10%. Registration spheres are retained
 internally for atlas mapping and excluded from the browser output list. DICOM
 import uses the shared dcm2niix worker. Images and results are not uploaded to a processing service.

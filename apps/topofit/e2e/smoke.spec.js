@@ -196,7 +196,7 @@ test('surface checkboxes show multiple meshes and expose the X-ray control', asy
   await expect(left).toBeEnabled();
   const visibleSurface = await canvas.screenshot();
   expect(visibleSurface.equals(hiddenSurface)).toBe(false);
-  await expect(page.getByRole('button', { name: '3-Plane' })).toHaveClass(/active/);
+  await expect(page.getByRole('radio', { name: 'Multi+Render', exact: true })).toHaveAttribute('data-state', 'on');
   await expect(page.locator('#meshXRay')).toHaveValue('0.1');
   await left.uncheck();
   await expect(left).toBeEnabled();
@@ -231,4 +231,28 @@ test('surface checkboxes show multiple meshes and expose the X-ray control', asy
   await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(0);
   expect((await canvas.screenshot()).equals(selectedSurface)).toBe(false);
   await page.locator('#cancelButton').click();
+});
+
+test('FreeBrowse initialization failure releases the viewer for retry', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.rejectViewerContext = true;
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (type, ...args) {
+      if (window.rejectViewerContext && type === 'webgl2') return null;
+      return getContext.call(this, type, ...args);
+    };
+  });
+  await page.goto('/');
+  await page.locator('#imageInput').setInputFiles(niftiFixture());
+  await expect(page.locator('#statusText')).toHaveClass(/error/);
+  await expect(page.locator('#imageInput')).toBeEnabled();
+  await page.evaluate(() => { window.rejectViewerContext = false; });
+  await page.locator('#imageInput').setInputFiles(niftiFixture());
+  await expect(page.locator('#statusText')).toContainText('Image loaded');
+  await expect(page.locator('.freebrowse-root')).toBeVisible();
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  await expect(page.locator('.freebrowse-root')).toBeVisible();
+  await page.getByRole('radio', { name: 'Axial view', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Axial view', exact: true })).toHaveAttribute('data-state', 'on');
 });

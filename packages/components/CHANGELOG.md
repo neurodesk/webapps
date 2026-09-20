@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.4.3
+
+### Patch Changes
+
+- Replace TopoFit's bare NiiVue viewer with FreeBrowse 2.5.0-next.1 and its matching NiiVue rc.13 event model. Keep mid-surface overlays, detected-patch RAS measurements, and STL exports synchronized with FreeBrowse's volume and surface controls. Add shared embedding styles for the existing application bar, theme, and phone layout.
+
 ## 0.4.2
 
 ### Patch Changes
