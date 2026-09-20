@@ -1,10 +1,17 @@
 # syncro
 
+## 0.3.20260920
+
+### Patch Changes
+
+- @neurodesk/greedy@0.3.20260920
+
 ## 0.3.20260918
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.3.1
   - @neurodesk/webapp-components@0.4.1
   - @neurodesk/greedy@0.3.20260918

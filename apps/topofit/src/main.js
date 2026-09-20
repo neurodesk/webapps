@@ -130,35 +130,51 @@ function stlStages() {
   return ticked.length ? ticked : available;
 }
 
-async function exportStl(stages, reduce, smooth) {
-  $('stlButton').disabled = true;
+function exportStl(stages, reduce, smooth) {
+  if (busy) return;
+  operation = 'STL export';
+  setBusy(true);
   status(`Preparing ${stages.length} printable ${stages.length === 1 ? 'surface' : 'surfaces'}…`);
-  const stlWorker = new Worker(new URL('./stl-worker.js', import.meta.url), { type: 'module' });
   try {
-    const files = await new Promise((resolve, reject) => {
-      stlWorker.onmessage = ({ data }) => {
-        if (data.type === 'progress') status(`Simplifying surface ${data.done} of ${data.total}…`);
-        if (data.type === 'result') resolve(data.files);
-        if (data.type === 'error') reject(new Error(data.message));
-      };
-      stlWorker.onerror = (event) => reject(new Error(event.message || 'The STL worker could not run.'));
-      stlWorker.postMessage({
-        reduce,
-        smooth,
-        surfaces: stages.map((stage) => ({
-          name: `${stage.replace('-', '.')}.stl`,
-          vertices: reconstruction.surfaces.vertices[stage.replace('-', '.')],
-          faces: reconstruction.surfaces.faces[stage.slice(0, 2)],
-        })),
-      });
+    const active = new Worker(new URL('./stl-worker.js', import.meta.url), { type: 'module' });
+    worker = active;
+    const finish = () => {
+      active.terminate();
+      worker = null;
+      setBusy(false);
+    };
+    active.onmessage = ({ data }) => {
+      if (worker !== active) return;
+      if (data.type === 'progress') status(`Simplifying surface ${data.done} of ${data.total}…`);
+      if (data.type === 'result') {
+        for (const file of data.files) downloadArrayBuffer(file.bytes, file.name, 'model/stl');
+        status(`Saved ${data.files.map((file) => `${file.name} · ${file.triangles.toLocaleString()} triangles`).join(', ')}`);
+        finish();
+      }
+      if (data.type === 'error') {
+        status(`STL export failed: ${data.message}`, true);
+        finish();
+      }
+    };
+    active.onerror = (event) => {
+      if (worker !== active) return;
+      status(`STL export failed: ${event.message || 'The STL worker could not run.'}`, true);
+      finish();
+    };
+    active.postMessage({
+      reduce,
+      smooth,
+      surfaces: stages.map((stage) => ({
+        name: `${stage.replace('-', '.')}.stl`,
+        vertices: reconstruction.surfaces.vertices[stage.replace('-', '.')],
+        faces: reconstruction.surfaces.faces[stage.slice(0, 2)],
+      })),
     });
-    for (const file of files) downloadArrayBuffer(file.bytes, file.name, 'model/stl');
-    status(`Saved ${files.map((file) => `${file.name} · ${file.triangles.toLocaleString()} triangles`).join(', ')}`);
   } catch (error) {
+    worker?.terminate();
+    worker = null;
     status(`STL export failed: ${error.message}`, true);
-  } finally {
-    stlWorker.terminate();
-    $('stlButton').disabled = false;
+    setBusy(false);
   }
 }
 
@@ -193,6 +209,7 @@ function setBusy(value) {
   for (const input of $('controls').querySelectorAll('input, select')) input.disabled = value;
   $('runButton').disabled = value || viewerBusy || !source;
   $('analyzeButton').disabled = value || viewerBusy || !reconstruction;
+  $('stlButton').disabled = value;
   $('cancelButton').hidden = !value;
   if (!value) clearInterval(timer);
 }

@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "greedy-rs"
-version = "0.3.20260918"
+version = "0.3.20260920"
 dependencies = [
  "flate2",
  "greedy-rs-core",
@@ -113,7 +113,7 @@ dependencies = [
 
 [[package]]
 name = "greedy-rs-core"
-version = "0.3.20260918"
+version = "0.3.20260920"
 dependencies = [
  "flate2",
  "rayon",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "greedy-rs-wasm"
-version = "0.3.20260918"
+version = "0.3.20260920"
 dependencies = [
  "greedy-rs-core",
  "wasm-bindgen",

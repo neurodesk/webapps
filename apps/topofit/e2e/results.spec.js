@@ -390,3 +390,33 @@ test('cortical surfaces export as printable STL through niimath', async ({ page 
   expect(stl.subarray(0, 80).every((byte) => byte === 0)).toBe(true);
   await expect(page.locator('#statusText')).toContainText('lh.pial.stl · 4 triangles');
 });
+
+test('STL export serializes processing and cancellation rejects late results', async ({ page }) => {
+  await deliverSurfaces(page);
+  await page.evaluate(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      postMessage(job, ...rest) {
+        if (!job.surfaces) return super.postMessage(job, ...rest);
+        window.finishStl = () => this.onmessage({ data: {
+          type: 'result',
+          files: [{ name: 'stale.stl', bytes: new ArrayBuffer(84), triangles: 0 }],
+        } });
+      }
+    };
+  });
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download.suggestedFilename()));
+  await page.locator('#stlButton').click();
+  await page.locator('#stlSaveButton').click();
+  await expect(page.locator('#imageInput')).toBeDisabled();
+  await expect(page.locator('#runButton')).toBeDisabled();
+  await page.locator('#cancelButton').click();
+  await expect(page.locator('#stlButton')).toBeEnabled();
+  await expect(page.locator('#statusText')).toContainText('STL export cancelled');
+  await page.locator('#imageInput').setInputFiles({ ...scan(), name: 'replacement.nii' });
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await page.evaluate(() => window.finishStl());
+  await expect(page.locator('#statusText')).not.toContainText('Saved');
+  expect(downloads).toEqual([]);
+});
