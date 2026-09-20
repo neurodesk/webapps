@@ -1,5 +1,12 @@
 # qsmbly
 
+## 0.27.20260920
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.2
+
 ## 0.27.20260918
 
 ### Minor Changes

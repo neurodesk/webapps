@@ -2,5 +2,5 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: 'zarro',
-  version: '0.3.20260918',
+  version: '0.3.20260920',
 });

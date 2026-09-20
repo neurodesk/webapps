@@ -25,6 +25,19 @@ cortical surface is visible and defaults to 10%. Registration spheres are retain
 internally for atlas mapping and excluded from the browser output list. DICOM
 import uses the shared dcm2niix worker. Images and results are not uploaded to a processing service.
 
+**Save printable STL…** in Output converts surfaces for 3D printing: FreeSurfer
+surface files are not a printing format. niimath simplifies each mesh to a
+chosen fraction of its triangles (10 to 100%, default 25) and optionally
+smooths it (0 to 20 Humphrey iterations, default 0); TopoFit writes a binary
+STL in millimetres per surface. Ticked surfaces are exported, or all four when
+none is ticked. A 245,762-vertex hemisphere reduces in under a second.
+
+Because the published `@niivue/niimath` WebAssembly build compiles mesh support
+without `HAVE_FORMATS`, it can only write mz3, and its fluent JavaScript API
+appends `-odt` where niimath's mesh mode expects the output name. The app
+therefore drives the same WebAssembly module directly and writes the STL
+itself; both limits are fixed upstream for the release after 1.4.20260909.
+
 Open **Surface analysis** before reconstruction to export mid-surface normals
 or find flat cortical patches. Patch radius, count and hemisphere are available
 when the search is enabled; quality thresholds and a native-grid ROI are under

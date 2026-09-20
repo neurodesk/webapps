@@ -206,3 +206,11 @@ test('primary and selected buttons retain their shared visual priority', async (
   assert.match(css, /\.nd-imaging-controls \.nd-section-content \.nd-btn-primary\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
   assert.match(css, /\.nd-btn-secondary\[aria-pressed="true"\]\s*\{[^}]*background:\s*var\(--nd-color-primary\)/);
 });
+
+test('dialog fields share sidebar styling and touch sizing', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const sharedFields = css.split('\n').filter((line) => line.includes(':is(.nd-imaging-controls .nd-section-content, .nd-dialog-body)'));
+  assert.ok(sharedFields.some((line) => line.includes('min-height: 44px')));
+  assert.ok(sharedFields.some((line) => line.includes('font-size: 16px')));
+  assert.ok(sharedFields.some((line) => line.includes(':focus')));
+});

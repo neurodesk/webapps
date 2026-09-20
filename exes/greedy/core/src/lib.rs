@@ -12,14 +12,15 @@ mod svf;
 
 pub use affine::{
     AffineMetric, AffineOptions, image_centers, matrix as affine_matrix, nmi_score_gradient_affine,
-    optimize as optimize_affine, parameters as affine_parameters, register as register_affine,
-    score as score_affine, ssd_score_gradient,
+    optimize as optimize_affine, optimize_rigid, parameters as affine_parameters,
+    register as register_affine, register_rigid, score as score_affine, ssd_score_gradient,
 };
 pub use gaussian::smooth as gaussian_smooth;
 pub use grid::{Grid, Mat4};
 pub use nifti::{
-    NiftiImage, ScalarType, VectorField, decode_image, decode_vector_field, encode_image,
-    encode_vector_field,
+    NiftiImage, NiftiSeries, ScalarType, VectorField, decode_image, decode_series,
+    decode_vector_field, encode_image, encode_series, encode_series_header, encode_vector_field,
+    write_scalars,
 };
 pub use nmi::{BINS, bin_image};
 pub use par::set_threads;

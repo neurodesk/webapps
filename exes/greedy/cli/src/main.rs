@@ -1,10 +1,17 @@
-use std::{env, fs, path::Path};
+use std::{
+    env, fs,
+    io::{BufWriter, Write},
+    path::Path,
+};
+
+use flate2::{Compression, write::GzEncoder};
 
 use greedy_rs_core::{
-    AffineMetric, Interpolation, Mat4, ScalarType, Transform, build_pyramid, decode_image,
-    decode_vector_field, encode_image, encode_vector_field, image_centers,
-    nmi_score_gradient_affine, read_matrix, register_affine, register_nmi_svf, reslice,
-    reslice_with_background, score_affine, ssd_score_gradient,
+    AffineMetric, Error, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries, ScalarType, Transform,
+    build_pyramid, decode_image, decode_series, decode_vector_field, encode_image,
+    encode_series_header, encode_vector_field, image_centers, nmi_score_gradient_affine,
+    read_matrix, register_affine, register_nmi_svf, register_rigid, reslice,
+    reslice_with_background, score_affine, ssd_score_gradient, write_scalars,
 };
 
 #[derive(Clone, Copy)]
@@ -14,16 +21,114 @@ enum ResliceBackground {
 }
 
 impl ResliceBackground {
-    fn resolve(self, image: &greedy_rs_core::NiftiImage) -> f32 {
+    fn resolve(self, values: &[f32]) -> f32 {
         match self {
             Self::Value(value) => value,
-            Self::Auto => image
-                .data
+            Self::Auto => values
                 .iter()
                 .copied()
                 .filter(|value| value.is_finite())
                 .fold(0.0, f32::min),
         }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_resliced_series(
+    writer: &mut impl Write,
+    fixed: &NiftiImage,
+    moving: &NiftiSeries,
+    chain: &[Transform],
+    expected: Option<&Grid>,
+    interpolation: Interpolation,
+    outside: f32,
+) -> greedy_rs_core::Result<()> {
+    let metadata = NiftiSeries {
+        grid: fixed.grid.clone(),
+        data: Vec::new(),
+        scalar_type: moving.scalar_type,
+        timepoints: moving.timepoints,
+        time_spacing: moving.time_spacing,
+        time_units: moving.time_units,
+    };
+    writer
+        .write_all(&encode_series_header(&metadata)?)
+        .map_err(|error| Error(format!("NIfTI write: {error}")))?;
+    let source_count = moving.grid.dims.iter().product::<usize>();
+    for timepoint in 0..moving.timepoints {
+        let start = timepoint * source_count;
+        let image = NiftiImage {
+            grid: moving.grid.clone(),
+            data: moving.data[start..start + source_count].to_vec(),
+            scalar_type: moving.scalar_type,
+        };
+        let volume =
+            reslice_with_background(&fixed.grid, &image, chain, expected, interpolation, outside)?;
+        write_scalars(writer, &volume.data, moving.scalar_type)?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_reslice_output(
+    output_path: &str,
+    fixed: &NiftiImage,
+    moving: &NiftiSeries,
+    chain: &[Transform],
+    expected: Option<&Grid>,
+    interpolation: Interpolation,
+    outside: f32,
+) {
+    let temporary = format!("{output_path}.greedy-rs-{}.tmp", std::process::id());
+    let result = (|| -> greedy_rs_core::Result<()> {
+        let file =
+            fs::File::create(&temporary).map_err(|error| Error(format!("{temporary}: {error}")))?;
+        if output_path.ends_with(".gz") {
+            let encoder = GzEncoder::new(BufWriter::new(file), Compression::default());
+            let mut writer = BufWriter::new(encoder);
+            write_resliced_series(
+                &mut writer,
+                fixed,
+                moving,
+                chain,
+                expected,
+                interpolation,
+                outside,
+            )?;
+            writer
+                .flush()
+                .map_err(|error| Error(format!("{temporary}: {error}")))?;
+            let writer = writer
+                .into_inner()
+                .map_err(|error| Error(format!("{temporary}: {}", error.into_error())))?;
+            let mut writer = writer
+                .finish()
+                .map_err(|error| Error(format!("{temporary}: {error}")))?;
+            writer
+                .flush()
+                .map_err(|error| Error(format!("{temporary}: {error}")))?;
+        } else {
+            let mut writer = BufWriter::new(file);
+            write_resliced_series(
+                &mut writer,
+                fixed,
+                moving,
+                chain,
+                expected,
+                interpolation,
+                outside,
+            )?;
+            writer
+                .flush()
+                .map_err(|error| Error(format!("{temporary}: {error}")))?;
+        }
+        fs::rename(&temporary, output_path)
+            .map_err(|error| Error(format!("{output_path}: {error}")))?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_file(&temporary);
+        fail(error);
     }
 }
 
@@ -36,7 +141,7 @@ fn print_help() {
     println!(
         "greedy-rs {}\n\
          \n\
-         Deterministic 3-D affine and deformable image registration.\n\
+         Deterministic 3-D affine and deformable image registration, with 4-D reslicing.\n\
          This minimal Rust tool implements a subset of the C++/ITK Greedy tool\n\
          developed by Paul Yushkevich.\n\
          Original Greedy: https://sites.google.com/view/greedyreg/about\n\
@@ -49,6 +154,7 @@ fn print_help() {
          \n\
          Common options:\n\
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
+           -dof 6|12       Rigid or affine registration (default: 12)\n\
            -threads N      Limit the Rayon worker pool\n\
            -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
            -rb VALUE|AUTO  Reslice outside value (default: 0)\n\
@@ -104,6 +210,7 @@ fn run_affine(args: &[String]) {
     let mut dump_pyramid = false;
     let mut dump_prefix = String::new();
     let mut verbose = true;
+    let mut dof = 12;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -116,6 +223,13 @@ fn run_affine(args: &[String]) {
                 }
             }
             "-V" => verbose = take(args, &mut at, "-V") != "0",
+            "-dof" => {
+                dof = take(args, &mut at, "-dof")
+                    .parse::<u8>()
+                    .ok()
+                    .filter(|value| matches!(value, 6 | 12))
+                    .unwrap_or_else(|| fail("-dof must be 6 or 12"));
+            }
             "-m" => {
                 metric = match take(args, &mut at, "-m").to_ascii_uppercase().as_str() {
                     "SSD" => AffineMetric::Ssd,
@@ -162,8 +276,11 @@ fn run_affine(args: &[String]) {
             }
         }
     }
-    let matrix =
-        register_affine(fixed, moving, metric, levels, verbose).unwrap_or_else(|e| fail(e));
+    let matrix = match dof {
+        6 => register_rigid(fixed, moving, metric, levels, verbose),
+        _ => register_affine(fixed, moving, metric, levels, verbose),
+    }
+    .unwrap_or_else(|e| fail(e));
     let mut text = String::new();
     for row in matrix.0 {
         text.push_str(&format!("{} {} {} {}\n", row[0], row[1], row[2], row[3]));
@@ -491,20 +608,16 @@ fn main() {
         .as_deref()
         .map(|path| decode_image(&read(path)).unwrap_or_else(|e| fail(e)));
     for (moving_path, output_path) in reslices {
-        let moving = decode_image(&read(&moving_path)).unwrap_or_else(|e| fail(e));
-        let output = reslice_with_background(
-            &fixed.grid,
+        let moving = decode_series(&read(&moving_path)).unwrap_or_else(|e| fail(e));
+        let outside = background.resolve(&moving.data);
+        write_reslice_output(
+            &output_path,
+            &fixed,
             &moving,
             &chain,
             expected.as_ref().map(|image| &image.grid),
             interpolation,
-            background.resolve(&moving),
-        )
-        .unwrap_or_else(|e| fail(e));
-        fs::write(
-            &output_path,
-            encode_image(&output, output_path.ends_with(".gz")).unwrap_or_else(|e| fail(e)),
-        )
-        .unwrap_or_else(|e| fail(format!("{output_path}: {e}")));
+            outside,
+        );
     }
 }

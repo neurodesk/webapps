@@ -1,4 +1,4 @@
-export const VERSION = '0.4.20260918';
+export const VERSION = '0.4.20260920';
 
 // Immutable model weights are published separately from the site artifact.
 export const MODEL_BASE_URL = 'https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/vesselboost';

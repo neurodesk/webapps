@@ -1,7 +1,8 @@
 use std::{env, fs, process::Command};
 
 use greedy_rs_core::{
-    Grid, Mat4, NiftiImage, ScalarType, decode_image, decode_vector_field, encode_image,
+    Grid, Mat4, NiftiImage, NiftiSeries, ScalarType, decode_image, decode_series,
+    decode_vector_field, encode_image, encode_series,
 };
 
 fn image() -> NiftiImage {
@@ -171,6 +172,80 @@ fn auto_background_uses_the_source_minimum_below_zero() {
         decode_image(&fs::read(&output).unwrap()).unwrap().data[0],
         -1000.0
     );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn rigid_registration_and_four_dimensional_reslice_work() {
+    let directory = env::temp_dir().join(format!("greedy-rs-4d-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&directory);
+    fs::create_dir(&directory).unwrap();
+    let fixed = directory.join("fixed.nii.gz");
+    let moving = directory.join("moving.nii.gz");
+    let matrix = directory.join("rigid.mat");
+    let output = directory.join("resliced.nii.gz");
+    let source = image();
+    let mut values = source.data.clone();
+    values.extend(source.data.iter().map(|value| value + 100.0));
+    let series = NiftiSeries {
+        grid: source.grid.clone(),
+        data: values.clone(),
+        scalar_type: ScalarType::F32,
+        timepoints: 2,
+        time_spacing: 3.0,
+        time_units: 8,
+    };
+    let mut target = source.clone();
+    target.grid.dims = [3, 3, 3];
+    target.data.truncate(27);
+    fs::write(&fixed, encode_image(&target, true).unwrap()).unwrap();
+    fs::write(&moving, encode_series(&series, true).unwrap()).unwrap();
+    run(&[
+        "-V",
+        "0",
+        "-d",
+        "3",
+        "-a",
+        "-dof",
+        "6",
+        "-m",
+        "NMI",
+        "-i",
+        fixed.to_str().unwrap(),
+        fixed.to_str().unwrap(),
+        "-o",
+        matrix.to_str().unwrap(),
+        "-ia-image-centers",
+        "-n",
+        "0x0x0",
+    ]);
+    run(&[
+        "-d",
+        "3",
+        "-rf",
+        fixed.to_str().unwrap(),
+        "-rm",
+        moving.to_str().unwrap(),
+        output.to_str().unwrap(),
+        "-r",
+        matrix.to_str().unwrap(),
+    ]);
+    let decoded = decode_series(&fs::read(&output).unwrap()).unwrap();
+    let mut expected = Vec::new();
+    for offset in [0.0, 100.0] {
+        for z in 0..3 {
+            for y in 0..3 {
+                for x in 0..3 {
+                    expected.push(source.data[x + 4 * (y + 4 * z)] + offset);
+                }
+            }
+        }
+    }
+    assert_eq!(decoded.grid.dims, [3, 3, 3]);
+    assert_eq!(decoded.data, expected);
+    assert_eq!(decoded.timepoints, 2);
+    assert_eq!(decoded.time_spacing, 3.0);
+    assert_eq!(decoded.time_units, 8);
     fs::remove_dir_all(directory).unwrap();
 }
 

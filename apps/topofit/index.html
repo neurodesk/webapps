@@ -87,7 +87,10 @@
       </details>
       <details class="nd-sidebar-section" id="outputSection">
         <summary class="nd-section-title">Output</summary>
-        <div class="nd-section-content"><div id="resultList"></div></div>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+          <button id="stlButton" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Save printable STL…</button>
+        </div>
       </details>
       <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
@@ -112,6 +115,19 @@
       <p>Optional surface analysis exports area-weighted mid-surface normals and finds connected cortical patches. Patch selection follows OpenRecon's atlas exclusion, geodesic radius, plane-fit error, area and normal-coherence criteria. The input must be a T1-weighted scan.</p>
       <p>Patches that pass every criterion are ranked by flatness: plane-fit RMS plus radius × (1 − normal coherence), lowest first. Area is only an acceptance threshold. Each hemisphere keeps the best-ranked patches that share no vertices with a higher-ranked patch, so Left flat patch 1 is the flattest left patch.</p>
       <p>Patch QC shows white and pial boundaries, the mid-surface and a normal glyph. Its line is the true in-plane component at physical scale. A center dot points toward increasing source slice positions; a cross points toward decreasing positions. Select a patch row to center the viewer on that patch.</p>
+    </template>
+    <template id="stlContent">
+      <p>FreeSurfer surfaces are not a 3D-printing format. niimath simplifies and smooths each surface, then TopoFit writes a binary STL in millimetres.</p>
+      <p class="nd-hint">Exporting: <span id="stlSurfaceList"></span>. Tick surfaces in Output to export only those.</p>
+      <div class="nd-field">
+        <label for="stlReduce">Reduce to <small>% of triangles</small></label>
+        <input id="stlReduce" type="number" min="10" max="100" step="5" value="25" required>
+      </div>
+      <div class="nd-field">
+        <label for="stlSmooth">Smoothing iterations</label>
+        <input id="stlSmooth" type="number" min="0" max="20" step="1" value="0" required>
+      </div>
+      <button id="stlSaveButton" class="nd-btn nd-btn-secondary" type="button">Save STL</button>
     </template>
     <template id="privacyContent">
       <p>Your scan and reconstructed surfaces stay in this browser. Pretrained models are downloaded from Hugging Face; the optional example is downloaded from OpenNeuro.</p>
