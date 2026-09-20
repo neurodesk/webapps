@@ -155,20 +155,6 @@
             />
           </div>
         </details>
-        <details id="dataset" data-show="ready">
-          <summary>Surf your own vessel mask</summary>
-          <div class="section-body">
-            <label for="mask">Vessel segmentation (.nii or .nii.gz)</label>
-            <input id="mask" type="file" accept=".nii,.nii.gz,.gz" />
-            <p class="muted">
-              Positive voxels become vessels. The largest connected region is
-              explored at game resolution. Files stay in this browser and
-              practice runs are not ranked.
-            </p>
-            <p id="load-status" role="status"></p>
-            <button id="demo">Back to the human brain</button>
-          </div>
-        </details>
         <p id="source-label" class="credit" data-show="ready">
           Human pial arteries · 7T TOF at 140 µm · Bollmann et al. 2022 ·
           <a href="https://doi.org/10.7554/eLife.71186" target="_blank" rel="noopener">paper</a> ·

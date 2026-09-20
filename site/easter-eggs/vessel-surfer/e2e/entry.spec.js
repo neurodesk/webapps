@@ -22,8 +22,27 @@ test("the footer link opens the game as its own page, without the app shell", as
   await expect(page.locator(".nd-imaging-app-header")).toHaveCount(0);
   await expect(page.locator("iframe")).toHaveCount(0);
   await expect(page.locator("#menu")).toBeVisible();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
+  await expect(page.getByText("Surf your own vessel mask", { exact: true })).toHaveCount(0);
   await expect(page.locator("#play")).toHaveText("Dive");
   await page.getByRole("link", { name: "Neurodesk Webapps" }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator("#app-search")).toBeVisible();
+});
+
+test("brain loading can be retried without the removed upload panel", async ({ page }) => {
+  let failed = false;
+  await page.route("**/data/brain.json", async (route) => {
+    if (!failed) {
+      failed = true;
+      await route.fulfill({ status: 503, body: "Temporarily unavailable" });
+    } else await route.continue();
+  });
+  await page.goto("/surf/");
+  await expect(page.getByRole("button", { name: "Retry loading brain" })).toBeVisible();
+  await expect(page.locator("#mission-text")).toContainText("Could not load brain data");
+  await page.getByRole("button", { name: "Retry loading brain" }).click();
+  await expect(page.locator("#play")).toHaveText("Dive", { timeout: 60000 });
+  await expect(page.locator("#play")).toBeEnabled();
+  await expect(page.locator('input[type="file"]')).toHaveCount(0);
 });

@@ -81,14 +81,9 @@ for (const width of [1440, 390])
     await expect(page.locator("#ocean")).toHaveAttribute("data-state", "ready");
     await expect(page.locator("#score")).toHaveText("0:00.0");
     await expect(page.locator("#speed")).toHaveValue("1.5");
-    await page.getByText("Surf your own vessel mask", { exact: true }).click();
-    await page.locator("#mask").setInputFiles({
-      name: "invalid.nii",
-      mimeType: "application/octet-stream",
-      buffer: Buffer.alloc(512),
-    });
-    await expect(page.locator("#load-status")).toContainText("not a NIfTI");
-    await expect(page.locator("#play")).toBeEnabled({ timeout: 30000 });
+    await expect(page.locator('input[type="file"]')).toHaveCount(0);
+    await expect(page.getByText("Surf your own vessel mask", { exact: true })).toHaveCount(0);
+    await expect(page.locator("#play")).toBeEnabled();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,

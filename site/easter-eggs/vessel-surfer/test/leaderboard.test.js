@@ -60,6 +60,7 @@ test("falls back to this device's best runs when the server is unavailable", asy
   assert.deepEqual(empty.rows, []);
   const saved = await board.submit(result, "Grace");
   assert.equal(saved.scope, "local");
+  assert.equal(saved.savedLocally, true);
   assert.equal(saved.error, "offline");
   assert.equal(saved.rows[0].points, result.points);
   assert.equal(saved.rows[0].name, "Grace");
@@ -71,4 +72,38 @@ test("falls back to this device's best runs when the server is unavailable", asy
   assert.equal((await failing.submit(result, "Grace")).error, "Too many runs");
   const unconfigured = createLeaderboard({ url: "", storage, fetch });
   assert.equal((await unconfigured.top()).scope, "local");
+});
+
+test("Grand Tour completions persist on the server, including zero-point runs", async () => {
+  const { handle, memoryStore } = await import("../../vessel-surfer-leaderboard/src/worker.js");
+  const store = memoryStore();
+  const board = createLeaderboard({
+    url: "https://leaderboard.example",
+    storage: memoryStorage(),
+    fetch: (url, init) => handle(new Request(url, init), { store }),
+  });
+  const challenge = "pial-arteries-v2-tour";
+  for (const bumps of [0, 4]) {
+    const result = { challenge, seconds: 60, bumps, points: pointsFor(60, bumps, challenge) };
+    const saved = await board.submit(result, `Pilot ${bumps}`);
+    assert.equal(saved.scope, "global", saved.error);
+  }
+  const reloaded = await board.top(10, challenge);
+  assert.equal(reloaded.total, 2);
+  assert.deepEqual(reloaded.rows.map(({ points }) => points), [1600, 0]);
+  assert.equal((await board.top(10, "pial-arteries-v2")).total, 0, "track boards stay separate");
+});
+
+test("a failed local write is not reported as a saved score", async () => {
+  const board = createLeaderboard({
+    url: "",
+    storage: {
+      getItem: () => null,
+      setItem: () => { throw new Error("Storage unavailable"); },
+    },
+  });
+  const saved = await board.submit(result, "Grace");
+  assert.equal(saved.scope, "local");
+  assert.equal(saved.savedLocally, false);
+  assert.deepEqual(saved.rows, []);
 });

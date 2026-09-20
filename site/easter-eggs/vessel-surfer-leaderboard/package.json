@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/vessel-surfer-leaderboard",
-  "version": "0.1.20260920",
+  "version": "0.1.20260921",
   "private": true,
   "type": "module",
   "description": "Cloudflare Worker and D1 database behind the Vessel Surfer global leaderboard.",

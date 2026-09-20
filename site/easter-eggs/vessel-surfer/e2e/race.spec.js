@@ -1,6 +1,6 @@
 import { openGame } from "./open-game.js";
-import { fixtureMask } from "./fixture-mask.js";
 import { test, expect } from "@playwright/test";
+import { handle, memoryStore } from "../../vessel-surfer-leaderboard/src/worker.js";
 
 const board = [
   { name: "Ada", points: 9800, seconds: 10, bumps: 0 },
@@ -113,86 +113,31 @@ async function steerWithKeys(page, yaw, pitch, tick = 60) {
   if (tick > elapsed) await page.waitForTimeout(tick - elapsed);
 }
 
-test("a practice run in an imported mask reaches its destination with the keyboard", async ({
-  page,
-}) => {
-  test.setTimeout(300000);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route("**/scores*", (route) =>
-    route.fulfill({ json: { scores: board, total: 2 } }),
-  );
-  await openGame(page);
-  await page.getByText("Surf your own vessel mask", { exact: true }).click();
-  await page.locator("#mask").setInputFiles({
-    name: "race-tunnel.nii",
-    mimeType: "application/octet-stream",
-    buffer: fixtureMask(),
-  });
-  await expect(page.locator("#load-status")).toContainText("Loaded");
-  await expect(page.locator("#mission-text")).toContainText("Practice run");
-  await page.getByText("Controls", { exact: true }).click();
-  await page.locator("#speed").fill("3");
-  await page.locator("#play").click();
-  await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
-  // A tiny autopilot: hold the arrow keys in proportion to the angle between
-  // the heading and the destination.
-  const ocean = page.locator("#ocean");
-  for (let i = 0; i < 1200; i++) {
-    const data = await ocean.evaluate((el) => ({ ...el.dataset }));
-    if (data.state === "complete") break;
-    const p = JSON.parse(data.position);
-    const h = JSON.parse(data.heading);
-    const t = JSON.parse(data.target);
-    const d = t.map((v, k) => v - p[k]);
-    const length = Math.hypot(...d) || 1;
-    const desired = d.map((v) => v / length);
-    // The camera frame: looking along +z with +y up, "right" is -x.
-    const right = [-h[2], 0, h[0]];
-    const rightLength = Math.hypot(...right) || 1;
-    right.forEach((v, k) => (right[k] = v / rightLength));
-    const up = [
-      right[1] * h[2] - right[2] * h[1],
-      right[2] * h[0] - right[0] * h[2],
-      right[0] * h[1] - right[1] * h[0],
-    ];
-    const dotWith = (a) => a.reduce((sum, v, k) => sum + v * desired[k], 0);
-    let yaw = dotWith(right);
-    const pitch = dotWith(up);
-    if (dotWith(h) < 0 && Math.abs(yaw) < 0.3) yaw = 1;
-    await steerWithKeys(page, yaw, pitch);
-  }
-  await expect(ocean).toHaveAttribute("data-state", "complete");
-  await expect(page.locator("#run-result")).toContainText("Practice complete");
-  await expect(page.locator("#submit-form")).toBeHidden();
-  await expect(page.locator("#score-rows")).toContainText("Ada");
-  await page.screenshot({ path: test.info().outputPath("vessel-race-finish.png") });
-  await page.locator("#play").click();
-  await expect(ocean).toHaveAttribute("data-state", "running");
-  await expect(page.locator("#score")).not.toHaveText("0:00.0");
-});
-
-test("the brain challenge can be completed and saved to the global leaderboard", async ({
+test("Grand Tour saves to the real leaderboard handler after a retry and survives reload", async ({
   page,
 }) => {
   test.setTimeout(300000);
   await page.setViewportSize({ width: 1440, height: 900 });
   const posted = [];
+  const store = memoryStore();
   await page.route("**/scores*", async (route) => {
     const request = route.request();
-    if (request.method() === "POST") {
-      const entry = request.postDataJSON();
-      posted.push(entry);
-      const points = Math.max(
-        0,
-        Math.round(80000 / Math.max(1, entry.seconds)) - entry.bumps * 400,
-      );
-      await route.fulfill({
-        status: 201,
-        json: { rank: 1, scores: [{ ...entry, points }, ...board] },
-      });
-    } else await route.fulfill({ json: { scores: board, total: 2 } });
+    const isPost = request.method() === "POST";
+    if (isPost) {
+      posted.push(request.postDataJSON());
+      if (posted.length === 1) {
+        await route.fulfill({ status: 503, json: { error: "Temporarily unavailable" } });
+        return;
+      }
+    }
+    const response = await handle(new Request(request.url(), {
+      method: request.method(),
+      ...(isPost ? { body: request.postData(), headers: { "content-type": "application/json" } } : {}),
+    }), { store });
+    await route.fulfill({ status: response.status, json: await response.json() });
   });
   await openGame(page);
+  await page.locator('[data-track="pial-arteries-v2-tour"]').click();
   await page.getByText("Controls", { exact: true }).click();
   await page.locator("#speed").fill("3");
   await page.locator("#play").click();
@@ -242,12 +187,15 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   await expect(page.locator("#submit-form")).toBeVisible();
   await page.locator("#player-name").fill("  Test Pilot  ");
   await page.locator("#submit").click();
+  await expect(page.locator("#submit-status")).toContainText("Saved on this device.");
+  await expect(page.locator("#submit")).toBeEnabled();
+  await page.locator("#submit").click();
   await expect(page.locator("#submit-status")).toHaveText(
     "Saved. You are #1 in the world.",
   );
-  expect(posted).toHaveLength(1);
+  expect(posted).toHaveLength(2);
   expect(posted[0]).toMatchObject({
-    challenge: "pial-arteries-v2",
+    challenge: "pial-arteries-v2-tour",
     name: "Test Pilot",
     bumps: Number(await ocean.getAttribute("data-bumps")),
   });
@@ -260,6 +208,9 @@ test("the brain challenge can be completed and saved to the global leaderboard",
   await page.screenshot({ path: test.info().outputPath("vessel-race-brain-finish.png") });
   await page.reload();
   await expect(page.locator("#play")).toBeEnabled({ timeout: 60000 });
+  await expect(page.locator("#board-title")).toContainText("Grand tour");
+  await expect(page.locator("#score-rows")).toContainText("Test Pilot");
+  expect(store.rows).toHaveLength(1);
   expect(await page.evaluate(() => localStorage.getItem("vessel-surfer.name.v1"))).toBe(
     "Test Pilot",
   );

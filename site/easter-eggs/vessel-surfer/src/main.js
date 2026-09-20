@@ -1,11 +1,10 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { MarchingCubes } from "three/addons/objects/MarchingCubes.js";
 import { insideMask } from "./mask.js";
 import { TunnelCamera, clearSight, lumenExtent, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
-import { surfaceGuard } from "./surface-guard.js";
 import { Flight } from "./flight.js";
+import { createRouteArrowGeometry } from "./route-arrow.js";
 import { Race, BUMP_PENALTY, TRACKS, bumpPenalty, speedScore, trackFor } from "./race.js";
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
@@ -155,20 +154,7 @@ function boot() {
     emissive: 0xb57616,
     emissiveIntensity: 2,
   });
-  // A flat chevron in the XZ plane pointing along +Z, one unit long, lying
-  // on the vessel wall with its face toward the lumen.
-  const chevron = new THREE.Shape();
-  chevron.moveTo(0, 0.55);
-  chevron.lineTo(0.5, -0.15);
-  chevron.lineTo(0.22, -0.15);
-  chevron.lineTo(0, 0.12);
-  chevron.lineTo(-0.22, -0.15);
-  chevron.lineTo(-0.5, -0.15);
-  chevron.closePath();
-  const arrowGeometry = new THREE.ShapeGeometry(chevron);
-  // Shape geometry lies in XY pointing +Y; lay it flat so it points +Z with
-  // its face normal along +Y.
-  arrowGeometry.rotateX(-Math.PI / 2);
+  const arrowGeometry = createRouteArrowGeometry();
   const arrowMaterial = new THREE.MeshStandardMaterial({
     color: 0xffc44d,
     emissive: 0xff9a1c,
@@ -189,7 +175,6 @@ function boot() {
   let state = "loading";
   let overview = true;
   let network = null;
-  let mask = null;
   let human = null;
   let humanPromise = null;
   let travel = 0;
@@ -328,7 +313,7 @@ function boot() {
     }
     for (const button of picker.children)
       button.setAttribute("aria-checked", String(button.dataset.track === item.challenge));
-    if (network && !mask) reset();
+    if (network) reset();
   }
   renderTracks();
 
@@ -353,7 +338,7 @@ function boot() {
     }
   }
   function volumeOf() {
-    return mask || human.volume;
+    return human.volume;
   }
   // Fog, lighting and the far plane follow how roomy the vessel is, smoothed
   // over about half a second. They must not follow the distance to the
@@ -469,7 +454,7 @@ function boot() {
       orbit.update();
       sub.visible = true;
       sub.position.copy(player);
-      sub.scale.setScalar(mask ? Math.min(...mask.scale) * 0.22 : 0.5);
+      sub.scale.setScalar(0.5);
     } else {
       updateTunnel(0, lumenRadius(volumeOf(), player), true);
     }
@@ -494,39 +479,27 @@ function boot() {
     swimUp.set(0, 1, 0);
     clear(beacons);
     clear(trail);
-    if (mask) {
-      player.fromArray(mask.spawn);
-      direction.set(0, 0, 1);
-      target =
-        mask.targets
-          .map((p) => new THREE.Vector3(...p))
-          .filter((p) => insideMask(mask, p.toArray()))
-          .sort((a, b) => b.distanceTo(player) - a.distanceTo(player))[0] ||
-        player.clone();
-      targetRadius = Math.min(...mask.scale) * 0.7;
-    } else {
-      if (!challenges.has(track.challenge))
-        challenges.set(track.challenge, humanChallenge(network, volume, track));
-      challenge = challenges.get(track.challenge);
-      // Spawn on the route, facing along it: the route may leave the launch
-      // point against the edge's stored direction.
-      player.copy(challenge.path[0]);
-      direction.copy(challenge.path[1]).sub(challenge.path[0]).normalize();
-      target = challenge.target.clone();
-      targetRadius = 0.35;
-    }
+    if (!challenges.has(track.challenge))
+      challenges.set(track.challenge, humanChallenge(network, volume, track));
+    challenge = challenges.get(track.challenge);
+    // Spawn on the route, facing along it: the route may leave the launch
+    // point against the edge's stored direction.
+    player.copy(challenge.path[0]);
+    direction.copy(challenge.path[1]).sub(challenge.path[0]).normalize();
+    target = challenge.target.clone();
+    targetRadius = 0.35;
     const beacon = new THREE.Mesh(beaconGeometry, beaconMaterial);
     beacon.position.copy(target);
     beacon.scale.setScalar(targetRadius * 0.7);
     beacons.add(beacon);
-    const path = mask ? [] : challenge.path;
-    routeLength = mask ? player.distanceTo(target) : challenge.length;
+    const path = challenge.path;
+    routeLength = challenge.length;
     overviewMap.configure({
       bounds: vesselBounds,
       start: player,
       target,
       path,
-      minSpan: mask ? unit * 20 : 18,
+      minSpan: 18,
     });
     if (path.length > 1) {
       // One arrow per validated route sample (0.25 mm apart), laid on the
@@ -560,9 +533,7 @@ function boot() {
     $("ocean").dataset.path = JSON.stringify(
       path.map((p) => p.toArray().map((v) => Number(v.toFixed(3)))),
     );
-    $("mission-text").textContent = mask
-      ? "Practice run: reach the gold ring in your own vessel mask. Practice runs are not ranked."
-      : `Pilot a tiny submarine through real human brain vessels. ${track.name}: follow the gold arrows ${Math.round(routeLength)} mm to the gold ring.`;
+    $("mission-text").textContent = `Pilot a tiny submarine through real human brain vessels. ${track.name}: follow the gold arrows ${Math.round(routeLength)} mm to the gold ring.`;
     $("run-breakdown").replaceChildren();
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
@@ -576,7 +547,7 @@ function boot() {
     refreshBoard();
   }
   function start() {
-    if (state === "loading" || (!network && !mask)) return;
+    if (state === "loading" || !network) return;
     if (state === "complete") reset();
     if (overview) setView(false);
     race.resume(performance.now());
@@ -634,9 +605,7 @@ function boot() {
   }
   function coach() {
     const distance = target ? player.distanceTo(target) : 0;
-    return mask
-      ? `Reach the gold ring, ${distance.toFixed(1)} units away · ${steerHint()}`
-      : `${track.name} · follow the gold arrows to the ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
+    return `${track.name} · follow the gold arrows to the ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
   }
   function pause() {
     if (!running()) return;
@@ -654,55 +623,60 @@ function boot() {
     lastResult = race.finish(performance.now());
     keys.clear();
     flight.reset();
-    const message = mask
-      ? `Practice complete · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`
-      : `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
+    const message = `${lastResult.points.toLocaleString()} points · ${formatTime(lastResult.seconds)} · ${lastResult.bumps} wall bumps`;
     $("run-result").textContent = message;
     const breakdown = $("run-breakdown");
     breakdown.replaceChildren();
-    if (!mask) {
-      const average = routeLength / Math.max(lastResult.seconds, 0.001);
-      const rows = [
-        ["Speed score", `+${speedScore(lastResult.seconds, track.challenge).toLocaleString()}`, `${track.name} · ${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${track.speedPoints.toLocaleString()} ÷ seconds`, "plus"],
-        ["Wall penalty", `−${bumpPenalty(lastResult.bumps).toLocaleString()}`, `${lastResult.bumps} bump${lastResult.bumps === 1 ? "" : "s"} × ${BUMP_PENALTY}`, "minus"],
-        ["Points", lastResult.points.toLocaleString(), "speed score minus wall penalty", "total"],
-      ];
-      for (const [label, value, note, kind] of rows) {
-        const row = document.createElement("div");
-        row.className = `breakdown__row is-${kind}`;
-        const name = document.createElement("span");
-        name.className = "breakdown__label";
-        name.textContent = label;
-        const amount = document.createElement("strong");
-        amount.className = "breakdown__value";
-        amount.textContent = value;
-        const detail = document.createElement("span");
-        detail.className = "breakdown__note";
-        detail.textContent = note;
-        row.append(name, amount, detail);
-        breakdown.append(row);
-      }
+    const average = routeLength / Math.max(lastResult.seconds, 0.001);
+    const rows = [
+      ["Speed score", `+${speedScore(lastResult.seconds, track.challenge).toLocaleString()}`, `${track.name} · ${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${track.speedPoints.toLocaleString()} ÷ seconds`, "plus"],
+      ["Wall penalty", `−${bumpPenalty(lastResult.bumps).toLocaleString()}`, `${lastResult.bumps} bump${lastResult.bumps === 1 ? "" : "s"} × ${BUMP_PENALTY}`, "minus"],
+      ["Points", lastResult.points.toLocaleString(), "speed score minus wall penalty", "total"],
+    ];
+    for (const [label, value, note, kind] of rows) {
+      const row = document.createElement("div");
+      row.className = `breakdown__row is-${kind}`;
+      const name = document.createElement("span");
+      name.className = "breakdown__label";
+      name.textContent = label;
+      const amount = document.createElement("strong");
+      amount.className = "breakdown__value";
+      amount.textContent = value;
+      const detail = document.createElement("span");
+      detail.className = "breakdown__note";
+      detail.textContent = note;
+      row.append(name, amount, detail);
+      breakdown.append(row);
     }
     showMenu("complete");
-    $("submit-form").hidden = Boolean(mask);
-    if (!mask) {
-      $("player-name").value = leaderboard.name;
-      $("player-name").focus({ preventScroll: true });
-    }
+    $("submit-form").hidden = false;
+    $("player-name").value = leaderboard.name;
+    $("player-name").focus({ preventScroll: true });
     refreshBoard();
   }
   $("submit-form").onsubmit = async (event) => {
     event.preventDefault();
-    if (!lastResult || mask) return;
+    if (!lastResult) return;
+    const result = lastResult;
+    const name = $("player-name").value;
+    // An earlier GET must not replace the freshly saved leaderboard.
+    boardRequest++;
     $("submit").disabled = true;
     $("submit-status").textContent = "Saving…";
-    const outcome = await leaderboard.submit(lastResult, $("player-name").value);
-    const mine = { ...lastResult, name: leaderboard.name };
-    renderBoard(outcome, mine);
-    $("submit-status").textContent =
-      outcome.scope === "global"
+    try {
+      const outcome = await leaderboard.submit(result, name);
+      if (lastResult !== result || state !== "complete") return;
+      const mine = { ...result, name: leaderboard.name };
+      renderBoard(outcome, mine);
+      $("submit-status").textContent = outcome.scope === "global"
         ? `Saved. You are #${outcome.rank.toLocaleString()} in the world.`
-        : `The leaderboard is unreachable (${outcome.error}). Saved on this device instead.`;
+        : `Could not save online (${outcome.error}). ${outcome.savedLocally ? "Saved on this device." : "Could not save on this device."} Press Save score to retry.`;
+      $("submit").disabled = outcome.scope === "global";
+    } catch (error) {
+      if (lastResult !== result || state !== "complete") return;
+      $("submit-status").textContent = `Could not save this run: ${error.message}`;
+      $("submit").disabled = false;
+    }
   };
   // Switch the scene between its tunnel appearance and the overview drawn in
   // the map window: whole surface instead of culled chunks, no fog, no
@@ -745,7 +719,6 @@ function boot() {
     }
   }
   async function loadDemo() {
-    const token = ++loadId;
     showMenu("loading");
     $("hint").textContent = "Loading the human brain vessel segmentation…";
     try {
@@ -754,9 +727,7 @@ function boot() {
         throw error;
       });
       const data = await humanPromise;
-      if (token !== loadId) return;
       human = data;
-      mask = null;
       network = human.network;
       challenge = null;
       challenges.clear();
@@ -782,27 +753,25 @@ function boot() {
         "Human pial arteries · 7T TOF at 140 µm · Bollmann et al. 2022 · ";
       reset();
     } catch (error) {
-      if (token !== loadId) return;
       showMenu("ready");
-      $("play").disabled = true;
-      $("play").textContent = "Brain data unavailable";
-      $("hint").textContent = error.message;
-      $("load-status").textContent = error.message;
-      $("dataset").open = true;
+      $("play").disabled = false;
+      $("play").textContent = "Retry loading brain";
+      $("mission-text").textContent = `Could not load brain data: ${error.message}`;
     }
   }
   $("play").onclick = () => {
-    if (state === "running") pause();
+    if (state === "ready" && !network) loadDemo();
+    else if (state === "running") pause();
     else start();
   };
   $("quick-play").onclick = $("play").onclick;
   $("reset").onclick = () => {
-    if (state === "loading" || (!network && !mask)) return;
+    if (state === "loading" || !network) return;
     reset();
     start();
   };
   $("menu-button").onclick = () => {
-    if (state === "loading" || (!network && !mask)) return;
+    if (state === "loading" || !network) return;
     reset();
   };
   // One cruising speed, shown on the menu slider and the in-run slider, and
@@ -967,97 +936,6 @@ function boot() {
       stick.yaw = stick.pitch = 0;
       $("stick").hidden = true;
     });
-  let worker = null;
-  let loadId = 0;
-  function cancelLoad() {
-    loadId++;
-    worker?.terminate();
-    worker = null;
-    $("mask").disabled = false;
-  }
-  $("demo").onclick = () => {
-    cancelLoad();
-    $("mask").value = "";
-    $("load-status").textContent = "";
-    loadDemo();
-  };
-  $("mask").onchange = async () => {
-    const file = $("mask").files[0];
-    if (!file) return;
-    cancelLoad();
-    const token = loadId;
-    const hadData = Boolean(network || mask);
-    showMenu("loading");
-    $("mask").disabled = true;
-    $("load-status").textContent = "Building your vessel surface…";
-    try {
-      if (file.size > 128 * 1024 * 1024)
-        throw new Error("Choose a file smaller than 128 MB.");
-      const data = await file.arrayBuffer();
-      if (token !== loadId) return;
-      const result = await new Promise((resolve, reject) => {
-        worker = new Worker(new URL("./mask-worker.js", import.meta.url), {
-          type: "module",
-        });
-        worker.onmessage = ({ data }) =>
-          data.error ? reject(new Error(data.error)) : resolve(data.mask);
-        worker.onerror = () =>
-          reject(
-            new Error("Could not decode this mask. Try another NIfTI file."),
-          );
-        worker.postMessage(data, [data]);
-      });
-      if (token !== loadId) return;
-      const surface = new MarchingCubes(
-        result.n,
-        vesselMaterial,
-        false,
-        false,
-        300000,
-      );
-      surface.isolation = 0.5;
-      surface.field.set(result.field);
-      surface.update();
-      surface.onBeforeRender = () => {};
-      surface.scale.set(...result.scale.map((v) => (v * result.n) / 2));
-      if (surface.count >= 300000 * 3) {
-        surface.geometry.dispose();
-        throw new Error(
-          "Surface is too complex for this game. Try a smaller vessel mask.",
-        );
-      }
-      const count = surface.geometry.drawRange.count;
-      const collisionGeometry = new THREE.BufferGeometry();
-      collisionGeometry.setAttribute(
-        "position",
-        new THREE.BufferAttribute(
-          surface.geometry.attributes.position.array.slice(0, count * 3),
-          3,
-        ),
-      );
-      collisionGeometry.scale(
-        surface.scale.x,
-        surface.scale.y,
-        surface.scale.z,
-      );
-      Object.assign(result, surfaceGuard(collisionGeometry));
-      clear(vessels);
-      vessels.add(surface);
-      mask = result;
-      $("source-label").firstChild.textContent = `Local mask: ${file.name} · `;
-      $("load-status").textContent = `Loaded ${result.voxels.toLocaleString()} game voxels in the largest connected vessel region.`;
-      reset();
-      $("dataset").open = true;
-    } catch (error) {
-      if (token === loadId) {
-        $("load-status").textContent = error.message;
-        if (hadData) reset();
-        $("dataset").open = true;
-      }
-    } finally {
-      if (token === loadId) cancelLoad();
-    }
-  };
   function resize() {
     dirty = true;
     const width = ocean.clientWidth;
@@ -1100,7 +978,7 @@ function boot() {
       };
       const { moved, speed, radius, turning, blocked } = flight.step(
         volume, player, direction, swimUp,
-        { dt, cruise: cruise(), rate: mask ? 2 : 6, braking, reversing, playerDemand, turnRequest },
+        { dt, cruise: cruise(), braking, reversing, playerDemand, turnRequest },
       );
       turnRequest = false;
       race.movement(Math.abs(dt * speed), moved);
@@ -1139,9 +1017,8 @@ function boot() {
     $("score").textContent = formatTime(race.seconds);
     $("bumps").textContent = `${race.bumps} bump${race.bumps === 1 ? "" : "s"}`;
     if (target && !$("navigation-map").hidden) {
-      const units = mask ? "units" : "mm";
       $("target-distance").textContent =
-        `${player.distanceTo(target).toFixed(1)} ${units} away · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
+        `${player.distanceTo(target).toFixed(1)} mm away · ${Math.abs(target.y - player.y).toFixed(1)} ${target.y >= player.y ? "above" : "below"}`;
     }
     for (const b of beacons.children) {
       b.userData.baseScale ??= b.scale.x;
@@ -1166,7 +1043,7 @@ function boot() {
     const data = ocean.dataset;
     data.state = state;
     data.distance = travel.toFixed(2);
-    data.source = mask ? "local-mask" : human ? "human-pial-arteries" : "loading";
+    data.source = human ? "human-pial-arteries" : "loading";
     data.position = JSON.stringify(player.toArray());
     data.heading = JSON.stringify(direction.toArray());
     data.up = JSON.stringify(swimUp.toArray());
