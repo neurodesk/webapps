@@ -1,13 +1,12 @@
-import { CHALLENGE, pointsFor } from "../../vessel-surfer/src/race.js";
+import { CHALLENGE, CHALLENGES as TRACK_IDS, pointsFor, trackFor } from "../../vessel-surfer/src/race.js";
 
 export const NAME_LIMIT = 16;
 export const MAX_LIMIT = 100;
 export const SUBMISSIONS_PER_HOUR = 30;
-// The shortest believable run: the fixed route is 33 mm and the fastest
-// cruising speed is eighteen voxels per second (about 2.5 mm/s at 140 um).
-export const MIN_SECONDS = 8;
+// The shortest believable run per track (the fastest cruising speed is about
+// 2.5 mm/s) comes from the track table in the game's race.js.
 export const MAX_SECONDS = 3600;
-export const CHALLENGES = new Set([CHALLENGE]);
+export const CHALLENGES = new Set(TRACK_IDS);
 
 export function cleanName(value) {
   const text = String(value ?? "")
@@ -34,13 +33,13 @@ export function validateEntry(body) {
   if (
     typeof seconds !== "number" ||
     !Number.isFinite(seconds) ||
-    seconds < MIN_SECONDS ||
+    seconds < trackFor(challenge).minSeconds ||
     seconds > MAX_SECONDS
   )
     throw new ValidationError("Run time is out of range.");
   if (!Number.isInteger(bumps) || bumps < 0 || bumps > 999)
     throw new ValidationError("Bump count is out of range.");
-  const points = pointsFor(seconds, bumps);
+  const points = pointsFor(seconds, bumps, challenge);
   if (points <= 0) throw new ValidationError("This run scores no points.");
   return {
     challenge,

@@ -40,10 +40,6 @@
         Whole brain · zoom to route
       </button>
     </aside>
-    <div id="target-marker" class="target-marker" hidden aria-hidden="true">
-      <span class="target-marker__arrow"></span>
-      <span class="target-marker__label"></span>
-    </div>
     <div id="speed-panel" class="speed-panel" hidden>
       <label for="speed-hud">
         Speed <output id="speed-hud-value">0.5×</output>
@@ -75,11 +71,19 @@
         <h1 data-show="complete">Destination reached</h1>
         <p id="mission-text" class="lede" data-show="loading ready">
           Pilot a tiny submarine through real human brain vessels. Follow the
-          gold trail 12 mm to the gold ring.
+          gold arrows to the gold ring.
         </p>
+        <div
+          id="tracks"
+          class="tracks"
+          role="radiogroup"
+          aria-label="Track"
+          data-show="loading ready"
+        ></div>
         <p class="scoring" data-show="loading ready">
-          Speed score: 80,000 ÷ your seconds. Wall penalty: 400 per bump. Go
-          faster with + / − or the speed slider, but every bump costs you.
+          Speed score: track points ÷ your seconds. Wall penalty: 400 per
+          bump. Every track has its own leaderboard. Go faster with + / − or
+          the speed slider, but every bump costs you.
         </p>
         <p id="run-result" class="result" role="status" data-show="complete"></p>
         <div id="run-breakdown" class="breakdown" data-show="complete"></div>

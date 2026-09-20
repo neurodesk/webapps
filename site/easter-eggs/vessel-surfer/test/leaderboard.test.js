@@ -34,12 +34,19 @@ test("reads and submits through the server when it is reachable", async () => {
   assert.equal(top.scope, "global");
   assert.equal(top.rows[0].name, "Ada");
   assert.equal(calls[0].url, "https://api.example/scores?challenge=pial-arteries-v2&limit=5");
+  await board.top(3, "pial-arteries-v2-tour");
+  assert.equal(calls[1].url, "https://api.example/scores?challenge=pial-arteries-v2-tour&limit=3");
+  calls.length = 0;
   const saved = await board.submit(result, "  Grace  ");
   assert.equal(saved.scope, "global");
   assert.equal(saved.rank, 3);
-  assert.equal(JSON.parse(calls[1].init.body).name, "Grace");
+  assert.equal(JSON.parse(calls[0].init.body).name, "Grace");
   assert.equal(board.name, "Grace");
   await assert.rejects(board.submit({ ...result, points: 1 }, "x"), /cannot be scored/);
+  await assert.rejects(board.submit({ ...result, challenge: "no-such-track" }, "x"), /Unknown track/);
+  const sprint = { challenge: "pial-arteries-v2-sprint", seconds: 6, bumps: 0, points: pointsFor(6, 0, "pial-arteries-v2-sprint") };
+  await board.submit(sprint, "Grace");
+  assert.equal(JSON.parse(calls.at(-1).init.body).challenge, "pial-arteries-v2-sprint");
 });
 
 test("falls back to this device's best runs when the server is unavailable", async () => {

@@ -1,4 +1,4 @@
-import { CHALLENGE, pointsFor, readScores, saveScore } from "./race.js";
+import { CHALLENGE, CHALLENGES, pointsFor, readScores, saveScore } from "./race.js";
 
 export const NAME_KEY = "vessel-surfer.name.v1";
 export const NAME_LIMIT = 16;
@@ -45,9 +45,9 @@ export function createLeaderboard({
       clearTimeout(timer);
     }
   };
-  const local = () => {
+  const local = (track) => {
     try {
-      return readScores(storage).map((row) => ({
+      return readScores(storage, track).map((row) => ({
         ...row,
         name: row.name || "You",
       }));
@@ -71,24 +71,27 @@ export function createLeaderboard({
         /* Storage can be disabled. */
       }
     },
-    async top(limit = 10) {
+    // Each track is its own board; `track` defaults to the standard track.
+    async top(limit = 10, track = challenge) {
       try {
         const data = await request(
-          `/scores?challenge=${encodeURIComponent(challenge)}&limit=${limit}`,
+          `/scores?challenge=${encodeURIComponent(track)}&limit=${limit}`,
         );
         return { scope: "global", rows: data.scores, total: data.total };
       } catch (error) {
-        return { scope: "local", rows: local(), error: error.message };
+        return { scope: "local", rows: local(track), error: error.message };
       }
     },
     async submit(result, name) {
+      const track = result.challenge || challenge;
+      if (!CHALLENGES.includes(track)) throw new Error("Unknown track.");
       const entry = {
-        challenge,
+        challenge: track,
         name: cleanName(name),
         seconds: result.seconds,
         bumps: result.bumps,
       };
-      if (pointsFor(entry.seconds, entry.bumps) !== result.points)
+      if (pointsFor(entry.seconds, entry.bumps, track) !== result.points)
         throw new Error("This run cannot be scored.");
       this.name = entry.name;
       try {
@@ -99,8 +102,8 @@ export function createLeaderboard({
         });
         return { scope: "global", rank: data.rank, rows: data.scores };
       } catch (error) {
-        saveScore(storage, { ...result, name: entry.name });
-        return { scope: "local", rows: local(), error: error.message };
+        saveScore(storage, { ...result, challenge: track, name: entry.name });
+        return { scope: "local", rows: local(track), error: error.message };
       }
     },
   };

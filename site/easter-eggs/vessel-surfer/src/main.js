@@ -6,7 +6,7 @@ import { TunnelCamera, clearSight, lumenRadius } from "./chase.js";
 import { loadHumanData } from "./human-data.js";
 import { surfaceGuard } from "./surface-guard.js";
 import { level, steer, swim } from "./swim.js";
-import { Race, BUMP_PENALTY, SPEED_POINTS, bumpPenalty, speedScore } from "./race.js";
+import { Race, BUMP_PENALTY, TRACKS, bumpPenalty, speedScore, trackFor } from "./race.js";
 import { OverviewMap, humanChallenge } from "./navigation-map.js";
 import { HeldInputs } from "./held-inputs.js";
 import { Steering, UTurn, aimFromOffset, combineDemand } from "./controls.js";
@@ -27,6 +27,7 @@ try {
 }
 const leaderboard = createLeaderboard({ url: LEADERBOARD_URL, storage });
 const SPEED_KEY = "vessel-surfer.speed.v1";
+const TRACK_KEY = "vessel-surfer.track.v1";
 const SPEED_MIN = 0.25;
 const SPEED_MAX = 3;
 const SPEED_STEP = 0.25;
@@ -68,7 +69,7 @@ function boot() {
   scene.add(fill);
   const vessels = new THREE.Group();
   const beacons = new THREE.Group();
-  // Gold breadcrumbs along the validated route show the way to the destination.
+  // Gold arrows along the validated route point the way to the destination.
   const trail = new THREE.Group();
   scene.add(vessels, beacons, trail);
   const sub = new THREE.Group();
@@ -154,12 +155,26 @@ function boot() {
     emissive: 0xb57616,
     emissiveIntensity: 2,
   });
-  const crumbGeometry = new THREE.SphereGeometry(1, 8, 6);
-  const crumbMaterial = new THREE.MeshStandardMaterial({
+  // A flat chevron in the XZ plane pointing along +Z, one unit long, lying
+  // on the vessel wall with its face toward the lumen.
+  const chevron = new THREE.Shape();
+  chevron.moveTo(0, 0.55);
+  chevron.lineTo(0.5, -0.15);
+  chevron.lineTo(0.22, -0.15);
+  chevron.lineTo(0, 0.12);
+  chevron.lineTo(-0.22, -0.15);
+  chevron.lineTo(-0.5, -0.15);
+  chevron.closePath();
+  const arrowGeometry = new THREE.ShapeGeometry(chevron);
+  // Shape geometry lies in XY pointing +Y; lay it flat so it points +Z with
+  // its face normal along +Y.
+  arrowGeometry.rotateX(-Math.PI / 2);
+  const arrowMaterial = new THREE.MeshStandardMaterial({
     color: 0xffc44d,
     emissive: 0xff9a1c,
     emissiveIntensity: 0.9,
     roughness: 0.4,
+    side: THREE.DoubleSide,
   });
   // Inside the vessel the distance fades to a deep red so far walls read as
   // vessel rather than as a black void; the overview keeps the ocean navy.
@@ -184,6 +199,8 @@ function boot() {
   let targetRadius = 0.35;
   let routeLength = 0;
   let challenge = null;
+  const challenges = new Map();
+  let track = trackFor(storage?.getItem(TRACK_KEY)) || TRACKS[0];
   let blocked = false;
   const player = new THREE.Vector3();
   const direction = new THREE.Vector3(0, 1, 0);
@@ -232,7 +249,6 @@ function boot() {
     $("navigation-map").hidden = !target || next === "ready" || next === "loading";
     $("touch").hidden = next !== "running";
     $("speed-panel").hidden = next !== "running";
-    $("target-marker").hidden = next !== "running";
     document.body.classList.toggle("is-running", next === "running");
     $("hint").textContent = "";
     dirty = true;
@@ -267,6 +283,7 @@ function boot() {
         cell.className = className;
       }
     });
+    $("board-title").textContent = `${track.name} leaderboard`;
     $("board-status").textContent =
       board.scope === "global"
         ? `Top ${board.rows.length} worldwide`
@@ -276,9 +293,46 @@ function boot() {
   let boardRequest = 0;
   async function refreshBoard(mine) {
     const token = ++boardRequest;
-    const board = await leaderboard.top(10);
+    const board = await leaderboard.top(10, track.challenge);
     if (token === boardRequest) renderBoard(board, mine);
   }
+  // Track picker: one button per track, the chosen one remembered.
+  const picker = $("tracks");
+  function renderTracks() {
+    picker.replaceChildren();
+    for (const item of TRACKS) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "track";
+      button.dataset.track = item.challenge;
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(item === track));
+      const name = document.createElement("strong");
+      name.textContent = item.name;
+      const meta = document.createElement("span");
+      meta.className = "track__meta";
+      meta.textContent = `${item.length} mm`;
+      const blurb = document.createElement("span");
+      blurb.className = "track__blurb";
+      blurb.textContent = item.blurb;
+      button.append(name, meta, blurb);
+      button.onclick = () => selectTrack(item);
+      picker.append(button);
+    }
+  }
+  function selectTrack(item) {
+    if (item === track && state !== "loading") return;
+    track = item;
+    try {
+      storage?.setItem(TRACK_KEY, item.challenge);
+    } catch {
+      /* Storage can be disabled. */
+    }
+    for (const button of picker.children)
+      button.setAttribute("aria-checked", String(button.dataset.track === item.challenge));
+    if (network && !mask) reset();
+  }
+  renderTracks();
 
   $("map-view").onclick = () => {
     const route = overviewMap.toggle() === "route";
@@ -424,7 +478,7 @@ function boot() {
     const volume = volumeOf();
     const unit = Math.min(...volume.scale);
     measureVessels();
-    race = new Race(Math.min(...volume.scale) * 0.4);
+    race = new Race(Math.min(...volume.scale) * 0.4, track.challenge);
     lastResult = null;
     travel = 0;
     blocked = false;
@@ -447,7 +501,9 @@ function boot() {
         player.clone();
       targetRadius = Math.min(...mask.scale) * 0.7;
     } else {
-      challenge ||= humanChallenge(network, volume);
+      if (!challenges.has(track.challenge))
+        challenges.set(track.challenge, humanChallenge(network, volume, track));
+      challenge = challenges.get(track.challenge);
       // Spawn on the route, facing along it: the route may leave the launch
       // point against the edge's stored direction.
       player.copy(challenge.path[0]);
@@ -469,29 +525,32 @@ function boot() {
       minSpan: mask ? unit * 20 : 18,
     });
     if (path.length > 1) {
-      // One crumb per validated route sample and one between each pair; the
-      // samples are 0.25 mm apart inside the lumen, so the midpoints are too.
-      // Each crumb is lowered onto the vessel floor like a runway light, so the
-      // trail is never in the eye's way as the sub passes along the route.
-      const points = [];
-      for (let i = 0; i < path.length; i++) {
-        points.push(path[i]);
-        if (i + 1 < path.length) points.push(path[i].clone().lerp(path[i + 1], 0.5));
-      }
-      const crumbs = new THREE.InstancedMesh(crumbGeometry, crumbMaterial, points.length);
-      crumbs.userData.sharedAsset = true;
+      // One arrow per validated route sample (0.25 mm apart), laid on the
+      // vessel wall on the "floor" side of the route and pointing along it,
+      // so the way to go is readable at a glance and never in the eye's way.
+      const arrows = new THREE.InstancedMesh(arrowGeometry, arrowMaterial, path.length);
+      arrows.userData.sharedAsset = true;
       const matrix = new THREE.Matrix4();
-      const down = new THREE.Vector3(0, -1, 0);
-      const size = unit * 0.22;
-      crumbs.userData.points = points.map((p, i) => {
+      const worldDown = new THREE.Vector3(0, -1, 0);
+      arrows.userData.points = path.map((p, i) => {
+        const forward = challenge.directions[i].clone();
+        // Sized to the local lumen so arrows read alike in wide and narrow branches.
+        const size = THREE.MathUtils.clamp(lumenRadius(volume, p) * 0.6, unit * 0.6, unit * 2.4);
+        // The floor side: world-down made perpendicular to the route; in a
+        // near-vertical vessel use the sideways direction instead.
+        let down = worldDown.clone().addScaledVector(forward, -worldDown.dot(forward));
+        if (down.lengthSq() < 0.05) down = new THREE.Vector3(1, 0, 0).cross(forward);
+        down.normalize();
         const floor = freeDistance(volume, p, down, unit * 8);
-        const spot = p.clone().addScaledVector(down, Math.max(0, floor - unit * 0.5));
-        matrix.makeScale(size, size, size).setPosition(spot);
-        crumbs.setMatrixAt(i, matrix);
-        return { spot, size };
+        const spot = p.clone().addScaledVector(down, Math.max(0, floor - unit * 0.35));
+        const normal = down.clone().negate();
+        const right = normal.clone().cross(forward).normalize();
+        matrix.makeBasis(right, normal, forward).scale(new THREE.Vector3(size, size, size)).setPosition(spot);
+        arrows.setMatrixAt(i, matrix);
+        return { spot, size, right, normal, forward };
       });
-      crumbs.instanceMatrix.needsUpdate = true;
-      trail.add(crumbs);
+      arrows.instanceMatrix.needsUpdate = true;
+      trail.add(arrows);
     }
     // The validated reference route, for browser verification only.
     $("ocean").dataset.path = JSON.stringify(
@@ -499,7 +558,7 @@ function boot() {
     );
     $("mission-text").textContent = mask
       ? "Practice run: reach the gold ring in your own vessel mask. Practice runs are not ranked."
-      : `Pilot a tiny submarine through real human brain vessels. Follow the gold trail ${Math.round(routeLength)} mm to the gold ring.`;
+      : `Pilot a tiny submarine through real human brain vessels. ${track.name}: follow the gold arrows ${Math.round(routeLength)} mm to the gold ring.`;
     $("run-breakdown").replaceChildren();
     swimUp.addScaledVector(direction, -swimUp.dot(direction)).normalize();
     sub.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
@@ -573,7 +632,7 @@ function boot() {
     const distance = target ? player.distanceTo(target) : 0;
     return mask
       ? `Reach the gold ring, ${distance.toFixed(1)} units away · ${steerHint()}`
-      : `Follow the gold trail to the gold ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
+      : `${track.name} · follow the gold arrows to the ring, ${distance.toFixed(1)} mm ahead · faster earns more, bumps cost ${BUMP_PENALTY} · ${steerHint()}`;
   }
   function pause() {
     if (!running()) return;
@@ -601,7 +660,7 @@ function boot() {
     if (!mask) {
       const average = routeLength / Math.max(lastResult.seconds, 0.001);
       const rows = [
-        ["Speed score", `+${speedScore(lastResult.seconds).toLocaleString()}`, `${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${SPEED_POINTS.toLocaleString()} ÷ seconds`, "plus"],
+        ["Speed score", `+${speedScore(lastResult.seconds, track.challenge).toLocaleString()}`, `${track.name} · ${routeLength.toFixed(1)} mm in ${formatTime(lastResult.seconds)} · ${average.toFixed(2)} mm/s · ${track.speedPoints.toLocaleString()} ÷ seconds`, "plus"],
         ["Wall penalty", `−${bumpPenalty(lastResult.bumps).toLocaleString()}`, `${lastResult.bumps} bump${lastResult.bumps === 1 ? "" : "s"} × ${BUMP_PENALTY}`, "minus"],
         ["Points", lastResult.points.toLocaleString(), "speed score minus wall penalty", "total"],
       ];
@@ -662,48 +721,25 @@ function boot() {
     beacons.visible = !on;
     headlamp.visible = !on && !overview;
   }
-  // Crumbs right under the eye would fill the view, so each one shrinks away
+  // Arrows right under the eye would fill the view, so each one shrinks away
   // as the sub passes over it and grows back once it is behind.
-  const crumbMatrix = new THREE.Matrix4();
+  const arrowMatrix = new THREE.Matrix4();
+  const arrowScale = new THREE.Vector3();
   function fadeTrail() {
     const unit = Math.min(...volumeOf().scale);
-    for (const crumbs of trail.children) {
-      crumbs.userData.points.forEach(({ spot, size }, i) => {
+    for (const arrows of trail.children) {
+      arrows.userData.points.forEach(({ spot, size, right, normal, forward }, i) => {
         const t = THREE.MathUtils.smoothstep(
           player.distanceTo(spot),
           unit * 2.5,
           unit * 5,
         );
-        crumbMatrix.makeScale(size * t, size * t, size * t).setPosition(spot);
-        crumbs.setMatrixAt(i, crumbMatrix);
+        arrowScale.setScalar(Math.max(1e-4, size * t));
+        arrowMatrix.makeBasis(right, normal, forward).scale(arrowScale).setPosition(spot);
+        arrows.setMatrixAt(i, arrowMatrix);
       });
-      crumbs.instanceMatrix.needsUpdate = true;
+      arrows.instanceMatrix.needsUpdate = true;
     }
-  }
-  // A screen-space pointer to the destination: over the ring when it is in
-  // view, otherwise a chevron at the screen edge in its direction.
-  const projected = new THREE.Vector3();
-  function placeTargetMarker() {
-    const marker = $("target-marker");
-    const width = ocean.clientWidth;
-    const height = ocean.clientHeight;
-    projected.copy(target).project(camera);
-    const behind = projected.z > 1;
-    let x = behind ? -projected.x : projected.x;
-    let y = behind ? -projected.y : projected.y;
-    const inView = !behind && Math.abs(x) < 0.9 && Math.abs(y) < 0.82;
-    if (!inView) {
-      const edge = Math.max(Math.abs(x) / 0.9, Math.abs(y) / 0.82, 1e-6);
-      x /= edge;
-      y /= edge;
-    }
-    const px = ((x + 1) / 2) * width;
-    const py = ((1 - y) / 2) * height;
-    marker.classList.toggle("is-offscreen", !inView);
-    marker.style.transform = `translate(${px.toFixed(0)}px, ${py.toFixed(0)}px)`;
-    const angle = Math.atan2(py - height / 2, px - width / 2);
-    marker.firstElementChild.style.transform = `rotate(${(angle + Math.PI / 2).toFixed(3)}rad)`;
-    marker.lastElementChild.textContent = `${player.distanceTo(target).toFixed(1)} ${mask ? "u" : "mm"}`;
   }
   async function loadDemo() {
     const token = ++loadId;
@@ -720,6 +756,7 @@ function boot() {
       mask = null;
       network = human.network;
       challenge = null;
+      challenges.clear();
       clear(vessels);
       const overviewMesh = new THREE.Mesh(human.geometry, vesselMaterial);
       overviewMesh.name = "overview-surface";
@@ -1165,7 +1202,6 @@ function boot() {
         overviewMap.render(player, direction, dt, ocean, mapPass);
       dirty = false;
     }
-    if (running() && target) placeTargetMarker();
     frames++;
     // Read-only telemetry for accessible integrations and browser verification.
     const data = ocean.dataset;
@@ -1182,6 +1218,7 @@ function boot() {
     data.turning = String(uturn.active);
     data.blocked = String(blocked);
     data.tilt = tiltState;
+    data.track = track.challenge;
     data.tiltRecentres = String(tiltRecentres);
     data.mapZoom = overviewMap.zoom;
     for (const [id, names] of [

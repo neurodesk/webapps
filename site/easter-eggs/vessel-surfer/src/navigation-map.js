@@ -1,12 +1,16 @@
 import * as THREE from "three";
 import { lumenRadius } from "./chase.js";
+import { TRACKS } from "./race.js";
 
-// The challenge route: the longest simple path through the route graph from
-// the launch point, in either direction, using only branches whose lumen
-// stays at least `floor` millimetres wide. The graph is a forest, so the
-// search is a plain depth-first walk. The route is sampled every `spacing`
-// millimetres for the trail and the map; the destination is its last point.
-export function humanChallenge(network, volume, { floor = 0.15, spacing = 0.25 } = {}) {
+// A track's route: the longest simple path through the route graph from its
+// start, using only branches whose lumen stays at least `floor` millimetres
+// wide. The graph is a forest, so the search is a plain depth-first walk.
+// Starts are either the launch point on the widest trunk (with the longest or
+// the shortest of its two directions) or a leaf node. The route is sampled
+// every `spacing` millimetres for the trail and the map; the destination is
+// its last point.
+export function humanChallenge(network, volume, track = TRACKS[0], spacing = 0.25) {
+  const floor = track.floor;
   const minRadius = new Map();
   for (const edge of network.edges) {
     let radius = Infinity;
@@ -28,31 +32,42 @@ export function humanChallenge(network, volume, { floor = 0.15, spacing = 0.25 }
     }
     return best;
   };
-  const start = network.edges[network.start.edge];
-  visited.add(start.id);
-  const candidates = [false, true].map((reverse) => {
-    const first = (reverse ? network.start.progress : 1 - network.start.progress) * start.length;
-    const rest = longest(reverse ? start.a : start.b, start.id);
-    return { reverse, length: first + rest.length, edges: rest.edges };
-  });
-  const choice = candidates.sort((a, b) => b.length - a.length)[0];
-  // Walk the chosen edges in order, sampling by arc length.
   const path = [];
-  let node = null;
   const sample = (edge, fromT, toT) => {
     const count = Math.max(1, Math.round((Math.abs(toT - fromT) * edge.length) / spacing));
     for (let i = path.length ? 1 : 0; i <= count; i++)
       path.push(edge.curve.getPointAt(fromT + ((toT - fromT) * i) / count));
   };
-  sample(start, network.start.progress, choice.reverse ? 0 : 1);
-  node = choice.reverse ? start.a : start.b;
-  for (const id of choice.edges) {
+  let node, edges, length;
+  if (track.start.edge === "launch") {
+    const start = network.edges[network.start.edge];
+    visited.add(start.id);
+    const candidates = [false, true].map((reverse) => {
+      const first = (reverse ? network.start.progress : 1 - network.start.progress) * start.length;
+      const rest = longest(reverse ? start.a : start.b, start.id);
+      return { reverse, length: first + rest.length, edges: rest.edges };
+    });
+    candidates.sort((a, b) => b.length - a.length);
+    const choice = track.start.direction === "shortest" ? candidates[1] : candidates[0];
+    sample(start, network.start.progress, choice.reverse ? 0 : 1);
+    node = choice.reverse ? start.a : start.b;
+    ({ edges, length } = choice);
+  } else {
+    node = track.start.node;
+    ({ edges, length } = longest(node, -1));
+    if (!edges.length) throw new Error(`Track ${track.challenge} has no route.`);
+  }
+  for (const id of edges) {
     const edge = network.edges[id];
     const forward = edge.a === node;
     sample(edge, forward ? 0 : 1, forward ? 1 : 0);
     node = forward ? edge.b : edge.a;
   }
-  return { target: path.at(-1).clone(), path, length: choice.length };
+  // The trail arrows need a direction at every sample.
+  const directions = path.map((p, i) =>
+    (i + 1 < path.length ? path[i + 1].clone().sub(p) : p.clone().sub(path[i - 1])).normalize(),
+  );
+  return { track, target: path.at(-1).clone(), path, directions, length };
 }
 
 // A live 3D overview drawn by the game renderer into a corner of the main
