@@ -1,0 +1,92 @@
+import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const cli = fileURLToPath(new URL('../../../exes/nii2tvx/test/expected-examples.tsv', import.meta.url));
+
+test('app boots with the shared bar and the information actions', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#controls')).toBeVisible();
+  const bar = page.locator('.nd-app-bar:visible');
+  await expect(bar).toHaveCount(1);
+  for (const name of ['About', 'Cite', 'Privacy']) {
+    await expect(bar.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  await expect(page.locator('#controls > #aboutBtn')).toBeHidden();
+  await bar.getByRole('button', { name: 'About', exact: true }).click();
+  await expect(page.locator('#infoDialog')).toContainText('87 white-matter bundles');
+  await page.locator('#infoDialog').getByRole('button', { name: 'Close' }).click();
+  await bar.locator('[data-neurodesk-theme-toggle]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-neurodesk-theme', 'light');
+});
+
+test('About explains the sample-versus-measurement distinction and points at the CLI', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('.nd-app-bar:visible').getByRole('button', { name: 'About', exact: true }).click();
+  const dialog = page.locator('#infoDialog');
+  await expect(dialog).toContainText('decimated sample');
+  await expect(dialog).toContainText('exes/nii2tvx');
+  await page.locator('#infoDialog').getByRole('button', { name: 'Close' }).click();
+  // Standalone is the shell's own dialog, rendered from registry/standalone.json. This app
+  // ships no CLI release of its own, so it offers the shared desktop bundle.
+  await page.locator('.nd-app-bar:visible').getByRole('button', { name: 'Standalone', exact: true }).click();
+  await expect(page.locator('dialog[open]').last()).toContainText('Webapp standalone');
+});
+
+test('run is gated on a lesion, and the colorbar waits for a result', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Ready', { timeout: 60_000 });
+  await expect(page.locator('#runButton')).toBeDisabled();
+  await expect(page.locator('#colorbar')).toBeHidden();
+  await expect(page.locator('#saveButton')).toBeDisabled();
+  // The MNI template stands in until an anatomical scan arrives.
+  await expect(page.locator('#imageLabel')).toContainText('MNI152 TEMPLATE');
+});
+
+test('a lesion off the atlas grid is refused with advice, not answered', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Ready', { timeout: 60_000 });
+  // 20 mm cube: valid NIfTI, wrong grid.
+  const wrong = readFileSync(fileURLToPath(new URL('../../../exes/nii2tvx/test/fixtures/lesion.nii.gz', import.meta.url)));
+  await page.locator('#imageInput').setInputFiles({ name: 'wrong_grid.nii.gz', mimeType: 'application/gzip', buffer: wrong });
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60_000 });
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toContainText('SYNcro', { timeout: 300_000 });
+  await expect(page.locator('#statusText')).toHaveClass(/error/);
+  await expect(page.locator('#saveButton')).toBeDisabled();
+});
+
+// The whole pipeline against the real atlas: ~40 MB of downloads, so it is opt-in.
+test('an example lesion scores, draws and downloads the CLI\'s own TSV', async ({ page }) => {
+  test.skip(!process.env.DISCONNECTOME_LIVE_DATA, 'set DISCONNECTOME_LIVE_DATA=1 to fetch the real atlas');
+  test.setTimeout(900_000);
+  await page.goto('./');
+  await page.locator('select[data-neurodesk-example]').selectOption('wm2208');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 300_000 });
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 180_000 });
+  await expect(page.locator('#imageLabel')).toContainText('LESION');
+
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toContainText('bundles disconnected', { timeout: 600_000 });
+  await expect(page.locator('#colorbar')).toBeVisible();
+  await expect(page.locator('#colorbarNote')).toContainText('of 87 bundles shown');
+  await expect(page.locator('#damageSummary')).toContainText('CBT_L 100%');
+
+  // Raising the threshold hides bundles without touching the numbers.
+  const shown = async () => Number((await page.locator('#colorbarNote').textContent()).match(/^(\d+)/)[1]);
+  const all = await shown();
+  await page.locator('#threshold').fill('60');
+  await expect(page.locator('#thresholdValue')).toHaveText('60');
+  expect(await shown()).toBeLessThan(all);
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('#saveButton').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('wM2208_T2w_lesion_disconnectome.tsv');
+  const [header, row] = readFileSync(await download.path(), 'utf8').trim().split('\n');
+  const expected = readFileSync(cli, 'utf8').trim().split('\n');
+  // Byte-identical to the command-line tool, whatever the slider is set to.
+  expect(header).toBe(expected[0]);
+  expect(row).toBe(expected.find((line) => line.startsWith('wM2208')));
+});

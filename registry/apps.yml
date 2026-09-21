@@ -430,6 +430,26 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+  - id: disconnectome
+    path: disconnectome
+    title: Disconnectome
+    description: Score which white-matter bundles a lesion disconnects, in the browser.
+    categories: [segmentation-analysis]
+    keywords: [lesion, disconnection, tractography, white matter, HCP1065, stroke]
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: models/disconnectome.manifest.json
+    asset_manifest_schema: scientific-assets-v1
+    source: neurodesk/webapps@local
+    license: BSD-2-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
   - id: greedy
     path: greedy
     title: Greedy

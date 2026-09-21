@@ -25,34 +25,34 @@
   ],
   "examples": [
     {
-      "filename": "examples/wM2017_T1w.nii.gz",
-      "bytes": 4116093,
-      "sha256": "fb3b019e01b6f4ddc41a62483dac1c69c6f932fb424b94f84695a6e05b6a14a5"
+      "filename": "examples/wM2017_T2w.nii.gz",
+      "bytes": 2483322,
+      "sha256": "aa8be671c4e662ec4d4a913e1f2d4080a488a1a3c7734a02b980e23effcbdd21"
     },
     {
-      "filename": "examples/wM2017_T1w_lesion.nii.gz",
-      "bytes": 27516,
-      "sha256": "acf44fa20fc5b07645896af4ce2ce6d511984a39328e6b0307626a29914e175e"
+      "filename": "examples/wM2017_T2w_lesion.nii.gz",
+      "bytes": 29321,
+      "sha256": "6cec7fd16d20bde36d219f02be88bdaf7fe2538c7069f6db51f0210a070b1b6f"
     },
     {
-      "filename": "examples/wM2018_T1w.nii.gz",
-      "bytes": 4308759,
-      "sha256": "05bdd591734d2701c505497e73e110b7bbd1d94037d94fc588a1a98087a00349"
+      "filename": "examples/wM2018_T2w.nii.gz",
+      "bytes": 2800195,
+      "sha256": "44364444f7522936ee21beef6fc9140e46b2664b09fbf6e9ec73368166fc024e"
     },
     {
-      "filename": "examples/wM2018_T1w_lesion.nii.gz",
-      "bytes": 24540,
-      "sha256": "2aa2901cc8b0813a45f716d90c145e20359bcc6c78c39c4ede0fd3afedb744f5"
+      "filename": "examples/wM2018_T2w_lesion.nii.gz",
+      "bytes": 14750,
+      "sha256": "160d5b208bc50b2709a194cc3af6e15566a239fcdd67f7a9a9d99138c55cc4b6"
     },
     {
-      "filename": "examples/wM2208_T1w.nii.gz",
-      "bytes": 5022139,
-      "sha256": "6d375dee1900c7082476fb1e9ef1587bd1a475de68dbbc63e8a7126090ccea34"
+      "filename": "examples/wM2208_T2w.nii.gz",
+      "bytes": 2472763,
+      "sha256": "3926f810853c2fa199ac4d50488a1c83c84789005ea96be2d95536dbd358c97b"
     },
     {
-      "filename": "examples/wM2208_T1w_lesion.nii.gz",
-      "bytes": 11085,
-      "sha256": "528caafca903fa8bb69f947ade038c40bf612a3b041df51952cbc474eed142f7"
+      "filename": "examples/wM2208_T2w_lesion.nii.gz",
+      "bytes": 9667,
+      "sha256": "ff198fa6b071039cc9919e4aea13c178360d3089b983365b1a7813e1a56a0c31"
     }
   ],
   "display_atlas": {
@@ -65,11 +65,12 @@
   },
   "source": {
     "tracts": "https://brain.labsolver.org/hcp_trk_atlas.html",
-    "citation": "Yeh FC. Population-based tract-to-region connectome of the human brain. NeuroImage. 2022;258:119361.",
-    "doi": "10.1016/j.neuroimage.2022.119361",
-    "tool": "https://github.com/neurolabusc/nii2tvx"
+    "citation": "Yeh FC. Population-based tract-to-region connectome of the human brain and its hierarchical topology. Nature Communications. 2022;13:4933.",
+    "doi": "10.1038/s41467-022-32595-4",
+    "tool": "https://github.com/neurolabusc/nii2tvx",
+    "pubmed": "https://pubmed.ncbi.nlm.nih.gov/35995773/"
   },
   "repository": "neurodeskorg/webapps",
-  "revision": "07f2b163ac3e4858948323c97fa6556d4b8688db",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07f2b163ac3e4858948323c97fa6556d4b8688db/disconnectome/"
+  "revision": "0b932d096011a6826f80627e434a36c4334bc1db",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0b932d096011a6826f80627e434a36c4334bc1db/disconnectome/"
 }

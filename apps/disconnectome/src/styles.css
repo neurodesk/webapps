@@ -1,0 +1,5 @@
+/* The colorbar the tract colours are read against. The ramp is painted from NiiVue's viridis
+   at run time, so it cannot drift from the colours on the bundles. */
+.dc-colorbar { display: flex; flex-direction: column; gap: var(--nd-space-xs); }
+.dc-colorbar-ramp { height: 12px; border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); }
+.dc-colorbar-scale { display: flex; justify-content: space-between; color: var(--nd-color-text-muted); font-size: 0.7rem; }

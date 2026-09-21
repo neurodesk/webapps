@@ -367,6 +367,28 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(@vitest/ui@3.2.7)(jsdom@26.1.0)(lightningcss@1.32.0)
 
+  apps/disconnectome:
+    dependencies:
+      '@neurodesk/nii2tvx':
+        specifier: workspace:*
+        version: link:../../packages/nii2tvx
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
+    devDependencies:
+      '@playwright/test':
+        specifier: ^1.44.0
+        version: 1.61.1
+      eslint:
+        specifier: ^9.0.0
+        version: 9.39.5(jiti@2.7.0)
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0)
+
   apps/dwi2trx:
     dependencies:
       '@brainchop/mindgrab':

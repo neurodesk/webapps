@@ -98,8 +98,8 @@ test('the WebAssembly module reproduces the native TSV on the real atlas', async
   const rows = [];
   for (const subject of ['wM2017', 'wM2018', 'wM2208']) {
     rows.push({
-      id: `${subject}_T1w_lesion`,
-      fractions: await atlas.query(readFileSync(join(reference, `example/${subject}_T1w_lesion.nii.gz`))),
+      id: `${subject}_T2w_lesion`,
+      fractions: await atlas.query(readFileSync(join(reference, `examples2/${subject}_T2w_lesion.nii.gz`))),
     });
   }
   atlas.close();

@@ -101,6 +101,21 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   `0.0000324086`, and on `1e-07` versus `1e-7`. `make test` enforces it.
 - Lesions must sit on the atlas grid (MNI152 1 mm, 182x218x182, sform). The app refuses
   anything else and points at SYNcro, which normalizes to exactly that template.
+- The display TRX and the query TVX are different files on purpose: numbers come from the
+  full-resolution atlas, geometry from a 20 % decimation. `apps/disconnectome` says so in
+  About; keep that distinction if either file changes.
+- NiiVue rc.13 is required, not the patched rc.11 most apps pin: `setTractOptions`'s
+  `groupColors` (colour and visibility per TRX group, in one call) and `dps` arrived in rc.13.
+  The 3D clip plane is load-bearing, not decoration: without it the opaque volume render hides
+  every bundle inside the brain.
+- The Standalone bar action belongs to the shell and renders `registry/standalone.json`; an app
+  cannot replace it with its own dialog. Every registered app needs an entry there or the
+  catalog check fails.
+- Examples are declared once, in `apps/disconnectome/examples.json`, which the shared
+  `nd-example-selector` downloads and checksums. Re-pinning the dataset changes every URL, so
+  after `repoint_manifest.sh` run `apps/disconnectome/scripts/sync-examples.mjs` and then
+  `scripts/lock-example-assets.mjs`, dropping the old revision's entries from the offline
+  inventory first.
 
 ## Native executables (exes/)
 
