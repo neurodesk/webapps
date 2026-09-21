@@ -96,10 +96,11 @@ test('the WebAssembly module reproduces the native TSV on the real atlas', async
   const atlas = await openAtlas(readFileSync(atlasPath));
   assert.equal(atlas.tracts.length, 87);
   const rows = [];
-  for (const subject of ['wM2017', 'wM2018', 'wM2208']) {
+  // wM2017 was drawn on a T1, the other two on a T2.
+  for (const lesion of ['wM2017_T1w', 'wM2018_T2w', 'wM2208_T2w']) {
     rows.push({
-      id: `${subject}_T2w_lesion`,
-      fractions: await atlas.query(readFileSync(join(reference, `examples2/${subject}_T2w_lesion.nii.gz`))),
+      id: `${lesion}_lesion`,
+      fractions: await atlas.query(readFileSync(join(reference, `examples2/${lesion}_lesion.nii.gz`))),
     });
   }
   atlas.close();

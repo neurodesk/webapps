@@ -25,12 +25,12 @@
   ],
   "examples": [
     {
-      "filename": "examples/wM2017_T2w.nii.gz",
+      "filename": "examples/wM2017_T1w.nii.gz",
       "bytes": 2483322,
       "sha256": "aa8be671c4e662ec4d4a913e1f2d4080a488a1a3c7734a02b980e23effcbdd21"
     },
     {
-      "filename": "examples/wM2017_T2w_lesion.nii.gz",
+      "filename": "examples/wM2017_T1w_lesion.nii.gz",
       "bytes": 29321,
       "sha256": "6cec7fd16d20bde36d219f02be88bdaf7fe2538c7069f6db51f0210a070b1b6f"
     },
@@ -71,6 +71,6 @@
     "pubmed": "https://pubmed.ncbi.nlm.nih.gov/35995773/"
   },
   "repository": "neurodeskorg/webapps",
-  "revision": "0b932d096011a6826f80627e434a36c4334bc1db",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0b932d096011a6826f80627e434a36c4334bc1db/disconnectome/"
+  "revision": "fe6cb871ff77ab504ad9b81c5bb4ad867c8ba557",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fe6cb871ff77ab504ad9b81c5bb4ad867c8ba557/disconnectome/"
 }
