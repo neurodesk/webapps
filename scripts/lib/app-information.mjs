@@ -21,13 +21,14 @@ export async function loadAppInformation(registry, path = appInformationPath) {
   const data = parse(await readFile(path, 'utf8'));
   const errors = [];
   const shared = data?.shared ?? {};
-  for (const key of ['builder', 'ecosystem', 'ecosystem_name', 'ecosystem_url']) {
+  for (const key of ['builder', 'execution', 'ecosystem', 'ecosystem_name', 'ecosystem_url']) {
     if (!text(shared[key])) errors.push(`shared.${key} must be a non-empty string`);
   }
   if (!/lightNIIng/.test(shared.ecosystem ?? '') || !/lightniing\.org/.test(shared.ecosystem ?? '')) errors.push('shared.ecosystem must name the lightNIIng ecosystem and its domain lightniing.org');
   if (shared.ecosystem_url !== 'https://lightniing.org') errors.push('shared.ecosystem_url must be https://lightniing.org');
   if (!/clinical translation/.test(shared.ecosystem ?? '')) errors.push('shared.ecosystem must state the clinical-translation aim');
   if (!/Neurodesk/.test(shared.builder ?? '')) errors.push('shared.builder must name Neurodesk');
+  if (!/browser/.test(shared.execution ?? '')) errors.push('shared.execution must state that apps run in the browser by default');
   validateCitation(shared.platform_citation, 'shared.platform_citation', errors);
   if (shared.platform_citation?.doi !== '10.1038/s41592-023-02145-x') errors.push('shared.platform_citation must be the Neurodesk Nature Methods paper');
 
@@ -39,6 +40,9 @@ export async function loadAppInformation(registry, path = appInformationPath) {
     const info = apps[id];
     if (!info) { errors.push(`missing app-information entry for ${id}`); continue; }
     if (info.builders !== undefined && !text(info.builders)) errors.push(`${id}.builders must be a non-empty string when present`);
+    if (info.execution !== undefined && !(text(info.execution) && /browser|server|computer|machine/i.test(info.execution))) {
+      errors.push(`${id}.execution must be a sentence saying where processing happens when present`);
+    }
     if (info.about !== undefined && (!Array.isArray(info.about) || !info.about.length || !info.about.every(text))) {
       errors.push(`${id}.about must be a non-empty list of paragraphs when present`);
     }
@@ -91,6 +95,7 @@ export function appInformationPayload(information, appId) {
   return {
     shared: information.shared,
     builders: info.builders ?? null,
+    execution: info.execution ?? null,
     about: info.about ?? [],
     packages: info.packages,
     citations: info.citations,

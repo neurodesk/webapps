@@ -1,0 +1,46 @@
+[
+  {
+    "id": "svrtk-simulated-fetal",
+    "label": "Simulated fetal brain stacks (SVRTK)",
+    "description": "Six simulated, motion-corrupted stacks of one fetal brain from the SVRTK regression tests (Apache-2.0), with the brain mask SVRTK uses for its template stack. Thicknesses are prefilled from the slice spacing.",
+    "expectedResult": "Connect to a compute server and choose Reconstruct volume: the Fetal brain protocol masks each stack, corrects the bias field, aligns the slices with SVoRT and reconstructs one isotropic 0.8 mm volume for review and download.",
+    "protocol": "fetal-brain",
+    "files": [
+      {
+        "role": "stack",
+        "name": "stack-d0.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d0.nii.gz"
+      },
+      {
+        "role": "stack",
+        "name": "stack-d1.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d1.nii.gz"
+      },
+      {
+        "role": "stack",
+        "name": "stack-d2.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2.nii.gz"
+      },
+      {
+        "role": "stack",
+        "name": "stack-d3.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d3.nii.gz"
+      },
+      {
+        "role": "stack",
+        "name": "stack-d4.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d4.nii.gz"
+      },
+      {
+        "role": "stack",
+        "name": "stack-d5.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d5.nii.gz"
+      },
+      {
+        "role": "mask",
+        "name": "stack-d2_mask.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2_mask.nii.gz"
+      }
+    ]
+  }
+]

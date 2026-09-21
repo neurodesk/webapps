@@ -1,0 +1,47 @@
+[package]
+name = "compute-server"
+version = "0.1.20260921"
+edition = "2021"
+license = "MIT"
+description = "neurodesk-compute: token-protected HTTP + SSE server that runs the Neurodesk nesvor container for the browser webapp"
+default-run = "neurodesk-compute"
+
+[lib]
+name = "compute_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "neurodesk-compute"
+path = "src/main.rs"
+
+[dependencies]
+async-stream = "0.3"
+axum = { version = "0.8", features = ["multipart"] }
+axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4", features = ["derive", "env"] }
+dirs = "6"
+flate2 = "1"
+futures-util = "0.3"
+humantime = "2"
+if-addrs = "0.15"
+rand = "0.9"
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "pem", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+tokio-util = { version = "0.7", features = ["io"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["cors", "fs", "set-header", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "stream"] }
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1

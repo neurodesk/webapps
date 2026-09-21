@@ -2595,6 +2595,55 @@
       "contentType": "application/gzip",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d0.nii.gz": {
+      "sha256": "ca5ad2c6926d5fa7d4379be406ea7c59bf506c6276759e1bc81b0d2356f86255",
+      "bytes": 1232590,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2.nii.gz": {
+      "sha256": "ea2057269f3e80da190076f5e0923d1fde445bfd136c9f63c11344ea96d4b9a6",
+      "bytes": 1219056,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d3.nii.gz": {
+      "sha256": "09d19f5e1917d39648f076a26590b8cdba70270383aab19fa30a5fb72b21c73b",
+      "bytes": 1314619,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d1.nii.gz": {
+      "sha256": "5ef391936f5fa0b817e09cdb349dbbb931bf30cedc29a1025e20f82befad902f",
+      "bytes": 1206612,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2_mask.nii.gz": {
+      "sha256": "268b6f357b9dab05410c35ba7bd8c6fc341ec560d62cd9764476235bf521576d",
+      "bytes": 8381,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d4.nii.gz": {
+      "sha256": "177b081af57e3b1efb559baa461f57f0b4a132e2c1df4afeb1c813ed4ed4b7c6",
+      "bytes": 1283692,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d5.nii.gz": {
+      "sha256": "d3675b1ceedebc7ae85023e105ccf4af1497532260018ce521d73b3dd9de4c98",
+      "bytes": 1274175,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3101,6 +3150,15 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/e0a056b3d6b2b075bab5b780281af17fc9d6421d/syncro/synthstrip-browser.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+    ],
+    "nesvor": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d0.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d1.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d3.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d4.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d5.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d2_mask.nii.gz"
     ]
   }
 }

@@ -1,0 +1,104 @@
+name: compute-server-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/compute-server-native.yml'
+      - 'exes/compute-server/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compute-server-native.yml'
+      - 'exes/compute-server/**'
+
+concurrency:
+  group: compute-server-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x64
+          - os: windows-latest
+            platform: windows-x64
+          - os: macos-latest
+            platform: macos-arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy, rustfmt
+      - name: Test
+        working-directory: exes/compute-server
+        run: cargo test --release
+      - name: Lint
+        working-directory: exes/compute-server
+        run: |
+          cargo clippy --release --all-targets -- -D warnings
+          cargo fmt --check
+      - name: Build
+        working-directory: exes/compute-server
+        run: cargo build --release
+      - name: Stage archive contents
+        id: stage
+        working-directory: exes/compute-server
+        shell: bash
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+          name="neurodesk-compute-$version-${{ matrix.platform }}"
+          mkdir -p "dist/$name"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp target/release/neurodesk-compute.exe "dist/$name/"
+          else
+            cp target/release/neurodesk-compute "dist/$name/"
+          fi
+          cp README.md LICENSE THIRD_PARTY_NOTICES.md "dist/$name/"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Package (tar.gz)
+        if: runner.os != 'Windows'
+        working-directory: exes/compute-server/dist
+        shell: bash
+        env:
+          NAME: ${{ steps.stage.outputs.name }}
+        run: |
+          tar -czf "$NAME.tar.gz" "$NAME"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
+          else
+            shasum -a 256 "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
+          fi
+          rm -rf "$NAME"
+          cat "$NAME.tar.gz.sha256"
+      - name: Package (zip)
+        if: runner.os == 'Windows'
+        working-directory: exes/compute-server/dist
+        shell: pwsh
+        env:
+          NAME: ${{ steps.stage.outputs.name }}
+        run: |
+          Compress-Archive -Path "$env:NAME" -DestinationPath "$env:NAME.zip"
+          $hash = (Get-FileHash "$env:NAME.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $env:NAME.zip" | Out-File -Encoding ascii "$env:NAME.zip.sha256"
+          Remove-Item -Recurse -Force "$env:NAME"
+          Get-Content "$env:NAME.zip.sha256"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: neurodesk-compute-${{ matrix.platform }}-archive
+          path: |
+            exes/compute-server/dist/neurodesk-compute-*-${{ matrix.platform }}.tar.gz
+            exes/compute-server/dist/neurodesk-compute-*-${{ matrix.platform }}.tar.gz.sha256
+            exes/compute-server/dist/neurodesk-compute-*-${{ matrix.platform }}.zip
+            exes/compute-server/dist/neurodesk-compute-*-${{ matrix.platform }}.zip.sha256
+          if-no-files-found: error

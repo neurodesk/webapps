@@ -167,6 +167,20 @@
       "url": "https://hub.docker.com/r/vnmd/topofit_0.5.1",
       "dockerImage": "vnmd/topofit_0.5.1:candidate-1c960cec82947541d270e06099ab415933c9ea07",
       "dockerLabel": "Docker Hub \u00b7 candidate build"
+    },
+    "nesvor": {
+      "id": "nesvor",
+      "label": "nesvor 0.5.0 (20260722)",
+      "version": "0.5.0",
+      "buildDate": "20260722",
+      "image": "vnmd/nesvor_0.5.0@sha256:4a9b346297bd5c10af4047745b6fa82f2912e06c8fecaab615f2adcb32599f64",
+      "digest": "sha256:4a9b346297bd5c10af4047745b6fa82f2912e06c8fecaab615f2adcb32599f64",
+      "url": "https://hub.docker.com/r/vnmd/nesvor_0.5.0",
+      "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/main/recipes/nesvor/build.yaml",
+      "dockerImage": "vnmd/nesvor_0.5.0:20260722",
+      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/nesvor_0.5.0_20260722.simg",
+      "apptainerName": "nesvor_0.5.0_20260722",
+      "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
     }
   },
   "unresolved": []

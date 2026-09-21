@@ -58,6 +58,14 @@
     "./elements/example-selector": {
       "types": "./src/elements/example-selector.d.ts",
       "default": "./src/elements/example-selector.js"
+    },
+    "./compute": {
+      "types": "./src/compute/index.d.ts",
+      "default": "./src/compute/index.js"
+    },
+    "./elements/compute-connection": {
+      "types": "./src/elements/compute-connection.d.ts",
+      "default": "./src/elements/compute-connection.js"
     }
   },
   "scripts": {

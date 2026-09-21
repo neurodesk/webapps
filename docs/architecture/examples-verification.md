@@ -34,6 +34,7 @@ inventories record all declared files and checksums. Large files stay outside Gi
 | Deface | Full-head MRI with facial anatomy. |
 | BrowserQC | Anatomical MRI plus matching BIDS metadata. |
 | NiiMath | Anatomical T1/T2 inputs for image arithmetic. |
+| NeSVoR | Six simulated, motion-corrupted fetal brain stacks with one brain mask from the SVRTK regression tests (Apache-2.0). Reconstruction needs a connected compute server; the browser test uses the Node reference server's simulated tool. |
 
 SeedSeg has no example: its synthetic phantom was withdrawn because a real seed42 run produced no detections on it, so it could not demonstrate marker detection.
 

@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { verifyWorkflow } from './workflows.mjs';
+import { prepareWorkflow, verifyWorkflow } from './workflows.mjs';
 import { verifyBundle } from '../../packages/desktop/src/bundle.js';
 
 const root = resolve(import.meta.dirname, '../..');
@@ -25,11 +25,13 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
   const missing = [];
   let desktop;
   let progress;
+  let prepared = null;
   try {
+    prepared = process.env.NEURODESK_WORKFLOWS ? await prepareWorkflow(app.id) : null;
     desktop = await electron.launch({
       executablePath,
       args: [...(process.env.NEURODESK_CONTAINER === '1' ? ['--no-sandbox'] : []), ...(process.env.NEURODESK_EXECUTABLE ? [] : [join(root, 'packages/desktop')])],
-      env: { ...environment, NEURODESK_BUNDLE: resources, NEURODESK_APP: app.id, NEURODESK_USER_DATA: userData, NEURODESK_DOWNLOADS: join(report, app.id, 'downloads') },
+      env: { ...environment, ...(prepared?.env ?? {}), NEURODESK_BUNDLE: resources, NEURODESK_APP: app.id, NEURODESK_USER_DATA: userData, NEURODESK_DOWNLOADS: join(report, app.id, 'downloads') },
       timeout: 60000,
     });
     const page = await desktop.firstWindow();
@@ -66,7 +68,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     await page.locator('#neurodeskStandaloneDialog').waitFor({ state: 'visible' });
     await page.screenshot({ path: join(report, `${app.id}.png`) });
     await page.locator('#neurodeskStandaloneDialog').getByRole('button', { name: 'Close', exact: true }).click();
-    const workflow = process.env.NEURODESK_WORKFLOWS ? await verifyWorkflow(app.id, page, { root, resources, desktop }) : null;
+    const workflow = process.env.NEURODESK_WORKFLOWS ? await verifyWorkflow(app.id, page, { root, resources, desktop, ...(prepared?.context ?? {}) }) : null;
     const blocked = await desktop.evaluate(() => globalThis.neurodeskOffline.blockedRequests);
     // An installed pack serves each model asset in place, so an asset hash in
     // this profile's cache was fetched over the network instead. Slices derived
@@ -84,6 +86,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
       try { await (await desktop.firstWindow()).screenshot({ path: join(report, `${app.id}-failure.png`) }); } catch {}
     }
     await desktop?.close();
+    await prepared?.close?.();
   }
   console.log(JSON.stringify(results.at(-1)));
 }

@@ -8,10 +8,22 @@ import { verifyNiftiOffset } from './check-nifti.mjs';
 import { dicomSeries } from '../../test-utils/dicom-fixture.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
+import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction'];
+export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction'];
 
-export async function verifyWorkflow(id, page, { root, resources, desktop }) {
+/**
+ * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
+ * remote server, so its workflow runs the protocol's reference server on
+ * loopback and admits that origin through NEURODESK_COMPUTE_ORIGINS.
+ */
+export async function prepareWorkflow(id) {
+  if (id !== 'nesvor') return null;
+  const compute = await startReferenceServer({ stageDelayMs: 50 });
+  return { env: { NEURODESK_COMPUTE_ORIGINS: compute.origin }, context: { compute }, close: () => compute.close() };
+}
+
+export async function verifyWorkflow(id, page, { root, resources, desktop, compute }) {
   const fixture = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
   const download = async selector => {
     const count = await desktop.evaluate(() => globalThis.neurodeskOffline.downloads.length);
@@ -43,6 +55,25 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await expect(selector).toBeEnabled({ timeout: 120000 });
     await selector.selectOption(examples[0].id);
     await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+  }
+  if (id === 'nesvor') {
+    assert.ok(compute, 'the nesvor workflow needs the reference compute server from prepareWorkflow');
+    const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
+    const selector = page.getByRole('combobox', { name: 'Example', exact: true });
+    await expect(selector).toBeEnabled({ timeout: 120000 });
+    await selector.selectOption(examples[0].id);
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120000 });
+    const panel = page.locator('#computeConnection');
+    await panel.locator('input[type="text"]').fill(compute.origin);
+    await panel.locator('input[type="password"]').fill(compute.token);
+    await panel.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(panel).toHaveAttribute('data-state', 'simulated', { timeout: 30000 });
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
+    await page.locator('#runButton').click();
+    const button = '#resultList button:has-text("Download") >> nth=0';
+    await expect(page.locator(button)).toBeEnabled({ timeout: 300000 });
+    const result = nifti(await download(button));
+    return { ...result, simulated: true };
   }
   if (id === 'musclemap') return verifyMuscleMapFullPipeline(page, page.url());
   if (id === 'brain-extraction') {

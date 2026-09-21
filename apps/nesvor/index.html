@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NeSVoR — NeuroDesk</title>
+  </head>
+  <body>
+    <!--
+      Built from the shared workspace vocabulary in
+      @neurodesk/webapp-components/styles/imaging-workspace.css. Only the words,
+      the stack table and the reconstruction settings are app-owned.
+      See docs/architecture/design-system.md and docs/architecture/nesvor-remote-compute.md.
+    -->
+    <header id="controls">
+      <!-- 1. Input: the example first, then one picker for every stack. -->
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input stacks</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI stacks" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI stacks (two or more orthogonal acquisitions)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div id="stackRows" aria-label="Loaded stacks"></div>
+          <p class="nd-hint" id="stackHint" hidden>Thickness is prefilled from each stack's slice spacing. Edit it when the acquisition used a gap or overlap.</p>
+          <details class="nd-sidebar-section" id="maskSection">
+            <summary class="nd-section-title">Masks (optional)</summary>
+            <div class="nd-section-content">
+              <label class="nd-file" id="maskDropZone">
+                <input id="maskInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose NIfTI masks" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Drop one brain mask per stack</span>
+              </label>
+              <p class="nd-hint">NeSVoR uses masks only when every stack has one. The Fetal brain protocol creates masks itself.</p>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <!-- 2. Where the computation runs. -->
+      <details class="nd-sidebar-section" id="computeSection" open>
+        <summary class="nd-section-title">Compute server <span class="nd-step-badge" id="computeBadge" hidden></span></summary>
+        <div class="nd-section-content">
+          <div id="computeControl"></div>
+          <p class="nd-hint">NeSVoR needs an NVIDIA GPU, so it runs on a computer in your network that you or your IT department set up with the free neurodesk-compute server.</p>
+          <button id="standaloneLink" class="nd-btn nd-btn-sm" type="button">Get the compute server</button>
+        </div>
+      </details>
+
+      <!-- 3. The task: protocol, visible settings, advanced settings collapsed, one primary action. -->
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Reconstruction</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="protocol">Protocol</label>
+            <select id="protocol"></select>
+            <p class="nd-hint" id="protocolHint"></p>
+          </div>
+          <div class="nd-field">
+            <label for="outputResolution">Output resolution <small>mm, isotropic</small></label>
+            <input id="outputResolution" type="number" min="0.3" max="3" step="0.1" value="0.8" />
+          </div>
+          <div class="nd-field">
+            <label for="registration">Motion correction</label>
+            <select id="registration">
+              <option value="svort">SVoRT, then stack registration if better (fetal brain)</option>
+              <option value="svort-only">SVoRT only (fetal brain)</option>
+              <option value="svort-stack">SVoRT stack transforms only (fetal brain)</option>
+              <option value="stack">Stack-to-stack rigid registration</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="segmentation" type="checkbox" /> Fetal brain masking (MONAIfbs)</label>
+              <label class="nd-check"><input id="biasFieldCorrection" type="checkbox" /> N4 bias field correction</label>
+              <label class="nd-check"><input id="otsuThresholding" type="checkbox" /> Otsu background removal</label>
+              <label class="nd-check"><input id="stacksIntersection" type="checkbox" /> Restrict to the intersection of all stacks</label>
+              <label class="nd-check"><input id="deformable" type="checkbox" /> Deformable motion (experimental)</label>
+              <label class="nd-check"><input id="singlePrecision" type="checkbox" /> Single precision training</label>
+              <div class="nd-field">
+                <label for="iterations">Training iterations</label>
+                <input id="iterations" type="number" min="100" max="20000" step="100" value="6000" />
+                <p class="nd-hint">Fewer iterations finish faster with less detail. The upstream default is 6000.</p>
+              </div>
+              <div class="nd-field">
+                <label for="weightTransformation">Transformation regularisation weight</label>
+                <input id="weightTransformation" type="number" min="0" max="100" step="0.1" value="0.1" />
+              </div>
+              <div class="nd-field">
+                <label for="weightImage">Image regularisation weight</label>
+                <input id="weightImage" type="number" min="0" max="100" step="0.1" value="1" />
+              </div>
+              <div class="nd-field">
+                <label for="weightDeform">Deformation regularisation weight</label>
+                <input id="weightDeform" type="number" min="0" max="100" step="0.1" value="0.1" />
+              </div>
+              <div class="nd-field">
+                <label for="batchSize">Batch size</label>
+                <input id="batchSize" type="number" min="256" max="32768" step="256" value="4096" />
+              </div>
+              <div class="nd-field">
+                <label for="log2HashmapSize">Hash grid size <small>log2</small></label>
+                <input id="log2HashmapSize" type="number" min="15" max="24" step="1" value="19" />
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Reconstruct volume</button>
+        </div>
+      </details>
+
+      <!-- 4. Output: collapsed until results exist. -->
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Load stacks to begin.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-primary"></span><span id="location"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Reconstruction progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel" aria-label="Cancel" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>NeSVoR reconstructs one isotropic 3D volume from several stacks of motion-corrupted 2D MRI slices, as acquired in fetal and neonatal brain imaging. Slices are first aligned with SVoRT, a transformer trained for fetal brain slice-to-volume registration, or with stack-to-stack registration. The aligned slices then train an implicit neural representation of the volume, from which the output grid is sampled at the chosen resolution. Optional steps mask the fetal brain in each slice (MONAIfbs) and correct the bias field (N4).</p>
+      <p>This app prepares the stacks, thicknesses and settings in your browser and sends them to a compute server in your own network, where the pinned Neurodesk NeSVoR 0.5.0 container runs on an NVIDIA GPU. The reconstructed volume returns to this page for review and download. Without a compute server nothing is reconstructed.</p>
+      <p>SVoRT is trained on fetal brains only; use stack registration for neonatal or body data. Deformable reconstruction is experimental upstream.</p>
+    </template>
+    <template id="privacyContent">
+      <p>Your stacks and masks are uploaded only to the compute server whose address you enter in this app, inside your own network. NeSVoR runs there in a container without network access, and the server deletes each job's files after its retention period (one hour by default) or when you cancel. Nothing is sent to Neurodesk or any other third party, and the compute server records no analytics.</p>
+      <p>Only connect to a server that you or your IT department set up. The address and access token are remembered in this browser until you disconnect.</p>
+    </template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

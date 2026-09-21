@@ -88,6 +88,25 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   1.4.20260909 — once that ships, drop the direct `callMain` path and `writeMz3`/`readMz3` for the fluent
   API's own STL output.
 
+## nesvor and the compute server
+
+- `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the
+  app sends jobs to a `neurodesk-compute` server the user runs in their own network
+  ([ADR-0003](docs/adr/0003-remote-compute-nodes.md), [design](docs/architecture/nesvor-remote-compute.md),
+  [protocol](docs/architecture/remote-compute-protocol.md)). The connection panel is the shared
+  `nd-compute-connection` element and the client is `@neurodesk/webapp-components/compute`; do not
+  write app-local fetch code for the protocol.
+- `exes/compute-server` (Rust, binary `neurodesk-compute`) and `test-utils/compute-reference-server.mjs`
+  (Node, simulated tool, used by browser and desktop tests) implement protocol v1. Change the protocol
+  document first, then both implementations, then run `test/remote-compute-protocol.test.mjs` against
+  both (`COMPUTE_SERVER_URL`/`COMPUTE_SERVER_TOKEN` select a running server). `apps/nesvor/src/spec.js`
+  is shared by the app and the reference server; `exes/compute-server/src/tools/nesvor.rs` mirrors it.
+- The container digest is pinned in the design document, `registry/neurocontainers.json`, the Rust tool
+  definition and the reference server. Update all four together.
+- An app whose processing is not in the browser overrides `execution` in `registry/app-information.yml`
+  and states the data flow in its own Privacy template. The desktop suite reaches a compute server only
+  through `NEURODESK_COMPUTE_ORIGINS`.
+
 ## Native executables (exes/)
 
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`
@@ -105,6 +124,11 @@ relative URLs and must remain adjacent. The versioned Greedy web release carries
 that generated runtime; it is never committed or npm-published. Greedy's app
 manifest is the release version source; the release tooling keeps its package
 and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version.
+
+`exes/compute-server` is the `neurodesk-compute` server (`make build test lint fmt`,
+`make run-simulated`). It has no GPU or Docker dependency at build or test time; all
+tests use the simulated runner. `.github/workflows/compute-server-native.yml` builds
+and tests it on Linux, Windows and macOS and uploads archives.
 
 `exes/synthseg` is the SynthSeg 2.0 CLI (ORT CPU + native Metal), imported
 from a standalone repo. Its `README.md` "Numerics" and "Traps" sections are the

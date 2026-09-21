@@ -119,7 +119,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     const builders = information.builders ? `<p>${escapeHtml(information.builders)}</p>` : '';
     return `<section class="nd-app-info" data-neurodesk-app-info="about">`
       + `<h3>Under the hood</h3><ul>${packages}</ul>`
-      + `<h3>About this app</h3>${builders}<p>${escapeHtml(information.shared.builder)}</p>`
+      + `<h3>About this app</h3>${builders}<p>${escapeHtml(information.shared.builder)} ${escapeHtml(information.execution || information.shared.execution)}</p>`
       + `<p>${ecosystemHtml()}</p>`
       + `</section>`;
   }

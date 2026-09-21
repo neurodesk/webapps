@@ -5,7 +5,7 @@ import { join, resolve, basename, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { canonicalUrl, loadBundle, verifyBundle } from './bundle.js';
 import { readJob, runJob } from './jobs.js';
-import { mimeType, startOfflineServer } from './server.js';
+import { mimeType, parseComputeOrigins, startOfflineServer } from './server.js';
 import { createModelResolver } from './models.js';
 
 const root = process.env.NEURODESK_BUNDLE || (app.isPackaged ? join(process.resourcesPath, 'offline') : resolve('resources'));
@@ -55,12 +55,16 @@ try {
     await appendFile(join(app.getPath('userData'), 'offline-missing.jsonl'), `${JSON.stringify({ url })}\n`);
   };
   offlineSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  // Compute servers named by the user (docs/adr/0003-remote-compute-nodes.md) are the
+  // only origins outside the bundle that a webapp may talk to.
+  const computeOrigins = parseComputeOrigins(process.env.NEURODESK_COMPUTE_ORIGINS);
+  const computeRequest = url => computeOrigins.has(url.origin);
   offlineSession.webRequest.onBeforeRequest((details, callback) => {
     const url = new URL(details.url);
     const localRequest = url.origin === local.origin;
     const bundledRequest = Boolean(bundle.assets[canonicalUrl(details.url)]);
     const internalRequest = ['data:', 'blob:', 'devtools:'].includes(url.protocol);
-    if (!localRequest && !bundledRequest && !internalRequest) {
+    if (!localRequest && !bundledRequest && !internalRequest && !computeRequest(url)) {
       void blocked(details.url);
       callback({ cancel: true });
     } else callback({});
@@ -68,6 +72,7 @@ try {
   // Full installations serve packaged files. The smaller edition can fetch
   // only pinned model assets, which are verified and cached before use.
   offlineSession.protocol.handle('https', async request => {
+    if (computeRequest(new URL(request.url))) return net.fetch(request, { bypassCustomProtocolHandlers: true });
     const asset = bundle.assets[canonicalUrl(request.url)];
     if (!asset) {
       await blocked(request.url);

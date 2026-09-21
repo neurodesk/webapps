@@ -6,18 +6,23 @@
 #
 # Shared statements (rendered by the shell, never repeated per app):
 #   builder   "The web application is developed and hosted by the Neurodesk team …"
+#   execution "It runs entirely in your browser." — an app whose processing runs
+#             elsewhere overrides this with its own `execution` sentence
 #   ecosystem "This app is part of the lightNIIng ecosystem (lightniing.org), which aims
 #              to make neuroimaging tools widely available for clinical translation."
 #   platform  Renton et al. 2024, Nature Methods (Neurodesk) — closes every Cite list.
 #
 # Per app:
 #   builders   optional sentence naming additional authors of the web application
+#   execution  optional sentence replacing the shared execution statement; it must
+#              say where processing happens (browser, compute server, …)
 #   about      optional paragraphs shown when the app has no About dialog of its own
 #   packages   libraries and runtimes under the hood: name, url, role
 #   citations  one entry per implemented method: group, title, reference, doi|url, code?
 
 shared:
-  builder: The web application is developed and hosted by the Neurodesk team at the University of Queensland and collaborators, and runs entirely in your browser.
+  builder: The web application is developed and hosted by the Neurodesk team at the University of Queensland and collaborators.
+  execution: It runs entirely in your browser.
   ecosystem: This app is part of the lightNIIng ecosystem (lightniing.org), which aims to make neuroimaging tools widely available for clinical translation.
   ecosystem_name: lightNIIng
   ecosystem_url: https://lightniing.org
@@ -1067,3 +1072,40 @@ apps:
       title: NiiVue
       reference: 'NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software].'
       url: https://github.com/niivue/niivue
+
+  nesvor:
+    execution: The stacks you load are sent to the compute server you name inside your own network, where the Neurodesk NeSVoR container runs on a GPU; the reconstruction returns to your browser.
+    packages:
+      - { name: NeSVoR, url: https://github.com/daviddmc/NeSVoR, role: slice-to-volume reconstruction, run in the pinned Neurodesk container nesvor 0.5.0 on the compute server }
+      - { name: neurodesk-compute, url: https://github.com/neurodesk/webapps/tree/main/exes/compute-server, role: compute server that runs the container and streams progress to the browser }
+      - { name: PyTorch and tiny-cuda-nn, url: https://github.com/NVlabs/tiny-cuda-nn, role: hash-grid implicit neural representation training on the GPU }
+      - { name: SimpleITK, url: https://simpleitk.org, role: N4 bias field correction }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Reconstruction
+        title: NeSVoR
+        reference: "Xu J, Moyer D, Gagoski B, Iglesias JE, Grant PE, Golland P, Adalsteinsson E. NeSVoR: Implicit Neural Representation for Slice-to-Volume Reconstruction in MRI. IEEE Transactions on Medical Imaging. 2023;42(6):1707–1719."
+        doi: 10.1109/TMI.2023.3236216
+        code: https://github.com/daviddmc/NeSVoR
+      - group: Motion correction
+        title: SVoRT
+        reference: "Xu J, Moyer D, Grant PE, Golland P, Iglesias JE, Adalsteinsson E. SVoRT: Iterative Transformer for Slice-to-Volume Registration in Fetal Brain MRI. MICCAI 2022, LNCS 13436, pp. 3–13."
+        doi: 10.1007/978-3-031-16446-0_1
+      - group: Brain masking
+        title: MONAIfbs
+        reference: "Ranzini M, Fidon L, Ourselin S, Modat M, Vercauteren T. MONAIfbs: MONAI-based fetal brain MRI deep learning segmentation. arXiv:2103.13314, 2021."
+        url: https://arxiv.org/abs/2103.13314
+        code: https://github.com/gift-surg/MONAIfbs
+      - group: Bias field correction
+        title: N4ITK
+        reference: "Tustison NJ, Avants BB, Cook PA, Zheng Y, Egan A, Yushkevich PA, Gee JC. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
+        doi: 10.1109/TMI.2010.2046908
+      - group: Example data
+        title: SVRTK
+        reference: "Uus A, Zhang T, Jackson LH, Roberts TA, Rutherford MA, Hajnal JV, Deprez M. Deformable Slice-to-Volume Registration for Motion Correction of Fetal Body and Placenta MRI. IEEE Transactions on Medical Imaging. 2020;39(9):2750–2759. Simulated fetal brain stacks from the SVRTK test data, Apache-2.0."
+        doi: 10.1109/TMI.2020.2974844
+        code: https://github.com/SVRTK/SVRTK
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

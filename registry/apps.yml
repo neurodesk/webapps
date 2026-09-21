@@ -555,3 +555,23 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: nesvor
+    path: nesvor
+    title: NeSVoR
+    description: Reconstruct an isotropic 3D fetal or neonatal brain volume from motion-corrupted 2D MRI stacks on a GPU compute server in your network.
+    categories: [data-preparation]
+    keywords: [NeSVoR, SVoRT, fetal MRI, slice-to-volume reconstruction, motion correction, neonatal MRI]
+    legacy_domain: null
+    runtime: static-esm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
