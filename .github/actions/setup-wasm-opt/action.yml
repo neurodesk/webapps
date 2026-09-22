@@ -1,0 +1,36 @@
+name: Set up wasm-opt
+description: >-
+  Put binaryen's wasm-opt on PATH. wasm-pack prefers a PATH wasm-opt and only
+  falls back to fetching one from GitHub releases mid-build, where a transient
+  network failure aborts the whole build with no retry. Keep VERSION matched to
+  the release wasm-pack would fetch.
+
+runs:
+  using: composite
+  steps:
+    - id: cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.cache/binaryen
+        key: binaryen-version_117-${{ runner.os }}-${{ runner.arch }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        VERSION: version_117
+        SHA256: 3dc677006555b355ea2da5e82602065a161d5e83eaefd3f759afa00b96e83212
+      run: |
+        set -euo pipefail
+        tarball="$(mktemp -d)/binaryen.tar.gz"
+        curl --fail --silent --show-error --location \
+          --retry 5 --retry-delay 5 --retry-all-errors \
+          --output "$tarball" \
+          "https://github.com/WebAssembly/binaryen/releases/download/${VERSION}/binaryen-${VERSION}-x86_64-linux.tar.gz"
+        echo "${SHA256}  ${tarball}" | sha256sum --check --strict -
+        rm -rf ~/.cache/binaryen
+        mkdir -p ~/.cache/binaryen
+        tar -xzf "$tarball" -C ~/.cache/binaryen --strip-components=1
+    - shell: bash
+      run: |
+        set -euo pipefail
+        echo "$HOME/.cache/binaryen/bin" >> "$GITHUB_PATH"
+        "$HOME/.cache/binaryen/bin/wasm-opt" --version
