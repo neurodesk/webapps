@@ -102,8 +102,17 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - Lesions must sit on the atlas grid (MNI152 1 mm, 182x218x182, sform). The app refuses
   anything else and points at SYNcro, which normalizes to exactly that template.
 - The display TRX and the query TVX are different files on purpose: numbers come from the
-  full-resolution atlas, geometry from a 20 % decimation. `apps/disconnectome` says so in
+  full-resolution atlas, geometry from a decimated copy. `apps/disconnectome` says so in
   About; keep that distinction if either file changes.
+- Two atlases ship, ENIGMA Symmetric (65 bundles, the default) and HCP1065 (87). They are
+  different parcellations, so a result cannot be carried across a switch and the saved TSV
+  names the atlas. `models/disconnectome.manifest.json` holds the pairing under `atlases`.
+- Build an ENIGMA-style TVX from a 1 mm source, never a 2 mm one: `nii2tvx` rasterizes each
+  segment with Amanatides-Woo, so 2 mm chords cut corners into voxels the streamline never
+  enters. Measured, that doubled a small deep lesion's score and made the file larger.
+- `@neurodesk/nii2tvx` decodes tract names itself rather than calling `UTF8ToString`: past
+  16 bytes Emscripten switches to `TextDecoder`, which the browser refuses on the resizable
+  ArrayBuffer behind a growable WASM memory. HCP1065's short names never hit it; ENIGMA's do.
 - NiiVue rc.13 is required, not the patched rc.11 most apps pin: `setTractOptions`'s
   `groupColors` (colour and visibility per TRX group, in one call) and `dps` arrived in rc.13.
   The 3D clip plane is load-bearing, not decoration: without it the opaque volume render hides

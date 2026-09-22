@@ -2634,13 +2634,27 @@
     ],
     "disconnectome": [
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fe6cb871ff77ab504ad9b81c5bb4ad867c8ba557/disconnectome/atlas/hcp1065_avg_tracts.tvx.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fef23d1ff04d351d887333f52b4d708d07cb039d/disconnectome/atlas/enigma_symmetric.tvx.gz",
+        "sha256": "878fcd273077cbf84e9a4491f438d62c8ba4a6b11dbb88a65bb99706425127f5",
+        "bytes": 7902214,
+        "kind": "atlas-template",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fef23d1ff04d351d887333f52b4d708d07cb039d/disconnectome/tracts/enigma_display.trx",
+        "sha256": "60e5e5c20eccf099ccb75a5b18dd1e4ae6c4e10a4aa3f1b9282f799ecda1c2c2",
+        "bytes": 2447095,
+        "kind": "geometry-or-model-data",
+        "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fef23d1ff04d351d887333f52b4d708d07cb039d/disconnectome/atlas/hcp1065_avg_tracts.tvx.gz",
         "sha256": "8ab8de4423b2ee59e20ca5e7d73776f0a6f3de0569b64cc0597eb507526df458",
         "bytes": 21795029,
         "kind": "atlas-template"
       },
       {
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fe6cb871ff77ab504ad9b81c5bb4ad867c8ba557/disconnectome/tracts/hcp1065_display.trx",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fef23d1ff04d351d887333f52b4d708d07cb039d/disconnectome/tracts/hcp1065_display.trx",
         "sha256": "8d6baf379e008d5d6fd8a6429c1a0b59b42e78f2c845a998958f9b57cfed19a8",
         "bytes": 18878370,
         "kind": "geometry-or-model-data"

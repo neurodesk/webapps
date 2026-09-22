@@ -24,7 +24,11 @@
       <details class="nd-sidebar-section" id="runSection" open>
         <summary class="nd-section-title">Disconnection</summary>
         <div class="nd-section-content">
-          <p class="nd-hint">Each of the 87 HCP1065 bundles is scored by the fraction of its streamlines passing through the lesion.</p>
+          <div class="nd-field">
+            <label for="atlasSelect">Tractography atlas</label>
+            <select id="atlasSelect"></select>
+          </div>
+          <p class="nd-hint" id="atlasHint"></p>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Generate disconnectome</button>
         </div>
       </details>
@@ -62,7 +66,8 @@
       <progress id="progress" max="1" value="0" aria-label="Disconnection progress"></progress>
     </footer>
     <template id="aboutContent">
-      <p>A lesion interrupts more of the brain than it destroys: fibres passing through it lose their connection even where the tissue beyond is intact. This app scores that disconnection. It intersects a lesion map with the HCP1065 population-averaged tractography atlas and reports, for each of 87 white-matter bundles, the fraction of streamlines that pass through the lesion.</p>
+      <p>A lesion interrupts more of the brain than it destroys: fibres passing through it lose their connection even where the tissue beyond is intact. This app scores that disconnection. It intersects a lesion map with a population tractography atlas and reports, for each white-matter bundle, the fraction of streamlines that pass through the lesion.</p>
+      <p>Two atlases are offered. The <strong>ENIGMA Symmetric White Matter Tractography Atlas</strong> (65 bundles) is the default: it is built to be left–right symmetric, so a bundle and its contralateral twin are directly comparable. The <strong>HCP1065 population-averaged atlas</strong> (87 bundles) covers more bundles, including cranial nerves and brainstem pathways. They are different parcellations, not two measurements of one thing, so their bundle names and counts do not line up; report which one you used.</p>
       <p>The arithmetic runs locally in WebAssembly (<code>nii2tvx</code>), on the full-resolution atlas, so the numbers match the command-line tool exactly. The streamlines you see are a decimated sample of the same atlas, kept small enough to download; do not count fibres on screen and expect the reported fraction.</p>
       <p>The same analysis runs from a terminal: <code>exes/nii2tvx</code> in the Neurodesk webapps repository builds with <code>make</code>, and the dataset README shows the two commands. The browser and the command line produce the same table.</p>
       <p>Research use only. A population-averaged atlas is not this patient's anatomy, and disconnection scored this way is a prediction, not a measurement.</p>

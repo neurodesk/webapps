@@ -87,22 +87,30 @@ test('fractions format exactly as C printf("%g")', () => {
   assert.equal(formatG(1e-4), '0.0001');
 });
 
-// The real 87-tract atlas, which lives outside the repository.
-test('the WebAssembly module reproduces the native TSV on the real atlas', async (t) => {
-  const reference = process.env.NII2TVX_REFERENCE_DIR || join(process.env.HOME || '', 'src/nii2tvx');
-  const atlasPath = join(reference, 'hcp1065_avg_tracts.tvx');
-  if (!existsSync(atlasPath)) return t.skip(`no atlas at ${atlasPath}; set NII2TVX_REFERENCE_DIR`);
+// The real atlases, which live outside the repository.
+for (const { file, golden, tracts } of [
+  { file: 'hcp1065_avg_tracts.tvx', golden: 'test/expected-examples.tsv', tracts: 87 },
+  // ENIGMA's bundle names run past 16 bytes, which is where Emscripten's UTF8ToString switches
+  // to TextDecoder; the short HCP1065 names never exercise that path.
+  { file: 'enigma_symmetric.tvx', golden: 'test/expected-examples-enigma.tsv', tracts: 65 },
+]) {
+  test(`the WebAssembly module reproduces the native TSV on ${file}`, async (t) => {
+    const reference = process.env.NII2TVX_REFERENCE_DIR || join(process.env.HOME || '', 'src/nii2tvx');
+    const atlasPath = join(reference, file);
+    if (!existsSync(atlasPath)) return t.skip(`no atlas at ${atlasPath}; set NII2TVX_REFERENCE_DIR`);
 
-  const atlas = await openAtlas(readFileSync(atlasPath));
-  assert.equal(atlas.tracts.length, 87);
-  const rows = [];
-  // wM2017 was drawn on a T1, the other two on a T2.
-  for (const lesion of ['wM2017_T1w', 'wM2018_T2w', 'wM2208_T2w']) {
-    rows.push({
-      id: `${lesion}_lesion`,
-      fractions: await atlas.query(readFileSync(join(reference, `examples2/${lesion}_lesion.nii.gz`))),
-    });
-  }
-  atlas.close();
-  assert.equal(toTsv(atlas.tracts, rows), readFileSync(join(exe, 'test/expected-examples.tsv'), 'utf8'));
-});
+    const atlas = await openAtlas(readFileSync(atlasPath));
+    assert.equal(atlas.tracts.length, tracts);
+    assert.ok(atlas.tracts.every((name) => /^[\w-]+$/.test(name)), 'every tract name decoded');
+    const rows = [];
+    // wM2017 was drawn on a T1, the other three on a T2.
+    for (const lesion of ['wM2017_T1w', 'wM2018_T2w', 'wM2201_T2w', 'wM2208_T2w']) {
+      rows.push({
+        id: `${lesion}_lesion`,
+        fractions: await atlas.query(readFileSync(join(reference, `examples2/${lesion}_lesion.nii.gz`))),
+      });
+    }
+    atlas.close();
+    assert.equal(toTsv(atlas.tracts, rows), readFileSync(join(exe, golden), 'utf8'));
+  });
+}

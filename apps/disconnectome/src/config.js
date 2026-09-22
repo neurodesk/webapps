@@ -11,8 +11,19 @@ const asset = (filename) => {
   return Object.freeze({ ...entry, url: manifest.base_url + entry.filename });
 };
 
-export const ATLAS = asset('atlas/hcp1065_avg_tracts.tvx.gz');
-export const TRACTS = asset('tracts/hcp1065_display.trx');
+/** The selectable atlases, each pairing the TVX the numbers come from with the decimated TRX
+ *  drawn on screen. The first entry is the default. */
+export const ATLASES = Object.freeze(manifest.atlases.map((entry) => Object.freeze({
+  id: entry.id,
+  label: entry.label,
+  bundles: entry.bundles,
+  tvx: Object.freeze({ ...asset(entry.tvx), label: entry.label }),
+  trx: asset(entry.trx),
+  source: Object.freeze({ ...entry.source }),
+})));
+
+export const DEFAULT_ATLAS = ATLASES.find((atlas) => manifest.atlases.find((entry) =>
+  entry.id === atlas.id)?.default) ?? ATLASES[0];
 
 // Examples live in examples.json, the catalog's own contract; the shared
 // nd-example-selector downloads and checksums them.

@@ -4,7 +4,7 @@ import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-i
 import { bindFileDrop, createConsole, createExampleSelector, createInfoDialog, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { downloadBlob } from '@neurodesk/webapp-components/file-io';
 import { toTsv } from '@neurodesk/nii2tvx';
-import { APP, ATLAS, GRID, TRACTS, assignInputs, damagedBundles } from './config.js';
+import { APP, ATLASES, DEFAULT_ATLAS, GRID, assignInputs, damagedBundles } from './config.js';
 import examples from '../examples.json';
 import './styles.css';
 
@@ -63,8 +63,9 @@ let ready = false;
 let busy = false;
 let lesion = null;
 let anatomical = null;
-let result = null;    // { tracts, fractions, id }
-let tractsLoaded = false;
+let result = null;    // { tracts, fractions, id, atlas }
+let drawnAtlas = null; // which atlas's geometry the viewer currently holds
+let atlas = DEFAULT_ATLAS;
 let worker = null;
 let timer;
 
@@ -105,7 +106,7 @@ function refreshActions() {
 
 function setBusy(value) {
   busy = value;
-  for (const id of ['imageInput', 'threshold']) $(id).disabled = value;
+  for (const id of ['imageInput', 'threshold', 'atlasSelect']) $(id).disabled = value;
   exampleControl.setDisabled(value);
   refreshActions();
   if (!value) { clearInterval(timer); $('elapsed').textContent = ''; }
@@ -139,11 +140,11 @@ async function loadInputs(files, describe) {
   lesion = chosen.lesion;
   anatomical = chosen.anatomical;
   result = null;
-  tractsLoaded = false;
   $('outputSection').open = false;
   $('colorbar').hidden = true;
   $('damageSummary').hidden = true;
   await viewer.removeAllMeshes();
+  drawnAtlas = null;
   await showImages();
   $('lesionInfo').hidden = false;
   $('lesionInfo').textContent = `Lesion: ${lesion.name}`;
@@ -176,7 +177,7 @@ bindFileDrop($('dropZone'), (files) => void runTask('Reading images…', async (
 /** Colour every bundle at or above the slider, hide the rest. groupColors does both in one
  *  call, so the slider never reloads geometry. */
 async function paintTracts() {
-  if (!result || !tractsLoaded) return;
+  if (!result || drawnAtlas !== result.atlas) return;
   const threshold = Number($('threshold').value) / 100;
   const shown = damagedBundles(result.tracts, result.fractions, Math.max(threshold, Number.EPSILON));
   const colors = {};
@@ -196,22 +197,46 @@ async function paintTracts() {
     : 'No bundle reaches this threshold';
 }
 
+for (const entry of ATLASES) $('atlasSelect').add(new Option(entry.label, entry.id));
+$('atlasSelect').value = atlas.id;
+
+function describeAtlas() {
+  $('atlasHint').textContent = `Each of the ${atlas.bundles} bundles is scored by the fraction of its `
+    + `streamlines passing through the lesion. Changing atlas discards the current result: the two are `
+    + `different parcellations, so their bundles do not correspond.`;
+}
+
+$('atlasSelect').onchange = () => {
+  atlas = ATLASES.find((entry) => entry.id === $('atlasSelect').value) ?? DEFAULT_ATLAS;
+  describeAtlas();
+  result = null;
+  $('colorbar').hidden = true;
+  $('damageSummary').hidden = true;
+  // The bundles on screen belong to the old parcellation, so clear them rather than leaving
+  // them coloured by a result that no longer applies.
+  void runTask(`${atlas.label} selected · generate the disconnectome when ready`, async () => {
+    await viewer.removeAllMeshes();
+    drawnAtlas = null;
+  });
+};
+
 $('threshold').oninput = () => {
   $('thresholdValue').textContent = $('threshold').value;
   void paintTracts();
 };
 
+/** One worker for the session: it holds each opened atlas, so switching back and forth does
+ *  not inflate and parse the same file again. */
 function runDisconnectome() {
+  worker ??= new Worker(new URL('./disconnect-worker.js', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
-    worker?.terminate();
-    worker = new Worker(new URL('./disconnect-worker.js', import.meta.url), { type: 'module' });
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') { $('progress').value = data.value; status(data.message); }
       if (data.type === 'error') reject(new Error(data.message));
       if (data.type === 'result') resolve(data);
     };
     worker.onerror = (event) => reject(new Error(event.message || 'The disconnection worker could not run.'));
-    lesion.arrayBuffer().then((bytes) => worker.postMessage({ atlas: ATLAS, lesion: bytes }, [bytes]), reject);
+    lesion.arrayBuffer().then((bytes) => worker.postMessage({ atlas: atlas.tvx, lesion: bytes }, [bytes]), reject);
   });
 }
 
@@ -229,11 +254,13 @@ $('runButton').onclick = () => void runTask('Starting…', async () => {
       : error.message;
     throw new Error(message);
   }
-  result = { ...data, id: lesion.name.replace(/\.nii(\.gz)?$/i, '') };
+  result = { ...data, id: lesion.name.replace(/\.nii(\.gz)?$/i, ''), atlas: atlas.id };
 
-  status('Loading the tract geometry…');
-  await viewer.loadMeshes([{ url: TRACTS.url, name: 'hcp1065_display.trx' }]);
-  tractsLoaded = true;
+  if (drawnAtlas !== atlas.id) {
+    status('Loading the tract geometry…');
+    await viewer.loadMeshes([{ url: atlas.trx.url, name: atlas.trx.filename.split('/').pop() }]);
+    drawnAtlas = atlas.id;
+  }
   // Load-bearing, not cosmetic: the 3D volume render is opaque, so without a clip plane every
   // bundle inside the brain is invisible. Verified by removing it and watching them disappear.
   viewer.setClipPlanes([[0.1, 180, 20]]);
@@ -250,11 +277,13 @@ $('runButton').onclick = () => void runTask('Starting…', async () => {
 $('saveButton').onclick = () => {
   if (!result) return;
   const tsv = toTsv(result.tracts, [{ id: result.id, fractions: result.fractions }]);
-  downloadBlob(new Blob([tsv], { type: 'text/tab-separated-values' }), `${result.id}_disconnectome.tsv`);
+  // The atlas is in the name: the two produce different tables for the same lesion.
+  downloadBlob(new Blob([tsv], { type: 'text/tab-separated-values' }), `${result.id}_${result.atlas}_disconnectome.tsv`);
 };
 
 async function init() {
   paintColorbar();
+  describeAtlas();
   try {
     await attachViewer();
     await showImages();

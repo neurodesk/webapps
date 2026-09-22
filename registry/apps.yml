@@ -435,7 +435,7 @@ apps:
     title: Disconnectome
     description: Score which white-matter bundles a lesion disconnects, in the browser.
     categories: [segmentation-analysis]
-    keywords: [lesion, disconnection, tractography, white matter, HCP1065, stroke]
+    keywords: [lesion, disconnection, tractography, white matter, ENIGMA, HCP1065, stroke]
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: models/disconnectome.manifest.json

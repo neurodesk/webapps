@@ -1,9 +1,25 @@
 # Disconnectome (web)
 
-Score which white-matter bundles a lesion disconnects. The app intersects a lesion map with the
-87-bundle HCP1065 population-averaged tractography atlas and reports, per bundle, the fraction
-of streamlines passing through the lesion. Everything runs in the browser: the arithmetic is
-`exes/nii2tvx` compiled to WebAssembly, through `@neurodesk/nii2tvx`.
+Score which white-matter bundles a lesion disconnects. The app intersects a lesion map with a
+population tractography atlas and reports, per bundle, the fraction of streamlines passing
+through the lesion. Everything runs in the browser: the arithmetic is `exes/nii2tvx` compiled
+to WebAssembly, through `@neurodesk/nii2tvx`.
+
+## Two atlases
+
+| | bundles | TVX (gzipped) | display TRX |
+| --- | --- | --- | --- |
+| ENIGMA Symmetric, the default | 65 | 7.9 MB | 2.4 MB |
+| HCP1065 population-averaged | 87 | 21.8 MB | 18.9 MB |
+
+They are different parcellations, not two measurements of one thing: the bundle names do not
+correspond and neither do the counts, so switching atlas discards the current result rather
+than recolouring it. The saved TSV carries the atlas in its filename for the same reason.
+
+Both are built on the same MNI152 1 mm grid, so the lesion requirement below does not change
+with the choice. The ENIGMA TVX is built from that atlas's `MNI152_1mm/Full/trk`, not the 2 mm
+set: `nii2tvx` walks every voxel a segment crosses, so 2 mm chords cut corners and visit voxels
+the streamline never enters, which inflated a small deep lesion's score from 0.0034 to 0.0078.
 
 ## The workflow
 
@@ -12,8 +28,9 @@ of streamlines passing through the lesion. Everything runs in the browser: the a
    on; a name containing `lesion`, `mask` or `roi` settles it outright. With no anatomical
    scan, the MNI152 template SYNcro ships stands in as the backdrop.
 2. Look at the lesion in red at 70 % over the scan.
-3. **Generate disconnectome** downloads the atlas once (21.8 MB gzipped, cached afterwards) and
-   scores all 87 bundles in about 60 ms.
+3. **Generate disconnectome** downloads the chosen atlas once (cached afterwards, and each
+   atlas is kept open in the worker so switching back is free) and scores every bundle in
+   about 60 ms.
 4. The bundles appear coloured by viridis over their damage. The slider hides bundles below a
    threshold and re-spreads the ramp from the threshold to 100 %, so raising it uses the whole
    colormap on what remains. A clip plane opens the volume: without it the opaque 3D render

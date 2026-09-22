@@ -34,6 +34,20 @@ export function formatG(x) {
   return strip(x.toFixed(Math.max(0, 5 - exponent)));
 }
 
+/** Read a NUL-terminated C string as UTF-8.
+ *
+ *  Not `Module.UTF8ToString`: for names longer than 16 bytes that hands a view of the WASM
+ *  heap to `TextDecoder`, and a growable `WebAssembly.Memory` backs a resizable ArrayBuffer,
+ *  which `TextDecoder.decode` rejects in the browser. Copying first is the whole fix. The
+ *  HCP1065 names are all shorter than the threshold, so only a long-named atlas hits it.
+ */
+function readName(module, pointer) {
+  const heap = module.HEAPU8;
+  let end = pointer;
+  while (heap[end]) end += 1;
+  return new TextDecoder().decode(heap.slice(pointer, end));
+}
+
 /** The CLI's table: a header of tract names, then one row per lesion. */
 export function toTsv(tracts, rows) {
   return [['id', ...tracts].join('\t'), ...rows.map(({ id, fractions }) => [id, ...Array.from(fractions, formatG)].join('\t'))]
@@ -57,7 +71,7 @@ export async function openAtlas(atlas) {
   if (!handle) throw reason('Not a valid TVX atlas.');
 
   const count = module._tvx_ntract(handle);
-  const tracts = Array.from({ length: count }, (_, k) => module.UTF8ToString(module._tvx_name(handle, k)));
+  const tracts = Array.from({ length: count }, (_, k) => readName(module, module._tvx_name(handle, k)));
   let closed = false;
 
   return {

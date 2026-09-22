@@ -1,17 +1,17 @@
 // DOM-independent unit tests (Node, no browser). Browser behaviour is covered in e2e/.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP, ATLAS, GRID, TRACTS, assignInputs, damagedBundles } from '../src/config.js';
+import { APP, ATLASES, DEFAULT_ATLAS, GRID, assignInputs, damagedBundles } from '../src/config.js';
 import examples from '../examples.json' with { type: 'json' };
 
 test('app id is lowercase kebab-case and the config is frozen', () => {
   assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
-  assert.ok(Object.isFrozen(APP) && Object.isFrozen(ATLAS) && Object.isFrozen(TRACTS));
+  assert.ok(Object.isFrozen(APP) && Object.isFrozen(ATLASES) && ATLASES.every(Object.isFrozen));
 });
 
 test('every asset URL is pinned to an immutable dataset revision', () => {
   const pinned = /\/resolve\/[0-9a-f]{40}\/disconnectome\//;
-  for (const asset of [ATLAS, TRACTS]) {
+  for (const asset of ATLASES.flatMap((atlas) => [atlas.tvx, atlas.trx])) {
     assert.match(asset.url, pinned, `${asset.filename} is not pinned`);
     assert.match(asset.sha256, /^[0-9a-f]{64}$/);
     assert.ok(asset.bytes > 0);
@@ -20,9 +20,26 @@ test('every asset URL is pinned to an immutable dataset revision', () => {
     assert.match(file.url, pinned, `${file.name} is not pinned`);
     assert.match(file.sha256, /^[0-9a-f]{64}$/);
   }
-  // The browser fetches the gzipped atlas; the 88 MB plain copy is not served.
-  assert.ok(ATLAS.filename.endsWith('.tvx.gz'));
+  // The browser inflates with DecompressionStream; the plain TVX copies are not served.
+  for (const atlas of ATLASES) {
+    assert.ok(atlas.tvx.filename.endsWith('.tvx.gz'));
+    assert.ok(atlas.trx.filename.endsWith('.trx'));
+  }
+  // Both atlases are built on the one grid a lesion has to be on.
   assert.deepEqual(GRID.dim, [182, 218, 182]);
+});
+
+test('both atlases are offered, ENIGMA by default, each with its own citation', () => {
+  assert.deepEqual(ATLASES.map((atlas) => atlas.id), ['enigma', 'hcp1065']);
+  assert.equal(DEFAULT_ATLAS.id, 'enigma');
+  assert.deepEqual(ATLASES.map((atlas) => atlas.bundles), [65, 87]);
+  for (const atlas of ATLASES) {
+    assert.ok(atlas.source.citation.length > 20, `${atlas.id} needs a citation`);
+    assert.ok(atlas.source.doi || atlas.source.tracts, `${atlas.id} needs a doi or a source URL`);
+  }
+  // The two are different parcellations, so no asset may be shared between them.
+  const files = ATLASES.flatMap((atlas) => [atlas.tvx.filename, atlas.trx.filename]);
+  assert.equal(new Set(files).size, files.length);
 });
 
 test('the three examples each pair a lesion with its own anatomical scan', () => {

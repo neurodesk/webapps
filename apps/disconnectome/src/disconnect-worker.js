@@ -1,11 +1,12 @@
-// Fetch the tract atlas once, then score a lesion against all 87 bundles. The atlas is 21.8 MB
-// gzipped and inflates to 88 MB, so it is cached and kept open for the life of the worker; the
-// queries themselves take about 60 ms, which is why the worker exists for the download rather
-// than for the arithmetic.
+// Fetch a tract atlas once, then score a lesion against every bundle in it. The atlases are
+// 7.9 MB (ENIGMA) and 21.8 MB (HCP1065) gzipped and inflate to many times that, so each is
+// cached and kept open for the life of the worker; the queries themselves take about 60 ms,
+// which is why the worker exists for the download rather than for the arithmetic.
 import { openAtlas } from '@neurodesk/nii2tvx';
 
 const CACHE = 'neurodesk-disconnectome-v1';
-let atlasPromise;
+// Keyed by URL, so switching atlas and switching back does not download twice.
+const opened = new Map();
 
 async function fetchAtlas({ url, bytes, sha256 }, report) {
   let cache;
@@ -41,17 +42,18 @@ async function fetchAtlas({ url, bytes, sha256 }, report) {
 self.onmessage = async ({ data: job }) => {
   const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
   try {
-    if (!atlasPromise) {
-      atlasPromise = (async () => {
-        progress(0.05, 'Downloading the tract atlas…');
+    const key = job.atlas.url;
+    if (!opened.has(key)) {
+      opened.set(key, (async () => {
+        progress(0.05, `Downloading the ${job.atlas.label} atlas…`);
         const bytes = await fetchAtlas(job.atlas, (fraction) => progress(0.05 + 0.65 * fraction,
-          `Downloading the tract atlas · ${(fraction * 100).toFixed(0)}%`));
+          `Downloading the ${job.atlas.label} atlas · ${(fraction * 100).toFixed(0)}%`));
         progress(0.75, 'Opening the tract atlas…');
         return openAtlas(bytes);
-      })().catch((error) => { atlasPromise = null; throw error; });
+      })().catch((error) => { opened.delete(key); throw error; }));
     }
-    const atlas = await atlasPromise;
-    progress(0.9, 'Scoring 87 bundles…');
+    const atlas = await opened.get(key);
+    progress(0.9, `Scoring ${atlas.tracts.length} bundles…`);
     const fractions = await atlas.query(new Uint8Array(job.lesion));
     self.postMessage({ type: 'result', tracts: atlas.tracts, fractions }, [fractions.buffer]);
   } catch (error) {
