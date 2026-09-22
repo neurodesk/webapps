@@ -313,6 +313,9 @@ $('saveButton').onclick = () => {
 };
 
 async function init() {
+  // The template now comes over the network: until it is drawn, an example load would race it
+  // for the viewer and have its status overwritten.
+  setBusy(true);
   paintColorbar();
   describeAtlas();
   try {
