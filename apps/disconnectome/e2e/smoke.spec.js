@@ -38,7 +38,7 @@ test('About explains the sample-versus-measurement distinction and points at the
 
 test('run is gated on a lesion, and the colorbar waits for a result', async ({ page }) => {
   await page.goto('./');
-  await expect(page.locator('#statusText')).toContainText('Ready', { timeout: 60_000 });
+  await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60_000 });
   await expect(page.locator('#runButton')).toBeDisabled();
   await expect(page.locator('#colorbar')).toBeHidden();
   await expect(page.locator('#saveButton')).toBeDisabled();
@@ -48,7 +48,7 @@ test('run is gated on a lesion, and the colorbar waits for a result', async ({ p
 
 test('a lesion off the atlas grid is refused with advice, not answered', async ({ page }) => {
   await page.goto('./');
-  await expect(page.locator('#statusText')).toContainText('Ready', { timeout: 60_000 });
+  await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60_000 });
   // 20 mm cube: valid NIfTI, wrong grid.
   const wrong = readFileSync(fileURLToPath(new URL('../../../exes/nii2tvx/test/fixtures/lesion.nii.gz', import.meta.url)));
   await page.locator('#imageInput').setInputFiles({ name: 'wrong_grid.nii.gz', mimeType: 'application/gzip', buffer: wrong });
