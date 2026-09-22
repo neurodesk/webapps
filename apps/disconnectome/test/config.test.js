@@ -33,8 +33,8 @@ test('both atlases are offered, ENIGMA by default, each with its own citation', 
   assert.equal(new Set(files).size, files.length);
 });
 
-test('the three examples each pair a lesion with its own anatomical scan', () => {
-  assert.deepEqual(examples.map((example) => example.id), ['wm2017', 'wm2018', 'wm2208']);
+test('every example pairs a lesion with its own anatomical scan', () => {
+  assert.deepEqual(examples.map((example) => example.id), ['wm2017', 'wm2018', 'wm2201', 'wm2208']);
   for (const example of examples) {
     const [lesion, anatomical] = example.files;
     assert.equal(lesion.role, 'image');

@@ -15,12 +15,10 @@ const tracts = tsv[0].split('\t').slice(1);
 
 // Geometry measured from the lesion masks themselves; the CLI does not report it. The
 // modality differs per subject, and the file names on the dataset carry it.
-// wM2201 (T2w, 0.3 cc at MNI -8 -9 0) belongs here too, but only once its files are on the
-// dataset: this script is meant to be re-runnable after every re-pin, so it must not name a
-// file the manifest does not carry.
 const lesions = {
   wM2017: { modality: 'T1w', geometry: '163 cc, centred at MNI -45 -14 24' },
   wM2018: { modality: 'T2w', geometry: '45 cc, centred at MNI -41 -54 11' },
+  wM2201: { modality: 'T2w', geometry: '0.3 cc, centred at MNI -8 -9 0' },
   wM2208: { modality: 'T2w', geometry: '13 cc, centred at MNI -23 -9 7' },
 };
 

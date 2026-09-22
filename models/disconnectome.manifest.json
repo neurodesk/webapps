@@ -96,6 +96,16 @@
       "sha256": "160d5b208bc50b2709a194cc3af6e15566a239fcdd67f7a9a9d99138c55cc4b6"
     },
     {
+      "filename": "examples/wM2201_T2w.nii.gz",
+      "bytes": 2516604,
+      "sha256": "d834d31fc6aad8d31fbbcacf8591c89699537a36f6fc4a5d69a2b7c3ffdd872d"
+    },
+    {
+      "filename": "examples/wM2201_T2w_lesion.nii.gz",
+      "bytes": 7355,
+      "sha256": "01a7011a4a759eeaae083766e720d6e48d1a860b5a309674924c7e8c296f4c6a"
+    },
+    {
       "filename": "examples/wM2208_T2w.nii.gz",
       "bytes": 2472763,
       "sha256": "3926f810853c2fa199ac4d50488a1c83c84789005ea96be2d95536dbd358c97b"
@@ -107,6 +117,6 @@
     }
   ],
   "repository": "neurodeskorg/webapps",
-  "revision": "fef23d1ff04d351d887333f52b4d708d07cb039d",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fef23d1ff04d351d887333f52b4d708d07cb039d/disconnectome/"
+  "revision": "251637c4e003d4841ea3e28a583bca7dc264a610",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/"
 }
