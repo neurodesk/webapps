@@ -9,7 +9,7 @@ import { dicomSeries } from '../../test-utils/dicom-fixture.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 
-export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction'];
+export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome'];
 
 export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   const fixture = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
@@ -37,7 +37,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
-  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants'].includes(id)) {
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'disconnectome'].includes(id)) {
     const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
     const selector = page.getByRole('combobox', { name: 'Example', exact: true });
     await expect(selector).toBeEnabled({ timeout: 120000 });
@@ -294,6 +294,17 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     await expect(page.locator(selector)).toBeEnabled({ timeout: 900000 });
     const result = await download(selector);
     return { filename: result.filename, bytes: result.bytes.length };
+  }
+  if (id === 'disconnectome') {
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#runButton').click();
+    await expect(page.locator('#saveButton')).toBeEnabled({ timeout: 300000 });
+    const result = await download('#saveButton');
+    const [header, row] = result.bytes.toString('utf8').trim().split('\n').map(line => line.split('\t'));
+    // wM2017 on the default ENIGMA atlas: 65 bundles, 31 damaged (examples.json expectedResult).
+    assert.equal(header.length, 66);
+    assert.equal(row.slice(1).filter(value => Number(value) > 0).length, 31);
+    return { filename: result.filename, damaged: 31 };
   }
   throw new Error(`No offline workflow test registered for ${id}`);
 }

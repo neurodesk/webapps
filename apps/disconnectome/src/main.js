@@ -5,12 +5,12 @@ import { bindFileDrop, createConsole, createExampleSelector, createInfoDialog, c
 import { downloadBlob } from '@neurodesk/webapp-components/file-io';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { toTsv } from '@neurodesk/nii2tvx';
-import { APP, ATLASES, DEFAULT_ATLAS, GRID, assignInputs, damagedBundles } from './config.js';
+import { APP, ATLASES, DEFAULT_ATLAS, GRID, TEMPLATE, assignInputs, damagedBundles } from './config.js';
 import examples from '../examples.json';
 import './styles.css';
 
 const $ = (id) => document.getElementById(id);
-const TEMPLATE_URL = `${import.meta.env.BASE_URL}template/MNI152_T1_1mm_brain.nii.gz`;
+let template;
 
 mountImagingWorkspace({
   controls: '#controls',
@@ -131,10 +131,15 @@ async function attachViewer() {
   ready = true;
 }
 
+async function loadTemplate() {
+  const { url, bytes, sha256, name } = TEMPLATE;
+  return new File([await fetchModel({ url, integrity: { bytes, sha256 } })], name);
+}
+
 /** Anatomical (or the MNI template) underneath, lesion in red on top at 70 %. */
 async function showImages() {
-  const backdrop = anatomical ? { url: anatomical, name: anatomical.name } : { url: TEMPLATE_URL, name: 'MNI152_T1_1mm_brain.nii.gz' };
-  const volumes = [backdrop];
+  const backdrop = anatomical ?? (template ??= await loadTemplate());
+  const volumes = [{ url: backdrop, name: backdrop.name }];
   if (lesion) volumes.push({ url: lesion, name: lesion.name, colormap: 'red', opacity: 0.7 });
   await viewer.loadVolumes(volumes);
   $('emptyState').hidden = true;

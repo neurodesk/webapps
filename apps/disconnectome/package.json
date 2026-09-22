@@ -5,8 +5,8 @@
   "type": "module",
   "license": "BSD-2-Clause",
   "scripts": {
-    "dev": "node scripts/copy-assets.mjs && vite",
-    "build": "node scripts/copy-assets.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app disconnectome",
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app disconnectome",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",

@@ -30,6 +30,15 @@ export const DEFAULT_ATLAS = ATLASES.find((atlas) => atlas.default) ?? ATLASES[0
 
 export const GRID = Object.freeze({ ...manifest.grid });
 
+/** The backdrop for a lesion dropped without its anatomical scan: the pinned copy ANTs and
+ *  Greedy offer, not a bundled one, since the site may not carry NIfTI. */
+export const TEMPLATE = Object.freeze({
+  url: 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz',
+  name: 'MNI152_T1_1mm_brain.nii.gz',
+  bytes: 3219212,
+  sha256: '32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212',
+});
+
 /** Which files a dropped selection should be treated as: the smaller NIfTI is the lesion,
  *  because a binary mask compresses far smaller than the scan it was drawn on. A single file
  *  is always the lesion, since that is the only required input. */

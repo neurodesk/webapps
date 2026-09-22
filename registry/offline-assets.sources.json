@@ -2634,6 +2634,12 @@
     ],
     "disconnectome": [
       {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz",
+        "kind": "example-template",
+        "sha256": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212",
+        "bytes": 3219212
+      },
+      {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/atlas/enigma_symmetric.tvx.gz",
         "sha256": "878fcd273077cbf84e9a4491f438d62c8ba4a6b11dbb88a65bb99706425127f5",
         "bytes": 7902214,
