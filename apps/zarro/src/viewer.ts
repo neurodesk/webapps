@@ -503,6 +503,7 @@ const stainLayerDisplayQueue = new LatestTaskQueue(false)
 let initialSharedView: ViewState | null = null
 let initialSharedSettings: ShareableViewState | null = null
 let manualWindowRevision = 0
+let windowCommits = 0
 let autoWindowSession: AutoWindowSession | null = null
 const autoContrastStates = new WeakMap<
   OmezarrSource | OmezarrMosaicSource,
@@ -1114,6 +1115,10 @@ function commitAppliedWindow(
   }
   els.canvas.dataset.windowMin = String(win.min)
   els.canvas.dataset.windowMax = String(win.max)
+  // A commit often repeats the window already displayed, so the min and max
+  // alone cannot tell a caller that the redraw behind this one landed.
+  windowCommits++
+  els.canvas.dataset.windowCommits = String(windowCommits)
   syncNvSlideView()
 }
 
