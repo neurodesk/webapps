@@ -101,6 +101,23 @@ async function downloadAndVerifyNifti(page, expectedFilename) {
   return { estimate, bytes, header };
 }
 
+// Auto contrast sets the window controls synchronously, then redraws behind an
+// unawaited setVolume(). The window min and max already match before that
+// redraw lands, so wait on this counter to know it happened.
+async function windowCommitCount(page) {
+  const commits = await page.locator("#nv-canvas").getAttribute("data-window-commits");
+  return Number(commits ?? 0);
+}
+
+// Canvas capture is not synchronized with NiiVue's redraw, so one sample can
+// catch an unsettled frame. Poll instead: only a canvas that never settles back
+// to `anchor` fails.
+async function expectCanvasUnchanged(locator, anchor) {
+  await expect
+    .poll(async () => (await locator.screenshot()).equals(anchor), { timeout: 10_000 })
+    .toBe(true);
+}
+
 async function clickKnownCanvasPointUntilLocationChanges(
   page,
   points,
@@ -991,11 +1008,13 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
   const dapiBeforeAutoContrast = await page.locator("#nv-canvas").screenshot();
+  const dapiCommitsBeforeAutoContrast = await windowCommitCount(page);
   await page.getByRole("button", { name: "Auto contrast" }).click();
+  await expect.poll(() => windowCommitCount(page))
+    .toBeGreaterThan(dapiCommitsBeforeAutoContrast);
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
-  const dapiAfterAutoContrast = await page.locator("#nv-canvas").screenshot();
-  expect(dapiAfterAutoContrast.equals(dapiBeforeAutoContrast)).toBe(true);
+  await expectCanvasUnchanged(page.locator("#nv-canvas"), dapiBeforeAutoContrast);
   const requestsBeforeCachedSwitch = {
     left: leftChunkRequests,
     right: rightChunkRequests,
@@ -1057,11 +1076,16 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
   const restoredDapiBeforeAutoContrast = await page.locator("#nv-canvas").screenshot();
+  const restoredCommitsBeforeAutoContrast = await windowCommitCount(page);
   await page.getByRole("button", { name: "Auto contrast" }).click();
+  await expect.poll(() => windowCommitCount(page))
+    .toBeGreaterThan(restoredCommitsBeforeAutoContrast);
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
-  const restoredDapiAfterAutoContrast = await page.locator("#nv-canvas").screenshot();
-  expect(restoredDapiAfterAutoContrast.equals(restoredDapiBeforeAutoContrast)).toBe(true);
+  await expectCanvasUnchanged(
+    page.locator("#nv-canvas"),
+    restoredDapiBeforeAutoContrast,
+  );
   await expect(page.getByLabel(/opacity/i)).toHaveCount(0);
 
   // Exercise the same equal-slices layout used by the live DANDI report.
@@ -1104,8 +1128,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect.poll(async () => Number(
     await page.locator("#nv-canvas").getAttribute("data-stream-resident"),
   )).toBeGreaterThan(0);
-  const dapiAfterLodSwap = await page.locator("#nv-canvas").screenshot();
-  expect(dapiDuringLodSwap.equals(dapiAfterLodSwap)).toBe(true);
+  await expectCanvasUnchanged(page.locator("#nv-canvas"), dapiDuringLodSwap);
 
   // Supersede a delayed multi-stain swap. The controllers share one NiiVue
   // upload pump, so the newer request must wait for the current swap and then

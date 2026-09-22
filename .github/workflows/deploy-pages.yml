@@ -38,6 +38,8 @@ jobs:
         run: rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
       - name: Install wasm-pack 0.13.1
         run: cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        uses: ./.github/actions/setup-wasm-opt
       - run: pnpm install --frozen-lockfile
       - name: Generate aggregate webapp analytics
         run: node scripts/write-analytics.mjs --allow-missing-credentials
