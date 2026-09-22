@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Build the disconnectome web app's display atlas: one TRX holding every HCP1065 bundle as a
-named group.
+"""Build a disconnectome web app display atlas: one TRX holding every bundle of a TRK
+directory as a named group. Used for both shipped atlases.
 
 The numbers the app reports come from the full-resolution TVX atlas, never from this file.
 This is the picture only, so it is decimated hard: the undecimated atlas is 1.23 GB as TRK and
 still 470 MB as float16, which no browser should download.
 
-    python3 make_display_atlas.py ~/src/nii2tvx/hcp1065_avg_tracts_trk out/tracts.trx
+    python3 make_display_atlas.py ~/src/nii2tvx/hcp1065_avg_tracts_trk out/hcp1065_display.trx
+    python3 make_display_atlas.py ~/src/ENIGMA_atlas/MNI152_1mm/Sparse/trk out/enigma_display.trx \
+        --fraction 1.0 --floor 1 --spacing 3
+
+ENIGMA ships its own Sparse set (226 of 7,461 streamlines per bundle), so that one is kept
+whole and only thinned along its length; HCP1065 has no sparse copy and is decimated here.
 
 Three levers, measured on the real atlas:
   * keep a fraction of the streamlines per bundle (20 % by default, with a floor so a small
@@ -80,17 +85,20 @@ def main(argv=None):
 
     positions, offsets, groups, report = [], [], {}, []
     total = 0
+    vertices = 0  # running count: re-summing positions per streamline is quadratic
     for path in files:
         name = path.stem
         kept = decimate(path, args.fraction, args.floor, args.spacing)
         start = total
         for points in kept:
-            offsets.append(sum(len(p) for p in positions))
+            offsets.append(vertices)
             positions.append(points)
+            vertices += len(points)
             total += 1
+        points_kept = sum(len(p) for p in kept)
         groups[name] = np.arange(start, total, dtype=np.uint32)
-        report.append((name, len(kept), sum(len(p) for p in kept)))
-        print(f'  {name:<16} {len(kept):>6} streamlines {sum(len(p) for p in kept):>9} points', file=sys.stderr)
+        report.append((name, len(kept), points_kept))
+        print(f'  {name:<16} {len(kept):>6} streamlines {points_kept:>9} points', file=sys.stderr)
 
     stacked = np.concatenate(positions).astype(np.float16)
     args.output.parent.mkdir(parents=True, exist_ok=True)

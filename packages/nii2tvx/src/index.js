@@ -34,6 +34,17 @@ export function formatG(x) {
   return strip(x.toFixed(Math.max(0, 5 - exponent)));
 }
 
+/** _malloc returns 0 when the heap is exhausted, and the module is built without
+ *  ABORTING_MALLOC, so an unchecked write would land on address 0 — ordinary writable memory
+ *  holding the shadow stack and static data — and corrupt the module instead of failing.
+ */
+function allocate(module, bytes) {
+  const pointer = module._malloc(bytes.length);
+  if (!pointer) throw new Error(`Out of memory: ${bytes.length} bytes for the tract atlas.`);
+  module.HEAPU8.set(bytes, pointer);
+  return pointer;
+}
+
 /** Read a NUL-terminated C string as UTF-8.
  *
  *  Not `Module.UTF8ToString`: for names longer than 16 bytes that hands a view of the WASM
@@ -64,8 +75,7 @@ export async function openAtlas(atlas) {
   const reason = (fallback) => new Error(log.length ? log[log.length - 1] : fallback);
 
   const bytes = await gunzip(atlas);
-  const atlasPtr = module._malloc(bytes.length);
-  module.HEAPU8.set(bytes, atlasPtr);
+  const atlasPtr = allocate(module, bytes);
   log.length = 0;
   const handle = module._tvx_open(atlasPtr, bytes.length); // takes ownership of atlasPtr
   if (!handle) throw reason('Not a valid TVX atlas.');
@@ -79,8 +89,7 @@ export async function openAtlas(atlas) {
     async query(lesion) {
       if (closed) throw new Error('This atlas is closed.');
       const nii = await gunzip(lesion); // mask_open does not inflate
-      const niiPtr = module._malloc(nii.length);
-      module.HEAPU8.set(nii, niiPtr);
+      const niiPtr = allocate(module, nii);
       log.length = 0;
       const mask = module._mask_open(niiPtr, nii.length);
       module._free(niiPtr);

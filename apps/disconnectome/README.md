@@ -41,9 +41,9 @@ the streamline never enters, which inflated a small deep lesion's score from 0.0
 
 Fractions are computed on the full-resolution atlas, so a browser result equals `nii2tvx` on
 the command line to six significant digits; the e2e suite asserts exactly that against the
-CLI's committed output. The streamlines drawn are a separate, decimated file: 20 % of each
-bundle at 3 mm point spacing, 18.9 MB rather than 1.23 GB. Do not count fibres on screen and
-expect the reported fraction.
+CLI's committed output. The streamlines drawn are a separate, decimated file — 20 % of each HCP1065
+bundle (18.9 MB), or ENIGMA's own Sparse set of 226 per bundle (2.4 MB), both thinned to 3 mm
+point spacing. Do not count fibres on screen and expect the reported fraction.
 
 ## Grid
 

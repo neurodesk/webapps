@@ -583,9 +583,17 @@ static bool load_trk(const char *fnm, const nifti_1_header *hdr) {
 		int32_t m;
 		if (fread(&m, sizeof(m), 1, fp) != 1 || m < 0)
 			break;
-		if ((size_t)m * stride > bufcap)
-			buf = realloc(buf, (bufcap = (size_t)m * stride) * sizeof(float));
-		if (fread(buf, sizeof(float), (size_t)m * stride, fp) != (size_t)m * stride)
+		size_t want = (size_t)m * stride;
+		if (want > bufcap) {
+			// m and n_scalars both come from the file: m * stride can ask for terabytes, and
+			// on failure the old buffer must survive and bufcap must not claim the new size.
+			float *grown = realloc(buf, want * sizeof(float));
+			if (!grown)
+				break;
+			buf = grown;
+			bufcap = want;
+		}
+		if (fread(buf, sizeof(float), want, fp) != want)
 			break;
 		for (int j = 0; j < m; j++)
 			add_vertex(&w, buf + (size_t)j * stride);

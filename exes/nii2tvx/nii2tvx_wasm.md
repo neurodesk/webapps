@@ -1,3 +1,6 @@
+> Historical: this is the upstream handoff note. The integration it describes shipped as
+> `packages/nii2tvx`; where the two disagree, the package is authoritative.
+
 # nii2tvx in the browser: handoff
 
 For the developer building the WASM package and the web page. Read `tvx_format.md` for
@@ -68,7 +71,8 @@ queries, close the mask. The atlas stays open for the life of the page.
    NIfTI-2, big-endian, other datatypes, and qform-only headers are refused with a
    console message.
 3. **Query.** `ntract` calls to `_tvx_query`. Native cost is about 65 ms for all 87 tracts;
-   expect 100 to 200 ms in WASM. Run it in a Web Worker so the UI thread stays free, and
+   measured at 57 ms in WASM once the atlas is open. Run it in a Web Worker so the UI thread
+   stays free, and
    post the row back as `{name, fraction}` pairs.
 4. **Output.** Column names come from `_tvx_name`; the native TSV header is
    `id\t<name>...`. Keep the same order so results are comparable with the CLI.
@@ -93,12 +97,12 @@ lesions.
 
 ```
 make wasm
-node wasm_demo.mjs example/wM2208_T1w_lesion.nii.gz hcp1065_avg_tracts.tvx > wasm.tsv
+node wasm_demo.mjs examples2/wM2208_T2w_lesion.nii.gz hcp1065_avg_tracts.tvx > wasm.tsv
 ./nii2tvx example/wM2208_T1w_lesion.nii.gz hcp1065_avg_tracts.tvx > native.tsv
 ```
 
-The two files must agree to six significant digits on every column. The three lesions in
-`example/` cover a big, a small, and a zero-overlap case for most tracts.
+The two files must agree to six significant digits on every column. The four lesions in
+`examples2/` cover a big, a small, and a zero-overlap case for most tracts.
 
 ## Things not to do
 

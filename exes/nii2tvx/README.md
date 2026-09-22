@@ -23,7 +23,7 @@ cd exes/nii2tvx
 make            # native tool
 make wasm       # nii2tvx.mjs + nii2tvx.wasm (needs emcc)
 make test       # committed fixtures, plus WASM parity when the module is built
-make test-real  # the real atlas and examples; NII2TVX_REFERENCE_DIR points at an upstream checkout
+make test-real  # the two real atlases and four examples; NII2TVX_REFERENCE_DIR points at the data checkout
 make sanitize   # ASan + UBSan build as nii2tvx_asan
 ```
 
@@ -77,7 +77,19 @@ You can adapt the script for other templates or streamlines.
 python hcp2tvx.py
 ```
 
-This creates one `tvx` file per tract in `hcp1065_avg_tracts_tvx/` and packs them all into `hcp1065_avg_tracts.tvx`.  
+This creates one `tvx` file per tract in `hcp1065_avg_tracts_tvx/` and packs them all into `hcp1065_avg_tracts.tvx`.
+`enigma2tvx.py` does the same for the [ENIGMA Symmetric atlas](https://zenodo.org/records/19656193), which the
+Neurodesk app offers by default; unpack that download first and pass its directory. Use its 1 mm full set, not
+the 2 mm one — see the script's docstring for why.
+
+```bash
+python3 enigma2tvx.py ~/src/ENIGMA_atlas
+```
+
+`make test-real` and `packages/nii2tvx/test/parity.test.js` both read `NII2TVX_REFERENCE_DIR` (default
+`~/src/nii2tvx`) and expect it to hold `hcp1065_avg_tracts.tvx`, `enigma_symmetric.tvx` and an `examples2/`
+directory of lesion/scan pairs, which the two scripts above and the Neurodesk Hugging Face dataset provide.
+
 Use `lesion2tvx.py` to compute overlaps, providing a folder of TVX files and a folder of lesions:
 
 ```bash
@@ -87,10 +99,10 @@ python lesion2tvx.py ./lesions ./hcp1065_avg_tracts_tvx > results.tsv
 
 ## Example Usage
 
-Consider the provided lesion map `wM2208_T1w_lesion.nii.gz` that has been spatially normalized to the `MNI152_T1_1mm_brain_mask.nii.gz` template. We can identify the proportion damage to all the HCP1065 tracts.
+Consider the lesion map `wM2208_T2w_lesion.nii.gz` that has been spatially normalized to the `MNI152_T1_1mm_brain_mask.nii.gz` template. We can identify the proportion damage to all the HCP1065 tracts.
 
 ```
-nii2tvx ./example/wM2208_T1w_lesion.nii.gz hcp1065_avg_tracts.tvx > M2208.tsv
+nii2tvx ./examples2/wM2208_T2w_lesion.nii.gz hcp1065_avg_tracts.tvx > M2208.tsv
 ```
 This will generate a tab-separated values file.
 

@@ -22,8 +22,8 @@ wasm:
 test: nii2tvx
 	sh test/run-tests.sh
 
-# The real HCP1065 atlas and the three example lesions, which live outside the repository.
-# Both engines must reproduce test/expected-examples.tsv exactly.
+# The two real atlases and the four example lesions, which live outside the repository.
+# Both engines must reproduce each atlas's expected-examples*.tsv exactly.
 test-real: nii2tvx
 	sh test/run-real.sh "$(NII2TVX_REFERENCE_DIR)"
 

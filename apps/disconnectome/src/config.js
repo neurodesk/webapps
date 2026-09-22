@@ -12,7 +12,7 @@ const asset = (filename) => {
 };
 
 /** The selectable atlases, each pairing the TVX the numbers come from with the decimated TRX
- *  drawn on screen. The first entry is the default. */
+ *  drawn on screen, in the order they are offered. */
 export const ATLASES = Object.freeze(manifest.atlases.map((entry) => Object.freeze({
   id: entry.id,
   label: entry.label,
@@ -20,10 +20,10 @@ export const ATLASES = Object.freeze(manifest.atlases.map((entry) => Object.free
   tvx: Object.freeze({ ...asset(entry.tvx), label: entry.label }),
   trx: asset(entry.trx),
   source: Object.freeze({ ...entry.source }),
+  default: entry.default === true,
 })));
 
-export const DEFAULT_ATLAS = ATLASES.find((atlas) => manifest.atlases.find((entry) =>
-  entry.id === atlas.id)?.default) ?? ATLASES[0];
+export const DEFAULT_ATLAS = ATLASES.find((atlas) => atlas.default) ?? ATLASES[0];
 
 // Examples live in examples.json, the catalog's own contract; the shared
 // nd-example-selector downloads and checksums them.

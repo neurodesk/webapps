@@ -113,6 +113,14 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - `@neurodesk/nii2tvx` decodes tract names itself rather than calling `UTF8ToString`: past
   16 bytes Emscripten switches to `TextDecoder`, which the browser refuses on the resizable
   ArrayBuffer behind a growable WASM memory. HCP1065's short names never hit it; ENIGMA's do.
+- Every remote asset is checksummed against the manifest, the display TRX included: it is
+  fetched through `fetchModel` and handed to NiiVue as an object URL rather than by URL, so
+  the mesh parser never sees unverified bytes. `fetchModel` also re-verifies on a cache hit.
+- The TVX supplies the numbers and the TRX the colours, keyed by bundle name, and the two are
+  built by different scripts from different source trees. `make test-real` diffs the two name
+  sets; if they ever drift the app colours nothing while every number stays right.
+- `_malloc` returns 0 rather than aborting in this build, so the wrapper checks it: an
+  unchecked `HEAPU8.set` at address 0 corrupts the module instead of failing.
 - NiiVue rc.13 is required, not the patched rc.11 most apps pin: `setTractOptions`'s
   `groupColors` (colour and visibility per TRX group, in one call) and `dps` arrived in rc.13.
   The 3D clip plane is load-bearing, not decoration: without it the opaque volume render hides

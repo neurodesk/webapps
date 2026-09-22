@@ -19,9 +19,9 @@ Current folders:
 - `synthseg/`: SynthSeg 2.0 ONNX re-export of the FreeSurfer 8.1.0 checkpoint
   plus validation inputs and goldens (`neurodeskorg/webapps`), see
   `synthseg.manifest.json`.
-- `disconnectome/`: the 87-tract HCP1065 atlas as packed TVX for `nii2tvx` queries,
-  a decimated TRX of the same tracts for display only, and three example
-  lesion/T1 pairs, see `disconnectome.manifest.json`.
+- `disconnectome/`: two tract atlases as packed TVX for `nii2tvx` queries, ENIGMA Symmetric
+  (65 bundles, the default) and HCP1065 (87), a decimated TRX of each for display only, and
+  example lesion/scan pairs, see `disconnectome.manifest.json`.
 - `syncro/tutorials/`: seven deidentified inputs for SYNcro's four documented
   walkthroughs (`neurodeskorg/webapps`), see
   `syncro-tutorials.manifest.json` and `syncro-tutorials.README.md`.

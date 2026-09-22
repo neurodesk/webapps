@@ -3,6 +3,7 @@ import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import { bindFileDrop, createConsole, createExampleSelector, createInfoDialog, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { downloadBlob } from '@neurodesk/webapp-components/file-io';
+import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { toTsv } from '@neurodesk/nii2tvx';
 import { APP, ATLASES, DEFAULT_ATLAS, GRID, assignInputs, damagedBundles } from './config.js';
 import examples from '../examples.json';
@@ -49,9 +50,16 @@ $('viewer').prepend(toolbar);
 const exampleControl = createExampleSelector({
   examples,
   onLoad: async (example, { fetchFiles, assertCurrent }) => {
-    const files = await fetchFiles();
-    assertCurrent();
-    await loadInputs(files, `${example.label} loaded · generate the disconnectome when ready`);
+    // Hold the run button down for the whole download: the selector disables only itself, and
+    // the old lesion is still loaded until loadInputs replaces it.
+    setBusy(true);
+    try {
+      const files = await fetchFiles();
+      assertCurrent();
+      await loadInputs(files, `${example.label} loaded · generate the disconnectome when ready`);
+    } finally {
+      setBusy(false);
+    }
   },
   onStatus: (message, error) => status(message, error),
 });
@@ -70,15 +78,15 @@ let worker = null;
 let timer;
 
 // Viridis straight from NiiVue, so the tract colours and the colorbar are the same ramp the
-// rest of the catalog uses rather than an approximation of it.
+// rest of the catalog uses rather than an approximation of it. The LUT is four control points
+// at uneven positions (I = [0, 64, 192, 255]); interpolating over the array index instead of
+// over I would put the stops at thirds and quietly shift every colour.
 const VIRIDIS = lookupColorMap('viridis');
 function viridis(t) {
-  const clamped = Math.min(1, Math.max(0, t));
-  const last = VIRIDIS.R.length - 1;
-  const position = clamped * last;
-  const low = Math.floor(position);
-  const high = Math.min(last, low + 1);
-  const mix = position - low;
+  const position = Math.min(1, Math.max(0, t)) * VIRIDIS.I.at(-1);
+  const high = Math.max(1, VIRIDIS.I.findIndex((stop) => stop >= position));
+  const low = high - 1;
+  const mix = (position - VIRIDIS.I[low]) / (VIRIDIS.I[high] - VIRIDIS.I[low]);
   const channel = (values) => Math.round(values[low] + (values[high] - values[low]) * mix);
   return [channel(VIRIDIS.R), channel(VIRIDIS.G), channel(VIRIDIS.B), 255];
 }
@@ -143,8 +151,9 @@ async function loadInputs(files, describe) {
   $('outputSection').open = false;
   $('colorbar').hidden = true;
   $('damageSummary').hidden = true;
-  await viewer.removeAllMeshes();
-  drawnAtlas = null;
+  // The mesh stays: a new lesion rescores the same parcellation, and paintTracts hides every
+  // bundle through groupColors until it does. Reloading it would refetch up to 18.9 MB.
+  if (drawnAtlas) await viewer.setTractOptions(0, { groupColors: {} });
   await showImages();
   $('lesionInfo').hidden = false;
   $('lesionInfo').textContent = `Lesion: ${lesion.name}`;
@@ -225,9 +234,22 @@ $('threshold').oninput = () => {
   void paintTracts();
 };
 
+/** The manifest carries the display atlas's checksum, so verify it rather than handing an
+ *  unchecked download straight to the mesh parser. */
+async function loadTracts(source) {
+  const { url, bytes, sha256, filename } = source.trx;
+  const data = await fetchModel({ url, integrity: { bytes, sha256 } }, {
+    onProgress: ({ fraction }) => status(`Loading the tract geometry · ${((fraction ?? 0) * 100).toFixed(0)}%`),
+  });
+  // loadMeshes takes a File as well as a URL, and NiiVue picks the reader from the extension:
+  // an object URL has none and is read as MZ3.
+  const name = filename.split('/').pop();
+  await viewer.loadMeshes([{ url: new File([data], name), name }]);
+}
+
 /** One worker for the session: it holds each opened atlas, so switching back and forth does
  *  not inflate and parse the same file again. */
-function runDisconnectome() {
+function runDisconnectome(scored, job) {
   worker ??= new Worker(new URL('./disconnect-worker.js', import.meta.url), { type: 'module' });
   return new Promise((resolve, reject) => {
     worker.onmessage = ({ data }) => {
@@ -236,7 +258,7 @@ function runDisconnectome() {
       if (data.type === 'result') resolve(data);
     };
     worker.onerror = (event) => reject(new Error(event.message || 'The disconnection worker could not run.'));
-    lesion.arrayBuffer().then((bytes) => worker.postMessage({ atlas: atlas.tvx, lesion: bytes }, [bytes]), reject);
+    scored.arrayBuffer().then((bytes) => worker.postMessage({ atlas: job, lesion: bytes }, [bytes]), reject);
   });
 }
 
@@ -244,9 +266,13 @@ $('runButton').onclick = () => void runTask('Starting…', async () => {
   const started = performance.now();
   timer = setInterval(() => { $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`; }, 1000);
   $('progress').value = 0;
+  // Pin the inputs for this run: an example can finish downloading while it is in flight, and
+  // labelling one lesion's fractions with another lesion's name is worse than any crash.
+  const scored = lesion;
+  const runAtlas = atlas;
   let data;
   try {
-    data = await runDisconnectome();
+    data = await runDisconnectome(scored, runAtlas.tvx);
   } catch (error) {
     // The core reports a grid mismatch by name; say what to do about it.
     const message = /grid|dim|sto_xyz/i.test(error.message)
@@ -254,12 +280,12 @@ $('runButton').onclick = () => void runTask('Starting…', async () => {
       : error.message;
     throw new Error(message);
   }
-  result = { ...data, id: lesion.name.replace(/\.nii(\.gz)?$/i, ''), atlas: atlas.id };
+  result = { ...data, id: scored.name.replace(/\.nii(\.gz)?$/i, ''), atlas: runAtlas.id };
 
-  if (drawnAtlas !== atlas.id) {
+  if (drawnAtlas !== runAtlas.id) {
     status('Loading the tract geometry…');
-    await viewer.loadMeshes([{ url: atlas.trx.url, name: atlas.trx.filename.split('/').pop() }]);
-    drawnAtlas = atlas.id;
+    await loadTracts(runAtlas);
+    drawnAtlas = runAtlas.id;
   }
   // Load-bearing, not cosmetic: the 3D volume render is opaque, so without a clip plane every
   // bundle inside the brain is invisible. Verified by removing it and watching them disappear.
