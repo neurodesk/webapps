@@ -13,6 +13,12 @@ const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle
 const failures = [];
 if (process.env.UPLOAD_ARTIFACTS) await mkdir(process.env.UPLOAD_ARTIFACTS, { recursive: true });
 const checks = [
+  ['disconnectome', '#imageInput', async page => {
+    await expect(page.locator('#lesionInfo')).toContainText('.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await expect(page.locator('#imageLabel')).toContainText('LESION');
+    await expect(page.locator('#saveButton')).toBeDisabled();
+  }],
   ['brain-extraction', '#imageInput', async page => {
     await expect(page.locator('#fileInfo')).toContainText('16 × 16 × 4');
     await expect(page.locator('#runButton')).toBeEnabled();
