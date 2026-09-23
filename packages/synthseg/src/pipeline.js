@@ -2,7 +2,7 @@
 // compiled to wasm (./wasm.js); the runtime only supplies model bytes and an inference session.
 // Order mirrors exes/synthseg/src/main.rs.
 const CITATION = 'Billot et al. (2023) SynthSeg: Segmentation of brain MRI scans of any contrast and resolution without retraining. Med Image Anal. PMID: 36857946';
-const VERSION = '0.3.20260920';
+const VERSION = '0.3.20260923';
 
 export async function runSynthseg({ buffer, options = {}, loadModel, createSession, wasm,
   onProgress = () => {}, runtime = {} }) {

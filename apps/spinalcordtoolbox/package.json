@@ -51,7 +51,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "spinalcordtoolbox",
-  "version": "0.4.20260920",
+  "version": "0.4.20260923",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

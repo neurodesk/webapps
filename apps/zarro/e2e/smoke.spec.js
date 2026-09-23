@@ -186,9 +186,10 @@ test("app boots", async ({ page }) => {
   await expect(topBar).toHaveCount(1);
   await expect(topBar.locator(".nd-app-bar__identity")).toContainText("ZARRo");
   await expect(topBar.locator(".nd-app-bar__version")).toHaveText(/^v\d+\.\d+/);
-  for (const name of ["About", "Cite", "Standalone", "Privacy", "More Apps", "GitHub"]) {
-    await expect(topBar.getByRole(["More Apps", "GitHub"].includes(name) ? "link" : "button", { name })).toBeVisible();
+  for (const name of ["About", "Cite", "Standalone", "Privacy", "Support", "More Apps", "GitHub"]) {
+    await expect(topBar.getByRole(["Support", "More Apps", "GitHub"].includes(name) ? "link" : "button", { name })).toBeVisible();
   }
+  await expect(topBar.getByRole("link", { name: "Support" })).toHaveAttribute("href", /github\.com\/neurodesk\/webapps\/issues\/new\?/);
   await expect(topBar.locator("[data-neurodesk-theme-toggle]")).toBeVisible();
   await expect(page.getByText("Export area", { exact: true })).toHaveCount(0);
   await expect(page.locator("#exportMode")).toHaveCount(0);

@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import test from 'node:test';
-import { JSDOM } from 'jsdom';
-import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { appInformationPayload, loadAppInformation } from '../scripts/lib/app-information.mjs';
 import { injectCompositeTheme } from '../scripts/lib/composite-theme.mjs';
+import { mountAppShell } from '../test-utils/mount-app-shell.mjs';
 
 // Every hosted app's About and Cite dialogs are fed from
 // registry/app-information.yml through the shared shell. These tests keep the
@@ -93,34 +91,8 @@ test('theme injection carries the app information as one JSON script and stays i
   assert.equal(injectCompositeTheme(themed, metadata), themed, 'second injection is a no-op');
 });
 
-async function mountShell(appId, bodyHtml = '') {
-  const payload = appInformationPayload(information, appId);
-  const html = `<!doctype html><html data-neurodesk-app="${appId}" data-neurodesk-shell="imaging-workspace" data-neurodesk-theme="dark"><head>
-    <script type="application/json" data-neurodesk-app-information>${JSON.stringify(payload)}</script>
-    <script type="module" src="./app-shell.js" data-neurodesk-app-shell data-app-id="${appId}" data-app-shell="imaging-workspace" data-app-title="Demo" data-app-description="A demo app." data-app-version="1.2.3" data-ga4-measurement-id="G-TEST" data-analytics-href="./analytics.js" data-more-apps-href="../" data-source-href="https://github.com/neurodesk/webapps"></script>
-    </head><body>${bodyHtml}</body></html>`;
-  const dom = new JSDOM(html, { url: 'https://webapps.neurodesk.org/demo/', pretendToBeVisual: true });
-  const { window } = dom;
-  window.HTMLDialogElement.prototype.showModal ??= function showModal() { this.setAttribute('open', ''); };
-  window.HTMLDialogElement.prototype.close ??= function close() { this.removeAttribute('open'); };
-  window.Element.prototype.checkVisibility ??= function checkVisibility() { return true; };
-  globalThis.window = window;
-  globalThis.document = window.document;
-  globalThis.MutationObserver = window.MutationObserver;
-  globalThis.requestAnimationFrame = (callback) => setTimeout(callback, 0);
-  globalThis.HTMLElement = window.HTMLElement;
-  const shell = await readFile(join(repoRoot, 'site', 'app-shell.js'), 'utf8');
-  const adapters = await readFile(join(repoRoot, 'site', 'shell-adapters', 'index.js'), 'utf8');
-  // The shell is an ES module; evaluate it inline with its adapter resolved.
-  const source = shell.replace("import { resolveShellAdapter } from './shell-adapters/index.js';", '')
-    .replace(/import\(analyticsUrl\.href\)/, 'Promise.resolve({ initAnalytics() {} })');
-  const adapterSource = adapters.replace(/import [^;]+;/g, '').replace(/export /g, '');
-  const adapterModules = await Promise.all(['imaging-workspace', 'static-html', 'react'].map(async (name) =>
-    (await readFile(join(repoRoot, 'site', 'shell-adapters', `${name}.js`), 'utf8')).replace(/export /g, '')));
-  new Function('document', 'window', 'MutationObserver', 'requestAnimationFrame', 'console',
-    `${adapterModules.join('\n')}\n${adapterSource}\n${source}`)(window.document, window, window.MutationObserver, globalThis.requestAnimationFrame, console);
-  return window;
-}
+const mountShell = (appId, bodyHtml = '') =>
+  mountAppShell({ appId, information: appInformationPayload(information, appId), bodyHtml });
 
 test('the shell Cite action renders every registry citation and the platform paper', async () => {
   const window = await mountShell('syncro');

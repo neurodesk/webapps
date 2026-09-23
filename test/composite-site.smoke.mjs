@@ -344,12 +344,19 @@ try {
       if (!identity.includes(app.title)) failures.push(`${app.id}: top bar is missing the app name`);
       if (!identity.includes(app.description)) failures.push(`${app.id}: top bar is missing the short explanation`);
       if (!/v\d+\.\d+/.test(identity)) failures.push(`${app.id}: top bar is missing a version`);
-      const expectedActions = 'About Cite Standalone Privacy Light More Apps GitHub';
+      const expectedActions = 'About Cite Standalone Privacy Support Light More Apps GitHub';
       if (actions.replace(/\s+/g, ' ').trim() !== expectedActions) {
         failures.push(`${app.id}: top-bar actions are out of contract: ${actions.replace(/\s+/g, ' ').trim()}`);
       }
       if (githubHref !== `https://github.com/neurodesk/webapps/tree/main/apps/${app.id}`) {
         failures.push(`${app.id}: top-bar GitHub link is ${githubHref ?? 'missing'}`);
+      }
+      const supportHref = await topBar.locator('a[title="Report a problem or suggest a feature on GitHub"]').getAttribute('href');
+      const supportBody = supportHref?.startsWith('https://github.com/neurodesk/webapps/issues/new?')
+        ? new URL(supportHref).searchParams.get('body') : null;
+      if (!supportBody?.includes(`| App | ${app.title} (${app.id}) |`)
+          || !supportBody.includes('How can we reproduce the problem?')) {
+        failures.push(`${app.id}: top-bar Support link is ${supportHref ?? 'missing'}`);
       }
     }
     if (themeState.appId !== app.id) failures.push(`${app.id}: document theme identity is ${themeState.appId ?? 'missing'}`);

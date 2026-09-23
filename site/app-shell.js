@@ -35,6 +35,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h12a2 2 0 0 1 2 2V21H7a2 2 0 0 1-2-2V3.5Z"/><path d="M7 17h12M9 7h6"/></svg>',
     privacy: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s8-3.8 8-10V5l-8-3-8 3v6c0 6.2 8 10 8 10Z"/></svg>',
     standalone: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg>',
+    support: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.6"/><path d="m5.6 5.6 3.9 3.9M14.5 14.5l3.9 3.9M18.4 5.6l-3.9 3.9M9.5 14.5l-3.9 3.9"/></svg>',
     theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
     apps: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
     ecosystem: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>',
@@ -84,6 +85,76 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
     }
+    return link;
+  }
+
+  // Facts a maintainer needs before they can reproduce a browser-native imaging
+  // report: the exact build, the browser, and the two capabilities that decide
+  // whether an app runs at all. The page address keeps only origin and path,
+  // because app state in a query or fragment can name a user's own files.
+  function supportDetails() {
+    const { crossOriginIsolated, devicePixelRatio, innerHeight, innerWidth, location, navigator } = window;
+    return [
+      ['App', `${metadata.title} (${metadata.id})`],
+      ['Version', document.querySelector('.nd-app-bar__version')?.textContent || versionLabel(metadata.version)],
+      ['Page', `${location.origin}${location.pathname}`],
+      ['Browser', navigator.userAgent],
+      ['Window', `${innerWidth}x${innerHeight} at ${devicePixelRatio}x`],
+      ['WebGPU', navigator.gpu ? 'available' : 'unavailable'],
+      ['Cross-origin isolated', crossOriginIsolated ? 'yes' : 'no'],
+      ['CPU threads', String(navigator.hardwareConcurrency ?? 'unknown')],
+    ];
+  }
+
+  // One prefilled GitHub issue that serves both a problem report and a feature
+  // suggestion. The headings are the questions a maintainer would otherwise
+  // have to ask in a follow-up comment.
+  function supportIssueHref() {
+    const repository = metadata.sourceHref.replace(/\/(?:tree|blob)\/.*$/, '');
+    const body = [
+      `Thank you for helping improve ${metadata.title}. Fill in the sections that apply and delete the rest.`,
+      '',
+      '## What happened, or what would you like this app to do?',
+      '',
+      '',
+      '## How can we reproduce the problem?',
+      '',
+      'Leave this out for a feature suggestion.',
+      '',
+      '1. ',
+      '2. ',
+      '3. ',
+      '',
+      '## What did you expect instead?',
+      '',
+      '',
+      '## Which images were you working with?',
+      '',
+      'Modality, resolution, file format and size. Please do not upload identifiable patient data.',
+      '',
+      '## Browser console output',
+      '',
+      'Open your browser console, then paste any error messages below.',
+      '',
+      '```',
+      '',
+      '```',
+      '',
+      '## App details',
+      '',
+      '| Detail | Value |',
+      '| --- | --- |',
+      ...supportDetails().map(([label, value]) => `| ${label} | ${String(value).replaceAll('|', '\\|')} |`),
+      '',
+    ].join('\n');
+    return `${repository}/issues/new?${new URLSearchParams({ title: `[${metadata.title}] `, body })}`;
+  }
+
+  // The href is complete at creation so middle-click and copy-link work. The
+  // click rewrite picks up a scientific version the shell synced after the bar.
+  function createSupportAction() {
+    const link = createLink('Support', 'support', supportIssueHref(), 'Report a problem or suggest a feature on GitHub');
+    link.addEventListener('click', () => { link.href = supportIssueHref(); });
     return link;
   }
 
@@ -275,6 +346,7 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     ];
     informationActions.push(createControlAction('standalone', 'Standalone', 'standalone'));
     informationActions.push(createControlAction('privacy', 'Privacy', 'privacy'));
+    informationActions.push(createSupportAction());
     navigation.append(
       ...informationActions,
       (() => {
