@@ -27,11 +27,25 @@
         <summary class="nd-section-title">2. Create mesh</summary>
         <div class="nd-section-content">
           <p class="nd-hint">MindGrab segments the scan locally, then niimath makes a printable mesh.</p>
+          <div class="nd-field">
+            <label for="modelSelect">Segmentation model</label>
+            <select id="modelSelect">
+              <option value="16chan18cls">fast 16chan18cls</option>
+              <option value="mindmap">mindmap 24chan18cls</option>
+              <option value="pve" selected>mindmap 24chan18cls partial volume</option>
+              <option value="mindsnap">mindsnap 24chan104cls</option>
+            </select>
+          </div>
           <button id="segmentButton" class="nd-btn nd-btn-primary" type="button" disabled>Run segmentation</button>
           <div class="nd-field">
             <label for="simplify">Mesh simplification <small id="simplifyValue">20%</small></label>
             <input id="simplify" type="range" min="5" max="100" step="5" value="20" />
             <p class="nd-hint">Lower values make a smaller, simpler mesh.</p>
+          </div>
+          <div class="nd-field">
+            <label for="smooth">Mesh smoothing <small id="smoothValue">0</small></label>
+            <input id="smooth" type="range" min="0" max="20" step="1" value="0" />
+            <p class="nd-hint">Iterations of Humphrey's Classes smoothing after meshing.</p>
           </div>
           <label class="nd-check"><input id="largestOnly" type="checkbox" checked /> Keep only the largest component</label>
           <label class="nd-check"><input id="fillBubbles" type="checkbox" checked /> Fill internal bubbles</label>
@@ -73,7 +87,8 @@
     </footer>
 
     <template id="aboutContent">
-      <p>Brain2Print creates a printable brain mesh entirely in your browser. Load a NIfTI image or a DICOM series, segment it with the MindGrab 16chan18cls model, then download the niimath mesh as STL or OBJ.</p>
+      <p>Brain2Print creates a printable brain mesh entirely in your browser. Load a NIfTI image or a DICOM series, segment it with a MindGrab model, then download the niimath mesh as STL or OBJ.</p>
+      <p>The 16chan18cls and mindmap models label 17 brain regions and mindsnap labels 103 regions (Desikan-Killiany cortex plus subcortical structures); the mesh encloses every labelled voxel. The default partial volume option instead estimates grey and white matter fractions with mindmap and meshes where they sum to one half, which gives a smoother surface.</p>
       <p>This is a research demonstration, not a medical device. Use a recent WebGPU-capable desktop browser.</p>
     </template>
     <template id="privacyContent">

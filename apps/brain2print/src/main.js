@@ -4,7 +4,10 @@ import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui'
 import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
+import { createFloat32Nifti, extractNiftiHeader, readNiftiImageData } from '@neurodesk/webapp-components/file-io'
 import NiiVueGPU, { SLICE_TYPE } from '@niivue/niivue'
+import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
+import mindsnapColormap from './mindsnap-colormap.json'
 import { Niimath } from '@niivue/niimath'
 import { APP } from './config.js'
 import { flipWinding, inspectMesh } from './mesh.js'
@@ -19,6 +22,8 @@ const SEG_COLORMAP = {
   I: [...Array(18).keys()],
   A: [0, ...Array(17).fill(255)],
 }
+// mindsnap's 104 Desikan-Killiany labels, from github.com/niivue/browserqc.
+const MINDSNAP_COLORMAP = { ...mindsnapColormap, I: [...Array(104).keys()], A: [0, ...Array(103).fill(255)] }
 
 let viewerReady = false
 let source = null
@@ -72,13 +77,18 @@ function status(message, error = false) {
 
 function buttons() {
   exampleControl.setDisabled(busy || !viewerReady)
-  for (const id of ['imageInput', 'folderInput', 'seriesSelect']) $(id).disabled = busy || !viewerReady
+  for (const id of ['imageInput', 'folderInput', 'seriesSelect', 'modelSelect']) $(id).disabled = busy || !viewerReady
   $('segmentButton').disabled = busy || !source
   $('meshButton').disabled = busy || !segmentation
   $('downloadButton').disabled = busy || !nv.meshes.length
   // No stage reports a fraction, so the bar is indeterminate while working.
   if (busy) $('progress').removeAttribute('value')
   else $('progress').value = 0
+}
+
+// The rc.11 controller has no single-volume removal (removeVolume is internal to its model); reloading the base image alone drops the overlays.
+async function dropOverlays() {
+  if (nv.volumes.length > 1) await nv.loadVolumes([nv.volumes[0]])
 }
 
 async function clearMeshes() {
@@ -141,22 +151,41 @@ async function segment() {
     segmentation = null
     $('outputSection').open = false
     await clearMeshes()
-    while (nv.volumes.length > 1) await nv.removeVolume(1)
-    status('Segmenting with MindGrab…')
+    await dropOverlays()
+    status(`Segmenting with ${$('modelSelect').selectedOptions[0].text}…`)
     const input = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
     if (!(input instanceof Uint8Array)) throw new Error('Could not read the input image.')
-    const { segment: runSegment } = await import('@brainchop/mindgrab')
-    const result = await runSegment(input, {
-      model: '16chan18cls',
+    const choice = $('modelSelect').value
+    const isPve = choice === 'pve'
+    const options = {
+      model: isPve ? 'mindmap' : choice,
       worker: true,
       backend: 'auto',
-      assetPath: `${import.meta.env.BASE_URL}brainchop/`,
-    })
+      gzipOutput: false,
+      assetPath: `${import.meta.env.BASE_URL}brainchop/${mindgrabVersion}/`,
+    }
+    const mindgrab = await import('@brainchop/mindgrab')
+    let result, labels
+    if (isPve) {
+      result = await mindgrab.segmentTissues(input, options)
+      // Brain fraction = GM + WM; its 0.5 isosurface is a sub-voxel pial surface.
+      const brain = readNiftiImageData(result.tissues.gm).data
+      const wm = readNiftiImageData(result.tissues.wm).data
+      for (let i = 0; i < brain.length; i++) brain[i] += wm[i]
+      labels = new Uint8Array(createFloat32Nifti(brain, extractNiftiHeader(result.tissues.gm)))
+    } else {
+      result = await mindgrab.segment(input, options)
+      labels = new Uint8Array(result.image)
+    }
     if (source !== image) throw new Error('The image changed during segmentation; run it again.')
-    const labels = new Uint8Array(result.image)
-    while (nv.volumes.length > 1) await nv.removeVolume(1)
-    await nv.addVolume({ url: new File([labels], 'segmentation.nii'), name: 'segmentation.nii', opacity: 0.5 })
-    await nv.setColormapLabel(nv.volumes.length - 1, SEG_COLORMAP)
+    await dropOverlays()
+    if (isPve) {
+      // calMin 0.5 shows exactly what the mesh encloses.
+      await nv.addVolume({ url: new File([labels], 'brain-fraction.nii'), name: 'brain-fraction.nii', opacity: 0.5, colormap: 'warm', calMin: 0.5, calMax: 1 })
+    } else {
+      await nv.addVolume({ url: new File([labels], 'segmentation.nii'), name: 'segmentation.nii', opacity: 0.5 })
+      await nv.setColormapLabel(nv.volumes.length - 1, choice === 'mindsnap' ? MINDSNAP_COLORMAP : SEG_COLORMAP)
+    }
     segmentation = labels
     status(`Segmentation complete on ${result.backend} (${Math.round(result.elapsedMs)} ms). Create the mesh when ready.`)
   } catch (error) {
@@ -173,17 +202,20 @@ async function mesh() {
   busy = true
   buttons()
   try {
+    // Read before awaiting so edits made during niimath startup do not leak into this run.
+    const options = {
+      i: 0.5,
+      l: $('largestOnly').checked ? 1 : 0,
+      b: $('fillBubbles').checked ? 1 : 0,
+      r: Number($('simplify').value) / 100,
+      s: Number($('smooth').value),
+    }
     status('Creating mesh with niimath…')
     if (!niimathReady) niimathReady = niimath.init()
     await niimathReady
     const output = await niimath
       .image(new File([labels], 'segmentation.nii'))
-      .mesh({
-        i: 0.5,
-        l: $('largestOnly').checked ? 1 : 0,
-        b: $('fillBubbles').checked ? 1 : 0,
-        r: Number($('simplify').value) / 100,
-      })
+      .mesh(options)
       .run('brain.mz3')
     if (segmentation !== labels) throw new Error('The segmentation changed during meshing; run it again.')
     await clearMeshes()
@@ -222,6 +254,12 @@ $('folderInput').addEventListener('change', () => {
 })
 $('seriesSelect').addEventListener('change', () => void loadImage(series[Number($('seriesSelect').value)]))
 $('simplify').addEventListener('input', () => { $('simplifyValue').textContent = `${$('simplify').value}%` })
+$('modelSelect').addEventListener('change', () => {
+  // A segmentation belongs to the model that made it; mesh only what the picker shows.
+  segmentation = null
+  buttons()
+})
+$('smooth').addEventListener('input', () => { $('smoothValue').textContent = $('smooth').value })
 $('segmentButton').addEventListener('click', () => void segment())
 $('meshButton').addEventListener('click', () => void mesh())
 $('downloadButton').addEventListener('click', () => void nv.saveMesh(0, `brain2print.${$('format').value}`))

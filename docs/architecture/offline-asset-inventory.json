@@ -2493,7 +2493,7 @@
     "brain2print": {
       "assets": [
         {
-          "url": "npm:@brainchop/mindgrab@0.1.20260813/dist/brainchop-16chan18cls-gl.js",
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls-gl.js",
           "sources": [
             "apps/brain2print/scripts/copy-brainchop.mjs"
           ],
@@ -2504,46 +2504,200 @@
           "filename": "brainchop-16chan18cls-gl.js"
         },
         {
-          "url": "npm:@brainchop/mindgrab@0.1.20260813/dist/brainchop-16chan18cls-gl.wasm",
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls-gl.wasm",
           "sources": [
             "apps/brain2print/scripts/copy-brainchop.mjs"
           ],
           "kind": "bundled-runtime",
-          "bytes": 476475,
-          "sha256": "1dfb8d0f76d04f43a66b7ebd7a47164827cfbb10f6a7f5282df1aca01ea55ecf",
+          "bytes": 483617,
+          "sha256": "a110a16b3931ae0eb1137f9e5ef0a169ac5e7980abfb2616c2db3ab02526e8ea",
           "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-16chan18cls-gl.wasm",
           "filename": "brainchop-16chan18cls-gl.wasm"
         },
         {
-          "url": "npm:@brainchop/mindgrab@0.1.20260813/dist/brainchop-16chan18cls-gpu.js",
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls-gpu.js",
           "sources": [
             "apps/brain2print/scripts/copy-brainchop.mjs"
           ],
           "kind": "bundled-runtime",
-          "bytes": 100007,
-          "sha256": "5fed91c920c78c6c2761e9b9effe6922cd5aa6249ecea1186dd62da61ccf9097",
+          "bytes": 100291,
+          "sha256": "d1f06373387ce818434be31853e0e807e347bed5b2dc97785329c51da9fe4676",
           "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-16chan18cls-gpu.js",
           "filename": "brainchop-16chan18cls-gpu.js"
         },
         {
-          "url": "npm:@brainchop/mindgrab@0.1.20260813/dist/brainchop-16chan18cls-gpu.wasm",
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls-gpu.wasm",
           "sources": [
             "apps/brain2print/scripts/copy-brainchop.mjs"
           ],
           "kind": "bundled-runtime",
-          "bytes": 519055,
-          "sha256": "d6a353ab9847f5e5557ef9779621f19b29817b91ac233b9176c1aeff74fa8205",
+          "bytes": 528062,
+          "sha256": "3e911d18d5963f9805027e0d7d8214894c40e20b77ddaa84acc3fdb3ab3dff65",
           "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-16chan18cls-gpu.wasm",
           "filename": "brainchop-16chan18cls-gpu.wasm"
         },
         {
-          "url": "npm:@brainchop/mindgrab@0.1.20260813/dist/worker.js",
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls.js",
           "sources": [
             "apps/brain2print/scripts/copy-brainchop.mjs"
           ],
           "kind": "bundled-runtime",
-          "bytes": 22230,
-          "sha256": "bd2a3f76bd87b01ebaa0bb535106828f21e27a0f18feb5c1c43e59a89ae186b7",
+          "bytes": 80609,
+          "sha256": "a099c29f94a3a87563a2fbf4814b90cb1934782f5dc6cf3446a5a30368fdf2c0",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-16chan18cls.js",
+          "filename": "brainchop-16chan18cls.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-16chan18cls.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 478961,
+          "sha256": "dadce68c3fa4baad00d3ab0e05c34f0623bb54cf1e6f178b4ca8155b99111748",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-16chan18cls.wasm",
+          "filename": "brainchop-16chan18cls.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap-gl.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 85425,
+          "sha256": "1f16f3df30f89e30f3a0d1c2b331484e18f9bcb8610b9858a2e705f0819d5244",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap-gl.js",
+          "filename": "brainchop-mindmap-gl.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap-gl.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 938676,
+          "sha256": "3bc3ec2cd7e4fd318ee89d235262c9692a562f887ba216d6676aa11b78e12ddb",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap-gl.wasm",
+          "filename": "brainchop-mindmap-gl.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap-gpu.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 100283,
+          "sha256": "0639a0da807985655127bcf97da8de278ab92649d8b3f06dce332b97a9f1d515",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap-gpu.js",
+          "filename": "brainchop-mindmap-gpu.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap-gpu.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 989802,
+          "sha256": "3a03412482ba28d68a636fa7b1f0048711a967d47dba4220886449901d034220",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap-gpu.wasm",
+          "filename": "brainchop-mindmap-gpu.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 80597,
+          "sha256": "ce37f51256fbcadc4da696b4038d62da14a43fbc52b98b77afb6f9987c412089",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap.js",
+          "filename": "brainchop-mindmap.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindmap.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 932751,
+          "sha256": "18ce9cbdec3096911263592e36af2e2db971bdedc868e99ff5cbfc80f2362e49",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindmap.wasm",
+          "filename": "brainchop-mindmap.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap-gl.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 85427,
+          "sha256": "bcab8947e9463a8795b6072acbdccb27b0716af842518e35d8136984aefd72f5",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap-gl.js",
+          "filename": "brainchop-mindsnap-gl.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap-gl.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 910423,
+          "sha256": "0c95688200d207271ae8031e9e2595140e11cc9ad04432f1e90f6db48f6dc370",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap-gl.wasm",
+          "filename": "brainchop-mindsnap-gl.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap-gpu.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 100285,
+          "sha256": "42f4fb1209170b8bec51d67f745e2696022927098812c3a1398c38df1361c4fa",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap-gpu.js",
+          "filename": "brainchop-mindsnap-gpu.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap-gpu.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 958521,
+          "sha256": "1fea0feea0910ff806214f7dd5ace0a6033baa2acdc3b280f54ef1a8bfbbef17",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap-gpu.wasm",
+          "filename": "brainchop-mindsnap-gpu.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 80600,
+          "sha256": "60a476fdc53929ad5de4a31baa99bd007ff6cd0d5c4b7f8b21111de2fd6fe4a3",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap.js",
+          "filename": "brainchop-mindsnap.js"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/brainchop-mindsnap.wasm",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 909573,
+          "sha256": "8a0bec38e2e4909f323a4689d0f75af167758c181ff7c32324da022e1f87cac1",
+          "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/brainchop-mindsnap.wasm",
+          "filename": "brainchop-mindsnap.wasm"
+        },
+        {
+          "url": "npm:@brainchop/mindgrab@0.1.20260923/dist/worker.js",
+          "sources": [
+            "apps/brain2print/scripts/copy-brainchop.mjs"
+          ],
+          "kind": "bundled-runtime",
+          "bytes": 26564,
+          "sha256": "e0b4f40046ede2350cc22b7ba59d33a8c31129c6d96dc43fb7766dbd666c2c8e",
           "local_source": "apps/brain2print/node_modules/@brainchop/mindgrab/dist/worker.js",
           "filename": "worker.js"
         },
@@ -2559,14 +2713,14 @@
       ],
       "url_mappings": [],
       "runtime_packages": {
-        "@brainchop/mindgrab": "0.1.20260813",
+        "@brainchop/mindgrab": "0.1.20260923",
         "@neurodesk/runtime-support": "workspace:*",
         "@neurodesk/webapp-components": "workspace:*",
         "@niivue/niimath": "1.4.20260909",
         "@niivue/niivue": "1.0.0-rc.11"
       },
       "notes": [
-        "MindGrab 16chan18cls generated JavaScript/WASM runtime is a required bundled npm dependency. Copy scripts stage files; preserve adjacency. Inventory of transitive runtime-generated requests is still required."
+        "MindGrab 16chan18cls, mindmap and mindsnap generated JavaScript/WASM runtime (WebGPU, WebGL2 and threaded CPU) is a required bundled npm dependency. Copy scripts stage files; preserve adjacency. Inventory of transitive runtime-generated requests is still required."
       ],
       "unknowns": [
         {

@@ -119,6 +119,7 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
     await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
     await expect(page.locator("#meshButton")).toBeEnabled();
 
+    await page.locator("#smooth").fill("5"); // smoothing must keep the mesh closed
     await page.locator("#meshButton").click();
     await expect(status).toHaveText(/^Mesh complete: \d+ triangles, closed manifold/, { timeout: 300_000 });
     const triangles = Number((await status.textContent()).match(/(\d+) triangles/)[1]);
@@ -137,6 +138,22 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
   });
 }
 
+// The pipeline above runs the default partial-volume model; the label models share one page.
+test("each label model segments with its own colormap", async ({ page }) => {
+  test.skip(!hardwareGpu, "needs a hardware WebGPU adapter");
+  test.setTimeout(900_000);
+  await page.goto("/");
+  const status = page.locator("#statusText");
+  await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
+  await page.setInputFiles("#imageInput", fixture);
+  await expect(status).toHaveText("small.nii.gz loaded", { timeout: 120_000 });
+  for (const model of ["16chan18cls", "mindmap", "mindsnap"]) {
+    await page.locator("#modelSelect").selectOption(model);
+    await page.locator("#segmentButton").click();
+    await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
+    await expect(page.locator("#meshButton")).toBeEnabled();
+  }
+});
 
 test("a delayed example never replaces a selected image", async ({ page }) => {
   let releaseExample;
