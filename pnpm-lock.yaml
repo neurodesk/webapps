@@ -107,8 +107,8 @@ importers:
   apps/brain2print:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260923
+        version: 0.1.20260923
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -1075,6 +1075,9 @@ packages:
 
   '@brainchop/mindgrab@0.1.20260813':
     resolution: {integrity: sha512-HpushBfOzG5yhzgKmhjy1q+8DYxLdM96LeeciF+W2wwStKFzNW1ABY87fwGZjFXcivoWVv+HWPfakBe/GrQPsA==}
+
+  '@brainchop/mindgrab@0.1.20260923':
+    resolution: {integrity: sha512-U6u1UPNxIn/mudogTtUgaDi5zWzwtxQxiPAgOu3dT9zvqRS9hWaGRyLX3zPXFb07/WGJA/OrmVsGGsT/PzdqZw==}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
@@ -6553,6 +6556,10 @@ snapshots:
   '@bcoe/v8-coverage@0.2.3': {}
 
   '@brainchop/mindgrab@0.1.20260813':
+    dependencies:
+      '@webgpu/types': 0.1.71
+
+  '@brainchop/mindgrab@0.1.20260923':
     dependencies:
       '@webgpu/types': 0.1.71
 

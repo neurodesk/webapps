@@ -16,6 +16,7 @@ minimumReleaseAgeExclude:
   - '@dipy/gpu-streamlines@0.1.0'
   - '@niivue/niimath@1.4.20260909'
   - '@fireants/fireants@0.1.20260913'
+  - '@brainchop/mindgrab@0.1.20260923'
 patchedDependencies:
   '@niivue/niivue@1.0.0-rc.11': patches/@niivue__niivue@1.0.0-rc.11.patch
 overrides:
