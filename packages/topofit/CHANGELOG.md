@@ -1,5 +1,7 @@
 # @neurodesk/topofit
 
+## 0.11.20260923
+
 ## 0.11.20260920
 
 ### Minor Changes
