@@ -98,10 +98,11 @@ lesions.
 ```
 make wasm
 node wasm_demo.mjs examples2/wM2208_T2w_lesion.nii.gz hcp1065_avg_tracts.tvx > wasm.tsv
-./nii2tvx example/wM2208_T1w_lesion.nii.gz hcp1065_avg_tracts.tvx > native.tsv
+./nii2tvx examples2/wM2208_T2w_lesion.nii.gz hcp1065_avg_tracts.tvx > native.tsv
+diff -u native.tsv wasm.tsv
 ```
 
-The two files must agree to six significant digits on every column. The four lesions in
+The two files must match byte for byte, including the lesion ID, header and formatted fractions. The four lesions in
 `examples2/` cover a big, a small, and a zero-overlap case for most tracts.
 
 ## Things not to do

@@ -4,6 +4,7 @@ import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-i
 import { bindFileDrop, createConsole, createExampleSelector, createInfoDialog, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { downloadBlob } from '@neurodesk/webapp-components/file-io';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
+import { readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { toTsv } from '@neurodesk/nii2tvx';
 import { APP, ATLASES, DEFAULT_ATLAS, GRID, TEMPLATE, assignInputs, damagedBundles } from './config.js';
 import examples from '../examples.json';
@@ -49,14 +50,14 @@ $('viewer').prepend(toolbar);
 
 const exampleControl = createExampleSelector({
   examples,
-  onLoad: async (example, { fetchFiles, assertCurrent }) => {
+  onLoad: async (example, { signal, fetchFiles, assertCurrent }) => {
     // Hold the run button down for the whole download: the selector disables only itself, and
     // the old lesion is still loaded until loadInputs replaces it.
     setBusy(true);
     try {
       const files = await fetchFiles();
       assertCurrent();
-      await loadInputs(files, `${example.label} loaded · generate the disconnectome when ready`);
+      await loadInputs(files, `${example.label} loaded · generate the disconnectome when ready`, { signal, assertCurrent });
     } finally {
       setBusy(false);
     }
@@ -137,29 +138,38 @@ async function loadTemplate() {
 }
 
 /** Anatomical (or the MNI template) underneath, lesion in red on top at 70 %. */
-async function showImages() {
-  const backdrop = anatomical ?? (template ??= await loadTemplate());
+async function showImages(inputs = { anatomical, lesion }) {
+  const backdrop = inputs.anatomical ?? (template ??= await loadTemplate());
   const volumes = [{ url: backdrop, name: backdrop.name }];
-  if (lesion) volumes.push({ url: lesion, name: lesion.name, colormap: 'red', opacity: 0.7 });
+  if (inputs.lesion) volumes.push({ url: inputs.lesion, name: inputs.lesion.name, colormap: 'red', opacity: 0.7 });
   await viewer.loadVolumes(volumes);
   $('emptyState').hidden = true;
-  $('imageLabel').textContent = [anatomical ? 'ANATOMICAL' : 'MNI152 TEMPLATE', lesion ? 'LESION' : null]
+  $('imageLabel').textContent = [inputs.anatomical ? 'ANATOMICAL' : 'MNI152 TEMPLATE', inputs.lesion ? 'LESION' : null]
     .filter(Boolean).join(' · ');
 }
 
-async function loadInputs(files, describe) {
-  const chosen = assignInputs(files);
+async function loadInputs(files, describe, { signal, assertCurrent = () => {} } = {}) {
+  const images = await readImageFiles(files, { signal });
+  assertCurrent();
+  const chosen = assignInputs(images);
   if (chosen.error) throw new Error(chosen.error);
+  try {
+    await showImages(chosen);
+    if (drawnAtlas) await viewer.setTractOptions(0, { groupColors: {} });
+    assertCurrent();
+  } catch (error) {
+    // NiiVue changes its volume stack while loading. Restore the committed input on
+    // failure or cancellation before allowing another import or analysis to start.
+    await showImages();
+    await paintTracts();
+    throw error;
+  }
   lesion = chosen.lesion;
   anatomical = chosen.anatomical;
   result = null;
   $('outputSection').open = false;
   $('colorbar').hidden = true;
   $('damageSummary').hidden = true;
-  // The mesh stays: a new lesion rescores the same parcellation, and paintTracts hides every
-  // bundle through groupColors until it does. Reloading it would refetch up to 18.9 MB.
-  if (drawnAtlas) await viewer.setTractOptions(0, { groupColors: {} });
-  await showImages();
   $('lesionInfo').hidden = false;
   $('lesionInfo').textContent = `Lesion: ${lesion.name}`;
   $('anatomicalInfo').hidden = !anatomical;

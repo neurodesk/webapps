@@ -23,7 +23,8 @@ the streamline never enters, which inflated a small deep lesion's score from 0.0
 
 ## The workflow
 
-1. Choose an example pair, or drop a lesion map with an optional anatomical scan. The smaller
+1. Choose an example pair, or drop a lesion map with an optional anatomical scan.
+   NIfTI files and complete DICOM series are accepted; DICOM is converted locally. The smaller
    NIfTI is taken as the lesion, since a mask compresses far smaller than the scan it was drawn
    on; a name containing `lesion`, `mask` or `roi` settles it outright. With no anatomical
    scan, the MNI152 template SYNcro ships stands in as the backdrop.

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
 #include "nifti1.h"
 #ifdef __EMSCRIPTEN__
 	#include <emscripten.h>
@@ -11,7 +12,7 @@
 #else
 	#define EXPORT
 #endif
-#define kVersion "v1.1.20260920"
+#define kVersion "v1.1.20260923"
 
 // ============================================================================
 // Core: buffer in, numbers out. No file I/O, no zlib. This is also the WASM surface.
@@ -103,6 +104,11 @@ EXPORT void tvx_close(tvx_t *t) {
 // Takes ownership of buf. Validates structure (sizes, names, offsets); stream contents are checked as they are walked.
 EXPORT tvx_t *tvx_open(uint8_t *buf, size_t len) {
 	tvx_t *t = calloc(1, sizeof(tvx_t));
+	if (!t) {
+		free(buf);
+		fprintf(stderr, "Out of memory opening TVX file\n");
+		return NULL;
+	}
 	t->buf = buf;
 	if (len < sizeof(tvx_header))
 		goto bad;
@@ -114,6 +120,11 @@ EXPORT tvx_t *tvx_open(uint8_t *buf, size_t len) {
 	if (t->h.ntract > (len - sizeof(tvx_header)) / sizeof(tract_header))
 		goto bad;
 	t->tracts = calloc(t->h.ntract, sizeof(tract_t));
+	if (t->h.ntract && !t->tracts) {
+		fprintf(stderr, "Out of memory opening TVX tracts\n");
+		tvx_close(t);
+		return NULL;
+	}
 	size_t p = sizeof(tvx_header);
 	for (uint32_t k = 0; k < t->h.ntract; k++) {
 		tract_t *tr = &t->tracts[k];
@@ -195,8 +206,17 @@ EXPORT mask_t *mask_open(const uint8_t *buf, size_t len) {
 	size_t n = (size_t)nvox;
 	const uint8_t *raw = buf + (size_t)h.vox_offset;
 	mask_t *m = malloc(sizeof(mask_t));
+	if (!m) {
+		fprintf(stderr, "Out of memory opening lesion mask\n");
+		return NULL;
+	}
 	m->hdr = h;
 	m->img = malloc(n);
+	if (!m->img) {
+		fprintf(stderr, "Out of memory allocating lesion voxels\n");
+		mask_close(m);
+		return NULL;
+	}
 	switch (bpp) { // int16 is read as uint16: sign is irrelevant to a != 0 test
 	case 1: for (size_t i = 0; i < n; i++) m->img[i] = raw[i] != 0; break;
 	case 2: for (size_t i = 0; i < n; i++) m->img[i] = ((const uint16_t *)raw)[i] != 0; break;
@@ -213,7 +233,7 @@ static bool close_enough(float a, float b) {
 }
 
 static bool same_grid(const tvx_header *a, const nifti_1_header *hdr) {
-	bool ok = true;
+	bool ok = hdr->sform_code > 0;
 	for (int i = 0; i < 3; i++)
 		ok &= a->dim[i] == (uint32_t)hdr->dim[i + 1];
 	for (int i = 0; i < 4; i++)
@@ -242,7 +262,7 @@ EXPORT float tvx_query(const tvx_t *t, int k, const mask_t *m) {
 		}
 		hits += r;
 	}
-	return (float)hits / (float)n;
+	return n ? (float)hits / (float)n : NAN;
 }
 
 #ifndef __EMSCRIPTEN__
@@ -551,10 +571,10 @@ static bool load_trk(const char *fnm, const nifti_1_header *hdr) {
 	FILE *fp = fopen(fnm, "rb");
 	if (fp == NULL)
 		return false;
-	trk_header thdr;
-	if (fread(&thdr, sizeof(trk_header), 1, fp) != 1 || thdr.hdr_size != sizeof(trk_header) || thdr.version != 2 || thdr.n_count == 0) {
+	trk_header thdr = {0};
+	if (fread(&thdr, sizeof(trk_header), 1, fp) != 1 || thdr.hdr_size != sizeof(trk_header) || thdr.version != 2 || thdr.n_count <= 0) {
 		fprintf(stderr, "Unable to read TRK header %d %d\n", thdr.hdr_size, thdr.version);
-		if (thdr.n_count == 0)
+		if (thdr.n_count <= 0)
 			fprintf(stderr, "unable to read TRK with implicit n_count (hint: convert to TCK with tff_convert_tractogram.py)\n");
 		fclose(fp);
 		return false;
@@ -582,28 +602,39 @@ static bool load_trk(const char *fnm, const nifti_1_header *hdr) {
 	for (int i = 0; i < thdr.n_count; i++) {
 		int32_t m;
 		if (fread(&m, sizeof(m), 1, fp) != 1 || m < 0)
-			break;
+			goto bad_trk;
 		size_t want = (size_t)m * stride;
 		if (want > bufcap) {
 			// m and n_scalars both come from the file: m * stride can ask for terabytes, and
 			// on failure the old buffer must survive and bufcap must not claim the new size.
 			float *grown = realloc(buf, want * sizeof(float));
 			if (!grown)
-				break;
+				goto bad_trk;
 			buf = grown;
 			bufcap = want;
 		}
 		if (fread(buf, sizeof(float), want, fp) != want)
-			break;
+			goto bad_trk;
 		for (int j = 0; j < m; j++)
 			add_vertex(&w, buf + (size_t)j * stride);
-		fseek(fp, thdr.n_properties * sizeof(float), SEEK_CUR);
+		for (int j = 0; j < thdr.n_properties; j++) {
+			float property;
+			if (fread(&property, sizeof(property), 1, fp) != 1)
+				goto bad_trk;
+		}
 		end_streamline(&w);
 	}
 	free(buf);
 	fclose(fp);
 	write_tvx(fnm, &w);
 	return true;
+bad_trk:
+	fprintf(stderr, "Truncated or invalid TRK streamlines in %s\n", fnm);
+	free(buf);
+	free(w.offsets);
+	free(w.stream);
+	fclose(fp);
+	return false;
 }
 
 static bool load_tck(const char *fnm, const nifti_1_header *hdr) {
@@ -611,31 +642,72 @@ static bool load_tck(const char *fnm, const nifti_1_header *hdr) {
 	if (fp == NULL)
 		return false;
 	char line[1024];
-	do { // text header ends with "END\n"; assumes Float32LE data follows immediately
-		if (!fgets(line, sizeof(line), fp)) {
-			fclose(fp);
-			return false;
+	unsigned long long offset = 0;
+	bool datatype_ok = false, file_ok = false, ended = false;
+	if (!fgets(line, sizeof(line), fp))
+		goto bad_tck_header;
+	line[strcspn(line, "\r\n")] = 0;
+	if (strcmp(line, "mrtrix tracks") != 0)
+		goto bad_tck_header;
+	while (fgets(line, sizeof(line), fp)) {
+		line[strcspn(line, "\r\n")] = 0;
+		if (strcmp(line, "END") == 0) {
+			ended = true;
+			break;
 		}
-	} while (strcmp(line, "END\n") != 0);
+		if (strncmp(line, "datatype:", 9) == 0) {
+			char datatype[64], extra;
+			datatype_ok = sscanf(line + 9, "%63s %c", datatype, &extra) == 1 && strcmp(datatype, "Float32LE") == 0;
+		}
+		if (strncmp(line, "file:", 5) == 0) {
+			char extra;
+			file_ok = sscanf(line, "file: . %llu %c", &offset, &extra) == 1;
+		}
+	}
+	long header_end = ftell(fp);
+	if (!ended || !datatype_ok || !file_ok || header_end < 0 || offset < (unsigned long long)header_end || offset > LONG_MAX)
+		goto bad_tck_header;
+	if (fseek(fp, 0, SEEK_END) != 0)
+		goto bad_tck_header;
+	long file_end = ftell(fp);
+	if (file_end < 0 || offset >= (unsigned long long)file_end || fseek(fp, (long)offset, SEEK_SET) != 0)
+		goto bad_tck_header;
 	tvx_writer w;
 	if (!writer_init(&w, fnm, hdr, nifti_mat44_inverse(sform(hdr)))) {
 		fclose(fp);
 		return false;
 	}
 	float xyz[3];
-	while (fread(xyz, sizeof(xyz), 1, fp) == 1) {
-		if (isfinite(xyz[0])) {
+	for (;;) {
+		if (fread(xyz, sizeof(float), 3, fp) != 3)
+			goto bad_tck_data;
+		if (isfinite(xyz[0]) && isfinite(xyz[1]) && isfinite(xyz[2])) {
 			add_vertex(&w, xyz);
 			continue;
 		}
-		end_streamline(&w); // NaN separates streamlines, Inf terminates the file
-		if (!isnan(xyz[0]))
+		if (isnan(xyz[0]) && isnan(xyz[1]) && isnan(xyz[2])) {
+			end_streamline(&w);
+			continue;
+		}
+		if (xyz[0] == INFINITY && xyz[1] == INFINITY && xyz[2] == INFINITY) {
+			end_streamline(&w);
 			break;
+		}
+		goto bad_tck_data;
 	}
-	end_streamline(&w);
 	fclose(fp);
 	write_tvx(fnm, &w);
 	return true;
+bad_tck_data:
+	fprintf(stderr, "Truncated or invalid TCK vertices in %s\n", fnm);
+	free(w.offsets);
+	free(w.stream);
+	fclose(fp);
+	return false;
+bad_tck_header:
+	fprintf(stderr, "Invalid TCK header: expected inline Float32LE data with a valid file offset\n");
+	fclose(fp);
+	return false;
 }
 
 // concatenate the records of several TVX files sharing one grid into a single file

@@ -89,6 +89,7 @@ export async function openAtlas(atlas) {
     async query(lesion) {
       if (closed) throw new Error('This atlas is closed.');
       const nii = await gunzip(lesion); // mask_open does not inflate
+      if (closed) throw new Error('This atlas is closed.');
       const niiPtr = allocate(module, nii);
       log.length = 0;
       const mask = module._mask_open(niiPtr, nii.length);

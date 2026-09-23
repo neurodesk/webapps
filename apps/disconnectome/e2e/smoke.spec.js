@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 
 const golden = {
   enigma: fileURLToPath(new URL('../../../exes/nii2tvx/test/expected-examples-enigma.tsv', import.meta.url)),
@@ -113,4 +114,67 @@ test('each atlas scores, draws and downloads its own CLI table', async ({ page }
     // The selector really changed the parcellation, not just the colours.
     expect(header.split('\t').length - 1).toBe(bundles);
   }
+});
+
+test('example download failure can be retried', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60_000 });
+  const examples = page.locator('[data-neurodesk-examples]');
+  const selector = page.locator('select[data-neurodesk-example]');
+  await page.route('**/disconnectome/examples/**', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await selector.selectOption('wm2017');
+  await expect(examples).toHaveAttribute('data-example-state', 'error');
+  await expect(page.locator('#runButton')).toBeDisabled();
+  await page.unroute('**/disconnectome/examples/**');
+  await selector.selectOption('wm2017');
+  await expect(examples).toHaveAttribute('data-example-state', 'ready', { timeout: 120_000 });
+  await expect(page.locator('#runButton')).toBeEnabled();
+});
+
+test('cancelling during image preparation preserves the previous lesion', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.addInitScript(() => {
+    const postMessage = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message.name?.startsWith('wM2017') && !window.releaseExampleImage) {
+        window.releaseExampleImage = () => postMessage.call(this, message, ...args);
+        return;
+      }
+      return postMessage.call(this, message, ...args);
+    };
+  });
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60_000 });
+  const buffer = readFileSync(fileURLToPath(new URL('../../../exes/nii2tvx/test/fixtures/lesion.nii.gz', import.meta.url)));
+  await page.locator('#imageInput').setInputFiles({ name: 'previous_lesion.nii.gz', mimeType: 'application/gzip', buffer });
+  await expect(page.locator('#runButton')).toBeEnabled();
+  await page.locator('select[data-neurodesk-example]').selectOption('wm2017');
+  await page.waitForFunction(() => typeof window.releaseExampleImage === 'function', null, { timeout: 120_000 });
+  await page.getByRole('button', { name: 'Cancel example download' }).click();
+  await page.evaluate(() => window.releaseExampleImage());
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60_000 });
+  await expect(page.locator('#lesionInfo')).toHaveText('Lesion: previous_lesion.nii.gz');
+  await expect(page.locator('#anatomicalInfo')).toBeHidden();
+  await expect(page.locator('#imageLabel')).toHaveText('MNI152 TEMPLATE · LESION');
+  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'cancelled');
+  await expect(page.locator('#statusText')).toContainText('cancelled');
+  await expect(page.locator('#saveButton')).toBeDisabled();
+});
+
+
+test('extensionless DICOM series converts alongside a NIfTI lesion', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60_000 });
+  const buffer = readFileSync(fileURLToPath(new URL('../../../exes/nii2tvx/test/fixtures/lesion.nii.gz', import.meta.url)));
+  await page.locator('#imageInput').setInputFiles([
+    { name: 'lesion.nii.gz', mimeType: 'application/gzip', buffer },
+    ...dicomSeries({ extension: '' }),
+  ]);
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120_000 });
+  await expect(page.locator('#lesionInfo')).toHaveText('Lesion: lesion.nii.gz');
+  await expect(page.locator('#anatomicalInfo')).toBeVisible();
+  await expect(page.locator('#anatomicalInfo')).toContainText('.nii');
+  await expect(page.locator('#imageLabel')).toHaveText('ANATOMICAL · LESION');
 });

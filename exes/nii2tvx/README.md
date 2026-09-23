@@ -32,7 +32,8 @@ lesions. The bundles are chosen so the answers span a full hit, a fraction, a mi
 empty tract (`nan`); a fixture that only produced 0 and 1 would pass with the middle of the
 algorithm broken. It also checks that the packed atlas and the per-tract files agree, that a
 lesion on a different grid is refused, and that the WASM module prints exactly what the native
-tool prints. Measured here: 57 ms for all 87 HCP1065 tracts in WASM, 13 ms to open the 88 MB
+tool prints. Conversion regressions cover padded TCK headers, malformed TCK vertices and truncated TRK records.
+Allocation tests inject failures into each query-core allocation and check cleanup. Measured here: 57 ms for all 87 HCP1065 tracts in WASM, 13 ms to open the 88 MB
 atlas, 9 ms to open a mask.
 
 ## Manual Usage
@@ -51,7 +52,8 @@ make
 ```
 
 - `template.nii`: NIfTI image defining voxel space and affine transform.  
-- `tracksX.trk` / `tracksX.tck`: tractography files.  
+- `tracksX.trk` / `tracksX.tck`: tractography files. TCK inputs must use inline `Float32LE` data;
+  the converter respects the header's `file: . <offset>` and rejects unsupported encodings.
 - Output: `.tvx` files, one per input streamline file.  
 - Pack many into one self-describing atlas: `./nii2tvx -p atlas.tvx tracks1.tvx tracks2.tvx`  
 - Format details: [tvx_format.md](tvx_format.md).  

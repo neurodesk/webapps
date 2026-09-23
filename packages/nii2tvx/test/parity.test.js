@@ -74,6 +74,36 @@ test('gzipped and plain inputs are accepted interchangeably', async (t) => {
   }
 });
 
+test('closing during decompression refuses the query before using freed memory', async (t) => {
+  const built = buildFixtureAtlas();
+  if (!built) return t.skip('build exes/nii2tvx first');
+  try {
+    const atlas = await openAtlas(readFileSync(join(built.work, 'atlas.tvx')));
+    const pending = atlas.query(readFileSync(join(fixtures, 'lesion.nii.gz')));
+    atlas.close();
+    await assert.rejects(pending, /atlas is closed/);
+  } finally {
+    rmSync(built.work, { recursive: true, force: true });
+  }
+});
+
+test('an inactive sform cannot establish atlas alignment', async (t) => {
+  const built = buildFixtureAtlas();
+  if (!built) return t.skip('build exes/nii2tvx first');
+  try {
+    const atlas = await openAtlas(readFileSync(join(built.work, 'atlas.tvx')));
+    try {
+      const lesion = await gunzip(readFileSync(join(fixtures, 'lesion.nii.gz')));
+      new DataView(lesion.buffer, lesion.byteOffset, lesion.byteLength).setInt16(254, 0, true);
+      await assert.rejects(atlas.query(lesion), /grid|dim|sto_xyz/i);
+    } finally {
+      atlas.close();
+    }
+  } finally {
+    rmSync(built.work, { recursive: true, force: true });
+  }
+});
+
 test('fractions format exactly as C printf("%g")', () => {
   // Every case where Number(x.toPrecision(6)) diverges, plus the ordinary ones.
   assert.equal(formatG(NaN), 'nan');

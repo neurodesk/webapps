@@ -26,6 +26,7 @@ const M = await createModule();
 
 function toHeap(bytes) { // copy a Node buffer into WASM memory; caller frees
 	const ptr = M._malloc(bytes.length);
+	if (!ptr) throw new Error(`Out of memory allocating ${bytes.length} bytes.`);
 	M.HEAPU8.set(bytes, ptr);
 	return ptr;
 }

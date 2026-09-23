@@ -1,6 +1,6 @@
 {
   "name": "disconnectome",
-  "version": "0.1.20260920",
+  "version": "0.1.20260923",
   "private": true,
   "type": "module",
   "license": "BSD-2-Clause",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@neurodesk/nii2tvx": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.13"
   },

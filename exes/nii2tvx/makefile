@@ -21,6 +21,9 @@ wasm:
 # Committed fixtures: TRK -> TVX -> pack -> query, plus WASM parity when nii2tvx.mjs exists.
 test: nii2tvx
 	sh test/run-tests.sh
+	python3 test/conversion.test.py
+	@work=$$(mktemp -d); trap 'rm -rf "$$work"' EXIT; \
+	$(CC) $(CFLAGS) test/allocation.test.c -o "$$work/allocation-test" $(LIBS) && "$$work/allocation-test"
 
 # The two real atlases and the four example lesions, which live outside the repository.
 # Both engines must reproduce each atlas's expected-examples*.tsv exactly.

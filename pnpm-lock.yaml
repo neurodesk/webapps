@@ -372,6 +372,9 @@ importers:
       '@neurodesk/nii2tvx':
         specifier: workspace:*
         version: link:../../packages/nii2tvx
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../../packages/runtime-support
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components

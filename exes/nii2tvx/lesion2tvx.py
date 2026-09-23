@@ -16,7 +16,7 @@ from pathlib import Path
 
 def extract_subject_session(fp: str):
     for part in Path(fp).parts[::-1]:  # nearest folder or file name wins
-        m = re.match(r"sub-([A-Za-z0-9]+)(?:_ses-([0-9]+))?", part)
+        m = re.match(r"w?sub-([A-Za-z0-9]+)(?:_ses-([A-Za-z0-9]+))?", part)
         if m:
             return m.group(1), m.group(2) or "1"
     return Path(fp).name, "1"

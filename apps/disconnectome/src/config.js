@@ -45,6 +45,7 @@ export const TEMPLATE = Object.freeze({
 export function assignInputs(files) {
   const images = files.filter((file) => /\.nii(\.gz)?$/i.test(file.name));
   if (!images.length) return { error: 'Choose a .nii or .nii.gz lesion map.' };
+  if (images.length > 2) return { error: 'Choose one lesion map and at most one anatomical image or DICOM series.' };
   if (images.length === 1) return { lesion: images[0], anatomical: null };
   const byName = images.filter((file) => /lesion|mask|roi/i.test(file.name));
   const lesion = byName.length === 1 ? byName[0] : [...images].sort((a, b) => a.size - b.size)[0];

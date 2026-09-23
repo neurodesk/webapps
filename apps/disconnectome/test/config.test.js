@@ -61,6 +61,7 @@ test('a dropped selection picks the lesion, not the scan', () => {
   const l1 = file('lesion1.nii.gz', 900), l2 = file('lesion2.nii.gz', 90);
   assert.equal(assignInputs([l1, l2]).lesion, l2);
   assert.ok(assignInputs([file('notes.txt', 10)]).error);
+  assert.match(assignInputs([mask, scan, file('extra.nii', 100)]).error, /at most one/);
 });
 
 test('damaged bundles are filtered, sorted worst first, and never include NaN', () => {
