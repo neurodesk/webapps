@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Disconnectome — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Images</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a lesion map and optional anatomical scan" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a lesion map, and an anatomical scan if you have one</span>
+          </label>
+          <p id="lesionInfo" class="nd-file-info" hidden></p>
+          <p id="anatomicalInfo" class="nd-file-info" hidden></p>
+          <p class="nd-hint">The lesion must already be on the MNI152 1 mm template, 182 × 218 × 182. Normalize with <a href="../syncro/" target="_blank" rel="noopener">SYNcro</a> first if it is not. Without an anatomical scan the MNI152 template is shown instead.</p>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="runSection" open>
+        <summary class="nd-section-title">Disconnection</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="atlasSelect">Tractography atlas</label>
+            <select id="atlasSelect"></select>
+          </div>
+          <p class="nd-hint" id="atlasHint"></p>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Generate disconnectome</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="threshold">Show bundles damaged at least <small><span id="thresholdValue">0</span>%</small></label>
+            <input id="threshold" type="range" min="0" max="100" step="1" value="0" />
+          </div>
+          <div id="colorbar" class="dc-colorbar" hidden>
+            <div class="dc-colorbar-ramp" aria-hidden="true"></div>
+            <div class="dc-colorbar-scale"><span id="colorbarMin">0%</span><span id="colorbarMax">100%</span></div>
+            <p class="nd-hint" id="colorbarNote"></p>
+          </div>
+          <p id="damageSummary" class="nd-file-info" hidden></p>
+          <button id="saveButton" class="nd-btn nd-btn-secondary" type="button" disabled>Download disconnectome (.tsv)</button>
+        </div>
+      </details>
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Lesion, anatomical scan and disconnected bundles"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Choose an example or drop a lesion map to begin.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel"></span><span id="location">Scroll to change slices · drag to adjust the view</span></div>
+    </main>
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Disconnection progress"></progress>
+    </footer>
+    <template id="aboutContent">
+      <p>A lesion interrupts more of the brain than it destroys: fibres passing through it lose their connection even where the tissue beyond is intact. This app scores that disconnection. It intersects a lesion map with a population tractography atlas and reports, for each white-matter bundle, the fraction of streamlines that pass through the lesion.</p>
+      <p>Two atlases are offered. The <strong>ENIGMA Symmetric White Matter Tractography Atlas</strong> (65 bundles) is the default: it is built to be left–right symmetric, so a bundle and its contralateral twin are directly comparable. The <strong>HCP1065 population-averaged atlas</strong> (87 bundles) covers more bundles, including cranial nerves and brainstem pathways. They are different parcellations, not two measurements of one thing, so their bundle names and counts do not line up; report which one you used.</p>
+      <p>The arithmetic runs locally in WebAssembly (<code>nii2tvx</code>), on the full-resolution atlas, so the numbers match the command-line tool exactly. The streamlines you see are a decimated sample of the same atlas, kept small enough to download; do not count fibres on screen and expect the reported fraction.</p>
+      <p>The same analysis runs from a terminal: <code>exes/nii2tvx</code> in the Neurodesk webapps repository builds with <code>make</code>, and the dataset README shows the two commands. The browser and the command line produce the same table.</p>
+      <p>Research use only. A population-averaged atlas is not this patient's anatomy, and disconnection scored this way is a prediction, not a measurement.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed in this browser and are never uploaded. The tract atlas and the example scans are downloaded from Hugging Face at a pinned revision.</p></template>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

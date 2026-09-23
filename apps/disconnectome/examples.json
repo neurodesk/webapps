@@ -1,0 +1,82 @@
+[
+  {
+    "id": "wm2017",
+    "label": "wM2017 lesion and T1",
+    "description": "A left-hemisphere stroke lesion of 163 cc, centred at MNI -45 -14 24, with the spatially normalized T1 it was drawn on.",
+    "expectedResult": "With the ENIGMA Symmetric (65 bundles) atlas, 31 score as damaged and 7 as severed completely.",
+    "files": [
+      {
+        "role": "image",
+        "name": "wM2017_T1w_lesion.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2017_T1w_lesion.nii.gz",
+        "sha256": "6cec7fd16d20bde36d219f02be88bdaf7fe2538c7069f6db51f0210a070b1b6f"
+      },
+      {
+        "role": "anatomical",
+        "name": "wM2017_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2017_T1w.nii.gz",
+        "sha256": "aa8be671c4e662ec4d4a913e1f2d4080a488a1a3c7734a02b980e23effcbdd21"
+      }
+    ]
+  },
+  {
+    "id": "wm2018",
+    "label": "wM2018 lesion and T2",
+    "description": "A left-hemisphere stroke lesion of 45 cc, centred at MNI -41 -54 11, with the spatially normalized T2 it was drawn on.",
+    "expectedResult": "With the ENIGMA Symmetric (65 bundles) atlas, 24 score as damaged and 5 as severed completely.",
+    "files": [
+      {
+        "role": "image",
+        "name": "wM2018_T2w_lesion.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2018_T2w_lesion.nii.gz",
+        "sha256": "160d5b208bc50b2709a194cc3af6e15566a239fcdd67f7a9a9d99138c55cc4b6"
+      },
+      {
+        "role": "anatomical",
+        "name": "wM2018_T2w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2018_T2w.nii.gz",
+        "sha256": "44364444f7522936ee21beef6fc9140e46b2664b09fbf6e9ec73368166fc024e"
+      }
+    ]
+  },
+  {
+    "id": "wm2201",
+    "label": "wM2201 lesion and T2",
+    "description": "A left-hemisphere stroke lesion of 0.3 cc, centred at MNI -8 -9 0, with the spatially normalized T2 it was drawn on.",
+    "expectedResult": "With the ENIGMA Symmetric (65 bundles) atlas, 3 score as damaged and 0 as severed completely.",
+    "files": [
+      {
+        "role": "image",
+        "name": "wM2201_T2w_lesion.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2201_T2w_lesion.nii.gz",
+        "sha256": "01a7011a4a759eeaae083766e720d6e48d1a860b5a309674924c7e8c296f4c6a"
+      },
+      {
+        "role": "anatomical",
+        "name": "wM2201_T2w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2201_T2w.nii.gz",
+        "sha256": "d834d31fc6aad8d31fbbcacf8591c89699537a36f6fc4a5d69a2b7c3ffdd872d"
+      }
+    ]
+  },
+  {
+    "id": "wm2208",
+    "label": "wM2208 lesion and T2",
+    "description": "A left-hemisphere stroke lesion of 13 cc, centred at MNI -23 -9 7, with the spatially normalized T2 it was drawn on.",
+    "expectedResult": "With the ENIGMA Symmetric (65 bundles) atlas, 22 score as damaged and 6 as severed completely.",
+    "files": [
+      {
+        "role": "image",
+        "name": "wM2208_T2w_lesion.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2208_T2w_lesion.nii.gz",
+        "sha256": "ff198fa6b071039cc9919e4aea13c178360d3089b983365b1a7813e1a56a0c31"
+      },
+      {
+        "role": "anatomical",
+        "name": "wM2208_T2w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/examples/wM2208_T2w.nii.gz",
+        "sha256": "3926f810853c2fa199ac4d50488a1c83c84789005ea96be2d95536dbd358c97b"
+      }
+    ]
+  }
+]

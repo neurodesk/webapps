@@ -36,6 +36,24 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('disconnectome', async page => {
+    await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60000 });
+    await page.locator('#imageInput').setInputFiles(nifti('interface-lesion.nii'));
+    await expect(page.locator('#runButton')).toBeEnabled();
+    const inputs = page.locator('#inputSection > summary');
+    await inputs.tap();
+    await expect(page.locator('#imageInput')).toBeHidden();
+    await inputs.tap();
+    await expect(page.locator('#lesionInfo')).toContainText('interface-lesion.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    const outputs = page.locator('#outputSection > summary');
+    await outputs.tap();
+    await page.locator('#threshold').fill('60');
+    await outputs.tap();
+    await outputs.tap();
+    await expect(page.locator('#threshold')).toHaveValue('60');
+    await expect(page.locator('#saveButton')).toBeDisabled();
+  });
   await check('syncro', async page => {
     await expect(page.locator('#runButton')).toBeDisabled();
     await expect(page.locator('#results')).not.toHaveAttribute('open','');

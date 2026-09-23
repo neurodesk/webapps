@@ -565,6 +565,13 @@
       "assets": [],
       "downloads": [],
       "containers": []
+    },
+    "disconnectome": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

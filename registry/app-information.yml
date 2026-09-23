@@ -1067,3 +1067,30 @@ apps:
       title: NiiVue
       reference: 'NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software].'
       url: https://github.com/niivue/niivue
+
+  disconnectome:
+    about:
+      - A lesion interrupts more of the brain than it destroys. This app intersects a lesion map with a population tractography atlas and reports, for each white-matter bundle, the fraction of streamlines passing through the lesion. Two atlases are offered, ENIGMA Symmetric (65 bundles, the default) and HCP1065 population-averaged (87 bundles). The arithmetic runs locally on the full-resolution atlas; the streamlines drawn are a decimated sample of the same atlas.
+    packages:
+      - { name: nii2tvx (WebAssembly), url: https://github.com/neurolabusc/nii2tvx, role: lesion-to-tract disconnection }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image and tract viewer }
+    citations:
+      - group: Tract atlas
+        title: ENIGMA Symmetric White Matter Tractography Atlas
+        reference: "Ba Gari I, Alibrando JD, Feng Y, Villalon-Reina JE, Cabalinan A, Nabulsi L, Thompson PM, Yeh FC, Chandio BQ, Nir TM, Jahanshad N. ENIGMA Symmetric White Matter Tractography Atlas v1.0.0. Zenodo; 2026."
+        doi: 10.5281/zenodo.19656193
+        url: https://zenodo.org/records/19656193
+      - group: Tract atlas
+        title: HCP1065 population-averaged tractography atlas
+        reference: "Yeh FC. Population-based tract-to-region connectome of the human brain and its hierarchical topology. Nature Communications. 2022;13:4933."
+        doi: 10.1038/s41467-022-32595-4
+        url: https://pubmed.ncbi.nlm.nih.gov/35995773/
+      - group: Disconnection
+        title: nii2tvx
+        reference: "Rorden C. nii2tvx: structural disconnection from voxel-based lesion maps [Computer software]."
+        url: https://github.com/neurolabusc/nii2tvx
+        code: https://github.com/neurolabusc/nii2tvx
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

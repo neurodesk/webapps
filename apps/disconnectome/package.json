@@ -1,0 +1,26 @@
+{
+  "name": "disconnectome",
+  "version": "0.1.20260923",
+  "private": true,
+  "type": "module",
+  "license": "BSD-2-Clause",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app disconnectome",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@neurodesk/nii2tvx": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "vite": "^6.3.2"
+  }
+}
