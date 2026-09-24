@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "appVersion": "1.4.20260923",
-  "targetAppVersion": "1.4.20260923",
+  "appVersion": "1.4.20260924",
+  "targetAppVersion": "1.4.20260924",
   "upstream": {
     "repository": "https://github.com/MuscleMap/MuscleMap",
     "revision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",

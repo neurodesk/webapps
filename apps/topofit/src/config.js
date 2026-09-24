@@ -2,5 +2,5 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: 'topofit',
-  version: '0.11.20260923',
+  version: '0.11.20260924',
 });

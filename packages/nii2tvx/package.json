@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/nii2tvx",
-  "version": "0.1.20260923",
+  "version": "0.1.20260924",
   "private": true,
   "type": "module",
   "description": "Lesion-to-tract disconnection queries (nii2tvx) as WebAssembly",

@@ -1,5 +1,13 @@
 # disconnectome
 
+## 0.1.20260924
+
+### Patch Changes
+
+- Updated dependencies [39a9ea5]
+  - @neurodesk/webapp-components@0.4.5
+  - @neurodesk/nii2tvx@0.1.20260924
+
 ## 0.1.20260923
 
 ### Patch Changes
@@ -8,7 +16,6 @@
   merged after the release that recorded the action for the other 25 apps, so this
   notes it against the same release date.
   - @neurodesk/nii2tvx@0.1.20260923
-
 
 ### Patch Changes
 
