@@ -1574,7 +1574,7 @@
       "url_mappings": [],
       "runtime_packages": {
         "@neurodesk/webapp-components": "workspace:*",
-        "@niivue/niivue": "1.0.0-rc.11",
+        "@niivue/niivue": "1.0.0-rc.14",
         "zarrita": "^0.7.3"
       },
       "notes": [

@@ -3,6 +3,7 @@ import NiiVue, {
   type ChunkedVolumeSource,
   type ChunkPlan,
   chunkVolumeGrid,
+  createStreamingNVImage,
   DRAG_MODE,
   type NVChunkedVolume,
   type NVImage,
@@ -56,7 +57,6 @@ import {
 } from './decoded_chunk_cache'
 import { anchoredSlicePan, pointOnSlicePlane } from './cursor_zoom'
 import {
-  buildLogicalVolume,
   niftiDatatype,
   type Shape3,
 } from './logical_volume'
@@ -76,7 +76,6 @@ import {
   type NiftiStreamProgress,
 } from './nifti_stream'
 import { LatestTaskQueue } from './latest_task_queue'
-import { measurementIndexAtCanvasPoint } from './measurement_hit_test'
 import {
   layoutTranslatedBlocks,
   spatialTransformMm,
@@ -1473,21 +1472,8 @@ function waitForStainLayerUploads(signal?: AbortSignal): Promise<void> {
 
 async function waitForStainLayerRefocus(
   controller: NVChunkedVolume,
-  previousPlan: ChunkPlan,
 ): Promise<void> {
-  const startedAt = performance.now()
-  while (controller.currentPlan === previousPlan) {
-    if (performance.now() - startedAt > 10_000) {
-      throw new Error('Timed out waiting for a stain detail plan swap')
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 25))
-  }
-
-  // NVChunkedVolume debounces refocus and exposes no public completion promise.
-  // The pinned NiiVue implementation keeps the actual host swap in swapChain;
-  // await it so a second controller cannot enter the shared renderer mid-swap.
-  const internal = controller as unknown as { swapChain?: Promise<void> }
-  await internal.swapChain
+  await controller.whenRefocusIdle()
   await waitForStainLayerUploads()
 }
 
@@ -3154,7 +3140,7 @@ function createOmezarrRenderCropVolume(
     STREAMING_CHUNK_HALO,
   )
   const win = parseWindow(source.defaultWindow)
-  const volume = buildLogicalVolume({
+  const volume = createStreamingNVImage({
     id: `${source.name} current FOV L${level.level}`,
     url:
       `client-zarr-crop://${source.id}/L${level.level}` +
@@ -3164,45 +3150,44 @@ function createOmezarrRenderCropVolume(
     shape: geometry.shape,
     spacing: geometry.spacing,
     datatypeCode: source.datatypeCode,
-    numBitsPerVoxel: source.numBitsPerVoxel,
     calMin: win.min,
     calMax: win.max,
     colormap: els.colormap.value,
-    chunkSource: async (request) => {
-      const signal = readSession.signalFor(request.signal)
-      const texOrigin = absoluteCropOrigin(
-        geometry.origin,
-        request.desc.texOrigin,
-      )
-      const texDims = request.desc.texDims
-      const key = omezarrRequestKey(level.level, texOrigin, texDims)
-      stats.requested.add(key)
-      renderHud()
-      try {
-        const bytes = await fetchOmezarrRegion(
-          level,
-          {
-            levelIndex: level.level,
-            texOrigin,
-            texDims,
-            bytesPerVoxel: request.bytesPerVoxel,
-          },
-          signal,
-        )
-        observeChunkForAutoWindow(source, bytes)
-        stats.completed.add(key)
-        stats.decodedBytes += bytes.byteLength
-        renderHud()
-        return bytes
-      } catch (error) {
-        if (!isAbortError(error)) {
-          stats.failures++
-          renderHud()
-        }
-        throw error
-      }
-    },
   })
+  volume.chunkSource = async (request) => {
+    const signal = readSession.signalFor(request.signal)
+    const texOrigin = absoluteCropOrigin(
+      geometry.origin,
+      request.desc.texOrigin,
+    )
+    const texDims = request.desc.texDims
+    const key = omezarrRequestKey(level.level, texOrigin, texDims)
+    stats.requested.add(key)
+    renderHud()
+    try {
+      const bytes = await fetchOmezarrRegion(
+        level,
+        {
+          levelIndex: level.level,
+          texOrigin,
+          texDims,
+          bytesPerVoxel: request.bytesPerVoxel,
+        },
+        signal,
+      )
+      observeChunkForAutoWindow(source, bytes)
+      stats.completed.add(key)
+      stats.decodedBytes += bytes.byteLength
+      renderHud()
+      return bytes
+    } catch (error) {
+      if (!isAbortError(error)) {
+        stats.failures++
+        renderHud()
+      }
+      throw error
+    }
+  }
   volume.chunkPlan = plan
   volume.chunkExplode = { enabled: false }
   return { volume, plan }
@@ -3542,7 +3527,7 @@ async function downloadNifti(): Promise<void> {
 
 function createStreamingVolume(source: RangeSource): NVImage {
   const win = parseWindow(source.defaultWindow)
-  const vol = buildLogicalVolume({
+  const vol = createStreamingNVImage({
     id: source.name,
     url:
       `client-chunk://${source.id}` +
@@ -3553,12 +3538,11 @@ function createStreamingVolume(source: RangeSource): NVImage {
     shape: source.shape,
     spacing: source.spacing,
     datatypeCode: source.datatypeCode,
-    numBitsPerVoxel: source.numBitsPerVoxel,
     calMin: win.min,
     calMax: win.max,
     colormap: els.colormap.value,
-    chunkSource: createRangeChunkSource(source),
   })
+  vol.chunkSource = createRangeChunkSource(source)
   vol.chunkPlan = chunkPlan ?? undefined
   vol.chunkExplode = { enabled: false }
   return vol
@@ -3937,35 +3921,20 @@ function sliceTypeForVolumePlane(plane: VolumePlane): number {
 function addNvSlideMeasurement(
   measurement: NvSlideMeasurementCreation,
 ): void {
-  if (!nv) return
-  nv.model.completedMeasurements.push({
-    startMM: [
-      measurement.startMM[0],
-      measurement.startMM[1],
-      measurement.startMM[2],
-    ],
-    endMM: [
-      measurement.endMM[0],
-      measurement.endMM[1],
-      measurement.endMM[2],
-    ],
-    distance: measurement.distance,
-    sliceIndex: 0,
-    sliceType: sliceTypeForVolumePlane(measurement.plane),
-    slicePosition: measurement.slicePosition,
-  })
-  nv.drawScene()
-  els.clearMeasurements.disabled = false
-  els.measurementStatus.value =
-    `${formatMeasuredDistance(measurement.distance)} · right-click to remove`
-  syncNvSlideView()
+  nv?.addMeasurement(
+    [...measurement.startMM],
+    [...measurement.endMM],
+    {
+      sliceType: sliceTypeForVolumePlane(measurement.plane),
+      slicePosition: measurement.slicePosition,
+    },
+  )
 }
 
-function removeNvSlideMeasurement(index: number): void {
+function removeMeasurement(index: number): void {
   if (!nv) return
-  nv.model.completedMeasurements.splice(index, 1)
-  nv.drawScene()
-  const remaining = nv.model.completedMeasurements.length
+  nv.removeMeasurement(index)
+  const remaining = nv.getMeasurements().length
   els.clearMeasurements.disabled = remaining === 0
   els.measurementStatus.value =
     remaining === 0
@@ -3975,35 +3944,14 @@ function removeNvSlideMeasurement(index: number): void {
 }
 
 function handleMeasurementContextMenu(event: MouseEvent): void {
-  if (!nv || event.shiftKey || nv.model.completedMeasurements.length === 0) return
-  const rect = els.canvas.getBoundingClientRect()
-  if (rect.width <= 0 || rect.height <= 0) return
-  const scaleX = els.canvas.width / rect.width
-  const scaleY = els.canvas.height / rect.height
-  const point: [number, number] = [
-    (event.clientX - rect.left) * scaleX,
-    (event.clientY - rect.top) * scaleY,
-  ]
-  const planeTolerance =
-    Math.max(...(activeSource?.crosshairSpacing ?? [1, 1, 1])) * 0.5
-  const index = measurementIndexAtCanvasPoint(
-    nv.model.completedMeasurements,
-    nv.view?.screenSlices ?? [],
-    point,
-    12 * Math.max(scaleX, scaleY),
-    planeTolerance,
-  )
-  if (index < 0) return
+  if (!nv || event.shiftKey) return
+  const point = nv.clientToCanvas(event.clientX, event.clientY)
+  if (!point) return
+  const cssToCanvas = els.canvas.width / Math.max(1, els.canvas.clientWidth)
+  const index = nv.pickMeasurement(point[0], point[1], 12 * cssToCanvas)
+  if (index === null) return
   event.preventDefault()
-  nv.model.completedMeasurements.splice(index, 1)
-  nv.drawScene()
-  const remaining = nv.model.completedMeasurements.length
-  els.clearMeasurements.disabled = remaining === 0
-  els.measurementStatus.value =
-    remaining === 0
-      ? 'drag across a structure'
-      : `${remaining} measurement${remaining === 1 ? '' : 's'} · right-click to remove`
-  syncNvSlideView()
+  removeMeasurement(index)
 }
 
 function resetRenderCropForSourceChange(): void {
@@ -4063,13 +4011,7 @@ function startHudPolling(): void {
 }
 
 function selectedLayoutConfig() {
-  const source = activeSource
-  const physicalExtents = source
-    ? source.shape.map(
-        (length, axis) => length * source.spacing[axis],
-      ) as Shape3
-    : undefined
-  return viewerLayoutConfig(Number(els.layout.value), physicalExtents)
+  return viewerLayoutConfig(Number(els.layout.value))
 }
 
 function selectedSliceType(): number {
@@ -4434,7 +4376,7 @@ function syncNvSlideView(): void {
       els.interactionTool.getAttribute('aria-pressed') === 'true'
         ? 'measurement'
         : 'navigation',
-    measurements: nv?.model.completedMeasurements ?? [],
+    measurements: nv?.getMeasurements() ?? [],
   }
   nvSlideView.update(state)
 }
@@ -5014,7 +4956,6 @@ async function applyAdaptiveLodRequest(): Promise<void> {
   if (requestKey !== primary.lastAdaptiveRequestKey) {
     primary.lastAdaptiveRequestKey = requestKey
     primary.readSession.renew()
-    const previousPlan = primary.chunkedVolume.currentPlan
     const targetChanged = updateAdaptiveLodDetail(
       primary.chunkedVolume,
       primary.detailLevel,
@@ -5027,7 +4968,7 @@ async function applyAdaptiveLodRequest(): Promise<void> {
       lastAdaptiveRequestKey = requestKey
       if (targetChanged) setActiveLodLoading(target)
     }
-    await waitForStainLayerRefocus(primary.chunkedVolume, previousPlan)
+    await waitForStainLayerRefocus(primary.chunkedVolume)
   }
 
   const active = activeStainRuntime()
@@ -5068,8 +5009,7 @@ async function refocusMultiStainVolumes(
       focus: focusFraction,
       bounds,
     })),
-    (controller, previousPlan) =>
-      waitForStainLayerRefocus(controller, previousPlan),
+    waitForStainLayerRefocus,
   )
 
   for (const { runtime, targetLevel, requestKey } of requests) {
@@ -5456,7 +5396,7 @@ async function main(): Promise<void> {
     {
       onCrosshairChange: applyNvSlideCrosshair,
       onMeasurementCreate: addNvSlideMeasurement,
-      onMeasurementRemove: removeNvSlideMeasurement,
+      onMeasurementRemove: removeMeasurement,
       onActivePaneChange: () => {
         syncDownloadControl()
       },

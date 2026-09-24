@@ -118,6 +118,22 @@ async function expectCanvasUnchanged(locator, anchor) {
     .toBe(true);
 }
 
+// `data-loading` reaches 0 once uploads finish, but bricks can still be
+// cross-fading in. A reference captured mid-fade never recurs, so wait for two
+// identical consecutive frames before using one.
+async function settledCanvasScreenshot(locator) {
+  let previous = await locator.screenshot();
+  await expect
+    .poll(async () => {
+      const next = await locator.screenshot();
+      const settled = next.equals(previous);
+      previous = next;
+      return settled;
+    }, { timeout: 10_000 })
+    .toBe(true);
+  return previous;
+}
+
 async function clickKnownCanvasPointUntilLocationChanges(
   page,
   points,
@@ -1008,7 +1024,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.getByLabel(/Window width/)).toHaveValue("610");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
-  const dapiBeforeAutoContrast = await page.locator("#nv-canvas").screenshot();
+  const dapiBeforeAutoContrast = await settledCanvasScreenshot(page.locator("#nv-canvas"));
   const dapiCommitsBeforeAutoContrast = await windowCommitCount(page);
   await page.getByRole("button", { name: "Auto contrast" }).click();
   await expect.poll(() => windowCommitCount(page))
@@ -1076,7 +1092,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await expect(page.getByLabel(/Window width/)).toHaveValue("610");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-min", "0");
   await expect(page.locator("#nv-canvas")).toHaveAttribute("data-window-max", "610");
-  const restoredDapiBeforeAutoContrast = await page.locator("#nv-canvas").screenshot();
+  const restoredDapiBeforeAutoContrast = await settledCanvasScreenshot(page.locator("#nv-canvas"));
   const restoredCommitsBeforeAutoContrast = await windowCommitCount(page);
   await page.getByRole("button", { name: "Auto contrast" }).click();
   await expect.poll(() => windowCommitCount(page))
@@ -1108,7 +1124,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   await page.getByLabel("Zoom level").fill("2");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect.poll(() => gatedDapiLodRequests).toBeGreaterThan(0);
-  const dapiDuringLodSwap = await page.locator("#nv-canvas").screenshot();
+  const dapiDuringLodSwap = await settledCanvasScreenshot(page.locator("#nv-canvas"));
   await expect(page.getByLabel(/Window level/)).toHaveValue(dapiWindowBeforeLodSwap[0]);
   await expect(page.getByLabel(/Window width/)).toHaveValue(dapiWindowBeforeLodSwap[1]);
   await expect(page.locator("#activeLevel")).toHaveAttribute(
@@ -1131,15 +1147,17 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   )).toBeGreaterThan(0);
   await expectCanvasUnchanged(page.locator("#nv-canvas"), dapiDuringLodSwap);
 
-  // Supersede a delayed multi-stain swap. The controllers share one NiiVue
-  // upload pump, so the newer request must wait for the current swap and then
-  // become the final delivered plan instead of leaving the pump idle/stale.
-  gateDualLayerLod = true;
-  gatedLodLevel = 3;
-  gatedDapiLodRequests = 0;
+  // Supersede a pending multi-stain swap. The controllers share one NiiVue
+  // upload pump, so the newer request must become the final delivered plan
+  // instead of leaving the pump idle or stale. Level 3 is the coarse floor and
+  // already resident, so no network gate can hold this swap in flight.
+  gateDualLayerLod = false;
   await page.getByLabel("Zoom level").fill("3");
   await page.getByRole("button", { name: "Apply" }).click();
-  await expect.poll(() => gatedDapiLodRequests).toBeGreaterThan(0);
+  await expect(page.locator("#activeLevel")).toHaveAttribute(
+    "data-requested-level",
+    "3",
+  );
   await page.getByLabel("Zoom level").fill("1");
   await page.getByRole("button", { name: "Apply" }).click();
   await expect(page.locator("#activeLevel")).toHaveAttribute(

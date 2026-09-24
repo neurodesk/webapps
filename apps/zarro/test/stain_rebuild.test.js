@@ -37,7 +37,6 @@ test('settles each stain plan swap before starting the next one', async () => {
     readSession: { renew: () => order.push(`renew:${name}`) },
     controller: {
       name,
-      currentPlan: `${name}:old`,
       setMaxDetail: () => order.push(`detail:${name}`),
       setFocus: () => order.push(`focus:${name}`),
     },
@@ -50,8 +49,8 @@ test('settles each stain plan swap before starting the next one', async () => {
 
   const refocus = refocusLoadedStainVolumes(
     [first, second],
-    (controller, previousPlan) => {
-      order.push(`wait:${controller.name}:${previousPlan}`)
+    (controller) => {
+      order.push(`wait:${controller.name}`)
       return new Promise((resolve) => settle.set(controller.name, resolve))
     },
   )
@@ -62,7 +61,7 @@ test('settles each stain plan swap before starting the next one', async () => {
     'renew:second',
     'detail:first',
     'focus:first',
-    'wait:first:first:old',
+    'wait:first',
   ])
 
   settle.get('first')()
@@ -72,10 +71,10 @@ test('settles each stain plan swap before starting the next one', async () => {
     'renew:second',
     'detail:first',
     'focus:first',
-    'wait:first:first:old',
+    'wait:first',
     'detail:second',
     'focus:second',
-    'wait:second:second:old',
+    'wait:second',
   ])
 
   settle.get('second')()

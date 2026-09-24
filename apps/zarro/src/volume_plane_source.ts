@@ -230,7 +230,6 @@ export function windowVoxelsToRgba(
 export class VolumePlaneSource implements SlideTileSource {
   readonly manifest: NVSlideManifest
 
-  private readonly abortController = new AbortController()
   private readonly bytesPerVoxel: number
   private readonly definition: PlaneDefinition
   private readonly planeForLevel: number[] = []
@@ -330,6 +329,7 @@ export class VolumePlaneSource implements SlideTileSource {
     level: NVSlideLevelManifest,
     tile: NVSlideTileManifest,
     label: string,
+    signal?: AbortSignal,
   ): Promise<Uint8Array> {
     const normalIndex = this.planeForLevel[level.index]
     if (normalIndex === undefined) {
@@ -342,14 +342,14 @@ export class VolumePlaneSource implements SlideTileSource {
       normalIndex,
       this.bytesPerVoxel,
     )
-    request.signal = this.abortController.signal
+    request.signal = signal
     this.host?.pushRangeEvent({ label, status: 'pending' })
     let voxels: Uint8Array
     try {
       voxels = await this.volume.fetchChunk(request)
-      this.abortController.signal.throwIfAborted()
+      signal?.throwIfAborted()
     } catch (error) {
-      if (!this.abortController.signal.aborted) {
+      if (!signal?.aborted) {
         this.host?.updateRangeEvent(label, 'failed')
       }
       throw error
@@ -366,6 +366,5 @@ export class VolumePlaneSource implements SlideTileSource {
 
   dispose(): void {
     this.host = null
-    this.abortController.abort()
   }
 }

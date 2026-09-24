@@ -10,14 +10,13 @@
     "build": "tsc --noEmit && vite build && node ../../scripts/theme-app-dist.mjs --app zarro",
     "preview": "vite preview",
     "prototype:fov": "node scripts/fov_framing_prototype.mjs",
-    "verify:niivue-streaming": "node scripts/verify_niivue_streaming_patch.mjs",
-    "test": "node scripts/verify_niivue_streaming_patch.mjs && node --test test/*.test.js && tsc --noEmit",
+    "test": "node --test test/*.test.js && tsc --noEmit",
     "test:e2e": "playwright test",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/niivue": "1.0.0-rc.11",
+    "@niivue/niivue": "1.0.0-rc.14",
     "zarrita": "^0.7.3"
   },
   "devDependencies": {

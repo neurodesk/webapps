@@ -123,7 +123,7 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   sets; if they ever drift the app colours nothing while every number stays right.
 - `_malloc` returns 0 rather than aborting in this build, so the wrapper checks it: an
   unchecked `HEAPU8.set` at address 0 corrupts the module instead of failing.
-- NiiVue rc.13 is required, not the patched rc.11 most apps pin: `setTractOptions`'s
+- NiiVue rc.13 is required, not the rc.11 most apps pin: `setTractOptions`'s
   `groupColors` (colour and visibility per TRX group, in one call) and `dps` arrived in rc.13.
   The 3D clip plane is load-bearing, not decoration: without it the opaque volume render hides
   every bundle inside the brain.
@@ -135,6 +135,11 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   after `repoint_manifest.sh` run `apps/disconnectome/scripts/sync-examples.mjs` and then
   `scripts/lock-example-assets.mjs`, dropping the old revision's entries from the offline
   inventory first.
+
+## zarro
+
+- Uses the registry `@niivue/niivue` with no patch. Everything the old rc.11 patch provided is upstream API as of `1.0.0-rc.14` ([niivue/mono#160](https://github.com/niivue/mono/issues/160)); see `docs/architecture/zarro-niivue-streaming-integration.md` for the mapping. Do not reintroduce `patchedDependencies` or reach into NiiVue internals; ask upstream for an API instead.
+- `src/cursor_zoom.ts` stays until NiiVue exports its wheel-zoom anchor helpers or a configurable wheel step, because the Scroll zoom speed setting needs a continuous zoom. `src/nvslide_measurement.ts` stays until NVSlide scalar tiles land upstream (niivue/mono#159).
 
 ## Native executables (exes/)
 
