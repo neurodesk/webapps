@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carotid Flow — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Phase-contrast series</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a phase-contrast NIfTI or DICOM series" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI or DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <p class="nd-hint">One gated neck slice: amplitude frames, then as many phase frames. Separate amplitude and <code>_ph</code> series also work.</p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Carotid detection</summary>
+        <div class="nd-section-content">
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="venc">Velocity encoding (VENC) <small>cm/s</small></label>
+                <input id="venc" type="number" min="1" max="999" step="1" placeholder="from the series" />
+                <p class="nd-hint">Only for raw ±4096 phase. Phase already scaled to cm/s needs none.</p>
+              </div>
+              <div class="nd-field">
+                <label for="candidatePercentile">Candidate percentile <small>%</small></label>
+                <input id="candidatePercentile" type="number" min="90" max="99.99" step="0.05" value="99.9" />
+                <p class="nd-hint">Unsigned speed images only: pixels whose signal varies more than this share of the head. Lower it when a carotid is missed.</p>
+              </div>
+              <div class="nd-field">
+                <label for="headPercentile">Head threshold percentile <small>%</small></label>
+                <input id="headPercentile" type="number" min="1" max="80" step="1" value="20" />
+                <p class="nd-hint">Amplitude pixels above this percentile form the head, which sets the search band.</p>
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Detect carotids</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Flow curves</summary>
+        <div class="nd-section-content">
+          <div id="flowChart"></div>
+          <div class="nd-table-scroll">
+            <table class="nd-data-table" id="metricsTable" hidden>
+              <thead><tr><th>Carotid</th><th>Area <small>mm²</small></th><th id="meanHeader">Mean</th><th id="peakHeader">Peak</th><th>PI</th></tr></thead>
+              <tbody id="metricsBody"></tbody>
+            </table>
+          </div>
+          <div id="resultList"></div>
+          <button id="saveButton" class="nd-btn nd-btn-secondary" type="button" disabled>Download flow curves (.csv)</button>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Phase-contrast slice with the detected carotids"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Choose an example or drop a phase-contrast series to begin.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel"></span><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Detection progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel loading" aria-label="Cancel loading" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Carotid Flow finds both carotid arteries in a retrospectively gated phase-contrast slice through the neck and plots their flow over the cardiac cycle. Left and right are the patient’s, read from the image orientation; the downloaded carotid labels image codes the left carotid 1 and the right 2.</p>
+      <p><strong>Signed velocity</strong> (phase scaled to cm/s, or raw phase with its VENC). Vessels are regions of fast mean flow in either direction. The arteries are the direction whose flow pulses more, since neck veins pulse far less, and each carotid is the artery carrying the most flow on its side of the neck. Curves are flow in ml/min through a fixed region, with mean velocity in the CSV. On the example, the right carotid’s flow is within 6 % of PCMCalculator’s manual measurement, with the same waveform.</p>
+      <p><strong>Unsigned speed images</strong>, as some scanners export the phase series, carry no direction. They go through a port of the lab’s MATLAB script, <code>standalone_automatic_carotid_flow.m</code>, which selects the same vessels: pixels whose signal varies most over the cycle, inside a band beside the spine and airway, paired as the two blobs furthest apart and level with each other. The script named the vessel on the image’s left as the left carotid; on the scanner’s radiological grid that is the patient’s right, so this app swaps them. These curves are image intensities, not velocities.</p>
+      <p>Research use only. Check the detected vessels on the image before using a curve. Aliased (wrapped) velocities are not corrected: choose a VENC above the peak carotid velocity.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed in this browser and are never uploaded. The example is downloaded from Hugging Face at a pinned revision.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

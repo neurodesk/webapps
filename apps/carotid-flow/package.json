@@ -1,0 +1,25 @@
+{
+  "name": "carotid-flow",
+  "version": "0.0.20260924",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app carotid-flow",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.14"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "vite": "^5.0.0"
+  }
+}

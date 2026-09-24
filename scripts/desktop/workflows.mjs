@@ -9,7 +9,7 @@ import { dicomSeries } from '../../test-utils/dicom-fixture.mjs';
 import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 
-export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome'];
+export const workflowApps = ['musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow'];
 
 export async function verifyWorkflow(id, page, { root, resources, desktop }) {
   const fixture = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
@@ -37,7 +37,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
-  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'disconnectome'].includes(id)) {
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'disconnectome', 'carotid-flow'].includes(id)) {
     const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
     const selector = page.getByRole('combobox', { name: 'Example', exact: true });
     await expect(selector).toBeEnabled({ timeout: 120000 });
@@ -305,6 +305,20 @@ export async function verifyWorkflow(id, page, { root, resources, desktop }) {
     assert.equal(header.length, 66);
     assert.equal(row.slice(1).filter(value => Number(value) > 0).length, 31);
     return { filename: result.filename, damaged: 31 };
+  }
+  if (id === 'carotid-flow') {
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
+    await page.locator('#runButton').click();
+    await expect(page.locator('#saveButton')).toBeEnabled({ timeout: 60000 });
+    const result = await download('#saveButton');
+    const rows = result.bytes.toString('utf8').trim().split('\n');
+    // The example's 28 cardiac frames; mean flow as examples.json's expectedResult states.
+    assert.equal(rows[0], 'frame,left_velocity_cm_s,left_flow_ml_min,right_velocity_cm_s,right_flow_ml_min');
+    assert.equal(rows.length, 29);
+    const flow = column => rows.slice(1).reduce((sum, row) => sum + Number(row.split(',')[column]), 0) / 28;
+    assert.equal(Math.round(flow(2)), 231);
+    assert.equal(Math.round(flow(4)), 211);
+    return { filename: result.filename, frames: rows.length - 1 };
   }
   throw new Error(`No offline workflow test registered for ${id}`);
 }

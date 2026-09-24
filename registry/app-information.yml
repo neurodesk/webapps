@@ -1094,3 +1094,31 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  carotid-flow:
+    about:
+      - Carotid Flow finds both carotid arteries in a retrospectively gated phase-contrast slice through the neck and extracts their flow over the cardiac cycle, with peak, time average and pulsatility index. Signed velocity gives flow in ml/min; an unsigned speed image goes through a port of a MATLAB script from the requesting lab and gives intensity curves. Everything runs locally.
+      - The example is the open test data of PCMCalculator (Mark B. Vestergaard, MIT licence); on it the right carotid's flow is within 6 % of PCMCalculator's manual measurement.
+    packages:
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Example data and reference measurement
+        title: PCMCalculator
+        reference: "Vestergaard MB. PCMCalculator [Computer software]. Zenodo; 2026."
+        doi: 10.5281/zenodo.18712355
+        code: https://github.com/MarkVestergaard/PCMCalculator
+      - group: Pulsatility index
+        title: Arterial assessment by Doppler-shift ultrasound
+        reference: "Gosling RG, King DH. Arterial assessment by Doppler-shift ultrasound. Proceedings of the Royal Society of Medicine. 1974;67(6 Pt 1):447–449."
+        doi: 10.1177/00359157740676P113
+        url: https://pubmed.ncbi.nlm.nih.gov/4850636/
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

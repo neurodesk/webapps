@@ -36,6 +36,21 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('carotid-flow', async page => {
+    await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60000 });
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#candidatePercentile').fill('99.5');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#candidatePercentile')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#candidatePercentile')).toHaveValue('99.5');
+    await page.locator('#imageInput').setInputFiles(nifti('interface-volume.nii'));
+    await expect(page.locator('#statusText')).toContainText('has 16 slices');
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
   await check('disconnectome', async page => {
     await expect(page.locator('#statusText')).toContainText('Ready · choose', { timeout: 60000 });
     await page.locator('#imageInput').setInputFiles(nifti('interface-lesion.nii'));
