@@ -64,28 +64,47 @@ test('keeps a large mosaic plan bounded and dispatches only requested FOV bricks
   )
 })
 
-test('keeps the requested finest focus brick when the global plan exceeds its budget', () => {
-  const levels = [
-    [41840, 18560, 2048],
-    [20920, 9280, 1024],
-    [10460, 4640, 512],
-    [5230, 2320, 256],
-    [2615, 1160, 128],
-    [1308, 580, 64],
-    [654, 290, 32],
-  ]
+const slidePyramid = [
+  [41840, 18560, 2048],
+  [20920, 9280, 1024],
+  [10460, 4640, 512],
+  [5230, 2320, 256],
+  [2615, 1160, 128],
+  [1308, 580, 64],
+  [654, 290, 32],
+]
+
+const slidePlanOptions = {
+  cellEdge: 128,
+  haloSize: [3, 3, 3],
+  minLevel: 0,
+  budgetBytes: 2 * 1024 * 1024 * 1024,
+  maxBricks: 512,
+  detail: 0.1,
+}
+
+function levelOfBrickAt(plan, point) {
+  const containing = plan.chunks.filter((chunk) =>
+    chunk.voxelOrigin.every(
+      (origin, axis) =>
+        origin <= point[axis] && origin + chunk.voxelDims[axis] > point[axis],
+    ),
+  )
+  assert.equal(containing.length, 1)
+  return containing[0].sourceLevel ?? 0
+}
+
+function finestLevel(plan) {
+  return Math.min(...plan.chunks.map((chunk) => chunk.sourceLevel ?? 0))
+}
+
+test('holds the budget on a slide-sized pyramid and keeps the focus at the finest level it allows', () => {
+  const center = slidePyramid[0].map((size) => size * 0.5)
   const plan = chunkVolumeMultiLOD(
-    levels,
-    { center: levels[0].map((size) => size * 0.5), radius: 64 },
+    slidePyramid,
+    { center, radius: 64 },
     256,
-    {
-      cellEdge: 128,
-      haloSize: [3, 3, 3],
-      minLevel: 0,
-      budgetBytes: 2 * 1024 * 1024 * 1024,
-      maxBricks: 512,
-      detail: 0.1,
-    },
+    slidePlanOptions,
   )
   const estimatedBytes = plan.chunks.reduce(
     (sum, chunk) =>
@@ -95,19 +114,11 @@ test('keeps the requested finest focus brick when the global plan exceeds its bu
 
   assert.ok(plan.chunks.length <= 512)
   assert.ok(estimatedBytes <= 2 * 1024 * 1024 * 1024)
-  assert.ok(plan.chunks.some((chunk) => chunk.sourceLevel === 0))
+  assert.equal(finestLevel(plan), 1)
+  assert.equal(levelOfBrickAt(plan, center), 1)
 })
 
-test('reserves finest detail at the true focus when context uses a boundary bias', () => {
-  const levels = [
-    [41840, 18560, 2048],
-    [20920, 9280, 1024],
-    [10460, 4640, 512],
-    [5230, 2320, 256],
-    [2615, 1160, 128],
-    [1308, 580, 64],
-    [654, 290, 32],
-  ]
+test('refines the un-biased focus to the finest level in force when context uses a boundary bias', () => {
   const reserveCenter = [20920, 9280, 746]
   const contextCenter = [
     reserveCenter[0] + 128 * 0.31,
@@ -115,32 +126,13 @@ test('reserves finest detail at the true focus when context uses a boundary bias
     reserveCenter[2] + 128 * 0.23,
   ]
   const plan = chunkVolumeMultiLOD(
-    levels,
+    slidePyramid,
     { center: contextCenter, reserveCenter, radius: 64 },
     256,
-    {
-      cellEdge: 128,
-      haloSize: [3, 3, 3],
-      minLevel: 0,
-      budgetBytes: 2 * 1024 * 1024 * 1024,
-      maxBricks: 512,
-      detail: 0.1,
-    },
-  )
-  const halfFov = levels[0].map((size) => size / (2 * 64))
-  const lo = reserveCenter.map((center, axis) => center - halfFov[axis])
-  const hi = reserveCenter.map((center, axis) => center + halfFov[axis])
-  const visibleL0 = plan.chunks.filter(
-    (chunk) =>
-      chunk.sourceLevel === 0 &&
-      chunk.voxelOrigin.every(
-        (origin, axis) =>
-          origin < hi[axis] &&
-          origin + chunk.voxelDims[axis] > lo[axis],
-      ),
+    slidePlanOptions,
   )
 
-  assert.ok(visibleL0.length > 0)
+  assert.equal(levelOfBrickAt(plan, reserveCenter), finestLevel(plan))
 })
 
 test('keeps every brick in the protected field of view at one level', () => {

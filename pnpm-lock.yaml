@@ -7,9 +7,6 @@ settings:
 overrides:
   '@electron/osx-sign>isbinaryfile': 5.0.7
 
-patchedDependencies:
-  '@niivue/niivue@1.0.0-rc.11': f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6
-
 importers:
 
   .:
@@ -89,7 +86,7 @@ importers:
         version: link:../../packages/components
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -120,7 +117,7 @@ importers:
         version: 1.4.20260909
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
     devDependencies:
       '@playwright/test':
         specifier: ^1.44.0
@@ -151,7 +148,7 @@ importers:
         version: 1.4.20260909
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
     devDependencies:
       '@webgpu/types':
         specifier: ^0.1.52
@@ -414,7 +411,7 @@ importers:
         version: file:apps/dwi2trx/vendor/niimath
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -626,7 +623,7 @@ importers:
         version: link:../../packages/components
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
@@ -654,7 +651,7 @@ importers:
         version: link:../../packages/components
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
     devDependencies:
       '@playwright/test':
         specifier: ^1.44.0
@@ -679,7 +676,7 @@ importers:
         version: link:../../packages/components
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        version: 1.0.0-rc.11
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -747,8 +744,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niivue':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)
+        specifier: 1.0.0-rc.14
+        version: 1.0.0-rc.14
       zarrita:
         specifier: ^0.7.3
         version: 0.7.4
@@ -2297,6 +2294,9 @@ packages:
 
   '@niivue/niivue@1.0.0-rc.13':
     resolution: {integrity: sha512-YpahB/wRst5yPv4fztV7z2fREc99uGyDz5KEMFxowXWtT74y0Df9A/TRotMmpAKxg6g4kWX7wQJY/2rjf7nBBQ==}
+
+  '@niivue/niivue@1.0.0-rc.14':
+    resolution: {integrity: sha512-QJtugUVRxTb0dpOyVxK65ufXK0zF5xp7uMw9S+aIDfXgd6ffJvRSJuqwyfgnNzMwH8TKHE+znApYW00sCiVECQ==}
 
   '@niivue/niivue@1.0.0-rc.9':
     resolution: {integrity: sha512-CPu6+KTONESagpbYn+BF/TWy27twmPgqpLNam9x24tl9XDWKfJTLhkjqBZSCVOyWqu1eYMdJFt/nQeDbTGdWvA==}
@@ -7727,7 +7727,7 @@ snapshots:
     optionalDependencies:
       '@rollup/rollup-linux-x64-gnu': 4.62.2
 
-  '@niivue/niivue@1.0.0-rc.11(patch_hash=f9748394ca2414090ff8580b3514639f284a8be82cc3b0152e59c96d4a48b3b6)':
+  '@niivue/niivue@1.0.0-rc.11':
     dependencies:
       cbor-x: 1.6.4
       clipper2-ts: 2.0.1-18
@@ -7736,6 +7736,15 @@ snapshots:
       nifti-reader-js: 0.8.0
 
   '@niivue/niivue@1.0.0-rc.13':
+    dependencies:
+      cbor-x: 1.6.4
+      clipper2-ts: 2.0.1-18
+      earcut: 3.2.3
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.0
+      zarrita: 0.7.4
+
+  '@niivue/niivue@1.0.0-rc.14':
     dependencies:
       cbor-x: 1.6.4
       clipper2-ts: 2.0.1-18

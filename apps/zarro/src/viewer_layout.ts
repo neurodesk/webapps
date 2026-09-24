@@ -32,7 +32,6 @@ export interface NiiVueLayoutConfig {
   customLayout: Array<{
     sliceType: number
     position: [number, number, number, number]
-    squareCropFraction?: number
   }> | null
 }
 
@@ -72,29 +71,7 @@ function axialFocusConfig(): NiiVueLayoutConfig {
   }
 }
 
-function verticalCropFractions(
-  physicalExtents: readonly [number, number, number] | undefined,
-): [number, number, number] {
-  if (
-    !physicalExtents?.every(
-      (extent) => Number.isFinite(extent) && extent > 0,
-    )
-  ) {
-    return [1, 1, 1]
-  }
-  const [x, y, z] = physicalExtents
-  const commonFieldOfView = Math.min(x, y)
-  return [
-    1,
-    commonFieldOfView / Math.min(x, z),
-    commonFieldOfView / Math.min(y, z),
-  ]
-}
-
-export function viewerLayoutConfig(
-  selected: number,
-  physicalExtents?: readonly [number, number, number],
-): ViewerLayoutConfig {
+export function viewerLayoutConfig(selected: number): ViewerLayoutConfig {
   if (selected === LAYOUT_PRESET.AXIAL_FOCUS) {
     return {
       kind: 'niivue',
@@ -127,31 +104,14 @@ export function viewerLayoutConfig(
     }
   }
   if (selected === LAYOUT_PRESET.EQUAL_SLICES_VERTICAL) {
-    const cropFractions = verticalCropFractions(physicalExtents)
     return {
       kind: 'niivue',
       niivue: {
         sliceType: SLICE_TYPE.MULTIPLANAR,
         showRender: SHOW_RENDER.NEVER,
         multiplanarType: MULTIPLANAR_TYPE.COLUMN,
-        isEqualSize: false,
-        customLayout: [
-          {
-            sliceType: SLICE_TYPE.AXIAL,
-            position: [0, 0, 1, 1 / 3],
-            squareCropFraction: cropFractions[0],
-          },
-          {
-            sliceType: SLICE_TYPE.CORONAL,
-            position: [0, 1 / 3, 1, 1 / 3],
-            squareCropFraction: cropFractions[1],
-          },
-          {
-            sliceType: SLICE_TYPE.SAGITTAL,
-            position: [0, 2 / 3, 1, 1 / 3],
-            squareCropFraction: cropFractions[2],
-          },
-        ],
+        isEqualSize: true,
+        customLayout: null,
       },
     }
   }

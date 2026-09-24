@@ -179,7 +179,7 @@ test('clamps an NVSlide pane export to the source extent', () => {
   assert.deepEqual(geometry.shape, [10, 8, 6])
 })
 
-test('aborts an in-flight volume request when its plane is disposed', async () => {
+test('forwards the NVSlide tile signal to the volume request', async () => {
   let requestSignal
   const volume = {
     levels,
@@ -199,9 +199,10 @@ test('aborts an in-flight volume request when its plane is disposed', async () =
     window: [0, 255],
   })
   const level = source.manifest.levels[0]
-  const pending = source.fetchTileBytes(level, level.tiles[0], 'pending')
-  source.dispose()
+  const controller = new AbortController()
+  const pending = source.fetchTileBytes(level, level.tiles[0], 'pending', controller.signal)
+  controller.abort()
 
   await assert.rejects(pending)
-  assert.equal(requestSignal.aborted, true)
+  assert.equal(requestSignal, controller.signal)
 })
