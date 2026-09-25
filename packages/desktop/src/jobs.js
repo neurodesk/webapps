@@ -6,6 +6,7 @@ export async function readJob(path) {
   if (job.schemaVersion !== 1 || !/^[a-z][a-z0-9-]*$/.test(job.app) || !Array.isArray(job.steps) || !job.steps.length) throw new Error('Invalid offline job');
   if (!Number.isSafeInteger(job.expectedDownloads) || job.expectedDownloads < 1) throw new Error('A batch job must declare its expected download count');
   if (job.timeoutMs !== undefined && (!Number.isSafeInteger(job.timeoutMs) || job.timeoutMs < 1)) throw new Error('Invalid job timeout');
+  if (job.failSelector !== undefined && job.failSelector !== null && (typeof job.failSelector !== 'string' || !job.failSelector)) throw new Error('Invalid failure selector');
   for (const step of job.steps) {
     if (!['upload', 'click', 'fill', 'select', 'check', 'wait'].includes(step.action) || typeof step.selector !== 'string') throw new Error('Invalid job step');
     if (step.timeoutMs !== undefined && (!Number.isSafeInteger(step.timeoutMs) || step.timeoutMs < 1)) throw new Error('Invalid step timeout');
@@ -27,6 +28,14 @@ const inspectElement = ({ selector, condition, value }) => {
   if (condition === 'value') return element.value === value;
   if (condition === 'visible') return Boolean(element.getClientRects().length) && getComputedStyle(element).visibility !== 'hidden';
   return true;
+};
+
+// Apps report failures in their status line with an `error` class. A job that
+// only waits for success would otherwise sit until its timeout.
+const DEFAULT_FAIL_SELECTOR = '#statusText.error';
+const readFailure = selector => {
+  const element = document.querySelector(selector);
+  return element ? (element.textContent.trim() || 'unspecified error') : null;
 };
 
 export async function runJob(contents, job, outputDirectory) {
@@ -52,11 +61,18 @@ export async function runJob(contents, job, outputDirectory) {
   };
   contents.session.on('will-download', onDownload);
   const evaluate = (fn, value) => contents.executeJavaScript(`(${fn.toString()})(${JSON.stringify(value)})`);
+  const failSelector = job.failSelector === null ? null : (job.failSelector ?? DEFAULT_FAIL_SELECTOR);
+  const checkFailure = async () => {
+    if (!failSelector) return;
+    const message = await evaluate(readFailure, failSelector);
+    if (message !== null) throw new Error(`${job.app} reported an error: ${message}`);
+  };
   const wait = async step => {
     const timeout = step.timeoutMs ?? job.timeoutMs ?? 900000;
     const deadline = Date.now() + timeout;
     while (!await evaluate(inspectElement, step)) {
       if (downloadError) throw downloadError;
+      await checkFailure();
       if (Date.now() > deadline) throw new Error(`Timed out waiting for ${step.selector} (${step.condition || 'exists'})`);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
@@ -88,6 +104,7 @@ export async function runJob(contents, job, outputDirectory) {
     const deadline = Date.now() + (job.timeoutMs || 900000);
     while (pending.length < job.expectedDownloads) {
       if (downloadError) throw downloadError;
+      await checkFailure();
       if (Date.now() > deadline) throw new Error(`Expected ${job.expectedDownloads} outputs, received ${pending.length}`);
       await new Promise(resolve => setTimeout(resolve, 100));
     }
