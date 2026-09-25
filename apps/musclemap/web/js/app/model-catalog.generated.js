@@ -1,5 +1,5 @@
-export const APP_VERSION = "1.4.20260923";
-export const TARGET_APP_VERSION = "1.4.20260923";
+export const APP_VERSION = "1.4.20260924";
+export const TARGET_APP_VERSION = "1.4.20260924";
 export const MODEL_BASE_URL = "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap";
 export const UPSTREAM_REVISION = "6e1e1eb6732337c13cab53bd5cc800c69024774f";
 export const MODEL_RELEASES = [

@@ -2681,6 +2681,20 @@
       "contentType": "application/octet-stream",
       "kind": "geometry-or-model-data",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_ph.nii.gz": {
+      "sha256": "db0a041daecf042dcef5a67ebfe7c877a6a4bbe841f505a78c1ec1ea826aa142",
+      "bytes": 875770,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_mod.nii.gz": {
+      "sha256": "43f5bf1894bce2be664d6fcaa274184a69890b0f17ffc3a64f3ff9da930cbdcb",
+      "bytes": 948401,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3202,6 +3216,10 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/tracts/enigma_display.trx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/tracts/hcp1065_display.trx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz"
+    ],
+    "carotid-flow": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_mod.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_ph.nii.gz"
     ]
   }
 }

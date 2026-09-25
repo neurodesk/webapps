@@ -1,6 +1,6 @@
 {
   "name": "synthseg",
-  "version": "0.3.20260923",
+  "version": "0.3.20260924",
   "private": true,
   "type": "module",
   "scripts": {

@@ -2713,6 +2713,20 @@
         "bytes": 2472763,
         "kind": "example"
       }
+    ],
+    "carotid-flow": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_mod.nii.gz",
+        "sha256": "43f5bf1894bce2be664d6fcaa274184a69890b0f17ffc3a64f3ff9da930cbdcb",
+        "bytes": 948401,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_ph.nii.gz",
+        "sha256": "db0a041daecf042dcef5a67ebfe7c877a6a4bbe841f505a78c1ec1ea826aa142",
+        "bytes": 875770,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [

@@ -873,7 +873,7 @@ dependencies = [
 
 [[package]]
 name = "qsm_wasm"
-version = "0.27.20260923"
+version = "0.27.20260924"
 dependencies = [
  "console_error_panic_hook",
  "getrandom",

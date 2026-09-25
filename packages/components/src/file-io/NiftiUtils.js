@@ -73,13 +73,28 @@ export function readNiftiImageData(bufferLike, OutputCtor = Float32Array) {
   const buffer = toArrayBuffer(bufferLike);
   const view = new DataView(buffer);
   const header = parseNiftiHeader(view);
+  const output = readScaledVoxels(view, header, header.nx * header.ny * header.nz, OutputCtor);
+  return { data: output, header, dims: [header.nx, header.ny, header.nz] };
+}
+
+/** Every frame of a 4D (or higher) NIfTI, frame-major: voxel v of frame t is data[t * nx * ny * nz + v]. */
+export function readNiftiFrames(bufferLike, OutputCtor = Float32Array) {
+  const buffer = toArrayBuffer(bufferLike);
+  const view = new DataView(buffer);
+  const header = parseNiftiHeader(view);
+  let frames = 1;
+  for (let d = 4; d <= header.dims[0]; d++) frames *= Math.max(1, header.dims[d]);
+  const output = readScaledVoxels(view, header, header.nx * header.ny * header.nz * frames, OutputCtor);
+  return { data: output, header, dims: [header.nx, header.ny, header.nz], frames };
+}
+
+function readScaledVoxels(view, header, total, OutputCtor) {
   const dataStart = Math.ceil(header.voxOffset);
-  const total = header.nx * header.ny * header.nz;
   const output = new OutputCtor(total);
   for (let i = 0; i < total; i++) {
     output[i] = readVoxel(view, dataStart, i, header.datatype) * header.sclSlope + header.sclInter;
   }
-  return { data: output, header, dims: [header.nx, header.ny, header.nz] };
+  return output;
 }
 
 export function parseNiftiVolume(bufferLike, options = {}) {

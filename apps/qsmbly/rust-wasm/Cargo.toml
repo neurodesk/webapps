@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.27.20260923"
+version = "0.27.20260924"
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"

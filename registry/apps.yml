@@ -575,3 +575,23 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: carotid-flow
+    path: carotid-flow
+    title: Carotid Flow
+    description: Find the carotid arteries in a phase-contrast neck slice and extract their flow curves, in the browser.
+    categories: [quantitative-imaging]
+    keywords: [phase contrast, carotid, blood flow, PC-MRI, pulsatility, cardiac gating]
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true

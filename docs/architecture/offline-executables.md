@@ -53,6 +53,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `brain2print` | Segmentation to printable mesh | `apps/brain2print/src/mesh.js` has pure mesh validation. Extract the `src/main.js` pipeline with headless MindGrab and niimath meshing. |
 | `brain-extraction` | BET, MindGrab and SynthStrip brain extraction | Packaged in suite 0.4.20260915 with pinned models, the shared extraction adapters and an offline BET extraction/export check. |
 | `disconnectome` | Lesion-to-bundle disconnection scores | `exes/nii2tvx` is the C CLI whose query core the app runs as WASM; the TSV matches byte for byte. Package the native binary with the pinned TVX atlases. |
+| `carotid-flow` | Carotid detection and flow curves from a phase-contrast slice | `apps/carotid-flow/src/carotid.js` is pure JavaScript with no runtime assets; package it as a Node command over the same module. |
 | `dicom2vid` | Volume-to-video conversion | `apps/dicom2vid/web/js/pipeline.js` and `encode.js` depend on browser video/canvas APIs. Choose and validate an offline renderer/encoder before packaging. |
 | `surfannotate` | No default batch equivalent | Manual surface ROI drawing and vertex selection. Excluded from this rollout. |
 | `zarro` | No default batch equivalent | Interactive OME-Zarr exploration. Conversion or extraction would be a separately scoped command. |

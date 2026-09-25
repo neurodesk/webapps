@@ -82,7 +82,7 @@ Thin wrapper around vendored dcm2niix WASM. Apps provide the module URL and call
 
 ### NIfTI Utilities
 
-`parseNiftiHeader`, `extractAffine`, `readNiftiImageData`, `createUint8Nifti`, `createFloat32Nifti`, `createFloat64Nifti`, `createMaskNifti`, and `createNiftiFromVolume`.
+`parseNiftiHeader`, `extractAffine`, `readNiftiImageData`, `readNiftiFrames` (every frame of a 4D series), `createUint8Nifti`, `createFloat32Nifti`, `createFloat64Nifti`, `createMaskNifti`, and `createNiftiFromVolume`.
 
 ## Viewer
 

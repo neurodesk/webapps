@@ -9,6 +9,7 @@ import {
   createNiftiFromVolume,
   isNiftiFile,
   parseNiftiHeader,
+  readNiftiFrames,
   readNiftiImageData
 } from '../src/file-io/index.js';
 
@@ -91,6 +92,23 @@ test('preserves NIfTI intensity scaling when exporting an existing volume', () =
   assert.equal(parsed.sclSlope, 2);
   assert.equal(parsed.sclInter, 10);
   assert.deepEqual(Array.from(readNiftiImageData(output, Float64Array).data), [16]);
+});
+
+test('reads every frame of a 4D NIfTI with its scaling', () => {
+  const header = createNiftiHeaderFromVolume({
+    hdr: { dims: [4, 2, 1, 1, 3, 1, 1, 1], scl_slope: 2, scl_inter: 1 },
+  });
+  const view = new DataView(header);
+  view.setInt16(70, 4, true);
+  view.setInt16(72, 16, true);
+  const output = new Uint8Array(header.byteLength + 12);
+  output.set(new Uint8Array(header));
+  output.set(new Uint8Array(new Int16Array([0, 1, 2, 3, 4, 5]).buffer), header.byteLength);
+  const { data, dims, frames } = readNiftiFrames(output, Float64Array);
+  assert.deepEqual(dims, [2, 1, 1]);
+  assert.equal(frames, 3);
+  assert.deepEqual(Array.from(data), [1, 3, 5, 7, 9, 11]);
+  assert.deepEqual(Array.from(readNiftiImageData(output, Float64Array).data), [1, 3]);
 });
 
 test('resets source scaling when writing newly derived voxel data', () => {

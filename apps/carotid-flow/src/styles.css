@@ -1,0 +1,8 @@
+/* The flow chart and the table swatches. Series colours are set from the overlay colormaps at
+   run time, so the curves, the swatches and the vessels on the image are the same colour. */
+.cf-chart { display: block; width: 100%; height: auto; }
+.cf-chart text { fill: var(--nd-color-text-muted); font-size: 9px; }
+.cf-chart .cf-axis { stroke: var(--nd-color-border); }
+.cf-chart .cf-grid { stroke: var(--nd-color-border-light); stroke-dasharray: 2 3; }
+.cf-chart .cf-curve { fill: none; stroke-width: 1.75; stroke-linejoin: round; }
+.cf-swatch { display: inline-block; width: 0.7em; height: 0.7em; margin-right: var(--nd-space-xs); border-radius: 2px; }

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "carotid-pc",
+    "label": "Carotid phase-contrast slice",
+    "description": "An open, gated phase-contrast slice through the neck (Philips, VENC 100 cm/s) from PCMCalculator's test data.",
+    "expectedResult": "The right carotid carries about 211 ml/min and the left 231 ml/min.",
+    "files": [
+      {
+        "role": "image",
+        "name": "carotid_pc_mod.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_mod.nii.gz",
+        "sha256": "43f5bf1894bce2be664d6fcaa274184a69890b0f17ffc3a64f3ff9da930cbdcb"
+      },
+      {
+        "role": "phase",
+        "name": "carotid_pc_ph.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/07cac5c3f89c82ba721163ea8c1fbf1df9625c7d/carotid-flow/examples/carotid_pc_ph.nii.gz",
+        "sha256": "db0a041daecf042dcef5a67ebfe7c877a6a4bbe841f505a78c1ec1ea826aa142"
+      }
+    ]
+  }
+]

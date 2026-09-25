@@ -13,6 +13,11 @@ const browser = await chromium.launch({ args: ['--enable-webgl', '--use-gl=angle
 const failures = [];
 if (process.env.UPLOAD_ARTIFACTS) await mkdir(process.env.UPLOAD_ARTIFACTS, { recursive: true });
 const checks = [
+  ['carotid-flow', '#imageInput', async page => {
+    // The fixture is a converted four-slice volume, which proves DICOM reaches the reader.
+    await expect(page.locator('#statusText')).toContainText('has 4 slices; Carotid Flow reads one gated slice');
+    await expect(page.locator('#runButton')).toBeDisabled();
+  }],
   ['disconnectome', '#imageInput', async page => {
     await expect(page.locator('#lesionInfo')).toContainText('.nii');
     await expect(page.locator('#runButton')).toBeEnabled();

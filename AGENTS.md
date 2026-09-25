@@ -136,6 +136,13 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   `scripts/lock-example-assets.mjs`, dropping the old revision's entries from the offline
   inventory first.
 
+## carotid-flow
+
+- Two methods, chosen by the phase data (`isSignedPhase`). Signed velocity goes through `detectFromVelocity` (flow in ml/min); an unsigned speed image goes through `detectFromVariability`, the port of the requesting lab's `standalone_automatic_carotid_flow.m`. Keep the port faithful: `test/carotid.test.js` pins the vessels it selects on the lab's export (right 12 px, left 4 px, `CAROTID_FLOW_EXAMPLE`, not public). State any deliberate departure in `README.md`.
+- The example is PCMCalculator's MIT test data. Its right carotid must stay within 10 % of PCMCalculator's 225 ml/min (`CAROTID_FLOW_OPEN_EXAMPLE`), and the e2e and offline workflow tests pin 231 and 211 ml/min.
+- Left and right are the patient's, from the affine. The MATLAB script called the image-left vessel left, which on the scanner's radiological grid is the patient's right; do not "fix" the app back to the script.
+- Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
+
 ## zarro
 
 - Uses the registry `@niivue/niivue` with no patch. Everything the old rc.11 patch provided is upstream API as of `1.0.0-rc.14` ([niivue/mono#160](https://github.com/niivue/mono/issues/160)); see `docs/architecture/zarro-niivue-streaming-integration.md` for the mapping. Do not reintroduce `patchedDependencies` or reach into NiiVue internals; ask upstream for an API instead.
