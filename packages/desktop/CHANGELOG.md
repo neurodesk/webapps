@@ -1,5 +1,13 @@
 # @neurodesk/desktop
 
+## 0.20.20261003
+
+### Patch Changes
+
+- Share operation parameter schemas across browser and desktop automation. Both callers now use the same defaults, enum values, bounds, recursive arrays, decimal multiples and safe integer rules. Preserve MCP parameter metadata and bundle the validator for native ESM development, standalone releases and the composite catalog.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.19.20261003
 
 ### Patch Changes

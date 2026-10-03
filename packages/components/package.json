@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",

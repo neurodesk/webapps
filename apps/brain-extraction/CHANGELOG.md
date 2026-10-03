@@ -1,5 +1,14 @@
 # brain-extraction
 
+## 0.3.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/synthsr@0.5.20261003
+  - @neurodesk/brain-extraction@0.1.14
+
 ## 0.3.20260930
 
 ### Patch Changes
@@ -9,7 +18,6 @@
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/synthsr@0.5.20260930
   - @neurodesk/brain-extraction@0.1.13
-
 
 ### Patch Changes
 

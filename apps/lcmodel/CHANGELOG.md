@@ -1,5 +1,12 @@
 # lcmodel
 
+## 0.3.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.3.20261002
 
 ### Minor Changes

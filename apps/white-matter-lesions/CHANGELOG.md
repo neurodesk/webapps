@@ -1,11 +1,18 @@
 # white-matter-lesions
 
+## 0.1.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/synthsr@0.5.20261003
+
 ## 0.1.20260930
 
 ### Patch Changes
 
 - 5909f26: Fix the lesion probability overlay by using NiiVue's supported display-range options. Probabilities below 0.1 stay transparent instead of tinting the entire FLAIR image orange; downloaded probabilities are unchanged. Open Advanced settings by default so skull stripping, model and processing options are immediately visible.
-
 
 ### Patch Changes
 
