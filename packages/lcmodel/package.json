@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/lcmodel",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "LCModel and FID-A spectroscopy processing for browsers (Rust ports compiled to WebAssembly)",
   "type": "module",
   "private": true,

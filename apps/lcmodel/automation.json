@@ -7,7 +7,7 @@
   "operations": {
     "fit": {
       "title": "Preprocess and fit",
-      "description": "FID-A preprocessing of raw spectroscopy data (or an LCModel .RAW as is), then an LCModel fit with a library or supplied basis set.",
+      "description": "FID-A preprocessing of raw spectroscopy data (or an LCModel .RAW as is), then an LCModel fit with a library or supplied basis set; optionally tissue-corrected concentrations from a T1 segmentation or given fractions.",
       "mode": "batch",
       "inputs": {
         "spectra": {
@@ -37,6 +37,18 @@
           "description": "Optional LCModel .BASIS file; overrides basisSet.",
           "minimum": 0,
           "maximum": 1
+        },
+        "t1": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "Optional T1-weighted image from the same session; segmented to measure the voxel's tissue fractions.",
+          "minimum": 0,
+          "maximum": 1,
+          "space": "native"
         }
       },
       "parameters": {
@@ -54,9 +66,46 @@
             "press-1.5t-te30",
             "slaser-7t-te28",
             "steam-7t-te8",
-            "megapress-3t-te68-diff"
+            "megapress-3t-te68-diff",
+            "press-1.5t-te35",
+            "press-1.5t-te144",
+            "steam-1.5t-te20",
+            "press-3t-te80",
+            "steam-3t-te8",
+            "slaser-3t-te35",
+            "slaser-3t-te30-shaped",
+            "slaser-3t-te35-shaped",
+            "press-3t-te30-shaped",
+            "press-3t-te35-shaped",
+            "press-3t-te80-shaped",
+            "press-3t-te144-shaped",
+            "slaser-7t-te28-shaped",
+            "megapress-3t-te80-diff",
+            "megapress-3t-te80-mmsup-diff"
           ],
           "default": "auto"
+        },
+        "edited": {
+          "type": "boolean",
+          "description": "GE and Philips: alternate transients are edit-ON/OFF MEGA-PRESS pairs; detected from the data when absent."
+        },
+        "macromoleculeModel": {
+          "type": "string",
+          "description": "MEGA-PRESS: co-edited fits MM09 and MM3co to 0.5 ppm (1.2-1.95 ppm excluded, as Osprey) and reports GABA, MM3co and GABA+; none is LCModel's mega-press-3 as before (GABA+ only, to 1.95 ppm). MM-suppressed basis sets always use none.",
+          "enum": [
+            "co-edited",
+            "none"
+          ],
+          "default": "co-edited"
+        },
+        "lineBroadening": {
+          "type": "string",
+          "description": "LCModel's line-broadening prior for unedited spectra: widened (DESDT2 2, RFWBAS 80) recovers synthetic concentrations with the library's narrow-line basis sets, where LCModel's defaults (lcmodel: DESDT2 0.4, RFWBAS 10) scale 8-15 % low. MEGA-PRESS difference fits always use LCModel's values.",
+          "enum": [
+            "widened",
+            "lcmodel"
+          ],
+          "default": "widened"
         },
         "removeBadAverages": {
           "type": "boolean",
@@ -97,7 +146,7 @@
         },
         "ppmEnd": {
           "type": "number",
-          "description": "Lower end of the fit range in ppm; 0.2 (1.95 for MEGA-PRESS) when absent.",
+          "description": "Lower end of the fit range in ppm; 0.2 when absent (MEGA-PRESS: 0.5 with the co-edited MM model, 1.95 without).",
           "minimum": -1,
           "maximum": 10
         },
@@ -112,12 +161,41 @@
           "description": "Dwell time for a .RAW without one.",
           "minimum": 0.001,
           "maximum": 10
+        },
+        "fractionGM": {
+          "type": "number",
+          "description": "Grey matter volume fraction in the voxel, instead of segmenting a T1; give all three.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fractionWM": {
+          "type": "number",
+          "description": "White matter volume fraction in the voxel; give all three.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fractionCSF": {
+          "type": "number",
+          "description": "CSF volume fraction in the voxel; give all three.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "metaboliteRelaxation": {
+          "type": "boolean",
+          "description": "Tissue correction: also correct metabolite T1 and T2 (literature values at 3 T and 7 T).",
+          "default": true
         }
       },
       "artifacts": {
         "concentrations": {
           "type": "neuro:table",
           "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fitReport": {
+          "type": "file:mrs-report",
+          "mediaType": "text/html",
           "minimum": 1,
           "maximum": 1
         },
@@ -162,6 +240,219 @@
           "mediaType": "application/json",
           "minimum": 0,
           "maximum": 1
+        },
+        "tissueConcentrations": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "tissueReport": {
+          "type": "file:tissue-correction",
+          "mediaType": "application/json",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "voxelMask": {
+          "type": "neuro:mask",
+          "mediaType": "application/octet-stream",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "gmMap": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "wmMap": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "csfMap": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "fit-group": {
+      "title": "Fit a group of datasets",
+      "description": "Every dataset among the files (several subjects or sessions, each paired with its own water reference) is preprocessed with FID-A and fitted with LCModel in turn, with the same settings and each dataset's recommended basis set unless one is given. A dataset that fails is listed in the group table and the rest continue.",
+      "mode": "batch",
+      "inputs": {
+        "spectra": {
+          "source": "files",
+          "type": "neuro:spectroscopy",
+          "formats": [
+            "twix",
+            "ge-pfile",
+            "siemens-rda",
+            "siemens-dicom",
+            "philips-sdat",
+            "nifti-mrs",
+            "bruker"
+          ],
+          "description": "Raw spectroscopy files of several acquisitions, each with its water reference, e.g. every subject's folder of a study.",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "basis": {
+          "source": "files",
+          "type": "file:lcmodel-basis",
+          "formats": [
+            "lcmodel-basis"
+          ],
+          "description": "Optional LCModel .BASIS file for every dataset; overrides basisSet.",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "t1": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "Optional T1-weighted image from the same session; segmented to measure the voxel's tissue fractions.",
+          "minimum": 0,
+          "maximum": 1,
+          "space": "native"
+        }
+      },
+      "parameters": {
+        "basisSet": {
+          "type": "string",
+          "description": "Library basis set for every dataset it suits, or auto for each dataset's recommendation.",
+          "enum": [
+            "auto",
+            "press-3t-te30",
+            "press-3t-te35",
+            "press-3t-te144",
+            "steam-3t-te20",
+            "slaser-3t-te30",
+            "special-3t-te8.5",
+            "press-1.5t-te30",
+            "slaser-7t-te28",
+            "steam-7t-te8",
+            "megapress-3t-te68-diff",
+            "press-1.5t-te35",
+            "press-1.5t-te144",
+            "steam-1.5t-te20",
+            "press-3t-te80",
+            "steam-3t-te8",
+            "slaser-3t-te35",
+            "slaser-3t-te30-shaped",
+            "slaser-3t-te35-shaped",
+            "press-3t-te30-shaped",
+            "press-3t-te35-shaped",
+            "press-3t-te80-shaped",
+            "press-3t-te144-shaped",
+            "slaser-7t-te28-shaped",
+            "megapress-3t-te80-diff",
+            "megapress-3t-te80-mmsup-diff"
+          ],
+          "default": "auto"
+        },
+        "edited": {
+          "type": "boolean",
+          "description": "GE and Philips: alternate transients are edit-ON/OFF MEGA-PRESS pairs, for every such dataset; detected per dataset when absent."
+        },
+        "macromoleculeModel": {
+          "type": "string",
+          "description": "MEGA-PRESS: co-edited fits MM09 and MM3co to 0.5 ppm (1.2-1.95 ppm excluded, as Osprey) and reports GABA, MM3co and GABA+; none is LCModel's mega-press-3 as before (GABA+ only, to 1.95 ppm). MM-suppressed basis sets always use none.",
+          "enum": [
+            "co-edited",
+            "none"
+          ],
+          "default": "co-edited"
+        },
+        "lineBroadening": {
+          "type": "string",
+          "description": "LCModel's line-broadening prior for unedited spectra: widened (DESDT2 2, RFWBAS 80) recovers synthetic concentrations with the library's narrow-line basis sets, where LCModel's defaults (lcmodel: DESDT2 0.4, RFWBAS 10) scale 8-15 % low. MEGA-PRESS difference fits always use LCModel's values.",
+          "enum": [
+            "widened",
+            "lcmodel"
+          ],
+          "default": "widened"
+        },
+        "removeBadAverages": {
+          "type": "boolean",
+          "description": "Remove bad averages (FID-A op_rmbadaverages).",
+          "default": true
+        },
+        "badAverageSd": {
+          "type": "number",
+          "description": "Bad-average threshold in standard deviations; FID-A's default when absent.",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "driftCorrection": {
+          "type": "boolean",
+          "description": "Correct frequency and phase drift.",
+          "default": true
+        },
+        "phaseAndReference": {
+          "type": "boolean",
+          "description": "Phase and reference to creatine.",
+          "default": true
+        },
+        "waterScaling": {
+          "type": "boolean",
+          "description": "Scale to the water reference when there is one.",
+          "default": true
+        },
+        "eddyCurrentCorrection": {
+          "type": "boolean",
+          "description": "Eddy-current correction with the water reference.",
+          "default": true
+        },
+        "ppmStart": {
+          "type": "number",
+          "description": "Upper end of the fit range in ppm; 4.0 (4.2 for MEGA-PRESS) when absent.",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "ppmEnd": {
+          "type": "number",
+          "description": "Lower end of the fit range in ppm; 0.2 (1.95 for MEGA-PRESS) when absent.",
+          "minimum": -1,
+          "maximum": 10
+        },
+        "metaboliteRelaxation": {
+          "type": "boolean",
+          "description": "Tissue correction: also correct metabolite T1 and T2 (literature values at 3 T and 7 T).",
+          "default": true
+        }
+      },
+      "artifacts": {
+        "groupTable": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "groupWide": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "reports": {
+          "type": "file:mrs-report",
+          "mediaType": "text/html",
+          "minimum": 1,
+          "maximum": 4096
         }
       },
       "engines": [

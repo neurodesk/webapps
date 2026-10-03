@@ -230,6 +230,17 @@ fn phoenix_from_file(b: &[u8]) -> String {
     t[i1..end].to_string()
 }
 
+/// The Siemens Phoenix protocol (ASCCONV text) of one spectroscopy DICOM
+/// file, as the reader finds it: in the file text for XA (enhanced) DICOM,
+/// in the CSA private elements otherwise. Empty when there is none.
+pub fn protocol_text(b: &[u8]) -> String {
+    match parse_dicom(b) {
+        Ok(d) if d.get(0x5600, 0x0020).is_some() => phoenix_from_file(b),
+        Ok(d) => phoenix_from_private(&d),
+        Err(_) => String::new(),
+    }
+}
+
 /// FID-A `io_loadspec_dicom_siemens(folder)`: `files` are the (name, bytes)
 /// of the folder. Returns the structure and the parsed first file.
 pub fn load_folder(files: &[(String, &[u8])]) -> Res<(Spectra, DicomFile)> {

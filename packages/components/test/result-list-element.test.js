@@ -119,3 +119,53 @@ test('a result marked not viewable keeps its row but disables View', () => {
   assert.equal(element.querySelectorAll('.nd-download-btn').length, 2);
   window.close();
 });
+
+test('re-rendering keeps the buttons of unchanged rows, so a click in progress still lands', () => {
+  const { window } = new JSDOM();
+  const downloads = [];
+  const element = createResultList({ onDownload: (stage, result) => downloads.push([stage, result]) }, window.document);
+  window.document.body.append(element);
+  const first = { description: 'Table', viewable: false };
+  element.render({ table: first, report: { description: 'Report' } });
+  const button = element.querySelector('[data-stage="table"] .nd-download-btn');
+  // An app re-renders on a field's change event, between pointerdown and click.
+  const second = { description: 'Table', viewable: false };
+  element.render({ table: second, report: { description: 'Report' } });
+  assert.equal(element.querySelector('[data-stage="table"] .nd-download-btn'), button);
+  button.click();
+  assert.deepEqual(downloads, [['table', second]]);
+  window.close();
+});
+
+test('re-rendering replaces changed rows, drops removed ones and follows the new order', () => {
+  const { window } = new JSDOM();
+  const element = createResultList({}, window.document);
+  element.render({ a: { description: 'A' }, b: { description: 'B' }, c: { description: 'C' } });
+  const rowB = element.querySelector('[data-stage="b"]');
+  const rowA = element.querySelector('[data-stage="a"]');
+  element.render({ c: { description: 'C' }, b: { description: 'B' }, a: { description: 'A, renamed' } });
+  assert.deepEqual([...element.children].map((row) => row.dataset.stage), ['c', 'b', 'a']);
+  assert.equal(element.querySelector('[data-stage="b"]'), rowB);
+  assert.notEqual(element.querySelector('[data-stage="a"]'), rowA);
+  assert.equal(element.querySelector('[data-stage="a"] .nd-stage-label').textContent, 'A, renamed');
+  element.render({ b: { description: 'B', viewable: false } });
+  assert.deepEqual([...element.children].map((row) => row.dataset.stage), ['b']);
+  assert.notEqual(element.querySelector('[data-stage="b"]'), rowB);
+  assert.equal(element.querySelector('.nd-view-btn').disabled, true);
+  element.render({});
+  assert.equal(element.textContent, 'No results yet');
+  element.render({ b: { description: 'B' } });
+  assert.equal(element.children.length, 1);
+  window.close();
+});
+
+test('a kept checkbox row follows the new visibility', () => {
+  const { window } = new JSDOM();
+  const element = createResultList({}, window.document);
+  element.render({ surface: { visible: true } });
+  const checkbox = element.querySelector('input');
+  element.render({ surface: { visible: false } });
+  assert.equal(element.querySelector('input'), checkbox);
+  assert.equal(checkbox.checked, false);
+  window.close();
+});

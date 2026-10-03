@@ -1,0 +1,492 @@
+{
+  "description": "FID-A reference data for exes/fida/tests and packages/lcmodel/wasm (validation/README.md). Fetch with validation/fetch_reference.py.",
+  "repository": "neurodeskorg/webapps",
+  "files": [
+    {
+      "path": "lcmodel/examples/ge-press-phantom/P17920.7",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 20080220,
+      "sha256": "e2c9aec2b310567ebf91239c96e5b25b875ccdbd96f8d338133d1267f11d20f5",
+      "to": [
+        "GE/sample01_press/press/P17920.7"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/siemens-special/specialDLPFC.dat",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 168955936,
+      "sha256": "2ffbf866b159c2090afcc6cb595181632b07956bbbe6591e1270cf8a74df5731",
+      "to": [
+        "Siemens/sample02_special/special/specialDLPFC.dat"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/siemens-special/specialDLPFC_w.dat",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 8949792,
+      "sha256": "857a102e6e0153f5ea1be7b9eb606c26139f819a9ac5df43eea50912ca3e0aa5",
+      "to": [
+        "Siemens/sample02_special/special_w/specialDLPFC_w.dat"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/siemens-megapress/megapressDLPFC.dat",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 86369696,
+      "sha256": "d29c2a2b181873f66615433de0d7ff369af17d252202e6447c0624cfc7712e70",
+      "to": [
+        "Siemens/sample01_megapress/megapress/megapressDLPFC.dat"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/philips-megapress/sub-01_megapress_act.sdat",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 5242880,
+      "sha256": "8d62c50e7b71f4babcecd0d24254059fa4874d522b668753b47b9c462c18ad26",
+      "to": [
+        "Philips-MEGA/sub-01_megapress_act.sdat"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/philips-megapress/sub-01_megapress_act.spar",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 3085,
+      "sha256": "90d05989a05e69996f68cc0a436f82d63083137ffe369d7dd89d288c8fd21698",
+      "to": [
+        "Philips-MEGA/sub-01_megapress_act.spar"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/philips-megapress/sub-01_megapress_ref.sdat",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 5242880,
+      "sha256": "b0e1f8186bfe4353aaf543b6b3a7aea978424c5bcbbfb09e197f6465678d3766",
+      "to": [
+        "Philips-MEGA/sub-01_megapress_ref.sdat"
+      ]
+    },
+    {
+      "path": "lcmodel/examples/philips-megapress/sub-01_megapress_ref.spar",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 3085,
+      "sha256": "e311b2b2c08116010c7c1ea29a29e91b1a414f146fd71213245ebd26c9e3bfda",
+      "to": [
+        "Philips-MEGA/sub-01_megapress_ref.spar"
+      ]
+    },
+    {
+      "path": "lcmodel/basis/press-3t-te35.basis.gz",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 1061494,
+      "sha256": "a6fa0a8a342f4ce81ac247a521c681cfe1e77e7873709754ecaa01b2b11517c8",
+      "gunzip": true,
+      "to": [
+        "basis/press-3t-te35.basis"
+      ]
+    },
+    {
+      "path": "lcmodel/basis/megapress-3t-te68-diff.basis.gz",
+      "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
+      "bytes": 362382,
+      "sha256": "e87c6c3d6aa461f7a4078d00909148b4f1d701102c6ac59548fb15dd47f06681",
+      "gunzip": true,
+      "to": [
+        "basis/megapress-3t-te68-diff.basis"
+      ]
+    },
+    {
+      "path": "lcmodel/fida-reference/inputs.tar.zst",
+      "revision": "917d5b27f857edcad2e1eab217fdd91bfe1df6a6",
+      "bytes": 123161319,
+      "sha256": "0426662f3d6689bcd62bfc80bb868cea92794ce9760d9b2b7ddccf13e33debc2",
+      "extract": true
+    },
+    {
+      "path": "lcmodel/fida-reference/ops.tar.zst",
+      "revision": "917d5b27f857edcad2e1eab217fdd91bfe1df6a6",
+      "bytes": 302348498,
+      "sha256": "76034679af435602dd673889eb5bc9adb1faa22a70ce286d540a30b56e1b761d",
+      "extract": true
+    },
+    {
+      "path": "lcmodel/fida-reference/ref.tar.zst",
+      "revision": "917d5b27f857edcad2e1eab217fdd91bfe1df6a6",
+      "bytes": 111407913,
+      "sha256": "1bb98791a5d051455a5d808e0f8ab40505adb3ad676748c8295fbd32594c92ea",
+      "extract": true
+    }
+  ],
+  "derived": [
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_svs_se.dat",
+      "args": [
+        "%SiemensSeq%\\svs_se"
+      ],
+      "bytes": 8949792,
+      "sha256": "110c248db8b7191871ce0e346271cfec8d9793bf77ea81f3d4d342104df0f11e"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_svs_se.dat",
+      "to": "SiemensSeq/vd_svs_se.dat",
+      "bytes": 10499584,
+      "sha256": "70ef095ad73be88dcfe071dd5f04df964cc99842c64063a394499521a6459802"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_svs_st.dat",
+      "args": [
+        "%SiemensSeq%\\svs_st"
+      ],
+      "bytes": 8949792,
+      "sha256": "3d04e99f5d49fe282b79c09e817c45c006fd0fb88de26a2429069789df8923c3"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_svs_st.dat",
+      "to": "SiemensSeq/vd_svs_st.dat",
+      "bytes": 10499584,
+      "sha256": "f10e36d2a4ff8c0822dd718d0a370388c03baf3eb72cb9a41fa40fd1a96ebbb5"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_edit_529.dat",
+      "args": [
+        "%SiemensSeq%\\edit_529"
+      ],
+      "bytes": 8949792,
+      "sha256": "2858edd06c06de70514b7c8d09a130253fec8ca06d6db5cf8fed639d7355bd40"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_edit_529.dat",
+      "to": "SiemensSeq/vd_edit_529.dat",
+      "bytes": 10499584,
+      "sha256": "2acea65da9ab6f77f51bb391bf42b33c7b353c3fead8cd84812833c02a11738e"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_edit_859.dat",
+      "args": [
+        "%SiemensSeq%\\edit_859"
+      ],
+      "bytes": 8949792,
+      "sha256": "75a4e2a35897817b51124ceffe5ae7d94d9ba99d45c620d25b037042440af80e"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_edit_859.dat",
+      "to": "SiemensSeq/vd_edit_859.dat",
+      "bytes": 10499584,
+      "sha256": "c21c079738c023ff72c0a8455243a2ef645443aa6664ecff8e8cddc1db1923e2"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_eja_svs_mpress.dat",
+      "args": [
+        "%SiemensSeq%\\eja_svs_mpress"
+      ],
+      "bytes": 8949792,
+      "sha256": "c665f8d319177a0abffa89c8a2ac74248b9debca46f87b5cad4638bf3f09f402"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_eja_svs_mpress.dat",
+      "to": "SiemensSeq/vd_eja_svs_mpress.dat",
+      "bytes": 10499584,
+      "sha256": "495336aba9e67fedda87193416975cf0f221a8ffdbc40a878ba07a2be3ceabaf"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_svs_slaserVOI_dkd2.dat",
+      "args": [
+        "%SiemensSeq%\\svs_slaserVOI_dkd2"
+      ],
+      "bytes": 8949792,
+      "sha256": "e01b2e9202d391208e4260042649984f73cfa606a461c1dc5cb3c1fb43027b1f"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_svs_slaserVOI_dkd2.dat",
+      "to": "SiemensSeq/vd_svs_slaserVOI_dkd2.dat",
+      "bytes": 10499584,
+      "sha256": "f730f326ccfe1dbb228f4f19846b315025e3a5d618593950389abb0726271188"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_svs_slaser_cu.dat",
+      "args": [
+        "%SiemensSeq%\\svs_slaser_cu"
+      ],
+      "bytes": 8949792,
+      "sha256": "4fb2066a0bff080f7f62c39fe1b8a5081482154e639304c8a35b0b3bc1d9a449"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_svs_slaser_cu.dat",
+      "to": "SiemensSeq/vd_svs_slaser_cu.dat",
+      "bytes": 10499584,
+      "sha256": "a6e9c758b537e82f64db9b4833f5fe822fce8151d482dd1b3226279d25850ad3"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_smm_svs_herc.dat",
+      "args": [
+        "%SiemensSeq%\\smm_svs_herc"
+      ],
+      "bytes": 8949792,
+      "sha256": "82006e19b676fa16178c530b8050d5f36e5108a5e2456f7c333da0512afacff6"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_smm_svs_herc.dat",
+      "to": "SiemensSeq/vd_smm_svs_herc.dat",
+      "bytes": 10499584,
+      "sha256": "0b76d212a23983d0f79c037237950f466fa4758c264551a1151e37bda8dbc85a"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_rm_special.dat",
+      "args": [
+        "%SiemensSeq%\\rm_special"
+      ],
+      "bytes": 8949792,
+      "sha256": "ffe7ca2cb2dca3da885499f08e382d925872a6ee9acacff4d7600e42308af49c"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_rm_special.dat",
+      "to": "SiemensSeq/vd_rm_special.dat",
+      "bytes": 10499584,
+      "sha256": "228a3fbd754ca92d50bbc6610482f1936845fbe1de3ef47c1dc852565a3eed73"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_md_dvox_special.dat",
+      "args": [
+        "%SiemensSeq%\\md_dvox_special"
+      ],
+      "bytes": 8949792,
+      "sha256": "17115789e5509a19b7b7724e6feba134403d48d60b91702f7e01148856720b36"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_md_dvox_special.dat",
+      "to": "SiemensSeq/vd_md_dvox_special.dat",
+      "bytes": 10499584,
+      "sha256": "4e678f069da0709745bddb04d40a8d75cff75d4ef01b20bf4ba78b70ce827830"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_jn_MEGA_GABA.dat",
+      "args": [
+        "%SiemensSeq%\\jn_MEGA_GABA"
+      ],
+      "bytes": 8949792,
+      "sha256": "a403aa69a0d53507db532672b9da698a82aadfa2d7dd3a78998c3b8f1985ccef"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_jn_MEGA_GABA.dat",
+      "to": "SiemensSeq/vd_jn_MEGA_GABA.dat",
+      "bytes": 10499584,
+      "sha256": "b1f979660895d338f20abdaf413ac204ea4f83efa8827f1819fb75399c8d27a0"
+    },
+    {
+      "script": "twix_rename_seq.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensSeq/vb_other_seq.dat",
+      "args": [
+        "%SiemensSeq%\\other_seq"
+      ],
+      "bytes": 8949792,
+      "sha256": "067b07b5f2ad73de98d2c2d4c24cd06fe70dfd85b724e8147a105840d09c38ce"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "SiemensSeq/vb_other_seq.dat",
+      "to": "SiemensSeq/vd_other_seq.dat",
+      "bytes": 10499584,
+      "sha256": "84aade084b5c33bdaa51e4f714490b973c62d68d3620a032a5152f0eddfac915"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "Siemens/sample01_megapress/megapress/megapressDLPFC.dat",
+      "to": "SiemensVD/megapress_vd.dat",
+      "bytes": 86955008,
+      "sha256": "eb538e657fa4bc4c756a01c5c6bb3c3ac05e6867a2fec6824b15a30063c77d23"
+    },
+    {
+      "script": "twix_vb_to_vd.py",
+      "from": "Siemens/sample02_special/special_w/specialDLPFC_w.dat",
+      "to": "SiemensVD/special_w_vd.dat",
+      "bytes": 10499584,
+      "sha256": "a6c29e074f2bd99facb192af7482ae3652a7647dd2442b6e48d3eb020b8dcd89"
+    }
+  ],
+  "copies": {
+    "Bruker/sample01_press/press/spnam1": "Bruker/sample01_press/press/spnam0",
+    "Bruker/sample01_press/press/spnam3": "Bruker/sample01_press/press/spnam2",
+    "Bruker/sample01_press/press/spnam4": "Bruker/sample01_press/press/spnam0",
+    "Bruker/sample01_press/press/trace.singleData": "Bruker/sample01_press/press/trace.dualData",
+    "Bruker/sample01_press/press_w/pdata/1/meta": "Bruker/sample01_press/press/pdata/2/meta",
+    "Bruker/sample01_press/press_w/pdata/2/meta": "Bruker/sample01_press/press/pdata/2/meta",
+    "Bruker/sample01_press/press_w/pulseprogram": "Bruker/sample01_press/press/pulseprogram",
+    "Bruker/sample01_press/press_w/spnam0": "Bruker/sample01_press/press/spnam0",
+    "Bruker/sample01_press/press_w/spnam1": "Bruker/sample01_press/press/spnam0",
+    "Bruker/sample01_press/press_w/spnam2": "Bruker/sample01_press/press/spnam2",
+    "Bruker/sample01_press/press_w/spnam3": "Bruker/sample01_press/press/spnam2",
+    "Bruker/sample01_press/press_w/spnam7": "Bruker/sample01_press/press/spnam7",
+    "Bruker/sample01_press/press_w/trace.dualData": "Bruker/sample01_press/press/trace.dualData",
+    "Bruker/sample01_press/press_w/trace.singleData": "Bruker/sample01_press/press/trace.dualData",
+    "Bruker/sample01_press/press_w/uxnmr.par": "Bruker/sample01_press/press/uxnmr.par",
+    "ops/ge_press/out_aa_2.json": "ops/ge_press/out_aa_1.json",
+    "ops/ge_press/out_ls.bin": "ops/ge_press/out_av.bin",
+    "ops/ge_press/out_ls.json": "ops/ge_press/out.json",
+    "ops/ge_press/out_ls_zp_filt_ph.json": "ops/ge_press/out_ls_zp_filt.json",
+    "ops/ge_press/out_rm.bin": "ops/ge_press/out_cc.bin",
+    "ops/ge_press/out_rm.json": "ops/ge_press/out_cc.json",
+    "ops/ge_press_geauto/out.json": "ops/ge_press/out.json",
+    "ops/ge_press_geauto/outw.json": "ops/ge_press/outw.json",
+    "ops/philips_mega/sub2.json": "ops/philips_mega/sub1.json",
+    "ops/philips_mega/sum.json": "ops/philips_mega/diff.json",
+    "ops/siemens_mega/sub2.json": "ops/siemens_mega/sub1.json",
+    "ops/siemens_mega/sum.json": "ops/siemens_mega/diff.json",
+    "ops/single_ops/aa_a.json": "ops/ge_press/out_aa_1.json",
+    "ops/single_ops/aa_auto.json": "ops/ge_press/out_aa_1.json",
+    "ops/single_ops/aafd_n.json": "ops/ge_press/out_aa_1.json",
+    "ops/single_ops/addphase.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/addrcvrs_gls.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/addrcvrs_h.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/addrcvrs_h_self.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/addrcvrs_w_self.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/alignmp_i.json": "ops/single_ops/alignisis_noavg.json",
+    "ops/single_ops/alignmp_o.json": "ops/single_ops/alignisis_noavg.json",
+    "ops/single_ops/alignrcvrs_w.json": "ops/ge_press/raw.json",
+    "ops/single_ops/ampscale.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/autophase.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/combineRcvrs_out.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/combineRcvrs_out_presum.json": "ops/ge_press/raw.json",
+    "ops/single_ops/combineRcvrs_outw.json": "ops/ge_press/outw_cc.json",
+    "ops/single_ops/complexconj.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/ecc.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/ecc_w.json": "ops/ge_press/outw_noproc.json",
+    "ops/single_ops/faa_n.json": "ops/ge_press/out_aa_1.json",
+    "ops/single_ops/faa_y.json": "ops/ge_press/out_aa_1.json",
+    "ops/single_ops/fourstep_1.json": "ops/single_ops/fourstep_0.json",
+    "ops/single_ops/fourstep_2.json": "ops/single_ops/fourstep_0.json",
+    "ops/single_ops/fourstep_3.json": "ops/single_ops/fourstep_0.json",
+    "ops/single_ops/freqshift.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/hsvdfit_resid.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/out_cc.bin": "ops/ge_press/out_cc.bin",
+    "ops/single_ops/out_cc.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/out_ls.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/outw_ls.json": "ops/ge_press/outw_noproc.json",
+    "ops/single_ops/ppmref.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/raw.bin": "ops/ge_press/raw.bin",
+    "ops/single_ops/raw.json": "ops/ge_press/raw.json",
+    "ops/single_ops/raww.bin": "ops/ge_press/raww.bin",
+    "ops/single_ops/raww.json": "ops/ge_press/raww.json",
+    "ops/single_ops/removewater.json": "ops/ge_press/out_noproc.json",
+    "ops/single_ops/rmbad_t15.bin": "ops/ge_press/out_cc.bin",
+    "ops/single_ops/rmbad_t15.json": "ops/ge_press/out_cc.json",
+    "ops/single_ops/sw_av.bin": "ops/single_ops/alignisis_noavg.bin",
+    "ops/special/out_ai2.json": "ops/special/out_ai1.json",
+    "ops/special/out_ai3.json": "ops/special/out_ai1.json",
+    "ops/special/out_ai4.json": "ops/special/out_ai1.json",
+    "ops/special/out_rm.json": "ops/special/out_aa_1.json",
+    "ops/special/out_w_cc.bin": "ops/single_ops/sw_cc.bin",
+    "ops/special/out_w_cc.json": "ops/single_ops/sw_cc.json",
+    "ops/special/out_w_cs.json": "ops/special/out_w_aa.json",
+    "ops/special/raww.bin": "ops/siemens_mega/raww.bin",
+    "ops/special/raww.json": "ops/siemens_mega/raww.json",
+    "ops/special_single/out.json": "ops/special/out.json",
+    "ref/ge_press.json": "ops/ge_press/raw.json",
+    "ref/ge_press_wref.json": "ops/ge_press/raww.json",
+    "ref/lcm_ge_press_RAW.json": "ref/lcm_ge_press_H2O.json",
+    "ref/nii_ge_press_ref_nii_gz.bin": "ref/nii_ge_press_ref_nifti1_nii.bin",
+    "ref/nii_sdat_ws_nii_gz.bin": "ref/nii_sdat_ws_nifti1_nii.bin",
+    "ref/nii_twix_special_w_nii_gz.bin": "ref/nii_twix_special_w_edit_nifti1_nii.bin",
+    "ref/rda_synthetic_lf_rda.bin": "ref/rda_synthetic_crlf_rda.bin",
+    "ref/sdat_ws.bin": "ref/nii_sdat_ws_nifti1_nii.bin",
+    "ref/twix_megapress.bin": "ops/siemens_mega/raw.bin",
+    "ref/twix_megapress.json": "ops/siemens_mega/raw.json",
+    "ref/twix_megapress_w.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_megapress_w.json": "ops/siemens_mega/raww.json",
+    "ref/twix_special.bin": "ops/special/raw.bin",
+    "ref/twix_special.json": "ops/special/raw.json",
+    "ref/twix_special_w.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_special_w.json": "ops/siemens_mega/raww.json",
+    "ref/twix_vb_edit_529.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vb_edit_859.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vb_jn_MEGA_GABA.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vb_other_seq.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vb_svs_se.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vb_svs_slaser_cu_wref.json": "ref/twix_vb_svs_slaser_cu.json",
+    "ref/twix_vb_svs_st.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_edit_529.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_edit_529.json": "ref/twix_vb_edit_529.json",
+    "ref/twix_vd_edit_859.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_edit_859.json": "ref/twix_vb_edit_859.json",
+    "ref/twix_vd_eja_svs_mpress.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_jn_MEGA_GABA.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_jn_MEGA_GABA.json": "ref/twix_vb_jn_MEGA_GABA.json",
+    "ref/twix_vd_other_seq.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_other_seq.json": "ref/twix_vb_other_seq.json",
+    "ref/twix_vd_svs_se.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_svs_se.json": "ref/twix_vb_svs_se.json",
+    "ref/twix_vd_svs_slaser_cu.bin": "ref/twix_vb_svs_slaser_cu.bin",
+    "ref/twix_vd_svs_slaser_cu.json": "ref/twix_vb_svs_slaser_cu.json",
+    "ref/twix_vd_svs_slaser_cu_wref.bin": "ref/twix_vb_svs_slaser_cu_wref.bin",
+    "ref/twix_vd_svs_slaser_cu_wref.json": "ref/twix_vb_svs_slaser_cu.json",
+    "ref/twix_vd_svs_st.bin": "ops/siemens_mega/raww.bin",
+    "ref/twix_vd_svs_st.json": "ref/twix_vb_svs_st.json",
+    "ref/twixvd_megapress.bin": "ops/siemens_mega/raw.bin",
+    "ref/twixvd_megapress.json": "ops/siemens_mega/raw.json",
+    "ref/twixvd_special_w.bin": "ops/siemens_mega/raww.bin",
+    "ref/twixvd_special_w.json": "ops/siemens_mega/raww.json",
+    "ref_vfix/twix_megapress.bin": "ops/siemens_mega/raw.bin",
+    "ref_vfix/twix_megapress.json": "ops/siemens_mega/raw.json",
+    "ref_vfix/twix_megapress_w.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_megapress_w.json": "ops/siemens_mega/raww.json",
+    "ref_vfix/twix_special.bin": "ops/special/raw.bin",
+    "ref_vfix/twix_special.json": "ops/special/raw.json",
+    "ref_vfix/twix_special_w.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_special_w.json": "ops/siemens_mega/raww.json",
+    "ref_vfix/twix_vb_edit_529.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_edit_529.json": "ref/twix_vb_edit_529.json",
+    "ref_vfix/twix_vb_edit_859.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_edit_859.json": "ref/twix_vb_edit_859.json",
+    "ref_vfix/twix_vb_jn_MEGA_GABA.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_jn_MEGA_GABA.json": "ref/twix_vb_jn_MEGA_GABA.json",
+    "ref_vfix/twix_vb_other_seq.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_other_seq.json": "ref/twix_vb_other_seq.json",
+    "ref_vfix/twix_vb_svs_se.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_svs_se.json": "ref/twix_vb_svs_se.json",
+    "ref_vfix/twix_vb_svs_slaser_cu.bin": "ref/twix_vb_svs_slaser_cu.bin",
+    "ref_vfix/twix_vb_svs_slaser_cu.json": "ref/twix_vb_svs_slaser_cu.json",
+    "ref_vfix/twix_vb_svs_slaser_cu_wref.bin": "ref/twix_vb_svs_slaser_cu_wref.bin",
+    "ref_vfix/twix_vb_svs_slaser_cu_wref.json": "ref/twix_vb_svs_slaser_cu.json",
+    "ref_vfix/twix_vb_svs_st.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vb_svs_st.json": "ref/twix_vb_svs_st.json",
+    "ref_vfix/twix_vd_eja_svs_mpress.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vd_eja_svs_mpress.json": "ref/twix_vd_eja_svs_mpress.json",
+    "ref_vfix/twix_vd_jn_MEGA_GABA.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vd_other_seq.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vd_svs_se.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twix_vd_svs_st.bin": "ops/siemens_mega/raww.bin",
+    "ref_vfix/twixvd_megapress.bin": "ops/siemens_mega/raw.bin"
+  }
+}

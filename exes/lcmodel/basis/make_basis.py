@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Write LCModel .BASIS files from FID-A simulations.
 
-    python3 make_basis.py <simulation dir> <output dir>
+    python3 make_basis.py <simulation dir> <output dir> [set id ...]
 
 <simulation dir>/<set id>/<metabolite>.{json,bin} are FID-A structures
 exported by simulate_library.m and simulate_mega.m (via
 fida/validation/export_fida.m). For each
-set in library.json this writes <output dir>/<set id>.basis.
+set in library.json (or each set named) this writes <output dir>/<set id>.basis.
 
 Conventions, taken from LCModel.f (MYBASI) and FID-A (io_writelcm):
 * LCModel's time-domain data are the complex conjugate of FID-A's `fids`,
@@ -91,8 +91,11 @@ def main():
     sim_dir = Path(sys.argv[1])
     out_dir = Path(sys.argv[2])
     out_dir.mkdir(parents=True, exist_ok=True)
+    only = set(sys.argv[3:])
     lib = json.loads((HERE / "library.json").read_text())
     for set_def in lib["sets"] + lib.get("mega", []):
+        if only and set_def["id"] not in only:
+            continue
         out = out_dir / f"{set_def['id']}.basis"
         write_basis(set_def, set_def.get("metabolites", lib["metabolites"]), sim_dir, out)
         print(out, out.stat().st_size)

@@ -45,3 +45,32 @@ test("GE PRESS example: FID-A preprocessing and LCModel in WebAssembly", async (
   assert.ok(naa, "NAA row");
   console.log(naa.trim());
 });
+
+// Osprey's exampledata/sdat/UnEdited (MIT): two subjects, each with its
+// metabolite and water scans in sibling BIDS folders, as a directory drop names them.
+const osprey = process.env.OSPREY_UNEDITED ?? `${process.env.TMPDIR}/group-report/osprey`;
+
+test("a folder of subjects pairs each spectrum with its own water reference", async (t) => {
+  const names = ["01", "02"].flatMap((s) => [
+    `sub-${s}/ses-01/mrs/sub-${s}_ses-01_press/sub-${s}_PRESS_35_act.sdat`,
+    `sub-${s}/ses-01/mrs/sub-${s}_ses-01_press/sub-${s}_PRESS_35_act.spar`,
+    `sub-${s}/ses-01/mrs/sub-${s}_ses-01_press-ref/sub-${s}_PRESS_35_ref.sdat`,
+    `sub-${s}/ses-01/mrs/sub-${s}_ses-01_press-ref/sub-${s}_PRESS_35_ref.spar`,
+  ]);
+  const bytes = await Promise.all(names.map((n) => maybeRead(`${osprey}/${n}`)));
+  if (bytes.some((b) => !b)) return t.skip("Osprey example data not available (OSPREY_UNEDITED)");
+  const lcm = await loadLcmodel(await readFile(new URL("../src/lcmodel.wasm", import.meta.url)));
+  // Water first and subjects interleaved, so pairing cannot rely on order.
+  for (const k of [6, 7, 2, 3, 0, 1, 4, 5]) lcm.addFile(`study/${names[k]}`, new Uint8Array(bytes[k]));
+  const loaded = lcm.load();
+  assert.equal(loaded.datasets.length, 2, JSON.stringify(loaded));
+  for (const ds of loaded.datasets) {
+    const subject = ds.path.split("/")[1];
+    assert.match(ds.waterPath, new RegExp(`^study/${subject}/`), `${ds.path} paired with ${ds.waterPath}`);
+    assert.equal(ds.header.teMs, 35);
+    const processed = lcm.process(ds.index, {});
+    assert.equal(processed.error, undefined, processed.error);
+    assert.ok(processed.lcmodel.h2o, "water reference passed to LCModel");
+  }
+  assert.deepEqual(loaded.unpairedWater, []);
+});

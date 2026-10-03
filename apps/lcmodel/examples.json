@@ -8,7 +8,40 @@
       {
         "role": "spectrum",
         "name": "P17920.7",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/ge-press-phantom/P17920.7"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/ge-press-phantom/P17920.7"
+      }
+    ]
+  },
+  {
+    "id": "philips-press-t1",
+    "label": "Philips PRESS 3 T, TE 35 ms, with T1 (tissue correction)",
+    "description": "Philips SDAT/SPAR from Osprey (MIT): PRESS at 3 T, TE 35 ms, 30 mm voxel in the posterior cingulate, water reference, and the same session's T1 (defaced).",
+    "expectedResult": "LCModel fits with the PRESS TE 35 ms basis; MindMap segments the T1, the Voxel view shows the box on it, and the table adds tissue-corrected concentrations (mmol/kg) from its GM, WM and CSF fractions.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "sub-01_PRESS_35_act.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.sdat"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-01_PRESS_35_act.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.spar"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_PRESS_35_ref.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.sdat"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_PRESS_35_ref.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.spar"
+      },
+      {
+        "role": "t1",
+        "name": "sub-01_T1w_defaced.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz"
       }
     ]
   },
@@ -21,12 +54,12 @@
       {
         "role": "spectrum",
         "name": "specialDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-special/specialDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC.dat"
       },
       {
         "role": "water",
         "name": "specialDLPFC_w.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-special/specialDLPFC_w.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC_w.dat"
       }
     ]
   },
@@ -39,7 +72,83 @@
       {
         "role": "spectrum",
         "name": "megapressDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-megapress/megapressDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-megapress/megapressDLPFC.dat"
+      }
+    ]
+  },
+  {
+    "id": "philips-megapress",
+    "label": "Philips MEGA-PRESS 3 T, TE 68 ms (GABA)",
+    "description": "Philips SDAT/SPAR from Osprey (MIT): GABA-edited MEGA-PRESS at 3 T, TE 68 ms, 160 edit-ON/OFF pairs with a water reference. The file does not record editing; the app detects it. 10 MB.",
+    "expectedResult": "The app finds alternate edit-OFF and edit-ON transients (NAA nearly erased in edit-ON), FID-A removes bad averages, corrects drift and aligns the subspectra, and LCModel fits GABA+ on the difference spectrum relative to NAA+NAAG.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "sub-01_megapress_act.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.sdat"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-01_megapress_act.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.spar"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_megapress_ref.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.sdat"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_megapress_ref.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.spar"
+      }
+    ]
+  },
+  {
+    "id": "philips-press-group",
+    "label": "Philips PRESS 3 T, TE 35 ms, two subjects (group)",
+    "description": "Philips SDAT/SPAR from Osprey (MIT): PRESS at 3 T, TE 35 ms, 64 averages combined on the scanner, two subjects, each with a water reference. 80 kB.",
+    "expectedResult": "The app pairs each spectrum with its own water reference and fits both subjects with the PRESS TE 35 ms basis in one run; the group table compares water-scaled concentrations and quality measures, and each subject has a printable report.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "sub-01_PRESS_35_act.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.sdat"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-01_PRESS_35_act.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.spar"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_PRESS_35_ref.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.sdat"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_PRESS_35_ref.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.spar"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-02_PRESS_35_act.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.sdat"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-02_PRESS_35_act.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.spar"
+      },
+      {
+        "role": "water",
+        "name": "sub-02_PRESS_35_ref.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.sdat"
+      },
+      {
+        "role": "water",
+        "name": "sub-02_PRESS_35_ref.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.spar"
       }
     ]
   },
@@ -52,17 +161,17 @@
       {
         "role": "spectrum",
         "name": "data.raw",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/data.raw"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/data.raw"
       },
       {
         "role": "basis",
         "name": "3t.basis",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/3t.basis"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/3t.basis"
       },
       {
         "role": "control",
         "name": "control.file",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/control.file"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/control.file"
       }
     ]
   }

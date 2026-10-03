@@ -13,5 +13,14 @@
 .lcm-plot .lcm-residual { stroke: var(--nd-color-text-muted); stroke-width: 0.8; }
 .lcm-plot .lcm-metabolite { stroke: var(--nd-color-primary); stroke-width: 1.2; }
 .lcm-conc td { white-space: nowrap; }
+.lcm-conc td:first-child { white-space: normal; }
 .lcm-combination td:first-child { font-weight: 600; }
 .lcm-uncertain td { color: var(--nd-color-text-dim); }
+/* The group table fills the viewer and scrolls within it; names and headers stay in view. */
+.lcm-group-host { position: absolute; inset: 0; overflow: auto; padding: var(--nd-space-sm); background: var(--nd-color-surface); }
+.lcm-group :is(th, td) { white-space: nowrap; overflow-wrap: normal; }
+.lcm-group thead th { position: sticky; top: 0; z-index: 1; background: var(--nd-color-surface); }
+.lcm-group tbody th { position: sticky; left: 0; background: var(--nd-color-surface); font-weight: 500; }
+.lcm-group tr[aria-current="true"] > * { background: var(--nd-color-surface-elevated); }
+.lcm-group .lcm-uncertain { color: var(--nd-color-text-dim); }
+.lcm-group .lcm-error { color: var(--nd-color-error); white-space: normal; }

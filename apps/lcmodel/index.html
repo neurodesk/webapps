@@ -16,12 +16,14 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Drop spectroscopy files: twix, P-file, RDA, DICOM, SPAR/SDAT, NIfTI-MRS, .RAW</span>
           </label>
+          <label class="nd-file" id="folderPick">Or choose a folder of subjects<input id="folderInput" type="file" data-neurodesk-input="dataset" webkitdirectory multiple hidden /></label>
           <p id="fileInfo" class="nd-file-info" hidden></p>
           <div class="nd-field" id="datasetField" hidden>
             <label for="datasetSelect">Dataset</label>
             <select id="datasetSelect"></select>
           </div>
           <p id="datasetSummary" class="nd-hint" hidden></p>
+          <label class="nd-check" id="editedField" hidden><input id="editedToggle" type="checkbox" /> Edited MEGA-PRESS: alternate edit-ON and edit-OFF <span class="nd-info-icon" tabindex="0" aria-label="About editing detection">i<span class="nd-info-tooltip" id="editedInfo">GE and Philips files do not record editing.</span></span></label>
           <div id="acquisitionFields" hidden>
             <div class="nd-row">
               <div class="nd-field">
@@ -44,15 +46,15 @@
         <div class="nd-section-content">
           <div class="nd-field">
             <label for="basisSelect">Basis set
-              <span class="nd-info-icon" tabindex="0" aria-label="About basis sets">i<span class="nd-info-tooltip">LCModel fits the spectrum as a sum of metabolite spectra simulated for the same field strength, sequence and echo time. Coupled metabolites (Glu, Gln, GABA, mI, Lac) change shape with the sequence timing, so a mismatched basis biases them even when the fit looks good. The recommendation compares the data's header with each basis set.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About basis sets">i<span class="nd-info-tooltip">LCModel fits the spectrum as a sum of metabolite spectra simulated for the same field strength, sequence and echo time. Coupled metabolites (Glu, Gln, GABA, mI, Lac) change shape with the sequence timing, so a mismatched basis biases them even when the fit looks good. The recommendation compares the data's header with each basis set. Your own .BASIS file (plain or .gz) can also be dropped with the data.</span></span>
             </label>
             <select id="basisSelect"></select>
           </div>
           <p id="basisAdvice" class="nd-message info" hidden></p>
-          <label class="nd-file" id="basisDrop" hidden>
+          <label class="nd-file" id="basisDrop">
             <input id="basisInput" type="file" data-neurodesk-input="model" aria-label="Choose an LCModel .BASIS file" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Drop your LCModel .BASIS file</span>
+            <span>Or drop your own LCModel .BASIS file</span>
           </label>
           <p id="basisInfo" class="nd-file-info" hidden></p>
         </div>
@@ -79,6 +81,26 @@
           <details class="nd-sidebar-section" id="fitSettings">
             <summary class="nd-section-title">LCModel settings</summary>
             <div class="nd-section-content">
+              <div class="nd-field" id="mmModelField" hidden>
+                <label for="mmModel">Macromolecule model
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the macromolecule model">i<span class="nd-info-tooltip">GABA editing also edits a macromolecule signal at 3.0 ppm (MM3co). Co-edited MM fits it as a 14 Hz Gaussian tied to the 0.915 ppm macromolecule peak (Zöllner et al. 2022), from 4.2 to 0.5 ppm without 1.2-1.95 ppm (as Osprey), and reports GABA, MM3co and their sum GABA+. The split rests on that model; GABA+ does not. None is LCModel's mega-press-3 analysis as before: 4.2 to 1.95 ppm, and GABA there is GABA+. Macromolecule-suppressed basis sets always use none.</span></span>
+                </label>
+                <select id="mmModel">
+                  <option value="co-edited">Co-edited MM: GABA, MM3co, GABA+</option>
+                  <option value="none">None: GABA+ only, as before</option>
+                </select>
+                <p class="nd-hint" id="mmModelHint" hidden>MM-suppressed basis: no co-edited MM to model.</p>
+              </div>
+              <div class="nd-field">
+                <label for="lineBroadening">Line-broadening prior
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the line-broadening prior">i<span class="nd-info-tooltip">The included basis sets have 1.5 Hz lines, narrower than in vivo. With LCModel's defaults (DESDT2 0.4, RFWBAS 10) the fit cannot follow the broadened line tails and the reference singlet is integrated over too narrow a window, so water-scaled concentrations come out 8-15 % low: below synthetic data of known concentration, and below spant's ABfit with the same basis on the same files. Widened (DESDT2 2, RFWBAS 80) recovers the synthetic concentrations and agrees with spant within about 5 %. Ratios change less. MEGA-PRESS difference fits always keep LCModel's values: there the widened prior moved GABA+/NAA by up to 30 % without validation. Choose LCModel defaults to compare with other LCModel analyses.</span></span>
+                </label>
+                <select id="lineBroadening">
+                  <option value="widened">Widened (default)</option>
+                  <option value="lcmodel">LCModel defaults</option>
+                </select>
+                <p class="nd-hint" id="lineBroadeningHint" hidden>MEGA-PRESS fits keep LCModel's values.</p>
+              </div>
               <div class="nd-row">
                 <div class="nd-field">
                   <label for="ppmStart">From <small>ppm</small></label>
@@ -93,6 +115,39 @@
             </div>
           </details>
           <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Preprocess and fit</button>
+          <button id="runSelectedButton" class="nd-btn nd-btn-secondary" type="button" hidden>Fit selected dataset</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="tissueSection">
+        <summary class="nd-section-title">Tissue correction</summary>
+        <div class="nd-section-content">
+          <label class="nd-file" id="t1Drop">
+            <input id="t1Input" type="file" data-neurodesk-input="image" multiple aria-label="Choose the T1-weighted image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop the T1 from the same session: NIfTI or DICOM</span>
+          </label>
+          <p id="t1Info" class="nd-file-info" hidden></p>
+          <button id="measureButton" class="nd-btn nd-btn-secondary" type="button" disabled>Segment and measure the voxel</button>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="fGm">GM
+                <span class="nd-info-icon" tabindex="0" aria-label="About tissue fractions">i<span class="nd-info-tooltip">Volume fractions of grey matter, white matter and CSF in the voxel. The T1 is segmented in the browser (MindMap partial-volume maps) and the voxel box, placed from the spectroscopy header, is sampled on the T1 grid. MindMap labels ventricles as CSF only, so the rest of the voxel (sulcal CSF) counts as CSF. Or enter fractions from another tool; they are scaled to sum to 1.</span></span>
+              </label>
+              <input id="fGm" type="number" min="0" max="1" step="0.01" inputmode="decimal" />
+            </div>
+            <div class="nd-field">
+              <label for="fWm">WM</label>
+              <input id="fWm" type="number" min="0" max="1" step="0.01" inputmode="decimal" />
+            </div>
+            <div class="nd-field">
+              <label for="fCsf">CSF</label>
+              <input id="fCsf" type="number" min="0" max="1" step="0.01" inputmode="decimal" />
+            </div>
+          </div>
+          <p id="tissueSummary" class="nd-hint" hidden></p>
+          <label class="nd-check"><input id="metabRelax" type="checkbox" checked /> Correct metabolite T1 and T2 <span class="nd-info-icon" tabindex="0" aria-label="About relaxation correction">i<span class="nd-info-tooltip">Gasparovic et al. 2006 with Osprey's constants: water T1/T2 per tissue and literature metabolite T1/T2 at 3 T or 7 T, averaged over grey and white matter. Off, only the water signal is relaxation-corrected. Results are in mmol per kg tissue water.</span></span></label>
+          <p id="tissueAdvice" class="nd-message warning" hidden></p>
         </div>
       </details>
 
@@ -100,9 +155,19 @@
         <summary class="nd-section-title">Results</summary>
         <div class="nd-section-content">
           <p id="fitSummary" class="nd-hint" hidden></p>
+          <p id="modelNote" class="nd-hint" hidden>GABA and MM3co depend on the macromolecule model; GABA+ does not.
+            <span class="nd-info-icon" tabindex="0" aria-label="About model-dependent results">i<span class="nd-info-tooltip">The fit separates GABA from co-edited macromolecules (MM3co) by assuming the MM3co line width and its ratio to the 0.915 ppm macromolecule peak. Change those assumptions and the split changes, while GABA+ = GABA + MM3co hardly moves. Report GABA+ as the primary result.</span></span>
+          </p>
+          <div class="nd-field" id="concColumnField" hidden>
+            <label for="concColumn">Last column</label>
+            <select id="concColumn">
+              <option value="tissue">Tissue-corrected (mmol/kg)</option>
+              <option value="ratio">Ratio</option>
+            </select>
+          </div>
           <div class="nd-table-scroll">
             <table class="nd-data-table lcm-conc" id="concTable" hidden>
-              <thead><tr><th>Metabolite</th><th id="concHeader">Conc.</th><th>SD</th><th id="ratioHeader">Ratio</th></tr></thead>
+              <thead><tr><th>Metabolite</th><th id="concHeader">Conc.</th><th>SD</th><th id="ratioHeader">Ratio</th><th id="corrHeader" hidden>Tissue <small>mmol/kg</small></th></tr></thead>
               <tbody id="concBody"></tbody>
             </table>
           </div>
@@ -117,6 +182,8 @@
     <main id="viewer">
       <div class="nd-viewer-canvas-wrapper">
         <div id="plot" class="lcm-plot-host" aria-live="polite"></div>
+        <div id="groupView" class="lcm-group-host" hidden></div>
+        <canvas id="t1Canvas" aria-label="T1 image with the spectroscopy voxel" hidden></canvas>
         <p id="emptyState" class="nd-viewer-empty">Choose an example or drop spectroscopy data to begin.</p>
         <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
       </div>
@@ -135,8 +202,13 @@
       <p>This app quantifies metabolites in single-voxel MR spectroscopy data, in the browser. Raw data are preprocessed with FID-A's automatic pipelines and fitted with LCModel. Both run as Rust ports compiled to WebAssembly.</p>
       <p><strong>Preprocessing.</strong> FID-A combines the receiver channels, removes bad averages, corrects frequency and phase drift by spectral registration, and averages. For SPECIAL it also aligns and combines the ISIS subspectra. It then phases and references the spectrum to creatine and the water reference to 4.65 ppm. GE data follow FID-A's GE script, which phases on the residual water. In room-temperature phantoms water sits near 4.8 ppm, so FID-A's creatine search can lock onto choline; LCModel's own referencing corrects this and reports it as the data shift. These are FID-A's <code>run_pressproc_auto</code> and <code>run_specialproc_auto</code>, with fixed values where FID-A draws random registration windows, so the result is reproducible. The port agrees with FID-A run in GNU Octave to within 10<sup>-5</sup> Hz in the drift estimates and 10<sup>-8</sup> in the final spectra. Data that arrive coil-combined (RDA, DICOM, NIfTI-MRS) are aligned and averaged only. LCModel .RAW files go to LCModel unchanged.</p>
       <p><strong>Fitting.</strong> LCModel 6.3-1N was translated from Stephen Provencher's Fortran subprogram by subprogram, keeping its precision and order of operations. On LCModel's own test case, the port's .TABLE and .COORD outputs are identical to those of the Fortran compiled with gfortran. Concentrations are scaled to the unsuppressed water reference when there is one (LCModel's WCONC and ATTH2O defaults); without water they are in arbitrary units, and the ratios to creatine are the useful numbers. %SD is LCModel's Cramér-Rao estimate; values above about 20% are unreliable.</p>
-      <p><strong>Basis sets.</strong> The included basis sets were simulated with FID-A's ideal-pulse density-matrix simulations for 20 metabolites. LCModel adds macromolecules and lipids itself. Choose the one that matches the data's field strength, sequence and echo time, or supply your own .BASIS file. Ideal pulses ignore the slice profiles of real pulses, which matter most for semi-LASER and long echo times.</p>
-      <p><strong>MEGA-PRESS.</strong> GABA-edited data go through FID-A's <code>run_megapressproc_auto</code>: coil combination, removal of bad averages, drift correction per subspectrum and alignment of edit-ON to edit-OFF. LCModel then fits the difference spectrum with its MEGA-PRESS analysis (<code>sptype='mega-press-3'</code>, 4.2 to 1.95 ppm, no baseline, scaled to NAA) and the difference basis set. That basis set was simulated with FID-A's shaped 14 ms editing pulses at the voxel centre, because real editing pulses nearly erase the NAA singlet in the edit-ON scan, which instantaneous pulses cannot reproduce. GABA from the difference spectrum includes co-edited macromolecules (GABA+). Ratios are to NAA+NAAG; the edit-OFF spectrum is a separate download.</p>
+      <p><strong>Line-broadening prior.</strong> The included basis sets have 1.5 Hz lines, narrower than in vivo. With LCModel's default priors (DESDT2 0.4, RFWBAS 10) the fit cannot follow the broadened line tails and the reference singlet is integrated over too narrow a window, so water-scaled concentrations come out 8-15 % low: 13 % below the known concentrations of synthetic spectra, and below spant's ABfit with the same basis on the same files. The app therefore widens the prior (DESDT2 2, RFWBAS 80), which recovers the synthetic concentrations to 1 % and agrees with spant within about 5 %. It applies with or without a water reference, so ratios and concentrations come from the same fit; ratios move by a few percent. MEGA-PRESS difference fits keep LCModel's values, because there the widened prior changed GABA+ by up to 30 % with nothing to validate it. "LCModel defaults" in the LCModel settings restores LCModel's own priors, to compare with other LCModel analyses.</p>
+      <p><strong>Basis sets.</strong> The included basis sets were simulated with FID-A for 20 metabolites. LCModel adds macromolecules and lipids itself. Most use ideal (instantaneous) pulses. Sets marked "shaped pulses" use real refocusing pulse shapes across the voxel (FID-A's sample Mao refocusing pulse for PRESS, its HS2 adiabatic pulse for semi-LASER), which reproduce J-evolution during the pulses and the chemical-shift displacement of the slices; the app prefers them to the ideal set with the same parameters. Choose the set that matches the data's field strength, sequence and echo time, or supply your own .BASIS file. The pulses are FID-A's examples, not a particular scanner's.</p>
+      <p><strong>MEGA-PRESS.</strong> GABA-edited data go through FID-A's <code>run_megapressproc_auto</code>: coil combination, removal of bad averages, drift correction per subspectrum and alignment of edit-ON to edit-OFF. LCModel then fits the difference spectrum with its MEGA-PRESS analysis (<code>sptype='mega-press-3'</code>, no baseline, scaled to NAA) and a difference basis set, simulated with FID-A's shaped editing and refocusing pulses at the voxel centre: real editing pulses nearly erase the NAA singlet in the edit-ON scan, which instantaneous pulses cannot reproduce. Sets exist for TE 68 ms (14 ms editing pulses) and TE 80 ms (20 ms), and for macromolecule-suppressed editing (TE 80 ms, edit-OFF at 1.5 ppm). Ratios are to NAA+NAAG; the edit-OFF spectrum is a separate download. GE and Philips files do not record editing or which transient is edit-ON, so the app compares alternate transients, as Osprey does. Data that the scanner averaged in edit-ON/OFF pairs cannot be separated.</p>
+      <p><strong>GABA and co-edited macromolecules.</strong> The 1.9 ppm editing pulse also edits a macromolecule signal at 3.0 ppm (MM3co) under the GABA peak. The fit models it as Zöllner et al. (2022) recommend: a 14 Hz Gaussian at 3.0 ppm tied to the co-edited macromolecule peak at 0.915 ppm by a soft 3:2 area constraint, fitted from 4.2 to 0.5 ppm. As in Osprey's MEGA-PRESS LCModel jobs, 1.2 to 1.95 ppm is left out: macromolecules there, hit directly by the editing pulse, have no basis spectrum, and the analysis has no baseline. The table gives GABA, MM3co and their sum GABA+, each with %SD. GABA+ is robust; the split between GABA and MM3co is not a measurement but follows from the model's assumptions (the MM3co line width and its ratio to the 0.915 ppm peak), and changes when they change. The results therefore lead with GABA+ and mark GABA and MM3co as model-dependent; report GABA+ as the primary result. LCModel settings offer the previous analysis as the macromolecule model "None": LCModel's <code>mega-press-3</code> as is, 4.2 to 1.95 ppm, where GABA is GABA+. Macromolecule-suppressed data have no co-edited MM3co, so their sets always use it.</p>
+      <p><strong>Groups.</strong> Drop several acquisitions, or a folder of subjects, and the app fits each one in turn with the same settings. Every spectrum is paired with the water reference in its own folder. Each dataset gets the basis set recommended for its header, unless you chose a library basis set that suits all of them or dropped your own .BASIS file, which then fits every dataset. A dataset that fails is listed with its error and the rest continue. The group table shows each dataset's concentrations or ratios with their %SD, FID-A's SNR, linewidth and removed averages, and LCModel's FWHM, S/N and shift. Its CSV download is long, one row per dataset and metabolite, because units and ratio references can differ between datasets; the second CSV has one row per dataset. Both also record each dataset's macromolecule model, line-broadening prior and, when it was corrected, its tissue fractions and tissue-corrected concentrations.</p>
+      <p><strong>Reports.</strong> This port does not draw LCModel's PostScript page. Instead each fit has a printable HTML report with the same information: the fit with its baseline and residual, the concentration table with %SD above 20% marked, LCModel's diagnostics and fit quality, the data's header, FID-A's preprocessing summary, the basis set with its checksum, the fit settings, the tissue correction and its inputs when one was applied, the control file and the versions used. Open it and print it to PDF from the browser.</p>
+      <p><strong>Tissue correction.</strong> LCModel scales to the water reference as if the voxel were pure white matter (WCONC 35880 mM, ATTH2O 0.7). With a T1 image from the same session, the app segments it in the browser with MindMap's partial-volume grey matter, white matter and CSF maps (brainchop, on WebGPU, WebGL2 or CPU), places the voxel from the spectroscopy header (spec2nii's conventions for Siemens, Philips and NIfTI-MRS), and samples the oblique voxel box on the T1 grid. MindMap's CSF map holds the ventricles only, so the part of the voxel no map labels (sulcal and interhemispheric CSF) counts as CSF. The Voxel view shows the box on the T1: check it covers the region you planned. Concentrations are then corrected as in Gasparovic et al. 2006, in mmol per kg tissue water, with Osprey's constants: tissue water contents of 0.78, 0.65 and 0.97, water T1 and T2 per tissue and metabolite T1 and T2 from the literature at 3 T and 7 T. For GABA-edited data, GABA, GABA+ and Glx are also given with Harris et al.'s alpha correction (alpha 0.5). In a group, a loaded T1 is taken to be the session's and each dataset's own voxel is measured on it; typed fractions correct only the dataset on display. Fractions from another tool can be typed in. GE P-files, Bruker and .RAW files do not carry the voxel position here.</p>
       <p>Research use only.</p>
     </template>
     <template id="privacyContent"><p>Spectroscopy files are processed in this browser and are never uploaded. Basis sets and examples are downloaded from Hugging Face at a pinned revision and verified by checksum.</p></template>

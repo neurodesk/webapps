@@ -43,7 +43,7 @@ const REQUIRED_METHODS = {
   ants: ['10.1038/s41598-021-87564-6', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2026.122074', '10.1016/j.jneumeth.2016.03.001'],
   'carotid-flow': ['10.5281/zenodo.18712355', '10.1177/00359157740676P113', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   disconnectome: ['10.1038/s41467-022-32595-4', 'github.com/neurolabusc/nii2tvx', 'github.com/niivue/niivue'],
-  lcmodel: ['10.1002/mrm.1910300604', '10.1002/mrm.26091', '10.1002/mrm.25094'],
+  lcmodel: ['10.1002/mrm.1910300604', '10.1002/mrm.26091', '10.1002/mrm.25094', '10.1002/mp.12375', '10.1002/(SICI)1099-1492(199810)11:6<266::AID-NBM530>3.0.CO;2-J', '10.1002/nbm.4618', '10.1002/mrm.24391', '10.1002/mrm.20901', '10.1002/jmri.24903', '10.1016/j.jneumeth.2020.108827', '10.1016/j.neuroimage.2026.122074', '10.1002/mrm.29418', '10.1016/j.jneumeth.2016.03.001'],
   greedy: ['sites.google.com/view/greedyreg/about', 'github.com/pyushkevich/greedy', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
   fireants: ['10.1038/s41467-026-72508-3', 'arxiv.org/abs/2506.11860', '10.1016/j.jneumeth.2016.03.001'],
   nesvor: ['10.1016/j.jneumeth.2016.03.001', '10.1109/TMI.2023.3236216', '10.1007/978-3-031-16446-0_1', 'arxiv.org/abs/2103.13314', '10.1109/TMI.2010.2046908', 'github.com/niivue/niivue'],

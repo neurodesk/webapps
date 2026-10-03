@@ -1,9 +1,11 @@
 % simulate_library.m
 % Simulate every basis set in library.json with FID-A and export each
-% metabolite's FID with export_fida.m for make-basis.
+% metabolite's FID with export_fida.m for make-basis. Sets whose
+% `simulation` is 'shaped' use real refocusing pulse shapes across the voxel
+% (sim_shaped.m); the others use FID-A's ideal (instantaneous) pulses.
 %
 %   FIDA=/path/to/FID-A OUT=/path/to/out octave --no-gui simulate_library.m
-%   (SET restricts the run to one set.)
+%   (SET and METABOLITE restrict the run to one set or metabolite.)
 %
 % FID-A: https://github.com/CIC-methods/FID-A (BSD-3-Clause).
 warning('off', 'all');
@@ -22,14 +24,19 @@ for s = 1:numel(lib.sets)
   mkdir(d);
   for m = 1:numel(lib.metabolites)
     name = lib.metabolites{m};
+    if ~isempty(getenv('METABOLITE')) && ~strcmp(getenv('METABOLITE'), name), continue; end
     sys = S.(['sys' name]);
-    switch set.sequence
+    kind = set.sequence;
+    if isfield(set, 'simulation') && strcmp(set.simulation, 'shaped'), kind = 'shaped'; end
+    switch kind
       case 'PRESS'
         out = sim_press(set.points, set.bandwidth_Hz, set.field_T, set.linewidth_Hz, sys, set.te1_ms, set.te2_ms);
       case 'STEAM'
         out = sim_steam(set.points, set.bandwidth_Hz, set.field_T, set.linewidth_Hz, sys, set.te_ms, set.tm_ms);
       case 'sLASER'
         out = sim_slaser_ideal(set.points, set.bandwidth_Hz, set.field_T, set.linewidth_Hz, sys, set.te_ms);
+      case 'shaped'
+        out = sim_shaped(set, sys);
       case 'SPECIAL'
         out = sim_spinecho(set.points, set.bandwidth_Hz, set.field_T, set.linewidth_Hz, sys, set.te_ms);
       otherwise
@@ -43,3 +50,4 @@ for s = 1:numel(lib.sets)
     fflush(stdout);
   end
 end
+

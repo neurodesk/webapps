@@ -39,6 +39,34 @@ export function visibleIndices(ppm, values, lo, hi, max = 1600) {
 }
 
 /**
+ * Positions in `idx` grouped into runs that do not cross a gap in the ppm
+ * axis: LCModel leaves the excluded window (PPMGAP) out of the .COORD file,
+ * and a line drawn across it would look like fitted data.
+ */
+export function splitAtGaps(ppm, idx) {
+  const steps = [];
+  for (let k = 1; k < ppm.length; k += 1) steps.push(Math.abs(ppm[k] - ppm[k - 1]));
+  const typical = steps.sort((a, b) => a - b)[Math.floor(steps.length / 2)] ?? 0;
+  const runs = [];
+  let run = [];
+  idx.forEach((k, i) => {
+    if (run.length) {
+      const prev = idx[i - 1];
+      for (let g = Math.min(prev, k) + 1; g <= Math.max(prev, k); g += 1) {
+        if (Math.abs(ppm[g] - ppm[g - 1]) > 5 * typical) {
+          runs.push(run);
+          run = [];
+          break;
+        }
+      }
+    }
+    run.push(i);
+  });
+  if (run.length) runs.push(run);
+  return runs;
+}
+
+/**
  * @param {{
  *   ppm: number[],
  *   series: { values: number[], kind: string, label: string, offset?: number }[],
@@ -75,9 +103,12 @@ export function spectrumSvg({ ppm, series, range, height = 420, ariaLabel }) {
   }
   parts.push(`<line class="lcm-axis" x1="${MARGIN.left}" x2="${WIDTH - MARGIN.right}" y1="${height - MARGIN.bottom}" y2="${height - MARGIN.bottom}"/>`);
   parts.push(`<text x="${MARGIN.left + plotWidth / 2}" y="${height - 4}" text-anchor="middle">Chemical shift (ppm)</text>`);
+  const runs = splitAtGaps(ppm, idx);
   series.forEach((s, j) => {
-    const points = idx.map((k, i) => `${x(ppm[k])},${y(shifted[j][i])}`).join(" ");
-    parts.push(`<polyline class="lcm-${escapeXml(s.kind)}" points="${points}"><title>${escapeXml(s.label)}</title></polyline>`);
+    for (const run of runs) {
+      const points = run.map((i) => `${x(ppm[idx[i]])},${y(shifted[j][i])}`).join(" ");
+      parts.push(`<polyline class="lcm-${escapeXml(s.kind)}" points="${points}"><title>${escapeXml(s.label)}</title></polyline>`);
+    }
     if (s.kind === "metabolite") {
       const peak = shifted[j].reduce((best, v, i) => (v > shifted[j][best] ? i : best), 0);
       const tx = Math.min(Math.max(Number(x(ppm[idx[peak]])), MARGIN.left + 24), WIDTH - MARGIN.right - 24);

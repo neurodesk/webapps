@@ -373,9 +373,9 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     return { mask: nifti(mask), lesions: rows.length - 1 };
   }
   if (id === 'lcmodel') {
-    // GE PRESS phantom: FID-A preprocessing, then LCModel with the TE 35 ms basis set.
+    // GE PRESS phantom: FID-A preprocessing, then LCModel with the shaped-pulse TE 35 ms basis set.
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
-    await expect(page.locator('#basisSelect')).toHaveValue('press-3t-te35');
+    await expect(page.locator('#basisSelect')).toHaveValue('press-3t-te35-shaped');
     await page.locator('#runButton').click();
     await expect(page.locator('#statusText')).toContainText('Fit done', { timeout: 300000 });
     const result = await download('#resultList .nd-volume-toggle:first-child .nd-download-btn');

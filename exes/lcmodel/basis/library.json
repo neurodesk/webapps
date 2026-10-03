@@ -1,5 +1,5 @@
 {
-  "comment": "Basis sets simulated with FID-A (ideal pulses, FID-A spin systems). simulate_library.m reads this file; make-basis writes the .BASIS files; the app's basis selector reads the fields below.",
+  "comment": "Basis sets simulated with FID-A (FID-A spin systems): ideal (instantaneous) pulses unless `simulation` says otherwise. simulate_library.m and simulate_mega.m read this file; make_basis.py writes the .BASIS files; the app's basis selector reads the fields below.",
   "metabolites": [
     "Ala",
     "Asc",
@@ -175,6 +175,157 @@
       "points": 8192,
       "bandwidth_Hz": 6000,
       "linewidth_Hz": 1.5
+    },
+    {
+      "id": "slaser-3t-te30-shaped",
+      "sequence": "sLASER",
+      "field_T": 3.0,
+      "te_ms": 30,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleAFPpulse_HS2_R15.RF",
+        "type": "inv",
+        "tp_ms": 3.5,
+        "resample": 100,
+        "w1max_kHz": 1.5
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "slaser-3t-te35-shaped",
+      "sequence": "sLASER",
+      "field_T": 3.0,
+      "te_ms": 35,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleAFPpulse_HS2_R15.RF",
+        "type": "inv",
+        "tp_ms": 3.5,
+        "resample": 100,
+        "w1max_kHz": 1.5
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "press-3t-te144-shaped",
+      "sequence": "PRESS",
+      "field_T": 3.0,
+      "te_ms": 144,
+      "te1_ms": 10,
+      "te2_ms": 134,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleRefocPulse.pta",
+        "type": "ref",
+        "tp_ms": 3.5,
+        "resample": 100
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "press-3t-te80-shaped",
+      "sequence": "PRESS",
+      "field_T": 3.0,
+      "te_ms": 80,
+      "te1_ms": 10,
+      "te2_ms": 70,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleRefocPulse.pta",
+        "type": "ref",
+        "tp_ms": 3.5,
+        "resample": 100
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "slaser-7t-te28-shaped",
+      "sequence": "sLASER",
+      "field_T": 7.0,
+      "te_ms": 28,
+      "points": 8192,
+      "bandwidth_Hz": 8000,
+      "linewidth_Hz": 2.0,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleAFPpulse_HS2_R15.RF",
+        "type": "inv",
+        "tp_ms": 3.5,
+        "resample": 100,
+        "w1max_kHz": 1.5
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "press-3t-te30-shaped",
+      "sequence": "PRESS",
+      "field_T": 3.0,
+      "te_ms": 30,
+      "te1_ms": 10,
+      "te2_ms": 20,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleRefocPulse.pta",
+        "type": "ref",
+        "tp_ms": 3.5,
+        "resample": 100
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
+    },
+    {
+      "id": "press-3t-te35-shaped",
+      "sequence": "PRESS",
+      "field_T": 3.0,
+      "te_ms": 35,
+      "te1_ms": 10,
+      "te2_ms": 25,
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "simulation": "shaped",
+      "pulse": {
+        "file": "sampleRefocPulse.pta",
+        "type": "ref",
+        "tp_ms": 3.5,
+        "resample": 100
+      },
+      "centre_ppm": 3.0,
+      "thk_cm": 2,
+      "fov_cm": 3,
+      "grid": 32
     }
   ],
   "mega": [
@@ -250,6 +401,66 @@
       "edit_off_ppm": 7.5,
       "edit_tp_ms": 14,
       "simulation": "ideal"
+    },
+    {
+      "id": "megapress-3t-te80-diff",
+      "edit": "diff",
+      "metabolites": [
+        "GABA",
+        "Glu",
+        "Gln",
+        "GSH",
+        "NAA",
+        "NAAG"
+      ],
+      "sequence": "MEGA-PRESS",
+      "field_T": 3.0,
+      "te_ms": 80,
+      "taus_ms": [
+        5,
+        20,
+        20,
+        20,
+        15
+      ],
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "edit_on_ppm": 1.9,
+      "edit_off_ppm": 7.5,
+      "edit_tp_ms": 20,
+      "simulation": "shaped-central",
+      "refoc_tp_ms": 5
+    },
+    {
+      "id": "megapress-3t-te80-mmsup-diff",
+      "edit": "diff",
+      "metabolites": [
+        "GABA",
+        "Glu",
+        "Gln",
+        "GSH",
+        "NAA",
+        "NAAG"
+      ],
+      "sequence": "MEGA-PRESS",
+      "field_T": 3.0,
+      "te_ms": 80,
+      "taus_ms": [
+        5,
+        20,
+        20,
+        20,
+        15
+      ],
+      "points": 8192,
+      "bandwidth_Hz": 6000,
+      "linewidth_Hz": 1.5,
+      "edit_on_ppm": 1.9,
+      "edit_off_ppm": 1.5,
+      "edit_tp_ms": 20,
+      "simulation": "shaped-central",
+      "refoc_tp_ms": 5
     }
   ]
 }

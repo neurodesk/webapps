@@ -9,23 +9,20 @@ use common::*;
 use fida::io::twix::{load_with, TwixOptions};
 
 fn check(name: &str, sub: &str, bytes: &[u8], opts: TwixOptions, dir: &std::path::PathBuf) {
-    let r = reference_in(dir, sub, name);
     let t0 = std::time::Instant::now();
     let res = load_with(bytes, opts);
-    let Some(r) = r else {
+    if fida_failed(dir, sub, name) {
         // FID-A failed on this file: so must we
         if let Ok(x) = &res {
-            let failed = std::fs::read_to_string(dir.join(sub).join("FAILED")).unwrap_or_default();
-            if failed.lines().any(|l| l == name) {
-                panic!("{name} ({sub}): FID-A errors on this file but we read sz {:?}", x.out.sz);
-            }
+            panic!("{name} ({sub}): FID-A errors on this file but we read sz {:?}", x.out.sz);
         }
         return;
-    };
+    }
+    let Some(r) = reference_in(dir, sub, name) else { return };
     let res = res.unwrap_or_else(|e| panic!("{name} ({sub}): {e}"));
     eprintln!("{name} ({sub}): read {} MB in {:?}", bytes.len() / 1_000_000, t0.elapsed());
     compare(&format!("{name} ({sub})"), &res.out, &r, &[]);
-    match (reference_in(dir, sub, &format!("{name}_wref")), &res.out_w) {
+    match (optional_reference(dir, sub, &format!("{name}_wref")), &res.out_w) {
         (Some(rw), Some(w)) => {
             compare(&format!("{name}_wref ({sub})"), w, &rw, &[]);
         }
@@ -81,7 +78,7 @@ fn twixvd_special_w() {
 fn twix_sequence_families() {
     let Some(dir) = data_dir("twix_sequence_families") else { return };
     let Ok(rd) = std::fs::read_dir(dir.join("SiemensSeq")) else {
-        eprintln!("skipping: no SiemensSeq directory");
+        skip("no SiemensSeq directory");
         return;
     };
     let mut names: Vec<_> = rd.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
