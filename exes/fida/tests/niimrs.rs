@@ -8,7 +8,7 @@ use common::*;
 fn niimrs_all() {
     let Some(dir) = data_dir("niimrs_all") else { return };
     let Ok(rd) = std::fs::read_dir(dir.join("NIfTI-MRS")) else {
-        eprintln!("skipping: no NIfTI-MRS directory");
+        skip("no NIfTI-MRS directory");
         return;
     };
     let mut names: Vec<String> = rd.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();

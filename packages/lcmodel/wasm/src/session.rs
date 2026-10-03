@@ -356,20 +356,53 @@ pub fn lcmodel_inputs(p: &Processed) -> Result<Value, String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod test_data {
+    //! Example data and basis sets for the tests below, fetched by
+    //! exes/fida/validation/fetch_reference.py. Without them a test passes
+    //! with a notice, unless FIDA_REQUIRE_REFERENCE is set (as in CI).
 
-    fn example(rel: &str) -> Option<Vec<u8>> {
-        let root = std::env::var("FIDA_EXAMPLES").unwrap_or_else(|_| "/home/ubuntu/src/mrs/FID-A/exampleData".into());
-        std::fs::read(format!("{root}/{rel}")).ok()
+    pub fn skip(why: &str) {
+        if std::env::var_os("FIDA_REQUIRE_REFERENCE").is_some() {
+            panic!("{why}: FIDA_REQUIRE_REFERENCE is set (fetch the data with exes/fida/validation/fetch_reference.py)");
+        }
+        eprintln!("skipping: {why}");
     }
+
+    fn read(path: String) -> Option<Vec<u8>> {
+        let b = std::fs::read(&path).ok();
+        if b.is_none() {
+            skip(&format!("{path} not found"));
+        }
+        b
+    }
+
+    /// A file of FID-A's example data (`$FIDA_EXAMPLES`).
+    pub fn example(rel: &str) -> Option<Vec<u8>> {
+        let root = std::env::var("FIDA_EXAMPLES").unwrap_or_else(|_| "/home/ubuntu/src/mrs/FID-A/exampleData".into());
+        read(format!("{root}/{rel}"))
+    }
+
+    /// An LCModel basis set (`$LCMODEL_BASIS_DIR`, default `$TMPDIR/basis-out`).
+    pub fn basis(name: &str) -> Option<Vec<u8>> {
+        let dir = std::env::var("LCMODEL_BASIS_DIR").unwrap_or_else(|_| format!("{}/basis-out", std::env::temp_dir().display()));
+        read(format!("{dir}/{name}.basis"))
+    }
+
+    /// Osprey's Philips MEGA-PRESS example (`$PHILIPS_MEGA`).
+    pub fn philips_mega(name: &str) -> Option<Vec<u8>> {
+        let dir = std::env::var("PHILIPS_MEGA").unwrap_or_else(|_| format!("{}/mega-vendors/philips", std::env::temp_dir().display()));
+        read(format!("{dir}/{name}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::test_data::*;
+    use super::*;
 
     #[test]
     fn ge_press_example_runs_through_fida_and_lcmodel() {
-        let Some(bytes) = example("GE/sample01_press/press/P17920.7") else {
-            eprintln!("skipping: FID-A example data not found");
-            return;
-        };
+        let Some(bytes) = example("GE/sample01_press/press/P17920.7") else { return };
         let files = vec![("P17920.7".to_string(), bytes.as_slice())];
         let (ds, summary) = load(&files);
         assert_eq!(ds.len(), 1, "{summary}");
@@ -377,11 +410,7 @@ mod tests {
         let p = process(&ds[0], &Options::from_json(&json!({"phaseAndReference": std::env::var("NOREF").is_err()})), &mut |_, _| {}, &|| false).unwrap();
         let inputs = lcmodel_inputs(&p).unwrap();
         assert!(inputs["h2o"].is_string());
-        let basis = std::fs::read(format!("{}/basis-out/press-3t-te35.basis", std::env::var("TMPDIR").unwrap_or_default()));
-        let Ok(basis) = basis else {
-            eprintln!("skipping the fit: no basis set in $TMPDIR/basis-out");
-            return;
-        };
+        let Some(basis) = basis("press-3t-te35") else { return };
         let control = format!(
             " $LCMODL\n key=210387309\n lps=0\n nunfil={}\n deltat={:e}\n hzpppm={}\n filbas='b.basis'\n filraw='m.raw'\n filh2o='w.h2o'\n dows=T\n doecc=T\n lcoord=9\n filcoo='out.coord'\n ltable=7\n filtab='out.table'\n $END\n",
             inputs["nunfil"], inputs["deltat"].as_f64().unwrap(), inputs["hzpppm"]
@@ -391,8 +420,6 @@ mod tests {
         let r = lcmodel::run_lcmodel(&control, &[("b.basis", &basis), ("m.raw", &raw), ("w.h2o", &h2o)], "");
         assert!(r.error.is_none(), "{:?}", r.error);
         let table = &r.outputs["out.table"];
-        std::fs::write(format!("{}/ge.coord", std::env::var("TMPDIR").unwrap()), &r.outputs["out.coord"]).ok();
-        std::fs::write(format!("{}/ge.raw", std::env::var("TMPDIR").unwrap()), &raw).ok();
         eprintln!("{table}");
         assert!(table.contains("NAA"));
     }
@@ -400,23 +427,13 @@ mod tests {
 
 #[cfg(test)]
 mod mega_tests {
-    fn example(rel: &str) -> Option<Vec<u8>> {
-        let root = std::env::var("FIDA_EXAMPLES").unwrap_or_else(|_| "/home/ubuntu/src/mrs/FID-A/exampleData".into());
-        std::fs::read(format!("{root}/{rel}")).ok()
-    }
+    use super::test_data::*;
     use super::*;
 
     #[test]
     fn siemens_mega_press_example_fits_gaba() {
-        let root = std::env::var("FIDA_EXAMPLES").unwrap_or_else(|_| "/home/ubuntu/src/mrs/FID-A/exampleData".into());
-        let Ok(bytes) = std::fs::read(format!("{root}/Siemens/sample01_megapress/megapress/megapressDLPFC.dat")) else {
-            eprintln!("skipping: FID-A example data not found");
-            return;
-        };
-        let Ok(basis) = std::fs::read(format!("{}/basis-out/megapress-3t-te68-diff.basis", std::env::var("TMPDIR").unwrap_or_default())) else {
-            eprintln!("skipping: no MEGA-PRESS basis set in $TMPDIR/basis-out");
-            return;
-        };
+        let Some(bytes) = example("Siemens/sample01_megapress/megapress/megapressDLPFC.dat") else { return };
+        let Some(basis) = basis("megapress-3t-te68-diff") else { return };
         let (ds, summary) = load(&[("megapressDLPFC.dat".to_string(), bytes.as_slice())]);
         assert_eq!(ds.len(), 1, "{summary}");
         assert_eq!(family(&ds[0].metab.seq), "MEGA-PRESS");
@@ -440,10 +457,7 @@ mod mega_tests {
 
     /// Fit a MEGA-PRESS difference spectrum with the library's difference basis.
     fn fit_mega(p: &Processed) -> Option<String> {
-        let Ok(basis) = std::fs::read(format!("{}/basis-out/megapress-3t-te68-diff.basis", std::env::var("TMPDIR").unwrap_or_default())) else {
-            eprintln!("skipping the fit: no MEGA-PRESS basis set in $TMPDIR/basis-out");
-            return None;
-        };
+        let basis = basis("megapress-3t-te68-diff")?;
         let inputs = lcmodel_inputs(p).unwrap();
         let control = format!(
             " $LCMODL\n key=210387309\n lps=0\n sptype='mega-press-3'\n nunfil={}\n deltat={:e}\n hzpppm={}\n filbas='b.basis'\n filraw='d.raw'\n ltable=7\n filtab='out.table'\n $END\n",
@@ -464,12 +478,8 @@ mod mega_tests {
     #[test]
     fn philips_mega_press_is_detected_split_and_fits_gaba() {
         // Osprey's MIT example data (exampledata/sdat/MEGA/sub-01).
-        let dir = std::env::var("PHILIPS_MEGA").unwrap_or_else(|_| format!("{}/mega-vendors/philips", std::env::var("TMPDIR").unwrap_or_default()));
         let names = ["sub-01_megapress_act.sdat", "sub-01_megapress_act.spar", "sub-01_megapress_ref.sdat", "sub-01_megapress_ref.spar"];
-        let Ok(bytes) = names.iter().map(|n| std::fs::read(format!("{dir}/{n}"))).collect::<Result<Vec<_>, _>>() else {
-            eprintln!("skipping: Philips MEGA-PRESS example not found");
-            return;
-        };
+        let Some(bytes) = names.iter().map(|n| philips_mega(n)).collect::<Option<Vec<_>>>() else { return };
         let files: Vec<(String, &[u8])> = names.iter().zip(&bytes).map(|(n, b)| (n.to_string(), b.as_slice())).collect();
         let (ds, summary) = load(&files);
         assert_eq!(ds.len(), 1, "{summary}");
@@ -496,10 +506,7 @@ mod mega_tests {
     fn ge_mega_sample_with_averaged_transients_is_not_called_edited() {
         // FID-A's GE MEGA-PRESS sample stores 8-transient sums whose edit
         // states cancel: alternate frames agree to 0.4 % (FID-A in Octave too).
-        let Some(bytes) = example("GE/sample02_megapress/megapress/P21504.7") else {
-            eprintln!("skipping: FID-A example data not found");
-            return;
-        };
+        let Some(bytes) = example("GE/sample02_megapress/megapress/P21504.7") else { return };
         let (ds, summary) = load(&[("P21504.7".to_string(), bytes.as_slice())]);
         assert_eq!(ds.len(), 1, "{summary}");
         let e = ds[0].edit.as_ref().expect("GE frames are classified");

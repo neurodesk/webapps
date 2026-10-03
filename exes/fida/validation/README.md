@@ -12,6 +12,60 @@ statistics 1.8.2).
   MATLAB's `contains`.
 * `export_fida.m` writes a FID-A structure as `name.json` + `name.bin` for the tests.
 
+## References in CI
+
+The tests read FID-A's outputs and the example inputs from one directory,
+`FIDA_TEST_DATA`. A pinned copy lives on Hugging Face (`neurodeskorg/webapps`,
+`lcmodel/fida-reference/`), listed with sha256 and size in
+`reference.manifest.json`:
+
+```
+python3 exes/fida/validation/fetch_reference.py $TMPDIR/fida-reference
+D=$TMPDIR/fida-reference
+FIDA_TEST_DATA=$D FIDA_EXAMPLES=$D PHILIPS_MEGA=$D/Philips-MEGA LCMODEL_BASIS_DIR=$D/basis \
+  FIDA_REQUIRE_REFERENCE=1 cargo test --release   # in exes/fida and packages/lcmodel/wasm
+```
+
+`FIDA_REQUIRE_REFERENCE=1` turns every "skipping" into a failure;
+`.github/workflows/lcmodel-native.yml` (job `fida-reference`) sets it, so CI
+cannot pass by not finding the data. Without it a missing file is a notice.
+
+The directory holds:
+
+* `ref/`, `ref_vfix/`: `export_readers.m` with the Octave copy and with the
+  `version` fix (below); `FAILED` lists the cases FID-A errors on.
+* `ops/`: the exports of `ref_pipelines.m`, `ref_geauto.m`, `ref_ops.m`,
+  `ref_mega.m` and `ref_mega_philips.m`, only the files a test reads (803 of
+  921 MB; FID-A's other intermediate steps are left out).
+* Inputs: the GE PRESS P-file, the Siemens SPECIAL and MEGA-PRESS twix files,
+  Osprey's Philips MEGA-PRESS example (`Philips-MEGA/`) and two basis sets
+  come from `lcmodel/examples/` and `lcmodel/basis/`. The twix files there are
+  de-identified (patient name, ID and birth date overwritten), so the
+  references for every twix-derived file were exported from those copies, not
+  FID-A's originals: `SiemensSeq/` and `SiemensVD/` are rebuilt by the fetch
+  script with `twix_rename_seq.py` and `twix_vb_to_vd.py` (and checked against
+  their sha256), and `NIfTI-MRS/twix_*` were converted with spec2nii 0.8.15
+  from the de-identified twix. FID-A's MEGA-PRESS water file is byte-identical
+  to the SPECIAL one and is a copy of it. The rest (`GE/sample02_megapress`,
+  `Bruker/`, `Philips/`, `LCModel/`, `RDA/`, the GE and Philips NIfTI-MRS)
+  carries no patient identifiers and ships unchanged.
+
+Archives are `inputs.tar.zst` (123 MB), `ref.tar.zst` (111 MB) and
+`ops.tar.zst` (302 MB), zstd `--long=31`; unpacked, the directory is 2.3 GB.
+A file identical to another (e.g. `ops/special/raw.bin` and
+`ref/twix_special.bin`) is stored once and listed under `copies`.
+
+To publish new references, regenerate them (below), collect only the files
+the tests open into one directory in this layout, then
+
+```
+python3 exes/fida/validation/pack_reference.py <dir> $TMPDIR/fida-pack
+hf upload neurodeskorg/webapps $TMPDIR/fida-pack lcmodel/fida-reference --repo-type dataset
+```
+
+and replace the `PENDING` revision in the manifest with the commit `hf`
+prints. Update `lcmodel/README.md` on Hugging Face if the contents change.
+
 ## Processing (src/ops)
 
 ### Octave set-up

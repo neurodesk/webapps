@@ -7,18 +7,18 @@ use num_complex::Complex64 as C;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 
-/// `$FIDA_TEST_DATA/ops/<sub>`, or None (with a notice) when absent.
+mod skip;
+pub use skip::skip;
+
+/// `$FIDA_TEST_DATA/ops/<sub>`, or None (see `skip`) when absent.
 pub fn data_dir(sub: &str) -> Option<PathBuf> {
-    let root = match std::env::var_os("FIDA_TEST_DATA") {
-        Some(r) => PathBuf::from(r),
-        None => {
-            eprintln!("FIDA_TEST_DATA is not set: skipping the FID-A reference comparison ({sub}).");
-            return None;
-        }
+    let Some(root) = std::env::var_os("FIDA_TEST_DATA") else {
+        skip(&format!("FIDA_TEST_DATA is not set ({sub})"));
+        return None;
     };
-    let d = root.join("ops").join(sub);
+    let d = PathBuf::from(root).join("ops").join(sub);
     if !d.is_dir() {
-        eprintln!("{} is missing: run validation/ref_*.m (see validation/README.md). Skipping.", d.display());
+        skip(&format!("{} is missing", d.display()));
         return None;
     }
     Some(d)

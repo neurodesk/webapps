@@ -29,7 +29,7 @@ fn detect_example_tree() {
         walk(&dir, sub, &mut paths);
     }
     if paths.is_empty() {
-        eprintln!("skipping: example tree not found");
+        skip("example tree not found");
         return;
     }
     let data: Vec<(String, Vec<u8>)> = paths.iter().map(|(r, p)| (r.clone(), std::fs::read(p).unwrap())).collect();
@@ -52,7 +52,8 @@ fn detect_example_tree() {
     assert!(pair_of("philips_spar_sdat_WS.SDAT").unwrap().ends_with("philips_spar_sdat_W.SDAT"));
     assert!(pair_of("ge_press.RAW").unwrap().ends_with("ge_press.H2O"));
     assert!(pair_of("NIfTI-MRS/ge_press.nii.gz").unwrap().ends_with("ge_press_ref.nii.gz"));
-    assert!(det.ignored.iter().all(|(n, _)| !n.ends_with(".dat") && !n.ends_with(".7")), "{:?}", det.ignored);
+    // No twix or P-file is ignored (Bruker's press_w/spectrum.dat is a text export, not twix).
+    assert!(det.ignored.iter().all(|(n, _)| !n.starts_with("Siemens/") && !n.starts_with("GE/")), "{:?}", det.ignored);
 
     let (_, loaded) = load_all(&files, &LoadOptions::default());
     for (p, (m, w)) in det.pairs.iter().zip(loaded.iter()) {

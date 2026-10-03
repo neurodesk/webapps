@@ -29,7 +29,7 @@ fn philips_mega_split_matches_fida_reader() {
     use fida::ops::editing::{classify_mega, drop_empty_transients, split_alternate, to_fida_layout};
     let Some(d) = data_dir("philips_mega") else { return };
     let Ok(pd) = std::env::var("PHILIPS_MEGA") else {
-        eprintln!("PHILIPS_MEGA is not set: skipping the reader comparison.");
+        skip("PHILIPS_MEGA is not set");
         return;
     };
     let read = |stem: &str| sdat::load(&std::fs::read(format!("{pd}/{stem}.sdat")).unwrap(), &std::fs::read(format!("{pd}/{stem}.spar")).unwrap(), 1).unwrap();

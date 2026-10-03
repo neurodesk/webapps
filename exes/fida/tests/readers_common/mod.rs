@@ -6,27 +6,27 @@ use fida::Spectra;
 use serde_json::Value;
 use std::path::PathBuf;
 
-/// `$FIDA_TEST_DATA`, or None (with a notice) when it is not set.
+#[path = "../common/skip.rs"]
+mod skip;
+pub use skip::skip;
+
+/// `$FIDA_TEST_DATA`, or None (see `skip`) when it is not set.
 pub fn data_dir(test: &str) -> Option<PathBuf> {
-    match std::env::var_os("FIDA_TEST_DATA") {
-        Some(d) => Some(PathBuf::from(d)),
-        None => {
-            eprintln!("{test}: FIDA_TEST_DATA is not set; skipping (see validation/README.md)");
-            None
-        }
+    let d = std::env::var_os("FIDA_TEST_DATA").map(PathBuf::from);
+    if d.is_none() {
+        skip(&format!("{test}: FIDA_TEST_DATA is not set"));
     }
+    d
 }
 
-/// Read an input file, or None (with a notice) when it is absent.
+/// Read an input file, or None (see `skip`) when it is absent.
 pub fn input(dir: &PathBuf, rel: &str) -> Option<Vec<u8>> {
     let p = dir.join(rel);
-    match std::fs::read(&p) {
-        Ok(b) => Some(b),
-        Err(_) => {
-            eprintln!("skipping: {} not found", p.display());
-            None
-        }
+    let b = std::fs::read(&p).ok();
+    if b.is_none() {
+        skip(&format!("{} not found", p.display()));
     }
+    b
 }
 
 pub struct Reference {
@@ -38,12 +38,26 @@ pub fn reference(dir: &PathBuf, name: &str) -> Option<Reference> {
     reference_in(dir, "ref", name)
 }
 
-/// A reference from another export directory (e.g. `ref_vfix`).
+/// A reference from another export directory (e.g. `ref_vfix`), or None
+/// (see `skip`) when it is absent.
 pub fn reference_in(dir: &PathBuf, sub: &str, name: &str) -> Option<Reference> {
+    let r = optional_reference(dir, sub, name);
+    if r.is_none() {
+        skip(&format!("reference {sub}/{name} not found in {}", dir.display()));
+    }
+    r
+}
+
+/// FID-A's FAILED list in an export directory: the cases its reader errors on.
+pub fn fida_failed(dir: &PathBuf, sub: &str, name: &str) -> bool {
+    std::fs::read_to_string(dir.join(sub).join("FAILED")).unwrap_or_default().lines().any(|l| l == name)
+}
+
+/// A reference that may legitimately not exist (a water reference).
+pub fn optional_reference(dir: &PathBuf, sub: &str, name: &str) -> Option<Reference> {
     let j = dir.join(sub).join(format!("{name}.json"));
     let b = dir.join(sub).join(format!("{name}.bin"));
     let (Ok(js), Ok(bin)) = (std::fs::read_to_string(&j), std::fs::read(&b)) else {
-        eprintln!("skipping: reference {} not found (run validation/export_readers.m)", j.display());
         return None;
     };
     let h: Value = serde_json::from_str(&js).expect("reference json");

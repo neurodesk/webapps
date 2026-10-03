@@ -22,7 +22,8 @@ the automatic pipelines. `apps/lcmodel` runs it in the browser through
 
 ```bash
 cargo test --release                                 # unit and synthetic-signal tests
-FIDA_TEST_DATA=$TMPDIR/fida/testdata cargo test --release   # plus the FID-A references
+python3 validation/fetch_reference.py $TMPDIR/fida-reference   # pinned FID-A references
+FIDA_TEST_DATA=$TMPDIR/fida-reference FIDA_REQUIRE_REFERENCE=1 cargo test --release
 cargo build --release --target wasm32-unknown-unknown --lib
 ```
 

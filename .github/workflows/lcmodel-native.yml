@@ -4,6 +4,9 @@ name: lcmodel-native
 # writing the same .TABLE/.COORD numbers as the Fortran on LCModel's test
 # case, FID-A (exes/fida) its unit and synthetic tests, and the committed
 # WebAssembly module (packages/lcmodel) the same table as native LCModel.
+# The fida-reference job compares the FID-A port with FID-A's own outputs
+# (exes/fida/validation/README.md), fetched from the pinned Hugging Face
+# revision in exes/fida/validation/reference.manifest.json.
 on:
   pull_request:
     paths:
@@ -17,6 +20,8 @@ on:
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
+      - '.github/workflows/lcmodel-native.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -46,3 +51,25 @@ jobs:
           cargo build --release --target wasm32-unknown-unknown --manifest-path packages/lcmodel/wasm/Cargo.toml
       - name: Committed WebAssembly module matches native LCModel
         run: node --test packages/lcmodel/test/lcmodel-wasm.test.js
+
+  fida-reference:
+    runs-on: ubuntu-latest
+    env:
+      DATA: ${{ github.workspace }}/../fida-reference
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache the reference downloads
+        uses: actions/cache@v6
+        with:
+          path: ${{ github.workspace }}/../fida-reference/.download
+          key: fida-reference-${{ hashFiles('exes/fida/validation/reference.manifest.json') }}
+      - name: Fetch the FID-A references (sha256-checked)
+        run: python3 exes/fida/validation/fetch_reference.py "$DATA"
+      - name: FID-A port against FID-A, and the app session on the examples
+        env:
+          FIDA_REQUIRE_REFERENCE: '1'
+        run: |
+          export FIDA_TEST_DATA="$DATA" FIDA_EXAMPLES="$DATA" PHILIPS_MEGA="$DATA/Philips-MEGA" LCMODEL_BASIS_DIR="$DATA/basis"
+          cargo test --release --manifest-path exes/fida/Cargo.toml -- --nocapture
+          cargo test --release --manifest-path packages/lcmodel/wasm/Cargo.toml -- --nocapture
