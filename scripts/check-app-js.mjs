@@ -8,6 +8,7 @@ const files = [];
 const generatedOrVendoredDirectories = new Set([
   'dcm2niix',
   'dist',
+  'freebrowse-viewer',
   'nifti-js',
   'node_modules',
   'pkg',

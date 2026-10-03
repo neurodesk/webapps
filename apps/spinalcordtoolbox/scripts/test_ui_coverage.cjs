@@ -19,13 +19,14 @@ const appJs = fs.readFileSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js')
 const controllerSources = [
   'web/js/controllers/SctInputSessions.js',
   'web/js/controllers/SctPipeline.js',
-  'web/js/modules/fallback-nifti-preview.js'
+  'web/js/modules/fallback-nifti-preview.js',
+  'web/js/modules/sct-viewer.js'
 ].map(file => fs.readFileSync(path.join(ROOT, file), 'utf8')).join('\n');
+const viewerJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/sct-viewer.js'), 'utf8');
 const sharedUiSources = [
   'ConsoleOutput.js',
   'ModalManager.js',
-  'ProgressManager.js',
-  'WindowControls.js'
+  'ProgressManager.js'
 ].map(file => fs.readFileSync(path.join(SHARED_UI, file), 'utf8')).join('\n');
 const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controller.mjs'), 'utf8');
 const processingTest = fs.readFileSync(path.join(ROOT, 'scripts/test_sct_processing.cjs'), 'utf8');
@@ -52,24 +53,13 @@ const UI_COVERAGE = Object.freeze([
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
   { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
-  { id: 'downloadCurrentVolume', behavior: 'downloads selected result/input volume', coveredBy: ['batch', 'static-dom'] },
-  { id: 'screenshotViewer', behavior: 'exports viewer screenshot', coveredBy: ['batch', 'static-dom'] },
+  { id: 'screenshotViewer', behavior: 'exports viewer screenshot', coveredBy: ['viewer', 'batch', 'static-dom'] },
+  { id: 'freebrowseViewer', behavior: 'hosts the FreeBrowse viewer: layout, zoom/pan, window, opacity, colormap, drawing', coveredBy: ['viewer', 'static-dom'] },
   { id: 'viewerUnavailableMessage', behavior: 'shows non-WebGL2 viewer fallback state', coveredBy: ['static-dom'] },
-  { id: 'fallbackCanvas2d', behavior: 'renders NIfTI slices when NiiVue cannot initialize', coveredBy: ['static-dom'] },
+  { id: 'fallbackCanvas2d', behavior: 'renders NIfTI slices when the viewer cannot initialize', coveredBy: ['static-dom'] },
   { id: 'clearResults', behavior: 'clears pipeline results', coveredBy: ['static-dom'] },
-  { id: 'overlayOpacity', behavior: 'updates segmentation overlay opacity', coveredBy: ['viewer', 'batch', 'static-dom'] },
-  { id: 'inputVisibilityToggle', behavior: 'toggles input volume visibility', coveredBy: ['viewer', 'static-dom'] },
   { id: 'singleViewButton', behavior: 'returns the viewer to the active single-image session', coveredBy: ['viewer', 'static-dom'] },
   { id: 'compareViewButton', behavior: 'shows loaded input sessions in side-by-side comparison canvases', coveredBy: ['viewer', 'static-dom'] },
-  { id: 'interpolation', behavior: 'toggles viewer interpolation', coveredBy: ['static-dom'] },
-  { id: 'colorbarToggle', behavior: 'toggles viewer colorbar', coveredBy: ['static-dom'] },
-  { id: 'crosshairToggle', behavior: 'toggles viewer crosshair', coveredBy: ['static-dom'] },
-  { id: 'colormapSelect', behavior: 'changes base volume colormap', coveredBy: ['static-dom'] },
-  { id: 'rangeMin', behavior: 'updates lower display window', coveredBy: ['static-dom'] },
-  { id: 'rangeMax', behavior: 'updates upper display window', coveredBy: ['static-dom'] },
-  { id: 'windowMin', behavior: 'updates lower display window from numeric input', coveredBy: ['static-dom'] },
-  { id: 'windowMax', behavior: 'updates upper display window from numeric input', coveredBy: ['static-dom'] },
-  { id: 'resetWindow', behavior: 'resets display window', coveredBy: ['static-dom'] },
   { id: 'copyConsole', behavior: 'copies console output', coveredBy: ['static-dom'] },
   { id: 'clearConsole', behavior: 'clears console output', coveredBy: ['static-dom'] },
   { id: 'aboutButton', behavior: 'opens About modal', coveredBy: ['static-dom'] },
@@ -103,23 +93,38 @@ for (const item of UI_COVERAGE) {
 }
 
 const htmlInteractiveIds = [...htmlIds].filter(id => {
-  return /(Button|Toggle|Select|Input|Opacity|Window|range|file|run|abort|cancel|clear|download|screenshot|close|privacy|citations|about)/i.test(id);
+  return /(Button|Toggle|Select|Input|Opacity|Window|range|file|run|abort|cancel|clear|download|screenshot|close|privacy|citations|about|viewer)/i.test(id);
 });
-const missingCoverage = htmlInteractiveIds.filter(id => !interactiveIds.has(id) && !/Version|Modal|Badge|Value|Text|Output|Section|Control|List|Details|Primary|Label|Selected|gl1/u.test(id));
+const missingCoverage = htmlInteractiveIds.filter(id => !interactiveIds.has(id) && !/Version|Modal|Badge|Value|Text|Output|Section|Control|List|Details|Primary|Label|Selected|viewerInfo/u.test(id));
 assert.deepEqual(missingCoverage, [], `interactive ids missing UI coverage entries: ${missingCoverage.join(', ')}`);
 
-assert.ok(appJs.includes("querySelectorAll('.view-tab[data-view]')"), 'view tab controls are wired');
-assert.ok(indexHtml.includes('class="view-tab'), 'view tab controls exist');
-assert.ok(appJs.includes("await this.nv.attachTo('gl1')"), 'app attempts NiiVue attachment directly');
-assert.ok(appJs.includes('if (!this.nv.gl)'), 'app asserts a GL context exists after attach (guards a future niivue that logs-and-returns)');
-assert.ok(appJs.includes("this.disableViewer(error?.message || 'Viewer initialization failed.')"), 'app disables viewer instead of aborting startup when NiiVue cannot initialize');
+// The viewer is FreeBrowse, mounted from the app's own origin. Controls it
+// already provides must not come back as a second copy in SCT's toolbar.
+assert.ok(indexHtml.includes('<div id="freebrowseViewer" class="nd-viewer-embed"></div>'), 'the FreeBrowse host element exists');
+assert.ok(!/unpkg\.com|cdn\.jsdelivr\.net|niivue\.umd/.test(indexHtml), 'the page loads no viewer code from a CDN');
+assert.ok(!/id="gl1"/.test(indexHtml), 'the app no longer owns a bare NiiVue canvas');
+assert.match(viewerJs, /new URL\('\.\.\/\.\.\/freebrowse-viewer\/index\.js', import\.meta\.url\)/, 'the viewer bundle is loaded from the app origin');
+assert.ok(!/https?:\/\//.test(viewerJs), 'the viewer module references no remote URL');
+for (const retired of ['data-view=', 'id="windowMin"', 'id="windowMax"', 'id="rangeMin"', 'id="rangeMax"', 'id="resetWindow"', 'id="overlayOpacity"', 'id="inputVisibilityToggle"', 'id="interpolation"', 'id="colorbarToggle"', 'id="crosshairToggle"', 'id="colormapSelect"', 'id="downloadCurrentVolume"']) {
+  assert.ok(!indexHtml.includes(retired), `${retired} duplicates a FreeBrowse control and stays removed`);
+}
+assert.ok(appJs.includes('await SctViewer.mount({'), 'app mounts the viewer through SctViewer');
+assert.ok(appJs.includes("element: document.getElementById('freebrowseViewer')"), 'app mounts FreeBrowse into its host element');
+assert.ok(viewerJs.includes("if (!nv?.backend) throw new Error('WebGL2 context unavailable after attach.')"), 'viewer asserts a rendering backend exists after attach (guards a NiiVue that logs-and-returns)');
+assert.ok(appJs.includes('this.viewerMount = this.viewer.handle') && appJs.includes('this.nv = this.viewer.nv'), 'app exposes the mount handle and NiiVue instance for later integrations');
+assert.ok(!/hideDrawing|drawing.*display:\s*none/i.test(`${appJs}\n${viewerJs}\n${stylesCss}`), 'the FreeBrowse Drawing tab is not hidden');
+assert.equal((appJs.match(/\.showVolumes\(/g) || []).length, 1, 'one call site decides which volumes the main viewer shows');
+assert.ok(!/\.(loadVolumes|addVolume|removeVolume|removeAllVolumes)\(/.test(appJs), 'the app never changes the NiiVue volume list directly');
+assert.ok(appJs.includes("this.disableViewer(error?.message || 'Viewer initialization failed.')"), 'app disables viewer instead of aborting startup when the viewer cannot initialize');
 assert.ok(/VIEWER_UNAVAILABLE_GUIDANCE[\s\S]*WebGL2[\s\S]*hardware acceleration/i.test(appJs), 'viewer-unavailable message names the WebGL2 cause and the hardware-acceleration remedy');
 assert.ok(indexHtml.includes('<script src="nifti-js/index.js"></script>'), 'NIfTI parser is loaded for the non-WebGL fallback preview');
 assert.ok(appJs.includes('FallbackNiftiPreview'), 'app wires the non-WebGL NIfTI preview fallback');
 assert.ok(appJs.includes('this.renderFallbackPreview()'), 'viewer render path falls back to a 2D NIfTI preview');
 assert.match(effectiveStyles, /\.viewer-unavailable-message\[hidden\]\s*{\s*display:\s*none\s*!important;\s*}/, 'hidden viewer fallback message does not paint over a working canvas');
 assert.ok(appJs.includes('setViewerControlsEnabled(false)'), 'app disables viewer-only controls when the viewer is unavailable');
-assert.ok(appJs.includes('if (!this.isViewerAvailable()) return false;'), 'viewer render path is a no-op when WebGL2 is unavailable');
+assert.ok(appJs.includes('if (!this.isViewerAvailable()) return this.renderFallbackPreview();'), 'viewer render path never touches NiiVue when WebGL2 is unavailable');
+assert.ok(SpinalCordToolboxHintLength(appJs) <= 90, 'the zoom/pan hint stays within 90 characters');
+assert.ok(/VIEWER_HINT =\s*'[^']*zoom[^']*pan[^']*reset/i.test(appJs), 'the viewer hint tells the user how to zoom, pan and reset');
 assert.ok(!/start-page|id="startPage"|id="enterAppButton"/.test(indexHtml), 'the workspace is the first screen; no start page');
 assert.ok(!appJs.includes('bindStartPageControls'), 'no start-page handoff remains');
 assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" class="nd-status-text"[\s\S]*<progress id="progress"[\s\S]*id="cancelButton" class="nd-btn-cancel"[^>]*hidden/.test(indexHtml), 'status lives in the shared footer with a native progress bar and a hidden cancel');
@@ -145,6 +150,11 @@ assert.ok(
   indexHtml.includes('SCT: Spinal Cord Toolbox, an open-source software for processing spinal cord MRI data'),
   'Citations modal includes the primary SCT NeuroImage citation'
 );
+
+function SpinalCordToolboxHintLength(source) {
+  const match = source.match(/VIEWER_HINT =\s*'([^']*)'/);
+  return match ? match[1].length : Infinity;
+}
 
 function SpinalCordToolboxGuidanceLength(source) {
   const match = source.match(/VIEWER_UNAVAILABLE_GUIDANCE =\s*'([^']*)'/);

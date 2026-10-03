@@ -63,6 +63,7 @@ export function registerSctAutomation(app) {
       },
     },
   });
-  automation.registerViewer('main', createNiivueAdapter(app.nv));
+  // No viewer is registered when WebGL2 is unavailable; processing still runs.
+  if (app.nv) automation.registerViewer('main', createNiivueAdapter(app.nv));
   return automation;
 }

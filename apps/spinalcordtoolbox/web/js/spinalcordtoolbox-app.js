@@ -10,17 +10,15 @@ bindSectionDisclosures(document);
 
 import { registerSctAutomation } from './automation.js';
 import { SctInputSessions } from './controllers/SctInputSessions.js';
-import { ViewerController } from '@neurodesk/webapp-components';
 import { SctPipeline } from './controllers/SctPipeline.js';
-import { ConsoleOutput, bindWindowControls } from '@neurodesk/webapp-components/ui';
+import { ConsoleOutput } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
-import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
+import { SctViewer } from './modules/sct-viewer.js';
 import * as Config from './app/config.js';
-import { generateNiivueColormap, getLabelName } from './app/labels.js';
+import { generateLabelColormap, getLabelName } from './app/labels.js';
 import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, getTaskTemplateAssetUrl, isTaskRunnable } from './app/sct-tasks.js';
-import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import './modules/sct-processing.js';
 
 export class SpinalCordToolboxApp {
@@ -30,15 +28,18 @@ export class SpinalCordToolboxApp {
   static VIEWER_UNAVAILABLE_GUIDANCE =
     'No preview: WebGL2 failed. Enable hardware acceleration (see chrome://gpu), then reload.';
 
+  // Shown under the viewer until the first crosshair readout replaces it.
+  static VIEWER_HINT =
+    'Pan/zoom mode: scroll or pinch to zoom, right-drag to pan. The reset button restores it.';
+
   constructor() {
-    // NiiVue
-    this.nv = new niivue.Niivue({
-      ...Config.VIEWER_CONFIG,
-      onLocationChange: (data) => {
-        this._lastLocationData = data;
-        this.updateViewerInfo(data);
-      }
-    });
+    // Viewer: FreeBrowse around NiiVue, mounted in setupViewer(). `viewer` owns
+    // which volumes are shown, `viewerMount` is the shared mount handle
+    // ({ nv, ready, destroy }) and `nv` the NiiVue instance; all three stay
+    // null when WebGL2 is unavailable.
+    this.viewer = null;
+    this.viewerMount = null;
+    this.nv = null;
 
     // UI modules
     this.console = new ConsoleOutput({
@@ -54,7 +55,6 @@ export class SpinalCordToolboxApp {
     this.currentRunningStep = null;
     this.abortUICheckpoint = null;
     this._inputVisible = true;
-    this._overlaySliderValue = 0.7;
     this._stageVisibility = {
       input: true,
       segmentation: true,
@@ -67,7 +67,6 @@ export class SpinalCordToolboxApp {
     this._renderViewerRequested = false;
     this._lastLocationData = null;
     this._viewerMode = 'single';
-    this._currentViewType = 'multiplanar';
     this._activeSessionId = null;
     this.selectedTask = getDefaultTask();
     this.viewerAvailable = false;
@@ -98,13 +97,6 @@ export class SpinalCordToolboxApp {
       onSessionsChanged: () => this.onInputSessionsChanged()
     });
 
-    this.viewerController = new ViewerController({
-      nv: this.nv,
-      viewerConfig: Config.VIEWER_CONFIG,
-      niivueFactory: (viewerConfig) => new niivue.Niivue(viewerConfig),
-      updateOutput: (msg) => this.updateOutput(msg)
-    });
-
     this.inferenceExecutor = new SctPipeline({
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
@@ -123,21 +115,7 @@ export class SpinalCordToolboxApp {
 
     this.setupShellEventListeners();
 
-    // Register custom colormap
-    const colormapData = generateNiivueColormap(this.selectedTask.id);
-
-    // Setup
-    const viewerReady = await this.setupViewer();
-
-    // Register colormap after viewer is ready
-    if (viewerReady) {
-      this.viewerController.registerSctColormap(colormapData, this.getSelectedColormapId());
-      this.viewerController.registerSctColormap(generateNiivueColormap('spinalcord'), 'sct-spinalcord');
-      this.viewerController.registerSctColormap(generateNiivueColormap('lesion_sci_t2'), 'sct-lesion');
-      this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
-      this.viewerController.registerSctColormap(generateNiivueColormap('totalspineseg'), 'sct-totalspineseg');
-      this.viewerController.registerSctColormap(generateNiivueColormap('spineDiscs'), 'sct-spine-discs');
-    }
+    await this.setupViewer();
 
     this.setupEventListeners();
     await this.setupExamples();
@@ -152,21 +130,24 @@ export class SpinalCordToolboxApp {
 
   async setupViewer() {
     try {
-      await this.nv.attachTo('gl1');
-      // niivue 0.68.2 attachTo() throws on WebGL2 failure, so the catch below
-      // normally engages the 2D fallback. Belt-and-braces for a future niivue
-      // that logs-and-returns instead of throwing: a missing GL context means
-      // the canvas is dead even though the promise resolved.
-      if (!this.nv.gl) {
-        throw new Error('WebGL2 context unavailable after attach.');
-      }
-      this.nv.setMultiplanarPadPixels(5);
-      this.nv.setSliceType(this.nv.sliceTypeMultiplanar);
-      this.nv.setInterpolation(true);
-      this.nv.drawScene();
+      this.viewer = await SctViewer.mount({
+        element: document.getElementById('freebrowseViewer'),
+        niivueOptions: Config.VIEWER_CONFIG,
+        canvasLabel: 'Spinal cord image viewer',
+        loadModule: this.loadViewerModule,
+        onLocationChange: (data) => {
+          this._lastLocationData = data;
+          this.updateViewerInfo(data);
+        },
+        onStageVisibilityChange: (stage, visible) => this.onViewerStageVisibility(stage, visible),
+        updateOutput: (msg) => this.updateOutput(msg)
+      });
+      this.viewerMount = this.viewer.handle;
+      this.nv = this.viewer.nv;
       this.viewerAvailable = true;
       this.setViewerUnavailableMessage('');
       this.setViewerControlsEnabled(true);
+      this.updateViewerInfo(null);
       return true;
     } catch (error) {
       this.disableViewer(error?.message || 'Viewer initialization failed.');
@@ -175,7 +156,7 @@ export class SpinalCordToolboxApp {
   }
 
   isViewerAvailable() {
-    return this.viewerAvailable && !!this.nv && this.viewerController?.isAvailable?.();
+    return this.viewerAvailable && !!this.viewer?.isAvailable();
   }
 
   isImagePreviewAvailable() {
@@ -185,7 +166,9 @@ export class SpinalCordToolboxApp {
   disableViewer(reason) {
     this.viewerAvailable = false;
     this.viewerUnavailableReason = reason;
-    this.viewerController.nv = null;
+    this.viewer = null;
+    this.viewerMount = null;
+    this.nv = null;
     this.fallbackPreview?.setUnavailable(reason);
     this.setViewerUnavailableMessage(reason);
     this.setViewerControlsEnabled(false);
@@ -195,6 +178,8 @@ export class SpinalCordToolboxApp {
 
   setViewerUnavailableMessage(reason) {
     document.body.classList.toggle('viewer-unavailable', !!reason);
+    const embed = document.getElementById('freebrowseViewer');
+    if (embed) embed.hidden = !!reason;
     const message = document.getElementById('viewerUnavailableMessage');
     if (message) {
       message.hidden = !reason;
@@ -218,7 +203,7 @@ export class SpinalCordToolboxApp {
   updateViewerInfo(data) {
     const primaryEl = document.getElementById('viewerInfoPrimary');
     if (primaryEl) {
-      primaryEl.textContent = data?.string || '';
+      primaryEl.textContent = data?.string || (this.isViewerAvailable() ? SpinalCordToolboxApp.VIEWER_HINT : '');
     }
 
     const labelEl = document.getElementById('viewerInfoLabel');
@@ -232,7 +217,7 @@ export class SpinalCordToolboxApp {
 
     const visibleLabelStages = this.getVisibleOverlayStages().slice().reverse();
     for (const stage of visibleLabelStages) {
-      const volumeIndex = this.viewerController?.getVolumeIndexForStage?.(stage);
+      const volumeIndex = this.viewer.getVolumeIndexForStage(stage);
       if (volumeIndex === null || volumeIndex === undefined) continue;
 
       const rawValue = data?.values?.[volumeIndex]?.value;
@@ -311,88 +296,9 @@ export class SpinalCordToolboxApp {
       });
     });
 
-    document.querySelectorAll('.view-tab[data-view]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.view-tab[data-view]').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this._currentViewType = btn.dataset.view || 'multiplanar';
-        if (!this.isViewerAvailable()) return;
-        this.viewerController.setViewType(this._currentViewType);
-        if (this.isCompareMode()) {
-          this.viewerController.setComparisonViewType(this._currentViewType);
-        }
-      });
-    });
-
-    const opacitySlider = document.getElementById('overlayOpacity');
-    if (opacitySlider) {
-      opacitySlider.addEventListener('input', (e) => {
-        const val = parseFloat(e.target.value);
-        this._overlaySliderValue = val;
-        if (this.isViewerAvailable() && this.getVisibleOverlayStages().length > 0) {
-          this.viewerController.setOverlayOpacity(val);
-        }
-        const display = document.getElementById('overlayOpacityValue');
-        if (display) display.textContent = `${Math.round(val * 100)}%`;
-      });
-    }
-
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) {
-      inputVisibilityToggle.addEventListener('change', (e) => {
-        void this.toggleInputVisibility(e.target.checked);
-      });
-    }
-
-    this.setupWindowControls();
-
-    const interpToggle = document.getElementById('interpolation');
-    if (interpToggle) {
-      interpToggle.addEventListener('change', (e) => {
-        if (!this.isViewerAvailable()) return;
-        this.nv.setInterpolation(!e.target.checked);
-        this.nv.drawScene();
-      });
-    }
-
-    const colorbarToggle = document.getElementById('colorbarToggle');
-    if (colorbarToggle) {
-      colorbarToggle.addEventListener('change', (e) => {
-        if (!this.isViewerAvailable()) return;
-        this.nv.opts.isColorbar = e.target.checked;
-        this.nv.drawScene();
-      });
-    }
-
-    const crosshairToggle = document.getElementById('crosshairToggle');
-    if (crosshairToggle) {
-      crosshairToggle.addEventListener('change', (e) => {
-        if (!this.isViewerAvailable()) return;
-        this.nv.setCrosshairWidth(e.target.checked ? 1 : 0);
-      });
-    }
-
-    const downloadBtn = document.getElementById('downloadCurrentVolume');
-    if (downloadBtn) {
-      downloadBtn.addEventListener('click', () => this.downloadCurrentVolume());
-    }
-
     const screenshotBtn = document.getElementById('screenshotViewer');
     if (screenshotBtn) {
       screenshotBtn.addEventListener('click', () => this.saveScreenshot());
-    }
-
-    const colormapSelect = document.getElementById('colormapSelect');
-    if (colormapSelect) {
-      colormapSelect.addEventListener('change', (e) => {
-        if (this.isViewerAvailable() && this.nv.volumes?.length) {
-          this.nv.volumes[0].colormap = e.target.value;
-          this.nv.updateGLVolume();
-        }
-        if (this.isCompareMode()) {
-          this.viewerController.setComparisonColormap(e.target.value);
-        }
-      });
     }
 
     const clearResults = document.getElementById('clearResults');
@@ -442,9 +348,6 @@ export class SpinalCordToolboxApp {
 
   onTaskSelectionChanged(taskId) {
     this.selectedTask = getTaskById(taskId);
-    if (this.isViewerAvailable()) {
-      this.viewerController.registerSctColormap(generateNiivueColormap(this.selectedTask.id), this.getSelectedColormapId());
-    }
     this.applyTaskInferenceDefaults();
     this.updateTaskDetails();
   }
@@ -582,7 +485,7 @@ export class SpinalCordToolboxApp {
     if (this.isCompareMode()) {
       await this.renderComparisonView();
     } else {
-      this.viewerController.clearComparisonView(document.getElementById('comparisonGrid'));
+      this.viewer?.clearComparison(document.getElementById('comparisonGrid'));
       await this.renderViewerVolumes();
     }
   }
@@ -619,12 +522,9 @@ export class SpinalCordToolboxApp {
 
     const sessions = this.getInputSessions();
     const activeSession = this.getActiveSession();
-    const colormapSelect = document.getElementById('colormapSelect');
-    const rendered = await this.viewerController.loadComparisonVolumes(sessions, {
+    const rendered = await this.viewer.showComparison(sessions, {
       container: document.getElementById('comparisonGrid'),
       activeSessionId: activeSession?.id || this._activeSessionId,
-      viewType: this._currentViewType,
-      colormap: colormapSelect?.value || 'gray',
       maxSessions: 4
     });
 
@@ -636,77 +536,7 @@ export class SpinalCordToolboxApp {
     return rendered;
   }
 
-  setupWindowControls() {
-    this.windowControls = bindWindowControls({
-      getVolume: () => this.nv?.volumes?.[0] || null,
-      updateVolume: () => this.nv?.updateGLVolume?.(),
-      onReset: volume => {
-        if (typeof this.applyAutoContrast === 'function') return this.applyAutoContrast();
-        volume.cal_min = volume.global_min ?? 0;
-        volume.cal_max = volume.global_max ?? 1;
-        this.nv?.updateGLVolume?.();
-        this.windowControls.sync();
-      }
-    });
-  }
-
-  applyAutoContrast() {
-    if (!this.isViewerAvailable() || !this.nv.volumes.length) return;
-    const vol = this.nv.volumes[0];
-
-    // computeAutoWindow operates on vol.img which may be raw typed data
-    // (e.g. Int16Array), but vol.cal_min/cal_max are in scaled space
-    // (after NIfTI scl_slope/scl_inter). Convert using global_min/max.
-    const { low, high, min: rawMin, max: rawMax } = computeAutoWindow(vol.img);
-
-    let scaledLow = low;
-    let scaledHigh = high;
-    const rawRange = rawMax - rawMin;
-    const scaledRange = vol.global_max - vol.global_min;
-    if (rawRange > 0 && scaledRange > 0) {
-      // Linear mapping: raw → scaled
-      const slope = scaledRange / rawRange;
-      const inter = vol.global_min - rawMin * slope;
-      scaledLow = low * slope + inter;
-      scaledHigh = high * slope + inter;
-    }
-
-    vol.cal_min = scaledLow;
-    vol.cal_max = scaledHigh;
-    this.nv.updateGLVolume();
-    this.syncWindowControls();
-  }
-
-  syncWindowControls() {
-    this.windowControls?.sync();
-  }
-
-  syncSlidersToVolume() {
-    this.windowControls?.syncSliders();
-  }
-
-  downloadCurrentVolume() {
-    if (!this.isViewerAvailable() || !this.nv.volumes?.length) {
-      this.updateOutput('No volume loaded');
-      return;
-    }
-    const vol = this.nv.volumes[0];
-    const name = (vol.name || 'volume').replace(/\.(nii|nii\.gz)$/i, '');
-    const niftiBuffer = createNiftiFromVolume(vol);
-    const blob = new Blob([niftiBuffer], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${name}.nii`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    this.updateOutput(`Downloaded: ${name}.nii`);
-  }
-
-
-  saveScreenshot() {
+  async saveScreenshot() {
     if (!this.isViewerAvailable()) {
       this.updateOutput('Image preview unavailable');
       return;
@@ -716,7 +546,7 @@ export class SpinalCordToolboxApp {
       const name = (this.nv.volumes[0].name || 'volume').replace(/\.(nii|nii\.gz)$/i, '');
       filename = `${name}_screenshot.png`;
     }
-    this.nv.saveScene(filename);
+    await this.viewer.saveScreenshot(filename);
     this.updateOutput(`Screenshot saved: ${filename}`);
   }
 
@@ -727,20 +557,8 @@ export class SpinalCordToolboxApp {
     this.inputFile = file;
     this._activeSessionId = context?.session?.id || null;
     this.setStageVisible('input', true);
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
     this.syncViewerModeControls();
-
-    if (this.isCompareMode()) {
-      await this.renderComparisonView();
-    } else if (this.isViewerAvailable()) {
-      await this.viewerController.loadBaseVolume(file, { stage: 'input' });
-      this.applyDefaultBaseColormap();
-      this.syncWindowControls();
-      this.applyAutoContrast();
-    } else {
-      await this.renderFallbackPreview(file, { stage: 'input' });
-    }
+    await this.renderViewerVolumes();
 
     // Send data to worker for loading
     const inputData = await file.arrayBuffer();
@@ -751,10 +569,10 @@ export class SpinalCordToolboxApp {
   async onFilesCleared() {
     this._viewerMode = 'single';
     this._activeSessionId = null;
-    this.viewerController?.clearComparisonView?.(document.getElementById('comparisonGrid'));
+    this.viewer?.clearComparison(document.getElementById('comparisonGrid'));
     await this.resetForNewFile();
-    if (this.isViewerAvailable()) this.viewerController.clearVolumes();
     this.syncViewerModeControls();
+    await this.renderViewerVolumes();
   }
 
   async resetForNewFile() {
@@ -768,7 +586,6 @@ export class SpinalCordToolboxApp {
     this.abortUICheckpoint = null;
     this._inputVisible = true;
     this.resetStageVisibility();
-    this._overlaySliderValue = 0.7;
     this._lastLocationData = null;
 
     this.console.clear();
@@ -796,8 +613,7 @@ export class SpinalCordToolboxApp {
       buttonsEnabled,
       currentResultTab: this.currentResultTab || 'input',
       inputVisible: this._inputVisible,
-      stageVisibility: { ...this._stageVisibility },
-      overlaySliderValue: this._overlaySliderValue
+      stageVisibility: { ...this._stageVisibility }
     };
   }
 
@@ -862,17 +678,11 @@ export class SpinalCordToolboxApp {
       }
     }
 
-    const overlayControl = document.getElementById('overlayControl');
-    if (overlayControl) {
-      overlayControl.classList.toggle('hidden', !this.inferenceExecutor.getResult('segmentation'));
-    }
-
     this.currentResultTab = checkpoint?.currentResultTab || 'input';
     this._stageVisibility = {
       ...this.getDefaultStageVisibility(),
       ...(checkpoint?.stageVisibility || {})
     };
-    this._overlaySliderValue = checkpoint?.overlaySliderValue ?? 0.5;
 
     this.rebuildResultsList();
 
@@ -882,17 +692,6 @@ export class SpinalCordToolboxApp {
     this.currentResultTab = targetStage;
 
     this.setStageVisible('input', checkpoint?.inputVisible ?? true);
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = this.isStageVisible('input');
-
-    const opacitySlider = document.getElementById('overlayOpacity');
-    if (opacitySlider) {
-      opacitySlider.disabled = this.getVisibleOverlayStages().length === 0;
-      opacitySlider.value = String(this._overlaySliderValue);
-    }
-    const opacityDisplay = document.getElementById('overlayOpacityValue');
-    if (opacityDisplay) opacityDisplay.textContent = `${Math.round(this._overlaySliderValue * 100)}%`;
-
     if (this.inputFile && targetStage) {
       await this.renderViewerVolumes();
     }
@@ -1078,9 +877,6 @@ export class SpinalCordToolboxApp {
       resultsSection.classList.add('collapsed');
     }
 
-    const overlayControl = document.getElementById('overlayControl');
-    if (overlayControl) overlayControl.classList.add('hidden');
-
     this.resetAbortControls();
   }
 
@@ -1106,78 +902,11 @@ export class SpinalCordToolboxApp {
     this.applyTaskInferenceDefaults();
   }
 
+  // FreeBrowse keeps the user's layout, zoom and window across inputs; only
+  // SCT's own viewer buttons are reset here.
   resetViewerControls() {
-    document.querySelectorAll('.view-tab[data-view]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.view === 'multiplanar');
-    });
-    this._currentViewType = 'multiplanar';
-    if (this.isViewerAvailable()) this.viewerController.setViewType('multiplanar');
-
-    const rangeMin = document.getElementById('rangeMin');
-    if (rangeMin) rangeMin.value = '0';
-    const rangeMax = document.getElementById('rangeMax');
-    if (rangeMax) rangeMax.value = '100';
-    const rangeSelected = document.getElementById('rangeSelected');
-    if (rangeSelected) {
-      rangeSelected.style.left = '0%';
-      rangeSelected.style.width = '100%';
-    }
-
-    const windowMin = document.getElementById('windowMin');
-    if (windowMin) windowMin.value = '';
-    const windowMax = document.getElementById('windowMax');
-    if (windowMax) windowMax.value = '';
-
-    const overlayControl = document.getElementById('overlayControl');
-    if (overlayControl) overlayControl.classList.add('hidden');
-
-    const opacitySlider = document.getElementById('overlayOpacity');
-    if (opacitySlider) {
-      opacitySlider.disabled = false;
-      opacitySlider.value = '0.5';
-    }
-    const opacityDisplay = document.getElementById('overlayOpacityValue');
-    if (opacityDisplay) opacityDisplay.textContent = '50%';
-
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
-
-    const colormapSelect = document.getElementById('colormapSelect');
-    if (colormapSelect) colormapSelect.value = 'gray';
-
-    const interpolationToggle = document.getElementById('interpolation');
-    if (interpolationToggle) interpolationToggle.checked = false;
-    if (this.isViewerAvailable()) this.nv.setInterpolation(true);
-
-    const colorbarToggle = document.getElementById('colorbarToggle');
-    if (colorbarToggle) colorbarToggle.checked = false;
-    if (this.isViewerAvailable()) this.nv.opts.isColorbar = false;
-
-    const crosshairToggle = document.getElementById('crosshairToggle');
-    if (crosshairToggle) crosshairToggle.checked = true;
-    if (this.isViewerAvailable()) this.nv.setCrosshairWidth(Config.VIEWER_CONFIG.crosshairWidth ?? 1);
-
-    const downloadBtn = document.getElementById('downloadCurrentVolume');
-    if (downloadBtn) downloadBtn.disabled = true;
-
-    if (this.isViewerAvailable()) {
-      this.nv.drawScene();
-      this.setViewerControlsEnabled(true);
-    } else {
-      this.setViewerControlsEnabled(false);
-    }
+    this.setViewerControlsEnabled(this.isViewerAvailable());
     this.syncViewerModeControls();
-  }
-
-  applyDefaultBaseColormap() {
-    const colormapSelect = document.getElementById('colormapSelect');
-    let colormap = colormapSelect?.value || 'gray';
-    if (this.currentResultTab === 'vertebrae') colormap = 'sct-vertebrae';
-    if (this.currentResultTab === 'lesion') colormap = 'sct-lesion';
-    if (this.currentResultTab === 'segmentation' && this.selectedTask?.id === 'lesion_sci_t2') colormap = 'sct-spinalcord';
-    if (!this.isViewerAvailable() || !this.nv.volumes?.length) return;
-    this.nv.volumes[0].colormap = colormap;
-    this.nv.updateGLVolume();
   }
 
   async onStepComplete(step) {
@@ -1297,25 +1026,11 @@ export class SpinalCordToolboxApp {
     }
 
     if (this.isOverlayStage(data.stage)) {
-      if (data.stage === 'vertebrae') {
-        if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
-      }
-      if (data.stage === 'lesion') {
-        if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('lesion_sci_t2'), 'sct-lesion');
-      }
-      if (data.stage === 'spine_step1') {
-        if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('totalspineseg'), 'sct-totalspineseg');
-      }
-      if (data.stage === 'spine_discs') {
-        if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('spineDiscs'), 'sct-spine-discs');
-      }
       this.setStageVisible(data.stage, this.getDefaultStageVisibility()[data.stage] !== false);
       this.setStageVisible('input', true);
       if (!this.isViewerAvailable() && this.fallbackPreview?.isSupported?.()) {
         this.currentResultTab = data.stage;
       }
-      const overlayControl = document.getElementById('overlayControl');
-      if (overlayControl) overlayControl.classList.toggle('hidden', !this.isViewerAvailable());
       await this.renderViewerVolumes();
     } else if (data.kind === 'metrics') {
       this.renderMetricsResult(data.stage);
@@ -1571,8 +1286,6 @@ export class SpinalCordToolboxApp {
     this.currentResultTab = stage;
     this.clearMetricsResult();
     this.setStageVisible('input', true);
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
 
     await this.renderViewerVolumes();
 
@@ -1650,13 +1363,36 @@ export class SpinalCordToolboxApp {
     ));
   }
 
-  async loadViewerStackIfChanged(stackEntries) {
-    if (!this.isViewerAvailable()) return false;
-    if (this.viewerController.isCurrentVolumeStack?.(stackEntries)) {
-      return false;
+  getOverlayStagesWithResults() {
+    return ['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'].filter(stage => (
+      this.inferenceExecutor.hasResult(stage)
+    ));
+  }
+
+  // The requested viewer stack, bottom to top: the base image, then every
+  // label-mask stage of the current run. Visibility is a property of an entry
+  // (NiiVue opacity), not of membership, so an eye toggle never reloads a
+  // volume. This and renderViewerVolumes() are the only place that decides
+  // which volumes the main viewer shows.
+  getViewerStack() {
+    const baseFile = this.getCurrentBaseFile();
+    if (!baseFile) return [];
+
+    const stackEntries = [{
+      file: baseFile,
+      stage: this.currentResultTab && !this.isOverlayStage(this.currentResultTab) ? this.currentResultTab : 'input',
+      visible: this.isStageVisible('input')
+    }];
+    for (const overlayStage of this.getOverlayStagesWithResults()) {
+      stackEntries.push({
+        file: this.inferenceExecutor.getResult(overlayStage)?.file,
+        stage: overlayStage,
+        visible: this.isStageVisible(overlayStage),
+        colormapKey: this.getOverlayColormapId(overlayStage),
+        labelColormap: generateLabelColormap(this.getOverlayLabelTaskId(overlayStage))
+      });
     }
-    await this.viewerController.loadVolumeStack(stackEntries);
-    return true;
+    return stackEntries.filter(entry => entry.file);
   }
 
   async renderViewerVolumes() {
@@ -1685,59 +1421,17 @@ export class SpinalCordToolboxApp {
   }
 
   async _renderViewerVolumesNow() {
-    const visibleOverlayStages = this.getVisibleOverlayStages();
+    await this.viewer.showVolumes(this.getViewerStack());
+  }
 
-    if (!this.isStageVisible('input')) {
-      const [baseOverlayStage, ...remainingOverlayStages] = visibleOverlayStages;
-      if (baseOverlayStage) {
-        const baseOverlayFile = this.inferenceExecutor.getResult(baseOverlayStage)?.file;
-        const stackEntries = [{
-          file: baseOverlayFile,
-          stage: baseOverlayStage,
-          colormap: this.getOverlayColormapId(baseOverlayStage),
-          labelMask: true
-        }];
-        for (const overlayStage of remainingOverlayStages) {
-          const overlayFile = this.inferenceExecutor.getResult(overlayStage)?.file;
-          stackEntries.push({
-            file: overlayFile,
-            stage: overlayStage,
-            colormap: this.getOverlayColormapId(overlayStage),
-            opacity: this._overlaySliderValue,
-            labelMask: true
-          });
-        }
-        await this.loadViewerStackIfChanged(stackEntries);
-        this.syncWindowControls();
-      } else {
-        this.viewerController.clearVolumes();
-      }
-      return;
-    }
-
-    const baseFile = this.getCurrentBaseFile();
-    if (!baseFile) return;
-
-    const stackEntries = [{
-      file: baseFile,
-      stage: this.currentResultTab || 'input',
-      colormap: null
-    }];
-    for (const overlayStage of visibleOverlayStages) {
-      const overlayFile = this.inferenceExecutor.getResult(overlayStage)?.file;
-      stackEntries.push({
-        file: overlayFile,
-        stage: overlayStage,
-        colormap: this.getOverlayColormapId(overlayStage),
-        opacity: this._overlaySliderValue,
-        labelMask: true
-      });
-    }
-
-    await this.loadViewerStackIfChanged(stackEntries);
-    this.applyDefaultBaseColormap();
-    this.syncWindowControls();
-    this.applyAutoContrast();
+  // FreeBrowse's own eye, opacity slider and delete button change a stage's
+  // visibility without going through the Results list; keep the two in step.
+  onViewerStageVisibility(stage, visible) {
+    const shownStage = this.isOverlayStage(stage) ? stage : 'input';
+    if (this.isStageVisible(shownStage) === visible) return;
+    this.setStageVisible(shownStage, visible);
+    this.syncResultViewButtons();
+    this.updateViewerInfo(this._lastLocationData);
   }
 
   syncResultViewButtons() {
@@ -1760,8 +1454,6 @@ export class SpinalCordToolboxApp {
     }
     this.setStageVisible('input', visible);
     if (!this.isViewerAvailable()) return;
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = visible;
     await this.renderViewerVolumes();
     this.rebuildResultsList();
     this.updateViewerInfo(this._lastLocationData);
@@ -1772,13 +1464,11 @@ export class SpinalCordToolboxApp {
       await this.setViewerMode('single');
     }
     this.setStageVisible(stage, visible);
-    const opacitySlider = document.getElementById('overlayOpacity');
     if (!this.isViewerAvailable()) {
       this.syncResultViewButtons();
       return;
     }
     await this.renderViewerVolumes();
-    if (opacitySlider) opacitySlider.disabled = this.getVisibleOverlayStages().length === 0;
     this.syncResultViewButtons();
     this.updateViewerInfo(this._lastLocationData);
   }
@@ -1793,16 +1483,6 @@ export class SpinalCordToolboxApp {
 
     if (this.isViewerAvailable() && this.getVisibleOverlayStages().length > 0) {
       await this.renderViewerVolumes();
-
-      const opacitySlider = document.getElementById('overlayOpacity');
-      if (opacitySlider) {
-        opacitySlider.disabled = this.getVisibleOverlayStages().length === 0;
-        opacitySlider.value = String(this._overlaySliderValue);
-      }
-      const opacityDisplay = document.getElementById('overlayOpacityValue');
-      if (opacityDisplay) opacityDisplay.textContent = `${Math.round(this._overlaySliderValue * 100)}%`;
-      const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-      if (inputVisibilityToggle) inputVisibilityToggle.checked = this.isStageVisible('input');
       this.rebuildResultsList();
     }
   }
@@ -1827,9 +1507,7 @@ export class SpinalCordToolboxApp {
     const container = document.getElementById('stageButtons');
     if (container) container.innerHTML = '';
     this.clearMetricsResult();
-    if (this.isViewerAvailable()) this.viewerController.clearVolumes();
     this.resetStageVisibility();
-    this._overlaySliderValue = 0.7;
   }
 
   clearResults() {
@@ -1837,8 +1515,6 @@ export class SpinalCordToolboxApp {
     this.disableAllResultTabs();
     this.currentResultTab = 'input';
     this.setStageVisible('input', true);
-    const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
-    if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
 
     const resultsSection = document.getElementById('resultsSection');
     if (resultsSection) {
@@ -1846,22 +1522,7 @@ export class SpinalCordToolboxApp {
       resultsSection.classList.add('collapsed');
     }
 
-    const overlayControl = document.getElementById('overlayControl');
-    if (overlayControl) overlayControl.classList.add('hidden');
-
-    const opacitySlider = document.getElementById('overlayOpacity');
-    if (opacitySlider) {
-      opacitySlider.disabled = false;
-      opacitySlider.value = 0.5;
-    }
-    const opacityDisplay = document.getElementById('overlayOpacityValue');
-    if (opacityDisplay) opacityDisplay.textContent = '50%';
-
-    if (this.inputFile && this.isCompareMode()) {
-      void this.renderComparisonView();
-    } else if (this.inputFile && this.isViewerAvailable()) {
-      this.viewerController.loadBaseVolume(this.inputFile, { stage: 'input' });
-    }
+    if (this.inputFile) void this.renderViewerVolumes();
 
     this.updateViewerInfo(this._lastLocationData);
   }

@@ -56,7 +56,8 @@
   "type": "module",
   "neurodeskWebapp": {
     "static": {
-      "coiServiceWorker": true
+      "coiServiceWorker": true,
+      "freebrowseViewer": true
     }
   }
 }

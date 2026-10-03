@@ -3060,7 +3060,6 @@
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx",
-      "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz"
     ],
     "calmar": [

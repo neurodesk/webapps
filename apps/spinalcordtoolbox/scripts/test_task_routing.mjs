@@ -116,10 +116,10 @@ assert.doesNotMatch(gitAttributes, /filter=lfs/, 'model assets must not be track
 // silently falling back to Config.MODEL.name.
 assert.match(appJs, /processingOnly\s*\|\|\s*!selectedAsset/, 'runInference must guard against processingOnly tasks and missing model assets');
 
-// Label masks must be independently toggleable result stages. When input is
-// visible they render as overlays; when input is hidden, renderViewerVolumes()
-// promotes the first visible label mask to the NiiVue base volume because
-// volume 0 is not a reliable hide target.
+// Label masks must be independently toggleable result stages. Every label
+// mask of the current run is one tracked entry of the viewer stack above the
+// base image; visibility (the input's included) is a property of the entry,
+// so an eye toggle changes opacity instead of reloading or reordering volumes.
 assert.match(appJs, /isOverlayStage\(stage\)\s*\{\s*return stage === 'segmentation' \|\| stage === 'lesion' \|\| stage === 'vertebrae' \|\| stage === 'spine_step1' \|\| stage === 'spine_discs'/, 'isOverlayStage must include segmentation, lesion, vertebrae, and TotalSpineSeg label stages');
 assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-vertebrae'/, 'getOverlayColormapId must map vertebrae to sct-vertebrae');
 assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-lesion'/, 'getOverlayColormapId must map lesion to sct-lesion');
@@ -128,11 +128,13 @@ assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-spine-discs'/, 'getOverlay
 assert.match(appJs, /_stageVisibility\s*=\s*\{[\s\S]*?segmentation:\s*true[\s\S]*?lesion:\s*true[\s\S]*?vertebrae:\s*true[\s\S]*?spine_step1:\s*true[\s\S]*?spine_discs:\s*true/, 'result visibility must show TotalSpineSeg label stages by default');
 assert.match(appJs, /setStageVisible\(data\.stage,\s*this\.getDefaultStageVisibility\(\)\[data\.stage\]\s*!==\s*false\)/, 'new overlay stage data must honor default visibility instead of forcing raw localizers visible');
 assert.match(appJs, /getVisibleOverlayStages\(\)[\s\S]*?\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\][\s\S]*?isStageVisible\(stage\)[\s\S]*?hasResult\(stage\)/, 'visible overlay stages must be resolved from per-stage visibility and existing results');
-assert.match(appJs, /stackEntries\s*=\s*\[\{[\s\S]*?stage:\s*baseOverlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'hidden-input rendering must promote the first visible label mask to the base volume with stage tracking');
-assert.match(appJs, /for \(const overlayStage of visibleOverlayStages\)[\s\S]*?stackEntries\.push\(\{[\s\S]*?stage:\s*overlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'visible label masks must be loaded as one independently tracked volume stack');
+assert.match(appJs, /getViewerStack\(\)\s*\{[\s\S]*?stackEntries\s*=\s*\[\{[\s\S]*?file:\s*baseFile[\s\S]*?visible:\s*this\.isStageVisible\('input'\)/, 'the base image stays in the stack when hidden; its visibility is an entry property');
+assert.match(appJs, /for \(const overlayStage of this\.getOverlayStagesWithResults\(\)\)[\s\S]*?stackEntries\.push\(\{[\s\S]*?stage:\s*overlayStage[\s\S]*?visible:\s*this\.isStageVisible\(overlayStage\)[\s\S]*?colormapKey:\s*this\.getOverlayColormapId\(overlayStage\)[\s\S]*?labelColormap:\s*generateLabelColormap\(this\.getOverlayLabelTaskId\(overlayStage\)\)/, 'label masks must be loaded as independently tracked label-colormap entries');
+assert.match(appJs, /getOverlayStagesWithResults\(\)\s*\{[\s\S]*?\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\]\.filter\(stage => \(\s*this\.inferenceExecutor\.hasResult\(stage\)/, 'only stages with a current result enter the viewer stack, in stable order');
 assert.match(appJs, /_renderViewerPromise\s*=\s*Promise\.resolve\(\)/, 'viewer renders must be serialized to prevent late base loads from wiping overlays');
 assert.match(appJs, /renderViewerVolumes\(\)\s*\{[\s\S]*?_renderViewerPromise\s*=\s*this\._renderViewerPromise\.then/, 'renderViewerVolumes must enqueue render work in order');
-assert.match(appJs, /loadViewerStackIfChanged\(stackEntries\)\s*\{[\s\S]*?isCurrentVolumeStack\?\.\(stackEntries\)[\s\S]*?return false[\s\S]*?loadVolumeStack\(stackEntries\)/, 'renderViewerVolumes must skip loadVolumeStack when the requested stack is already current');
+assert.match(appJs, /_renderViewerVolumesNow\(\)\s*\{\s*await this\.viewer\.showVolumes\(this\.getViewerStack\(\)\);\s*\}/, 'renderViewerVolumes must hand the whole stack to SctViewer, which reloads only what changed');
+assert.equal((appJs.match(/\.showVolumes\(/g) || []).length, 1, 'renderViewerVolumes is the only path that changes the main viewer stack');
 assert.match(appJs, /getResultListStages\(\)\s*\{[\s\S]*?getStageOrder\(\)\.filter\(stage => !this\.isMetricsResultStage\(stage\)\)/, 'metrics stages must be excluded from the viewable/downloadable image-layer result list');
 assert.match(appJs, /renderMetricsResult\(stage\)[\s\S]*?metrics-download-btn[\s\S]*?downloadMetricsResult\(stage\)/, 'metrics statistics panel must provide its own CSV download button');
 assert.match(appJs, /downloadMetricsResult\(stage\)[\s\S]*?result\?\.kind !== 'metrics'[\s\S]*?Downloaded statistics/, 'metrics CSV download must be handled as statistics, not as a layer download');

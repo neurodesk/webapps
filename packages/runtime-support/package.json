@@ -11,12 +11,20 @@
       "types": "./src/niimath/index.d.ts",
       "default": "./src/niimath/index.js"
     },
-    "./gpu-unet": "./src/gpu-unet/index.js"
+    "./gpu-unet": "./src/gpu-unet/index.js",
+    "./freebrowse-viewer": "./src/freebrowse-viewer/index.js"
   },
   "dependencies": {
-    "@niivue/dcm2niix": "^1.2.0"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/dcm2niix": "^1.2.0",
+    "@niivue/niivue": "1.0.0-rc.13",
+    "freebrowse": "2.5.0-next.1"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build:freebrowse-viewer": "node scripts/build-freebrowse-viewer.mjs"
+  },
+  "devDependencies": {
+    "vite": "^6.3.2"
   }
 }

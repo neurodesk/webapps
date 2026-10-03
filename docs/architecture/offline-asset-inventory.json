@@ -386,14 +386,6 @@
             "apps/spinalcordtoolbox/web/js/inference-worker.js"
           ],
           "verification": "source reference; production bundling may rewrite it"
-        },
-        {
-          "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-          "kind": "runtime-cdn",
-          "sources": [
-            "apps/spinalcordtoolbox/web/index.html"
-          ],
-          "verification": "source reference; production bundling may rewrite it"
         }
       ],
       "url_mappings": [],

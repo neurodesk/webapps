@@ -17,7 +17,7 @@
 .comparison-grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .comparison-grid[data-count="3"],
 .comparison-grid[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.viewer-canvas-wrapper.compare-mode #gl1,
+.viewer-canvas-wrapper.compare-mode #freebrowseViewer,
 .viewer-canvas-wrapper.compare-mode #fallbackCanvas2d,
 .viewer-canvas-wrapper.compare-mode .viewer-unavailable-message { visibility: hidden; }
 .viewer-canvas-wrapper.compare-mode .comparison-grid { visibility: visible; }

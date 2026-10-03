@@ -2,6 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": [
     "packages/runtime-support/src/**",
+    "packages/runtime-support/scripts/**",
     "packages/components/src/automation/**",
     "packages/desktop/src/contracts.js",
     "packages/desktop/src/resource-limits.js",

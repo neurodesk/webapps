@@ -26,7 +26,7 @@ bash run.sh
 - **DICOM and NIfTI** input support
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
 - **Configurable**: overlap, probability threshold, component size filtering
-- **Smart auto-contrast**: percentile-based windowing for better default display
+- **FreeBrowse viewer**: zoom and pan in 2D slices and the 3D render, layout selection, intensity window, per-layer opacity, colormap and visibility, image download, and a Drawing tab
 - **Privacy**: patient image data stays confidential and browser-local; non-patient usage statistics may be collected as telemetry
 
 ## SCT Model Assets
@@ -50,14 +50,23 @@ spinalcordtoolbox/
 ├── web/
 │   ├── js/
 │   │   ├── app/           # Config and labels
-│   │   ├── controllers/   # FileIO, DICOM, Inference, Viewer
-│   │   ├── modules/       # UI components and inference pipeline
+│   │   ├── controllers/   # Input sessions and the inference pipeline adapter
+│   │   ├── modules/       # Viewer (sct-viewer.js), 2D fallback preview, processing
 │   │   ├── spinalcordtoolbox-app.js    # Main app
 │   │   └── inference-worker.js   # Web Worker (3D inference pipeline)
 │   ├── models/            # SCT model manifest + browser-runnable assets
 │   └── index.html
 └── README.md
 ```
+
+## Viewer
+
+The viewer is [FreeBrowse](https://github.com/freesurfer/freebrowse) around NiiVue 1.0, the same embedding TopoFit uses (`@neurodesk/runtime-support/freebrowse-viewer`). This app has no bundler, so `pnpm runtime-support` builds the viewer into `web/freebrowse-viewer/` and the page loads it from its own origin.
+
+- **Zoom and pan**: choose **pan/zoom** beside "Right drag" in the viewer toolbar, then scroll to zoom and right-drag to pan. On a touch screen, pinch to zoom and drag with two fingers to pan, in any mode. In the 3D render the wheel always zooms. The ⟲ button resets view and contrast.
+- **Layers**: the sidebar button opens the Volumes tab with visibility, opacity, intensity window and colormap for every layer, and Download for the current images. The Results eye buttons in the left sidebar toggle the same layers.
+- **SCT's own toolbar** keeps only what FreeBrowse lacks: Single/Compare for multiple loaded images, and the PNG screenshot.
+- Without WebGL2 the app shows a 2D axial preview instead; segmentation, results and downloads still work.
 
 ## Pipeline
 
@@ -119,6 +128,7 @@ If you use SCT workflows, please cite Spinal Cord Toolbox and the relevant SCT t
 - **dcm2niix**: Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56. [GitHub](https://github.com/rordenlab/dcm2niix)
 - **ONNX Runtime Web**: Microsoft. [onnxruntime.ai](https://onnxruntime.ai)
 - **NiiVue**: NiiVue Contributors. [github.com/niivue/niivue](https://github.com/niivue/niivue)
+- **FreeBrowse**: FreeSurfer developers. [github.com/freesurfer/freebrowse](https://github.com/freesurfer/freebrowse)
 
 ## Privacy
 
