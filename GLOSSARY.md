@@ -2,6 +2,14 @@
 
 Terms for scientific workflows and their desktop execution.
 
+## Scientific operations
+
+**Operation**:
+A declared scientific processing or viewing action with inputs, method settings and results.
+
+**Operation parameter**:
+A named method setting whose declaration describes its accepted values and default.
+
 ## Desktop results
 
 **Artifact**:

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { registerAppAutomation } from '../src/automation/index.js';
+import { operationParameterSchema, operationParametersSchema } from '@neurodesk/webapp-components/automation/parameters';
 import { parseContract, requestSchema } from '../../desktop/src/contracts.js';
 
 function contract(parameters) {
@@ -128,4 +129,36 @@ test('default and supplied nested arrays stay isolated across parses, callbacks 
   await f.dispatch('start');
   assert.deepEqual((await completed(f.dispatch)).parameters, { setting: [[0.15]] });
   assert.deepEqual(f.calls, [{ setting: [[0.15]] }, { setting: [[0.15]] }]);
+});
+
+
+test('defaults use required value rules and safeParse preserves the full nested issue path', () => {
+  const items = field('number', { multipleOf: 0.01, default: 0.15 });
+  const declaration = field('array', { items: field('array', { items }), default: [[0.150000000001]] });
+  const schema = operationParametersSchema({ setting: declaration });
+  const result = schema.safeParse(undefined);
+  assert.equal(result.success, false);
+  assert.deepEqual(result.error.issues[0].path, ['setting', 0, 0]);
+  assert.throws(() => parseContract(contract({ setting: declaration })));
+  assert.throws(() => parseContract(contract({ setting: field('array', { items: field('number', { default: 'wrong' }) }) })));
+  assert.equal(operationParameterSchema(items).safeParse(undefined).success, false);
+  const defaultValue = [[0.15]];
+  declaration.default = defaultValue;
+  const valid = operationParametersSchema({ setting: declaration });
+  defaultValue[0][0] = 1;
+  const first = valid.parse(undefined);
+  first.setting[0][0] = 2;
+  assert.deepEqual(valid.parse(undefined), { setting: [[0.15]] });
+});
+
+
+test('browser rejects invalid declared defaults before calling the operation', async t => {
+  const spec = contract({ setting: field('array', { default: [[0.150000000001]], items: field('array', { items: field('number', { multipleOf: 0.01 }) }) }) });
+  const f = browser(t, spec);
+  await assert.rejects(f.dispatch('start'), error => {
+    assert.deepEqual(error.issues[0].path, ['setting', 0, 0]);
+    return true;
+  });
+  assert.deepEqual(f.calls, []);
+  assert.equal((await f.dispatch('snapshot')).state, 'idle');
 });

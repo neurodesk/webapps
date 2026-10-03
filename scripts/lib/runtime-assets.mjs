@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, relative, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
+import { stageOperationParameters } from './operation-parameters-runtime.mjs';
 
 const TEXT_EXTENSIONS = new Set(['.html', '.js', '.mjs']);
 
@@ -140,6 +141,7 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
     join(runtimeRoot, 'webapp-components', '0.1.2', 'src'),
     { recursive: true },
   );
+  await stageOperationParameters({ repoRoot, componentsSrc: join(runtimeRoot, 'webapp-components', '0.1.2', 'src') });
 
   const files = await walk(siteDist);
   for (const file of files) {

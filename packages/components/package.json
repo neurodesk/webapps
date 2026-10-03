@@ -34,6 +34,7 @@
     "./inference": "./src/inference/index.js",
     "./pipeline": "./src/pipeline/index.js",
     "./automation": "./src/automation/index.js",
+    "./automation/parameters": "./src/automation/parameters.js",
     "./automation/freesurfer-lut": "./src/automation/freesurfer-lut.json",
     "./volume": "./src/volume/index.js",
     "./worker": "./src/worker/index.js",
@@ -87,5 +88,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   }
 }

@@ -1,6 +1,7 @@
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import * as z from 'zod/v4';
+import { operationParameterSchema, operationParametersSchema } from '@neurodesk/webapp-components/automation/parameters';
 import { operationLimitsSchema, validateOperationLimits } from './resource-limits.js';
 
 const selector = z.string().trim().min(1);
@@ -133,7 +134,7 @@ export function parseContract(value) {
     if (field.enum && field.type !== 'string') throw new Error(`${key}: enum requires a string parameter`);
     if ((field.minimum !== undefined || field.maximum !== undefined || field.multipleOf !== undefined) && field.type !== 'number') throw new Error(`${key}: bounds require a number`);
     if (field.minimum > field.maximum) throw new Error(`${key}: minimum exceeds maximum`);
-    if (field.default !== undefined) parameterSchema(field).parse(field.default);
+    if (field.default !== undefined) operationParameterSchema(field).parse(field.default);
   }
   return contract;
 }
@@ -146,25 +147,7 @@ function validateParameter(key, field) {
   if (field.type === 'array' && !field.items) throw new Error(`${key}: array parameters require items`);
   if (field.type !== 'array' && field.items) throw new Error(`${key}: items requires an array`);
   if (field.items) validateParameter(`${key} item`, field.items);
-  if (field.default !== undefined) parameterSchema(field).parse(field.default);
-}
-
-export function parameterSchema(field) {
-  let schema;
-  if (field.type === 'boolean') schema = z.boolean();
-  else if (field.type === 'array') {
-    schema = z.array(parameterSchema(field.items));
-    if (field.minimum !== undefined) schema = schema.min(field.minimum);
-    if (field.maximum !== undefined) schema = schema.max(field.maximum);
-  } else if (field.type === 'number' || field.type === 'integer') {
-    schema = z.number().finite();
-    if (field.type === 'integer') schema = schema.int();
-    if (field.minimum !== undefined) schema = schema.min(field.minimum);
-    if (field.maximum !== undefined) schema = schema.max(field.maximum);
-    if (field.multipleOf !== undefined) schema = schema.multipleOf(field.multipleOf);
-  } else schema = z.string();
-  if (field.enum) schema = field.type === 'string' ? z.enum(field.enum) : schema.and(z.literal(field.enum));
-  return schema.describe(field.description);
+  if (field.default !== undefined) operationParameterSchema(field).parse(field.default);
 }
 
 export function operationFor(contract, operation) {
@@ -191,9 +174,7 @@ export function requestSchema(contract, operation) {
         schema = schema.describe(field.description);
         return [role, field.minimum > 0 ? schema : schema.optional()];
       }))).prefault({}),
-      parameters: z.strictObject(Object.fromEntries(Object.entries(selected.parameters).map(([key, field]) => [
-        key, field.default === undefined ? parameterSchema(field).optional() : parameterSchema(field).default(field.default),
-      ]))).prefault({}),
+      parameters: operationParametersSchema(selected.parameters),
       selections: z.strictObject(Object.fromEntries(Object.entries(selected.inputs)
         .filter(([, field]) => field.formats?.includes('dicom'))
         .map(([role]) => [role, z.string().regex(/^[a-f0-9]{64}$/).optional()]))).prefault({}),
@@ -206,9 +187,7 @@ export function requestSchema(contract, operation) {
     inputs: z.strictObject(Object.fromEntries(Object.entries(contract.inputs).map(([role, field]) => [
       role, z.array(z.string().min(1)).length(1).describe(`${field.description} Absolute path to one NIfTI file.`),
     ]))),
-    parameters: z.strictObject(Object.fromEntries(Object.entries(contract.parameters).map(([key, field]) => [
-      key, field.default === undefined ? parameterSchema(field).optional() : parameterSchema(field).default(field.default),
-    ]))).prefault({}),
+    parameters: operationParametersSchema(contract.parameters),
     engine: z.enum(contract.engines).default('browser'),
     timeoutMs: z.number().int().min(1).max(86400000).default(1800000),
   });

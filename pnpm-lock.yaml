@@ -35,6 +35,9 @@ importers:
       ajv-formats:
         specifier: 3.0.1
         version: 3.0.1(ajv@8.20.0)
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       jsdom:
         specifier: ^24.0.0
         version: 24.1.3
@@ -877,7 +880,11 @@ importers:
         specifier: workspace:*
         version: link:../synthsr
 
-  packages/components: {}
+  packages/components:
+    dependencies:
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
   packages/desktop:
     dependencies:

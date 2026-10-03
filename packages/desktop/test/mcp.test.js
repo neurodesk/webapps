@@ -185,3 +185,40 @@ test('EOF before initialization and repeated explicit close release the service 
     assert.equal(client.stderr.trim(), '{"closeCount":1,"states":[]}');
   }
 });
+
+
+test('stdio tools/list publishes native recursive parameter constraints and active defaults', { timeout: 10000 }, async t => {
+  const client = connect(t, ['--parameters']);
+  await client.initialize();
+  const listed = await client.request('tools/list');
+  const tool = listed.result.tools.find(tool => tool.name === 'run_settings');
+  const parameters = tool.inputSchema.properties.parameters;
+  assert.equal(parameters.additionalProperties, false);
+  assert.deepEqual(parameters.default, {});
+  assert.equal(parameters.required, undefined);
+  const { method, threshold, iterations, numeric, flag, enabled, schedule } = parameters.properties;
+  assert.deepEqual(method, { type: 'string', enum: ['fast', 'normal'], description: 'Scientific method', default: 'normal' });
+  assert.deepEqual(threshold, { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.01, description: 'Intensity threshold', default: 0.15 });
+  assert.deepEqual(numeric, { allOf: [{ type: 'number' }, { type: 'number', enum: [1, 2] }], description: 'Numeric choice' });
+  assert.deepEqual(flag, { allOf: [{ type: 'boolean' }, { type: 'boolean', const: false }], description: 'Boolean choice' });
+  assert.equal(iterations.type, 'integer');
+  assert.equal(iterations.description, 'Iteration count');
+  assert.equal(iterations.minimum, Number.MIN_SAFE_INTEGER);
+  assert.equal(iterations.maximum, Number.MAX_SAFE_INTEGER);
+  assert.equal(enabled.type, 'boolean');
+  assert.equal(enabled.description, 'Enable processing');
+  assert.equal(enabled.default, false);
+  assert.equal(schedule.type, 'array');
+  assert.equal(schedule.description, 'Resolution schedule');
+  assert.equal(schedule.minItems, 1);
+  assert.equal(schedule.maxItems, 2);
+  assert.deepEqual(schedule.default, [[0.15]]);
+  assert.equal(schedule.items.description, 'Resolution entries');
+  assert.equal(schedule.items.minItems, 1);
+  assert.equal(schedule.items.maxItems, 3);
+  assert.deepEqual(schedule.items.items, { type: 'number', minimum: 0, maximum: 1, multipleOf: 0.01, description: 'Resolution weight' });
+  assert.deepEqual(value(await client.tool('apps_validate', { app: 'settings' })).parameters, {
+    method: 'normal', threshold: 0.15, enabled: false, schedule: [[0.15]],
+  });
+  assert.equal((await client.end()).code, 0);
+});
