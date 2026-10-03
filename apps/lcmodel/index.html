@@ -22,6 +22,7 @@
             <select id="datasetSelect"></select>
           </div>
           <p id="datasetSummary" class="nd-hint" hidden></p>
+          <label class="nd-check" id="editedField" hidden><input id="editedToggle" type="checkbox" /> Edited MEGA-PRESS: alternate edit-ON and edit-OFF <span class="nd-info-icon" tabindex="0" aria-label="About editing detection">i<span class="nd-info-tooltip" id="editedInfo">GE and Philips files do not record editing.</span></span></label>
           <div id="acquisitionFields" hidden>
             <div class="nd-row">
               <div class="nd-field">
@@ -44,15 +45,15 @@
         <div class="nd-section-content">
           <div class="nd-field">
             <label for="basisSelect">Basis set
-              <span class="nd-info-icon" tabindex="0" aria-label="About basis sets">i<span class="nd-info-tooltip">LCModel fits the spectrum as a sum of metabolite spectra simulated for the same field strength, sequence and echo time. Coupled metabolites (Glu, Gln, GABA, mI, Lac) change shape with the sequence timing, so a mismatched basis biases them even when the fit looks good. The recommendation compares the data's header with each basis set.</span></span>
+              <span class="nd-info-icon" tabindex="0" aria-label="About basis sets">i<span class="nd-info-tooltip">LCModel fits the spectrum as a sum of metabolite spectra simulated for the same field strength, sequence and echo time. Coupled metabolites (Glu, Gln, GABA, mI, Lac) change shape with the sequence timing, so a mismatched basis biases them even when the fit looks good. The recommendation compares the data's header with each basis set. Your own .BASIS file (plain or .gz) can also be dropped with the data.</span></span>
             </label>
             <select id="basisSelect"></select>
           </div>
           <p id="basisAdvice" class="nd-message info" hidden></p>
-          <label class="nd-file" id="basisDrop" hidden>
+          <label class="nd-file" id="basisDrop">
             <input id="basisInput" type="file" data-neurodesk-input="model" aria-label="Choose an LCModel .BASIS file" />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <span>Drop your LCModel .BASIS file</span>
+            <span>Or drop your own LCModel .BASIS file</span>
           </label>
           <p id="basisInfo" class="nd-file-info" hidden></p>
         </div>
@@ -136,7 +137,7 @@
       <p><strong>Preprocessing.</strong> FID-A combines the receiver channels, removes bad averages, corrects frequency and phase drift by spectral registration, and averages. For SPECIAL it also aligns and combines the ISIS subspectra. It then phases and references the spectrum to creatine and the water reference to 4.65 ppm. GE data follow FID-A's GE script, which phases on the residual water. In room-temperature phantoms water sits near 4.8 ppm, so FID-A's creatine search can lock onto choline; LCModel's own referencing corrects this and reports it as the data shift. These are FID-A's <code>run_pressproc_auto</code> and <code>run_specialproc_auto</code>, with fixed values where FID-A draws random registration windows, so the result is reproducible. The port agrees with FID-A run in GNU Octave to within 10<sup>-5</sup> Hz in the drift estimates and 10<sup>-8</sup> in the final spectra. Data that arrive coil-combined (RDA, DICOM, NIfTI-MRS) are aligned and averaged only. LCModel .RAW files go to LCModel unchanged.</p>
       <p><strong>Fitting.</strong> LCModel 6.3-1N was translated from Stephen Provencher's Fortran subprogram by subprogram, keeping its precision and order of operations. On LCModel's own test case, the port's .TABLE and .COORD outputs are identical to those of the Fortran compiled with gfortran. Concentrations are scaled to the unsuppressed water reference when there is one (LCModel's WCONC and ATTH2O defaults); without water they are in arbitrary units, and the ratios to creatine are the useful numbers. %SD is LCModel's Cramér-Rao estimate; values above about 20% are unreliable.</p>
       <p><strong>Basis sets.</strong> The included basis sets were simulated with FID-A's ideal-pulse density-matrix simulations for 20 metabolites. LCModel adds macromolecules and lipids itself. Choose the one that matches the data's field strength, sequence and echo time, or supply your own .BASIS file. Ideal pulses ignore the slice profiles of real pulses, which matter most for semi-LASER and long echo times.</p>
-      <p><strong>MEGA-PRESS.</strong> GABA-edited data go through FID-A's <code>run_megapressproc_auto</code>: coil combination, removal of bad averages, drift correction per subspectrum and alignment of edit-ON to edit-OFF. LCModel then fits the difference spectrum with its MEGA-PRESS analysis (<code>sptype='mega-press-3'</code>, 4.2 to 1.95 ppm, no baseline, scaled to NAA) and the difference basis set. That basis set was simulated with FID-A's shaped 14 ms editing pulses at the voxel centre, because real editing pulses nearly erase the NAA singlet in the edit-ON scan, which instantaneous pulses cannot reproduce. GABA from the difference spectrum includes co-edited macromolecules (GABA+). Ratios are to NAA+NAAG; the edit-OFF spectrum is a separate download.</p>
+      <p><strong>MEGA-PRESS.</strong> GABA-edited data go through FID-A's <code>run_megapressproc_auto</code>: coil combination, removal of bad averages, drift correction per subspectrum and alignment of edit-ON to edit-OFF. LCModel then fits the difference spectrum with its MEGA-PRESS analysis (<code>sptype='mega-press-3'</code>, 4.2 to 1.95 ppm, no baseline, scaled to NAA) and the difference basis set. That basis set was simulated with FID-A's shaped 14 ms editing pulses at the voxel centre, because real editing pulses nearly erase the NAA singlet in the edit-ON scan, which instantaneous pulses cannot reproduce. GABA from the difference spectrum includes co-edited macromolecules (GABA+). Ratios are to NAA+NAAG; the edit-OFF spectrum is a separate download. GE and Philips files do not record editing or which transient is edit-ON, so the app compares alternate transients, as Osprey does: the editing pulse nearly erases the NAA peak in edit-ON. Data that the scanner averaged in edit-ON/OFF pairs cannot be separated.</p>
       <p>Research use only.</p>
     </template>
     <template id="privacyContent"><p>Spectroscopy files are processed in this browser and are never uploaded. Basis sets and examples are downloaded from Hugging Face at a pinned revision and verified by checksum.</p></template>

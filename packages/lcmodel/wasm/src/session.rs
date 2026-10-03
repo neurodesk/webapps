@@ -7,6 +7,7 @@ use fida::io::lcm;
 use fida::ops::align::{op_align_averages, AlignTo};
 use fida::ops::averaging::op_averaging;
 use fida::ops::basic::op_complex_conj;
+use fida::ops::editing::{classify_mega, drop_empty_transients, split_alternate, to_fida_layout, EditCheck};
 use fida::ops::pipeline::{run_megapressproc_auto, run_pressproc_auto, run_specialproc_auto, MegaOptions, PressOptions, SpecialOptions};
 use fida::ops::quality::{op_get_lw, op_get_snr};
 use fida::Spectra;
@@ -19,6 +20,23 @@ pub struct Dataset {
     pub water_name: Option<String>,
     pub metab: Spectra,
     pub water: Option<Spectra>,
+    /// GE and Philips: whether alternate transients look like edit-ON/OFF pairs.
+    pub edit: Option<EditCheck>,
+}
+
+/// Readers that store edit-ON and edit-OFF as alternate transients without
+/// saying so; the app splits them (FID-A's `subspecs = 2`) when the data, or
+/// the user, say the data are edited.
+fn splits_editing(format: Format) -> bool {
+    matches!(format, Format::GePfile | Format::PhilipsSdat)
+}
+
+/// Edit-ON/OFF classification of alternate transients, when there are pairs.
+fn detect_editing(metab: &Spectra, water: Option<&Spectra>) -> Option<EditCheck> {
+    if metab.dims.sub_specs != 0 || size_of(metab, metab.dims.averages) < 4 {
+        return None;
+    }
+    classify_mega(&split_alternate(metab).ok()?, water).ok()
 }
 
 /// Sequence families that decide the pipeline and the basis set.
@@ -99,14 +117,27 @@ pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
             (None, Some(w)) if w.n() > 0 => (Some(w), Some(format!("{} (water frames)", pair.metabolite.name))),
             _ => (None, None),
         };
+        let format = pair.metabolite.format;
+        let (metab, water) = if splits_editing(format) {
+            (drop_empty_transients(&metab.out), water.as_ref().map(drop_empty_transients))
+        } else {
+            (metab.out, water)
+        };
+        let edit = if splits_editing(format) { detect_editing(&metab, water.as_ref()) } else { None };
+        let mut h = header(&metab);
+        // GE and Philips do not record editing; the interface shows what the
+        // data say and lets the user override it (Options::edited).
+        if let Some(e) = &edit {
+            h["editing"] = json!({ "detected": e.edited(), "contrast": e.contrast, "offFirst": e.off_first });
+        }
         summary.push(json!({
             "index": datasets.len(),
             "name": pair.metabolite.name,
-            "format": pair.metabolite.format.label(),
+            "format": format.label(),
             "water": water_name,
-            "header": header(&metab.out),
+            "header": h,
         }));
-        datasets.push(Dataset { name: pair.metabolite.name.clone(), format: pair.metabolite.format, water_name, metab: metab.out, water });
+        datasets.push(Dataset { name: pair.metabolite.name.clone(), format, water_name, metab, water, edit });
     }
     let ignored: Vec<Value> = det.ignored.iter().map(|(n, why)| json!({ "file": n, "reason": why })).collect();
     let unpaired: Vec<Value> = det.unpaired_water.iter().map(|d| json!(d.name)).collect();
@@ -120,6 +151,9 @@ pub struct Options {
     pub bad_average_sd: Option<f64>,
     pub drift_correction: bool,
     pub phase_and_reference: bool,
+    /// GE and Philips: treat alternate transients as edit-OFF/ON pairs
+    /// (`Some(true)`), as unedited (`Some(false)`), or as detected (`None`).
+    pub edited: Option<bool>,
 }
 
 impl Options {
@@ -129,6 +163,7 @@ impl Options {
             bad_average_sd: v["badAverageSd"].as_f64(),
             drift_correction: v["driftCorrection"].as_bool().unwrap_or(true),
             phase_and_reference: v["phaseAndReference"].as_bool().unwrap_or(true),
+            edited: v["edited"].as_bool(),
         }
     }
 }
@@ -158,11 +193,30 @@ pub fn process(ds: &Dataset, opts: &Options, progress: &mut dyn FnMut(&str, f32)
         (&ds.metab, ds.water.as_ref())
     };
     let fam = family(&ds.metab.seq);
+    let split;
+    let mut edit_warnings = Vec::new();
+    let mut edit_check = Value::Null;
+    let metab = if splits_editing(ds.format) && opts.edited.unwrap_or(ds.edit.as_ref().is_some_and(EditCheck::edited)) {
+        let pairs = split_alternate(metab)?;
+        let check = classify_mega(&pairs, water)?;
+        if !check.edited() {
+            edit_warnings.push(format!(
+                "Edit-ON and edit-OFF look alike (NAA/Cr differs by {:.0} %): editing may have been averaged on the scanner, or the data are not edited.",
+                (check.contrast - 1.0) * 100.0
+            ));
+        }
+        edit_check = json!({ "contrast": check.contrast, "offFirst": check.off_first, "inverted": check.inverted });
+        split = to_fida_layout(&pairs, &check);
+        &split
+    } else {
+        metab
+    };
     let has_coils = metab.dims.coils > 0 && metab.size(metab.dims.coils) > 1;
-    if !has_coils {
+    let edited = fam == "MEGA-PRESS" || (metab.dims.sub_specs > 0 && fam != "SPECIAL");
+    if !has_coils && !edited {
         return process_combined(metab, water, opts, progress);
     }
-    if fam == "MEGA-PRESS" || (metab.dims.sub_specs > 0 && fam != "SPECIAL") {
+    if edited {
         if metab.dims.sub_specs == 0 || metab.size(metab.dims.sub_specs) != 2 {
             return Err("Edited MEGA-PRESS data need two subspectra (edit-ON and edit-OFF); these have none.".into());
         }
@@ -178,6 +232,12 @@ pub fn process(ds: &Dataset, opts: &Options, progress: &mut dyn FnMut(&str, f32)
         let mut report = out.report.to_json();
         report["conjugated"] = json!(conj);
         report["edited"] = json!(true);
+        if !edit_check.is_null() {
+            report["editClassification"] = edit_check;
+            if let Some(w) = report["warnings"].as_array_mut() {
+                w.extend(edit_warnings.into_iter().map(Value::from));
+            }
+        }
         return Ok(Processed { metab: out.diff, water: out.outw, unprocessed: out.diff_noproc, report, edit_off: Some(out.sub1) });
     }
     let out = if fam == "SPECIAL" {
@@ -340,6 +400,10 @@ mod tests {
 
 #[cfg(test)]
 mod mega_tests {
+    fn example(rel: &str) -> Option<Vec<u8>> {
+        let root = std::env::var("FIDA_EXAMPLES").unwrap_or_else(|_| "/home/ubuntu/src/mrs/FID-A/exampleData".into());
+        std::fs::read(format!("{root}/{rel}")).ok()
+    }
     use super::*;
 
     #[test]
@@ -372,5 +436,75 @@ mod mega_tests {
         let gaba = table.lines().find(|l| l.trim_end().ends_with(" GABA")).expect("GABA row");
         let sd: f64 = gaba.split_whitespace().nth(1).unwrap().trim_end_matches('%').parse().unwrap();
         assert!(sd < 20.0, "GABA %SD {sd}");
+    }
+
+    /// Fit a MEGA-PRESS difference spectrum with the library's difference basis.
+    fn fit_mega(p: &Processed) -> Option<String> {
+        let Ok(basis) = std::fs::read(format!("{}/basis-out/megapress-3t-te68-diff.basis", std::env::var("TMPDIR").unwrap_or_default())) else {
+            eprintln!("skipping the fit: no MEGA-PRESS basis set in $TMPDIR/basis-out");
+            return None;
+        };
+        let inputs = lcmodel_inputs(p).unwrap();
+        let control = format!(
+            " $LCMODL\n key=210387309\n lps=0\n sptype='mega-press-3'\n nunfil={}\n deltat={:e}\n hzpppm={}\n filbas='b.basis'\n filraw='d.raw'\n ltable=7\n filtab='out.table'\n $END\n",
+            inputs["nunfil"], inputs["deltat"].as_f64().unwrap(), inputs["hzpppm"]
+        );
+        let raw = inputs["raw"].as_str().unwrap().as_bytes().to_vec();
+        let r = lcmodel::run_lcmodel(&control, &[("b.basis", &basis), ("d.raw", &raw)], "");
+        assert!(r.error.is_none(), "{:?}", r.error);
+        Some(r.outputs["out.table"].clone())
+    }
+
+    fn row(table: &str, name: &str) -> (f64, f64, f64) {
+        let l = table.lines().find(|l| l.trim_end().ends_with(&format!(" {name}"))).unwrap_or_else(|| panic!("{name} row in\n{table}"));
+        let f: Vec<&str> = l.split_whitespace().collect();
+        (f[0].parse().unwrap(), f[1].trim_end_matches('%').parse().unwrap(), f[2].parse().unwrap())
+    }
+
+    #[test]
+    fn philips_mega_press_is_detected_split_and_fits_gaba() {
+        // Osprey's MIT example data (exampledata/sdat/MEGA/sub-01).
+        let dir = std::env::var("PHILIPS_MEGA").unwrap_or_else(|_| format!("{}/mega-vendors/philips", std::env::var("TMPDIR").unwrap_or_default()));
+        let names = ["sub-01_megapress_act.sdat", "sub-01_megapress_act.spar", "sub-01_megapress_ref.sdat", "sub-01_megapress_ref.spar"];
+        let Ok(bytes) = names.iter().map(|n| std::fs::read(format!("{dir}/{n}"))).collect::<Result<Vec<_>, _>>() else {
+            eprintln!("skipping: Philips MEGA-PRESS example not found");
+            return;
+        };
+        let files: Vec<(String, &[u8])> = names.iter().zip(&bytes).map(|(n, b)| (n.to_string(), b.as_slice())).collect();
+        let (ds, summary) = load(&files);
+        assert_eq!(ds.len(), 1, "{summary}");
+        let h = &summary["datasets"][0]["header"];
+        assert_eq!(h["editing"]["detected"], json!(true), "{h}");
+        assert_eq!(h["editing"]["offFirst"], json!(true));
+        assert!(h["editing"]["contrast"].as_f64().unwrap() > 2.0);
+        // 8 water transients in a block of 320 rows; the empty rows are dropped.
+        assert_eq!(size_of(ds[0].water.as_ref().unwrap(), ds[0].water.as_ref().unwrap().dims.averages), 8);
+        let p = process(&ds[0], &Options::from_json(&json!({})), &mut |_, _| {}, &|| false).unwrap();
+        assert_eq!(p.report["edited"], json!(true));
+        assert_eq!(p.report["editClassification"]["inverted"], json!(true));
+        let Some(table) = fit_mega(&p) else { return };
+        eprintln!("{table}");
+        let (_, sd, ratio) = row(&table, "GABA");
+        assert!(sd < 20.0, "GABA %SD {sd}");
+        assert!(ratio > 0.05 && ratio < 0.4, "GABA/NAA {ratio}");
+        // Forcing "not edited" fits the alternate transients as one PRESS-like average.
+        let p = process(&ds[0], &Options::from_json(&json!({"edited": false})), &mut |_, _| {}, &|| false).unwrap();
+        assert!(p.edit_off.is_none());
+    }
+
+    #[test]
+    fn ge_mega_sample_with_averaged_transients_is_not_called_edited() {
+        // FID-A's GE MEGA-PRESS sample stores 8-transient sums whose edit
+        // states cancel: alternate frames agree to 0.4 % (FID-A in Octave too).
+        let Some(bytes) = example("GE/sample02_megapress/megapress/P21504.7") else {
+            eprintln!("skipping: FID-A example data not found");
+            return;
+        };
+        let (ds, summary) = load(&[("P21504.7".to_string(), bytes.as_slice())]);
+        assert_eq!(ds.len(), 1, "{summary}");
+        let e = ds[0].edit.as_ref().expect("GE frames are classified");
+        assert!(!e.edited() && e.contrast < 1.2, "{e:?}");
+        let p = process(&ds[0], &Options::from_json(&json!({"edited": true})), &mut |_, _| {}, &|| false).unwrap();
+        assert!(p.report["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("look alike")));
     }
 }

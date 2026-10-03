@@ -1,5 +1,11 @@
 # lcmodel
 
+## 0.4.20261003
+
+### Minor Changes
+
+- Edited MEGA-PRESS from GE P-files and Philips SDAT. Neither format records editing, so the app compares alternate transients (the editing pulse nearly erases NAA in edit-ON), splits them into edit-OFF and edit-ON, and runs FID-A's MEGA-PRESS pipeline; a switch under the dataset overrides the detection. The Philips path matches FID-A run in Octave. Adds Osprey's Philips MEGA-PRESS example. The basis section now has a visible drop zone for your own .BASIS file, and a user basis that names no sequence can be used for edited data, with a warning.
+
 ## 0.3.20261002
 
 ### Minor Changes

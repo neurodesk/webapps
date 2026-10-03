@@ -66,7 +66,11 @@ export function assessBasis(data, basis) {
   // basis sets; one never stands in for the other.
   const dataEdited = dataSeq === "MEGA-PRESS";
   const basisEdited = basisSeq === "MEGA-PRESS";
-  if (dataEdited && !basisEdited) {
+  if (dataEdited && !basisEdited && basisSeq === null) {
+    // A user's own file that does not name its sequence.
+    score -= 30;
+    notes.push({ level: "warning", text: "Check that this is a MEGA-PRESS difference basis: its header names no sequence." });
+  } else if (dataEdited && !basisEdited) {
     usable = false;
     score -= 100;
     notes.push({ level: "error", text: "Edited data are fitted as a difference spectrum and need a MEGA-PRESS basis." });

@@ -257,7 +257,8 @@ function currentHeader() {
     return { hzpppm: a.hzpppm, teMs: input.header.teMs, sequence: input.header.sequence };
   }
   const ds = input.datasets[input.index];
-  return { hzpppm: ds.header.hzpppm, teMs: ds.header.teMs, sequence: ds.header.family || ds.header.sequence };
+  const sequence = isEdited() ? "MEGA-PRESS" : ds.header.family || ds.header.sequence;
+  return { hzpppm: ds.header.hzpppm, teMs: ds.header.teMs, sequence };
 }
 
 function acquisitionFromFields() {
@@ -266,9 +267,14 @@ function acquisitionFromFields() {
   return { hzpppm: hz > 0 ? hz : null, deltat: dwellMs > 0 ? dwellMs / 1000 : null };
 }
 
-/** Edited MEGA-PRESS data: LCModel fits their difference spectrum. */
+/** Edited MEGA-PRESS data: LCModel fits their difference spectrum. GE and
+ * Philips files do not say; the worker compares alternate transients
+ * (header.editing) and the user can override it. */
 function isEdited() {
-  return input?.kind === "fida" && input.datasets[input.index].header.family === "MEGA-PRESS";
+  if (input?.kind !== "fida") return false;
+  const ds = input.datasets[input.index];
+  if (ds.header.editing) return ds.editOverride ?? ds.header.editing.detected;
+  return ds.header.family === "MEGA-PRESS";
 }
 
 function hasWater() {
@@ -299,14 +305,17 @@ function showDataset() {
     summary.textContent = `LCModel .RAW, ${input.points} points${input.water ? ", with water" : ""}${input.header.teMs ? `, TE ${input.header.teMs} ms` : ""}. Fitted without preprocessing.`;
   } else {
     const h = input.datasets[input.index].header;
-    const parts = [h.family || "sequence not in header", `${h.fieldT ? h.fieldT.toFixed(2) : "?"} T`, `TE ${h.teMs} ms`];
+    const edited = isEdited();
+    const split = edited && h.editing;
+    const parts = [edited ? "MEGA-PRESS" : h.family || "sequence not in header", `${h.fieldT ? h.fieldT.toFixed(2) : "?"} T`, `TE ${h.teMs} ms`];
     if (h.coils > 1) parts.push(`${h.coils} coils`);
-    if (h.averages > 1) parts.push(`${h.averages} averages`);
-    if (h.subspectra > 1) parts.push(`${h.subspectra} subspectra`);
+    if (h.averages > 1) parts.push(`${split ? h.averages / 2 : h.averages} averages`);
+    if (h.subspectra > 1 || split) parts.push(`${split ? 2 : h.subspectra} subspectra`);
     parts.push(input.datasets[input.index].water ? "with water" : "no water reference");
     summary.hidden = false;
     summary.textContent = parts.join(", ");
   }
+  showEditing();
   // LCModel's MEGA-PRESS analysis (sptype mega-press-3) fits 4.2-1.95 ppm.
   const range = isEdited() ? ["4.2", "1.95"] : ["4.0", "0.2"];
   const editedRange = ["4.2", "1.95"];
@@ -321,6 +330,18 @@ function showDataset() {
   $("preprocessingSettings").hidden = input?.kind === "raw";
   recommend();
   updateRunButton();
+}
+
+/** The editing switch, for GE and Philips data with alternate transients. */
+function showEditing() {
+  const editing = input?.kind === "fida" ? input.datasets[input.index].header.editing : null;
+  $("editedField").hidden = !editing;
+  if (!editing) return;
+  $("editedToggle").checked = isEdited();
+  const ratio = editing.contrast.toFixed(1);
+  $("editedInfo").textContent = editing.detected
+    ? `GE and Philips files do not record editing. Alternate transients differ in NAA/Cr by a factor of ${ratio}: the 1.9 ppm editing pulse nearly erases NAA in edit-ON, so these are edit-ON/OFF pairs.`
+    : `GE and Philips files do not record editing. Alternate transients agree in NAA/Cr (factor ${ratio}), so these look unedited. Edited data whose transients the scanner averaged in pairs cannot be separated.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,7 +363,7 @@ function renderBasisOptions(ranked, assessed) {
   const select = $("basisSelect");
   const previous = select.value;
   const options = ranked.map((r, k) => new Option(`${r.basis.label}${assessed && k === 0 && r.usable ? " (recommended)" : ""}${r.usable ? "" : " (unusable)"}`, r.basis.id));
-  options.push(new Option(customBasis ? `Your basis set: ${customBasis.name}` : "Your own .BASIS file…", CUSTOM));
+  if (customBasis) options.push(new Option(`Your basis set: ${customBasis.name}`, CUSTOM));
   select.replaceChildren(...options);
   return previous;
 }
@@ -362,7 +383,6 @@ function recommend() {
 function showBasisAdvice() {
   const choice = $("basisSelect").value;
   const custom = choice === CUSTOM;
-  $("basisDrop").hidden = !custom;
   $("basisInfo").hidden = !custom || !customBasis;
   const advice = $("basisAdvice");
   const header = currentHeader();
@@ -393,6 +413,7 @@ function preprocessingOptions() {
     badAverageSd: sd > 0 ? sd : undefined,
     driftCorrection: $("driftCorrection").checked,
     phaseAndReference: $("phaseReference").checked,
+    edited: input.datasets[input.index].header.editing ? isEdited() : undefined,
   };
 }
 
@@ -598,10 +619,8 @@ $("dataInput").addEventListener("change", (event) => {
   if (files.length) void importFiles(files);
 });
 bindFileDrop($("dropZone"), async (files) => importFiles(await files));
-$("basisInput").addEventListener("change", async (event) => {
-  const [file] = event.target.files;
-  event.target.value = "";
-  if (!file) return;
+async function loadBasisFile(file) {
+  if (!file || busy) return;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const text = /\.gz$/i.test(file.name)
@@ -612,6 +631,18 @@ $("basisInput").addEventListener("change", async (event) => {
   } catch (error) {
     status(error.message, true);
   }
+}
+$("basisInput").addEventListener("change", (event) => {
+  const [file] = event.target.files;
+  event.target.value = "";
+  void loadBasisFile(file);
+});
+bindFileDrop($("basisDrop"), async (files) => loadBasisFile((await files)[0]));
+$("editedToggle").addEventListener("change", () => {
+  const ds = input.datasets[input.index];
+  ds.editOverride = $("editedToggle").checked;
+  clearResults();
+  showDataset();
 });
 $("basisSelect").addEventListener("change", showBasisAdvice);
 $("datasetSelect").addEventListener("change", () => {
@@ -656,6 +687,10 @@ async function fitOperation({ inputs, parameters, signal, progress: report }) {
   report("Reading the spectroscopy data");
   await loadFiles([...inputs.spectra, ...(inputs.basis ?? [])], signal);
   if (!input) throw new Error("No spectroscopy data found among the files.");
+  if (typeof p.edited === "boolean" && input.kind === "fida" && input.datasets[input.index].header.editing) {
+    input.datasets[input.index].editOverride = p.edited;
+    showDataset();
+  }
   const edited = isEdited();
   $("ppmStart").value = String(p.ppmStart ?? (edited ? 4.2 : 4.0));
   $("ppmEnd").value = String(p.ppmEnd ?? (edited ? 1.95 : 0.2));

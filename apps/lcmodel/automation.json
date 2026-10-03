@@ -58,6 +58,10 @@
           ],
           "default": "auto"
         },
+        "edited": {
+          "type": "boolean",
+          "description": "GE and Philips: alternate transients are edit-ON/OFF MEGA-PRESS pairs; detected from the data when absent."
+        },
         "removeBadAverages": {
           "type": "boolean",
           "description": "Remove bad averages (FID-A op_rmbadaverages).",

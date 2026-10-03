@@ -8,7 +8,7 @@
       {
         "role": "spectrum",
         "name": "P17920.7",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/ge-press-phantom/P17920.7"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/ge-press-phantom/P17920.7"
       }
     ]
   },
@@ -21,12 +21,12 @@
       {
         "role": "spectrum",
         "name": "specialDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-special/specialDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/siemens-special/specialDLPFC.dat"
       },
       {
         "role": "water",
         "name": "specialDLPFC_w.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-special/specialDLPFC_w.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/siemens-special/specialDLPFC_w.dat"
       }
     ]
   },
@@ -39,7 +39,35 @@
       {
         "role": "spectrum",
         "name": "megapressDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/siemens-megapress/megapressDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/siemens-megapress/megapressDLPFC.dat"
+      }
+    ]
+  },
+  {
+    "id": "philips-megapress",
+    "label": "Philips MEGA-PRESS 3 T, TE 68 ms (GABA)",
+    "description": "Philips SDAT/SPAR from Osprey (MIT): GABA-edited MEGA-PRESS at 3 T, TE 68 ms, 160 edit-ON/OFF pairs with a water reference. The file does not record editing; the app detects it. 10 MB.",
+    "expectedResult": "The app finds alternate edit-OFF and edit-ON transients (NAA nearly erased in edit-ON), FID-A removes bad averages, corrects drift and aligns the subspectra, and LCModel fits GABA+ on the difference spectrum relative to NAA+NAAG.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "sub-01_megapress_act.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/philips-megapress/sub-01_megapress_act.sdat"
+      },
+      {
+        "role": "spectrum",
+        "name": "sub-01_megapress_act.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/philips-megapress/sub-01_megapress_act.spar"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_megapress_ref.sdat",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/philips-megapress/sub-01_megapress_ref.sdat"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_megapress_ref.spar",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/philips-megapress/sub-01_megapress_ref.spar"
       }
     ]
   },
@@ -52,17 +80,17 @@
       {
         "role": "spectrum",
         "name": "data.raw",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/data.raw"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/lcmodel-test/data.raw"
       },
       {
         "role": "basis",
         "name": "3t.basis",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/3t.basis"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/lcmodel-test/3t.basis"
       },
       {
         "role": "control",
         "name": "control.file",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/examples/lcmodel-test/control.file"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/examples/lcmodel-test/control.file"
       }
     ]
   }

@@ -47,6 +47,8 @@ export FIDA_TEST_DATA=$TMPDIR/fida/testdata      # receives ops/...
 cd exes/fida/validation
 octave-cli ref_pipelines.m                        # ops/ge_press, ops/special, ops/special_single (~1.5 GB)
 FIDA_OCT=<copy with the op_removeWater fix> octave-cli ref_ops.m   # ops/single_ops
+octave-cli ref_mega.m                               # ops/siemens_mega
+PHILIPS_MEGA=<dir> octave-cli ref_mega_philips.m   # ops/philips_mega (Osprey's sdat/MEGA/sub-01)
 cd .. && FIDA_TEST_DATA=... cargo test --release
 ```
 
@@ -122,6 +124,22 @@ SPECIAL (tests/ref_special.rs, double-precision reference):
 | pipeline: unprocessed metabolite / water | 9.5e-10 / 1.1e-11 |
 | SNR (650.3), NAA linewidth (4.26 Hz), water linewidth (5.80 Hz) | 2.5e-8 relative, 2e-10 Hz, 7e-11 Hz |
 
+MEGA-PRESS (tests/ref_mega.rs, `megapressproc_det.m`):
+
+| quantity | Siemens (FID-A, 32 coils) | Philips (Osprey, SDAT) |
+| --- | --- | --- |
+| reader input | twix, exact | `split_alternate` + `drop_empty_transients` vs `io_loadspec_sdat(..., 2)`, exact |
+| pipeline: cumulative drift | 9.8e-8 Hz, 2.4e-6 deg | 8.9e-5 Hz in one transient, the other 293 <= 2.2e-6 Hz; 5.1e-5 deg |
+| pipeline: difference / sum / subspectra / water | 2.4e-9 / 4.1e-10 / 6.1e-10 / 7.5e-10 | 1.7e-6 / 2.2e-7 / 2.3e-7 / 2.8e-12 |
+
+The Philips data are single-channel and noisier per transient; one edit-ON
+transient's fit stops 8.9e-5 Hz from FID-A's, and that transient's phase error,
+averaged over 147, is the 1.7e-6 of the difference spectrum. The Philips test
+gates at 1e-4 Hz and 1e-5 relative; the Siemens gates are unchanged. The test
+also scrambles the Philips subspectra into every other storage layout (edit-ON
+first, not inverted, both) and checks that the classification restores the
+same input.
+
 Individual ops (tests/ref_ops.rs): all shape and arithmetic ops, coil modes
 (`'h'` exact, `'gls'` weights 9.4e-10, fids 3.2e-11), op_combineRcvrs,
 op_rmworstaverage, op_takesubspec, op_combinesubspecs, op_fourStepCombine,
@@ -149,5 +167,16 @@ the corrections are ~0) rounding decides the last step.
   that subspace); `model.fids` is the FID whose spectrum is FID-A's
   `model.specs` (FID-A stores the conjugated row there). They require a single
   spectrum (FID-A silently uses the first FID).
+* GE and Philips MEGA-PRESS: FID-A's readers split alternate transients into
+  subspectra only when told to (`subspecs = 2`), and `run_megapressproc_auto`
+  assumes the Siemens layout (edit-OFF first, the two stored phase-inverted).
+  `src/ops/editing.rs` decides from the data instead, as Osprey's
+  `osp_onOffClassifyMEGA` does: NAA/Cr differing between alternate transients
+  marks editing, the larger NAA is edit-OFF, and anti-correlated creatine marks
+  inversion; it then brings the data to FID-A's layout. Empty transients (a
+  Philips water reference padded with zero rows) are dropped before averaging.
+  FID-A's own GE MEGA-PRESS sample (`P21504.7`) stores 8-transient sums whose
+  edit states cancel (alternate frames agree to 0.4 %, in FID-A as in the port),
+  so it is not detected as edited, and `run_megapressproc_GEauto` is not ported.
 * Where FID-A asks the user (already left-shifted or zero-filled data, which
   subspectrum to phase), the port proceeds or takes an argument.

@@ -71,3 +71,11 @@ test("unedited data never get the difference basis", () => {
   assert.equal(r.usable, false);
   assert.notEqual(recommendBasis({ hzpppm: 127.7, teMs: 68, sequence: "PRESS" }, lib).basis.id, "megapress-3t-te68-diff");
 });
+
+test("a user basis that names no sequence is usable for edited data, with a warning", () => {
+  const a = assessBasis({ hzpppm: 127.75, teMs: 68, sequence: "MEGA-PRESS" }, { id: "custom", hzpppm: 127.73, teMs: 68, sequence: null });
+  assert.equal(a.usable, true);
+  assert.equal(a.level, "warning");
+  const b = assessBasis({ hzpppm: 127.75, teMs: 68, sequence: "MEGA-PRESS" }, { id: "custom", hzpppm: 127.73, teMs: 68, sequence: "PRESS" });
+  assert.equal(b.usable, false);
+});

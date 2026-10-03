@@ -412,10 +412,30 @@
       "filename": "examples/siemens-megapress/megapressDLPFC.dat",
       "bytes": 86369696,
       "sha256": "d29c2a2b181873f66615433de0d7ff369af17d252202e6447c0624cfc7712e70"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_act.sdat",
+      "bytes": 5242880,
+      "sha256": "8d62c50e7b71f4babcecd0d24254059fa4874d522b668753b47b9c462c18ad26"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_act.spar",
+      "bytes": 3085,
+      "sha256": "90d05989a05e69996f68cc0a436f82d63083137ffe369d7dd89d288c8fd21698"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_ref.sdat",
+      "bytes": 5242880,
+      "sha256": "b0e1f8186bfe4353aaf543b6b3a7aea978424c5bcbbfb09e197f6465678d3766"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_ref.spar",
+      "bytes": 3085,
+      "sha256": "e311b2b2c08116010c7c1ea29a29e91b1a414f146fd71213245ebd26c9e3bfda"
     }
   ],
   "repository": "neurodeskorg/webapps",
-  "revision": "91f69629415335ef6fcb88a8b8a05677328b916f",
+  "revision": "c4906fb8ac2acab28b81e648833e90b26f35478b",
   "prefix": "lcmodel/",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/"
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/c4906fb8ac2acab28b81e648833e90b26f35478b/lcmodel/"
 }

@@ -10,7 +10,7 @@ test("app boots on the workspace", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#runButton")).toBeDisabled();
-  await expect(page.locator("#basisSelect option")).toHaveCount(17);
+  await expect(page.locator("#basisSelect option")).toHaveCount(16);
 });
 
 test("shared app bar owns information actions and theme", async ({ page }) => {
@@ -122,6 +122,46 @@ test("the Siemens MEGA-PRESS example fits GABA on the difference spectrum (86 MB
   const download = page.waitForEvent("download");
   await page.locator("#resultList .nd-volume-toggle").filter({ hasText: "Edit-OFF" }).getByRole("button", { name: "Download" }).click();
   expect(readFileSync(await (await download).path(), "utf8")).toContain("$NMID");
+});
+
+test("the Philips MEGA-PRESS example is detected as edited and fits GABA", async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto("/");
+  await selectExample(page, "philips-megapress");
+  // SDAT does not record editing; alternate transients show it.
+  await expect(page.locator("#editedField")).toBeVisible();
+  await expect(page.locator("#editedToggle")).toBeChecked();
+  await expect(page.locator("#datasetSummary")).toContainText("MEGA-PRESS");
+  await expect(page.locator("#datasetSummary")).toContainText("160 averages");
+  await expect(page.locator("#basisSelect")).toHaveValue("megapress-3t-te68-diff");
+  await expect(page.locator("#ppmEnd")).toHaveValue("1.95");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 240000 });
+  await expect(page.locator("#ratioHeader")).toHaveText("/NAA+NAAG");
+  const gaba = page.locator("#concBody tr").filter({ has: page.locator("td:first-child", { hasText: /^GABA$/ }) });
+  expect(Number((await gaba.locator("td").nth(2).textContent()).replace("%", ""))).toBeLessThan(20);
+  const ratio = Number(await gaba.locator("td").nth(3).textContent());
+  expect(ratio).toBeGreaterThan(0.1);
+  expect(ratio).toBeLessThan(0.4);
+  // Overriding the detection treats the transients as one unedited series.
+  await page.locator("#editedToggle").uncheck();
+  await expect(page.locator("#datasetSummary")).not.toContainText("MEGA-PRESS");
+  await expect(page.locator("#basisSelect")).not.toHaveValue("megapress-3t-te68-diff");
+  await expect(page.locator("#ppmEnd")).toHaveValue("0.2");
+  await expect(page.locator("#concTable")).toBeHidden();
+});
+
+test("an uploaded .BASIS file becomes the selected basis set", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator("#basisDrop")).toBeVisible();
+  const basis = byId["lcmodel-test"].files.find((f) => f.name === "3t.basis");
+  const response = await request.get(basis.url);
+  await page.locator("#basisInput").setInputFiles({ name: "my.basis", mimeType: "text/plain", buffer: await response.body() });
+  await expect(page.locator("#basisSelect")).toHaveValue("custom");
+  await expect(page.locator("#basisSelect option:checked")).toHaveText("Your basis set: my.basis");
+  await expect(page.locator("#basisInfo")).toContainText("my.basis");
+  await page.locator("#basisSelect").selectOption("press-3t-te30");
+  await expect(page.locator("#basisInfo")).toBeHidden();
 });
 
 test("a failed download can retry the same example", async ({ page }) => {

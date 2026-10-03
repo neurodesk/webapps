@@ -10,6 +10,7 @@ pub mod align;
 pub mod averaging;
 pub mod basic;
 pub mod coils;
+pub mod editing;
 pub mod ecc;
 pub mod linalg;
 pub mod nlinfit;
