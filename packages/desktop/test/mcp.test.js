@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 
 const fixture = fileURLToPath(new URL('./fixtures/mcp-stdio.js', import.meta.url));
 
@@ -81,7 +82,7 @@ async function inputFile(t) {
   const directory = await mkdtemp(join(tmpdir(), 'desktop-mcp-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, 'input.nii');
-  await writeFile(path, 'MCP boundary fixture');
+  await writeFile(path, gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url))));
   return path;
 }
 

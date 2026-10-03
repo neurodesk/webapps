@@ -1,6 +1,4 @@
-import { createReadStream } from 'node:fs';
-import { open } from 'node:fs/promises';
-import { createGunzip } from 'node:zlib';
+import { readNiftiHeader } from './input-inspection.js';
 import { parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti';
 import * as z from 'zod/v4';
 
@@ -27,34 +25,6 @@ export const operationLimitsSchema = z.strictObject({
 
 const product = dims => dims.reduce((a, b) => a * b, 1);
 
-// Stop after the header, including for highly compressible voxel payloads. A gzip
-// filename/comment may precede it, so compressed input has a separate 1 MiB cap.
-async function readHeader(path) {
-  const file = await open(path, 'r');
-  const first = Buffer.alloc(352);
-  let bytesRead;
-  try { ({ bytesRead } = await file.read(first, 0, first.length, 0)); }
-  finally { await file.close(); }
-  if (first[0] !== 0x1f || first[1] !== 0x8b) return first.subarray(0, bytesRead);
-  const input = createReadStream(path, { highWaterMark: 4096, end: 1024 * 1024 - 1 });
-  const decoder = createGunzip({ chunkSize: 1024 });
-  input.on('error', error => decoder.destroy(error));
-  input.pipe(decoder);
-  const header = Buffer.alloc(352);
-  let received = 0;
-  try {
-    for await (const chunk of decoder) {
-      received += chunk.copy(header, received, 0, Math.min(chunk.length, header.length - received));
-      if (received === header.length) return header;
-    }
-    throw new Error('The compressed NIfTI header is truncated.');
-  } catch (error) {
-    throw new Error(`Cannot read NIfTI header within 1 MiB of compressed input: ${error.message}`);
-  } finally {
-    input.destroy();
-    decoder.destroy();
-  }
-}
 
 function inverse3(m) {
   const [[a, b, c], [d, e, f], [g, h, i]] = m;
@@ -162,7 +132,7 @@ export async function validateOperationLimits(operation, request) {
       // Conversion determines DICOM geometry; the existing browser runtime cap
       // remains authoritative after conversion, as declared by deferredFormats.
       if (!/\.nii(?:\.gz)?$/i.test(path)) continue;
-      const geometry = planSynthsegGeometry(await readHeader(path));
+      const geometry = planSynthsegGeometry(await readNiftiHeader(path));
       const requiredBufferBytes = geometry.paddedVoxels * limit.bytesPerPaddedVoxel;
       if (geometry.paddedVoxels <= limit.maxPaddedVoxels && requiredBufferBytes <= limit.maxBufferBytes) continue;
       const error = new Error(`${role}: SynthSeg browser input ${geometry.inputShape.join('×')} becomes ${geometry.resampledShape.join('×')} at 1 mm, padded to ${geometry.paddedShape.join('×')}; it needs a ${(requiredBufferBytes / 2 ** 30).toFixed(2)} GiB GPU buffer, above the validated 2 GiB limit (${limit.maxBufferBytes} bytes). Use engine "native" if available; reducing source resolution alone does not reduce the resampled field of view.`);

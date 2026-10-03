@@ -6,8 +6,8 @@
   "$defs": {
     "specVersion": {
       "type": "string",
-      "description": "NeuroFlow specification version this document targets.",
-      "const": "0.1.0"
+      "description": "NeuroFlow specification version this document targets. 0.1.1 is required for a document that carries any of the type qualifiers of RFC 0010 (formats, space, resolution, density, labelSystem).",
+      "enum": ["0.1.0", "0.1.1"]
     },
     "semver": {
       "type": "string",
@@ -174,8 +174,169 @@
         "enum": { "type": "array", "description": "Constrained set of allowed values.", "items": {} },
         "min": { "type": "number", "description": "Minimum value for numeric types." },
         "max": { "type": "number", "description": "Maximum value for numeric types." },
+        "formats": { "$ref": "#/$defs/formats" },
+        "space": { "$ref": "#/$defs/space" },
+        "resolution": { "$ref": "#/$defs/resolution" },
+        "density": { "$ref": "#/$defs/density" },
+        "labelSystem": { "$ref": "#/$defs/labelSystem" },
         "extensions": { "$ref": "#/$defs/extensions" }
-      }
+      },
+      "allOf": [{ "$ref": "#/$defs/typeQualifierRules" }]
+    },
+    "qualifierInputRef": {
+      "type": "string",
+      "description": "On a tool output, a type qualifier may be inputs.<local-id>: the output inherits that qualifier from the named input of the same tool (RFC 0010).",
+      "pattern": "^inputs\\.[a-z][A-Za-z0-9_-]*$"
+    },
+    "formats": {
+      "description": "Type qualifier (RFC 0010): file formats the value may be encoded in, as registered tokens (nifti, nii-gz, mgz, nrrd, dicom, gifti, tsv, ...) or vendor-prefixed tokens (brainvoyager:vmr). On an input, what the tool accepts; on an output, what it may produce. Absent means the format conventional for the type.",
+      "anyOf": [
+        {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?:(?!(?:core|neuro|bids|prov):)[a-z][a-z0-9.-]*:)?[a-z][a-z0-9-]*$" }
+        },
+        { "$ref": "#/$defs/qualifierInputRef" }
+      ]
+    },
+    "space": {
+      "description": "Type qualifier (RFC 0010): the coordinate space of a spatial value. A BIDS space label where one exists (individual, MNI152NLin2009cAsym, fsnative, ...), a vendor-prefixed label otherwise (afni:MNI_ANAT), optionally with a template revision after @ (neurodesk:atlas@2), or on a tool output inputs.<local-id>.",
+      "anyOf": [
+        { "type": "string", "pattern": "^(?:(?!(?:core|neuro|bids|prov):)[a-z][a-z0-9.-]*:)?[A-Za-z0-9][A-Za-z0-9_-]*(?:@[A-Za-z0-9][A-Za-z0-9._-]*)?$" },
+        { "$ref": "#/$defs/qualifierInputRef" }
+      ]
+    },
+    "resolution": {
+      "description": "Type qualifier (RFC 0010): voxel spacing in millimetres, one positive number for an isotropic grid or three in axis order, or on a tool output inputs.<local-id>.",
+      "anyOf": [
+        { "type": "number", "exclusiveMinimum": 0 },
+        {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "number", "exclusiveMinimum": 0 }
+        },
+        { "$ref": "#/$defs/qualifierInputRef" }
+      ]
+    },
+    "density": {
+      "description": "Type qualifier (RFC 0010): surface mesh density as a BIDS den-<label> value (32k, 164k, 41k, ...), a vendor-prefixed label, or on a tool output inputs.<local-id>.",
+      "anyOf": [
+        { "type": "string", "pattern": "^(?:(?!(?:core|neuro|bids|prov):)[a-z][a-z0-9.-]*:)?[A-Za-z0-9][A-Za-z0-9_-]*$" },
+        { "$ref": "#/$defs/qualifierInputRef" }
+      ]
+    },
+    "labelSystem": {
+      "description": "Type qualifier (RFC 0010): the integer table that gives meaning to a label map (freesurfer, mrtrix-fs-default, fsl-fast, harvard-oxford-cortical, binary, embedded, ...), optionally with a table revision after @ (freesurfer@7.4.1), a vendor-prefixed name, a URL to a dseg.tsv or FreeSurfer LUT file, or on a tool output inputs.<local-id>.",
+      "anyOf": [
+        { "type": "string", "pattern": "^(?:(?!(?:core|neuro|bids|prov):)[a-z][a-z0-9.-]*:)?[A-Za-z0-9][A-Za-z0-9_-]*(?:@[A-Za-z0-9][A-Za-z0-9._-]*)?$" },
+        { "type": "string", "pattern": "^https?://\\S+$" },
+        { "$ref": "#/$defs/qualifierInputRef" }
+      ]
+    },
+    "typeQualifierRules": {
+      "description": "Which type qualifiers a declaration may carry, by type (RFC 0010). Scalar core types carry none; space is limited to spatial neuro types, resolution to gridded ones, density to surfaces and CIFTI, labelSystem to label maps and probabilistic segmentations. Extension types may carry any qualifier.",
+      "allOf": [
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "enum": [
+                  "core:string", "core:number", "core:integer", "core:boolean", "core:object", "core:json",
+                  "core:array<core:string>", "core:array<core:number>", "core:array<core:integer>",
+                  "core:array<core:boolean>", "core:array<core:object>", "core:array<core:json>"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["formats"] }, { "required": ["space"] }, { "required": ["resolution"] },
+                { "required": ["density"] }, { "required": ["labelSystem"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "required": ["space"] },
+          "then": {
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "neuro:volume", "neuro:mask", "neuro:label-map", "neuro:statmap", "neuro:probseg",
+                      "neuro:surface", "neuro:tract", "neuro:cifti",
+                      "core:array<neuro:volume>", "core:array<neuro:mask>", "core:array<neuro:label-map>",
+                      "core:array<neuro:statmap>", "core:array<neuro:probseg>", "core:array<neuro:surface>",
+                      "core:array<neuro:tract>", "core:array<neuro:cifti>"
+                    ]
+                  },
+                  { "$ref": "#/$defs/extensionType" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["resolution"] },
+          "then": {
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "neuro:volume", "neuro:mask", "neuro:label-map", "neuro:statmap", "neuro:probseg",
+                      "core:array<neuro:volume>", "core:array<neuro:mask>", "core:array<neuro:label-map>",
+                      "core:array<neuro:statmap>", "core:array<neuro:probseg>"
+                    ]
+                  },
+                  { "$ref": "#/$defs/extensionType" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["density"] },
+          "then": {
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "neuro:surface", "neuro:cifti",
+                      "core:array<neuro:surface>", "core:array<neuro:cifti>"
+                    ]
+                  },
+                  { "$ref": "#/$defs/extensionType" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["labelSystem"] },
+          "then": {
+            "properties": {
+              "type": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "neuro:label-map", "neuro:probseg",
+                      "core:array<neuro:label-map>", "core:array<neuro:probseg>"
+                    ]
+                  },
+                  { "$ref": "#/$defs/extensionType" }
+                ]
+              }
+            }
+          }
+        }
+      ]
     },
     "extensions": {
       "type": "object",

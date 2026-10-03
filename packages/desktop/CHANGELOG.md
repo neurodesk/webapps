@@ -1,5 +1,17 @@
 # @neurodesk/desktop
 
+## 0.21.20261002
+
+### Patch Changes
+
+- Validate NIfTI encoding for legacy automation contracts before starting a run, matching schema-version-2 preflight checks.
+
+## 0.20.20261002
+
+### Minor Changes
+
+- Generate NeuroFlow 0.1.1 qualifiers and scalar single-file bindings. Resolve verified app coordinate references, retain ambiguous annotations without claiming shared frames, and reject invalid qualifier inheritance. Validate NIfTI encoding during desktop preflight and add a reproducible two-step BET chaining check.
+
 ## 0.19.20260930
 
 ### Minor Changes
