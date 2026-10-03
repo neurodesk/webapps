@@ -19,7 +19,7 @@ import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
-import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, getTaskTemplateAssetUrl, isTaskRunnable } from './app/sct-tasks.js';
+import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import './modules/sct-processing.js';
 
@@ -935,7 +935,7 @@ export class SpinalCordToolboxApp {
     }
 
     if (selectedTask.processingOnly || !selectedAsset) {
-      this.updateOutput(`SCT task "${selectedTask.displayName}" is a post-processing step. Run it from the SCT Processing section after a segmentation completes.`);
+      this.updateOutput(`SCT task "${selectedTask.displayName}" has no segmentation model.`);
       this.updateTaskDetails();
       return;
     }
@@ -976,29 +976,6 @@ export class SpinalCordToolboxApp {
       testTimeAugmentation,
       modelBaseUrl
     });
-  }
-
-  runProcessingOperation() {
-    const select = document.getElementById('processingOperationSelect');
-    const operation = select?.value || 'vertebrae';
-    if (operation === 'vertebrae') {
-      if (!this.inferenceExecutor.hasResult('segmentation')) {
-        this.updateOutput('Run spinal cord segmentation before vertebral labeling');
-        return;
-      }
-      const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
-      const pam50LevelsUrl = getTaskTemplateAssetUrl('vertebrae', 'pam50-levels');
-      this.beginAbortableStep('processing');
-      this.setStepRunning('processing');
-      this.inferenceExecutor.runVertebralLabeling({
-        modelBaseUrl,
-        pam50LevelsUrl: pam50LevelsUrl ? new URL(pam50LevelsUrl, window.location.href).href : null,
-        scaleDist: 0.55,
-        detectorMinScore: 0.1
-      }).catch(error => this.onInferenceError(error.message));
-      return;
-    }
-    this.updateOutput(`Unsupported SCT Processing operation: ${operation}`);
   }
 
   // ==================== Step UI Management ====================

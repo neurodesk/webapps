@@ -76,10 +76,8 @@ assert.equal(spine.outputStages?.find(stage => stage.id === 'spine_discs')?.visi
 
 const indexHtml = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
 assert.doesNotMatch(indexHtml, /id="overlapSelect"/, 'sliding-window overlap is an SCT model default, not a user-facing control');
-// runProcessingOperation must early-return on missing segmentation, and route
-// 'vertebrae' to runVertebralLabeling rather than to runInference.
 const appJs = fs.readFileSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js'), 'utf8');
-assert.match(appJs, /operation === 'vertebrae'[\s\S]*?hasResult\('segmentation'\)[\s\S]*?runVertebralLabeling/, 'runProcessingOperation must route vertebrae to runVertebralLabeling, gated on segmentation');
+assert.doesNotMatch(indexHtml, /id="(stepProcessingSection|processingOperationSelect|runProcessingBtn)"/, 'the obsolete SCT Processing section stays removed');
 assert.match(appJs, /getTaskModelUrl\(selectedTask\)[\s\S]*?modelUrl:\s*modelUrl\s*\?/, 'runInference must pass the resolved per-asset model URL into the worker');
 assert.match(appJs, /const overlap\s*=\s*assetDefaults\.overlap\s*\?\?\s*Config\.INFERENCE_DEFAULTS\.overlap/, 'runSegmentation must read overlap from task metadata instead of a public selector');
 assert.match(appJs, /keepLargestComponent:\s*!!\(assetDefaults\.keepLargestComponent\s*\?\?\s*Config\.INFERENCE_DEFAULTS\.keepLargestComponent\)/, 'runSegmentation must pass SCT largest-component cleanup to the worker');
