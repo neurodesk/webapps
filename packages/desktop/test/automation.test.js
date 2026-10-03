@@ -7,6 +7,10 @@ import { tmpdir } from 'node:os';
 import { createAutomationService, loadAutomationContracts } from '../src/automation.js';
 import { parseContract, readContract } from '../src/contracts.js';
 import { describeFile } from '../src/reports.js';
+import { EventEmitter } from 'node:events';
+import { completeBrowserArtifacts } from '../src/artifact-completion.js';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 
 const contract = { ...await readContract(new URL('../../../apps/synthseg/automation.json', import.meta.url)), appVersion: '0.3.20260928' };
 
@@ -31,10 +35,12 @@ async function completed(service, id) {
 }
 
 test('completed runs expose only their verified artifacts and persist execution provenance', async t => {
-  const { root, service, request } = await fixture(t, async ({ outputDirectory }) => {
+  const { root, service, request } = await fixture(t, async ({ outputDirectory, acceptBrowserOutcome }) => {
     const path = join(outputDirectory, 'labels.nii');
     await writeFile(path, 'labels');
-    return { artifacts: { labels: { ...await describeFile(path), mediaType: 'application/x-nifti' } } };
+    const report = { artifacts: { labels: { ...await describeFile(path), mediaType: 'application/x-nifti' } } };
+    acceptBrowserOutcome({ report });
+    return report;
   });
   const started = await service.start('synthseg', request);
   const run = await completed(service, started.id);
@@ -75,9 +81,11 @@ for (const state of ['succeeded', 'failed']) {
       defaultOperation: 'run', operations: { run: { title: 'Run', description: 'Run', mode: 'batch', inputs: {}, parameters: {}, artifacts: {}, engines: ['browser'] } } });
     const service = createAutomationService({
       contracts: [{ contract, sha256: 'a'.repeat(64) }], outputRoot: root,
-      execute: async () => {
+      execute: async ({ acceptBrowserOutcome }) => {
         if (state === 'failed') throw new Error('Processing failed');
-        return { artifacts: {} };
+        const report = { artifacts: {} };
+        acceptBrowserOutcome({ report });
+        return report;
       },
     });
     t.after(async () => { await service.close(); await rm(root, { recursive: true, force: true }); });
@@ -128,9 +136,13 @@ test('viewer sessions remain usable across scientific runs and closing them pres
     defaultOperation: 'open', operations: { open: { title: 'Open', description: 'Open image', mode: 'viewer', inputs: {}, parameters: {}, artifacts: {}, engines: ['browser'] } } });
   const service = createAutomationService({
     contracts: [{ contract: viewer, sha256: 'b'.repeat(64) }], outputRoot: join(root, 'runs'), sessionOptions: { maximum: 1 },
-    execute: async () => ({ report: { artifacts: {}, summary: { dimensions: [10, 20, 30] } }, session: {
-      close() { closed++; }, command: async () => ({ position: { frame: 'mm', value: [1, 2, 3] } }),
-    } }),
+    execute: async ({ acceptBrowserOutcome }) => {
+      const outcome = { report: { artifacts: {}, summary: { dimensions: [10, 20, 30] } }, session: {
+        close() { closed++; }, command: async () => ({ position: { frame: 'mm', value: [1, 2, 3] } }),
+      } };
+      acceptBrowserOutcome(outcome);
+      return outcome;
+    },
   });
   t.after(async () => { await service.close(); await rm(root, { recursive: true, force: true }); });
   assert.deepEqual((await service.listApps())[0].availableEngines, ['browser']);
@@ -148,3 +160,59 @@ test('viewer sessions remain usable across scientific runs and closing them pres
   await service.close();
   assert.equal(closed, 2);
 });
+
+for (const result of ['success', 'host failure', 'cancelled', 'publication failure']) {
+  test(`browser completion keeps its pending viewer private on ${result}`, async t => {
+    const root = await mkdtemp(join(tmpdir(), 'automation-completion-'));
+    if (result === 'publication failure') {
+      t.mock.method(fs, 'renameSync', () => { throw new Error('Publication failed'); });
+      syncBuiltinESMExports();
+      t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+    }
+    const viewer = parseContract({ schemaVersion: 2, app: 'viewer', title: 'Viewer', description: 'View an image', appVersion: '0.1.20260928',
+      defaultOperation: 'open', operations: { open: { title: 'Open', description: 'Open image', mode: 'viewer', inputs: {}, parameters: {}, artifacts: {}, engines: ['browser'] } } });
+    let accepted;
+    const acceptance = new Promise(resolve => { accepted = resolve; });
+    let release;
+    const publishing = new Promise(resolve => { release = resolve; });
+    let closed = 0;
+    let blocked = false;
+    const service = createAutomationService({
+      contracts: [{ contract: viewer, sha256: 'b'.repeat(64) }], outputRoot: root, sessionOptions: { maximum: 1 },
+      execute: async ({ outputDirectory, signal, acceptBrowserOutcome }) => completeBrowserArtifacts({ session: new EventEmitter() }, {
+        outputDirectory, signal,
+        assertHostHealthy() { if (blocked) throw new Error('Offline asset missing'); },
+      }, async artifacts => {
+        const report = await artifacts.verify(() => ({ artifacts: {} }));
+        const outcome = { report, session: { close() { closed++; }, command: async () => 'viewer state' } };
+        acceptBrowserOutcome(outcome);
+        accepted();
+        await publishing;
+        return outcome;
+      }),
+    });
+    t.after(async () => { release(); await service.close(); await rm(root, { recursive: true, force: true }); });
+    const started = await service.start('viewer', {});
+    await acceptance;
+    assert.deepEqual(await service.listSessions(), []);
+    const marker = join(root, started.id, 'outputs/job-result.json');
+    await assert.rejects(readFile(marker), { code: 'ENOENT' });
+    let cancellation;
+    if (result === 'host failure') blocked = true;
+    if (result === 'cancelled') cancellation = service.cancel(started.id);
+    release();
+    const run = cancellation ? await cancellation : await completed(service, started.id);
+    if (result === 'success') {
+      assert.equal(run.state, 'succeeded');
+      assert.equal((await service.listSessions())[0].id, run.session.id);
+      assert.deepEqual(JSON.parse(await readFile(marker)), { artifacts: {} });
+      assert.equal(closed, 0);
+    } else {
+      assert.equal(run.state, result === 'cancelled' ? 'cancelled' : 'failed');
+      assert.deepEqual(await service.listSessions(), []);
+      assert.equal(closed, 1);
+      await assert.rejects(readFile(marker), { code: 'ENOENT' });
+      await assert.rejects(readFile(join(root, started.id, 'outputs')), { code: 'ENOENT' });
+    }
+  });
+}

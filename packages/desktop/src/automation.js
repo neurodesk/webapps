@@ -101,6 +101,7 @@ export function createAutomationService({ contracts, outputRoot, execute, native
         const timer = setTimeout(() => controller.abort(new Error(`Run timed out after ${request.timeoutMs} ms`)), request.timeoutMs);
         let retained;
         let sessionInfo;
+        let accepted;
         try {
           await mkdir(outputDirectory, { recursive: true });
           await persist(run);
@@ -113,13 +114,19 @@ export function createAutomationService({ contracts, outputRoot, execute, native
               run.snapshot.phase = page.state === 'succeeded' ? 'exporting' : 'processing';
               run.snapshot.message = page.message;
             },
+            acceptBrowserOutcome(candidate) {
+              controller.signal.throwIfAborted();
+              if (accepted) throw new Error('Browser outcome was already accepted');
+              retained = candidate.session;
+              if (retained && !request.retainViewer) throw new Error('Execution returned an unrequested viewer session');
+              if (!retained && request.retainViewer) throw new Error('Execution did not provide the requested viewer session');
+              if (retained) sessionInfo = viewers.add({ app, runId: id, adapter: retained,
+                isReady: () => run.snapshot.state === 'succeeded',
+              });
+              accepted = candidate;
+            },
           });
-          retained = outcome.session;
-          controller.signal.throwIfAborted();
-          if (retained) {
-            if (!request.retainViewer) throw new Error('Execution returned an unrequested viewer session');
-            sessionInfo = viewers.add({ app, runId: id, adapter: retained });
-          } else if (request.retainViewer) throw new Error('Execution did not provide the requested viewer session');
+          if (request.engine === 'native') controller.signal.throwIfAborted();
           const report = retained ? outcome.report : outcome;
           run.snapshot = {
             ...run.snapshot,

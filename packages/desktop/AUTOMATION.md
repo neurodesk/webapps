@@ -166,6 +166,20 @@ MCP. Jobs close their windows after export. Existing schema-1 selector jobs
 remain supported, including `failSelector` and its `null` opt-out described in
 [STANDALONE.md](STANDALONE.md).
 
+`job-result.json` is the desktop completion report. It appears only after
+downloads, scientific provenance, offline asset checks and any requested viewer
+acceptance pass. Pending viewers are unavailable through MCP until completion.
+Cancellation or failure before publication removes the completion report and its
+temporary file. Direct jobs keep downloaded artifacts for inspection; MCP removes
+the failed run's output directory. A cancellation requested after publication
+does not retract completion.
+
+Run `xvfb-run -a node scripts/desktop/artifact-completion-smoke.mjs` on Linux
+to exercise CLI and MCP completion with controlled app fixtures. It checks both
+job schemas, offline failures, retained-viewer acceptance and cancellation in
+real Electron. Set `NEURODESK_ELECTRON` to use another Electron binary. This
+check does not validate scientific processing.
+
 ## Add an application
 
 Run `pnpm new-app <id>`. The template includes a contract, an explicitly labelled

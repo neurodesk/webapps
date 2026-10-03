@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.19.20261003
+
+### Patch Changes
+
+- Share browser download tracking, validation ordering and completion-report publication across selector jobs and typed operations. Publish completion only after offline and retained-viewer checks pass, hide pending viewers, and preserve CLI artifact retention and MCP failure cleanup.
+
 ## 0.19.20260930
 
 ### Minor Changes

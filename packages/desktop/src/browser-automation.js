@@ -1,5 +1,3 @@
-import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { describeFile, verifyOperationReport } from './reports.js';
 
@@ -45,47 +43,18 @@ export function browserDispatcher(contents, { signal, timeoutMs = 30000 } = {}) 
   };
 }
 
-export async function runBrowserOperation(contents, { contract, operation, request, outputDirectory, signal, onProgress = () => {}, mountDirectory }) {
-  const output = resolve(outputDirectory);
-  await mkdir(output, { recursive: true });
-  if ((await readdir(output)).length) throw new Error('Output directory must be empty');
+export async function runBrowserOperation(contents, { contract, operation, request, artifacts, signal, onProgress = () => {}, mountDirectory }) {
   const page = browserDispatcher(contents, { signal, timeoutMs: request.timeoutMs });
   const manifest = await page.ready();
   const registered = manifest.contract ?? manifest;
   if (!isDeepStrictEqual(registered, contract)) throw new Error('Registered app contract differs from its published contract');
   const inputs = {};
   const browserInputs = {};
-  const downloads = [];
-  const activeDownloads = new Set();
-  const names = new Set();
-  const reportPath = join(output, 'job-result.json');
-  const partialReportPath = join(output, '.job-result.json.partial');
-  let currentArtifact;
-  let downloadError;
   let snapshot;
   let runId;
-  let success = false;
-  const onDownload = (_event, item, owner) => {
-    if (owner !== contents) return;
-    const filename = basename(item.getFilename());
-    if (!currentArtifact || names.has(filename) || ['job-result.json', '.job-result.json.partial', 'run.json'].includes(filename)) {
-      downloadError = new Error(`Unexpected or duplicate output: ${filename}`);
-      item.cancel();
-      return;
-    }
-    names.add(filename);
-    const role = currentArtifact;
-    item.setSavePath(join(output, filename));
-    activeDownloads.add(item);
-    item.once('done', (_event, state) => {
-      activeDownloads.delete(item);
-      if (state !== 'completed') downloadError = new Error(`Output download ${filename}: ${state}`);
-      else downloads.push({ role, filename, bytes: item.getReceivedBytes() });
-    });
-  };
   async function observe() {
     signal?.throwIfAborted();
-    if (downloadError) throw downloadError;
+    artifacts.assertHealthy();
     snapshot = await page.call('snapshot');
     if (snapshot.runId !== runId) throw new Error('App operation changed during execution');
     if (snapshot.state === 'failed' || snapshot.state === 'cancelled') {
@@ -98,7 +67,6 @@ export async function runBrowserOperation(contents, { contract, operation, reque
     return snapshot;
   }
   const pause = () => page.bounded(new Promise(resolve => setTimeout(resolve, 100)));
-  contents.session.on('will-download', onDownload);
   try {
     contents.debugger.attach('1.3');
     for (const [role, field] of Object.entries(operation.inputs)) {
@@ -129,32 +97,12 @@ export async function runBrowserOperation(contents, { contract, operation, reque
     while ((await observe()).state !== 'succeeded') await pause();
     const ids = [...Object.keys(snapshot.report?.artifacts ?? {}), 'report'];
     for (const artifactId of ids) {
-      currentArtifact = artifactId;
-      await page.call('download', { artifactId });
-      while (!downloads.some(entry => entry.role === artifactId)) {
-        await observe();
-        await pause();
-      }
-      currentArtifact = undefined;
+      await artifacts.download(artifactId, () => page.call('download', { artifactId }), observe);
     }
     await observe();
-    if (downloadError || activeDownloads.size || names.size !== ids.length) throw downloadError ?? new Error('Operation output validation failed');
-    const report = await page.bounded(verifyOperationReport({ operation, snapshot, downloads, output, inputs, parameters: request.parameters }));
-    signal?.throwIfAborted();
-    await writeFile(partialReportPath, `${JSON.stringify(report, null, 2)}\n`, { signal });
-    signal?.throwIfAborted();
-    await rename(partialReportPath, reportPath);
-    signal?.throwIfAborted();
-    success = true;
-    return report;
+    return await artifacts.verify(({ output, downloads }) =>
+      page.bounded(verifyOperationReport({ operation, snapshot, downloads, output, inputs, parameters: request.parameters })));
   } finally {
-    currentArtifact = undefined;
-    contents.session.off('will-download', onDownload);
-    if (contents.debugger.isAttached()) contents.debugger.detach();
-    if (!success) {
-      for (const item of activeDownloads) item.cancel();
-      await rm(partialReportPath, { force: true });
-      await rm(reportPath, { force: true });
-    }
+    if (!contents.isDestroyed() && contents.debugger.isAttached()) contents.debugger.detach();
   }
 }
