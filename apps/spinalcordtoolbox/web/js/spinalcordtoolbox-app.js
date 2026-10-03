@@ -285,9 +285,6 @@ export class SpinalCordToolboxApp {
     const runBtn = document.getElementById('runSegmentation');
     if (runBtn) runBtn.addEventListener('click', () => this.runSegmentation());
 
-    const runProcessingBtn = document.getElementById('runProcessingBtn');
-    if (runProcessingBtn) runProcessingBtn.addEventListener('click', () => this.runProcessingOperation());
-
     const modelSelect = document.getElementById('modelSelect');
     if (modelSelect) {
       modelSelect.addEventListener('change', () => this.onTaskSelectionChanged(modelSelect.value));

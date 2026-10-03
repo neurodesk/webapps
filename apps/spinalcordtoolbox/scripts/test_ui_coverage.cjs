@@ -47,8 +47,6 @@ const UI_COVERAGE = Object.freeze([
   { id: 'thresholdInput', behavior: 'passes probability threshold to inference', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'minSizeInput', behavior: 'passes connected-component cleanup threshold', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
-  { id: 'processingOperationSelect', behavior: 'selects SCT browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
-  { id: 'runProcessingBtn', behavior: 'runs selected browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
   { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
