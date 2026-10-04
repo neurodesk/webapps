@@ -455,3 +455,31 @@ test('removal while opening restores the old overlay before a new session opens'
   assert.equal(await next, true);
   assert.deepEqual(nv.calls.filter(([name]) => name === 'setVolume').map(([, , options]) => options.opacity), [0, 0.6, 0]);
 });
+
+for (const operation of ['apply', 'cancel']) {
+  test(`${operation} enables the next edit only after its callback and owner finish`, async t => {
+    const gate = deferred();
+    let entered = false;
+    const callback = async () => { entered = true; await gate.promise; };
+    const { window, editor } = setup({ onApply: callback, onCancel: callback });
+    t.after(() => window.close());
+    const button = window.document.createElement('button');
+    button.disabled = true;
+    const completions = [];
+    editor.addEventListener('nd-mask-edit-end', event => {
+      completions.push({ stage: event.detail.stage, state: editor.session.state });
+      button.disabled = editor.session.state !== 'idle';
+    });
+    await editor.start({ stage: 'mask', file: maskFile([1]) });
+    const pending = editor[operation]();
+    await until(() => entered);
+    assert.equal(button.disabled, true, 'the next edit stays disabled while its callback owns the viewer');
+    assert.deepEqual(completions, []);
+    gate.resolve();
+    await pending;
+    assert.equal(button.disabled, false, 'the next edit must become available after its callback finishes');
+    assert.deepEqual(completions, [{ stage: 'mask', state: 'idle' }]);
+    await editor.cancel();
+    assert.equal(completions.length, 1, 'an idle cancel must not announce another completion');
+  });
+}
