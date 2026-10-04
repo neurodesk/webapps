@@ -1,9 +1,9 @@
 [package]
 name = "compute-server"
-version = "0.1.20260930"
+version = "0.2.20261004"
 edition = "2021"
 license = "MIT"
-description = "neurodesk-compute: token-protected HTTP + SSE server that runs the Neurodesk nesvor container for the browser webapp"
+description = "neurodesk-compute: paired HTTP + SSE server for pinned NeSVoR and SCT tools"
 default-run = "neurodesk-compute"
 
 [lib]

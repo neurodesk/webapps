@@ -6,10 +6,6 @@
 
 - Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
   including SynthSeg WASM, while preserving each method's preprocessing and outputs.
-
-
-### Patch Changes
-
 - Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
   SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
   scaling and geometry rules.

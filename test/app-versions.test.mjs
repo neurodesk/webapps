@@ -7,7 +7,7 @@ import test from 'node:test';
 import { promisify } from 'node:util';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import {
-  DATE_VERSION, EMBEDDED_VERSION_SITES, LINKED_PACKAGES, applyRelease, embeddedVersionMismatches,
+  DATE_VERSION, EMBEDDED_VERSION_SITES, LINKED_PACKAGES, applyRelease, embeddedVersionMismatches, mergeSameVersionSections,
   nextVersion, planRelease, releaseDate, syncEmbeddedVersions, validateReleaseDate, workspacePackages,
 } from '../scripts/lib/app-versions.mjs';
 
@@ -186,9 +186,14 @@ test('same-day updates are explicit and retain one changelog version heading', a
   await assert.rejects(planRelease(root, { date: '20260930' }), /already at/);
   await applyRelease(await planRelease(root, { date: '20260930', sameDay: true }));
   const changelog = await readFile(join(root, 'apps/zarro/CHANGELOG.md'), 'utf8');
-  assert.equal(changelog.match(/^## 0\.1\.20260930$/gm).length, 1);
-  assert.match(changelog, /Earlier work/);
-  assert.match(changelog, /Same-day fix/);
+  assert.equal(changelog, '# zarro\n\n## 0.1.20260930\n\n### Patch Changes\n\n- Same-day fix.\n- Earlier work.\n');
+});
+
+test('same-day sections merge change types in changeset order', () => {
+  const text = '# x\n\n## 1.0.1\n\n### Patch Changes\n\n- New patch.\n\n### Minor Changes\n\n- New minor.\n\n## 1.0.1\n\n### Patch Changes\n\n- Old patch.\n  - nested\n\n## 1.0.0\n\n- First.\n';
+  assert.equal(mergeSameVersionSections(text, '1.0.1'), '# x\n\n## 1.0.1\n\n### Minor Changes\n\n- New minor.\n\n### Patch Changes\n\n- New patch.\n- Old patch.\n  - nested\n\n## 1.0.0\n\n- First.\n');
+  assert.equal(mergeSameVersionSections('# x\n\n## 1.0.1\n\n## 1.0.1\n\n\n## 1.0.0\n', '1.0.1'), '# x\n\n## 1.0.1\n\n## 1.0.0\n');
+  assert.equal(mergeSameVersionSections(text, '9.9.9'), text);
 });
 
 test('upstream release series survives patch, minor and major webapp changes', async (t) => {

@@ -4,6 +4,7 @@
 
 pub mod nesvor;
 pub mod nifti;
+pub mod sct;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -50,12 +51,30 @@ pub struct ValidatedJob {
     pub tool: String,
     /// Tool command (`reconstruct`).
     pub command: String,
-    /// Input stacks in spec order.
-    pub stacks: Vec<StackInput>,
+    /// Tool-specific validated inputs.
+    #[serde(flatten)]
+    pub inputs: JobInputs,
     /// Options as given in the spec (only the keys that were present).
     pub options: serde_json::Map<String, Value>,
     /// Warnings produced during validation that are logged when the job starts.
     pub warnings: Vec<String>,
+}
+
+/// Tool-owned inputs. The untagged NeSVoR shape preserves persisted v1 jobs.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum JobInputs {
+    Nesvor { stacks: Vec<StackInput> },
+    Sct { analysis: sct::AnalysisInputs },
+}
+
+impl ValidatedJob {
+    pub fn stacks(&self) -> &[StackInput] {
+        match &self.inputs {
+            JobInputs::Nesvor { stacks } => stacks,
+            JobInputs::Sct { .. } => &[],
+        }
+    }
 }
 
 /// Paths of the job directory as seen by the tool process.
@@ -154,6 +173,17 @@ pub trait Tool: Send + Sync {
     fn id(&self) -> &'static str;
     /// Tool version (`0.5.0`).
     fn version(&self) -> &'static str;
+    /// Container image that replaces the configured `--image`, for tools pinned
+    /// to their own scientific runtime.
+    fn pinned_image(&self) -> Option<&'static str> {
+        None
+    }
+    /// Whether the tool runs on the GPU unless the server is started with `--cpu`.
+    fn uses_gpu(&self) -> bool;
+    /// Arguments appended to a GPU tool's command line when it runs on the CPU.
+    fn cpu_flags(&self) -> &'static [&'static str] {
+        &[]
+    }
     /// Commands accepted in `spec.command`.
     fn commands(&self) -> &'static [&'static str];
     /// Validates the spec against the received parts.
@@ -163,15 +193,49 @@ pub trait Tool: Send + Sync {
     /// Classifies a log line and extracts progress.
     fn parse_log_line(&self, job: &ValidatedJob, line: &str) -> LogUpdate;
     /// The outputs the tool produces.
-    fn outputs(&self) -> &'static [OutputSpec];
+    fn outputs(&self, job: &ValidatedJob) -> &'static [OutputSpec];
 }
 
 /// All registered tools.
 pub fn registry() -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(nesvor::Nesvor)]
+    vec![Arc::new(nesvor::Nesvor), Arc::new(sct::Sct)]
 }
 
 /// Looks up a tool by id.
 pub fn find(tools: &[Arc<dyn Tool>], id: &str) -> Option<Arc<dyn Tool>> {
     tools.iter().find(|tool| tool.id() == id).cloned()
+}
+
+/// Splits a Python-logging line `YYYY-MM-DD HH:MM:SS [LEVEL] message` into
+/// the level and the message. Other lines are `info` with the whole line as
+/// message.
+pub fn split_python_log(line: &str) -> (LogLevel, &str) {
+    let trimmed = line.trim_end();
+    let mut fields = trimmed.splitn(4, ' ');
+    let date = fields.next().unwrap_or("");
+    let time = fields.next().unwrap_or("");
+    let level_field = fields.next().unwrap_or("");
+    let rest = fields.next().unwrap_or("");
+    let looks_like_date = date.len() == 10 && date.as_bytes().get(4) == Some(&b'-');
+    let looks_like_time = time.len() == 8 && time.as_bytes().get(2) == Some(&b':');
+    if looks_like_date
+        && looks_like_time
+        && level_field.starts_with('[')
+        && level_field.ends_with(']')
+    {
+        let level = match &level_field[1..level_field.len() - 1] {
+            "WARNING" | "WARN" => LogLevel::Warning,
+            "ERROR" | "CRITICAL" | "FATAL" => LogLevel::Error,
+            _ => LogLevel::Info,
+        };
+        return (level, rest);
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("traceback") || lower.contains("error") {
+        return (LogLevel::Error, trimmed);
+    }
+    if lower.contains("warning") {
+        return (LogLevel::Warning, trimmed);
+    }
+    (LogLevel::Info, trimmed)
 }

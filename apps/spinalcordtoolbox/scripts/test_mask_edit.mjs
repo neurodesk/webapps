@@ -240,3 +240,17 @@ for (const [name, reset] of [
     assert.equal(app._editStage, null);
   });
 }
+
+test('native analysis offers the edited mask after Apply', async () => {
+  const { app, nv } = makeApp();
+  app._analysisTaskId = 'lesion_sci_t2';
+  app.analysis = { generated: {}, setGenerated(results) { this.generated = results; } };
+  await deliverResults(app);
+  assert.equal(app.analysis.generated.cord, app.inferenceExecutor.getResult('segmentation').file);
+  await app.editStage('lesion');
+  nv.drawing[352] = 1;
+  await editor().apply();
+  const edited = app.inferenceExecutor.getResult('lesion').file;
+  assert.equal(app.analysis.generated.lesion, edited);
+  assert.equal(app.analysis.generated.cord, app.inferenceExecutor.getResult('segmentation').file, 'the unedited cord mask stays selected');
+});
