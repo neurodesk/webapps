@@ -1,6 +1,6 @@
 # spinalcordtoolbox
 
-Spinal cord MRI segmentation and analysis interface for [Spinal Cord Toolbox](https://spinalcordtoolbox.com/stable/). Segmentation runs in the browser. Native morphometry and lesion analysis send selected masks to your compute server when you run them. SCT task metadata and model provenance are tracked in `web/models/manifest.json`.
+Spinal cord MRI segmentation and analysis interface for [Spinal Cord Toolbox](https://spinalcordtoolbox.com/stable/). Segmentation runs in the browser. SCT morphometry and lesion analysis also run locally in the browser, with a compute-server option for native execution. SCT task metadata and model provenance are tracked in `web/models/manifest.json`.
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ bash run.sh
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
 - **Configurable**: overlap, probability threshold, component size filtering
 - **Smart auto-contrast**: percentile-based windowing for better default display
-- **Privacy**: segmentation stays in the browser; native analysis sends selected masks to your chosen compute server
+- **Privacy**: segmentation stays in the browser; browser analysis stays local; native execution sends selected masks to your chosen compute server
 
 ## SCT Model Assets
 
@@ -122,18 +122,33 @@ If you use SCT workflows, please cite Spinal Cord Toolbox and the relevant SCT t
 
 ## Privacy
 
-Local segmentation keeps patient images and intermediate results in the browser.
+Local segmentation and browser SCT analysis keep patient images and intermediate results in the browser.
 Native analysis uploads the selected masks and their NIfTI headers to your chosen
 compute server, which retains inputs, results and logs until expiry or deletion.
 Telemetry excludes patient-derived content.
 
-## Native morphometry and lesion analysis
+## Morphometry and lesion analysis
 
-Open **Native SCT analysis** to analyze uploaded NIfTI masks independently of an
+Open **SCT analysis** to analyze uploaded NIfTI masks independently of an
 anatomy image. Cord morphometry needs a cord mask. Lesion analysis needs a lesion
 mask and accepts an optional cord mask. Current whole-cord and SCIseg lesion
 results can also be selected. Gray matter and multiclass spine labels are not
 whole-cord masks.
+
+Choose **This browser** to run the original SCT Python analysis code in a dedicated
+Pyodide WebAssembly worker. No server is required and masks stay on this device.
+The pinned Python runtime loads when analysis starts. Cancellation terminates the
+worker, and retry starts a fresh worker. Production and desktop bundles include
+the verified SCT source and small dependencies. Python and scientific libraries
+load from the versioned Pyodide CDN; the offline inventory pins their checksums.
+
+The browser uses SCT 7.3 source unchanged, with fail-fast adapters for unavailable
+OS APIs outside the supported analysis paths. It exports SCT's CSV/XLSX/pickle and
+labeled NIfTI files. WebAssembly floating-point values are not guaranteed
+bit-identical to native SCT. Measured synthetic and public SCT fixtures differed
+by at most 1.8e-15 for morphometry; tested lesion measurements and label
+voxels/affines matched exactly. Pickle serialization depends on Python/pandas
+versions. Select **Compute server** for the pinned native execution path.
 
 Connect a Neurodesk compute server running with Docker, then press **Run
 analysis**. Only that action sends the selected masks, including their NIfTI
@@ -183,3 +198,16 @@ The gate generates tilted, anisotropic, fractional and multi-lesion masks under
 image data exactly, excluding run timestamps. It covers lesion masks with and
 without a cord mask and both compressed and uncompressed NIfTI inputs. The gate
 retains its inputs, outputs and job receipts for inspection.
+
+### Compare browser and native exports
+
+After staging the runtime with a production build, run
+`pnpm --filter spinalcordtoolbox test:browser-parity` with local
+Docker available. `DOCKER` can select another Docker executable. This runs the
+delivered WebAssembly code and the pinned CLI independently, compares all
+scientific fields, requires exact lesion-label voxels/affines and workbook
+contents outside creation timestamps, and retains a per-field report under
+`TMPDIR`. Numerical comparisons allow absolute and relative tolerances of
+`1e-12`. `--exact` requires bit-identical numbers; `--report-only` records
+differences without enforcing the numerical tolerance. Neither flag relaxes
+checks of columns, rows, lesion labels, affines or workbook contents.

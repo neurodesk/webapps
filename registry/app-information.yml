@@ -115,11 +115,12 @@ apps:
         url: https://github.com/niivue/niivue
 
   spinalcordtoolbox:
-    execution: Segmentation runs in your browser. Native SCT morphometry and lesion analysis send selected masks to your chosen Neurodesk compute server only when you run analysis. The server retains inputs and results until deletion or expiry.
+    execution: Segmentation and SCT mask analysis can run in your browser. Selecting compute-server execution sends chosen masks to your Neurodesk server only when you run analysis. The server retains inputs and results until deletion or expiry.
     about:
-      - Native sct_process_segmentation and sct_analyze_lesion execute the pinned SCT container with upstream numerical behavior for the exposed options. Morphometry exports native CSV. Lesion analysis exports native XLSX, pickle and labeled NIfTI. Automatic SCIseg browser metrics remain an approximate subset.
+      - Native sct_process_segmentation and sct_analyze_lesion execute the pinned SCT container with upstream numerical behavior for the exposed options. Browser analysis runs the same SCT Python methods in WebAssembly with SCT export formats, while floating-point results may differ from native execution. Morphometry exports CSV; lesion analysis exports XLSX, pickle and labeled NIfTI. Automatic SCIseg browser metrics remain an approximate subset.
     packages:
-      - { name: Spinal Cord Toolbox, url: https://spinalcordtoolbox.com, role: native morphometry and lesion analysis on your compute server }
+      - { name: Spinal Cord Toolbox, url: https://spinalcordtoolbox.com, role: morphometry and lesion analysis in the browser or on your compute server }
+      - { name: Pyodide, url: https://pyodide.org, role: runs SCT Python and scientific libraries in WebAssembly }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation models in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }

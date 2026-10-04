@@ -1,18 +1,20 @@
 import { createComputeConnection, createFileField, createResultList, renderSidebarSection } from '@neurodesk/webapp-components/ui';
 import { downloadFile } from '@neurodesk/webapp-components/file-io';
+import { createBrowserAnalysisRunner } from '../app/browser-analysis.js';
 import { SCT_IMAGE, SCT_VERSION, validateSctSpec } from '../app/analysis-spec.js';
 
 export class SctAnalysis {
-    constructor({ before, progress, log, canRun = () => true }) {
+    constructor({ before, progress, log, canRun = () => true, createBrowserRunner = createBrowserAnalysisRunner }) {
         this.progress = progress;
         this.log = log;
         this.canRun = canRun;
+        this.createBrowserRunner = createBrowserRunner;
         this.generated = {};
         this.uploaded = {};
         this.revision = 0;
         this.job = null;
         this.outputs = {};
-        const section = renderSidebarSection({ id: 'sctAnalysisSection', title: 'Native SCT analysis', collapsed: true });
+        const section = renderSidebarSection({ id: 'sctAnalysisSection', title: 'SCT analysis', collapsed: true });
         before.before(section.root);
         this.section = section.root;
         section.content.innerHTML = `
@@ -23,7 +25,14 @@ export class SctAnalysis {
                     <option value="analyze_lesion">Lesion analysis</option>
                 </select>
             </div>
-            <p class="nd-hint">Run sends selected masks to your compute server. No anatomy image is required.</p>
+            <div class="nd-field">
+                <label for="sctAnalysisExecution">Run on</label>
+                <select id="sctAnalysisExecution">
+                    <option value="browser">This browser</option>
+                    <option value="server">Compute server</option>
+                </select>
+            </div>
+            <p class="nd-hint">Analyze selected masks. No anatomy image is required.</p>
             <div id="sctAnalysisCord" class="nd-field">
                 <label for="sctCordSource">Cord mask</label>
                 <select id="sctCordSource"><option value="upload">Upload NIfTI mask</option></select>
@@ -44,7 +53,7 @@ export class SctAnalysis {
                     </div>
                 </div>
             </details>
-            <details class="nd-sidebar-section" open>
+            <details id="sctComputePanel" class="nd-sidebar-section" open hidden>
                 <summary class="nd-section-title">Compute server</summary>
                 <div id="sctComputeControl" class="nd-section-content"></div>
             </details>
@@ -62,6 +71,9 @@ export class SctAnalysis {
             </details>`;
         const get = id => section.root.querySelector(`#${id}`);
         this.command = get('sctAnalysisCommand');
+        this.execution = get('sctAnalysisExecution');
+        this.computePanel = get('sctComputePanel');
+        this.execution.onchange = () => { this.invalidate(); this.sync(); void this.refreshJobs(); };
         this.perSlice = get('sctPerSlice');
         this.angleCorrection = get('sctAngleCorrection');
         this.slices = get('sctSlices');
@@ -111,7 +123,7 @@ export class SctAnalysis {
                 await this.refreshJobs();
             } catch (error) { this.progress.end(error.message, { success: false }); }
         };
-        const results = renderSidebarSection({ id: 'sctAnalysisResults', title: 'Native SCT results', collapsed: true });
+        const results = renderSidebarSection({ id: 'sctAnalysisResults', title: 'SCT results', collapsed: true });
         section.root.after(results.root);
         this.resultSection = results.root;
         this.resultNote = document.createElement('p');
@@ -164,7 +176,9 @@ export class SctAnalysis {
             this.fields[role].disabled = this.busy;
             this.sources[role].disabled = this.busy;
         }
-        for (const input of [this.command, this.perSlice, this.angleCorrection, this.slices]) input.disabled = this.busy;
+        this.computePanel.hidden = this.execution.value !== 'server';
+        this.previousPanel.hidden = this.execution.value !== 'server' || !this.connection.client;
+        for (const input of [this.execution, this.command, this.perSlice, this.angleCorrection, this.slices]) input.disabled = this.busy;
         this.connection.disabled = this.busy;
         this.runButton.disabled = this.busy;
         this.resumeButton.disabled = this.busy || !this.previous.value;
@@ -197,39 +211,52 @@ export class SctAnalysis {
         const tool = info?.tools?.find(item => item.id === 'sct');
         try {
             if (!this.canRun()) throw new Error('Wait for local segmentation to finish');
-            if (!client) throw new Error('Connect to a compute server first');
-            if (!tool || tool.version !== SCT_VERSION || tool.image !== SCT_IMAGE || (!info.simulated && info.runner !== 'docker')) {
+            const backend = previousId ? 'server' : this.execution.value;
+            if (backend === 'server' && !client) throw new Error('Connect to a compute server first');
+            if (backend === 'server' && (!tool || tool.version !== SCT_VERSION || tool.image !== SCT_IMAGE || (!info.simulated && info.runner !== 'docker'))) {
                 throw new Error(`Connect to a server with the pinned SCT ${SCT_VERSION} Docker tool`);
             }
             const request = previousId ? null : this.capture();
             this.invalidate();
-            const job = { client, id: previousId, cancelled: false, revision: this.revision, key: crypto.randomUUID() };
+            const job = { backend, cancelled: false, revision: this.revision, ...(backend === 'browser'
+                ? { runner: this.createBrowserRunner() }
+                : { client, id: previousId, key: crypto.randomUUID() }) };
             this.job = job;
             this.sync();
-            this.progress.begin(previousId ? 'Opening server job…' : 'Uploading masks to your compute server…');
+            this.progress.begin(backend === 'browser' ? 'Loading SCT in your browser…' : previousId ? 'Opening server job…' : 'Uploading masks to your compute server…');
             try {
-                if (!job.id) {
-                    const receipt = await client.submit(request.spec, request.files, { idempotencyKey: job.key });
-                    job.id = receipt.id;
-                }
-                if (job.cancelled) await client.cancel(job.id);
                 const current = () => this.job === job && job.revision === this.revision;
-                const done = await client.watch(job.id, {
-                    onStatus: event => { if (current()) this.progress.setIndeterminate(`SCT analysis ${event.status}`); },
+                const callbacks = {
                     onProgress: event => { if (current()) this.progress.setProgress(event.fraction, event.stage); },
-                    onLog: event => { if (current()) this.log(event.line); },
-                });
-                if (job.cancelled || !current()) return;
-                this.progress.setText('Downloading native SCT outputs…');
-                const artifacts = await Promise.all(done.outputs.map(async output => ({
-                    file: new File([await client.output(done.id, output.name)], output.name, { type: output.contentType }),
+                    onLog: event => { if (current()) this.log(typeof event === 'string' ? event : event.line); },
+                };
+                let done;
+                let outputs;
+                if (backend === 'browser') {
+                    outputs = await job.runner.run({ ...request, ...callbacks });
+                } else {
+                    if (!job.id) {
+                        const receipt = await client.submit(request.spec, request.files, { idempotencyKey: job.key });
+                        job.id = receipt.id;
+                    }
+                    if (job.cancelled) await client.cancel(job.id);
+                    done = await client.watch(job.id, {
+                        ...callbacks,
+                        onStatus: event => { if (current()) this.progress.setIndeterminate(`SCT analysis ${event.status}`); },
+                    });
+                    if (job.cancelled || !current()) return;
+                    this.progress.setText('Downloading native SCT outputs…');
+                    outputs = await Promise.all(done.outputs.map(async output => ({ ...output, bytes: await client.output(done.id, output.name) })));
+                }
+                const artifacts = outputs.map(output => ({
+                    file: new File([output.bytes], output.name, { type: output.contentType }),
                     description: output.name,
                     viewable: false,
-                })));
+                }));
                 if (job.cancelled || !current()) return;
                 this.outputs = Object.fromEntries(artifacts.map(result => [result.file.name, result]));
                 this.results.render(this.outputs);
-                this.resultNote.textContent = done.simulated ? 'Simulated placeholders. No scientific analysis was performed.' : `Native SCT ${SCT_VERSION} outputs, preserved unchanged.`;
+                this.resultNote.textContent = backend === 'browser' ? 'SCT 7.3 in your browser. WebAssembly results may differ from native SCT.' : done.simulated ? 'Simulated placeholders. No scientific analysis was performed.' : `Native SCT ${SCT_VERSION} outputs, preserved unchanged.`;
                 const csv = this.outputs['morphometry.csv'];
                 if (csv) {
                     const text = await csv.file.text();
@@ -238,10 +265,10 @@ export class SctAnalysis {
                 }
                 if (!current()) return;
                 this.resultSection.open = true;
-                this.progress.end(done.simulated ? 'Simulated SCT results ready' : 'Native SCT results ready');
+                this.progress.end(backend === 'browser' ? 'Browser SCT results ready' : done.simulated ? 'Simulated SCT results ready' : 'Native SCT results ready');
             } catch (error) {
                 if (job.revision === this.revision) {
-                    this.progress.end(error.code === 'cancelled' ? 'Analysis cancelled' : `Analysis interrupted: ${error.message}. Check Previous analysis jobs.`, { success: false });
+                    this.progress.end(job.cancelled || error.name === 'AbortError' || error.code === 'cancelled' ? 'Analysis cancelled' : backend === 'browser' ? `Analysis failed: ${error.message}` : `Analysis interrupted: ${error.message}. Check Previous analysis jobs.`, { success: false });
                 }
                 this.log(error.message);
             } finally {
@@ -262,7 +289,9 @@ export class SctAnalysis {
         if (!job) return;
         job.cancelled = true;
         this.progress.setText('Cancelling analysis…');
-        if (job.id) {
+        if (job.backend === 'browser') {
+            job.runner.cancel();
+        } else if (job.id) {
             try { await job.client.cancel(job.id); }
             catch (error) { this.log(`Cancellation not confirmed: ${error.message}`); }
         }
@@ -270,8 +299,8 @@ export class SctAnalysis {
 
     async refreshJobs() {
         const client = this.connection.client;
-        this.previousPanel.hidden = !client;
-        if (!client) return;
+        this.previousPanel.hidden = this.execution.value !== 'server' || !client;
+        if (this.execution.value !== 'server' || !client) return;
         try {
             const { jobs } = await client.jobs();
             if (client !== this.connection.client) return;

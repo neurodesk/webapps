@@ -1,5 +1,11 @@
 # spinalcordtoolbox
 
+## 0.7.20261004
+
+### Minor Changes
+
+- Add browser execution of SCT cord morphometry and standalone lesion analysis using pinned upstream Python in a dedicated Pyodide worker. Analyze uploaded or generated masks without a server, preserve SCT export formats, terminate cancelled workers, and retain the native compute-server option. Pin and verify all runtime assets and unchanged source files. Keep browser execution provenance explicit because WebAssembly floating-point results can differ from native SCT.
+
 ## 0.6.20261004
 
 ### Minor Changes

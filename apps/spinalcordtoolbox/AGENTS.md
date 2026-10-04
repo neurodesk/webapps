@@ -139,3 +139,11 @@ The example uses the pinned T2 spinal-cord reference case and preserves the sele
 - Morphometry preserves upstream CSV bytes. Lesion analysis preserves upstream XLSX, pickle and label NIfTI bytes; label compression follows the uploaded lesion mask. Do not rename a derived table CSV as native output.
 - Generated sources admit whole-cord `spinalcord`/SCIseg masks and SCIseg lesion masks. Gray matter and TotalSpineSeg multiclass labels are not whole-cord sources. New input sessions and cleared results invalidate generated choices and cancel owned jobs.
 - Automatic SCIseg metrics stay local and are labelled as approximate browser metrics. They are not numerical substitutes for the native commands.
+
+## Browser mask analysis
+
+- `browser-analysis.js` owns a fresh analysis worker per run. Cancellation terminates the worker and rejects the pending promise, including during initialization or mask reading. Replaced inputs cannot publish late outputs.
+- `browser-runtime.js` runs unchanged pinned SCT Python in Pyodide. `browser-runtime.json` pins runtime assets and every vendored source hash. `stage-browser-analysis.mjs` verifies the assets, packs the source reproducibly and stages `web/python/` for dev/build. Generated files are ignored by Git. Bundles include the SCT source and pure Python wheels; the versioned Pyodide CDN supplies Python and scientific libraries, which are pinned in the offline inventory.
+- OS adapters in `browser-bootstrap.py` fail when unavailable platform APIs are called. Do not change scientific functions in `vendor/sct`; refresh source hashes and native comparisons deliberately for an upstream update.
+- Browser exports retain SCT's CSV/XLSX/pickle/NIfTI formats. WebAssembly floating-point results are not guaranteed bit-identical to native SCT. Keep execution provenance visible and retain the pinned compute-server option.
+- `test:analysis` covers both backends and worker cancellation/retry. The real browser analysis must run without any compute-server connection and preserve useful downloads.

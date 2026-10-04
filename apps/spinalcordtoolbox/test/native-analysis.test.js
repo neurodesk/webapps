@@ -10,7 +10,7 @@ function deferred() {
     return { promise, resolve };
 }
 
-async function setup(overrides = {}) {
+async function setup(overrides = {}, browserRunner = null) {
     const { window } = new JSDOM('<body><div id="before"></div></body>', { url: 'https://example.test/sct/' });
     globalThis.window = window;
     globalThis.document = window.document;
@@ -32,7 +32,10 @@ async function setup(overrides = {}) {
     };
     const messages = [];
     const progress = Object.fromEntries(['begin', 'end', 'reset', 'setText', 'setIndeterminate', 'setProgress', 'setCancellable', 'stopTimer'].map(method => [method, (...args) => messages.push([method, ...args])]));
-    const analysis = new SctAnalysis({ before: document.getElementById('before'), progress, log: () => {} });
+    const analysis = new SctAnalysis({ before: document.getElementById('before'), progress, log: () => {}, ...(browserRunner ? { createBrowserRunner: () => browserRunner } : {}) });
+    if (browserRunner) return { analysis, calls, messages, client, csv, done, window };
+    analysis.execution.value = 'server';
+    analysis.execution.onchange();
     analysis.connection.configure({ createClient: () => client });
     analysis.connection.address = client.baseUrl;
     analysis.connection.token = 'code';
@@ -138,4 +141,73 @@ test('SCT schemas keep native defaults and reject unsupported scientific options
         assert.throws(() => validateSctSpec({ ...spec, options }, ['cord']));
     }
     assert.deepEqual(parseMetricTable('A,B\r\n"x,y","a""b"\r\n'), [['A', 'B'], ['x,y', 'a"b']]);
+});
+
+test('browser analysis needs no server and preserves mask inputs and every artifact byte', async () => {
+    const bytes = new Uint8Array([0, 255, 128, 1]);
+    let request;
+    const { analysis, calls } = await setup({}, {
+        run: async value => { request = value; return [{ name: 'lesion_analysis.xlsx', contentType: 'application/octet-stream', bytes }]; },
+        cancel: () => {},
+    });
+    const cord = new File(['original mask'], 'cord.nii');
+    analysis.uploaded.cord = cord;
+    assert.equal(analysis.execution.value, 'browser');
+    assert.equal(analysis.computePanel.hidden, true);
+    assert.equal(analysis.previousPanel.hidden, true);
+    await analysis.run();
+    assert.equal(request.files.cord, cord);
+    assert.deepEqual(request.spec, analysis.capture().spec);
+    assert.deepEqual(calls, []);
+    assert.deepEqual(new Uint8Array(await analysis.outputs['lesion_analysis.xlsx'].file.arrayBuffer()), bytes);
+    assert.match(analysis.resultNote.textContent, /WebAssembly results may differ/);
+    assert.equal(analysis.busy, false);
+});
+
+test('browser cancellation clears busy state and allows retry', async () => {
+    let rejectRun;
+    let attempts = 0;
+    const { analysis, messages } = await setup({}, {
+        run: () => {
+            attempts += 1;
+            return attempts === 1 ? new Promise((_resolve, reject) => { rejectRun = reject; }) : Promise.resolve([]);
+        },
+        cancel: () => rejectRun(new DOMException('Cancelled', 'AbortError')),
+    });
+    analysis.uploaded.cord = new File(['mask'], 'cord.nii');
+    const running = analysis.run();
+    assert.equal(analysis.busy, true);
+    await analysis.cancel();
+    await running;
+    assert.equal(analysis.busy, false);
+    assert.deepEqual(analysis.outputs, {});
+    assert.ok(messages.some(([method, text]) => method === 'end' && text === 'Analysis cancelled'));
+    await analysis.run();
+    assert.equal(attempts, 2);
+    assert.equal(analysis.resultSection.open, true);
+});
+
+test('browser late results from replaced inputs are discarded', async () => {
+    const pending = deferred();
+    const { analysis } = await setup({}, { run: () => pending.promise, cancel: () => {} });
+    analysis.uploaded.cord = new File(['old'], 'old.nii');
+    const running = analysis.run();
+    analysis.uploaded.cord = new File(['new'], 'new.nii');
+    analysis.invalidate();
+    pending.resolve([{ name: 'morphometry.csv', contentType: 'text/csv', bytes: new TextEncoder().encode('A\nold\n') }]);
+    await running;
+    assert.deepEqual(analysis.outputs, {});
+    assert.equal(analysis.table.childElementCount, 0);
+    assert.equal(analysis.resultSection.open, false);
+    assert.equal(analysis.capture().files.cord.name, 'new.nii');
+});
+
+test('browser runner errors keep masks retryable and report the failure', async () => {
+    const { analysis, messages } = await setup({}, { run: async () => { throw new Error('Runtime failed'); }, cancel: () => {} });
+    analysis.uploaded.cord = new File(['mask'], 'cord.nii');
+    await analysis.run();
+    assert.equal(analysis.busy, false);
+    assert.equal(analysis.uploaded.cord.name, 'cord.nii');
+    assert.deepEqual(analysis.outputs, {});
+    assert.ok(messages.some(([method, text]) => method === 'end' && text === 'Analysis failed: Runtime failed'));
 });
