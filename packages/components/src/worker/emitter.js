@@ -11,7 +11,8 @@ export function createWorkerEmitter(scope = globalThis) {
   return Object.freeze({
     emit,
     progress: (value, text) => emit('progress', { value, text }, { transfer: false }),
-    log: (message) => emit('log', { message }, { transfer: false }),
+    // `details` may name a console channel and level, e.g. { channel: 'analysis', level: 'warning' }.
+    log: (message, details = {}) => emit('log', { ...details, message }, { transfer: false }),
     error: (message) => emit('error', { message }, { transfer: false }),
     initialized: (data = {}) => emit('initialized', data, { transfer: false }),
     complete: (data = {}) => emit('complete', data, { transfer: false }),

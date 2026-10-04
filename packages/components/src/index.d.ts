@@ -50,6 +50,19 @@ export function renderCommand(config: { id?: string; command: string; label?: st
 export function bindInfoTooltips(root?: ParentNode): void;
 export function renderInfoIcon(text: string, config?: { label?: string; id?: string }, doc?: Document): HTMLSpanElement;
 export function bindSectionDisclosure(section: Element, root?: ParentNode): MutationObserver;
+export interface ConsoleResize {
+  handle: HTMLDivElement;
+  getHeight(): number;
+  getMax(): number;
+  setHeight(height: number): number;
+  reset(): void;
+  destroy(): void;
+}
+/** Adds a drag and keyboard resize separator to an open console; the height survives collapse. */
+export function bindConsoleResize(container: HTMLElement, options?: { min?: number; max?: number; reserve?: number; label?: string }): ConsoleResize;
+export function unbindConsoleResize(container: HTMLElement): void;
+export const CONSOLE_MIN_HEIGHT: number;
+export const CONSOLE_VIEWER_RESERVE: number;
 
 /** Drives footer#status: message, progress, elapsed time and the cancel ×. */
 export class ProgressManager {

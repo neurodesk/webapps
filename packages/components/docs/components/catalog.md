@@ -60,7 +60,8 @@ that markup so apps never hand-write it:
 
 - `createFileField({ id, text, kind, multiple, accept, directory })` — the shared `.nd-file` scan picker; `bindFileDrop(target, handler)` adds drag-and-drop with folder expansion to any element.
 - `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` — layout tabs plus optional window/level, overlay opacity, colormap, download and screenshot controls; every control is optional.
-- `createConsole({ id, title, collapsed })` — the collapsed technical log with Copy and Clear, bound to a `ConsoleOutput`; errors reopen it.
+- `createConsole({ id, title, collapsed, resizable, channels })` — the collapsed technical log with Copy and Clear, bound to a `ConsoleOutput`; errors reopen it. `resizable: true` adds the drag and keyboard separator (120px minimum, the viewer keeps 160px, size kept across collapse). `channels: [{ id, label }, …]` puts two or more logs behind header tabs; `log(message, level, channel)` writes to one, and Copy and Clear act on the visible one.
+- `bindConsoleResize(container, { min, max, reserve })` — the same separator for legacy `.console-container` markup; returns `{ handle, getHeight, setHeight, reset, destroy }` and dispatches `nd-console-resize`.
 - `createInfoDialog({ id })` — one centered, viewport-bounded `dialog.nd-dialog` whose `open(title, content, { wide })` swaps About, Cite, Privacy or Standalone content; `renderCommand({ id, command })` renders a copyable terminal command.
 - `bindInfoTooltips(root)` / `renderInfoIcon(text)` — the small "i" help icons with positioned tooltips.
 - `bindSectionDisclosure(section)` — binds a single class-driven disclosure (used by `createConsole`).

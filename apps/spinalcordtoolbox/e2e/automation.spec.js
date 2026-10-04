@@ -41,4 +41,18 @@ test('typed automation completes the real SCT T2 workflow and downloads its cord
   expect(output.length).toBe(artifact.bytes);
   expect(createHash('sha256').update(output).digest('hex')).toBe(artifact.sha256);
   await writeFile(join(directory, 'report.json'), JSON.stringify(snapshot.report, null, 2));
+
+  // The run is described in the analysis log; machinery stays in the technical log.
+  const logs = await page.evaluate(() => ({ analysis: app.log.getText('analysis'), technical: app.log.getText('technical') }));
+  expect(logs.analysis).toMatch(/Input volume: \d+x\d+x\d+, spacing: /);
+  expect(logs.analysis).toMatch(/Task: .+ on sct_T2_spinalcord\.nii\.gz/);
+  expect(logs.analysis).toMatch(/Parameters: model .+, threshold [\d.]+, min component \d+ voxels, overlap [\d.]+, TTA (on|off), patch \d+x\d+x\d+/);
+  expect(logs.analysis).toMatch(/segmentation: \d+ voxels \([\d.]+ mm\^3\)/);
+  expect(logs.analysis).not.toMatch(/Patch \d+ pos=|InferenceSession|Inference complete in/);
+  expect(logs.technical).toMatch(/Creating ONNX InferenceSession/);
+  expect(logs.technical).toMatch(/Inference complete in [\d.]+s/);
+  expect(logs.technical).not.toMatch(/Task: |segmentation: \d+ voxels/);
+  const lines = text => text.split('\n').map(line => line.replace(/^\[[\d:]+\]/, ''));
+  expect(lines(logs.analysis).filter(line => lines(logs.technical).includes(line))).toEqual([]);
+  await expect(page.locator('#spinalcordtoolbox-log')).toHaveClass(/collapsed/);
 });

@@ -266,15 +266,9 @@
       <span class="viewer-info-label" id="viewerInfoLabel"></span>
     </div>
 
-    <!-- Console -->
-    <div data-disclosure class="collapsed console-container" id="spinalcordtoolbox-log">
-      <div class="console-header">
-        <button type="button" class="console-title" data-disclosure-toggle>Technical log</button>
-        <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
-        <button class="console-clear" id="clearConsole">Clear</button>
-      </div>
-      <div class="console-output" id="consoleOutput" data-disclosure-panel></div>
-    </div>
+    <!-- Console: the shared nd-console builds the toggle, the Analysis and Technical tabs,
+         Copy, Clear and the resize separator. -->
+    <nd-console id="spinalcordtoolbox-log" collapsed resizable label="Log" channels="analysis:Analysis,technical:Technical"></nd-console>
   </main>
 
   <footer id="status" class="nd-imaging-status">
