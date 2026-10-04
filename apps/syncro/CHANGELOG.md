@@ -1,10 +1,24 @@
 # syncro
 
+## 0.5.20261004
+
+### Minor Changes
+
+- 257192b: Stream SynthSR and SynthStrip CPU inference by operator to avoid oversized browser allocations while preserving the pinned models. Reject normalization with less than one percent positive brain support in the MNI template before exposing downloads. Add numerical parity, allocation, failure recovery, and cropped-head regressions.
+
+### Patch Changes
+
+- Updated dependencies [257192b]
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/synthstrip@0.1.1
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/brain-extraction@0.1.16
+  - @neurodesk/greedy@0.4.20261004
+
 ## 0.4.20261004
 
 ### Patch Changes
 
-- Store streamed SynthSR WASM activations in bounded buffers so full-head examples do not require multi-gigabyte ArrayBuffers. Reject SYNcro registrations with less than 10% template brain support before publishing normalized outputs.
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
   - @neurodesk/greedy@0.4.20261004

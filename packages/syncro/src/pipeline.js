@@ -106,18 +106,19 @@ function background(volume, ct) {
   return ct ? volume.data.reduce((result, item) => Math.min(result, item), 0) : 0;
 }
 
-function checkNormalizedBrainSupport(buffer, template) {
-  const brain = readVolume(asBuffer(buffer));
-  if (!sameGeometry(brain, template)) throw new Error('Normalization failed: the synthetic brain does not match the template grid.');
-  let templateVoxels = 0;
-  let overlappingVoxels = 0;
+function validateRegisteredBrain(bytes, template) {
+  const brain = readVolume(asBuffer(bytes));
+  if (!sameGeometry(brain, template)) throw new Error('Normalization failed: registered brain does not match the MNI template grid.');
+  let templateSupport = 0;
+  let overlap = 0;
   for (let index = 0; index < template.data.length; index += 1) {
     if (template.data[index] <= 0) continue;
-    templateVoxels += 1;
-    if (brain.data[index] > 0) overlappingVoxels += 1;
+    templateSupport += 1;
+    if (brain.data[index] > 0) overlap += 1;
   }
-  if (templateVoxels === 0 || overlappingVoxels < templateVoxels * 0.1) {
-    throw new Error('Normalization failed: the synthetic brain covers less than 10% of the template brain. Check that the input includes the whole brain and review brain extraction.');
+  if (templateSupport === 0) throw new Error('Invalid MNI template: no positive brain voxels.');
+  if (overlap / templateSupport < 0.01) {
+    throw new Error(`Normalization failed: registered brain covers too little of the MNI template (${overlap}/${templateSupport} positive voxels, ${(100 * overlap / templateSupport).toFixed(2)}%; minimum 1%). Check that the scan contains the brain and has the correct orientation, and inspect the registration.`);
   }
 }
 
@@ -224,7 +225,7 @@ export async function runSyncro({
     compressed,
   }));
   try {
-    checkNormalizedBrainSupport(registrationResult.warped, fixed);
+    validateRegisteredBrain(registrationResult.warped, fixed);
     outputs[names.syntheticBrain] = registrationResult.warped;
     const apply = async (moving, options = {}) => registration.apply({
       registration: registrationResult,
