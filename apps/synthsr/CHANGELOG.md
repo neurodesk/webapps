@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Store streamed SynthSR WASM activations in bounded buffers so full-head examples do not require multi-gigabyte ArrayBuffers. Reject SYNcro registrations with less than 10% template brain support before publishing normalized outputs.
 - Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0

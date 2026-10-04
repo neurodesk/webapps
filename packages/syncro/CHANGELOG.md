@@ -2,6 +2,11 @@
 
 ## 0.4.20261004
 
+### Patch Changes
+
+- Store streamed SynthSR WASM activations in bounded buffers so full-head examples do not require multi-gigabyte ArrayBuffers. Reject SYNcro registrations with less than 10% template brain support before publishing normalized outputs.
+
+
 ## 0.4.20261003
 
 ## 0.4.20260930

@@ -1,5 +1,6 @@
 import model from './gpu-model.json' with { type: 'json' };
 import { planGpuGraph } from './gpu-session.js';
+import { WasmActivation } from './wasm-activation.js';
 
 export const WASM_IMPLEMENTATION = 'synthsr-streamed-fp32-v1';
 export const needsStreamedWasm = dims => dims.reduce((a,b)=>a*b,1)>8*1024*1024;
@@ -79,7 +80,7 @@ export function slabPlan(node, maxElements=8*1024*1024) {
 function sliceChannels(source,shape,start,end) {
   const [depth,height,width]=shape.dims, plane=height*width, count=(end-start)*plane;
   const result=new Float32Array(shape.channels*count);
-  for(let c=0;c<shape.channels;c++)result.set(source.subarray(c*depth*plane+start*plane,c*depth*plane+end*plane),c*count);
+  for(let c=0;c<shape.channels;c++)source.copyTo(result,c*count,c*depth*plane+start*plane,c*depth*plane+end*plane);
   return result;
 }
 
@@ -93,8 +94,7 @@ export async function createStreamedWasmSession(raw,dims,ort,{onProgress=()=>{},
     for(const node of plan.nodes)sessions.push(await ort.InferenceSession.create(layerModel(node,raw),{
       executionProviders:['wasm'],graphOptimizationLevel:'all',enableCpuMemArena:false,enableMemPattern:false,
     }));
-    // Large activations live in separate JS buffers, outside WASM's 4 GiB heap.
-    activation=plan.slots.map(s=>new Float32Array(s.bytes/4));
+    activation=plan.slots.map(s=>new WasmActivation(s.bytes/4,Math.min(maxElements,8*1024*1024)));
   }catch(error){await Promise.allSettled(sessions.map(s=>s.release()));throw error;}
   return {
     inputNames:[model.input],outputNames:[model.output],implementation:WASM_IMPLEMENTATION,
@@ -128,7 +128,8 @@ export async function createStreamedWasmSession(raw,dims,ort,{onProgress=()=>{},
             }finally{Object.values(tensors).forEach(t=>t.dispose());if(outputs)Object.values(outputs).forEach(t=>t.dispose());}
           }
         }
-        const result=activation[plan.outputSlot].slice(0,product(dims));
+        const result=new Float32Array(product(dims));
+        activation[plan.outputSlot].copyTo(result,0,0,result.length);
         return {[model.output]:{dims:[1,1,...dims],type:'float32',getData:async()=>result,dispose(){}}};
       }finally{running=false;}
     },

@@ -106,6 +106,21 @@ function background(volume, ct) {
   return ct ? volume.data.reduce((result, item) => Math.min(result, item), 0) : 0;
 }
 
+function checkNormalizedBrainSupport(buffer, template) {
+  const brain = readVolume(asBuffer(buffer));
+  if (!sameGeometry(brain, template)) throw new Error('Normalization failed: the synthetic brain does not match the template grid.');
+  let templateVoxels = 0;
+  let overlappingVoxels = 0;
+  for (let index = 0; index < template.data.length; index += 1) {
+    if (template.data[index] <= 0) continue;
+    templateVoxels += 1;
+    if (brain.data[index] > 0) overlappingVoxels += 1;
+  }
+  if (templateVoxels === 0 || overlappingVoxels < templateVoxels * 0.1) {
+    throw new Error('Normalization failed: the synthetic brain covers less than 10% of the template brain. Check that the input includes the whole brain and review brain extraction.');
+  }
+}
+
 function defaultImageMath() {
   return {
     async smoothLesion({ buffer }) {
@@ -209,6 +224,7 @@ export async function runSyncro({
     compressed,
   }));
   try {
+    checkNormalizedBrainSupport(registrationResult.warped, fixed);
     outputs[names.syntheticBrain] = registrationResult.warped;
     const apply = async (moving, options = {}) => registration.apply({
       registration: registrationResult,

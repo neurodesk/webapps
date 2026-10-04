@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Store streamed SynthSR WASM activations in bounded buffers so full-head examples do not require multi-gigabyte ArrayBuffers. Reject SYNcro registrations with less than 10% template brain support before publishing normalized outputs.
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
   - @neurodesk/greedy@0.4.20261004
