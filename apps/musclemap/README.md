@@ -115,7 +115,7 @@ The v1.4 browser pipeline reproduces the upstream source-axis chunk boundary bef
 
 Sampling-grid calculations use float64, as pinned MONAI does, with the pinned PyTorch linspace rounding and accumulation order. Their arithmetic order matters: rounding can turn an exact zero into a tiny nonzero value, changing which voxels enter normalization. The synthetic MONAI fixture checks both intensities and exact zeros. Regenerate it with `.tmp_model_env/bin/python scripts/emit_monai_test_fixture.py` from the app directory after setting up the pinned conversion environment.
 
-The [2026-10-04 upstream comparison report](test/upstream-parity-20261004.json) records input derivations, reference provenance, per-label results, and reproduction commands. These scores are evidence, not test thresholds. The comparator still requires Dice ≥ 0.95 for every present label.
+The [2026-10-04 upstream comparison report](test/upstream-parity-20261004.json) records input derivations, reference provenance, per-label results, and reproduction commands. These scores are evidence, not test thresholds. The comparator still requires Dice ≥ 0.95 for every present label. The full-body run passes all 85 labels with minimum Dice 0.999956; three of 27,648,000 voxels differ. Identical upstream tensors with identical blending and inversion isolate those three differences to inference runtime arithmetic. They are explicitly accepted under the existing gate. Full-knee segmentation is voxel-exact for the published bounded reference.
 
 The worker stores class indices internally in `uint8`. It exports official sparse label values as `uint8` or `uint16`, according to the generated label-space contract. Display overlays always use a separate class-index NIfTI. OpenRecon whole-body labels are detected from release-derived membership tables and restored with `original = 10 * floor(mapped / 3) + mapped % 3`; range-only guesses are not used.
 
@@ -126,6 +126,8 @@ The [immutable validation bundle](https://huggingface.co/datasets/neurodeskorg/w
 From the repository root:
 
 ```bash
+python3 -m venv apps/musclemap/.tmp_model_env
+apps/musclemap/.tmp_model_env/bin/pip install numpy==1.26.4 nibabel==5.2.1
 python apps/musclemap/scripts/fetch_parity_reference.py "$TMPDIR/musclemap-reference"
 corepack pnpm --filter musclemap build
 node apps/musclemap/scripts/validate_upstream_parity.mjs \
