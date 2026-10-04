@@ -259,8 +259,7 @@ pub fn snapshot(name: &str, lines: Vec<String>) {
     let expected = match (name, cfg!(debug_assertions)) {
         ("synthsr", true) => include_str!("../snapshots/synthsr-debug.txt"),
         ("synthsr", false) => include_str!("../snapshots/synthsr-release.txt"),
-        ("synthseg", true) => include_str!("../snapshots/synthseg-debug.txt"),
-        ("synthseg", false) => include_str!("../snapshots/synthseg-release.txt"),
+        ("synthseg", _) => include_str!("../snapshots/synthseg.txt"),
         _ => panic!("Unknown reader {name}"),
     };
     assert_eq!(lines.join("\n") + "\n", expected, "{name} baseline");

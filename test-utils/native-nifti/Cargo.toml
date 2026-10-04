@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
+neurodesk-nifti = { path = "../../exes/nifti" }
 flate2 = "1.1.10"
 
 [workspace]

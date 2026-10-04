@@ -6,6 +6,7 @@ license = "Apache-2.0"
 description = "SynthSR v2 brain image synthesis with ONNX Runtime"
 
 [dependencies]
+neurodesk-nifti = { path = "../nifti" }
 ort = { version = "=2.0.0-rc.13", features = ["webgpu"] }
 flate2 = "1"
 sha2 = "0.10"

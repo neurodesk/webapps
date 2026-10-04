@@ -49,7 +49,12 @@ name = "native-nifti-characterization"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "neurodesk-nifti",
 ]
+
+[[package]]
+name = "neurodesk-nifti"
+version = "0.1.0"
 
 [[package]]
 name = "simd-adler32"
