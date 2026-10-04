@@ -2,6 +2,11 @@
 
 ## 0.6.20261004
 
+### Patch Changes
+
+- Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
+  including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+
 
 ### Minor Changes
 

@@ -4,13 +4,19 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/brain-extraction@0.1.18
+
+
+### Patch Changes
+
 - bf52742: Correct the brain mask in the viewer before downloading it. Edit on the brain mask row shows the mask in red over the input image and opens the shared editor with Draw, Erase and Fill tools. Apply replaces the mask in the Output list, which then reads `Brain mask (edited)`, and Download returns the edited mask under the same name as a uint8 NIfTI. Cancel discards the strokes. Loading a new image or running extraction again closes an open edit. The brain image and the run report remain as extraction produced them.
 - Updated dependencies [0204fe1]
 - Updated dependencies [ec85a09]
   - @neurodesk/webapp-components@0.10.0
   - @neurodesk/synthsr@0.6.20261004
   - @neurodesk/brain-extraction@0.1.17
-
 
 ### Patch Changes
 

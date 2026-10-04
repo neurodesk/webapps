@@ -2,6 +2,7 @@
 #![allow(clippy::needless_range_loop, clippy::manual_clamp)]
 // Minimal NIfTI-1 scalar volume I/O (from exes/synthsr). Reads to f64 like nibabel get_fdata,
 // averages 4D channels like SynthSeg's preprocess(), writes int32 label maps.
+use neurodesk_nifti::affine::inverse3;
 use neurodesk_nifti::Nifti1Header;
 use std::io::Read;
 
@@ -134,7 +135,7 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
     if affine.iter().flatten().any(|v| !v.is_finite()) {
         return Err("Invalid NIfTI affine.".into());
     }
-    crate::volume::inverse3(&affine)?;
+    inverse3(&affine)?;
     Ok(Volume {
         data,
         dims,

@@ -2,6 +2,7 @@
 #![allow(clippy::needless_range_loop, clippy::manual_clamp)]
 // Minimal NIfTI-1 scalar volume I/O. Mirrors packages/synthsr/src/volume.js readVolume/writeVolume
 // and the affine rules of nifti-reader-js so both front ends see identical geometry.
+use neurodesk_nifti::affine::inverse3;
 use neurodesk_nifti::Nifti1Header;
 use std::io::Read;
 
@@ -129,7 +130,7 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f32>, String> {
     if affine.iter().flatten().any(|v| !v.is_finite()) {
         return Err("Invalid NIfTI affine.".into());
     }
-    crate::volume::inverse3(&affine)?;
+    inverse3(&affine)?;
     Ok(Volume { data, dims, affine })
 }
 
