@@ -224,8 +224,7 @@ built `src/synthseg.wasm` is committed: after changing those Rust files run
 (no WASM inference fallback); its e2e parity gate mirrors `tests/parity.rs`.
 
 Deferred SynthSeg cleanups (audit 2026-09-10):
-share the CLI shell/NIfTI decode/volume math with `exes/synthsr` in one crate; route both
-apps' worker model download through `packages/components` `fetchModel`; drop the
+share the CLI shell/NIfTI decode/volume math with `exes/synthsr` in one crate; drop the
 `metal-f16` feature and unused `scripts/{compare_seg,check_onnx}.py`; the per-run
 `is_finite` scan in `main.rs` is on the hot path.
 

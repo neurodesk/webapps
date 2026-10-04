@@ -7,6 +7,9 @@
 - Give the viewer Zoom and Fit controls 44-pixel touch targets through the shared workspace stylesheet.
 - 0e90fbf: Add a Zoom control to the viewer toolbar. With Zoom ticked the mouse wheel zooms 2D views and right-drag pans them; untick it to scroll slices again at the same zoom, and use Fit to restore the full view.
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
 ## 0.5.20261003
 
 ### Patch Changes
