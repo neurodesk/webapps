@@ -21,7 +21,7 @@ const DIMS = [3, 4, 3, 2, 1, 1, 1, 1];
 function maskBytes(values) {
   const labels = new Uint8Array(24);
   labels.set(values);
-  return createUint8Nifti(labels, createNiftiHeaderFromVolume({ hdr: { dims: DIMS } }));
+  return createUint8Nifti(labels, createNiftiHeaderFromVolume({ hdr: { dims: DIMS, affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] } }));
 }
 
 function fakeNv() {
