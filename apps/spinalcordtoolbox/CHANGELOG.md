@@ -1,5 +1,11 @@
 # spinalcordtoolbox
 
+## 0.5.20261004
+
+### Patch Changes
+
+- 0e90fbf: Add a Zoom control to the viewer toolbar. With Zoom ticked the mouse wheel zooms 2D views and right-drag pans them; untick it to scroll slices again at the same zoom, and use Fit to restore the full view.
+
 ## 0.5.20261003
 
 ### Patch Changes

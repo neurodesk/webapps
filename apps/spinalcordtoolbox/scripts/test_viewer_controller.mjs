@@ -416,4 +416,40 @@ function makeFile(name) {
   }
 }
 
+{
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeFakeDomElement };
+  const started = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const created = [];
+  const viewer = new ViewerController({
+    nv: createFakeNiivue(),
+    niivueFactory: () => {
+      const nv = createFakeComparisonNiivue(created);
+      const loadVolumes = nv.loadVolumes.bind(nv);
+      nv.loadVolumes = async volumes => {
+        started.resolve();
+        await release.promise;
+        await loadVolumes(volumes);
+      };
+      return nv;
+    }
+  });
+  try {
+    viewer.setDragMode(1);
+    const loading = viewer.loadComparisonVolumes([
+      { id: 'loading-session', file: makeFile('loading.nii') }
+    ], { container: makeFakeDomElement() });
+    await started.promise;
+    viewer.setDragMode(3);
+    release.resolve();
+    await loading;
+    assert.equal(viewer.nv.opts.dragMode, 3);
+    assert.equal(created[0].opts.dragMode, 3, 'a comparison image finishing its load uses the latest zoom mode');
+  } finally {
+    viewer.dispose();
+    globalThis.document = originalDocument;
+  }
+}
+
 console.log('ViewerController tests passed');

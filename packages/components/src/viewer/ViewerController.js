@@ -202,9 +202,22 @@ export class ViewerController {
   setColorbarVisible(visible) { if (this.nv) { this.nv.opts ||= {}; this.nv.opts.isColorbar = Boolean(visible); this.nv.drawScene?.(); } }
   setCrosshairVisible(visible, width = 0.75) { if (this.nv) { this.nv.opts ||= {}; this.nv.opts.crosshairWidth = visible ? width : 0; this.nv.drawScene?.(); } }
   // NiiVue zooms a 2D slice with the wheel only in its pan drag mode; elsewhere the wheel scrolls slices.
-  getAllViewers() { return [this.nv, ...[...this.compareViewers.values()].map(entry => entry.nv)].filter(Boolean); }
-  setDragMode(mode) { this.dragMode = mode; for (const nv of this.getAllViewers()) { nv.opts ||= {}; nv.opts.dragMode = mode; } }
-  resetPanZoom() { for (const nv of this.getAllViewers()) { if (nv.scene) nv.scene.pan2Dxyzmm = [0, 0, 0, 1]; nv.drawScene?.(); } }
+  getAllViewers() {
+    return [this.nv, ...[...this.compareViewers.values()].map(entry => entry.nv)].filter(Boolean);
+  }
+  setDragMode(mode) {
+    this.dragMode = mode;
+    for (const nv of this.getAllViewers()) {
+      nv.opts ||= {};
+      nv.opts.dragMode = mode;
+    }
+  }
+  resetPanZoom() {
+    for (const nv of this.getAllViewers()) {
+      if (nv.scene) nv.scene.pan2Dxyzmm = [0, 0, 0, 1];
+      nv.drawScene?.();
+    }
+  }
   getOverlayIndex() { return this.currentOverlayIndex !== null && this.nv?.volumes?.[this.currentOverlayIndex] ? this.currentOverlayIndex : (this.nv?.volumes?.length > 1 ? this.nv.volumes.length - 1 : null); }
   getOverlayIndices() { return (this.nv?.volumes || []).map((_, i) => i).filter(i => i > 0); }
   getVolumeIndexForStage(stage) { const index = this.volumeStageIndices.get(stage); return index !== undefined && this.nv?.volumes?.[index] ? index : null; }
@@ -222,12 +235,15 @@ export class ViewerController {
       const canvas = document.createElement('canvas'); canvas.id = `comparisonCanvas-${session.id}`; panel.appendChild(label); panel.appendChild(canvas); container.appendChild(panel);
       const nv = this.niivueFactory({ ...this.viewerConfig }); await nv.attachTo(canvas.id); if (!nv.gl) throw new Error(`WebGL2 context unavailable for ${session.name || session.file.name}.`);
       nv.setMultiplanarPadPixels?.(5); this.applyViewTypeToNv(nv, options.viewType || 'multiplanar'); nv.setInterpolation?.(true);
-      if (this.dragMode !== undefined) { nv.opts ||= {}; nv.opts.dragMode = this.dragMode; }
       try {
         await nv.loadVolumes([{ url: this.getObjectUrl(session.file), name: session.file.name }]);
       } catch (error) {
         this.releaseUnusedObjectUrls();
         throw error;
+      }
+      if (this.dragMode !== undefined) {
+        nv.opts ||= {};
+        nv.opts.dragMode = this.dragMode;
       }
       if (nv.volumes?.[0]) nv.volumes[0].colormap = options.colormap || 'gray';
       nv.updateGLVolume?.(); nv.drawScene?.(); this.compareViewers.set(session.id, { nv, file: session.file });
