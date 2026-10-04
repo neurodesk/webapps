@@ -6,6 +6,17 @@ on:
     branches: [main]
   schedule:
     - cron: '23 3 * * *'
+  workflow_dispatch:
+    inputs:
+      agentic_mode:
+        description: Agentic checks to run after building the catalog
+        type: choice
+        options: [interactions, pipeline]
+        default: interactions
+      agentic_apps:
+        description: Comma-separated app ids; leave empty for the full catalog
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -142,7 +153,7 @@ jobs:
       - name: Install browser
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Check custom element browser behavior
         run: pnpm --filter @neurodesk/webapp-components test:elements:browser
         env:
@@ -159,6 +170,45 @@ jobs:
         run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
+      - name: Install the catalog e2e browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Check catalog e2e types and coverage
+        run: pnpm test:e2e:types && node --test test/agentic-catalog.test.mjs test/agentic-provider.test.mjs test/playwright-discovery.test.mjs
+      - name: Test every production workspace with e2e
+        run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
+      - name: Run Neurodesk agent interactions across the catalog
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')
+        env:
+          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
+          AGENTIC_APPS: ${{ inputs.agentic_apps }}
+        run: |
+          if [ -z "$NEURODESK_API_KEY" ]; then
+            echo '::notice::Agent interactions not run: configure the NEURODESK_API_KEY repository secret.'
+            exit 0
+          fi
+          args=(--skip-build --output .e2e/agent)
+          if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
+          pnpm test:e2e:agent "${args[@]}"
+      - name: Run requested Neurodesk processing workflows
+        if: github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'pipeline'
+        env:
+          NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
+          AGENTIC_APPS: ${{ inputs.agentic_apps }}
+        run: |
+          if [ -z "$NEURODESK_API_KEY" ]; then
+            echo '::error::Processing workflows require the NEURODESK_API_KEY repository secret.'
+            exit 1
+          fi
+          args=(--skip-build --target desktop --no-cache --output .e2e/pipeline)
+          if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
+          pnpm test:e2e:pipeline "${args[@]}"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: catalog-e2e
+          path: .e2e/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Audit interface consistency across the catalog
         run: pnpm audit:interfaces
         env:
@@ -211,7 +261,7 @@ jobs:
       - name: Install browser
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} in a browser
@@ -227,7 +277,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: node node_modules/@playwright/test/cli.js install --with-deps chromium
       - run: node --test test/easter-egg.test.mjs
       - run: pnpm --filter @neurodesk/vessel-surfer-easter-egg test
       - run: pnpm --filter @neurodesk/vessel-surfer-leaderboard test

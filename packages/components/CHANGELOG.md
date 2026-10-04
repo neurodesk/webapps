@@ -4,7 +4,7 @@
 
 ### Patch Changes
 
-- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks, including manually edited ones, without an anatomy image, preserve native output files, and recover or cancel jobs. Keep automatic browser metrics explicitly approximate. Support selected tools and explicit HTTPS reverse-proxy addresses in shared compute connections.
+- Add SCT cord morphometry and standalone lesion analysis for uploaded, generated or manually edited masks, without an anatomy image. Analysis runs in the browser by default, executing the pinned, unchanged SCT 7.3 Python in a Pyodide worker, or optionally on a paired Neurodesk compute server in the pinned SCT Docker image. Both keep SCT's CSV, XLSX, pickle and labeled NIfTI outputs and show where results were computed, because WebAssembly floating-point results can differ from native SCT. Server jobs can be recovered, cancelled and deleted; browser runs cancel by terminating their worker. Automatic browser lesion metrics stay labelled approximate. Shared compute connections support selected tools and explicit HTTPS reverse-proxy addresses.
 
 ## 0.10.0
 
