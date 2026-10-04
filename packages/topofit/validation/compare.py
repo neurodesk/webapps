@@ -4,20 +4,15 @@
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 import nibabel as nib
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from thresholds import SURFACES, THRESHOLDS, within_thresholds
 
-SURFACES = (
-    "lh.white",
-    "rh.white",
-    "lh.pial",
-    "rh.pial",
-    "lh.registration",
-    "rh.registration",
-)
 OUTPUTS = (*SURFACES, "topofit_qc.nii", "topofit_manifest.json")
 CONTAINER = "vnmd/topofit_0.5.1@sha256:dff22ad5577a1a7ba0530759e009f293271ea5ddfc3441fb35b61322bbd6ec29"
 RELEASE = "topofit-0.5.1-onnx-20260911"
@@ -40,15 +35,6 @@ INPUTS = {
         "modelInputSha256": "7704182dbae55b4f103eb8fecb70ad251722e427db7b49528d82f3609589a407",
         "assetSetSha256": "80274962e92442a88f7e8c8ebddc98a01bd618e5c95070b881d12d38094db9f7",
     },
-}
-THRESHOLDS = {
-    "surfaceMeanMm": 0.25,
-    "surfaceP95Mm": 0.5,
-    "surfaceMaxMm": 2.0,
-    "registrationMeanDegrees": 0.1,
-    "registrationP95Degrees": 0.25,
-    "registrationRadiusMaxMm": 0.01,
-    "qcWithinOneVoxel": 0.99,
 }
 
 
@@ -197,28 +183,6 @@ def compare_repeat(directory, repeats):
             "outputSetSha256": canonical_sha256(hashes),
         })
     return result
-
-
-def within_thresholds(report):
-    for name, surface in report["surfaces"].items():
-        if name.endswith("registration"):
-            if surface["mean_angular_error_degrees"] > THRESHOLDS["registrationMeanDegrees"]:
-                return False
-            if surface["p95_angular_error_degrees"] > THRESHOLDS["registrationP95Degrees"]:
-                return False
-            if surface["max_radius_error_mm"] > THRESHOLDS["registrationRadiusMaxMm"]:
-                return False
-        else:
-            if surface["mean_corresponding_distance_mm"] > THRESHOLDS["surfaceMeanMm"]:
-                return False
-            if surface["p95_corresponding_distance_mm"] > THRESHOLDS["surfaceP95Mm"]:
-                return False
-            if surface["max_corresponding_distance_mm"] > THRESHOLDS["surfaceMaxMm"]:
-                return False
-    return (
-        report["qc"]["white_within_one_voxel_symmetric_coverage"] >= THRESHOLDS["qcWithinOneVoxel"]
-        and report["qc"]["pial_within_one_voxel_symmetric_coverage"] >= THRESHOLDS["qcWithinOneVoxel"]
-    )
 
 
 def main():

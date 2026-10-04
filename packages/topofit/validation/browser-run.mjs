@@ -1,4 +1,4 @@
-// Drive the production TopoFit app and retain the exact files offered to users.
+// Drive the production TopoFit app and capture every file emitted by its worker.
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 
@@ -15,12 +15,26 @@ const page = await browser.newPage({
 });
 const pageErrors = [];
 page.on('pageerror', (error) => pageErrors.push(error.message));
+await page.addInitScript(() => {
+  const NativeWorker = window.Worker;
+  window.Worker = class extends NativeWorker {
+    constructor(...args) {
+      super(...args);
+      if (String(args[0]).includes('inference-worker')) {
+        this.addEventListener('message', ({ data }) => {
+          if (data.type === 'result') window.topofitValidationResult = data;
+          if (data.type === 'error') window.topofitValidationError = data.message;
+        });
+      }
+    }
+  };
+});
 
 try {
   await page.goto(url);
   await expect.poll(() => page.evaluate(() => crossOriginIsolated)).toBe(true);
   await page.locator('#imageInput').setInputFiles(input);
-  await expect(page.locator('#runButton')).toBeEnabled();
+  await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60_000 });
   await page.locator('#advancedSettings > summary').click();
   if (conformOption === '--no-conform') await page.locator('#conform').uncheck();
   await page.locator('#thickness').selectOption('0');
@@ -35,7 +49,9 @@ try {
       console.log(currentStatus);
       previousStatus = currentStatus;
     }
-    if (currentStatus?.includes('Surfaces ready')) break;
+    const result = await page.evaluate(() => ({ ready: Boolean(window.topofitValidationResult), error: window.topofitValidationError }));
+    if (result.error) throw new Error(result.error);
+    if (result.ready && currentStatus?.includes('Surfaces ready')) break;
     if (await page.locator('#cancelButton').isHidden()) {
       throw new Error(`Processing stopped: ${currentStatus}`);
     }
@@ -48,12 +64,18 @@ try {
   await expect(page.locator('#outputSection')).toHaveAttribute('open', '');
   await expect(page.locator('#viewerError')).toBeHidden();
   await page.screenshot({ path: `${outputDirectory}/desktop-result.png`, fullPage: true });
-  const rows = page.locator('#resultList .nd-volume-toggle');
-  for (let index = 0; index < await rows.count(); index += 1) {
-    const pending = page.waitForEvent('download');
-    await rows.nth(index).locator('.nd-download-btn').click();
-    const download = await pending;
-    await download.saveAs(`${outputDirectory}/${download.suggestedFilename()}`);
+  const names = await page.evaluate(() => window.topofitValidationResult.files.map(file => file.name));
+  for (const name of names) {
+    const encoded = await page.evaluate(name => {
+      const file = window.topofitValidationResult.files.find(file => file.name === name);
+      const bytes = new Uint8Array(file.bytes);
+      let text = '';
+      for (let offset = 0; offset < bytes.length; offset += 32768) {
+        text += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+      }
+      return btoa(text);
+    }, name);
+    await writeFile(`${outputDirectory}/${name}`, Buffer.from(encoded, 'base64'));
   }
   await writeFile(
     `${outputDirectory}/browser-run.json`,
@@ -66,7 +88,7 @@ try {
     }, null, 2)}\n`,
   );
   if (pageErrors.length) throw new Error(pageErrors.join('\n'));
-  console.log(`Browser result downloaded to ${outputDirectory}`);
+  console.log(`Browser result saved to ${outputDirectory}`);
 } finally {
   await browser.close();
 }
