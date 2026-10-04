@@ -249,25 +249,28 @@ function endEdit() {
   $('opacity').disabled = busy || !labels;
 }
 function clearOutputs() {
-  void editor?.cancel();
+  const cancelled = editor?.cancel();
   labels = null;
   provenance = null;
   renderResults();
   $('outputSection').open = false;
   $('reportBtn').disabled = true;
+  return cancelled;
 }
-function beginImport() {
-  operation = runs.begin('loading');
+async function beginImport() {
+  const run = runs.begin('loading');
+  operation = run;
   source = null;
   ++viewRevision;
-  clearOutputs();
+  const cancelled = clearOutputs();
   $('fileInfo').hidden = true;
   setBusy(true, true);
-  return operation;
+  await cancelled;
+  return run;
 }
 async function load(file, signal, existingRun) {
   if ((!existingRun && busy) || !file) return false;
-  const run = existingRun || beginImport();
+  const run = existingRun || await beginImport();
   const abort = () => {
     if (operation !== run) return;
     cancel();
@@ -310,7 +313,7 @@ async function load(file, signal, existingRun) {
 async function importImages(filesPromise) {
   exampleControl.cancel();
   if (busy) return;
-  const run = beginImport();
+  const run = await beginImport();
   status('Reading images · converting DICOM if needed…');
   try {
     const files = await filesPromise;
@@ -348,7 +351,7 @@ bindFileDrop($('dropZone'), (files) => {
 const exampleControl = createExampleSelector({
   examples,
   onLoad: async (_example, { fetchFiles, assertCurrent, signal }) => {
-    const run = beginImport();
+    const run = await beginImport();
     const abort = () => {
       if (operation === run) cancel();
     };
@@ -381,7 +384,7 @@ async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
   if (!source || busy) throw new Error('Load an image before starting segmentation.');
   if (!webgpu) throw new Error('SynthSeg requires WebGPU.');
   signal?.throwIfAborted();
-  clearOutputs();
+  const cancelled = clearOutputs();
   const options = { fast: parameters.mode === 'fast', ct: parameters.ct ?? $('ct').checked };
   const run = runs.begin('running', {
     inputs: { image: source },
@@ -389,15 +392,18 @@ async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
   });
   operation = run;
   setBusy(true, true);
-  void show();
-  $('progress').value = 0;
-  started = performance.now();
-  timer = setInterval(() => {
-    $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`;
-  }, 1000);
   const abort = () => cancel();
   signal?.addEventListener('abort', abort, { once: true });
   try {
+    await cancelled;
+    signal?.throwIfAborted();
+    run.signal.throwIfAborted();
+    void show();
+    $('progress').value = 0;
+    started = performance.now();
+    timer = setInterval(() => {
+      $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`;
+    }, 1000);
     return await new Promise((resolve, reject) => {
       run.signal.addEventListener('abort', () => {
         queueMicrotask(() => {

@@ -643,6 +643,7 @@ class MuscleMapApp {
   // ==================== File Handling ====================
 
   async onFileLoaded(file) {
+    await this.maskEditor.cancel();
     this.inputFile = file;
     if (this.isViewerAvailable()) {
       const loaded = await this.viewerController.loadBaseVolume(file);
@@ -1730,8 +1731,8 @@ class MuscleMapApp {
     this._overlaySliderValue = 0.5;
   }
 
-  clearResults() {
-    void this.maskEditor.cancel();
+  async clearResults() {
+    await this.maskEditor.cancel();
     this.inferenceExecutor.clearResults();
     this.segmentationResults = [];
     this.activeSegmentationId = null;

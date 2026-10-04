@@ -164,12 +164,13 @@ async function editResult(stage, result) {
 }
 function resetOutputs() {
   editing = null;
-  void editor?.cancel();
+  const cancelled = editor?.cancel();
   results.setEditingEnabled(true);
   outputs = source ? { original: { description: 'Original', file: source } } : {};
   results.render(outputs);
   $('outputSection').open = false;
   $('reportBtn').disabled = true;
+  return cancelled;
 }
 async function ensureViewer() {
   if (!viewerReady) {
@@ -250,12 +251,14 @@ async function importImages(filesSource, signal) {
   $('emptyState').hidden = false;
   $('viewerNotice').hidden = true;
   $('location').textContent = '';
-  resetOutputs();
+  const cancelled = resetOutputs();
   $('fileInfo').hidden = true;
   picker.setHasFiles(false);
   status('Reading images and converting DICOM if needed…');
   try {
+    await cancelled;
     signal?.throwIfAborted();
+    job.run.signal.throwIfAborted();
     const files = await (typeof filesSource === 'function' ? filesSource(job.run.signal) : filesSource);
     job.run.signal.throwIfAborted();
     const images = await readImageFiles(files, { signal: job.run.signal });
@@ -292,8 +295,7 @@ $('folderInput').onchange = event => {
 async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   if (!source || state.phase !== 'idle') throw new Error('Load an image before starting brain extraction.');
   signal?.throwIfAborted();
-  resetOutputs();
-  void show(source, 'original');
+  const cancelled = resetOutputs();
   const { method, threshold = 0.5, backend: requestedBackend = 'auto' } = parameters;
   const effective = { method };
   if (method === 'bet') effective.threshold = threshold;
@@ -304,6 +306,10 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   const abort = () => cancel();
   signal?.addEventListener('abort', abort, { once: true });
   try {
+    await cancelled;
+    signal?.throwIfAborted();
+    job.run.signal.throwIfAborted();
+    void show(source, 'original');
     return await new Promise((resolve, reject) => {
       job.run.signal.addEventListener('abort', () => {
         queueMicrotask(() => {

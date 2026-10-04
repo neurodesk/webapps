@@ -135,8 +135,9 @@ function end(current, message, { success = true, error = false, result } = {}) {
 
 function closeEdit() {
   editing = null;
-  void editor?.cancel();
+  const cancelled = editor?.cancel();
   results.setEditingEnabled(true);
+  return cancelled;
 }
 
 async function editResult(stage, result) {
@@ -235,7 +236,7 @@ async function loadFiles(filesPromise, signal) {
   const abort = () => current.controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   source = null;
-  closeEdit();
+  const cancelled = closeEdit();
   outputs = {};
   renderOutputs();
   ++viewRevision;
@@ -245,6 +246,8 @@ async function loadFiles(filesPromise, signal) {
   $("fileInfo").hidden = true;
   $("dropZone").classList.remove("has-files");
   try {
+    await cancelled;
+    current.controller.signal.throwIfAborted();
     const files = await filesPromise;
     current.controller.signal.throwIfAborted();
     const images = await readImageFiles(files, { signal: current.controller.signal });
@@ -306,11 +309,13 @@ async function segment(parameters, onProgress = () => {}) {
   // Cancellation may settle the operation while adapter discovery is still pending.
   void current.completion.promise.catch(() => {});
   const stem = source.name.replace(/\.nii(\.gz)?$/i, "");
-  closeEdit();
+  const cancelled = closeEdit();
   outputs = { flair: outputs.flair };
   renderOutputs();
-  show("flair");
   try {
+    await cancelled;
+    if (job !== current) return current.completion.promise;
+    show("flair");
     const backend = await resolveBackend(parameters.backend);
     if (job !== current) return current.completion.promise;
     current.worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
