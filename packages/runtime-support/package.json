@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/runtime-support",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "Canonical browser runtime wrappers and generated host support shared by Neurodesk webapps.",
