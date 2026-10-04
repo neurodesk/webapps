@@ -5,12 +5,17 @@ import { createUint8Nifti } from '@neurodesk/webapp-components/file-io';
 import { editableLabelNames, editedSegmentation, findEditTarget } from '../web/js/app/segmentation-edit.js';
 import { getLabelsForLabelSpace } from '../web/js/app/labels.js';
 
-function labelMap(name, dims, { gzip = false } = {}) {
+function labelMap(name, dims, { gzip = false, shift = 0, spacing = 1 } = {}) {
   const header = new ArrayBuffer(352);
   const view = new DataView(header);
   view.setInt32(0, 348, true);
   [3, ...dims, 1, 1, 1, 1].forEach((value, index) => view.setInt16(40 + index * 2, value, true));
   view.setFloat32(108, 352, true);
+  view.setInt16(254, 1, true);
+  view.setFloat32(280, spacing, true);
+  view.setFloat32(292, shift, true);
+  view.setFloat32(300, 1, true);
+  view.setFloat32(320, 1, true);
   const bytes = new Uint8Array(createUint8Nifti(new Uint8Array(dims[0] * dims[1] * dims[2]), header));
   return new File([gzip ? gzipSync(bytes) : bytes], name);
 }
@@ -68,3 +73,11 @@ test('label names map class indices to the label space names', () => {
   assert.equal(Object.keys(names).length, 113);
   assert.deepEqual(editableLabelNames(null), {});
 });
+
+for (const geometry of [{ shift: 20 }, { spacing: 2 }]) {
+  test(`a display map with different geometry ${JSON.stringify(geometry)} cannot be edited`, async () => {
+    const file = labelMap('full.nii', [8, 8, 4]);
+    const displayFile = labelMap('display.nii', [8, 8, 4], geometry);
+    assert.equal(await findEditTarget({ file, displayFile, labelEncoding: 'sparse' }), null);
+  });
+}

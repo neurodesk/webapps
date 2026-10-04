@@ -93,7 +93,7 @@ function legacyNv(layer = drawingLayer()) {
     calls,
     layer,
     opts: { drawingEnabled: false, penSize: 1 },
-    volumes: [{ opacity: 1, hdr: { dims: [3, ...DIMS, 1] } }, { opacity: 0.7 }],
+    volumes: [{ opacity: 1, hdr: parseNiftiHeader(sourceHeader()) }, { opacity: 0.7 }],
     setDrawingEnabled(on) { calls.push(['setDrawingEnabled', on]); this.opts.drawingEnabled = on; },
     setPenValue(value, filled) { calls.push(['setPenValue', value, filled, this.opts.penSize]); },
     createEmptyDrawing() { calls.push(['createEmptyDrawing']); },
@@ -125,7 +125,7 @@ function currentNv({ penShape = true, layer = drawingLayer() } = {}) {
     drawPenValue: 1,
     drawPenFilled: false,
     drawPenSize: 1,
-    volumes: [{ opacity: 1, hdr: { dims: [3, ...DIMS, 1] } }, { opacity: 0.6 }],
+    volumes: [{ opacity: 1, hdr: parseNiftiHeader(sourceHeader()) }, { opacity: 0.6 }],
     calls: [],
     accept: true,
     createEmptyDrawing() { this.calls.push(['createEmptyDrawing']); },
@@ -257,3 +257,52 @@ test('1.0 adapter leaves the pen shape alone before rc.14 and rejects unknown to
   assert.equal('drawPenShape' in nv, false);
   assert.throws(() => drawing.setTool({ tool: 'smudge', label: 1, brushSize: 2 }), /Unknown edit tool/);
 });
+
+for (const makeNv of [legacyNv, currentNv]) {
+  for (const [name, change] of [
+    ['translation', hdr => { hdr.affine[0][3] += 20; }],
+    ['spacing', hdr => { hdr.affine[1][1] *= 2; }],
+    ['rotation', hdr => { hdr.affine[0][1] = 2; }],
+    ['nonfinite affine', hdr => { hdr.affine[0][3] = NaN; }],
+    ['unknown affine', hdr => { delete hdr.affine; }],
+  ]) {
+    test(`${makeNv.name} refuses ${name} before loading a drawing`, async () => {
+      const nv = makeNv();
+      change(nv.volumes[0].hdr);
+      assert.equal(await createDrawingAdapter(nv).open(float32Mask()), false);
+      assert.equal(nv.layer.loads, 0);
+    });
+  }
+
+  test(`${makeNv.name} preserves the mask header and extensions when NiiVue saves the base header`, async () => {
+    const maskHeader = new Uint8Array(384);
+    maskHeader.set(new Uint8Array(sourceHeader()));
+    const view = new DataView(maskHeader.buffer);
+    view.setFloat32(108, 384, true);
+    maskHeader.set(new TextEncoder().encode('mask provenance'), 148);
+    maskHeader[348] = 1;
+    view.setInt32(352, 32, true);
+    view.setInt32(356, 6, true);
+    maskHeader.set(new TextEncoder().encode('mask extension'), 360);
+    const source = createNiftiFromData(new Uint8Array(24).fill(3), maskHeader);
+    const nv = makeNv();
+    const save = async () => new Uint8Array(createNiftiFromData(labelBytes(nv.layer.stored), sourceHeader()));
+    if (nv.saveImage) nv.saveImage = save;
+    else nv.saveDrawing = save;
+    const drawing = createDrawingAdapter(nv);
+    assert.equal(await drawing.open(source), true);
+    const result = await drawing.export();
+    assert.deepEqual(result.subarray(148, 384), new Uint8Array(source).subarray(148, 384));
+    assert.deepEqual([...labelBytes(result)], new Array(24).fill(3));
+  });
+
+  test(`${makeNv.name} rejects a saved drawing with the wrong voxel count`, async () => {
+    const nv = makeNv();
+    const drawing = createDrawingAdapter(nv);
+    assert.equal(await drawing.open(float32Mask()), true);
+    const save = async () => nv.layer.stored.slice(0, -1);
+    if (nv.saveImage) nv.saveImage = save;
+    else nv.saveDrawing = save;
+    await assert.rejects(drawing.export(), /voxel count/);
+  });
+}
