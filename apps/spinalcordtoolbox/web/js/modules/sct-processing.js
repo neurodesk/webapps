@@ -567,43 +567,6 @@
     };
   }
 
-  function labelVertebraeFromSegmentation(segmentation, dims, options = {}) {
-    assertVolume(segmentation, dims, 'segmentation');
-    const startLevel = options.startLevel ?? 1;
-    const slicesPerLevel = options.slicesPerLevel ?? 1;
-    if (!Number.isInteger(startLevel) || startLevel <= 0) throw new Error('startLevel must be a positive integer');
-    if (!Number.isInteger(slicesPerLevel) || slicesPerLevel <= 0) throw new Error('slicesPerLevel must be a positive integer');
-    const out = new Uint8Array(segmentation.length);
-    let firstSlice = null;
-    for (let z = 0; z < dims[2]; z++) {
-      if (sliceHasForeground(segmentation, dims, z)) {
-        firstSlice = z;
-        break;
-      }
-    }
-    if (firstSlice == null) return out;
-    for (let z = firstSlice; z < dims[2]; z++) {
-      if (!sliceHasForeground(segmentation, dims, z)) continue;
-      const level = startLevel + Math.floor((z - firstSlice) / slicesPerLevel);
-      for (let y = 0; y < dims[1]; y++) {
-        for (let x = 0; x < dims[0]; x++) {
-          const idx = index3D(x, y, z, dims);
-          if (segmentation[idx] > 0) out[idx] = level;
-        }
-      }
-    }
-    return out;
-  }
-
-  function sliceHasForeground(data, dims, z) {
-    for (let y = 0; y < dims[1]; y++) {
-      for (let x = 0; x < dims[0]; x++) {
-        if (data[index3D(x, y, z, dims)] > 0) return true;
-      }
-    }
-    return false;
-  }
-
   function centerOfMass(data, dims) {
     assertVolume(data, dims, 'volume');
     const sum = [0, 0, 0];
@@ -851,7 +814,6 @@
     createQcReportHtml,
     getSctExampleDataManifest,
     getBrowserModelInstallPlan,
-    labelVertebraeFromSegmentation,
     registerByCenterOfMass,
     applyTranslation,
     warpTemplate,

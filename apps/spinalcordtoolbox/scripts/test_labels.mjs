@@ -4,7 +4,7 @@
 // gets a stop at the integer plus a second stop just below the next index,
 // holding the color flat across (i, i+1). Without the second stop, NiiVue
 // linearly interpolates between adjacent label colors and smears one
-// vertebra into its neighbour at sub-voxel boundaries.
+// label into its neighbour at sub-voxel boundaries.
 
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -14,30 +14,30 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const { generateNiivueColormap } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/labels.js')));
 
-const lut = generateNiivueColormap('vertebrae');
+const lut = generateNiivueColormap('spineDiscs');
 
-// 12 labels (background + 11 vertebrae). Step LUT adds a held stop between
-// every consecutive pair of indices, so we expect 12 + 11 = 23 entries.
-assert.equal(lut.I.length, 23, `expected 23 LUT stops, got ${lut.I.length}`);
+// Background plus 23 disc labels (3..25). Background is followed by a gap, so
+// it gets no held stop; every disc label but the last gets one: 1 + 23 + 22.
+assert.equal(lut.I.length, 46, `expected 46 LUT stops, got ${lut.I.length}`);
 assert.equal(lut.R.length, lut.I.length, 'R/I length mismatch');
 assert.equal(lut.G.length, lut.I.length, 'G/I length mismatch');
 assert.equal(lut.B.length, lut.I.length, 'B/I length mismatch');
 assert.equal(lut.A.length, lut.I.length, 'A/I length mismatch');
 
 assert.equal(lut.min, 0);
-assert.equal(lut.max, 11);
+assert.equal(lut.max, 25);
 assert.equal(lut.I.at(0), 0);
 assert.equal(lut.I.at(-1), 255);
 
 // Each label index is followed by a held stop just below the next index,
 // painted with the same color. That keeps NiiVue from interpolating across
-// vertebrae.
-for (let i = 0; i < lut.I.length - 1; i += 2) {
-  const labelIndex = i / 2;
+// neighbouring discs.
+for (let i = 1; i < lut.I.length - 1; i += 2) {
+  const labelIndex = 3 + (i - 1) / 2;
   const indexAtStart = lut.I[i];
   const indexBeforeNext = lut.I[i + 1];
-  const expectedStart = (labelIndex / 11) * 255;
-  const expectedNext = ((labelIndex + 1) / 11) * 255;
+  const expectedStart = (labelIndex / 25) * 255;
+  const expectedNext = ((labelIndex + 1) / 25) * 255;
   assert.ok(Math.abs(indexAtStart - expectedStart) < 1e-9, `LUT[${i}] should scale label ${labelIndex} to ${expectedStart}, got ${indexAtStart}`);
   assert.ok(indexBeforeNext > indexAtStart, `held stop must come after label ${labelIndex} start`);
   assert.ok(indexBeforeNext < expectedNext, `held stop must come before next label ${labelIndex + 1}`);
@@ -60,7 +60,7 @@ assert.equal(cordLut.I.at(-1), 255);
 // and produces NaN (divide-by-zero) clamped to 0, leaving the binary
 // spinalcord overlay entirely transparent. The held stop and the label start
 // MUST therefore land on distinct integer buckets after Uint8 rounding.
-// (Vertebrae 12-label LUT silently masks this bug — its later iterations
+// (A many-label LUT silently masks this bug — its later iterations
 // overwrite the corrupted bucket — so spinalcord is the canary.)
 for (let i = 0; i < cordLut.I.length - 1; i++) {
   const lo = Math.round(cordLut.I[i]);
@@ -96,4 +96,4 @@ assert.ok(cordVisible,
   'a binary mask voxel value of 1 maps to LUT[255] and an invisible bucket there means ' +
   'the segmentation overlay is silently hidden.');
 
-console.log(`Label LUT step encoding OK: vertebrae=${lut.I.length} stops, spinalcord=${cordLut.I.length} stops`);
+console.log(`Label LUT step encoding OK: spineDiscs=${lut.I.length} stops, spinalcord=${cordLut.I.length} stops`);

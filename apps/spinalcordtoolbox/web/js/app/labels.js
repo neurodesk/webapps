@@ -6,7 +6,7 @@ export const LABELS = Object.freeze([
 ]);
 
 // NiiVue interpolates linearly between adjacent LUT stops. For discrete label
-// maps this smears one vertebra into its neighbour at sub-voxel boundaries. We
+// maps this smears one label into its neighbour at sub-voxel boundaries. We
 // emit a step LUT: each label gets a stop at its integer index and another at
 // just-below the next index, holding the color flat across (i, i+1).
 //

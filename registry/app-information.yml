@@ -141,14 +141,6 @@ apps:
         title: TotalSpineSeg
         reference: "Warszawer Y, Molinier N, Valošek J, et al. TotalSpineSeg: Robust spine segmentation and labeling across multiple MRI contrasts. Proceedings of the ISMRM. 2025."
         url: https://github.com/neuropoly/totalspineseg
-      - group: Vertebral labeling
-        title: Vertebral level labeling
-        reference: "Ullmann E, Pelletier Paquette JF, Thong WE, Cohen-Adad J. Automatic labeling of vertebral levels using a robust template-based approach. International Journal of Biomedical Imaging. 2014;2014:719520."
-        doi: 10.1155/2014/719520
-      - group: Template
-        title: PAM50
-        reference: "De Leener B, Fonov VS, Collins DL, Callot V, Stikov N, Cohen-Adad J. PAM50: Unbiased multimodal template of the brainstem and spinal cord aligned with the ICBM152 space. NeuroImage. 2018;165:170–179."
-        doi: 10.1016/j.neuroimage.2017.10.041
       - group: Deep learning framework
         title: PyTorch
         reference: "Paszke A, Gross S, Massa F, et al. PyTorch: An imperative style, high-performance deep learning library. Advances in Neural Information Processing Systems. 2019;32."

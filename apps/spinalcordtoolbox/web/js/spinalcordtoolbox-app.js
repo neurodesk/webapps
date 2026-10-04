@@ -19,7 +19,7 @@ import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
-import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, getTaskTemplateAssetUrl, isTaskRunnable } from './app/sct-tasks.js';
+import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import './modules/sct-processing.js';
 
@@ -59,7 +59,6 @@ export class SpinalCordToolboxApp {
       input: true,
       segmentation: true,
       lesion: true,
-      vertebrae: true,
       spine_step1: true,
       spine_discs: true
     };
@@ -134,7 +133,6 @@ export class SpinalCordToolboxApp {
       this.viewerController.registerSctColormap(colormapData, this.getSelectedColormapId());
       this.viewerController.registerSctColormap(generateNiivueColormap('spinalcord'), 'sct-spinalcord');
       this.viewerController.registerSctColormap(generateNiivueColormap('lesion_sci_t2'), 'sct-lesion');
-      this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
       this.viewerController.registerSctColormap(generateNiivueColormap('totalspineseg'), 'sct-totalspineseg');
       this.viewerController.registerSctColormap(generateNiivueColormap('spineDiscs'), 'sct-spine-discs');
     }
@@ -285,9 +283,6 @@ export class SpinalCordToolboxApp {
     const runBtn = document.getElementById('runSegmentation');
     if (runBtn) runBtn.addEventListener('click', () => this.runSegmentation());
 
-    const runProcessingBtn = document.getElementById('runProcessingBtn');
-    if (runProcessingBtn) runProcessingBtn.addEventListener('click', () => this.runProcessingOperation());
-
     const modelSelect = document.getElementById('modelSelect');
     if (modelSelect) {
       modelSelect.addEventListener('change', () => this.onTaskSelectionChanged(modelSelect.value));
@@ -429,7 +424,6 @@ export class SpinalCordToolboxApp {
     modelSelect.innerHTML = '';
     for (const task of SCT_TASKS) {
       if (!isTaskRunnable(task)) continue;
-      if (task.processingOnly) continue;
       const option = document.createElement('option');
       option.value = task.id;
       option.textContent = task.displayName;
@@ -490,7 +484,6 @@ export class SpinalCordToolboxApp {
   }
 
   getOverlayLabelTaskId(stage) {
-    if (stage === 'vertebrae') return 'vertebrae';
     if (stage === 'lesion') return 'lesion_sci_t2';
     if (stage === 'spine_step1') return 'totalspineseg';
     if (stage === 'spine_discs') return 'spineDiscs';
@@ -785,7 +778,7 @@ export class SpinalCordToolboxApp {
     const sectionEnabled = {};
     const buttonsEnabled = {};
 
-    for (const pipelineStep of ['inference', 'processing']) {
+    for (const pipelineStep of ['inference']) {
       sectionEnabled[pipelineStep] = this.isStepEnabled(pipelineStep);
       buttonsEnabled[pipelineStep] = this.areStepButtonsEnabled(pipelineStep);
     }
@@ -806,7 +799,7 @@ export class SpinalCordToolboxApp {
     this.abortUICheckpoint = this.captureAbortUICheckpoint(step);
     this.inferenceExecutor.captureCheckpoint(step);
     this.setStatusError(false);
-    this.progress.begin(step === 'processing' ? 'Labelling vertebrae…' : 'Running segmentation…', { cancellable: true });
+    this.progress.begin('Running segmentation…', { cancellable: true });
     // Node test harnesses must not be kept alive by the elapsed counter.
     this.progress.timer?.unref?.();
   }
@@ -937,8 +930,8 @@ export class SpinalCordToolboxApp {
       return;
     }
 
-    if (selectedTask.processingOnly || !selectedAsset) {
-      this.updateOutput(`SCT task "${selectedTask.displayName}" is a post-processing step. Run it from the SCT Processing section after a segmentation completes.`);
+    if (!selectedAsset) {
+      this.updateOutput(`SCT task "${selectedTask.displayName}" has no model asset.`);
       this.updateTaskDetails();
       return;
     }
@@ -947,9 +940,8 @@ export class SpinalCordToolboxApp {
     const modelUrl = getTaskModelUrl(selectedTask);
     this.beginAbortableStep('inference');
 
-    // Clear previous results — including any vertebrae mask, which is derived
-    // from the previous segmentation and would otherwise be auto-rendered as a
-    // stale overlay on the new run.
+    // Clear previous results so a stale overlay is not auto-rendered on the
+    // new run.
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetStageVisibility();
@@ -981,29 +973,6 @@ export class SpinalCordToolboxApp {
     });
   }
 
-  runProcessingOperation() {
-    const select = document.getElementById('processingOperationSelect');
-    const operation = select?.value || 'vertebrae';
-    if (operation === 'vertebrae') {
-      if (!this.inferenceExecutor.hasResult('segmentation')) {
-        this.updateOutput('Run spinal cord segmentation before vertebral labeling');
-        return;
-      }
-      const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
-      const pam50LevelsUrl = getTaskTemplateAssetUrl('vertebrae', 'pam50-levels');
-      this.beginAbortableStep('processing');
-      this.setStepRunning('processing');
-      this.inferenceExecutor.runVertebralLabeling({
-        modelBaseUrl,
-        pam50LevelsUrl: pam50LevelsUrl ? new URL(pam50LevelsUrl, window.location.href).href : null,
-        scaleDist: 0.55,
-        detectorMinScore: 0.1
-      }).catch(error => this.onInferenceError(error.message));
-      return;
-    }
-    this.updateOutput(`Unsupported SCT Processing operation: ${operation}`);
-  }
-
   // ==================== Step UI Management ====================
 
   setStepRunning(step) {
@@ -1015,16 +984,14 @@ export class SpinalCordToolboxApp {
   getStepSectionId(step) {
     const sectionMap = {
       'load': null,
-      'inference': 'stepInferenceSection',
-      'processing': 'stepProcessingSection'
+      'inference': 'stepInferenceSection'
     };
     return sectionMap[step] || null;
   }
 
   getStepButtonIds(step) {
     const buttonMap = {
-      'inference': ['runSegmentation'],
-      'processing': ['runProcessingBtn']
+      'inference': ['runSegmentation']
     };
     return buttonMap[step] || [];
   }
@@ -1172,7 +1139,6 @@ export class SpinalCordToolboxApp {
   applyDefaultBaseColormap() {
     const colormapSelect = document.getElementById('colormapSelect');
     let colormap = colormapSelect?.value || 'gray';
-    if (this.currentResultTab === 'vertebrae') colormap = 'sct-vertebrae';
     if (this.currentResultTab === 'lesion') colormap = 'sct-lesion';
     if (this.currentResultTab === 'segmentation' && this.selectedTask?.id === 'lesion_sci_t2') colormap = 'sct-spinalcord';
     if (!this.isViewerAvailable() || !this.nv.volumes?.length) return;
@@ -1200,8 +1166,6 @@ export class SpinalCordToolboxApp {
       case 'load':
         this.setStepEnabled('inference', true);
         this.setStepButtonsEnabled('inference', true);
-        this.setStepEnabled('processing', true);
-        this.setStepButtonsEnabled('processing', true);
         this.updateTaskDetails();
         break;
       case 'inference':
@@ -1219,8 +1183,7 @@ export class SpinalCordToolboxApp {
   updateStepBadge(step, status) {
     const badgeMap = {
       'load': null,
-      'inference': 'stepInferenceBadge',
-      'processing': 'stepProcessingBadge'
+      'inference': 'stepInferenceBadge'
     };
     // Load step doesn't have a visible badge
     if (step === 'load') return;
@@ -1275,18 +1238,6 @@ export class SpinalCordToolboxApp {
     }
   }
 
-  resetUIDownstream(fromStep) {
-    const steps = ['inference', 'processing'];
-    const idx = steps.indexOf(fromStep);
-    if (idx < 0) return;
-
-    for (let i = idx + 1; i < steps.length; i++) {
-      this.updateStepBadge(steps[i], '');
-      this.setStepEnabled(steps[i], false);
-      this.setStepButtonsEnabled(steps[i], false);
-    }
-  }
-
   // ==================== Results ====================
 
   async handleStageData(data) {
@@ -1297,9 +1248,6 @@ export class SpinalCordToolboxApp {
     }
 
     if (this.isOverlayStage(data.stage)) {
-      if (data.stage === 'vertebrae') {
-        if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
-      }
       if (data.stage === 'lesion') {
         if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('lesion_sci_t2'), 'sct-lesion');
       }
@@ -1605,11 +1553,10 @@ export class SpinalCordToolboxApp {
   }
 
   isOverlayStage(stage) {
-    return stage === 'segmentation' || stage === 'lesion' || stage === 'vertebrae' || stage === 'spine_step1' || stage === 'spine_discs';
+    return stage === 'segmentation' || stage === 'lesion' || stage === 'spine_step1' || stage === 'spine_discs';
   }
 
   getOverlayColormapId(stage) {
-    if (stage === 'vertebrae') return 'sct-vertebrae';
     if (stage === 'lesion') return 'sct-lesion';
     if (stage === 'spine_step1') return 'sct-totalspineseg';
     if (stage === 'spine_discs') return 'sct-spine-discs';
@@ -1622,7 +1569,6 @@ export class SpinalCordToolboxApp {
       input: true,
       segmentation: true,
       lesion: true,
-      vertebrae: true,
       spine_step1: true,
       spine_discs: true
     };
@@ -1645,7 +1591,7 @@ export class SpinalCordToolboxApp {
   }
 
   getVisibleOverlayStages() {
-    return ['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'].filter(stage => (
+    return ['segmentation', 'lesion', 'spine_step1', 'spine_discs'].filter(stage => (
       this.isStageVisible(stage) && this.inferenceExecutor.hasResult(stage)
     ));
   }
