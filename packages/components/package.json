@@ -63,6 +63,10 @@
       "types": "./src/elements/viewer-toolbar.d.ts",
       "default": "./src/elements/viewer-toolbar.js"
     },
+    "./elements/mask-editor": {
+      "types": "./src/elements/mask-editor.d.ts",
+      "default": "./src/elements/mask-editor.js"
+    },
     "./elements/example-selector": {
       "types": "./src/elements/example-selector.d.ts",
       "default": "./src/elements/example-selector.js"
