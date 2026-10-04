@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -29,7 +28,7 @@ for datatype in (2, 4, 8, 256, 512, 768):
         header.set_data_dtype(datatype)
         image = nib.Nifti1Image(data, np.eye(4), header.copy())
         restored = nib.Nifti1Image.from_bytes(image.to_bytes())
-        expected = np.asarray(restored.dataobj, dtype=np.float32)
+        expected = restored.get_fdata(dtype=np.float64).astype(np.float32)
         fixtures.append({
             "name": f"{datatype}-{name}",
             "datatype": datatype,

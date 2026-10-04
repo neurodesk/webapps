@@ -16,7 +16,7 @@ function roundEven(value) {
   return floor % 2 === 0 ? floor : floor + 1;
 }
 
-// Match _write_temp_chunk: copied source dtype, automatic scaling, then float32 reload.
+// MONAI reloads _write_temp_chunk with float64 scaling before its float32 conversion.
 export function roundtripTemporaryChunk(data, datatype) {
   const range = integerRanges.get(datatype);
   if (!range) return data;
@@ -42,13 +42,10 @@ export function roundtripTemporaryChunk(data, datatype) {
   );
   const subtract = writeFloat ? value => Math.fround(value - intercept) : value => value - intercept;
   const divide = writeFloat ? value => Math.fround(value / slope) : value => value / slope;
-  const readFloat = datatype !== 8 && datatype !== 768 && [outMin, outMax].every(value =>
-    Number.isFinite(Math.fround(Math.fround(value * slope) + intercept))
-  );
   const output = new Float32Array(data.length);
   for (let i = 0; i < data.length; i++) {
     const encoded = Math.max(outMin, Math.min(outMax, roundEven(divide(subtract(data[i])))));
-    const scaled = slope === 1 ? encoded : readFloat ? Math.fround(encoded * slope) : encoded * slope;
+    const scaled = slope === 1 ? encoded : encoded * slope;
     output[i] = intercept === 0 ? scaled : scaled + intercept;
   }
   return output;

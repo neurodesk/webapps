@@ -9,7 +9,7 @@ const fixtures = JSON.parse(await readFile(
 ));
 
 for (const fixture of fixtures) {
-  test(`temporary NIfTI chunk matches nibabel float32 bits: ${fixture.name}`, () => {
+  test(`temporary NIfTI chunk matches MONAI float64 decode then float32 bits: ${fixture.name}`, () => {
     const input = Float32Array.from(fixture.input);
     const original = input.slice();
     const output = roundtripTemporaryChunk(input, fixture.datatype);
