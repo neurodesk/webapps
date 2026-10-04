@@ -61,8 +61,9 @@ export function readVolume(buffer) {
 
 export function estimateConformMemoryBytes(dims, retainedBytes = 0) {
   const source = product(dims);
-  const afterX = 256 * dims[1] * dims[2];
-  const afterY = 256 * 256 * dims[2];
+  const dimsAscending = [...dims].sort((a, b) => a - b);
+  const afterX = 256 * dimsAscending[1] * dimsAscending[2];
+  const afterY = 256 * 256 * dimsAscending[2];
   const target = 256 * 256 * 256;
   const simultaneousFloat64 = Math.max(
     2 * source + afterX,
@@ -73,10 +74,11 @@ export function estimateConformMemoryBytes(dims, retainedBytes = 0) {
   return retainedBytes + simultaneousFloat64 * Float64Array.BYTES_PER_ELEMENT;
 }
 
-export function needsConform(affine, tolerance = 1e-5) {
+export function needsConform(affine, relativeTolerance = 1e-5) {
   for (let row = 0; row < 3; row += 1) {
     for (let column = 0; column < 3; column += 1) {
-      if (Math.abs(affine[row][column] - (row === column ? 1 : 0)) > tolerance) return true;
+      const expected = row === column ? 1 : 0;
+      if (!(Math.abs(affine[row][column] - expected) <= 1e-8 + relativeTolerance * expected)) return true;
     }
   }
   return false;

@@ -4,10 +4,11 @@ TopoFit reconstructs left and right white, pial, and spherical-registration surf
 
 Use a desktop browser with cross-origin isolation and several gigabytes of available memory. The complete order-6 reconstruction contains 245,762 vertices and 491,520 faces per hemisphere.
 
-The browser uses the pinned npm `@niivue/niimath` WebAssembly worker to apply
-`-conform -ras`, resampling axis-aligned and oblique NIfTI geometry onto a
-centred 256³ 1 mm RAS grid. The original image and affine remain available for
-the source-grid QC volume.
+The reconstruction pipeline uses the package's OpenRecon-compatible cubic
+B-spline conformer, preserving the reference grid center, orientation, and
+effective scalar dtype. Oblique grids retain their normalized rotation and
+shear. Inputs already on an identity 1 mm grid bypass conforming, as in BrainNet.
+The original image and affine remain available for source-grid QC.
 
 ```bash
 pnpm --filter topofit dev
