@@ -19,4 +19,5 @@ minimumReleaseAgeExclude:
   - '@brainchop/mindgrab@0.1.20260923'
   - '@niivue/niivue@1.0.0-rc.14'
 overrides:
+  '@playwright/test': 1.63.0
   '@electron/osx-sign>isbinaryfile': 5.0.7
