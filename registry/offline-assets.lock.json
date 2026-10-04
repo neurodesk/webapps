@@ -1427,13 +1427,6 @@
       "kind": "atlas-template",
       "dependencies": []
     },
-    "https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js": {
-      "sha256": "e2273c15e8f8c4f4db128eaca593b647a871216656b2efe8b89d3a12a9d180c3",
-      "bytes": 1949679,
-      "contentType": "text/javascript; charset=utf-8",
-      "kind": "runtime-cdn",
-      "dependencies": []
-    },
     "https://unpkg.com/@niivue/niivue@0.68.1/dist/niivue.umd.js": {
       "sha256": "eb805352d555858708b5eb52a4b65f8eea37ddb7bc868506ac992126584b7784",
       "bytes": 2273503,
