@@ -1,3 +1,4 @@
+import { assertHardwareAdapter } from './hardware-adapter.js';
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
@@ -11,11 +12,11 @@ test.beforeEach(async ({ page }, testInfo) => {
   const info = await page.evaluate(async () => {
     const adapter = await navigator.gpu?.requestAdapter();
     if (!adapter) return null;
-    return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, isFallbackAdapter: adapter.info.isFallbackAdapter };
+    return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, device: adapter.info.device, description: adapter.info.description, isFallbackAdapter: adapter.info.isFallbackAdapter };
   });
   expect(info, 'Hardware WebGPU requires an available adapter').not.toBeNull();
   await testInfo.attach('webgpu-adapter', { body: JSON.stringify(info), contentType: 'application/json' });
-  expect(info.isFallbackAdapter, 'A software adapter cannot validate hardware WebGPU').toBe(false);
+  assertHardwareAdapter(info);
 });
 
 test('pinned T1 example completes with the WASM SynthSR backend', async ({ page }) => {

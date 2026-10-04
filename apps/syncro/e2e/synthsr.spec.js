@@ -1,3 +1,4 @@
+import { assertHardwareAdapter } from './hardware-adapter.js';
 import {test,expect} from '@playwright/test';
 import {readFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -14,10 +15,10 @@ for (const backend of ['wasm','webgpu']) test(`shared SynthSR stage: ${backend} 
   const info = await page.evaluate(async () => {
    const adapter = await navigator.gpu?.requestAdapter();
    if (!adapter) return null;
-   return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, isFallbackAdapter: adapter.info.isFallbackAdapter };
+   return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, device: adapter.info.device, description: adapter.info.description, isFallbackAdapter: adapter.info.isFallbackAdapter };
   });
   expect(info).not.toBeNull();
-  if (process.env.SYNCRO_HARDWARE_GPU) expect(info.isFallbackAdapter).toBe(false);
+  if (process.env.SYNCRO_HARDWARE_GPU) assertHardwareAdapter(info);
   await test.info().attach('webgpu-adapter', { body: JSON.stringify(info), contentType: 'application/json' });
  }
  const fixture=new URL('../../synthsr/test/fixtures/validation.nii.gz',import.meta.url);
