@@ -142,6 +142,10 @@ assert.ok(
   'privacy copy discloses page-view-only analytics and privacy controls'
 );
 assert.ok(
+  indexHtml.includes('downloads the pinned Pyodide Python runtime and scientific libraries from jsDelivr (cdn.jsdelivr.net)'),
+  'privacy copy discloses the CDN requests made by browser SCT analysis'
+);
+assert.ok(
   indexHtml.includes('SCT: Spinal Cord Toolbox, an open-source software for processing spinal cord MRI data'),
   'Citations modal includes the primary SCT NeuroImage citation'
 );

@@ -13,6 +13,9 @@ pub const HEADER_LEN: usize = 352;
 /// Byte offset of the magic string.
 pub const MAGIC_OFFSET: usize = 344;
 
+/// Maximum voxels per input file (a 512³ volume).
+pub const MAX_VOXELS: u64 = 512 * 512 * 512;
+
 /// Returns `true` when `bytes` start with the gzip magic.
 pub fn is_gzip(bytes: &[u8]) -> bool {
     bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b

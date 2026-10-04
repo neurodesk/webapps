@@ -213,3 +213,58 @@ test('reusing an idempotency key with changed content is a conflict', async () =
   await client.watch(submitted.id);
   await client.remove(submitted.id);
 });
+
+test('SCT advertises a pinned CPU tool and preserves simulator artifact bytes', async () => {
+  const client = createComputeClient({ baseUrl, token });
+  const info = await client.info();
+  const sct = info.tools.find(tool => tool.id === 'sct');
+  assert.equal(sct.version, '7.3');
+  assert.equal(sct.gpuRequired, false);
+  assert.match(sct.image, /spinalcordtoolbox_7\.3\.3@sha256:974f6019/);
+  assert.deepEqual(sct.commands, ['process_segmentation', 'analyze_lesion']);
+  const cases = [
+    [{ tool: 'sct', command: 'process_segmentation', cord: 'cord', options: { perSlice: true, angleCorrection: false, slices: '1:3,5' } }, { cord: stackA() }, ['morphometry.csv', 'log.txt']],
+    [{ tool: 'sct', command: 'analyze_lesion', lesion: 'lesion', options: {} }, { lesion: stackA() }, ['lesion_analysis.xlsx', 'lesion_analysis.pkl', 'lesion_label.nii.gz', 'log.txt']],
+    [{ tool: 'sct', command: 'analyze_lesion', lesion: 'lesion', cord: 'cord' }, { lesion: new Blob([gunzipSync(Buffer.from(await stackA().arrayBuffer()))]), cord: stackB() }, ['lesion_analysis.xlsx', 'lesion_analysis.pkl', 'lesion_label.nii', 'log.txt']],
+  ];
+  for (const [specification, files, names] of cases) {
+    const receipt = await client.submit(specification, files);
+    const done = await client.watch(receipt.id);
+    assert.equal(done.status, 'succeeded');
+    assert.deepEqual(done.outputs.map(output => output.name), names);
+    const log = await (await client.output(done.id, 'log.txt')).text();
+    assert.match(log, new RegExp(`sct_${specification.command}`));
+    assert.doesNotMatch(log, /--device|--input-stacks/);
+    if (specification.command === 'process_segmentation') {
+      assert.match(log, /-perslice 1 -angle-corr 0 -z 1:3,5/);
+      assert.equal(await (await client.output(done.id, 'morphometry.csv')).text(), 'Simulated,MEAN(area)\ntrue,0\n');
+    } else {
+      const label = names.find(name => name.includes('_label'));
+      assert.deepEqual(Buffer.from(await (await client.output(done.id, label)).arrayBuffer()), Buffer.from(await files.lesion.arrayBuffer()));
+    }
+  }
+});
+
+test('SCT rejects unsupported command shapes and options before running', async () => {
+  const client = createComputeClient({ baseUrl, token });
+  const valid = { tool: 'sct', command: 'process_segmentation', cord: 'cord' };
+  for (const [specification, files] of [
+    [{ ...valid, options: { slices: '5:1' } }, { cord: stackA() }],
+    [{ ...valid, options: { angleCorrection: 1 } }, { cord: stackA() }],
+    [{ ...valid, options: { command: 'anything' } }, { cord: stackA() }],
+    [{ ...valid, stacks: [] }, { cord: stackA() }],
+    [{ ...valid, cord: 'other' }, { other: stackA() }],
+    [valid, { cord: stackA(), lesion: stackB() }],
+    [{ tool: 'sct', command: 'analyze_lesion', lesion: 'lesion', options: { perSlice: true } }, { lesion: stackA() }],
+  ]) {
+    await assert.rejects(client.submit(specification, files), error => error.code === 'invalid-spec');
+  }
+});
+
+test('SCT cancellation reaches a terminal state without exposing artifacts', async () => {
+  const client = createComputeClient({ baseUrl, token });
+  const receipt = await client.submit({ tool: 'sct', command: 'analyze_lesion', lesion: 'lesion' }, { lesion: stackA() });
+  await client.cancel(receipt.id);
+  await assert.rejects(client.watch(receipt.id), error => error.code === 'cancelled');
+  assert.deepEqual((await client.job(receipt.id)).outputs, []);
+});

@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { isNifti1, readVolume, writeFloat32Volume } from './nifti-fixture.mjs';
+import { validateSctSpec, sctArgv, SCT_IMAGE, SCT_VERSION, SCT_COMMANDS } from '../apps/spinalcordtoolbox/web/js/app/analysis-spec.js';
 import { validateNesvorSpec, nesvorArgv } from '../apps/nesvor/src/spec.js';
 
 export const REFERENCE_VERSION = '0.1.20260921';
@@ -115,9 +116,31 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     job.listeners.clear();
   };
 
+  const runSct = async job => {
+    const fileNames = Object.fromEntries(Object.entries(job.files).map(([role, bytes]) => [role, `${role}.nii${bytes[0] === 31 && bytes[1] === 139 ? '.gz' : ''}`]));
+    log(job, 'info', `Simulated run of: ${sctArgv(job.validated, fileNames).join(' ')}`);
+    log(job, 'warning', 'SIMULATED SCT artifacts; no scientific analysis was performed');
+    const wantsFailure = failNext;
+    failNext = null;
+    await sleep(job, stageDelayMs * 8);
+    if (job.cancelled) return finish(job, 'cancelled');
+    if (wantsFailure) return finish(job, 'failed', { code: 'tool-failed', message: wantsFailure });
+    job.outputs = job.spec.command === 'process_segmentation'
+      ? [{ name: 'morphometry.csv', bytes: Buffer.from('Simulated,MEAN(area)\ntrue,0\n'), contentType: 'text/csv' }]
+      : [
+        { name: 'lesion_analysis.xlsx', bytes: Buffer.from('SIMULATED SCT spreadsheet placeholder\n'), contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+        { name: 'lesion_analysis.pkl', bytes: Buffer.from('SIMULATED SCT pickle placeholder\n'), contentType: 'application/octet-stream' },
+        { name: fileNames.lesion.replace('lesion.', 'lesion_label.'), bytes: job.files.lesion, contentType: fileNames.lesion.endsWith('.gz') ? 'application/gzip' : 'application/octet-stream' },
+      ];
+    job.outputs.push({ name: 'log.txt', bytes: Buffer.from(`${job.log.join('\n')}\n`), contentType: 'text/plain' });
+    progress(job, 1, 'Finished');
+    finish(job, 'succeeded');
+  };
+
   const run = async job => {
     job.startedAt = new Date().toISOString();
     setStatus(job, 'running');
+    if (job.spec.tool === 'sct') return runSct(job);
     log(job, 'info', `Simulated run of: nesvor ${nesvorArgv(job.validated).join(' ')}`);
     const wantsFailure = failNext;
     failNext = null;
@@ -213,7 +236,7 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
     if (Object.keys(files).length > maxFiles) return fail(response, 413, 'too-large', `More than ${maxFiles} files`);
     let validated;
     try {
-      validated = validateNesvorSpec(spec, Object.keys(files));
+      validated = spec?.tool === 'sct' ? validateSctSpec(spec, Object.keys(files)) : validateNesvorSpec(spec, Object.keys(files));
     } catch (error) {
       return fail(response, 400, 'invalid-spec', error.message);
     }
@@ -321,7 +344,7 @@ export function startReferenceServer({ port = 0, host = '127.0.0.1', token = 'te
           simulated: true,
           runner: 'simulate',
           gpu: { available: false, name: null },
-          tools: [{ id: 'nesvor', version: '0.5.0', image: NESVOR_IMAGE, commands: ['reconstruct'] }],
+          tools: [{ id: 'nesvor', version: '0.5.0', image: NESVOR_IMAGE, commands: ['reconstruct'] }, { id: 'sct', version: SCT_VERSION, image: SCT_IMAGE, commands: SCT_COMMANDS, gpuRequired: false }],
           limits: { maxUploadBytes, maxFiles },
         });
       }

@@ -5,7 +5,7 @@ use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 use super::process::{run_process, KillStrategy};
-use super::{with_device_flag, LineSink, RunFuture, RunRequest, Runner};
+use super::{LineSink, RunFuture, RunRequest, Runner};
 use crate::config::RunnerKind;
 use crate::tools::ToolPaths;
 
@@ -26,7 +26,7 @@ impl Runner for NativeRunner {
     }
 
     fn run(&self, request: RunRequest, sink: LineSink, cancel: CancellationToken) -> RunFuture {
-        let argv = with_device_flag(request.argv, request.cpu);
+        let argv = request.argv;
         Box::pin(async move {
             let Some((program, args)) = argv.split_first() else {
                 return Err(std::io::Error::other("empty argv"));

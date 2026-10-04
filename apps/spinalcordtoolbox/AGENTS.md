@@ -1,6 +1,8 @@
 <!-- SPECKIT START -->
 # General Instructions
 
+- `test:native-analysis` requires a real Docker compute server through `COMPUTE_SERVER_URL` and `COMPUTE_SERVER_TOKEN`. It compares native SCT data exactly with direct pinned-container runs, excluding timestamps, and retains generated fixtures under `TMPDIR`. `COMPUTE_SERVER_DATA` additionally checks downloaded artifact bytes against server files. Simulated runs cannot satisfy this gate.
+
 - after every change to the source code make sure the Agent.md file is updated
 - after every new feature added, make sure there is a test for the feature (no tests for removing features)
 - after changing the code, start a new dev server and ask the user to check the resulting app functionality
@@ -129,3 +131,21 @@ Common issues it catches:
 ## Examples
 
 The example uses the pinned T2 spinal-cord reference case and preserves the selected SCT task. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.
+
+## Native mask analysis
+
+- `SctAnalysis` owns independent mask inputs, compute jobs and unchanged native artifacts. It uses the shared compute connection/client and works without an anatomy image. Selecting or generating a mask never submits a job.
+- `analysis-spec.js` is the Node reference server's schema; `exes/compute-server/src/tools/sct.rs` mirrors it. Update the protocol document before changing either. `test:analysis` and the shared protocol suite cover it.
+- Native analysis uses the pinned registry container, whose tag is `7.3.3` but whose `sct_version` reports `7.3`. `test:analysis` fails unless the image and version agree across `analysis-spec.js`, `sct.rs`, `registry/neurocontainers.json`, the protocol document and both READMEs. Docker and simulation advertise the tool; native/Apptainer do not guarantee this dependency pin. Simulation is a transport test only.
+- Morphometry preserves upstream CSV bytes. Lesion analysis preserves upstream XLSX, pickle and label NIfTI bytes; label compression follows the uploaded lesion mask. Do not rename a derived table CSV as native output.
+- Generated sources admit whole-cord `spinalcord`/SCIseg masks and SCIseg lesion masks. Gray matter and TotalSpineSeg multiclass labels are not whole-cord sources. New input sessions and cleared results invalidate generated choices. They cancel or clear only an analysis of a generated mask; analysis of uploaded masks continues. Delete job asks for confirmation before removing server files.
+- Automatic SCIseg metrics stay local and are labelled as approximate browser metrics. They are not numerical substitutes for the native commands.
+
+## Browser mask analysis
+
+- `browser-analysis.js` owns a fresh analysis worker per run. Cancellation terminates the worker and rejects the pending promise, including during initialization or mask reading. Replaced inputs cannot publish late outputs.
+- `browser-runtime.js` runs unchanged pinned SCT Python in Pyodide. `browser-runtime.json` pins runtime assets and every vendored source hash. `stage-browser-analysis.mjs` verifies the assets, packs the source reproducibly and stages `web/python/` for dev/build. Generated files are ignored by Git. Bundles include the SCT source and pure Python wheels; the versioned Pyodide CDN supplies Python and scientific libraries, which are pinned in the offline inventory.
+- OS adapters in `browser-bootstrap.py` fail when unavailable platform APIs are called. Do not change scientific functions in `vendor/sct`; refresh source hashes and native comparisons deliberately for an upstream update.
+- The Privacy template discloses that browser analysis fetches Pyodide and its packages from jsDelivr; `test:ui` checks it. Update both if the runtime host changes.
+- Browser exports retain SCT's CSV/XLSX/pickle/NIfTI formats. WebAssembly floating-point results are not guaranteed bit-identical to native SCT. Keep execution provenance visible and retain the pinned compute-server option.
+- `test:analysis` covers both backends and worker cancellation/retry. The real browser analysis must run without any compute-server connection and preserve useful downloads.

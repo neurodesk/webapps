@@ -11,6 +11,7 @@ bindSectionDisclosures(document);
 import { registerSctAutomation } from './automation.js';
 import { SctInputSessions } from './controllers/SctInputSessions.js';
 import { ViewerController } from '@neurodesk/webapp-components';
+import { SctAnalysis } from './controllers/SctAnalysis.js';
 import { SctPipeline } from './controllers/SctPipeline.js';
 import { ConsoleOutput, bindWindowControls } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
@@ -121,6 +122,13 @@ export class SpinalCordToolboxApp {
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
+
+    this.analysis = new SctAnalysis({
+      before: document.getElementById('resultsSection'),
+      progress: this.progress,
+      log: message => this.updateOutput(message),
+      canRun: () => !this.inferenceExecutor.isRunning()
+    });
 
     this.setupShellEventListeners();
 
@@ -300,7 +308,7 @@ export class SpinalCordToolboxApp {
     }
 
     const cancelBtn = document.getElementById('cancelButton');
-    if (cancelBtn) cancelBtn.addEventListener('click', () => this.abortCurrentStep());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.analysis?.busy ? this.analysis.cancel() : this.abortCurrentStep());
 
     const copyConsole = document.getElementById('copyConsole');
     if (copyConsole) copyConsole.addEventListener('click', async () => {
@@ -925,7 +933,7 @@ export class SpinalCordToolboxApp {
   // ==================== Pipeline Step Methods ====================
 
   async runSegmentation() {
-    if (this.inferenceExecutor.isRunning()) return;
+    if (this.inferenceExecutor.isRunning() || this.analysis?.busy) return;
 
     const modelSelect = document.getElementById('modelSelect');
     const selectedTaskId = modelSelect ? modelSelect.value : DEFAULT_TASK_ID;
@@ -967,12 +975,14 @@ export class SpinalCordToolboxApp {
 
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
     const modelUrl = getTaskModelUrl(selectedTask);
+    this._analysisTaskId = selectedTask.id;
     await this.cancelMaskEdit();
     this.beginAbortableStep('inference');
 
     // Clear previous results — including any vertebrae mask, which is derived
     // from the previous segmentation and would otherwise be auto-rendered as a
     // stale overlay on the new run.
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetStageVisibility();
@@ -1069,6 +1079,7 @@ export class SpinalCordToolboxApp {
     }
 
     // Reset results
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetStageVisibility();
@@ -1298,6 +1309,7 @@ export class SpinalCordToolboxApp {
   // ==================== Results ====================
 
   async handleStageData(data) {
+    if (data.stage === 'segmentation' || data.stage === 'lesion') this.syncAnalysisMasks();
     const resultsSection = document.getElementById('resultsSection');
     if (resultsSection) {
       resultsSection.classList.remove('hidden');
@@ -1498,10 +1510,21 @@ export class SpinalCordToolboxApp {
     result.original ??= original;
     result.file = file;
     result.edited = true;
+    this.syncAnalysisMasks();
     this.updateOutput(`Applied manual edits to ${Config.STAGE_NAMES[stage] || stage}`);
     this.endMaskEdit();
     this.rebuildResultsList();
     await this._renderViewerVolumesNow();
+  }
+
+  // Only whole-cord segmentations are valid cord masks for native SCT analysis.
+  syncAnalysisMasks() {
+    const generated = {};
+    const cord = this.inferenceExecutor.getResult('segmentation')?.file;
+    const lesion = this.inferenceExecutor.getResult('lesion')?.file;
+    if (cord && ['spinalcord', 'lesion_sci_t2'].includes(this._analysisTaskId)) generated.cord = cord;
+    if (lesion) generated.lesion = lesion;
+    this.analysis?.setGenerated(generated);
   }
 
   endMaskEdit() {
@@ -1949,6 +1972,7 @@ export class SpinalCordToolboxApp {
 
   async clearResults() {
     await this.cancelMaskEdit();
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.currentResultTab = 'input';

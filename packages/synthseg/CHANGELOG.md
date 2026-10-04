@@ -2,7 +2,6 @@
 
 ## 0.5.20261004
 
-
 ### Patch Changes
 
 - Share raw NIfTI-1 header and scalar decoding between native SynthSR, native

@@ -1,5 +1,16 @@
 # spinalcordtoolbox
 
+## 0.6.20261004
+
+### Minor Changes
+
+- Add SCT cord morphometry and standalone lesion analysis for uploaded, generated or manually edited masks, without an anatomy image. Analysis runs in the browser by default, executing the pinned, unchanged SCT 7.3 Python in a Pyodide worker, or optionally on a paired Neurodesk compute server in the pinned SCT Docker image. Both keep SCT's CSV, XLSX, pickle and labeled NIfTI outputs and show where results were computed, because WebAssembly floating-point results can differ from native SCT. Server jobs can be recovered, cancelled and deleted; browser runs cancel by terminating their worker. Automatic browser lesion metrics stay labelled approximate. Shared compute connections support selected tools and explicit HTTPS reverse-proxy addresses.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+
 ## 0.5.20261004
 
 ### Patch Changes
@@ -8,7 +19,6 @@
 - Updated dependencies [0204fe1]
 - Updated dependencies [ec85a09]
   - @neurodesk/webapp-components@0.10.0
-
 
 ### Patch Changes
 
