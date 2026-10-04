@@ -4,7 +4,7 @@ export interface MaskEditorOptions {
   /** A NiiVue 0.x or 1.0 instance whose first volume is the image the mask was made on. */
   nv: object;
   onApply?(stage: string, edited: File, context: { original: File }): void | Promise<void>;
-  onCancel?(stage: string): void;
+  onCancel?(stage: string): void | Promise<void>;
   /** Failures from the toolbar's Apply and Cancel buttons, which have no caller to reject to. */
   onError?(stage: string, error: unknown): void;
   /** Names for label values, shown as `value — name` in the Label select. */
@@ -54,7 +54,7 @@ export interface MaskEditorElement extends HTMLElement {
   configure(options: Omit<MaskEditorOptions, 'doc'>): void;
   /** Resolves `false` when cancelled while the mask loads; rejects when NiiVue refuses the mask. */
   start(options: MaskEditStart): Promise<boolean>;
-  /** The edited file, or `null` when no session is open. */
+  /** The edited file, or `null` when no session is open or cancellation precedes the app callback. */
   apply(): Promise<File | null>;
   cancel(): Promise<void>;
 }

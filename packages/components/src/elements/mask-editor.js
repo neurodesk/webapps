@@ -21,112 +21,170 @@ function createMaskEditorClass(view) {
     #options = {};
     #drawing = null;
     #controls = null;
-    #pending = null;
+    #owner = null;
+    #keyDocument = null;
     #onKey = (event) => this.#handleKey(event);
 
     connectedCallback() {
       this.classList.add('nd-mask-editor');
       this.setAttribute('role', 'group');
       this.setAttribute('aria-label', 'Mask editing');
-      this.#sync();
+      this.#set(this.#session);
+    }
+
+    disconnectedCallback() {
+      queueMicrotask(() => {
+        if (this.isConnected) return;
+        this.#keyDocument?.removeEventListener('keydown', this.#onKey);
+        this.#keyDocument = null;
+        this.#report(this.cancel());
+      });
     }
 
     configure(options) {
-      this.#options = options;
+      this.#options = { ...options, labelNames: options.labelNames && { ...options.labelNames } };
       this.#drawing = createDrawingAdapter(options.nv);
     }
 
     get session() { return this.#session; }
 
-    // Starts run one after another, so a session cancelled while its mask loads has
-    // closed its drawing and restored its overlay before the next one touches NiiVue.
     async start(request) {
       if (!this.#drawing) throw new Error('Configure the mask editor with a NiiVue instance first');
-      await this.#pending?.catch(() => {});
-      const run = this.#open(request);
-      this.#pending = run;
-      try {
-        return await run;
-      } finally {
-        if (this.#pending === run) this.#pending = null;
-      }
+      const drawing = this.#drawing;
+      const options = this.#options;
+      if (this.#owner?.cancelling) await this.#owner.cancelling;
+      if (this.#owner) throw new Error(`Cannot start editing ${request.stage} while ${this.#session.stage} is open`);
+      const owner = {
+        drawing,
+        options,
+        stage: request.stage,
+        cancelled: false,
+        committing: false,
+        opened: false,
+        overlay: null,
+        released: null,
+        cancelling: null,
+        pending: null,
+      };
+      this.#owner = owner;
+      this.#set({ state: 'opening', stage: request.stage });
+      owner.pending = Promise.resolve().then(() => this.#open(owner, request));
+      return owner.pending;
     }
 
-    async #open({ stage, file, label = stage, overlayIndex = null, colormap = null }) {
-      if (this.#session.state !== 'idle') throw new Error(`Cannot start editing ${stage} while ${this.#session.stage} is open`);
-      const opening = { state: 'opening', stage };
-      this.#set(opening);
-      const overlay = overlayIndex === null ? null : { index: overlayIndex, opacity: this.#drawing.volumeOpacity(overlayIndex) };
-      let opened = false;
+    async #open(owner, { stage, file, label = stage, overlayIndex = null, colormap = null }) {
+      const { drawing, options } = owner;
       try {
-        if (overlay) await this.#drawing.setVolumeOpacity(overlay.index, 0);
+        if (owner.cancelled) return false;
+        owner.overlay = overlayIndex === null ? null : { index: overlayIndex, opacity: drawing.volumeOpacity(overlayIndex) };
+        if (owner.overlay) await drawing.setVolumeOpacity(overlayIndex, 0);
+        if (owner.cancelled) return false;
         const mask = await maskToUint8Nifti(file);
+        if (owner.cancelled) return false;
         const labelValues = await distinctLabels(mask);
-        opened = await this.#drawing.open(mask);
-        if (!opened) throw new Error(`${label} does not share the viewed image's voxel grid`);
-        if (this.#session !== opening) {
-          await this.#release(overlay);
-          return false;
-        }
-        if (colormap) this.#drawing.setColormap(colormap);
-        const choices = labelChoices(labelValues, this.#options.labelNames);
+        if (owner.cancelled) return false;
+        owner.opened = true;
+        owner.opened = await drawing.open(mask);
+        if (owner.cancelled) return false;
+        if (!owner.opened) throw new Error(`${label} does not share the viewed image's voxel grid`);
+        if (colormap) drawing.setColormap(colormap);
+        const choices = labelChoices(labelValues, options.labelNames);
         this.#build(label, choices);
-        this.#set({ state: 'editing', stage, file, label, labelValues, choices, tool: 'draw', value: choices[0], brush: DEFAULT_BRUSH, overlay });
+        this.#set({ state: 'editing', stage, file, label, labelValues, choices, tool: 'draw', value: choices[0], brush: DEFAULT_BRUSH, overlay: owner.overlay });
         this.#applyTool();
+        this.#emit('nd-mask-edit-start', { stage, message: `Editing ${label}. Left-drag paints; Apply keeps the changes.` });
+        return true;
       } catch (error) {
-        if (opened) this.#drawing.close();
-        if (overlay) await this.#drawing.setVolumeOpacity(overlay.index, overlay.opacity);
-        if (this.#session === opening) this.#set(IDLE);
+        if (!owner.cancelled) {
+          try {
+            await this.#release(owner);
+          } finally {
+            this.#finish(owner);
+          }
+        }
         throw error;
       }
-      this.#emit('nd-mask-edit-start', { stage, message: `Editing ${label}. Left-drag paints; Apply keeps the changes.` });
-      return true;
     }
 
     async apply() {
       const session = this.#session;
       if (session.state !== 'editing') return null;
+      const owner = this.#owner;
       this.#set({ state: 'applying', stage: session.stage });
-      let edited;
+      owner.pending = Promise.resolve().then(() => this.#apply(owner, session));
+      return owner.pending;
+    }
+
+    async #apply(owner, session) {
       try {
+        if (owner.cancelled) return null;
         const name = editedFileName(session.file.name);
-        const bytes = await this.#drawing.export();
-        edited = new File([name.toLowerCase().endsWith('.gz') ? await gzip(bytes) : bytes], name, { type: 'application/octet-stream' });
+        const bytes = await owner.drawing.export();
+        if (owner.cancelled) return null;
+        const contents = name.toLowerCase().endsWith('.gz') ? await gzip(bytes) : bytes;
+        if (owner.cancelled) return null;
+        const edited = new File([contents], name, { type: 'application/octet-stream' });
+        await this.#release(owner);
+        if (owner.cancelled) return null;
+        this.#emit('nd-mask-edit-apply', { stage: session.stage });
+        if (owner.cancelled) return null;
+        owner.committing = true;
+        await owner.options.onApply?.(session.stage, edited, { original: session.file });
+        return edited;
       } catch (error) {
-        this.#set(session);
+        if (!owner.cancelled && !owner.released) this.#set(session);
         throw error;
+      } finally {
+        if (owner.released && !owner.cancelled) this.#finish(owner);
       }
-      await this.#release(session.overlay);
-      this.#emit('nd-mask-edit-apply', { stage: session.stage });
-      await this.#options.onApply?.(session.stage, edited, { original: session.file });
-      return edited;
     }
 
     async cancel() {
-      const session = this.#session;
-      if (session.state === 'opening') {
-        this.#set(IDLE);
-        return;
-      }
-      if (session.state !== 'editing') return;
-      await this.#release(session.overlay);
-      this.#emit('nd-mask-edit-cancel', { stage: session.stage });
-      this.#options.onCancel?.(session.stage);
+      const owner = this.#owner;
+      if (!owner) return;
+      if (owner.cancelling) return owner.cancelling;
+      owner.cancelled = true;
+      if (this.#session.state === 'editing') this.#set({ state: 'applying', stage: owner.stage });
+      owner.cancelling = Promise.resolve().then(async () => {
+        try {
+          await owner.pending.catch(() => {});
+          await this.#release(owner);
+          if (!owner.committing) {
+            this.#emit('nd-mask-edit-cancel', { stage: owner.stage });
+            await owner.options.onCancel?.(owner.stage);
+          }
+        } finally {
+          this.#finish(owner);
+        }
+      });
+      return owner.cancelling;
     }
 
-    async #release(overlay) {
-      this.#drawing.close();
+    #release(owner) {
+      owner.released ??= Promise.resolve().then(async () => {
+        try {
+          if (owner.opened) owner.drawing.close();
+        } finally {
+          if (owner.overlay) await owner.drawing.setVolumeOpacity(owner.overlay.index, owner.overlay.opacity);
+        }
+      });
+      return owner.released;
+    }
+
+    #finish(owner) {
+      if (this.#owner !== owner) return;
+      this.#owner = null;
       this.#set(IDLE);
-      if (overlay) await this.#drawing.setVolumeOpacity(overlay.index, overlay.opacity);
     }
 
     #set(session) {
-      const wasActive = this.#session.state === 'editing' || this.#session.state === 'applying';
       this.#session = session;
-      const active = session.state === 'editing' || session.state === 'applying';
-      const doc = this.ownerDocument;
-      if (active && !wasActive) doc.addEventListener('keydown', this.#onKey);
-      if (!active && wasActive) doc.removeEventListener('keydown', this.#onKey);
+      this.#keyDocument?.removeEventListener('keydown', this.#onKey);
+      this.#keyDocument = null;
+      if (this.isConnected && session.state === 'editing') {
+        this.#keyDocument = this.ownerDocument;
+        this.#keyDocument.addEventListener('keydown', this.#onKey);
+      }
       this.#sync();
     }
 
@@ -139,12 +197,12 @@ function createMaskEditorClass(view) {
 
     #applyTool() {
       const { tool, value, brush } = this.#session;
-      this.#drawing.setTool({ tool, label: value, brushSize: brush });
+      this.#owner.drawing.setTool({ tool, label: value, brushSize: brush });
     }
 
     #build(label, choices) {
       const doc = this.ownerDocument;
-      const names = this.#options.labelNames || {};
+      const names = this.#owner.options.labelNames || {};
       const tools = TOOLS.map(tool => createElement('button', {
         className: 'nd-tool-btn',
         type: 'button',
@@ -168,7 +226,7 @@ function createMaskEditorClass(view) {
       });
       const brushValue = createElement('span', { ownerDocument: doc });
       const action = (text, onclick, title) => createElement('button', { className: 'nd-btn nd-btn-sm', type: 'button', text, title, ownerDocument: doc, onclick });
-      const undo = action('Undo', () => this.#drawing.undo(), 'Undo the last stroke (Ctrl+Z)');
+      const undo = action('Undo', () => this.#owner.drawing.undo(), 'Undo the last stroke (Ctrl+Z)');
       const apply = action('Apply', () => this.#report(this.apply()), 'Keep the edits and replace the result');
       const cancel = action('Cancel', () => this.#report(this.cancel()), 'Discard the edits');
       this.replaceChildren(...[
@@ -209,7 +267,7 @@ function createMaskEditorClass(view) {
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === 'z' && !event.shiftKey) {
         event.preventDefault();
-        this.#drawing.undo();
+        this.#owner.drawing.undo();
         return;
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -224,9 +282,10 @@ function createMaskEditorClass(view) {
     // A button has no caller to reject to; the app hears about failures instead.
     #report(promise) {
       const stage = this.#session.stage;
+      const options = this.#owner?.options ?? this.#options;
       promise.catch((error) => {
         this.#emit('nd-mask-edit-error', { stage, error });
-        this.#options.onError?.(stage, error);
+        options.onError?.(stage, error);
       });
     }
 

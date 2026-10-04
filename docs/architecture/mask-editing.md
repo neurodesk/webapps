@@ -49,7 +49,22 @@ from it, never the other way round. `label` is the result's display name,
 `value` the label value being painted, and `choices` the values the Label
 select offers: those in the mask plus any named in `labelNames`. `opening`
 covers the asynchronous load; the toolbar stays hidden, and a `cancel()`
-while opening returns `start()` `false` once the load finishes.
+while opening returns `start()` `false` once the load finishes. `cancel()`
+waits for that load, drawing cleanup, overlay restoration and `onCancel`.
+Each session captures its drawing adapter and callbacks. `configure()` affects
+future sessions, including when called while an old session is closing.
+
+Cancellation before `onApply` begins discards pending exports and returns `null`
+from `apply()`. Once `onApply` begins, cancellation waits for that callback to
+settle because it may already have changed app state. The editor retains
+ownership until cleanup and callbacks finish. Await `cancel()` before replacing
+viewer volumes or resetting app results. Callbacks must return their viewer
+work; they may request cancellation with `void editor.cancel()`, but must not
+await cancellation of their own session.
+
+Removing the element cancels its session after a microtask and removes its
+keyboard handler. A synchronous DOM move preserves the session. Reconnecting
+during cancellation does not allow a new drawing to open before cleanup ends.
 
 ## Code
 

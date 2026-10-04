@@ -6,10 +6,12 @@ import { createFloat32Nifti, createNiftiHeaderFromVolume, parseNiftiHeader } fro
 import { createMaskEditor } from '../src/elements/mask-editor.js';
 import { createResultList } from '../src/elements/result-list.js';
 
+const affine = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+
 function maskFile(values, name = 'mask.nii.gz') {
   const data = new Float32Array(24);
   data.set(values);
-  const header = createNiftiHeaderFromVolume({ hdr: { dims: [3, 4, 3, 2, 1, 1, 1, 1] } });
+  const header = createNiftiHeaderFromVolume({ hdr: { affine, sform_code: 1, dims: [3, 4, 3, 2, 1, 1, 1, 1] } });
   return new File([createFloat32Nifti(data, header)], name);
 }
 
@@ -20,7 +22,7 @@ function fakeNv() {
     drawPenValue: 1,
     drawPenFilled: false,
     drawPenSize: 1,
-    volumes: [{ opacity: 1, hdr: { dims: [3, 4, 3, 2, 1] } }, { opacity: 0.6 }],
+    volumes: [{ opacity: 1, hdr: { affine, sform_code: 1, dims: [3, 4, 3, 2, 1] } }, { opacity: 0.6 }],
     accept: true,
     drawing: null,
     async loadDrawing(file) {
@@ -197,9 +199,10 @@ test('a session cancelled while its mask loads closes its drawing before the nex
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   const load = nv.loadDrawing.bind(nv);
-  nv.loadDrawing = async (file) => { await gate; return load(file); };
+  let loading = false;
+  nv.loadDrawing = async (file) => { loading = true; await gate; return load(file); };
   const first = editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
-  await until(() => editor.session.state === 'opening');
+  await until(() => loading);
   const cancelling = editor.cancel();
   assert.notEqual(editor.session.state, 'idle');
   const second = editor.start({ stage: 'other', file: maskFile([2]), overlayIndex: 1 });
@@ -225,8 +228,10 @@ test('cancel waits for export and suppresses the stale apply callback', async (t
   t.after(() => window.close());
   await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
   const gate = deferred();
-  nv.saveDrawing = async () => { await gate.promise; return nv.drawing.slice(); };
+  let exporting = false;
+  nv.saveDrawing = async () => { exporting = true; await gate.promise; return nv.drawing.slice(); };
   const applying = editor.apply();
+  await until(() => exporting);
   let settled = false;
   const cancelling = editor.cancel().then(() => { settled = true; });
   await Promise.resolve();
@@ -307,4 +312,146 @@ test('permanent removal cancels editing but synchronous moves keep it alive', as
   const before = nv.calls.length;
   key('z', { ctrlKey: true });
   assert.equal(nv.calls.length, before);
+});
+
+
+test('cancel waits for overlay restoration and suppresses apply before commit', async (t) => {
+  const { window, editor, nv, applied } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  const gate = deferred();
+  let restoring = false;
+  nv.setVolume = async (_index, { opacity }) => {
+    if (opacity === 0.6) { restoring = true; await gate.promise; }
+  };
+  const applying = editor.apply();
+  await until(() => restoring);
+  let settled = false;
+  const cancelling = editor.cancel().then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  const next = editor.start({ stage: 'next', file: maskFile([2]) });
+  gate.resolve();
+  assert.equal(await applying, null);
+  await cancelling;
+  assert.equal(await next, true);
+  assert.deepEqual(applied, []);
+});
+
+test('an apply event can cancel before the app callback begins', async (t) => {
+  const { window, editor, applied, cancelled } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]) });
+  let cancelling;
+  editor.addEventListener('nd-mask-edit-apply', () => { cancelling = editor.cancel(); });
+  assert.equal(await editor.apply(), null);
+  await cancelling;
+  assert.deepEqual(applied, []);
+  assert.deepEqual(cancelled, ['mask']);
+});
+
+test('export failure remains editable, callback failure releases ownership', async (t) => {
+  const { window, editor, nv } = setup({ onApply: () => { throw new Error('commit failed'); } });
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]) });
+  const save = nv.saveDrawing.bind(nv);
+  nv.saveDrawing = async () => { throw new Error('export failed'); };
+  await assert.rejects(editor.apply(), /export failed/);
+  assert.equal(editor.session.state, 'editing');
+  nv.saveDrawing = save;
+  await assert.rejects(editor.apply(), /commit failed/);
+  assert.equal(editor.session.state, 'idle');
+  assert.equal(await editor.start({ stage: 'next', file: maskFile([2]) }), true);
+});
+
+test('failed cleanup still releases ownership and a later session can open', async (t) => {
+  const { window, editor, nv } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  nv.setVolume = async () => { throw new Error('restore failed'); };
+  await assert.rejects(editor.cancel(), /restore failed/);
+  assert.equal(editor.session.state, 'idle');
+  assert.equal(nv.drawIsEnabled, false);
+  assert.equal(await editor.start({ stage: 'next', file: maskFile([2]) }), true);
+});
+
+test('removal during export waits for it and cancels the old callback after reconnection', async (t) => {
+  const { window, editor, nv, applied } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  const gate = deferred();
+  let exporting = false;
+  nv.saveDrawing = async () => { exporting = true; await gate.promise; return nv.drawing.slice(); };
+  const applying = editor.apply();
+  await until(() => exporting);
+  editor.remove();
+  await Promise.resolve();
+  window.document.body.append(editor);
+  const next = editor.start({ stage: 'next', file: maskFile([2]) });
+  gate.resolve();
+  assert.equal(await applying, null);
+  assert.equal(await next, true);
+  assert.deepEqual(applied, []);
+  assert.equal(editor.session.stage, 'next');
+});
+
+
+test('a failed export after cancellation cannot resurrect the session', async (t) => {
+  const { window, editor, nv, applied } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]) });
+  const gate = deferred();
+  let exporting = false;
+  nv.saveDrawing = async () => {
+    exporting = true;
+    await gate.promise;
+    throw new Error('export failed');
+  };
+  const applying = editor.apply();
+  const rejected = assert.rejects(applying, /export failed/);
+  await until(() => exporting);
+  const cancelling = editor.cancel();
+  gate.resolve();
+  await rejected;
+  await cancelling;
+  assert.equal(editor.session.state, 'idle');
+  assert.equal(nv.drawIsEnabled, false);
+  assert.deepEqual(applied, []);
+});
+
+test('onApply may request cancellation without deadlocking or using configured callbacks', async (t) => {
+  const { window, editor, nv } = setup();
+  t.after(() => window.close());
+  let cancelling;
+  let committed = false;
+  editor.configure({ nv, onApply: () => { committed = true; cancelling = editor.cancel(); } });
+  await editor.start({ stage: 'mask', file: maskFile([1]) });
+  editor.configure({ nv: fakeNv(), onApply: () => assert.fail('new callback used for old session') });
+  assert.ok(await editor.apply() instanceof File);
+  await cancelling;
+  assert.equal(committed, true);
+  assert.equal(editor.session.state, 'idle');
+});
+
+test('removal while opening restores the old overlay before a new session opens', async (t) => {
+  const { window, editor, nv } = setup();
+  t.after(() => window.close());
+  const gate = deferred();
+  const load = nv.loadDrawing.bind(nv);
+  let loading = false;
+  nv.loadDrawing = async (file) => {
+    loading = true;
+    await gate.promise;
+    return load(file);
+  };
+  const opening = editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  await until(() => loading);
+  editor.remove();
+  await Promise.resolve();
+  window.document.body.append(editor);
+  const next = editor.start({ stage: 'next', file: maskFile([2]), overlayIndex: 1 });
+  gate.resolve();
+  assert.equal(await opening, false);
+  assert.equal(await next, true);
+  assert.deepEqual(nv.calls.filter(([name]) => name === 'setVolume').map(([, , options]) => options.opacity), [0, 0.6, 0]);
 });

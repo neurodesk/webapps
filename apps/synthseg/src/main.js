@@ -152,10 +152,10 @@ async function ensureViewer() {
         await show('labels');
         status('Labels edited · Download saves the edited file');
       },
-      onCancel: () => {
+      onCancel: async () => {
         endEdit();
         if (!labels) return;
-        void show('labels');
+        await show('labels');
         status('Edits discarded · labels unchanged');
       },
       onError: (_stage, error) => status(`Editing failed: ${error.message}`, true),
