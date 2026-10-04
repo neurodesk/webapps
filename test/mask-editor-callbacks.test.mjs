@@ -175,3 +175,37 @@ for (const id of ['seedseg', 'vesselboost', 'musclemap']) {
     assert.equal(button.disabled, false, 'completion must restore the next Edit action');
   });
 }
+
+test('carotid cancellation waits for its restored viewer before releasing the next edit', async t => {
+  const { app, stage } = await setup(apps[1], t);
+  const source = await readFile(new URL('../apps/carotid-flow/src/main.js', import.meta.url), 'utf8');
+  const start = source.indexOf('const editor = createMaskEditor(');
+  const end = source.indexOf('\ntoolbar.after(editor)', start);
+  const restoring = deferred();
+  const restored = deferred();
+  let options;
+  vm.runInNewContext(source.slice(start, end), {
+    viewer: {}, busy: false, results: { setEditingEnabled: noop }, status: noop,
+    applyLabelEdit: noop,
+    showImages: () => { restoring.resolve(); return restored.promise; },
+    createMaskEditor: configured => { options = configured; return app.maskEditor; },
+  });
+  app.maskEditor.configure({
+    ...options,
+    nv: {
+      volumes: [{ hdr }],
+      async loadDrawing(file) { this.drawing = new Uint8Array(await file.arrayBuffer()); return true; },
+      async saveDrawing() { return this.drawing.slice(); },
+      closeDrawing: noop,
+    },
+  });
+  await app.maskEditor.start({ stage, file: original });
+  let finished = false;
+  const cancelling = app.maskEditor.cancel().then(() => { finished = true; });
+  await restoring.promise;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(finished, false, 'cancel must retain ownership while the old carotid image loads');
+  restored.resolve();
+  await cancelling;
+  assert.equal(app.maskEditor.session.state, 'idle');
+});
