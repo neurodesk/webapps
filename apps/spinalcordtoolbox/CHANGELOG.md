@@ -8,6 +8,7 @@
 
 ### Patch Changes
 
+- a866951: Remove the obsolete vertebral labeling controls. TotalSpineSeg remains available for disc labeling.
 - Updated dependencies
   - @neurodesk/webapp-components@0.10.1
 
