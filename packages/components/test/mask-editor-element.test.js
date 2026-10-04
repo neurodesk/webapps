@@ -483,3 +483,24 @@ for (const operation of ['apply', 'cancel']) {
     assert.equal(completions.length, 1, 'an idle cancel must not announce another completion');
   });
 }
+
+for (const ending of ['refused mask', 'failed callback', 'removed editor']) {
+  test(`${ending} announces completion after the session becomes idle`, async t => {
+    const { window, editor, nv } = setup({ onApply: () => { throw new Error('commit failed'); } });
+    t.after(() => window.close());
+    const completions = [];
+    editor.addEventListener('nd-mask-edit-end', () => completions.push(editor.session.state));
+    if (ending === 'refused mask') {
+      nv.accept = false;
+      await assert.rejects(editor.start({ stage: 'mask', file: maskFile([1]) }), /voxel grid/);
+    } else {
+      await editor.start({ stage: 'mask', file: maskFile([1]) });
+      if (ending === 'failed callback') await assert.rejects(editor.apply(), /commit failed/);
+      else {
+        editor.remove();
+        await until(() => editor.session.state === 'idle');
+      }
+    }
+    assert.deepEqual(completions, ['idle']);
+  });
+}
