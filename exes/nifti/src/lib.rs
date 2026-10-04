@@ -1,3 +1,5 @@
+pub mod affine;
+
 /// Converts one unscaled scalar chunk to f64.
 pub type ScalarDecoder = fn(&[u8]) -> f64;
 

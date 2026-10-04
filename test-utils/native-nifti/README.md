@@ -15,6 +15,13 @@ Assertions pin each reader's scaling, precision, channels, geometry and error
 priority. Recorded baseline snapshots also compare 82 cases per reader using
 exact float bits, dimensions, metadata, errors and complete writer bytes.
 
+Spatial snapshots pin affine inverse bits and RAS axis selection, including
+ties, collision repair and the singularity cutoff. Seven affine fixtures also
+pin each application's complete prepared model input in both MR and CT modes.
+Run-length encoding records every float32 bit and padding position without
+storing millions of zeros. These snapshots were captured before the helpers
+moved into `neurodesk_nifti::affine`.
+
 SynthSR's infinite offset panics in debug and returns a truncation error in
 release. Separate snapshots preserve that existing behavior. SynthSeg uses one
 snapshot in both profiles. These tests characterize the readers; they do not

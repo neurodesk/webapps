@@ -4,7 +4,43 @@ mod nifti;
 mod support;
 #[path = "../../../exes/synthseg/src/volume.rs"]
 mod volume;
+use neurodesk_nifti::affine::{inverse3, ras_axes};
 use support::*;
+#[path = "support/spatial.rs"]
+mod spatial;
+
+#[test]
+fn affine_and_prepared_input_bits_match_baseline() {
+    let mut lines = Vec::new();
+    for (name, affine) in spatial::affines() {
+        lines.push(format!(
+            "{name} inverse={:?} axes={:?}",
+            inverse3(&affine).map(|m| m.map(|r| r.map(f64::to_bits))),
+            ras_axes(&affine)
+        ));
+        if name.contains("threshold") || name == "singular" {
+            continue;
+        }
+        let v = nifti::Volume {
+            data: (0..24).map(|i| ((i * 17 % 29) as f64 - 4.) * 2.5).collect(),
+            dims: [2, 3, 4],
+            affine,
+            pixdim: std::array::from_fn(|a| {
+                (0..3)
+                    .map(|r| affine[r][a] * affine[r][a])
+                    .sum::<f64>()
+                    .sqrt()
+            }),
+            codes: [2, 1],
+            units: 10,
+        };
+        for ct in [false, true] {
+            let p = volume::prepare(&v, ct).unwrap();
+            lines.push(format!("{name} ct={ct} dims={:?} aligned={:?} padded={:?} offsets={:?} axes={:?} flips={:?} affine={:?} codes={:?} units={} input={:?}", p.dims, p.aligned, p.padded, p.offsets, p.axes, p.flips, p.affine.map(|r| r.map(f64::to_bits)), p.codes, p.units, spatial::input_runs(&p.input)));
+        }
+    }
+    spatial::snapshot("synthseg", lines);
+}
 
 #[test]
 fn scalar_endian_matrix_pins_storage_bits() {

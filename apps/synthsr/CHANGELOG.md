@@ -8,6 +8,10 @@
 
 ### Patch Changes
 
+- Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
+  including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261004
 - Updated dependencies
   - @neurodesk/webapp-components@0.10.1
   - @neurodesk/synthsr@0.6.20261004
