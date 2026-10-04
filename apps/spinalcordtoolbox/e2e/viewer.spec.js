@@ -142,6 +142,13 @@ test.describe('FreeBrowse viewer', () => {
     expect((await image).suggestedFilename()).toBe(example.files[0].name);
   });
 
+  test('a file chosen while the viewer is still mounting is loaded, not lost', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#fileInput').setInputFiles({ name: 'early.nii', mimeType: 'application/octet-stream', buffer: inputVolume() });
+    await expect(page.locator('#stepInferenceSection')).not.toHaveClass(/step-disabled/, { timeout: 120000 });
+    await poll(() => page.evaluate(() => app.nv?.volumes.map(volume => volume.name)), { timeout: 120000 }).toEqual(['early.nii']);
+  });
+
   test('a result is a labelled overlay that the Results eye and FreeBrowse both control', async ({ page }) => {
     await openApp(page);
     await loadInput(page);

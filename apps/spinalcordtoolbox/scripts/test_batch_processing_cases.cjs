@@ -48,7 +48,7 @@ const WEBAPP_PIPELINE_FEATURES = Object.freeze({
     labels: ['SCT Processing', 'Vertebral labeling']
   },
   results: {
-    controls: ['resultsSection', 'stageButtons', 'downloadCurrentVolume', 'screenshotViewer', 'overlayOpacity'],
+    controls: ['resultsSection', 'stageButtons', 'freebrowseViewer', 'screenshotViewer'],
     workerMessages: ['stageData'],
     labels: ['Results']
   }

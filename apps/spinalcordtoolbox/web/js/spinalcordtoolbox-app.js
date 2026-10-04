@@ -115,7 +115,12 @@ export class SpinalCordToolboxApp {
 
     this.setupShellEventListeners();
 
-    await this.setupViewer();
+    // The viewer bundle loads while the rest of the page becomes usable, so a
+    // file chosen straight after load is never lost. Render paths await it.
+    this.viewerReady = this.setupViewer().then((available) => {
+      this.syncViewerModeControls();
+      return available;
+    });
 
     this.setupEventListeners();
     await this.setupExamples();
@@ -125,6 +130,7 @@ export class SpinalCordToolboxApp {
 
     // Start ONNX initialization in background
     this.inferenceExecutor.initialize();
+    await this.viewerReady;
     this.automation = registerSctAutomation(this);
   }
 
@@ -558,12 +564,15 @@ export class SpinalCordToolboxApp {
     this._activeSessionId = context?.session?.id || null;
     this.setStageVisible('input', true);
     this.syncViewerModeControls();
-    await this.renderViewerVolumes();
+    // Display and worker loading run side by side: a slow or missing viewer
+    // never delays segmentation.
+    const rendered = this.renderViewerVolumes();
 
     // Send data to worker for loading
     const inputData = await file.arrayBuffer();
     this.setStepRunning('load');
     await this.inferenceExecutor.loadVolume(inputData);
+    await rendered;
   }
 
   async onFilesCleared() {
@@ -1396,6 +1405,7 @@ export class SpinalCordToolboxApp {
   }
 
   async renderViewerVolumes() {
+    await this.viewerReady;
     if (this.isCompareMode()) return this.renderComparisonView();
     if (!this.isViewerAvailable()) return this.renderFallbackPreview();
     this._renderViewerRequested = true;
