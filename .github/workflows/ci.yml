@@ -173,7 +173,7 @@ jobs:
       - name: Install the catalog e2e browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Check catalog e2e types and coverage
-        run: pnpm test:e2e:types && node --test test/agentic-catalog.test.mjs
+        run: pnpm test:e2e:types && node --test test/agentic-catalog.test.mjs test/agentic-provider.test.mjs
       - name: Test every production workspace with e2e
         run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
       - name: Run Neurodesk agent interactions across the catalog

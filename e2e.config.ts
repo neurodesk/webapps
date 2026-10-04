@@ -1,13 +1,14 @@
 import type { E2EConfig } from 'e2e';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { catalogBrowser, catalogEngine } from './test-utils/agentic-browser.ts';
+import { neurodeskRequest } from './test-utils/neurodesk-request.mjs';
 
 const neurodesk = createOpenAICompatible({
   name: 'neurodesk',
   baseURL: 'https://llm.neurodesk.org/openai',
   apiKey: process.env.NEURODESK_API_KEY,
   supportsStructuredOutputs: true,
-  transformRequestBody: body => ({ ...body, max_tokens: 8192 }),
+  transformRequestBody: neurodeskRequest,
 });
 
 export default {

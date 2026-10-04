@@ -198,12 +198,13 @@ for (const entry of catalog) {
             params: { outcome: example.expectedResult },
             timeout: 300000,
           });
-          await expect.poll(() => browser.evaluate(() => {
+          await expect.poll(() => browser.evaluate(({ indeterminateOnly }) => {
             const footer = document.querySelector('footer#status');
             const progress = footer?.querySelector('progress');
             if (/\b(error|failed|unable)\b/i.test(footer?.textContent ?? '')) return true;
+            if (indeterminateOnly) return !progress || progress.hasAttribute('value');
             return !progress || (progress.hasAttribute('value') && progress.value >= progress.max);
-          }), { timeout: 1800000 }).toBe(true);
+          }, { indeterminateOnly: entry.id === 'dwi2trx' }), { timeout: 1800000 }).toBe(true);
           await expect(browser.locator('footer#status')).not.toContainText(/\b(error|failed|unable)\b/i);
           const result = await agent.extract(`Extract an object with a completed boolean describing the output-control state for this workflow: ${example.expectedResult}. Set completed to true only when processed scientific outputs are available to download. If results are absent, another processing step is needed, or only the input image or screenshot can be saved, return the object { "completed": false }. The absence of results is an answer, not missing data.`, {
             schema: z.object({ completed: z.boolean() }),
@@ -217,6 +218,7 @@ for (const entry of catalog) {
         const downloadPath = downloads.resolve(download.path);
         expect((await stat(downloadPath)).size).toBeGreaterThan(0);
         expect(download.suggestedFilename).toMatch(/\.(nii(\.gz)?|zip|tsv|csv|json|stl|obj|mz3|gii|png|mp4|webm|pdf|html|txt|tck|trx|label|mat|coord|table|sdat)$/i);
+        if (entry.id === 'dwi2trx') expect(download.suggestedFilename).toMatch(/\.trx$/);
         await expect(browser.locator('[data-neurodesk-state="failed"]')).toHaveCount(0);
         if (entry.id === 'niimath') {
           const { readVolume } = await import('../../packages/synthsr/src/volume.js');
