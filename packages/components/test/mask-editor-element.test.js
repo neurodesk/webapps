@@ -4,6 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { JSDOM } from 'jsdom';
 import { createFloat32Nifti, createNiftiHeaderFromVolume, parseNiftiHeader } from '../src/file-io/NiftiUtils.js';
 import { createMaskEditor } from '../src/elements/mask-editor.js';
+import { createResultList } from '../src/elements/result-list.js';
 
 function maskFile(values, name = 'mask.nii.gz') {
   const data = new Float32Array(24);
@@ -173,4 +174,19 @@ test('a mask NiiVue refuses leaves the editor idle with the overlay restored', a
   nv.accept = true;
   assert.equal(await editor.start({ stage: 'mask', file: maskFile([1]) }), true);
   await assert.rejects(editor.start({ stage: 'other', file: maskFile([1]) }), /while mask is open/);
+});
+
+test('a result list disables its Edit buttons while a session is open', async (t) => {
+  const { window, editor } = setup();
+  t.after(() => window.close());
+  const list = createResultList({}, window.document);
+  window.document.body.append(list);
+  list.render({ mask: { editable: true }, labels: { editable: true } });
+  window.document.addEventListener('nd-mask-edit-start', () => list.setEditingEnabled(false));
+  for (const name of ['nd-mask-edit-apply', 'nd-mask-edit-cancel']) window.document.addEventListener(name, () => list.setEditingEnabled(true));
+  const disabled = () => [...list.querySelectorAll('.nd-edit-btn')].map(button => button.disabled);
+  await editor.start({ stage: 'mask', file: maskFile([1]) });
+  assert.deepEqual(disabled(), [true, true]);
+  await editor.cancel();
+  assert.deepEqual(disabled(), [false, false]);
 });
