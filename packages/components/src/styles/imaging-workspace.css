@@ -785,14 +785,17 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 .nd-result-visibility { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; min-height: 28px; cursor: pointer; flex-shrink: 0; }
 .nd-result-visibility input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--nd-color-primary); }
 .nd-imaging-controls .nd-section-content .nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn),
-.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn) { width: auto; min-height: 28px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer; flex-shrink: 0; }
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn),
+.nd-edit-btn { width: auto; min-height: 28px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer; flex-shrink: 0; }
 .nd-volume-toggle .nd-view-btn { min-width: 52px; }
 .nd-volume-toggle .nd-view-btn.active { color: white; background: var(--nd-color-primary); border-color: var(--nd-color-primary); }
-.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):hover:not(:disabled) { border-color: var(--nd-color-border-light); background: var(--nd-color-border); }
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):hover:not(:disabled),
+.nd-edit-btn:hover:not(:disabled) { border-color: var(--nd-color-border-light); background: var(--nd-color-border); }
 .nd-volume-toggle .nd-view-btn.active:hover:not(:disabled) { background: var(--nd-color-primary-hover); border-color: var(--nd-color-primary-hover); }
-.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):disabled { opacity: 0.45; cursor: not-allowed; }
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):disabled,
+.nd-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .nd-empty-state { margin: 0; color: var(--nd-color-text-dim); font-size: 0.75rem; }
-@media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn, .nd-result-visibility) { min-height: 44px; } }
+@media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn, .nd-result-visibility), .nd-edit-btn { min-height: 44px; } }
 
 /* Light-DOM component hosts retain the block layout of their former containers. */
 nd-console,

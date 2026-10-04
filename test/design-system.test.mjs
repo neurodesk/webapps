@@ -189,6 +189,15 @@ test('the shared stylesheet defines the whole vocabulary the template and docs r
   }
 });
 
+test('an Edit button is styled in any result row, not only the shared result list', async () => {
+  const css = await readFile(join(repoRoot, 'packages', 'components', 'src', 'styles', 'imaging-workspace.css'), 'utf8');
+  const topLevel = (list) => list.replace(/\([^()]*\)/g, '()').split(',').map(item => item.trim());
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({ selectors: topLevel(selectors), body }));
+  const bare = rules.filter(rule => rule.selectors.includes('.nd-edit-btn'));
+  assert.ok(bare.some(rule => /border:/.test(rule.body) && /background:/.test(rule.body)), 'a bare .nd-edit-btn rule must give the button its border and background');
+  assert.ok(rules.some(rule => rule.selectors.includes('.nd-edit-btn:disabled')), 'a disabled Edit button must look disabled outside .nd-volume-toggle');
+});
+
 // ---------------------------------------------------------------------------
 // Catalog-wide workspace contract (every shell, including static-html and
 // react apps). Found by the 20 September 2026 UI audit: status shown in the
