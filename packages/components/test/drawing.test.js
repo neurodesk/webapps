@@ -306,3 +306,29 @@ for (const makeNv of [legacyNv, currentNv]) {
     await assert.rejects(drawing.export(), /voxel count/);
   });
 }
+
+for (const makeNv of [legacyNv, currentNv]) {
+  test(`${makeNv.name} accepts qform-only geometry and retains its original transform`, async () => {
+    const header = sourceHeader();
+    const view = new DataView(header);
+    view.setInt16(254, 0, true);
+    view.setFloat32(76, -1, true);
+    view.setFloat32(264, Math.SQRT1_2, true);
+    view.setFloat32(268, 42, true);
+    view.setFloat32(272, -30, true);
+    view.setFloat32(276, 7, true);
+    const source = createNiftiFromData(new Uint8Array(24).fill(2), header);
+    const nv = makeNv();
+    nv.volumes[0].hdr = parseNiftiHeader(header);
+    nv.volumes[0].hdr.affine[0][3] += 1e-6;
+    const drawing = createDrawingAdapter(nv);
+    assert.equal(await drawing.open(source), true);
+    const saved = await drawing.export();
+    assert.deepEqual(saved.subarray(252, 328), new Uint8Array(source).subarray(252, 328));
+    drawing.close();
+    nv.volumes[0].hdr.affine[0][3] += 1;
+    const loads = nv.layer.loads;
+    assert.equal(await drawing.open(source), false);
+    assert.equal(nv.layer.loads, loads);
+  });
+}

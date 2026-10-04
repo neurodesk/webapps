@@ -75,8 +75,15 @@ while opening returns `start()` `false` once the load finishes.
   where the round trip sends each voxel, with one probe load per byte of the
   voxel index. It then loads the layout that undoes the round trip and checks
   again. A NiiVue that loads correctly passes the first check, so a fixed
-  release needs no change here. A mask whose dimensions differ from the base
-  image is refused before loading.
+  release needs no change here. Before loading, `sameVoxelGrid` compares the
+  dimensions and all voxel-to-world affine coefficients with the base image.
+  It permits an absolute rounding error of 1e-5 per coefficient and refuses
+  missing or nonfinite geometry. The source parser resolves sform or qform;
+  NiiVue supplies the base image's computed affine. MuscleMap uses the same
+  comparison to exclude resampled display maps from editing.
+  Export checks the saved native voxel count and writes those labels into
+  the converted source mask's header, preserving its affine, metadata and
+  header extensions. An empty drawing uses the base image's header.
 - `packages/components/src/elements/mask-editor.js`. `createMaskEditor({ nv,
   onApply, onCancel, onError, labelNames })` returns the element;
   `start({ stage, file, label, overlayIndex, colormap })`, `apply()` and

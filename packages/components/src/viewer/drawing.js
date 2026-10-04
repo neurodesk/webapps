@@ -1,4 +1,4 @@
-import { createUint8Nifti, decodeNiftiBuffer, extractNiftiHeader, readNiftiImageData } from '../file-io/NiftiUtils.js';
+import { createUint8Nifti, decodeNiftiBuffer, extractNiftiHeader, parseNiftiHeader, readNiftiImageData, sameVoxelGrid } from '../file-io/NiftiUtils.js';
 
 export const EDIT_TOOLS = Object.freeze(['draw', 'erase', 'fill']);
 export const BRUSH_SIZE = Object.freeze({ min: 1, max: 25 });
@@ -37,15 +37,18 @@ export function editedFileName(name) {
  */
 export function createDrawingAdapter(nv) {
   const api = typeof nv.setDrawingEnabled === 'function' ? legacyApi(nv) : currentApi(nv);
+  let sourceHeader = null;
   return {
     get enabled() { return api.enabled(); },
     async open(source = null) {
+      sourceHeader = null;
       if (source === null) {
         api.createEmpty();
       } else {
         const nifti = await maskToUint8Nifti(source);
-        if (!sameGrid(nifti, nv.volumes?.[0]?.hdr?.dims) || !await api.load(nifti)) return false;
+        if (!sameVoxelGrid(parseNiftiHeader(nifti), nv.volumes?.[0]?.hdr) || !await api.load(nifti)) return false;
         await placeVerified(api, nifti);
+        sourceHeader = extractNiftiHeader(nifti);
       }
       api.enable(true);
       return true;
@@ -53,6 +56,7 @@ export function createDrawingAdapter(nv) {
     close() {
       api.enable(false);
       api.close();
+      sourceHeader = null;
     },
     setTool({ tool, label, brushSize }) {
       if (!EDIT_TOOLS.includes(tool)) throw new Error(`Unknown edit tool: ${tool}`);
@@ -64,7 +68,10 @@ export function createDrawingAdapter(nv) {
     volumeOpacity(index) { return nv.volumes?.[index]?.opacity ?? 1; },
     async setVolumeOpacity(index, opacity) { await api.volumeOpacity(index, opacity); },
     async export() {
-      const bytes = await savedNifti(api);
+      const saved = await savedNifti(api);
+      const bytes = sourceHeader
+        ? new Uint8Array(createUint8Nifti(nativeVoxels(saved, parseNiftiHeader(sourceHeader)), sourceHeader))
+        : saved;
       // 0.x copies the base image's display range; an unset range lets every viewer scale the labels.
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
       view.setFloat32(124, 0, true);
@@ -114,17 +121,19 @@ async function savedNifti(api) {
 
 async function savedVoxels(api) {
   const bytes = await savedNifti(api);
-  return bytes.subarray(voxOffset(bytes));
+  return nativeVoxels(bytes);
 }
 
 function voxOffset(nifti) {
   return Math.ceil(new DataView(nifti.buffer, nifti.byteOffset, nifti.byteLength).getFloat32(108, true));
 }
 
-function sameGrid(nifti, baseDims) {
-  if (!baseDims) return true;
-  const view = new DataView(nifti.buffer, nifti.byteOffset, nifti.byteLength);
-  return [1, 2, 3].every(axis => view.getInt16(40 + axis * 2, true) === baseDims[axis]);
+function nativeVoxels(nifti, header = parseNiftiHeader(nifti)) {
+  const labels = nifti.subarray(voxOffset(nifti));
+  if (labels.length !== header.nx * header.ny * header.nz) {
+    throw new Error('NiiVue drawing voxel count does not match the mask');
+  }
+  return labels;
 }
 
 function equalBytes(a, b) {

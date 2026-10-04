@@ -1,4 +1,4 @@
-import { decodeNiftiBuffer, isGzipped, parseNiftiHeader } from '@neurodesk/webapp-components/file-io';
+import { decodeNiftiBuffer, isGzipped, parseNiftiHeader, sameVoxelGrid } from '@neurodesk/webapp-components/file-io';
 
 const NIFTI1_HEADER_BYTES = 352;
 
@@ -9,7 +9,7 @@ const NIFTI1_HEADER_BYTES = 352;
 export async function findEditTarget({ file, displayFile, labelEncoding }) {
   if (!displayFile) return labelEncoding === 'class-index' ? file : null;
   const [display, full] = await Promise.all([gridOf(displayFile), gridOf(file)]);
-  return display.every((size, axis) => size === full[axis]) ? displayFile : null;
+  return sameVoxelGrid(display, full) ? displayFile : null;
 }
 
 /**
@@ -34,5 +34,5 @@ export function editableLabelNames(labels) {
 async function gridOf(file) {
   const head = await file.slice(0, NIFTI1_HEADER_BYTES).arrayBuffer();
   const header = isGzipped(head) ? await decodeNiftiBuffer(await file.arrayBuffer()) : head;
-  return parseNiftiHeader(header).dims.slice(1, 4);
+  return parseNiftiHeader(header);
 }

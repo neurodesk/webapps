@@ -16,7 +16,7 @@ export interface DrawingAdapter {
   setColormap(colormap: string | { R: number[]; G: number[]; B: number[]; A?: number[]; I?: number[]; labels?: string[] }): void;
   volumeOpacity(index: number): number;
   setVolumeOpacity(index: number, opacity: number): Promise<void>;
-  /** An uncompressed uint8 NIfTI on the base image's grid. */
+  /** Uncompressed uint8 labels with the source mask's header and extensions, or the base header for an empty drawing. */
   export(): Promise<Uint8Array>;
 }
 
