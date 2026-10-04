@@ -29,6 +29,8 @@ concurrency:
 jobs:
   parity:
     runs-on: ubuntu-latest
+    env:
+      TMPDIR: ${{ runner.temp }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -60,7 +62,6 @@ jobs:
         env:
           BACKEND: ${{ matrix.backend }}
           FULL_VOLUMES: ${{ inputs.full_volumes || false }}
-          TMPDIR: ${{ runner.temp }}
         run: |
           reference_root="$RUNNER_TEMP/musclemap-reference"
           report_root="$RUNNER_TEMP/musclemap-reports"

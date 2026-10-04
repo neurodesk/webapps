@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
 test('failed upstream validation cannot leave an earlier passing report', async () => {
-  const directory = await mkdtemp(join(process.env.TMPDIR || '/storage/tmp', 'musclemap-validator-'));
+  const directory = await mkdtemp(join(tmpdir(), 'musclemap-validator-'));
   const report = join(directory, 'report.json');
   try {
     await writeFile(report, JSON.stringify({ status: 'passed' }));
