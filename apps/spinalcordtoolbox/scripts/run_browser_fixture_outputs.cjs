@@ -186,9 +186,7 @@ function writeUint8NiftiGz(outPath, header, dims, labels) {
  * Mirrors the manifest the browser worker reads.
  */
 function resolveTaskAsset(fixtureId) {
-  const taskId = fixtureId.includes('lesion_sci_t2')
-    ? 'lesion_sci_t2'
-    : (fixtureId.includes('graymatter') ? 'graymatter' : 'spinalcord');
+  const taskId = ['lesion_sci_t2', 'lesion_ms', 'graymatter'].find(id => fixtureId.includes(id)) || 'spinalcord';
   const task = MANIFEST.tasks.find(t => t.id === taskId);
   if (!task) throw new Error(`No task in manifest matching fixture id ${fixtureId}`);
   const asset = task.modelAssets[0];
@@ -431,6 +429,8 @@ async function runCase(fixture) {
         testTimeAugmentation,
         channelCount: asset.output.channelCount || asset.output.channelOrder?.length || asset.output.regions?.length || 1,
         regions: asset.output.regions || [],
+        paddingMode: asset.output.paddingMode,
+        gaussianSigmaScale: asset.output.gaussianSigmaScale,
         onLog: () => {},
         onProgress: (stepsDone, totalSteps) => {
           if (totalSteps && stepsDone % 5 === 0) process.stderr.write(`${fixture.id}: ${stepsDone}/${totalSteps}\n`);
