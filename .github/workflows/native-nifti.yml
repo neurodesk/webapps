@@ -1,0 +1,91 @@
+name: native-nifti
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-nifti.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - 'exes/nifti/**'
+      - 'exes/synthsr/src/nifti.rs'
+      - 'exes/synthsr/src/volume.rs'
+      - 'exes/synthsr/Cargo.*'
+      - 'exes/synthseg/src/**'
+      - 'exes/synthseg/Cargo.*'
+      - 'test-utils/native-nifti/**'
+      - 'packages/synthseg/wasm/**'
+      - 'packages/synthseg/src/synthseg.wasm'
+      - 'packages/synthseg/src/wasm.js'
+      - 'packages/synthseg/test/nifti.test.js'
+      - 'packages/synthseg/Makefile'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-nifti.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - 'exes/nifti/**'
+      - 'exes/synthsr/src/nifti.rs'
+      - 'exes/synthsr/src/volume.rs'
+      - 'exes/synthsr/Cargo.*'
+      - 'exes/synthseg/src/**'
+      - 'exes/synthseg/Cargo.*'
+      - 'test-utils/native-nifti/**'
+      - 'packages/synthseg/wasm/**'
+      - 'packages/synthseg/src/synthseg.wasm'
+      - 'packages/synthseg/src/wasm.js'
+      - 'packages/synthseg/test/nifti.test.js'
+      - 'packages/synthseg/Makefile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-nifti-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          components: rustfmt
+      - name: Check formatting
+        run: |
+          cargo fmt --manifest-path exes/nifti/Cargo.toml --check
+          cargo fmt --manifest-path test-utils/native-nifti/Cargo.toml --check
+      - name: Test header decoding and actual readers without models
+        run: |
+          cargo test --locked --manifest-path exes/nifti/Cargo.toml
+          cargo test --locked --release --manifest-path exes/nifti/Cargo.toml
+          cargo test --locked --manifest-path test-utils/native-nifti/Cargo.toml
+          cargo test --locked --release --manifest-path test-utils/native-nifti/Cargo.toml
+
+  wasm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - uses: ./.github/actions/setup-wasm-opt
+      - name: Verify committed WASM through its JavaScript wrapper
+        run: node --test packages/synthseg/test/nifti.test.js
+      - name: Build from the shared native sources
+        run: make -C packages/synthseg wasm
+      - name: Verify rebuilt WASM through its JavaScript wrapper
+        run: node --test packages/synthseg/test/nifti.test.js
