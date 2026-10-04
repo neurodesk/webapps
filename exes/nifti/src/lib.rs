@@ -1,3 +1,6 @@
+/// Converts one unscaled scalar chunk to f64.
+pub type ScalarDecoder = fn(&[u8]) -> f64;
+
 /// Raw NIfTI-1 fields, without image acceptance, scaling or geometry policy.
 /// Signed dimensions and unmodified f32 values retain malformed header values.
 pub struct Nifti1Header {
@@ -57,7 +60,7 @@ impl Nifti1Header {
 
     /// Selects the scalar conversion once, after caller dimension validation.
     /// Each input chunk must have the returned byte width.
-    pub fn scalar_decoder(&self) -> Result<(usize, fn(&[u8]) -> f64), String> {
+    pub fn scalar_decoder(&self) -> Result<(usize, ScalarDecoder), String> {
         let datatype = self.datatype;
         let le = self.little_endian;
         macro_rules! decoder {
@@ -69,7 +72,7 @@ impl Nifti1Header {
                 }
             };
         }
-        let (width, decode): (usize, fn(&[u8]) -> f64) = match datatype {
+        let (width, decode): (usize, ScalarDecoder) = match datatype {
             2 => (1, |c| c[0] as f64),
             256 => (1, |c| c[0] as i8 as f64),
             4 => (2, decoder!(i16)),

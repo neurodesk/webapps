@@ -189,3 +189,15 @@ fn malformed_endian_and_precision_policy() {
         0.5f64.to_bits()
     );
 }
+
+#[test]
+fn finite_channels_can_overflow_the_accumulated_image() {
+    for le in [true, false] {
+        let mut f = Fixture::new(64, le, &[f64::MAX; 24]);
+        f.i16(40, 4);
+        f.i16(48, 3);
+        let image = nifti::read(&f.bytes).unwrap();
+        assert_eq!(image.data.len(), 8);
+        assert!(image.data.iter().all(|v| *v == f64::INFINITY));
+    }
+}
