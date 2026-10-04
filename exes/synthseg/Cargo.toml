@@ -6,6 +6,7 @@ license = "Apache-2.0"
 description = "SynthSeg 2.0 brain segmentation with ONNX Runtime and native Metal"
 
 [dependencies]
+neurodesk-nifti = { path = "../nifti" }
 ort = "=2.0.0-rc.13"
 flate2 = "1"
 serde_json = "1"

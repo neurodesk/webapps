@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.9.1",
+  "version": "0.10.1",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",
@@ -62,6 +62,10 @@
     "./elements/viewer-toolbar": {
       "types": "./src/elements/viewer-toolbar.d.ts",
       "default": "./src/elements/viewer-toolbar.js"
+    },
+    "./elements/mask-editor": {
+      "types": "./src/elements/mask-editor.d.ts",
+      "default": "./src/elements/mask-editor.js"
     },
     "./elements/example-selector": {
       "types": "./src/elements/example-selector.d.ts",

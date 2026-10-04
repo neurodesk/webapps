@@ -9,8 +9,15 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.9.1
+  - @neurodesk/webapp-components@0.10.1
   - @neurodesk/synthsr@0.6.20261004
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/synthsr@0.6.20261004
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
 - Updated dependencies [257192b]
   - @neurodesk/synthsr@0.6.20261004
   - @neurodesk/runtime-support@0.1.3

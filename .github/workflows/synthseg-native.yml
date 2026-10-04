@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/synthseg-native.yml'
       - 'exes/synthseg/**'
+      - 'exes/nifti/**'
+      - 'test-utils/native-nifti/**'
       - 'packages/synthseg/**'
       - 'exes/synthsr/scripts/ci_macos_release.sh'
   workflow_dispatch:

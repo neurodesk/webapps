@@ -15,6 +15,7 @@ import { MuscleMapPipeline } from './controllers/MuscleMapPipeline.js';
 import { ConsoleOutput, bindWindowControls } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
+import { createMaskEditor } from '@neurodesk/webapp-components/ui';
 import { createNiftiFromVolume, downloadBlob } from '@neurodesk/webapp-components/file-io';
 import { MuscleLegend } from './modules/ui/MuscleLegend.js';
 import { MuscleMapMetricsPanel } from './modules/ui/MuscleMapMetricsPanel.js';
@@ -22,6 +23,7 @@ import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
 import { registerMuscleMapAutomation } from './automation.js';
 import { generateNiivueColormap, getLabelName, getLabelColor, getMuscleLabels, getLabelsForModel, getLabelsForLabelSpace } from './app/labels.js';
+import { editableLabelNames, editedSegmentation, findEditTarget } from './app/segmentation-edit.js';
 
 class MuscleMapApp {
   static VIEWER_UNAVAILABLE_GUIDANCE =
@@ -73,8 +75,7 @@ class MuscleMapApp {
     this.currentModelName = Config.MODELS[0].name;
     this.currentLabelSpaceId = Config.MODELS[0].labelSpaceId;
     this.segmentationResults = [];
-    this.uploadedDisplayFiles = new Map();
-    this.uploadedNormalizedFiles = new Map();
+    this.uploadedDerivedFiles = new Map();
     this.activeSegmentationId = null;
     this._pendingMetrics = null;
     this._metricsSourceId = null;
@@ -158,6 +159,14 @@ class MuscleMapApp {
       nv: this.nv,
       updateOutput: (msg) => this.updateOutput(msg)
     });
+
+    this.maskEditor = createMaskEditor(this.maskEditorOptions());
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.syncEditButtons(true));
+    this.maskEditor.addEventListener('nd-mask-edit-start', (event) => {
+      this.setStatusError(false);
+      this.progress.reset(event.detail.message);
+    });
+    document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
 
     this.inferenceExecutor = new MuscleMapPipeline({
       updateOutput: (msg) => this.updateOutput(msg),
@@ -635,6 +644,7 @@ class MuscleMapApp {
   // ==================== File Handling ====================
 
   async onFileLoaded(file) {
+    await this.maskEditor.cancel();
     this.inputFile = file;
     if (this.isViewerAvailable()) {
       const loaded = await this.viewerController.loadBaseVolume(file);
@@ -678,8 +688,11 @@ class MuscleMapApp {
     this.syncImfControls();
     this.syncPostprocessingControls();
     const entries = this.fileIOController.getEntries();
-    this.uploadedDisplayFiles.clear();
-    this.uploadedNormalizedFiles.clear();
+    void this.maskEditor.cancel();
+    const uploadedIds = new Set(entries.map(entry => `uploaded-${entry.id}`));
+    for (const id of this.uploadedDerivedFiles.keys()) {
+      if (!uploadedIds.has(id)) this.uploadedDerivedFiles.delete(id);
+    }
     const currentEntry = entries.find(entry => entry.file === this.inputFile) || null;
     const currentIsDisplayable = currentEntry && currentEntry.role !== 'segmentation';
     const primary = this.fileIOController.getPrimaryImageEntry();
@@ -812,6 +825,7 @@ class MuscleMapApp {
       return;
     }
 
+    await this.maskEditor.cancel();
     this.setWorkerButtonsBusy(true);
 
     this.inferenceExecutor.clearResults();
@@ -867,17 +881,19 @@ class MuscleMapApp {
         const displayFile = displayResult?.file
           ? await this.cloneResultFile(displayResult.file, `${baseName}_segmentation_display.nii`)
           : null;
+        const labelEncoding = fullResult.provenance?.encoding;
         const segmentation = {
           id: `generated-${Date.now()}-${generatedSegmentations.length}`,
           type: 'generated',
           label: `${entry.file.name} segmentation`,
           file,
           displayFile,
+          editFile: await findEditTarget({ file, displayFile, labelEncoding }),
           baseFile: entry.file,
           modelName: modelConfig.name,
           numClasses: modelConfig.numClasses,
           labelSpaceId: fullResult.provenance?.labelSpaceId,
-          labelEncoding: fullResult.provenance?.encoding,
+          labelEncoding,
           labelSpace: modelConfig.labelSpace,
           provenance: fullResult.provenance,
           labelIndices: [...this._lastDetectedLabelIndices]
@@ -1000,15 +1016,17 @@ class MuscleMapApp {
         id: sourceId,
         type: 'uploaded',
         label: entry.file.name,
-        file: this.uploadedNormalizedFiles.get(sourceId) || entry.file,
-        displayFile: this.uploadedDisplayFiles.get(sourceId) || null,
+        file: entry.file,
+        displayFile: null,
+        editFile: null,
         baseFile: this.fileIOController.getPrimaryImageEntry()?.file || this.inputFile,
         modelName: model?.name || null,
         numClasses: model?.numClasses || null,
         labelSpaceId: entry.labelSpaceId,
         labelEncoding: entry.labelEncoding,
         labelSpace: model?.labelSpace || null,
-        labelIndices: null
+        labelIndices: null,
+        ...this.uploadedDerivedFiles.get(sourceId)
       };
     });
   }
@@ -1117,6 +1135,7 @@ class MuscleMapApp {
       modelConfig.numClasses,
       ...sources.map(source => source.numClasses || 0)
     );
+    await this.maskEditor.cancel();
     this.setWorkerButtonsBusy(true);
     this.metricsSummary.hide();
     this._pendingMetrics = null;
@@ -1139,17 +1158,19 @@ class MuscleMapApp {
       const displayFile = displayResult?.file
         ? await this.cloneResultFile(displayResult.file, 'consolidated_segmentation_display.nii')
         : null;
+      const labelEncoding = result.provenance?.encoding;
       const consolidated = {
         id: `consolidated-${Date.now()}`,
         type: 'consolidated',
         label: 'Consolidated segmentation',
         file,
         displayFile,
+        editFile: await findEditTarget({ file, displayFile, labelEncoding }),
         baseFile: sources.find(source => source.baseFile)?.baseFile || this.inputFile,
         modelName: modelConfig.name,
         numClasses,
         labelSpaceId: result.provenance?.labelSpaceId,
-        labelEncoding: result.provenance?.encoding,
+        labelEncoding,
         labelSpace: modelConfig.labelSpace,
         provenance: result.provenance,
         labelIndices: [...this._lastDetectedLabelIndices]
@@ -1229,24 +1250,30 @@ class MuscleMapApp {
       await this.inferenceExecutor.calculateMetrics(payload);
       const normalizedResult = this.inferenceExecutor.getResult('segmentation');
       const displayResult = this.inferenceExecutor.getResult('segmentation_display');
+      const derived = {};
       if (normalizedResult?.file && segmentationSource.type === 'uploaded') {
-        const normalizedFile = await this.cloneResultFile(
+        derived.file = await this.cloneResultFile(
           normalizedResult.file,
           `${segmentationSource.id}_official-labels.nii`
         );
-        segmentationSource.file = normalizedFile;
-        this.uploadedNormalizedFiles.set(segmentationSource.id, normalizedFile);
+        derived.labelEncoding = normalizedResult.provenance?.encoding || segmentationSource.labelEncoding;
       }
       if (displayResult?.file) {
-        const displayFile = await this.cloneResultFile(
+        derived.displayFile = await this.cloneResultFile(
           displayResult.file,
           `${segmentationSource.id}_display.nii`
         );
-        segmentationSource.displayFile = displayFile;
-        if (segmentationSource.type === 'uploaded') {
-          this.uploadedDisplayFiles.set(segmentationSource.id, displayFile);
-        }
       }
+      Object.assign(segmentationSource, derived);
+      derived.editFile = await findEditTarget(segmentationSource);
+      segmentationSource.editFile = derived.editFile;
+      if (segmentationSource.type === 'uploaded') {
+        this.uploadedDerivedFiles.set(segmentationSource.id, {
+          ...this.uploadedDerivedFiles.get(segmentationSource.id),
+          ...derived
+        });
+      }
+      this.refreshResultsPanel();
       this.updateOutput('Metrics ready.');
       signal?.throwIfAborted();
     } catch (error) {
@@ -1394,7 +1421,7 @@ class MuscleMapApp {
     resultList.className = 'segmentation-result-list';
     for (const source of sources) {
       const row = document.createElement('div');
-      row.className = 'segmentation-result-row';
+      row.className = 'segmentation-result-row nd-volume-toggle';
 
       const label = document.createElement('label');
       label.className = 'viewer-checkbox segmentation-result-label';
@@ -1408,7 +1435,19 @@ class MuscleMapApp {
         if (radio.checked) void this.showSegmentationSource(source.id);
       });
       label.appendChild(radio);
-      label.appendChild(document.createTextNode(source.label));
+      label.appendChild(document.createTextNode(source.edited ? `${source.label} (edited)` : source.label));
+      row.appendChild(label);
+
+      if (this.canEditSegmentation(source)) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'nd-edit-btn';
+        editBtn.type = 'button';
+        editBtn.textContent = 'Edit';
+        editBtn.title = 'Edit in the viewer';
+        editBtn.disabled = this.maskEditor.session.state !== 'idle';
+        editBtn.addEventListener('click', () => this.editSegmentationSource(source.id));
+        row.appendChild(editBtn);
+      }
 
       const dlBtn = document.createElement('button');
       dlBtn.className = 'download-btn segmentation-download-button';
@@ -1417,7 +1456,6 @@ class MuscleMapApp {
       dlBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Download</span>';
       dlBtn.addEventListener('click', () => this.downloadSegmentationSource(source.id));
 
-      row.appendChild(label);
       row.appendChild(dlBtn);
       resultList.appendChild(row);
     }
@@ -1427,6 +1465,11 @@ class MuscleMapApp {
   }
 
   async showSegmentationSource(id) {
+    await this.maskEditor.cancel();
+    return this.renderSegmentationSource(id);
+  }
+
+  async renderSegmentationSource(id) {
     const source = this.getSegmentationSourceById(id);
     if (!source) return;
     if (source.type === 'uploaded' && !source.displayFile) {
@@ -1488,6 +1531,70 @@ class MuscleMapApp {
     const name = source.file.name || `${source.id}.nii`;
     this.downloadFile(source.file, name);
     this.updateOutput(`Downloaded segmentation: ${name}`);
+  }
+
+  canEditSegmentation(source) {
+    return Boolean(source?.editFile && source.baseFile && this.isViewerAvailable());
+  }
+
+  async editSegmentationSource(id) {
+    const source = this.getSegmentationSourceById(id);
+    if (!this.canEditSegmentation(source) || this.maskEditor.session.state !== 'idle') return;
+    this.syncEditButtons(false);
+    try {
+      await this.showSegmentationSource(id);
+      const labels = getLabelsForLabelSpace(source.labelSpaceId);
+      this.maskEditor.configure(this.maskEditorOptions(labels));
+      const started = await this.maskEditor.start({
+        stage: source.id,
+        file: source.editFile,
+        label: source.label,
+        overlayIndex: 1,
+        // NiiVue 0.x resolves a drawing colormap name only among its built-in maps; an object is used as given.
+        colormap: generateNiivueColormap(labels)
+      });
+      if (!started) this.syncEditButtons(true);
+    } catch (error) {
+      this.syncEditButtons(true);
+      this.updateOutput(`Error: ${error.message}`);
+      this.onInferenceError(error.message);
+    }
+  }
+
+  async applySegmentationEdit(id, edited, original) {
+    const source = this.getSegmentationSourceById(id);
+    if (!source) return;
+    const patch = editedSegmentation(source, edited, original);
+    if (source.type === 'uploaded') {
+      this.uploadedDerivedFiles.set(id, { ...this.uploadedDerivedFiles.get(id), ...patch });
+    } else {
+      this.segmentationResults = this.segmentationResults.map(item => (item.id === id ? { ...item, ...patch } : item));
+    }
+    this.updateOutput(`Applied manual edits to ${source.label}.`);
+    this.endSegmentationEdit();
+    await this.renderSegmentationSource(id);
+  }
+
+  maskEditorOptions(labels = null) {
+    return {
+      nv: this.nv,
+      onApply: (id, edited, { original }) => this.applySegmentationEdit(id, edited, original),
+      onCancel: () => this.endSegmentationEdit(),
+      onError: (_id, error) => this.onInferenceError(error.message),
+      labelNames: editableLabelNames(labels)
+    };
+  }
+
+  endSegmentationEdit() {
+    this.progress.reset();
+    this.refreshResultsPanel();
+    this.syncPostprocessingControls();
+  }
+
+  syncEditButtons(enabled) {
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(button => {
+      button.disabled = !enabled || this.maskEditor.session.state !== 'idle';
+    });
   }
 
   toggleInputVisibility(visible) {
@@ -1629,7 +1736,8 @@ class MuscleMapApp {
     this._overlaySliderValue = 0.5;
   }
 
-  clearResults() {
+  async clearResults() {
+    await this.maskEditor.cancel();
     this.inferenceExecutor.clearResults();
     this.segmentationResults = [];
     this.activeSegmentationId = null;

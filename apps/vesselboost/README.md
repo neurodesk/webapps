@@ -26,6 +26,7 @@ bash run.sh
 - **Preprocessing**: N4ITK bias field correction, brain extraction (SynthStrip or BET), non-local means denoising
 - **SynthStrip**: deep-learning skull-stripping that works without WASM (default)
 - **Configurable**: overlap, probability threshold, component size filtering
+- **Mask editing**: correct the vessel or brain mask in the viewer (draw, erase, fill) before downloading it
 - **Smart auto-contrast**: percentile-based windowing for better default display
 - **Privacy**: all processing happens locally in the browser
 

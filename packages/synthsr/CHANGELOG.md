@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
 - Updated dependencies [257192b]
   - @neurodesk/runtime-support@0.1.3
 

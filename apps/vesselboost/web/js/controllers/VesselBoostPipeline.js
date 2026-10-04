@@ -2,6 +2,7 @@ import { PipelineExecutor, StepPipelineState } from '@neurodesk/webapp-component
 import { VERSION } from '../app/config.js';
 import {
   analysisVolumeSpace,
+  getSpatialMetadata,
   readNiftiSpatialMetadata,
   spatialGridId,
   tagSpatialFile,
@@ -124,7 +125,7 @@ export class VesselBoostPipeline extends PipelineExecutor {
     if (!this.stageOrder.includes(data.stage)) this.stageOrder.push(data.stage);
     const file = new File([data.niftiData], `${data.stage}.nii`, { type: 'application/octet-stream' });
     const spatial = this.tagStageFile(file, data.stage, data.niftiData);
-    this.results[data.stage] = { file, description: data.description, kind: 'nifti', spatial, raw: data };
+    this.results[data.stage] = { file, description: data.description, kind: 'nifti', spatial, raw: data, editable: data.stage === 'segmentation' };
     const nodeId = this.graph.getNodeForStage(data.stage);
     this.graph.recordArtifact(nodeId, { stage: data.stage, role: data.stage, file, description: data.description, spatial });
     if (data.stage === 'segmentation') {
@@ -159,7 +160,7 @@ export class VesselBoostPipeline extends PipelineExecutor {
     this.brainMaskOverlayFile = file;
     const spatial = this.tagStageFile(file, 'brainmask', data.niftiData);
     if (!this.stageOrder.includes('brainmask')) this.stageOrder.push('brainmask');
-    this.results.brainmask = { file, description: 'Brain mask', kind: 'nifti', spatial, raw: data };
+    this.results.brainmask = { file, description: 'Brain mask', kind: 'nifti', spatial, raw: data, editable: true };
     this.graph.recordArtifact('bet', { stage: 'brainmask', role: 'brainmask', file, description: 'Brain mask overlay', spatial });
     this.onBrainMaskOverlay?.(file);
   }
@@ -176,6 +177,14 @@ export class VesselBoostPipeline extends PipelineExecutor {
       digest: this.bufferDigest(inputData),
       spatial: { space: spatial ? VOLUME_SPACES.SOURCE_NATIVE : undefined, dims: spatial?.dims, affine: spatial?.affine },
     });
+  }
+
+  // The editor draws on the result's own grid, but NiiVue rewrites a qform-only header with an sform, which readNiftiSpatialMetadata would read as another grid.
+  replaceWithEdit(stage, file, original) {
+    const result = this.results[stage];
+    tagSpatialFile(file, getSpatialMetadata(result.file));
+    this.results[stage] = { ...result, file, original: result.original ?? original, edited: true };
+    return this.results[stage];
   }
 
   tagStageFile(file, stage, niftiData) {

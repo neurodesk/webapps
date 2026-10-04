@@ -1,4 +1,4 @@
-import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, createMaskEditor, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -20,7 +20,7 @@ import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
-import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
+import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getTaskLabels, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import './modules/sct-processing.js';
 
@@ -70,6 +70,7 @@ export class SpinalCordToolboxApp {
     this._viewerMode = 'single';
     this._currentViewType = 'multiplanar';
     this._activeSessionId = null;
+    this._editStage = null;
     this.selectedTask = getDefaultTask();
     this.viewerAvailable = false;
     this.viewerUnavailableReason = '';
@@ -145,6 +146,7 @@ export class SpinalCordToolboxApp {
       this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
       this.viewerController.registerSctColormap(generateNiivueColormap('totalspineseg'), 'sct-totalspineseg');
       this.viewerController.registerSctColormap(generateNiivueColormap('spineDiscs'), 'sct-spine-discs');
+      this.setupMaskEditor();
     }
 
     this.setupEventListeners();
@@ -424,7 +426,7 @@ export class SpinalCordToolboxApp {
     }
 
     const clearResults = document.getElementById('clearResults');
-    if (clearResults) clearResults.addEventListener('click', () => this.clearResults());
+    if (clearResults) clearResults.addEventListener('click', () => void this.clearResults());
 
     window.addEventListener('resize', () => {
       if (!this.isViewerAvailable()) this.fallbackPreview?.redraw?.();
@@ -974,6 +976,7 @@ export class SpinalCordToolboxApp {
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
     const modelUrl = getTaskModelUrl(selectedTask);
     this._analysisTaskId = selectedTask.id;
+    await this.cancelMaskEdit();
     this.beginAbortableStep('inference');
 
     // Clear previous results — including any vertebrae mask, which is derived
@@ -1059,6 +1062,7 @@ export class SpinalCordToolboxApp {
   }
 
   async resetAllSteps() {
+    await this.cancelMaskEdit();
     // Reset worker state
     if (this.inferenceExecutor.isReady()) {
       await this.inferenceExecutor.resetWorkerState();
@@ -1305,13 +1309,7 @@ export class SpinalCordToolboxApp {
   // ==================== Results ====================
 
   async handleStageData(data) {
-    const result = this.inferenceExecutor.getResult(data.stage);
-    if (result?.file && data.stage === 'segmentation' && ['spinalcord', 'lesion_sci_t2'].includes(this._analysisTaskId)) {
-      this.analysis?.setGenerated({ ...this.analysis.generated, cord: result.file });
-    }
-    if (result?.file && data.stage === 'lesion') {
-      this.analysis?.setGenerated({ ...this.analysis.generated, lesion: result.file });
-    }
+    if (data.stage === 'segmentation' || data.stage === 'lesion') this.syncAnalysisMasks();
     const resultsSection = document.getElementById('resultsSection');
     if (resultsSection) {
       resultsSection.classList.remove('hidden');
@@ -1319,6 +1317,7 @@ export class SpinalCordToolboxApp {
     }
 
     if (this.isOverlayStage(data.stage)) {
+      this.inferenceExecutor.getResult(data.stage).editable = true;
       if (data.stage === 'vertebrae') {
         if (this.isViewerAvailable()) this.viewerController.registerSctColormap(generateNiivueColormap('vertebrae'), 'sct-vertebrae');
       }
@@ -1419,8 +1418,21 @@ export class SpinalCordToolboxApp {
 
       const label = document.createElement('span');
       label.className = 'stage-label';
-      label.textContent = Config.STAGE_NAMES[stage] || stage;
+      const result = this.inferenceExecutor.getResult(stage);
+      const name = Config.STAGE_NAMES[stage] || stage;
+      label.textContent = result?.edited ? `${name} (edited)` : name;
       row.appendChild(label);
+
+      if (this.maskEditor && result?.editable) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'nd-edit-btn';
+        editBtn.type = 'button';
+        editBtn.title = 'Edit in the viewer';
+        editBtn.textContent = 'Edit';
+        editBtn.disabled = this._editStage != null || this.maskEditor.session.state !== 'idle';
+        editBtn.addEventListener('click', () => void this.editStage(stage));
+        row.appendChild(editBtn);
+      }
 
       // Download button (not for input — user already has the file)
       if (stage !== 'input') {
@@ -1434,6 +1446,109 @@ export class SpinalCordToolboxApp {
 
       container.appendChild(row);
     }
+  }
+
+  // ==================== Mask Editing ====================
+
+  setupMaskEditor() {
+    this.maskEditor = createMaskEditor({ nv: this.nv });
+    this.maskEditor.addEventListener('nd-mask-edit-start', ({ detail }) => {
+      this.setStatusError(false);
+      this.progress.reset(detail.message);
+    });
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.setEditStage(null));
+    document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
+  }
+
+  getStageLabelNames(stage) {
+    const names = {};
+    for (const label of getTaskLabels(this.getOverlayLabelTaskId(stage))) {
+      if (label.index > 0) names[label.index] = label.name;
+    }
+    return names;
+  }
+
+  async editStage(stage) {
+    const result = this.inferenceExecutor.getResult(stage);
+    if (!result?.editable || !this.maskEditor || this._editStage != null) return;
+    this.setEditStage(stage);
+    try {
+      if (this.isCompareMode()) await this.setViewerMode('single');
+      this.currentResultTab = 'input';
+      this.setStageVisible('input', true);
+      this.setStageVisible(stage, true);
+      const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
+      if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
+      await this.renderViewerVolumes();
+      this.syncResultViewButtons();
+      if (this.inferenceExecutor.getResult(stage) !== result) {
+        this.setEditStage(null);
+        return;
+      }
+      this.maskEditor.configure({
+        nv: this.nv,
+        labelNames: this.getStageLabelNames(stage),
+        onApply: (editedStage, file, { original }) => this.applyMaskEdit(editedStage, file, original),
+        onCancel: () => this.endMaskEdit(),
+        onError: (_stage, error) => this.reportMaskEditError(error),
+      });
+      const started = await this.maskEditor.start({
+        stage,
+        file: result.file,
+        label: Config.STAGE_NAMES[stage] || stage,
+        overlayIndex: 1 + this.getVisibleOverlayStages().indexOf(stage),
+      });
+      if (!started) this.setEditStage(null);
+    } catch (error) {
+      this.setEditStage(null);
+      this.reportMaskEditError(error);
+    }
+  }
+
+  async applyMaskEdit(stage, file, original) {
+    const result = this.inferenceExecutor.getResult(stage);
+    result.original ??= original;
+    result.file = file;
+    result.edited = true;
+    this.syncAnalysisMasks();
+    this.updateOutput(`Applied manual edits to ${Config.STAGE_NAMES[stage] || stage}`);
+    this.endMaskEdit();
+    this.rebuildResultsList();
+    await this._renderViewerVolumesNow();
+  }
+
+  // Only whole-cord segmentations are valid cord masks for native SCT analysis.
+  syncAnalysisMasks() {
+    const generated = {};
+    const cord = this.inferenceExecutor.getResult('segmentation')?.file;
+    const lesion = this.inferenceExecutor.getResult('lesion')?.file;
+    if (cord && ['spinalcord', 'lesion_sci_t2'].includes(this._analysisTaskId)) generated.cord = cord;
+    if (lesion) generated.lesion = lesion;
+    this.analysis?.setGenerated(generated);
+  }
+
+  endMaskEdit() {
+    this.setEditStage(null);
+    this.setStatusError(false);
+    this.progress.reset('Ready');
+  }
+
+  async cancelMaskEdit() {
+    await this.maskEditor?.cancel();
+  }
+
+  setEditStage(stage) {
+    this._editStage = stage;
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => {
+      btn.disabled = stage != null || Boolean(this.maskEditor && this.maskEditor.session.state !== 'idle');
+    });
+  }
+
+  reportMaskEditError(error) {
+    const message = error?.message || String(error);
+    this.updateOutput(`Mask editing failed: ${message}`);
+    this.progress.end(`Error: ${message}`, { success: false });
+    this.setStatusError(true);
   }
 
   downloadMetricsResult(stage) {
@@ -1682,6 +1797,7 @@ export class SpinalCordToolboxApp {
   }
 
   async renderViewerVolumes() {
+    await this.cancelMaskEdit();
     if (this.isCompareMode()) return this.renderComparisonView();
     if (!this.isViewerAvailable()) return this.renderFallbackPreview();
     this._renderViewerRequested = true;
@@ -1854,7 +1970,8 @@ export class SpinalCordToolboxApp {
     this._overlaySliderValue = 0.7;
   }
 
-  clearResults() {
+  async clearResults() {
+    await this.cancelMaskEdit();
     this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
