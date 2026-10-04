@@ -193,3 +193,16 @@ test('reload reuses a tab credential and disconnect removes it', async () => {
   assert.equal(window.sessionStorage.length, 0);
   assert.equal(revoked, true);
 });
+
+test('the tool option describes the requested tool in a multi-tool server', async () => {
+  const window = setup();
+  const { createClient } = fakeClient({ service: 'neurodesk-compute', tools: [{ id: 'nesvor', version: '0.5.0' }, { id: 'sct', version: '7.3' }], runner: 'docker' });
+  const panel = createComputeConnection({ tool: 'sct', autodetect: false, createClient }, window.document);
+  window.document.body.append(panel);
+  assert.match(panel.message.textContent, /Processing runs/);
+  panel.address = 'https://compute.example';
+  panel.token = 'code';
+  await panel.connect();
+  assert.match(panel.message.textContent, /sct 7\.3/);
+  assert.doesNotMatch(panel.message.textContent, /nesvor/);
+});

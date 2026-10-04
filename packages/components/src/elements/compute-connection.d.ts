@@ -5,6 +5,7 @@ export type ComputeConnectionState = 'idle' | 'connecting' | 'connected' | 'simu
 export interface ComputeConnectionConfig {
   id?: string;
   storageKey?: string;
+  tool?: string;
   disabled?: boolean;
   autodetect?: boolean;
   fetch?: typeof fetch;

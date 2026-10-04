@@ -762,7 +762,7 @@ impl JobStore {
             Ok(RunOutcome::Exited(0)) => {
                 let mut outputs = Vec::new();
                 let mut missing = None;
-                for spec in job.tool.outputs() {
+                for spec in job.tool.outputs(&job.validated) {
                     let path = out_dir.join(spec.name);
                     match std::fs::metadata(&path) {
                         Ok(metadata) if metadata.is_file() => {
@@ -935,7 +935,7 @@ mod tests {
                 ValidatedJob {
                     tool: "nesvor".into(),
                     command: "reconstruct".into(),
-                    stacks: vec![],
+                    inputs: crate::tools::JobInputs::Nesvor { stacks: vec![] },
                     options: serde_json::Map::new(),
                     warnings: vec![],
                 },

@@ -1,5 +1,13 @@
 # @neurodesk/webapp-components
 
+## 0.8.1
+
+### Patch Changes
+
+- Preserve explicit HTTP/HTTPS ports when connecting through a compute-server reverse proxy.
+
+- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, retain native result files unchanged, and recover or cancel server jobs. Keep local SCIseg browser metrics explicitly approximate. Compute connections can describe a selected tool on multi-tool servers.
+
 ## 0.8.0
 
 ### Minor Changes

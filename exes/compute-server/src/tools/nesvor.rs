@@ -238,7 +238,7 @@ impl Tool for Nesvor {
         Ok(ValidatedJob {
             tool: tool.to_string(),
             command: command.to_string(),
-            stacks,
+            inputs: super::JobInputs::Nesvor { stacks },
             options,
             warnings,
         })
@@ -247,23 +247,23 @@ impl Tool for Nesvor {
     fn argv(&self, job: &ValidatedJob, paths: &ToolPaths) -> Vec<String> {
         let mut argv = vec!["nesvor".to_string(), job.command.clone()];
         argv.push("--input-stacks".to_string());
-        for stack in &job.stacks {
+        for stack in job.stacks() {
             argv.push(ToolPaths::join(&paths.input_dir, &stack.file_name));
         }
         if job
-            .stacks
+            .stacks()
             .iter()
             .all(|stack| stack.mask_file_name.is_some())
         {
             argv.push("--stack-masks".to_string());
-            for stack in &job.stacks {
+            for stack in job.stacks() {
                 if let Some(mask) = &stack.mask_file_name {
                     argv.push(ToolPaths::join(&paths.input_dir, mask));
                 }
             }
         }
         argv.push("--thicknesses".to_string());
-        for stack in &job.stacks {
+        for stack in job.stacks() {
             argv.push(format_number(stack.thickness));
         }
         argv.push("--output-volume".to_string());
@@ -335,7 +335,7 @@ impl Tool for Nesvor {
         }
     }
 
-    fn outputs(&self) -> &'static [OutputSpec] {
+    fn outputs(&self, _job: &ValidatedJob) -> &'static [OutputSpec] {
         OUTPUTS
     }
 }
@@ -599,9 +599,9 @@ mod tests {
         let job = Nesvor.validate(&example_spec(), &example_parts()).unwrap();
         assert_eq!(job.tool, "nesvor");
         assert_eq!(job.command, "reconstruct");
-        assert_eq!(job.stacks.len(), 2);
-        assert_eq!(job.stacks[0].mask.as_deref(), Some("mask-0"));
-        assert_eq!(job.stacks[0].file_name, "stack-0.nii.gz");
+        assert_eq!(job.stacks().len(), 2);
+        assert_eq!(job.stacks()[0].mask.as_deref(), Some("mask-0"));
+        assert_eq!(job.stacks()[0].file_name, "stack-0.nii.gz");
         assert_eq!(job.options.len(), 14);
         assert!(job.warnings.is_empty());
     }

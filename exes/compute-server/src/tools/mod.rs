@@ -4,6 +4,7 @@
 
 pub mod nesvor;
 pub mod nifti;
+pub mod sct;
 
 use std::fmt;
 use std::path::PathBuf;
@@ -50,12 +51,30 @@ pub struct ValidatedJob {
     pub tool: String,
     /// Tool command (`reconstruct`).
     pub command: String,
-    /// Input stacks in spec order.
-    pub stacks: Vec<StackInput>,
+    /// Tool-specific validated inputs.
+    #[serde(flatten)]
+    pub inputs: JobInputs,
     /// Options as given in the spec (only the keys that were present).
     pub options: serde_json::Map<String, Value>,
     /// Warnings produced during validation that are logged when the job starts.
     pub warnings: Vec<String>,
+}
+
+/// Tool-owned inputs. The untagged NeSVoR shape preserves persisted v1 jobs.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum JobInputs {
+    Nesvor { stacks: Vec<StackInput> },
+    Sct { analysis: sct::AnalysisInputs },
+}
+
+impl ValidatedJob {
+    pub fn stacks(&self) -> &[StackInput] {
+        match &self.inputs {
+            JobInputs::Nesvor { stacks } => stacks,
+            JobInputs::Sct { .. } => panic!("SCT inputs are not NeSVoR stacks"),
+        }
+    }
 }
 
 /// Paths of the job directory as seen by the tool process.
@@ -154,6 +173,14 @@ pub trait Tool: Send + Sync {
     fn id(&self) -> &'static str;
     /// Tool version (`0.5.0`).
     fn version(&self) -> &'static str;
+    /// Pinned container image, or the configured NeSVoR image.
+    fn image<'a>(&self, configured: &'a str) -> &'a str {
+        configured
+    }
+    /// Whether the tool uses a GPU by default.
+    fn uses_gpu(&self) -> bool {
+        true
+    }
     /// Commands accepted in `spec.command`.
     fn commands(&self) -> &'static [&'static str];
     /// Validates the spec against the received parts.
@@ -163,12 +190,12 @@ pub trait Tool: Send + Sync {
     /// Classifies a log line and extracts progress.
     fn parse_log_line(&self, job: &ValidatedJob, line: &str) -> LogUpdate;
     /// The outputs the tool produces.
-    fn outputs(&self) -> &'static [OutputSpec];
+    fn outputs(&self, job: &ValidatedJob) -> &'static [OutputSpec];
 }
 
 /// All registered tools.
 pub fn registry() -> Vec<Arc<dyn Tool>> {
-    vec![Arc::new(nesvor::Nesvor)]
+    vec![Arc::new(nesvor::Nesvor), Arc::new(sct::Sct)]
 }
 
 /// Looks up a tool by id.

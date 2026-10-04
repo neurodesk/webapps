@@ -17,7 +17,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::{RunnerKind, ServeConfig};
-use crate::tools::{ToolPaths, ValidatedJob};
+use crate::tools::{Tool, ToolPaths, ValidatedJob};
 
 /// Receives every stdout/stderr line of the tool.
 pub type LineSink = mpsc::UnboundedSender<String>;
@@ -72,6 +72,26 @@ pub fn build(config: &ServeConfig) -> Arc<dyn Runner> {
         }),
         RunnerKind::Native => Arc::new(native::NativeRunner),
         RunnerKind::Simulate => Arc::new(simulate::SimulateRunner),
+    }
+}
+
+impl RunRequest {
+    pub fn image<'a>(&self, configured: &'a str) -> &'a str {
+        match &self.job.inputs {
+            crate::tools::JobInputs::Sct { .. } => crate::tools::sct::Sct.image(configured),
+            crate::tools::JobInputs::Nesvor { .. } => configured,
+        }
+    }
+
+    pub fn uses_gpu(&self) -> bool {
+        !self.cpu && matches!(self.job.inputs, crate::tools::JobInputs::Nesvor { .. })
+    }
+
+    pub fn command(&self) -> Vec<String> {
+        with_device_flag(
+            self.argv.clone(),
+            self.cpu && matches!(self.job.inputs, crate::tools::JobInputs::Nesvor { .. }),
+        )
     }
 }
 

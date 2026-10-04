@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tokio_util::sync::CancellationToken;
 
 use super::process::{run_process, KillStrategy};
-use super::{with_device_flag, LineSink, RunFuture, RunRequest, Runner};
+use super::{LineSink, RunFuture, RunRequest, Runner};
 use crate::config::RunnerKind;
 use crate::tools::ToolPaths;
 
@@ -19,13 +19,13 @@ pub struct ApptainerRunner {
 /// Builds the `apptainer` arguments for a request.
 pub fn apptainer_args(image: &Path, request: &RunRequest) -> Vec<String> {
     let mut args = vec!["exec".to_string(), "--containall".to_string()];
-    if !request.cpu {
+    if request.uses_gpu() {
         args.push("--nv".to_string());
     }
     args.push("-B".to_string());
     args.push(format!("{}:/job", request.job_dir.display()));
     args.push(image.display().to_string());
-    args.extend(with_device_flag(request.argv.clone(), request.cpu));
+    args.extend(request.command());
     args
 }
 

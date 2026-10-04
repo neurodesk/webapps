@@ -5,7 +5,7 @@ use std::path::Path;
 use tokio_util::sync::CancellationToken;
 
 use super::process::{run_process, KillStrategy};
-use super::{with_device_flag, LineSink, RunFuture, RunRequest, Runner};
+use super::{LineSink, RunFuture, RunRequest, Runner};
 use crate::config::RunnerKind;
 use crate::tools::ToolPaths;
 
@@ -32,7 +32,7 @@ pub fn docker_args(image: &str, request: &RunRequest) -> Vec<String> {
         "--name".to_string(),
         container_name(&request.job_id),
     ];
-    if !request.cpu {
+    if request.uses_gpu() {
         args.push("--gpus".to_string());
         args.push("all".to_string());
     }
@@ -42,8 +42,8 @@ pub fn docker_args(image: &str, request: &RunRequest) -> Vec<String> {
     }
     args.push("-v".to_string());
     args.push(format!("{}:/job", request.job_dir.display()));
-    args.push(image.to_string());
-    args.extend(with_device_flag(request.argv.clone(), request.cpu));
+    args.push(request.image(image).to_string());
+    args.extend(request.command());
     args
 }
 
@@ -97,7 +97,7 @@ mod tests {
             job: crate::tools::ValidatedJob {
                 tool: "nesvor".to_string(),
                 command: "reconstruct".to_string(),
-                stacks: Vec::new(),
+                inputs: crate::tools::JobInputs::Nesvor { stacks: Vec::new() },
                 options: serde_json::Map::new(),
                 warnings: Vec::new(),
             },

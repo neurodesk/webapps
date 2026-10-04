@@ -115,7 +115,11 @@ apps:
         url: https://github.com/niivue/niivue
 
   spinalcordtoolbox:
+    execution: Segmentation runs in your browser. Native SCT morphometry and lesion analysis send selected masks to your chosen Neurodesk compute server only when you run analysis. The server retains inputs and results until deletion or expiry.
+    about:
+      - Native sct_process_segmentation and sct_analyze_lesion execute the pinned SCT container with upstream numerical behavior for the exposed options. Morphometry exports native CSV. Lesion analysis exports native XLSX, pickle and labeled NIfTI. Automatic SCIseg browser metrics remain an approximate subset.
     packages:
+      - { name: Spinal Cord Toolbox, url: https://spinalcordtoolbox.com, role: native morphometry and lesion analysis on your compute server }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation models in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }

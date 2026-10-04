@@ -1,4 +1,4 @@
-export const VERSION = '0.5.20261003';
+export const VERSION = '0.6.20261004';
 
 // Model - relative path (served from same origin)
 export const MODEL_BASE_URL = './models';
@@ -53,7 +53,7 @@ export const STAGE_NAMES = {
   'vertebrae': 'Vertebral Labels',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',
-  'lesion_metrics': 'Lesion Metrics'
+  'lesion_metrics': 'Browser lesion metrics (approximate)'
 };
 
 export const ONNX_CONFIG = {

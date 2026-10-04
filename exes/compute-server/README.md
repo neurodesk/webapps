@@ -146,3 +146,22 @@ make run-simulated    # serve --runner simulate --insecure-http --listen 127.0.0
 ```
 
 Protocol: [remote-compute-protocol.md](../../docs/architecture/remote-compute-protocol.md).
+
+
+## Native SCT analysis
+
+With `--runner docker`, the server also advertises the CPU-only `sct` tool.
+It runs `sct_process_segmentation` and `sct_analyze_lesion` in
+`vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83`.
+This image reports SCT 7.3. Pull that exact image on the compute host before
+analysis. `neurodesk-compute pull` and `--image` retain their NeSVoR meaning;
+an image override never replaces SCT's pinned runtime. SCT needs no CUDA/GPU.
+
+The SCT webapp sends role-named NIfTI masks only when the user runs analysis.
+The server passes their bytes unchanged and returns native CSV for morphometry,
+or XLSX, pickle and labeled NIfTI for lesion analysis. See the
+[protocol](../../docs/architecture/remote-compute-protocol.md#job-specification-sct)
+for supported flags and output names. Existing pairing, ownership, cancellation
+and retention rules apply. Native and Apptainer runners do not advertise SCT
+because their scientific dependencies cannot be verified against the image pin.
+Simulation returns explicit placeholders and proves transport only.

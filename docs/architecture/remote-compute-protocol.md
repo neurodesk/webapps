@@ -254,3 +254,58 @@ float32 NIfTI-1 gzipped volume with the first stack's header, and writes
 `result.json` as `{ "simulated": true, "stacks": N, "options": {…} }`. It logs the
 `argv` it would have run and the stage lines of the table above so that progress
 parsing is exercised. `info.simulated` and every job's `simulated` are `true`.
+
+## Job specification: `sct`
+
+SCT analysis runs on the CPU in the registry-pinned image
+`vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83`.
+This image reports SCT `7.3` through `sct_version`, despite its `7.3.3` tag.
+The authenticated tool entry advertises its version, image and commands. Container
+selection and GPU requirements belong to each tool; NeSVoR keeps its existing
+image override and CPU option. SCT never receives NeSVoR's `--device` flag. SCT is advertised and accepted only
+with Docker or the explicit simulator. Native and Apptainer runners do not
+guarantee the pinned dependency stack and do not advertise SCT.
+
+Morphometry accepts a cord segmentation without an anatomy image:
+
+```json
+{"tool":"sct","command":"process_segmentation","cord":"cord","options":{"perSlice":true,"angleCorrection":true,"slices":"2:12"}}
+```
+
+Lesion analysis accepts an independent lesion mask and an optional cord mask:
+
+```json
+{"tool":"sct","command":"analyze_lesion","lesion":"lesion","cord":"cord","options":{}}
+```
+
+Only the fields shown are accepted. `cord` and `lesion` reference distinct
+uploaded NIfTI-1 parts. No unused parts are accepted. Every SCT mask uses its
+role as its multipart name, so `cord` must reference `cord` and `lesion` must
+reference `lesion`. The server stores the original bytes as `cord.nii[.gz]`
+and `lesion.nii[.gz]`. It does not threshold, resample or change orientation.
+SCT validates scientific input requirements itself.
+
+Morphometry options are optional. `perSlice` and `angleCorrection` are booleans,
+passed as `-perslice 0|1` and `-angle-corr 0|1`. `slices` is a nonempty comma-separated
+list of nonnegative slice indices or ascending inclusive ranges such as
+`2:12,15`, passed as `-z`. Unknown options are rejected. Lesion analysis currently
+accepts no options. Omitted options retain upstream defaults.
+
+The allowlisted commands are:
+
+```
+sct_process_segmentation -i /job/in/cord.nii.gz -o /job/out/morphometry.csv
+sct_analyze_lesion -m /job/in/lesion.nii.gz -s /job/in/cord.nii.gz -ofolder /job/out
+```
+
+The lesion `-s` argument is omitted when no cord is supplied. Morphometry returns
+`morphometry.csv`. Lesion analysis returns native `lesion_analysis.xlsx`,
+`lesion_analysis.pkl` and `lesion_label.nii[.gz]`, retaining the input compression. Both commands also expose
+`log.txt`. Downloads preserve original native bytes. Lesion spreadsheets and
+pickle files are not CSV files. Independent native runs may differ in timestamps
+and archive metadata; numerical/data fields are the compatibility contract.
+A downloaded artifact must match its originating run byte for byte.
+
+Simulation exercises transport and cancellation only. Its morphometry CSV is
+explicitly labelled simulated; lesion placeholders have the native filenames
+but contain no scientific results. Never use simulated output for analysis.

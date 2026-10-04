@@ -1,5 +1,16 @@
 # spinalcordtoolbox
 
+## 0.6.20261004
+
+### Minor Changes
+
+- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, retain native result files unchanged, and recover or cancel server jobs. Keep local SCIseg browser metrics explicitly approximate. Compute connections can describe a selected tool on multi-tool servers.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.1
+
 ## 0.5.20261003
 
 ### Patch Changes

@@ -3,7 +3,7 @@
     "lint": "node ../../scripts/check-app-js.mjs web",
     "test": "npm run test:fast && npm run test:inference:e2e && npm run test:worker:protocol && npm run test:server",
     "pretest:release": "pnpm runtime-support",
-    "test:release": "npm run lint && npm run test:manifest && npm run test:routing && npm run test:labels && npm run test:ui && npm run test:compat && npm run test:downloads && npm run test:viewer && npm run test:processing && npm run test:vertebrae:unit && npm run test:totalspineseg && npm run test:lesion-analysis && npm run test:inference:postprocessing && npm run test:batch:webapp && npm run test:controllers && npm run test:ui:modules && npm run test:ci-summary && npm run test:server",
+    "test:release": "npm run lint && npm run test:manifest && npm run test:routing && npm run test:labels && npm run test:ui && npm run test:compat && npm run test:downloads && npm run test:viewer && npm run test:processing && npm run test:vertebrae:unit && npm run test:totalspineseg && npm run test:lesion-analysis && npm run test:inference:postprocessing && npm run test:batch:webapp && npm run test:controllers && npm run test:ui:modules && npm run test:ci-summary && npm run test:server && npm run test:analysis",
     "test:fast": "npm run lint && npm run test:manifest && npm run test:routing && npm run test:labels && npm run test:ui && npm run test:compat && npm run test:downloads && npm run test:viewer && npm run test:processing && npm run test:vertebrae && npm run test:totalspineseg && npm run test:lesion-analysis && npm run test:inference:postprocessing && npm run test:batch:webapp && npm run test:fixtures && npm run test:controllers && npm run test:ui:modules && npm run test:ci-summary",
     "test:manifest": "node --no-warnings scripts/test_manifest_consistency.mjs",
     "test:routing": "node --no-warnings scripts/test_task_routing.mjs",
@@ -13,6 +13,7 @@
     "test:downloads": "node scripts/test_huggingface_fixtures.cjs",
     "test:viewer": "node --no-warnings scripts/test_viewer_controller.mjs",
     "test:processing": "node scripts/test_sct_processing.cjs",
+    "test:native-analysis": "node scripts/test_native_analysis.mjs",
     "test:vertebrae": "node scripts/test_vertebrae.cjs",
     "test:vertebrae:unit": "node scripts/test_vertebrae.cjs --unit-only",
     "test:totalspineseg": "node scripts/test_totalspineseg.cjs",
@@ -39,7 +40,8 @@
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
     "test:shared": "node --test test/shared-components-parity.test.js",
-    "test:examples": "node --test scripts/test_examples.mjs"
+    "test:examples": "node --test scripts/test_examples.mjs",
+    "test:analysis": "node --test test/native-analysis.test.js"
   },
   "dependencies": {
     "nifti-reader-js": "^0.8.0",
@@ -51,7 +53,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "spinalcordtoolbox",
-  "version": "0.5.20261003",
+  "version": "0.6.20261004",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

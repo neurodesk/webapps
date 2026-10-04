@@ -1,6 +1,8 @@
 <!-- SPECKIT START -->
 # General Instructions
 
+- `test:native-analysis` requires a real Docker compute server through `COMPUTE_SERVER_URL` and `COMPUTE_SERVER_TOKEN`. It compares native SCT data exactly with direct pinned-container runs, excluding timestamps, and retains generated fixtures under `TMPDIR`. `COMPUTE_SERVER_DATA` additionally checks downloaded artifact bytes against server files. Simulated runs cannot satisfy this gate.
+
 - after every change to the source code make sure the Agent.md file is updated
 - after every new feature added, make sure there is a test for the feature (no tests for removing features)
 - after changing the code, start a new dev server and ask the user to check the resulting app functionality
@@ -127,3 +129,12 @@ Common issues it catches:
 ## Examples
 
 The example uses the pinned T2 spinal-cord reference case and preserves the selected SCT task. When changing example input handling, run `pnpm test:examples` as well as the shared example contract tests.
+
+## Native mask analysis
+
+- `SctAnalysis` owns independent mask inputs, compute jobs and unchanged native artifacts. It uses the shared compute connection/client and works without an anatomy image. Selecting or generating a mask never submits a job.
+- `analysis-spec.js` is the Node reference server's schema; `exes/compute-server/src/tools/sct.rs` mirrors it. Update the protocol document before changing either. `test:analysis` and the shared protocol suite cover it.
+- Native analysis uses the pinned registry container, whose tag is `7.3.3` but whose `sct_version` reports `7.3`. Docker and simulation advertise the tool; native/Apptainer do not guarantee this dependency pin. Simulation is a transport test only.
+- Morphometry preserves upstream CSV bytes. Lesion analysis preserves upstream XLSX, pickle and label NIfTI bytes; label compression follows the uploaded lesion mask. Do not rename a derived table CSV as native output.
+- Generated sources admit whole-cord `spinalcord`/SCIseg masks and SCIseg lesion masks. Gray matter and TotalSpineSeg multiclass labels are not whole-cord sources. New input sessions and cleared results invalidate generated choices and cancel owned jobs.
+- Automatic SCIseg metrics stay local and are labelled as approximate browser metrics. They are not numerical substitutes for the native commands.
