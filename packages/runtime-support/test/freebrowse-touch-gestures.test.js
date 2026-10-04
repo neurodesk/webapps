@@ -125,6 +125,48 @@ test('while drawing, a pinch zooms but does not replay a drag that would paint',
   assert.equal(seen.filter(([type, pointerType]) => type === 'pointerdown' && pointerType === 'mouse').length, 0);
 });
 
+// A stand-in for NiiVue's pen: a touch pointerdown in draw mode records an undo
+// snapshot and paints a dot; drawUndo restores the snapshot.
+function withPen(setupResult) {
+  const { canvas, nv } = setupResult;
+  nv.currentDrawUndoBitmap = 3;
+  nv.bitmap = [0, 0, 0];
+  nv.undos = [];
+  nv.drawUndo = () => {
+    nv.bitmap = nv.undos.pop();
+    nv.currentDrawUndoBitmap -= 1;
+  };
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!nv.drawIsEnabled || event.pointerType !== 'touch') return;
+    nv.undos.push([...nv.bitmap]);
+    nv.currentDrawUndoBitmap += 1;
+    nv.bitmap[1] = 1;
+  });
+  return setupResult;
+}
+
+test('in draw mode the pinch takes back the dot the first finger painted', () => {
+  const { touch, nv } = withPen(setup({ drawIsEnabled: true }));
+  touch('pointerdown', 1, 100, 100);
+  assert.deepEqual(nv.bitmap, [0, 1, 0], 'the first finger alone is a pen stroke');
+  touch('pointerdown', 2, 200, 100);
+  assert.deepEqual(nv.bitmap, [0, 0, 0]);
+  assert.equal(nv.currentDrawUndoBitmap, 3, 'the undo stack is back where it was');
+});
+
+test('a one-finger stroke in draw mode is kept, and a pinch never undoes an earlier stroke', () => {
+  const { touch, nv } = withPen(setup({ drawIsEnabled: true }));
+  touch('pointerdown', 1, 100, 100);
+  touch('pointerup', 1, 100, 100);
+  assert.deepEqual(nv.bitmap, [0, 1, 0]);
+  // A pinch whose first finger starts no stroke (say, on the 3D render) undoes nothing.
+  nv.drawIsEnabled = false;
+  touch('pointerdown', 3, 100, 100);
+  nv.drawIsEnabled = true;
+  touch('pointerdown', 4, 200, 100);
+  assert.deepEqual(nv.bitmap, [0, 1, 0]);
+});
+
 test('lifting and replacing a finger continues with a new gesture', () => {
   const { touch, nv } = setup();
   touch('pointerdown', 1, 100, 100);

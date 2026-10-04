@@ -5,7 +5,8 @@ import workspaceStyles from '@neurodesk/webapp-components/styles/imaging-workspa
 import { bindTouchGestures } from './touch-gestures.js';
 
 // Mounts FreeBrowse around a host-owned NiiVue instance inside an open shadow
-// root. Returns { nv, ready, destroy }; await `ready` before loading files.
+// root. Returns { nv, ready, showDrawingTools, destroy }; await `ready` before
+// loading files.
 // `options` are NiiVue constructor options. `embed.canvasLabel` names the
 // canvas for assistive technology; `embed.sidebar` opens FreeBrowse's panel.
 export function mountViewer(element, options, embed = {}) {
@@ -72,9 +73,29 @@ export function mountViewer(element, options, embed = {}) {
   const observer = new MutationObserver(syncHost);
   observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-neurodesk-theme'] });
+  // Opens FreeBrowse's sidebar on its Drawing tab, for a host that has just
+  // put a drawing layer in place. The tab stays disabled until FreeBrowse has
+  // seen the layer, so this waits a few frames for it. Resolves false if the
+  // tab never becomes available.
+  const showDrawingTools = async () => {
+    for (let frame = 0; frame < 60 && !destroyed; frame += 1) {
+      container.querySelector('button[title="Show sidebar"]')?.click();
+      const tab = container.querySelector('[role="tab"][id$="-trigger-drawing"]');
+      if (tab && !tab.disabled) {
+        if (tab.getAttribute('aria-selected') !== 'true') {
+          // Radix tabs activate on mousedown, not click.
+          tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        }
+        return true;
+      }
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    return false;
+  };
   return {
     nv,
     ready,
+    showDrawingTools,
     destroy() {
       if (destroyed) return;
       destroyed = true;

@@ -9,6 +9,8 @@
 //   - two-finger drag on a slice -> a pan drag, replayed to NiiVue as one
 //     synthetic pointer at the midpoint, so NiiVue's own pixel-to-millimetre
 //     mapping is used
+//   - in draw mode the first finger has already started a pen stroke when the
+//     second lands; that stroke is undone, so a pinch never leaves a dot
 //
 // Only public properties and DOM pointer events are used. One-finger touches
 // and every mouse or pen event pass through untouched. Remove this file once
@@ -31,6 +33,9 @@ export function bindTouchGestures(nv, canvas, { dragModePan, sliceTypeRender }, 
   let gesture = null;
   // After a gesture ends, the fingers still down must not move the crosshair.
   let swallowing = false;
+  // NiiVue records an undo snapshot when a pen stroke starts. The index seen
+  // before the first finger reached NiiVue tells whether that finger began one.
+  let undoIndexAtFirstTouch = null;
 
   const send = (type, pointerId, [clientX, clientY]) => {
     const event = createEvent(type, {
@@ -59,6 +64,12 @@ export function bindTouchGestures(nv, canvas, { dragModePan, sliceTypeRender }, 
   const begin = (first, second) => {
     // NiiVue saw the first finger go down; end that drag before taking over.
     send('pointerup', first, touches.get(first));
+    // In draw mode that finger started a pen stroke (at least a dot). It was
+    // the start of a pinch, not an edit, so take it back.
+    if (nv.drawIsEnabled && undoIndexAtFirstTouch !== null && nv.currentDrawUndoBitmap !== undoIndexAtFirstTouch) {
+      nv.drawUndo();
+    }
+    undoIndexAtFirstTouch = null;
     const isRender = nv.activeTileHit?.isRender ?? nv.sliceType === sliceTypeRender;
     gesture = { ids: [first, second], isRender, pans: !isRender && !nv.drawIsEnabled };
     const { distance, middle } = measure();
@@ -99,6 +110,7 @@ export function bindTouchGestures(nv, canvas, { dragModePan, sliceTypeRender }, 
     touches.set(event.pointerId, [event.clientX, event.clientY]);
     if (touches.size < 2) {
       swallowing = false;
+      undoIndexAtFirstTouch = nv.drawIsEnabled ? nv.currentDrawUndoBitmap : null;
       return;
     }
     event.stopImmediatePropagation();
