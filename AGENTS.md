@@ -109,7 +109,10 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   both (`COMPUTE_SERVER_URL`/`COMPUTE_SERVER_TOKEN` select a running server). `apps/nesvor/src/spec.js`
   is shared by the app and the reference server; `exes/compute-server/src/tools/nesvor.rs` mirrors it.
 - The container digest is pinned in the design document, `registry/neurocontainers.json`, the Rust tool
-  definition and the reference server. Update all four together.
+  definition and the reference server. Update all four together. The SCT tool's image is pinned in
+  `apps/spinalcordtoolbox/web/js/app/analysis-spec.js`, `exes/compute-server/src/tools/sct.rs`,
+  `registry/neurocontainers.json`, the protocol document and both READMEs;
+  `apps/spinalcordtoolbox/test/native-analysis.test.js` fails when they disagree.
 - An app whose processing is not in the browser overrides `execution` in `registry/app-information.yml`
   and states the data flow in its own Privacy template. The desktop suite reaches a compute server only
   through `NEURODESK_COMPUTE_ORIGINS`.

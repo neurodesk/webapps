@@ -12,6 +12,7 @@ export class SctAnalysis {
         this.revision = 0;
         this.job = null;
         this.outputs = {};
+        this.analyzed = {};
         const section = renderSidebarSection({ id: 'sctAnalysisSection', title: 'Native SCT analysis', collapsed: true });
         before.before(section.root);
         this.section = section.root;
@@ -105,6 +106,7 @@ export class SctAnalysis {
         this.resumeButton.onclick = () => void this.run(this.previous.value);
         this.deleteButton.onclick = async () => {
             if (this.busy || !this.previous.value) return;
+            if (!window.confirm('Delete this job and its files from the compute server?')) return;
             try {
                 await this.connection.client.remove(this.previous.value);
                 this.progress.reset('Server job and files deleted');
@@ -126,14 +128,16 @@ export class SctAnalysis {
     get busy() { return Boolean(this.job); }
 
     setGenerated(results) {
+        const replaced = Object.entries(this.analyzed).some(([role, file]) => file === this.generated[role] && results[role] !== file);
         this.generated = results;
-        this.invalidate();
+        if (replaced) this.invalidate();
         this.updateSources();
     }
 
     invalidate() {
         this.revision += 1;
         this.outputs = {};
+        this.analyzed = {};
         this.results.render();
         this.table.replaceChildren();
         this.resultNote.textContent = '';
@@ -203,6 +207,7 @@ export class SctAnalysis {
             }
             const request = previousId ? null : this.capture();
             this.invalidate();
+            this.analyzed = request?.files ?? {};
             const job = { client, id: previousId, cancelled: false, revision: this.revision, key: crypto.randomUUID() };
             this.job = job;
             this.sync();
@@ -240,9 +245,10 @@ export class SctAnalysis {
                 this.resultSection.open = true;
                 this.progress.end(done.simulated ? 'Simulated SCT results ready' : 'Native SCT results ready');
             } catch (error) {
-                if (job.revision === this.revision) {
-                    this.progress.end(error.code === 'cancelled' ? 'Analysis cancelled' : `Analysis interrupted: ${error.message}. Check Previous analysis jobs.`, { success: false });
+                if (job.revision === this.revision && !job.cancelled && error.code !== 'cancelled') {
+                    this.progress.end(`Analysis interrupted: ${error.message}. Check Previous analysis jobs.`, { success: false });
                 }
+                if (error.code === 'cancelled') job.cancelled = true;
                 this.log(error.message);
             } finally {
                 if (this.job === job) {
@@ -275,7 +281,7 @@ export class SctAnalysis {
         try {
             const { jobs } = await client.jobs();
             if (client !== this.connection.client) return;
-            this.previous.replaceChildren(...jobs.filter(job => job.tool === 'sct').map(job => new Option(`${job.command} · ${job.status} · ${job.createdAt}`, job.id)));
+            this.previous.replaceChildren(...jobs.filter(job => job.tool === 'sct').map(job => new Option(jobLabel(job), job.id)));
             this.sync();
         } catch (error) { this.log(`Could not list SCT jobs: ${error.message}`); }
     }
@@ -295,6 +301,14 @@ export class SctAnalysis {
         });
         this.table.replaceChildren(table);
     }
+}
+
+const COMMAND_LABELS = { process_segmentation: 'Cord morphometry', analyze_lesion: 'Lesion analysis' };
+
+export function jobLabel(job) {
+    const created = new Date(job.createdAt);
+    const when = Number.isNaN(created.getTime()) ? job.createdAt : created.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    return `${COMMAND_LABELS[job.command] ?? job.command} · ${job.status} · ${when}`;
 }
 
 export function parseMetricTable(csv) {
