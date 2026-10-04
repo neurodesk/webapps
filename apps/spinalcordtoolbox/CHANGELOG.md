@@ -4,6 +4,14 @@
 
 ### Patch Changes
 
+- a928230: Correct segmentation and label results by hand before downloading them. Every mask and label-map row in Results (cord, lesion, TotalSpineSeg labels and disc markers) now has an Edit button that opens the shared mask editor under the viewer toolbar, with the input image as the base. Apply replaces the result with the edited uint8 NIfTI under the same file name and labels the row `(edited)`; Download then returns the edit. Cancel, a new run, Clear results, a new input or hiding the edited overlay discard unapplied strokes. Lesion statistics and automation reports keep the values the pipeline computed.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+
+
+### Patch Changes
+
 - Give the viewer Zoom and Fit controls 44-pixel touch targets through the shared workspace stylesheet.
 - 0e90fbf: Add a Zoom control to the viewer toolbar. With Zoom ticked the mouse wheel zooms 2D views and right-drag pans them; untick it to scroll slices again at the same zoom, and use Fit to restore the full view.
 
