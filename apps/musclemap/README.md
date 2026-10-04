@@ -74,12 +74,13 @@ corepack pnpm --filter musclemap model:validate -- \
   --precision fp32
 corepack pnpm --filter musclemap model:validate-browser -- --precision fp32
 corepack pnpm --filter musclemap model:validate-upstream -- \
+  --reference-manifest model-sources/upstream-reference-cases.json \
   --case vhp-neck \
   --reference-root /approved/musclemap-e2e \
-  --precision fp32
+  --conversion-report .tmp_model_release/wholebody-v1.4/conversion-report.json
 ```
 
-The fixture validator requires both MR and CT, at least 99% aggregate voxel agreement, at least 0.95 Dice for every present reference class, and reference-output coverage of every changed or new class index from 86 through 113. The browser validator creates a real ONNX Runtime Web WASM session and requires at least 99% argmax agreement with three deterministic PyTorch reference maps. The upstream validator additionally runs the complete browser worker and checks affine, voxel agreement, foreground Dice, and per-label Dice against a full-volume upstream result made with the same source chunk size and overlap. It also checks WebGPU when the runner exposes it; release CI can pass `--require-webgpu` on a capable runner.
+The fixture validator requires both MR and CT, at least 99% aggregate voxel agreement, at least 0.95 Dice for every present reference class, and reference-output coverage of every changed or new class index from 86 through 113. The browser validator creates a real ONNX Runtime Web WASM session and requires at least 99% argmax agreement with three deterministic PyTorch reference maps. The upstream validator additionally runs the complete browser worker and checks affine, voxel agreement, foreground Dice, and per-label Dice against a full-volume upstream result made with the same source chunk size and overlap. Select `--backend webgpu` to require a WebGPU adapter and evidence of executed WebGPU kernels. The default model is the published FP32 release; pass `--conversion-report` explicitly to validate a new candidate.
 
 After the report passes, publish with a rotated write token supplied only through the environment:
 
@@ -110,15 +111,43 @@ The app owns its generated scientific model contract; shared UI and runtime code
 
 ## Inference contract
 
-The v1.4 browser pipeline reproduces the upstream source-axis chunk boundary before preprocessing. Each chunk is oriented to RAS, resampled with its affine to 1 mm in-plane spacing while keeping native through-plane spacing, normalized over nonzero voxels, cropped with a 20-voxel margin, and padded at the end. It performs 2D sliding-window inference with Gaussian weighting, applies the inverse transforms to logits before argmax, and keeps the largest 6-connected component per label only after rebuilding the full source volume. Use the chunk size and overlap pinned in `model-sources/upstream-reference-cases.json` when reproducing a controlled upstream result.
+The v1.4 browser pipeline reproduces the upstream source-axis chunk boundary before preprocessing. Each chunk is oriented to RAS, resampled with its affine to 1 mm in-plane spacing while keeping native through-plane spacing, normalized over nonzero voxels, cropped around positive normalized voxels with a 20-voxel margin, and padded at the end. Negative intensities inside the crop are preserved. It performs 2D sliding-window inference with Gaussian weighting, applies the inverse transforms to logits before argmax, and keeps the largest 6-connected component per label only after rebuilding the full source volume. When processing multiple source chunks, the browser also reproduces the integer-storage roundtrip of upstream temporary NIfTI files. Temporary-file decoding uses float64 scaling before conversion to float32, matching MONAI's loader. Full-depth processing bypasses that roundtrip. Use the chunk size and overlap pinned in `model-sources/parity-reference.json` when reproducing a controlled upstream result.
+
+Sampling-grid calculations use float64, as pinned MONAI does, with the pinned PyTorch linspace rounding and accumulation order. Their arithmetic order matters: rounding can turn an exact zero into a tiny nonzero value, changing which voxels enter normalization. The synthetic MONAI fixture checks both intensities and exact zeros. Regenerate it with `.tmp_model_env/bin/python scripts/emit_monai_test_fixture.py` from the app directory after setting up the pinned conversion environment.
+
+The [2026-10-04 upstream comparison report](test/upstream-parity-20261004.json) records input derivations, reference provenance, per-label results, and reproduction commands. These scores are evidence, not test thresholds. The comparator still requires Dice ≥ 0.95 for every present label. The full-body run passes all 85 labels with minimum Dice 0.999956; three of 27,648,000 voxels differ. Identical upstream tensors with identical blending and inversion isolate those three differences to inference runtime arithmetic. They are explicitly accepted under the existing gate. Full-knee segmentation is voxel-exact for the published bounded reference.
 
 The worker stores class indices internally in `uint8`. It exports official sparse label values as `uint8` or `uint16`, according to the generated label-space contract. Display overlays always use a separate class-index NIfTI. OpenRecon whole-body labels are detected from release-derived membership tables and restored with `original = 10 * floor(mapped / 3) + mapped % 3`; range-only guesses are not used.
+
+## Reproduce public upstream parity
+
+The [immutable validation bundle](https://huggingface.co/datasets/neurodeskorg/webapps/tree/1409093e00bd7cc072220752352bb8891e5f38c6/musclemap/parity/20261004) contains public MRI inputs, derived subsets, upstream masks and provenance. Its manifest checks byte lengths and SHA-256, including cached downloads. Install NumPy 1.26.4 and nibabel 5.2.1 in `.tmp_model_env` for comparison; inference itself runs in Chromium.
+
+From the repository root:
+
+```bash
+python3 -m venv apps/musclemap/.tmp_model_env
+apps/musclemap/.tmp_model_env/bin/pip install numpy==1.26.4 nibabel==5.2.1
+python apps/musclemap/scripts/fetch_parity_reference.py "$TMPDIR/musclemap-reference"
+corepack pnpm --filter musclemap build
+node apps/musclemap/scripts/validate_upstream_parity.mjs \
+  --case body-first17-multichunk --reference-root "$TMPDIR/musclemap-reference" \
+  --backend wasm --output "$TMPDIR/musclemap-output.nii" \
+  --report "$TMPDIR/musclemap-report.json"
+```
+
+Cases are `body-first17`, `body-first17-multichunk`, `knee-slab`, `body-single-slice`, `body-full` and `knee-full`. The knee full-volume reference explicitly uses bounded channel inversion because unmodified upstream exceeds this host's memory. The bundle includes exact before-component equivalence checks on three labeled subsets and one background subset. This validates the tested scheduling change; it does not make the full-knee reference an unmodified upstream run. Full-body references use unmodified upstream inference.
+
+Run `body-single-slice` with `--backend webgpu`; `--software-webgpu` explicitly selects SwiftShader on hosts without hardware WebGPU. Reports record adapter details and require executed WebGPU kernels. Software results do not establish hardware GPU parity. The `musclemap-parity` workflow checks labeled WASM cases and the WebGPU single-slice case on pull requests; its manual `full_volumes` option adds both full-volume WASM cases.
+
+To regenerate upstream masks, install `scripts/requirements-reference.txt` in the pinned conversion environment, obtain the upstream revision and checkpoint named in `model-sources/release.json`, then run `scripts/generate_upstream_reference.py --help`. Source and checkpoint hashes are checked before inference. Only `knee-full` uses `--bounded-channel-inversion`. References compare implementation behavior, not anatomical ground truth.
 
 ## Verification
 
 ```bash
 corepack pnpm --filter musclemap test
 corepack pnpm --filter musclemap build
+apps/musclemap/.tmp_model_env/bin/python -m unittest discover -s apps/musclemap/tests -p test_upstream_comparison.py
 node --test test/registry.test.mjs test/app-plan.test.mjs
 node scripts/audit-artifacts.mjs --app musclemap
 ```

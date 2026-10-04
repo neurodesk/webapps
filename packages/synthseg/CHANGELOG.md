@@ -2,6 +2,10 @@
 
 ## 0.5.20261004
 
+### Patch Changes
+
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
 
 ## 0.5.20261003
 

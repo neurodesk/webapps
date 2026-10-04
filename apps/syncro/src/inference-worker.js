@@ -4,6 +4,7 @@ import wasmModuleURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?u
 import {readVolume,runSynthsr} from '@neurodesk/synthsr';
 import {createBrowserSession,browserRuntime} from '@neurodesk/synthsr/browser';
 import {runSynthstrip} from '@neurodesk/synthstrip';
+import {createBrowserSession as createStripSession} from '@neurodesk/synthstrip/browser';
 import {assets,browserSynthstrip} from '../../../packages/syncro/src/assets.js';
 import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
 ort.env.wasm.wasmPaths={wasm:wasmURL,mjs:wasmModuleURL};
@@ -34,7 +35,7 @@ self.onmessage=async({data:job})=>{
     ? (bytes,backend,shape)=>{Object.assign(runtime,browserRuntime(backend,shape));return createBrowserSession(ort,bytes,backend,shape,{
       bufferLimitHelp:'Use native SynthSR or another device for full-volume processing.',
     });}
-    : bytes=>ort.InferenceSession.create(bytes,{executionProviders:['wasm'],graphOptimizationLevel:'all'}),
+    : (bytes,shape)=>createStripSession(bytes,shape,ort),
    Tensor:ort.Tensor,onProgress:(value,message)=>self.postMessage({type:'progress',value,message})};
   const result=job.stage==='synthsr'?await runSynthsr({...common,buffer:job.buffer,options:{ct:job.ct,backend:job.backend??'webgpu'},runtime}):await runSynthstrip({...common,volume:job.volume??readVolume(job.buffer)});
   if(job.stage==='synthsr')self.postMessage({type:'result',result},[result.buffer]);

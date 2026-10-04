@@ -1,11 +1,17 @@
 # @neurodesk/desktop
 
-## 0.22.20261004
+## 0.23.20261004
 
 ### Patch Changes
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.1
+
+## 0.22.20261004
+
+### Patch Changes
+
+- Verify SYNcro with its packaged pinned T1 and explicit WASM SynthSR, SynthStrip, and Greedy backends.
 
 ## 0.21.20261004
 

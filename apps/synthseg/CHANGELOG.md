@@ -7,10 +7,9 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.1
   - @neurodesk/synthseg@0.5.20261004
-
-
-### Patch Changes
-
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/synthseg@0.5.20261004
 - Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
