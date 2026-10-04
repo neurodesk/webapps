@@ -1,5 +1,14 @@
 # syncro
 
+## 0.4.20261004
+
+### Patch Changes
+
+- Keep full-volume CPU SynthSR activations in bounded backing buffers so SYNcro's stroke MRI example does not exceed Chromium's per-ArrayBuffer allocation limit. Preserve channel ordering, operator slabs and numerical values. Wait for CALMaR mask review or final completion before issuing another agentic action, rather than treating intermediate stage progress as completed analysis.
+- Updated dependencies
+  - @neurodesk/synthsr@0.5.20261004
+  - @neurodesk/brain-extraction@0.1.15
+
 ## 0.4.20261003
 
 ### Patch Changes

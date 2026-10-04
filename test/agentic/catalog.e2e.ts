@@ -4,6 +4,7 @@ import { test as base } from '@e2e-dev/web';
 import { expect } from 'e2e';
 import { z } from 'zod';
 import { agenticCatalog } from '../../test-utils/agentic-catalog.mjs';
+import { pipelineSettled } from '../../test-utils/agentic-pipeline-state.mjs';
 import { loadAppContract } from '../../scripts/lib/app-automation.mjs';
 import { repoRoot } from '../../scripts/lib/apps-registry.mjs';
 
@@ -192,33 +193,53 @@ for (const entry of catalog) {
           });
           await expect(browser.locator('#command')).toHaveValue('-mul 0 -add 7');
         }
+        if (entry.id === 'syncro' && process.platform === 'linux' && process.env.E2E_SOFTWARE_GPU !== '0') {
+          await agent.act('Open Processing settings and set SynthSR device to CPU · WebAssembly. Leave Normalize to MNI unclicked.');
+          await expect(browser.locator('#synthsrBackend')).toHaveValue('wasm');
+        }
         let completed = false;
         for (let stage = 0; stage < 8 && !completed; stage += 1) {
-          await agent.act('Advance the main workflow on the loaded example toward {outcome}. Use the visible controls. Skip optional preprocessing if it gates the main Run action. Scroll the sidebar to reach controls below the fold. Return immediately once a processing task has started, or if the expected results are already available. Do not wait for a long-running task and do not click download.', {
+          await agent.act('Advance the main workflow on the loaded example toward {outcome}. Use the visible controls. If the app requests mask review, confirm the generated example mask to continue mapping. Skip optional preprocessing if it gates the main Run action. Scroll the sidebar to reach controls below the fold. Return immediately once a processing task has started, or if the expected results are already available. Do not restart an analysis already in progress, wait for a long-running task, or click download.', {
             params: { outcome: example.expectedResult },
             timeout: 300000,
           });
-          await expect.poll(() => browser.evaluate(({ indeterminateOnly }) => {
+          await expect.poll(async () => pipelineSettled(entry.id, await browser.evaluate(() => {
             const footer = document.querySelector('footer#status');
             const progress = footer?.querySelector('progress');
-            if (/\b(error|failed|unable)\b/i.test(footer?.textContent ?? '')) return true;
-            if (indeterminateOnly) return !progress || progress.hasAttribute('value');
-            return !progress || (progress.hasAttribute('value') && progress.value >= progress.max);
-          }, { indeterminateOnly: entry.id === 'dwi2trx' }), { timeout: 1800000 }).toBe(true);
+            return {
+              text: footer?.querySelector('[role="status"], #statusText')?.textContent ?? footer?.textContent ?? '',
+              value: !progress ? 1 : progress.hasAttribute('value') ? progress.value : null,
+              max: progress?.max ?? 1,
+            };
+          })), { timeout: 1800000 }).toBe(true);
           await expect(browser.locator('footer#status')).not.toContainText(/\b(error|failed|unable)\b/i);
           const result = await agent.extract(`Extract an object with a completed boolean describing the output-control state for this workflow: ${example.expectedResult}. Set completed to true only when processed scientific outputs are available to download. If results are absent, another processing step is needed, or only the input image or screenshot can be saved, return the object { "completed": false }. The absence of results is an answer, not missing data.`, {
             schema: z.object({ completed: z.boolean() }),
           });
           completed = result.completed;
+          if (entry.id === 'calmar') {
+            completed = completed && await browser.locator('#downloadNetworkMapButton').isEnabled();
+          }
         }
         expect(completed).toBe(true);
         const download = await browser.waitForDownload(async () => {
-          await agent.act('Download one scientific result from the completed workflow using its download or save control.');
+          await agent.act(entry.id === 'calmar'
+            ? 'Download the completed lesion-network map as NIfTI using Download network map.'
+            : 'Download one scientific result from the completed workflow using its download or save control.');
         }, { timeout: 120000 });
         const downloadPath = downloads.resolve(download.path);
         expect((await stat(downloadPath)).size).toBeGreaterThan(0);
         expect(download.suggestedFilename).toMatch(/\.(nii(\.gz)?|zip|tsv|csv|json|stl|obj|mz3|gii|png|mp4|webm|pdf|html|txt|tck|trx|label|mat|coord|table|sdat)$/i);
         if (entry.id === 'dwi2trx') expect(download.suggestedFilename).toMatch(/\.trx$/);
+        if (entry.id === 'calmar') {
+          expect(download.suggestedFilename).toBe('lnm-network-map.nii');
+          const { readVolume } = await import('../../packages/synthsr/src/volume.js');
+          const bytes = await readFile(downloadPath);
+          const result = readVolume(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+          expect(result.data.every(Number.isFinite)).toBe(true);
+          expect(result.data.some(value => value !== 0)).toBe(true);
+          expect(result.data.some(value => value !== result.data[0])).toBe(true);
+        }
         await expect(browser.locator('[data-neurodesk-state="failed"]')).toHaveCount(0);
         if (entry.id === 'niimath') {
           const { readVolume } = await import('../../packages/synthsr/src/volume.js');

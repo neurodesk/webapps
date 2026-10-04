@@ -1,5 +1,6 @@
 import model from './gpu-model.json' with { type: 'json' };
 import { planGpuGraph } from './gpu-session.js';
+import { createActivationStorage } from './activation-storage.js';
 
 export const WASM_IMPLEMENTATION = 'synthsr-streamed-fp32-v1';
 export const needsStreamedWasm = dims => dims.reduce((a,b)=>a*b,1)>8*1024*1024;
@@ -94,7 +95,7 @@ export async function createStreamedWasmSession(raw,dims,ort,{onProgress=()=>{},
       executionProviders:['wasm'],graphOptimizationLevel:'all',enableCpuMemArena:false,enableMemPattern:false,
     }));
     // Large activations live in separate JS buffers, outside WASM's 4 GiB heap.
-    activation=plan.slots.map(s=>new Float32Array(s.bytes/4));
+    activation=plan.slots.map(s=>createActivationStorage(s.bytes/4));
   }catch(error){await Promise.allSettled(sessions.map(s=>s.release()));throw error;}
   return {
     inputNames:[model.input],outputNames:[model.output],implementation:WASM_IMPLEMENTATION,
