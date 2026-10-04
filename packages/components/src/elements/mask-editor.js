@@ -155,7 +155,7 @@ function createMaskEditorClass(view) {
       });
       const brushValue = createElement('span', { ownerDocument: doc });
       const action = (text, onclick, title) => createElement('button', { className: 'nd-btn nd-btn-sm', type: 'button', text, title, ownerDocument: doc, onclick });
-      const undo = action('Undo', () => this.#session.state === 'editing' && this.#drawing.undo(), 'Undo the last stroke (Ctrl+Z)');
+      const undo = action('Undo', () => this.#drawing.undo(), 'Undo the last stroke (Ctrl+Z)');
       const apply = action('Apply', () => this.#report(this.apply()), 'Keep the edits and replace the result');
       const cancel = action('Cancel', () => this.#report(this.cancel()), 'Discard the edits');
       this.replaceChildren(...[
