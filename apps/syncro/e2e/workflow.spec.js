@@ -1,6 +1,7 @@
 import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mjs';
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
+import {unzipSync} from 'fflate';
 const PACKAGE_VERSION=JSON.parse(await readFile(new URL('../../../packages/syncro/package.json',import.meta.url),'utf8')).version;
 test.beforeEach(async({page})=>{await page.route('**/MNI152_T1_1mm_brain.nii.gz',async route=>route.fulfill({body:await readFile(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz',import.meta.url))}));});
 function scan(name,translation=0,value=20){
@@ -184,4 +185,69 @@ test('compact help, standalone commands and result switching remain reachable',a
  await expect(page.locator('#progress')).toHaveJSProperty('value',0);
  await expect(page.locator('#elapsed')).toBeEmpty();
  await expect(page.locator('#results')).not.toHaveAttribute('open','');
+});
+
+test('the normalized lesion can be edited, cancelled and downloaded',async({page})=>{
+ await page.addInitScript(()=>{
+  // NiiVue 1.0 rc.11 on SwiftShader WebGPU fails every load after the first; WebGL2 does not.
+  Object.defineProperty(navigator,'gpu',{value:undefined});
+  const NativeWorker=window.Worker;
+  window.Worker=function(url,options){
+   if(!/\/assets\/worker-[^/]+\.js/.test(String(url)))return new NativeWorker(url,options);
+   return {
+    onmessage:null,onerror:null,
+    postMessage(job){Promise.all([job.input.arrayBuffer(),job.lesion.arrayBuffer()]).then(([primary,lesion])=>{this.onmessage?.({data:{type:'result',outputs:{'wanatomical.nii':new Uint8Array(primary),'wlesion.nii':new Uint8Array(lesion)}}});});},
+    terminate(){}
+   };
+  };
+ });
+ await page.goto('./');
+ await page.locator('#input').setInputFiles(scan('anatomical.nii'));
+ await expect(page.locator('#runButton')).toBeEnabled({timeout:30000});
+ await expect(page.locator('#editLesion')).toBeDisabled();
+ await page.locator('#lesion').setInputFiles(scan('lesion.nii',0,0));
+ await expect(page.locator('#lesionInfo')).toBeVisible();
+ await page.locator('#runButton').click();
+ await expect(page.locator('#statusText')).toContainText('Normalization complete');
+ await expect(page.locator('#editLesion')).toBeEnabled();
+ const editor=page.locator('nd-mask-editor');
+ await page.locator('#editLesion').click();
+ await expect(editor).toBeVisible();
+ await expect(page.locator('#statusText')).toContainText('Editing normalized lesion');
+ await expect(page.locator('#editLesion')).toBeDisabled();
+ await expect(page.locator('#viewSelect')).toBeDisabled();
+ await editor.getByRole('button',{name:'Cancel'}).click();
+ await expect(editor).toBeHidden();
+ await expect(page.locator('#statusText')).toHaveText('Lesion edit discarded');
+ await expect(page.locator('#viewLabel')).toHaveText('wanatomical.nii + wlesion.nii');
+ await expect(page.locator('#editLesion')).toBeEnabled();
+ await page.getByRole('button',{name:'Axial',exact:true}).click();
+ await page.locator('#editLesion').click();
+ await expect(editor).toBeVisible();
+ const box=await page.locator('#gl1').boundingBox();
+ const centre={x:box.x+box.width/2,y:box.y+box.height/2};
+ await page.mouse.move(centre.x-20,centre.y);
+ await page.mouse.down();
+ await page.mouse.move(centre.x,centre.y+5,{steps:5});
+ await page.mouse.move(centre.x+20,centre.y,{steps:5});
+ await page.mouse.up();
+ await editor.getByRole('button',{name:'Apply'}).click();
+ await expect(editor).toBeHidden();
+ await expect(page.locator('#viewLabel')).toHaveText('wanatomical.nii + wlesion.nii (edited)');
+ await expect(page.locator('#statusText')).toContainText('Normalized lesion updated');
+ const archive=page.waitForEvent('download');
+ await page.locator('#download').click();
+ const files=unzipSync(await readFile(await (await archive).path()));
+ const edited=Buffer.from(files['wlesion.nii']);
+ expect(edited.readInt16LE(70)).toBe(2);
+ expect([0,1,2,3].map(i=>edited.readInt16LE(40+i*2))).toEqual([3,16,16,16]);
+ const voxels=edited.subarray(edited.readFloatLE(108));
+ expect(voxels.length).toBe(4096);
+ expect(voxels.some(value=>value!==0)).toBe(true);
+ await page.locator('#editLesion').click();
+ await expect(editor).toBeVisible();
+ await page.locator('#runButton').click();
+ await expect(page.locator('#statusText')).toContainText('Normalization complete');
+ await expect(editor).toBeHidden();
+ await expect(page.locator('#viewLabel')).toHaveText('wanatomical.nii + wlesion.nii');
 });
