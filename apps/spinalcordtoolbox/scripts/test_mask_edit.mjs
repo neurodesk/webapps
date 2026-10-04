@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { createNiftiHeaderFromVolume, createUint8Nifti } from '@neurodesk/webapp-components/file-io';
+import { createNiftiHeaderFromVolume, createUint8Nifti, parseNiftiHeader } from '@neurodesk/webapp-components/file-io';
 
 const dom = new JSDOM(`<!DOCTYPE html>
 <main class="app-main"><div class="viewer-toolbar"></div><div class="viewer-canvas-wrapper"></div></main>
@@ -57,7 +57,7 @@ function makeApp() {
     isCurrentVolumeStack: (entries) => stacks.length > 0 && JSON.stringify(signature(stacks.at(-1))) === JSON.stringify(signature(entries)),
     async loadVolumeStack(entries) {
       stacks.push(entries);
-      nv.volumes = entries.map(entry => ({ opacity: entry.opacity ?? 1, hdr: { dims: DIMS } }));
+      nv.volumes = entries.map(entry => ({ opacity: entry.opacity ?? 1, hdr: parseNiftiHeader(maskBytes([])) }));
     },
     clearVolumes() {
       stacks.length = 0;
