@@ -284,7 +284,7 @@ const results = createResultList({
   onView: (stage) => {
     if (!result || busy || editor.session.state !== 'idle') return;
     background = stage;
-    return showImages().catch((error) => status(error.message, true));
+    void showImages().catch((error) => status(error.message, true));
   },
   onDownload: (_stage, entry) => downloadFile(entry.file),
   onEdit: () => { void editLabels(); },
