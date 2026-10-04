@@ -316,12 +316,18 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
   }
   if (id === 'syncro') {
     const manifest = JSON.parse(await readFile(join(resources, 'manifest.json')));
-    const template = Object.entries(manifest.assets).find(([url]) => url.endsWith('/reg/moving/t1_brain.nii.gz'));
-    assert.ok(template, 'The real registration example must be packaged');
-    await page.locator('#input').setInputFiles({ name: 't1_brain.nii.gz', mimeType: 'application/gzip', buffer: await readFile(join(resources, template[1].path)) });
+    const examples = JSON.parse(await readFile(join(root, 'apps/syncro/examples.json')));
+    const primary = examples[0].files.find(file => file.role === 'primary');
+    const asset = manifest.assets[primary.url];
+    assert.ok(asset, 'The pinned SYNcro T1 example must be packaged');
+    await page.locator('#input').setInputFiles({ name: primary.name, mimeType: 'application/gzip', buffer: await readFile(join(resources, asset.path)) });
+    await page.locator('#settingsSection').evaluate(section => { section.open = true; });
+    await page.locator('#synthsrBackend').selectOption('wasm');
+    await page.locator('#brainExtractor').selectOption('synthstrip');
+    await page.locator('#normalization').selectOption('greedy');
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#runButton').click();
-    await expect(page.locator('#download')).toBeEnabled({ timeout: 900000 });
+    await expect(page.locator('#download')).toBeEnabled({ timeout: Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 1_800_000) });
     const result = await download('#download');
     assert.equal(result.bytes.readUInt16LE(0), 0x4b50);
     return { filename: result.filename, bytes: result.bytes.length };
