@@ -662,6 +662,11 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   :is(.nd-viewer-toolbar, .nd-mask-editor) :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
   :is(.nd-viewer-toolbar, .nd-mask-editor) select { font-size: 16px; }
   .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }
+  .nd-btn-sm,
+  .nd-viewer-checkbox {
+    min-width: 44px;
+    min-height: 44px;
+  }
   .nd-console-title, .nd-console-clear { min-height: 44px; }
   .nd-dialog-body .nd-btn, .nd-command .nd-btn { min-height: 44px; }
   .nd-imaging-status .nd-btn-cancel { width: 44px; height: 44px; }

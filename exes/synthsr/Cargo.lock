@@ -734,7 +734,7 @@ dependencies = [
 
 [[package]]
 name = "synthsr"
-version = "0.5.20261003"
+version = "0.6.20261004"
 dependencies = [
  "flate2",
  "metal",

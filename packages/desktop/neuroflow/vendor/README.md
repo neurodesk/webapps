@@ -1,12 +1,17 @@
 # NeuroFlow schema snapshot
 
 These unmodified NeuroFlow 0.1 schemas come from
-[cdrake/neuroflow-spec at d8a87377660495f8f17f8c4f76a00295d8d91f1a](https://github.com/cdrake/neuroflow-spec/tree/d8a87377660495f8f17f8c4f76a00295d8d91f1a/schemas/0.1).
+[cdrake/neuroflow-spec at 40ed9ce02184183237613318db48286b9f4c504f](https://github.com/cdrake/neuroflow-spec/tree/40ed9ce02184183237613318db48286b9f4c504f/schemas/0.1),
+the merged RFC 0010 change ([cdrake/neuroflow-spec#1](https://github.com/cdrake/neuroflow-spec/pull/1)).
+They add the type qualifiers `formats`, `space`, `resolution`, `density` and
+`labelSystem` and the `0.1.1` envelope value a qualified document declares.
 They are used under the included MIT license. Generation and tests validate
 against this local snapshot without fetching a schema at runtime.
 
 The launcher follows the script session contract implemented by
-[cdrake/neuroflow at a47266dbe80357cfffaee1906179d81411765de6](https://github.com/cdrake/neuroflow/tree/a47266dbe80357cfffaee1906179d81411765de6).
+[cdrake/neuroflow at cc399f8208473fc429a8cdf04d0ca4ca46547567](https://github.com/cdrake/neuroflow/tree/cc399f8208473fc429a8cdf04d0ca4ca46547567).
+That implementation was merged in [neuroflow#4](https://github.com/cdrake/neuroflow/pull/4).
+The earlier envelope-only support does not enforce qualifier constraints.
 It uses `core:result-file` and `neuroflow/launch`, and writes absolute artifact
 paths to `result.json`. The upstream MCP runtime resolves the launch script
 relative to the tool document and requires it to remain inside the registry.

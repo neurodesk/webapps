@@ -107,12 +107,12 @@ export function finishStrip(sdt, prep) {
 
 export async function runSynthstrip({volume,loadModel,createSession,Tensor,onProgress=()=>{}}) {
   onProgress(0,'Conforming image for brain extraction…');const prep=prepareStrip(volume);
-  const model=await loadModel();const session=await createSession(model.bytes);
+  const model=await loadModel();const session=await createSession(model.bytes,prep.modelDims);
   let input,outputs;
   try {
     input=new Tensor('float32',prep.input,[1,1,...prep.modelDims]);
     onProgress(0.2,'Extracting brain…');outputs=await session.run({[session.inputNames[0]]:input});
-    const result=finishStrip(outputs[session.outputNames[0]].data,prep);
+    const result=finishStrip(await outputs[session.outputNames[0]].getData(),prep);
     onProgress(1,'Brain extraction complete');return {...result,provenance:{modelHash:model.hash,modelDims:prep.modelDims,border:1}};
   } finally {input?.dispose();if(outputs)for(const v of Object.values(outputs))v.dispose();await session.release();}
 }

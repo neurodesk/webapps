@@ -1,5 +1,18 @@
 # @neurodesk/brain-extraction
 
+## 0.1.16
+
+### Patch Changes
+
+- Updated dependencies [257192b]
+  - @neurodesk/synthsr@0.6.20261004
+
+## 0.1.15
+
+### Patch Changes
+
+- @neurodesk/synthsr@0.5.20261004
+
 ## 0.1.14
 
 ### Patch Changes

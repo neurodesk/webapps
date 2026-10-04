@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseContract, requestSchema, validateRequest, operationFor } from '../src/contracts.js';
+import { createAutomationService } from '../src/automation.js';
 
 const registration = {
   schemaVersion: 2, app: 'registration', title: 'Registration', description: 'Register images',
@@ -37,7 +39,8 @@ async function fixture(t) {
   t.after(() => rm(directory, { recursive: true, force: true }));
   const fixed = join(directory, 'fixed.nii');
   const moving = join(directory, 'moving.nii.gz');
-  await Promise.all([writeFile(fixed, 'fixed fixture'), writeFile(moving, 'moving fixture')]);
+  const image = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
+  await Promise.all([writeFile(fixed, gunzipSync(image)), writeFile(moving, image)]);
   return { directory, inputs: { fixed: [fixed], moving: [moving] } };
 }
 
@@ -54,6 +57,20 @@ test('operation requests derive typed defaults and reject wrong operations and u
   await assert.rejects(validateRequest(contract, { inputs, parameters: { iterations: [-1] } }));
   await assert.rejects(validateRequest(contract, { inputs, parameters: { invented: true } }));
   await assert.rejects(validateRequest(contract, { inputs, selections: { fixed: 'not-a-hash' } }));
+});
+
+test('a disguised non-NIfTI file is rejected before the scientific executor starts', async t => {
+  const { directory, inputs } = await fixture(t);
+  await writeFile(inputs.fixed[0], 'not a NIfTI image despite the extension');
+  let executions = 0;
+  const service = createAutomationService({
+    contracts: [{ contract: parseContract(registration), sha256: 'test' }],
+    outputRoot: join(directory, 'runs'),
+    execute: async () => { executions++; },
+  });
+  await assert.rejects(service.validate('registration', { inputs }), /encoding.*NIfTI/);
+  await assert.rejects(service.start('registration', { inputs }), /encoding.*NIfTI/);
+  assert.equal(executions, 0);
 });
 
 test('DICOM directories expand deterministically and duplicate files are rejected', async t => {

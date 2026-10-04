@@ -1,6 +1,6 @@
 {
   "name": "musclemap",
-  "version": "1.4.20261003",
+  "version": "1.4.20261004",
   "releaseSeries": "1.4",
   "private": true,
   "type": "module",
@@ -14,6 +14,8 @@
     "model:validate-browser": "node scripts/validate_browser_model.mjs",
     "model:validate-preprocessing": "node scripts/validate_preprocessing_parity.mjs",
     "model:validate-upstream": "node scripts/validate_upstream_parity.mjs",
+    "model:fetch-reference": "python3 scripts/fetch_parity_reference.py",
+    "model:generate-reference": ".tmp_model_env/bin/python scripts/generate_upstream_reference.py",
     "model:publish": ".tmp_model_env/bin/python scripts/publish_model.py",
     "model:activate": ".tmp_model_env/bin/python scripts/activate_model_release.py",
     "vendor": "node ../../scripts/vendor-components.mjs",
