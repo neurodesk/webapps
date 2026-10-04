@@ -5,8 +5,27 @@ import { inferenceWorker } from '../test-utils/inference-worker-harness.mjs';
 const bytes = new Uint8Array([1, 2, 3]);
 const hash = '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81';
 const model = { url: 'https://example.org/model', bytes: 3, sha256: hash };
+const requestFailureMessages = {
+  synthsr: 'Could not download SynthSR weights. Check the connection or choose a local model file.',
+  synthseg: 'Could not download the SynthSeg weights. Check the connection and try again.',
+};
 
 for (const app of ['synthsr', 'synthseg']) {
+  for (const [failure, response] of [
+    ['HTTP 404', () => new Response('Missing', { status: 404 })],
+    ['HTML', () => new Response('<html>Unavailable</html>', { headers: { 'Content-Type': 'text/html' } })],
+  ]) {
+    test(`${app} actual worker preserves recovery guidance on ${failure}`, async () => {
+      const worker = await inferenceWorker(app, {
+        fetch: async url => url === model.url ? response() : new Response(bytes),
+      });
+      await worker.run(model);
+      assert.equal(worker.messages.at(-1).type, 'error');
+      assert.equal(worker.messages.at(-1).message, requestFailureMessages[app]);
+      assert.equal(worker.messages.some(message => message.type === 'result'), false);
+    });
+  }
+
   test(`${app} actual worker loads verified bytes and reports progress`, async () => {
     const calls = [];
     let stored;
