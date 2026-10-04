@@ -2,6 +2,13 @@
 
 ## 0.5.20261004
 
+### Patch Changes
+
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
+
+
 ## 0.5.20261003
 
 ## 0.5.20260930

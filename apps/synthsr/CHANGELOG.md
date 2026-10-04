@@ -4,6 +4,15 @@
 
 ### Patch Changes
 
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
+- Updated dependencies
+  - @neurodesk/synthsr@0.5.20261004
+
+
+### Patch Changes
+
 - Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
