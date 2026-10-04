@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.21.20261004
+
+### Minor Changes
+
+- Generate NeuroFlow 0.1.1 qualifiers and scalar single-file bindings against the merged upstream schema. Resolve verified app coordinate references, reject invalid qualifier inheritance, and validate NIfTI encoding before legacy and schema-version-2 runs.
+
 ## 0.20.20261003
 
 ### Patch Changes
