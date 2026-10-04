@@ -687,7 +687,10 @@ class MuscleMapApp {
     this.syncPostprocessingControls();
     const entries = this.fileIOController.getEntries();
     void this.maskEditor.cancel();
-    this.uploadedDerivedFiles.clear();
+    const uploadedIds = new Set(entries.map(entry => `uploaded-${entry.id}`));
+    for (const id of this.uploadedDerivedFiles.keys()) {
+      if (!uploadedIds.has(id)) this.uploadedDerivedFiles.delete(id);
+    }
     const currentEntry = entries.find(entry => entry.file === this.inputFile) || null;
     const currentIsDisplayable = currentEntry && currentEntry.role !== 'segmentation';
     const primary = this.fileIOController.getPrimaryImageEntry();

@@ -375,7 +375,7 @@ $('exampleControl').replaceWith(exampleControl);
 $('opacity').oninput = () => {
   const value = Number($('opacity').value);
   toolbar.control('overlayOpacityValue').textContent = `${Math.round(value * 100)}%`;
-  if (labels && viewer) void viewer.setVolume(1, { opacity: value });
+  if (labels && viewer && displayedStage === 'labels') void viewer.setVolume(1, { opacity: value });
 };
 async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
   if (!source || busy) throw new Error('Load an image before starting segmentation.');

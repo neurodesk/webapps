@@ -166,7 +166,10 @@ async function getViewer() {
       maskEditor = createMaskEditor({
         nv: viewer,
         onApply: async (name, file) => {
-          outputs[name] = new Uint8Array(await file.arrayBuffer());
+          const current = outputs;
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          if (outputs !== current || !current) return;
+          outputs[name] = bytes;
           lesionEdited = true;
           rebuildViewItems();
           setStatus('Normalized lesion updated · downloads include the edit');

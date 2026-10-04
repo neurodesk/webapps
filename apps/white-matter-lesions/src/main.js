@@ -169,8 +169,11 @@ async function ensureViewer() {
     editor = createMaskEditor({
       nv: viewer,
       onApply: async (stage, file, { original }) => {
+        const session = editing;
+        const volume = readVolume(await file.arrayBuffer());
+        if (editing !== session) return;
         closeEdit();
-        outputs = applyMaskEdit(outputs, file, original, readVolume(await file.arrayBuffer()));
+        outputs = applyMaskEdit(outputs, file, original, volume);
         renderOutputs();
         status(`${outputs.mask.description} · edited`);
         await show(stage);

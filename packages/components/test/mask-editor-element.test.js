@@ -190,3 +190,25 @@ test('a result list disables its Edit buttons while a session is open', async (t
   await editor.cancel();
   assert.deepEqual(disabled(), [false, false]);
 });
+
+test('a session cancelled while its mask loads closes its drawing before the next one opens', async (t) => {
+  const { window, nv, editor } = setup();
+  t.after(() => window.close());
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const load = nv.loadDrawing.bind(nv);
+  nv.loadDrawing = async (file) => { await gate; return load(file); };
+  const first = editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  await until(() => editor.session.state === 'opening');
+  await editor.cancel();
+  assert.equal(editor.session.state, 'idle');
+  const second = editor.start({ stage: 'other', file: maskFile([2]), overlayIndex: 1 });
+  release();
+  assert.equal(await first, false);
+  assert.equal(await second, true);
+  assert.equal(editor.session.stage, 'other');
+  const closes = nv.calls.filter(([name]) => name === 'closeDrawing').length;
+  assert.equal(closes, 1, 'the superseded drawing was closed once');
+  assert.deepEqual(nv.calls.filter(([name]) => name === 'setVolume').map(([, , options]) => options.opacity), [0, 0.6, 0]);
+  assert.deepEqual([...nv.drawing.subarray(352)].filter(Boolean), [2]);
+});

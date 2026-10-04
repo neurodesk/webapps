@@ -21,6 +21,7 @@ function createMaskEditorClass(view) {
     #options = {};
     #drawing = null;
     #controls = null;
+    #pending = null;
     #onKey = (event) => this.#handleKey(event);
 
     connectedCallback() {
@@ -37,8 +38,21 @@ function createMaskEditorClass(view) {
 
     get session() { return this.#session; }
 
-    async start({ stage, file, label = stage, overlayIndex = null, colormap = null }) {
+    // Starts run one after another, so a session cancelled while its mask loads has
+    // closed its drawing and restored its overlay before the next one touches NiiVue.
+    async start(request) {
       if (!this.#drawing) throw new Error('Configure the mask editor with a NiiVue instance first');
+      await this.#pending?.catch(() => {});
+      const run = this.#open(request);
+      this.#pending = run;
+      try {
+        return await run;
+      } finally {
+        if (this.#pending === run) this.#pending = null;
+      }
+    }
+
+    async #open({ stage, file, label = stage, overlayIndex = null, colormap = null }) {
       if (this.#session.state !== 'idle') throw new Error(`Cannot start editing ${stage} while ${this.#session.stage} is open`);
       const opening = { state: 'opening', stage };
       this.#set(opening);
@@ -50,9 +64,8 @@ function createMaskEditorClass(view) {
         const labelValues = await distinctLabels(mask);
         opened = await this.#drawing.open(mask);
         if (!opened) throw new Error(`${label} does not share the viewed image's voxel grid`);
-        // Cancelled while loading: close only if no other session has opened since.
         if (this.#session !== opening) {
-          if (this.#session.state === 'idle') await this.#release(overlay);
+          await this.#release(overlay);
           return false;
         }
         if (colormap) this.#drawing.setColormap(colormap);
