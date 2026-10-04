@@ -259,8 +259,6 @@ ort.env.webgpu.profiling = {
                   chunkSize: 1,
                   sourceChunkSize: selectedSourceChunkSize,
                   useWebGPU: selectedBackend === 'webgpu',
-                  sliceThickness: -1,
-                  lowRes: false,
                   calculateMetrics: false
                 }
               }

@@ -46,6 +46,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -1025,6 +1029,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.9,
       "normalization": "nonzero-zscore"
@@ -2156,6 +2164,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2316,6 +2328,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2449,6 +2465,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2663,6 +2683,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2868,6 +2892,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
