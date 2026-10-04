@@ -194,7 +194,7 @@ async function ensureViewer() {
         },
         onError: (_stage, error) => status(error.message, true),
       });
-      editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(state.phase === 'idle'));
+      editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(true));
       editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
       toolbar.after(editor);
       viewer.createExtensionContext().on('locationChange', event => { $('location').textContent = event.detail.string; });

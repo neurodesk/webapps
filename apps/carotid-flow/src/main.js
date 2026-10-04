@@ -86,7 +86,7 @@ const editor = createMaskEditor({
   labelNames: { 1: 'Left carotid', 2: 'Right carotid' },
   onApply: applyLabelEdit,
   onCancel: () => {
-    results.setEditingEnabled(!busy && editor.session.state === 'idle');
+    results.setEditingEnabled(editor.session.state === 'idle');
     // A load or run that cancelled the session redraws the viewer itself.
     if (busy) return;
     status('Edits discarded');
@@ -95,7 +95,7 @@ const editor = createMaskEditor({
   onError: (_stage, error) => status(error instanceof Error ? error.message : String(error), true),
 });
 toolbar.after(editor);
-editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(!busy));
+editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(true));
 editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
 let ready = false;
 let busy = false;
@@ -301,16 +301,16 @@ async function editLabels() {
       { url: mask, name: mask.name, colormap: LABEL_COLORMAP, calMin: 0, calMax: 2, opacity: overlayOpacity, isColorbarVisible: false },
     ]);
     const opened = await editor.start({ stage: 'mask', file: mask, label: 'Carotid labels', overlayIndex: 1, colormap: LABEL_COLORMAP });
-    if (!opened) results.setEditingEnabled(!busy && editor.session.state === 'idle');
+    if (!opened) results.setEditingEnabled(editor.session.state === 'idle');
   } catch (error) {
-    results.setEditingEnabled(!busy && editor.session.state === 'idle');
+    results.setEditingEnabled(editor.session.state === 'idle');
     status(error instanceof Error ? error.message : String(error), true);
     await showImages().catch(() => {});
   }
 }
 
 async function applyLabelEdit(_stage, file, { original }) {
-  results.setEditingEnabled(!busy && editor.session.state === 'idle');
+  results.setEditingEnabled(editor.session.state === 'idle');
   const edited = result;
   const labels = (await readVolume(file)).data;
   if (result !== edited) return;
