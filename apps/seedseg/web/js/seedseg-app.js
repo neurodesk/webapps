@@ -14,9 +14,10 @@ import { DicompareController } from 'https://dicompare.neurodesk.org/embed/Dicom
 import { DicompareReportRenderer } from '@neurodesk/webapp-components/ui';
 import { ViewerController } from '@neurodesk/webapp-components';
 import { SeedSegPipeline } from './controllers/SeedSegPipeline.js';
-import { ConsoleOutput, ProgressManager, ModalManager, bindWindowControls } from '@neurodesk/webapp-components/ui';
+import { ConsoleOutput, ProgressManager, ModalManager, bindWindowControls, createMaskEditor } from '@neurodesk/webapp-components/ui';
 import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import * as Config from './app/config.js';
+import { clearResultsAfterEditing, isEditableStage, replaceWithEdit, stageLabel } from './app/mask-edit.js';
 
 class SeedSegApp {
   constructor() {
@@ -82,6 +83,15 @@ class SeedSegApp {
       nv: this.nv,
       updateOutput: (msg) => this.updateOutput(msg)
     });
+
+    this.maskEditor = createMaskEditor({
+      nv: this.nv,
+      onApply: (stage, file, { original }) => this.onMaskApplied(stage, file, original),
+      onCancel: () => this.onMaskEditClosed(),
+      onError: (_stage, error) => this.onMaskEditError(error)
+    });
+    this.maskEditor.addEventListener('nd-mask-edit-start', (event) => this.progress.setText(event.detail.message));
+    document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
 
     this.inferenceExecutor = new SeedSegPipeline({
       updateOutput: (msg) => this.updateOutput(msg),
@@ -625,6 +635,7 @@ class SeedSegApp {
   // ==================== File Handling ====================
 
   async onFileLoaded(file) {
+    await this.maskEditor.cancel();
     this.inputFile = file;
     await this.viewerController.loadBaseVolume(file);
 
@@ -673,15 +684,15 @@ class SeedSegApp {
     // Read file
     const inputData = await file.arrayBuffer();
 
+    // Clear previous results
+    await clearResultsAfterEditing(this.maskEditor, this.inferenceExecutor);
+    this.disableAllResultTabs();
+
     // Disable run; the status footer shows the cancel button while running
     const runBtn = document.getElementById('runSegmentation');
     if (runBtn) runBtn.disabled = true;
     document.getElementById('statusText')?.classList.remove('error');
     this.progress.begin('Starting segmentation...');
-
-    // Clear previous results
-    this.inferenceExecutor.clearResults();
-    this.disableAllResultTabs();
 
     // Run
     await this.inferenceExecutor.run({
@@ -748,9 +759,20 @@ class SeedSegApp {
 
     const showBtn = document.createElement('button');
     showBtn.className = 'btn stage-btn';
-    showBtn.textContent = displayName;
+    showBtn.textContent = stageLabel(displayName, this.inferenceExecutor.getResult(stage));
     showBtn.addEventListener('click', () => this.showResult(stage));
     item.appendChild(showBtn);
+
+    if (isEditableStage(stage)) {
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'nd-edit-btn';
+      editBtn.textContent = 'Edit';
+      editBtn.title = 'Edit in the viewer';
+      editBtn.disabled = this.maskEditor.session.state !== 'idle';
+      editBtn.addEventListener('click', () => this.editResult(stage));
+      item.appendChild(editBtn);
+    }
 
     if (stage !== 'input') {
       const dlBtn = document.createElement('button');
@@ -762,6 +784,51 @@ class SeedSegApp {
     }
 
     container.appendChild(item);
+  }
+
+  async editResult(stage) {
+    const result = this.inferenceExecutor.getResult(stage);
+    if (!result?.file || !this.inputFile) return;
+    this.setEditButtonsEnabled(false);
+    document.getElementById('statusText')?.classList.remove('error');
+    try {
+      await this.showResult(stage);
+      const started = await this.maskEditor.start({
+        stage,
+        file: result.file,
+        label: SeedSegApp.STAGE_NAMES[stage] || stage,
+        overlayIndex: 1
+      });
+      if (!started) this.setEditButtonsEnabled(true);
+    } catch (error) {
+      this.onMaskEditError(error);
+    }
+  }
+
+  async onMaskApplied(stage, file, original) {
+    replaceWithEdit(this.inferenceExecutor, stage, file, original);
+    const showBtn = document.querySelector(`#stage-item-${stage} .stage-btn`);
+    if (showBtn) showBtn.textContent = stageLabel(SeedSegApp.STAGE_NAMES[stage] || stage, this.inferenceExecutor.getResult(stage));
+    this.updateOutput(`Applied manual edits to ${file.name}`);
+    this.onMaskEditClosed();
+    await this.showResult(stage);
+  }
+
+  onMaskEditClosed() {
+    this.setEditButtonsEnabled(true);
+    this.progress.setText('Ready');
+  }
+
+  onMaskEditError(error) {
+    this.setEditButtonsEnabled(true);
+    const message = error?.message || String(error);
+    this.updateOutput(`Mask editing failed: ${message}`);
+    this.progress.end(`Error: ${message}`, { success: false });
+    document.getElementById('statusText')?.classList.add('error');
+  }
+
+  setEditButtonsEnabled(enabled) {
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => { btn.disabled = !enabled; });
   }
 
   onInferenceComplete() {
@@ -778,6 +845,7 @@ class SeedSegApp {
   }
 
   async showResult(stage) {
+    await this.maskEditor.cancel();
     this.currentResultTab = stage;
 
     // Update active state on stage buttons
@@ -826,8 +894,8 @@ class SeedSegApp {
     if (container) container.innerHTML = '';
   }
 
-  clearResults() {
-    this.inferenceExecutor.clearResults();
+  async clearResults() {
+    await clearResultsAfterEditing(this.maskEditor, this.inferenceExecutor);
     this.disableAllResultTabs();
 
     const resultsSection = document.getElementById('resultsSection');
