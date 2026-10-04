@@ -3,7 +3,7 @@ import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import { createElement } from '@neurodesk/webapp-components/core';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { bindInfoTooltips, createInfoDialog, createConsole, createFileField, createViewerToolbar } from '@neurodesk/webapp-components/ui';
+import { bindInfoTooltips, createInfoDialog, createConsole, createFileField, createMaskEditor, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
 import { readVolume } from '@neurodesk/synthsr';
@@ -28,6 +28,7 @@ const viewerRegion = $('viewer');
 configureNativeDownloads($('standaloneContent').content);
 
 let viewer;
+let maskEditor;
 const layouts = {
   multiplanar() {
     viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -129,6 +130,7 @@ let processingAbort;
 let viewRevision = 0;
 let viewTask = Promise.resolve();
 let zipTask;
+let lesionEdited = false;
 
 function setStatus(message, error = false) {
   $('statusText').textContent = message;
@@ -146,8 +148,7 @@ function setBusy(value) {
   $('runButton').disabled = value || !inputs.primary;
   $('cancel').hidden = !value;
   $('download').disabled = value || !outputs;
-  $('viewSelect').disabled = value || viewItems.size === 0;
-  updateDownloadSelected();
+  updateResultActions();
   if (!value) {
     clearInterval(timer);
     worker?.terminate();
@@ -162,12 +163,34 @@ async function getViewer() {
       await viewer.attachTo('gl1');
       layouts.multiplanar();
       viewer.isLegendVisible = false;
+      maskEditor = createMaskEditor({
+        nv: viewer,
+        onApply: async (name, file) => {
+          outputs[name] = new Uint8Array(await file.arrayBuffer());
+          lesionEdited = true;
+          rebuildViewItems();
+          setStatus('Normalized lesion updated · downloads include the edit');
+        },
+        onCancel: () => {
+          updateResultActions();
+          if (outputs) setStatus('Lesion edit discarded');
+        },
+        onError: (name, error) => {
+          updateResultActions();
+          setStatus(`Could not edit the lesion: ${error.message}`, true);
+        },
+      });
+      maskEditor.addEventListener('nd-mask-edit-start', (event) => {
+        updateResultActions();
+        setStatus(event.detail.message);
+      });
+      toolbar.after(maskEditor);
       registerViewer('image', createNiivueAdapter(viewer, {
         tabs: {
           list: () => [...viewItems].map(([id, item]) => ({ id, label: item.label, active: id === $('viewSelect').value })),
           select: (id) => {
             $('viewSelect').value = id;
-            updateDownloadSelected();
+            updateResultActions();
             return show(viewItems.get(id));
           },
         },
@@ -194,7 +217,8 @@ async function show(item) {
     const file = item.file || new File([outputs[item.outputName]], item.outputName);
     const lesion = item.lesion || (item.lesionOutputName ? new File([outputs[item.lesionOutputName]], item.lesionOutputName) : null);
     $('empty').hidden = true;
-    $('viewLabel').textContent = lesion ? `${file.name} + ${lesion.name}` : file.name;
+    const edited = lesionEdited && item.lesionOutputName ? ' (edited)' : '';
+    $('viewLabel').textContent = lesion ? `${file.name} + ${lesion.name}${edited}` : file.name;
     $('opacityControl').hidden = !lesion;
     $('opacity').disabled = !lesion;
     try {
@@ -258,9 +282,7 @@ function rebuildViewItems(preferred) {
     });
   }
   if (outputs) {
-    const normalizedLesionName = inputs.lesion && outputs[prefixed('w', inputs.lesion.name)]
-      ? prefixed('w', inputs.lesion.name)
-      : null;
+    const normalizedLesionName = lesionOutputName();
     for (const name of Object.keys(outputs)) {
       if (!/\.nii(?:\.gz)?$/i.test(name) || name === normalizedLesionName) continue;
       const nativeSynthetic = name === prefixed('t1', inputs.primary.name);
@@ -274,16 +296,24 @@ function rebuildViewItems(preferred) {
   }
   viewItems = items;
   $('viewSelect').replaceChildren(...Array.from(items, ([value, item]) => new Option(item.label, value)));
-  $('viewSelect').disabled = items.size === 0 || busy;
   const next = items.has(selected) ? selected : items.keys().next().value;
   if (next) $('viewSelect').value = next;
-  updateDownloadSelected();
+  updateResultActions();
   void show(items.get(next));
 }
 
-function updateDownloadSelected() {
+function lesionOutputName() {
+  const name = inputs.lesion ? prefixed('w', inputs.lesion.name) : '';
+  return name && outputs?.[name] ? name : null;
+}
+
+function updateResultActions() {
   const item = viewItems.get($('viewSelect').value);
-  $('downloadSelected').disabled = busy || !item?.outputName;
+  const editing = Boolean(maskEditor) && maskEditor.session.state !== 'idle';
+  $('viewSelect').disabled = busy || editing || viewItems.size === 0;
+  $('downloadSelected').disabled = busy || editing || !item?.outputName;
+  $('editLesion').disabled = busy || editing || !lesionOutputName();
+  $('opacity').disabled = editing || $('opacityControl').hidden;
 }
 
 function download(bytes, name, type = 'application/octet-stream') {
@@ -299,6 +329,10 @@ function clearResults() {
   zipTask?.();
   zipTask = null;
   outputs = null;
+  lesionEdited = false;
+  if (maskEditor && maskEditor.session.state !== 'idle') {
+    viewTask = viewTask.then(() => maskEditor.cancel(), () => maskEditor.cancel());
+  }
   $('results').open = false;
   $('download').disabled = true;
   $('progress').value = 0;
@@ -416,7 +450,7 @@ $('clearLesion').onclick = () => clearOptionalInput('lesion');
 $('clearPathological').onclick = () => clearOptionalInput('pathological');
 
 $('viewSelect').onchange = () => {
-  updateDownloadSelected();
+  updateResultActions();
   void show(viewItems.get($('viewSelect').value));
 };
 
@@ -571,6 +605,22 @@ $('opacity').oninput = () => {
 $('downloadSelected').onclick = () => {
   const item = viewItems.get($('viewSelect').value);
   if (item?.outputName) download(outputs[item.outputName], item.outputName);
+};
+
+$('editLesion').onclick = async () => {
+  const name = lesionOutputName();
+  if (!name || busy) return;
+  const primary = `output:${prefixed('w', inputs.primary.name)}`;
+  $('viewSelect').value = primary;
+  $('editLesion').disabled = true;
+  await show(viewItems.get(primary));
+  if (lesionOutputName() !== name) return;
+  try {
+    await maskEditor.start({ stage: name, file: new File([outputs[name]], name), label: 'normalized lesion', overlayIndex: 1 });
+  } catch (error) {
+    setStatus(`Could not edit the lesion: ${error.message}`, true);
+  }
+  updateResultActions();
 };
 
 $('download').onclick = () => {
