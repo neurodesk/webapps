@@ -85,6 +85,7 @@ apps/qsmbly/nifti-js/
 
 packages/greedy/native/
 .audit/
+.e2e/
 
 # Example manifests staged for static development servers
 apps/*/web/examples.json
