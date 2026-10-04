@@ -12,5 +12,5 @@ export default defineConfig({
     url: baseURL,
     reuseExistingServer: !process.env.CI,
   },
-  use: {baseURL,launchOptions:{args:['--enable-unsafe-webgpu','--use-angle=swiftshader']}},
+  use: {baseURL,launchOptions:{args:['--enable-unsafe-webgpu','--use-angle=swiftshader','--enable-features=Vulkan','--use-vulkan=swiftshader']}},
 });

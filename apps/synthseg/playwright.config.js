@@ -12,7 +12,7 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:4175/synthseg/',
     // Headless Chromium only exposes a SwiftShader WebGPU adapter; SYNTHSEG_HARDWARE_GPU
     // switches to the real GPU (macOS/Metal), which the full-model run needs.
-    launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.env.SYNTHSEG_HARDWARE_GPU ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader'])] },
+    launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.env.SYNTHSEG_HARDWARE_GPU ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader', '--enable-features=Vulkan', '--use-vulkan=swiftshader'])] },
     screenshot: 'only-on-failure',
   },
 });

@@ -189,8 +189,6 @@ test('compact help, standalone commands and result switching remain reachable',a
 
 test('the normalized lesion can be edited, cancelled and downloaded',async({page})=>{
  await page.addInitScript(()=>{
-  // NiiVue 1.0 rc.11 on SwiftShader WebGPU fails every load after the first; WebGL2 does not.
-  Object.defineProperty(navigator,'gpu',{value:undefined});
   const NativeWorker=window.Worker;
   window.Worker=function(url,options){
    if(!/\/assets\/worker-[^/]+\.js/.test(String(url)))return new NativeWorker(url,options);

@@ -138,11 +138,6 @@ const SMALL = '../../exes/synthseg/test/fixtures/small.nii.gz';
 
 async function segmentWith(page, labels) {
   await fakeInference(page);
-  // SwiftShader's WebGPU loses NiiVue's device after the first volume load; with no adapter the viewer falls back
-  // to WebGL2, while the app's WebGPU check still passes.
-  await page.addInitScript(() => {
-    GPU.prototype.requestAdapter = async () => null;
-  });
   await page.goto('./');
   await page.locator('#imageInput').setInputFiles(SMALL);
   await expect(page.locator('#processButton')).toBeEnabled();
