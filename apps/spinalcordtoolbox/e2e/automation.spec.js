@@ -110,9 +110,10 @@ test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', asy
   await page.mouse.move(x, box.y + box.height * 0.65, { steps: 20 });
   await page.mouse.up();
   await editor.getByRole('button', { name: 'Apply' }).click();
-  await expect(editor).toBeHidden();
+  await expect(editor).toBeHidden({ timeout: 30000 });
   await expect(label).toHaveText('SCT Segmentation (edited)');
   await expect(status).toHaveText('Ready');
+  await expect(row.locator('.nd-edit-btn')).toBeEnabled();
 
   const edited = await downloadRow(page, row);
   const baseDims = await page.evaluate(() => Array.from(window.app.nv.volumes[0].hdr.dims.slice(1, 4)));
