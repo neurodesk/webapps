@@ -53,7 +53,7 @@ export const STAGE_NAMES = {
   'vertebrae': 'Vertebral Labels',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',
-  'lesion_metrics': 'Browser lesion metrics (approximate)'
+  'lesion_metrics': 'Lesion Metrics'
 };
 
 export const ONNX_CONFIG = {

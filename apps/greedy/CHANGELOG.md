@@ -5,7 +5,14 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.8.1
+  - @neurodesk/webapp-components@0.9.1
+  - @neurodesk/greedy@0.4.20261004
+
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
   - @neurodesk/greedy@0.4.20261004
 
 ## 0.4.20261003

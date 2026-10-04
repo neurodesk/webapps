@@ -1,12 +1,16 @@
 # @neurodesk/webapp-components
 
-## 0.8.1
+## 0.9.1
 
 ### Patch Changes
 
-- Preserve explicit HTTP/HTTPS ports when connecting through a compute-server reverse proxy.
+- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, preserve native output files, and recover or cancel jobs. Keep automatic browser metrics explicitly approximate. Support selected tools and explicit HTTPS reverse-proxy addresses in shared compute connections.
 
-- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, retain native result files unchanged, and recover or cancel server jobs. Keep local SCIseg browser metrics explicitly approximate. Compute connections can describe a selected tool on multi-tool servers.
+## 0.9.0
+
+### Minor Changes
+
+- Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
 
 ## 0.8.0
 

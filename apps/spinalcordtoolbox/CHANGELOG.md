@@ -4,12 +4,22 @@
 
 ### Minor Changes
 
-- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, retain native result files unchanged, and recover or cancel server jobs. Keep local SCIseg browser metrics explicitly approximate. Compute connections can describe a selected tool on multi-tool servers.
+- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, preserve native output files, and recover or cancel jobs. Keep automatic browser metrics explicitly approximate. Support selected tools and explicit HTTPS reverse-proxy addresses in shared compute connections.
 
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.8.1
+  - @neurodesk/webapp-components@0.9.1
+
+## 0.5.20261004
+
+### Patch Changes
+
+- Give the viewer Zoom and Fit controls 44-pixel touch targets through the shared workspace stylesheet.
+- 0e90fbf: Add a Zoom control to the viewer toolbar. With Zoom ticked the mouse wheel zooms 2D views and right-drag pans them; untick it to scroll slices again at the same zoom, and use Fit to restore the full view.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
 
 ## 0.5.20261003
 

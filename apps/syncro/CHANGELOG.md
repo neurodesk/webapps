@@ -5,7 +5,16 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.8.1
+  - @neurodesk/webapp-components@0.9.1
+  - @neurodesk/greedy@0.4.20261004
+  - @neurodesk/synthsr@0.5.20261004
+  - @neurodesk/brain-extraction@0.1.16
+
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
   - @neurodesk/greedy@0.4.20261004
   - @neurodesk/synthsr@0.5.20261004
   - @neurodesk/brain-extraction@0.1.15

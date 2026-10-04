@@ -23,7 +23,9 @@ export function makeRequest(tool, values, timeoutMs) {
     const value = values[name];
     if (value === undefined) continue;
     const source = operation.inputs[role].source;
-    inputs[role] = source === 'url' ? { url: value } : source === 'directory' ? { directory: value } : value;
+    // A single-file role is a scalar NeuroFlow input; the desktop always takes a list.
+    inputs[role] = source === 'url' ? { url: value } : source === 'directory' ? { directory: value }
+      : Array.isArray(value) ? value : [value];
   }
   for (const [key, name] of Object.entries(binding.parameters)) {
     if (values[name] !== undefined) parameters[key] = values[name];

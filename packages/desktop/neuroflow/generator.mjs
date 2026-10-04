@@ -3,6 +3,7 @@ import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { parseContract } from '../src/contracts.js';
 import { canonical, contractHash } from './runtime/contract.mjs';
+import { qualifiers } from './qualifiers.mjs';
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
@@ -12,16 +13,25 @@ for (const name of ['common', 'events', 'tool', 'neuroflow-mcp']) {
 const schemaId = 'https://niivue.github.io/neuroflow-spec/schemas/0.1/tool.schema.json';
 const validate = ajv.getSchema(schemaId);
 const validateMcp = ajv.getSchema('https://niivue.github.io/neuroflow-spec/schemas/0.1/extensions/neuroflow-mcp.schema.json');
+const validateQualifierType = ajv.getSchema('https://niivue.github.io/neuroflow-spec/schemas/0.1/common.schema.json#/$defs/typeQualifierRules');
 const artifactTypes = new Set([
   'neuro:volume', 'neuro:mask', 'neuro:label-map', 'neuro:transform',
-  'neuro:surface', 'neuro:report',
+  'neuro:surface', 'neuro:report', 'neuro:ome-zarr',
 ]);
-const aliases = { 'neuro:table': 'core:tabular', 'neuro:tractogram': 'neuro:tract', 'neuro:gradients': 'neuro:gradient-table' };
+// Contract types whose representation matches a NeuroFlow 0.1 type. A mapped
+// entry may add the format token (RFC 0010) that names the representation.
+const aliases = {
+  'neuro:table': { type: 'core:tabular' },
+  'neuro:tractogram': { type: 'neuro:tract' },
+  'neuro:gradients': { type: 'neuro:gradient-table' },
+  'neuro:multiscale-volume': { type: 'neuro:ome-zarr' },
+  'neuro:displacement-field': { type: 'neuro:transform', formats: ['displacement-field'] },
+};
 
-function artifactType(type) {
-  if (Array.isArray(type)) return 'core:file';
-  if (artifactTypes.has(type) || type.startsWith('file:')) return type;
-  return aliases[type] ?? `neurodesk:${type.slice(type.indexOf(':') + 1)}`;
+function mapType(type) {
+  if (Array.isArray(type)) return { type: 'core:file' };
+  if (artifactTypes.has(type) || type.startsWith('file:')) return { type };
+  return aliases[type] ?? { type: `neurodesk:${type.slice(type.indexOf(':') + 1)}` };
 }
 
 function parameterType(field) {
@@ -30,18 +40,62 @@ function parameterType(field) {
   return `core:array<${item}>`;
 }
 
-function dataDeclaration(field, description, type) {
+function dataDeclaration(field, description, kind, operation, context) {
+  const mapped = mapType(field.type);
+  const scalar = field.source === 'url' ? 'core:string'
+    : field.source === 'directory' ? (mapped.type === 'neuro:ome-zarr' ? mapped.type : 'core:directory')
+      : mapped.type;
   return {
-    type,
+    type: field.maximum === 1 ? scalar : `core:array<${scalar}>`,
     description,
     optional: field.minimum === 0,
+    // A URL is a core:string, which carries no qualifier; its formats stay in the extension.
+    ...(scalar !== 'core:string' && qualifiers(field, kind, operation, mapped, context)),
     extensions: { 'neurodesk/data': structuredClone(field) },
   };
+}
+
+const qualifierKeys = ['formats', 'space', 'resolution', 'density', 'labelSystem'];
+const qualified = declarations => Object.values(declarations).some(declaration => qualifierKeys.some(key => key in declaration));
+
+// Cross-declaration inheritance and version rules require the complete tool.
+function qualifierErrors(tool) {
+  const errors = [];
+  if ((qualified(tool.inputs ?? {}) || qualified(tool.outputs ?? {})) && tool.neuroflow !== '0.1.1') {
+    errors.push(`a document with type qualifiers declares 0.1.1, not ${tool.neuroflow}`);
+  }
+  for (const kind of ['inputs', 'outputs']) {
+    for (const [name, declaration] of Object.entries(tool[kind] ?? {})) {
+      for (const key of qualifierKeys) {
+        const match = /^inputs\.(.+)$/.exec(typeof declaration[key] === 'string' ? declaration[key] : '');
+        if (!match) continue;
+        const path = `${kind}/${name}/${key}`;
+        if (kind === 'inputs') {
+          errors.push(`${path}: qualifier inheritance is only allowed on outputs`);
+          continue;
+        }
+        if (!Object.hasOwn(tool.inputs ?? {}, match[1])) {
+          errors.push(`${path} references undeclared input ${match[1]}`);
+          continue;
+        }
+        const source = tool.inputs[match[1]];
+        if (!validateQualifierType({ type: source.type, [key]: declaration[key] })) {
+          errors.push(`${path}: ${key} does not apply to input ${match[1]} of type ${source.type}`);
+        }
+        if (source.type.startsWith('core:array<') && !declaration.type.startsWith('core:array<')) {
+          errors.push(`${path}: this generator does not support a scalar output inheriting ${key} from collection input ${match[1]}`);
+        }
+      }
+    }
+  }
+  return errors;
 }
 
 export function validateTool(tool) {
   if (!validate(tool)) throw new Error(`Invalid NeuroFlow tool: ${ajv.errorsText(validate.errors)}`);
   if (!validateMcp(tool.extensions?.['neuroflow/mcp'])) throw new Error(`Invalid NeuroFlow MCP binding: ${ajv.errorsText(validateMcp.errors)}`);
+  const errors = qualifierErrors(tool);
+  if (errors.length) throw new Error(`Invalid NeuroFlow tool: ${errors.join('; ')}`);
   return tool;
 }
 
@@ -58,9 +112,7 @@ export function generateTools(value) {
     for (const [role, field] of Object.entries(operation.inputs)) {
       const name = `input_${role}`;
       bindings.inputs[role] = name;
-      const type = field.source === 'url' ? 'core:string' : field.source === 'directory'
-        ? 'core:directory' : `core:array<${artifactType(field.type)}>`;
-      inputs[name] = dataDeclaration(field, field.description, type);
+      inputs[name] = dataDeclaration(field, field.description, 'inputs', operation, { app: contract.app, operationId: id });
     }
     for (const [key, field] of Object.entries(operation.parameters)) {
       const name = `param_${key}`;
@@ -83,11 +135,11 @@ export function generateTools(value) {
     for (const [role, field] of Object.entries(operation.artifacts)) {
       const name = `output_${role}`;
       bindings.artifacts[role] = name;
-      outputs[name] = dataDeclaration(field, `${operation.title}: ${role}`, `core:array<${artifactType(field.type)}>`);
+      outputs[name] = dataDeclaration(field, `${operation.title}: ${role}`, 'artifacts', operation, { app: contract.app, operationId: id });
     }
-    outputs.report = { type: 'core:file', description: 'Verified Neurodesk run report, including provenance, measurements and artifact hashes.' };
+    outputs.report = { type: 'neuro:report', description: 'Verified Neurodesk run report, including provenance, measurements and artifact hashes.' };
     const tool = {
-      $schema: schemaId, neuroflow: '0.1.0', kind: 'tool',
+      $schema: schemaId, neuroflow: qualified(inputs) || qualified(outputs) ? '0.1.1' : '0.1.0', kind: 'tool',
       id: `neurodesk.webapps/${contract.app}/${id}`, version: contract.appVersion,
       description: operation.description,
       inputs, outputs, outputDelivery: { default: 'core:result-file' },

@@ -243,3 +243,10 @@ test('embedded FreeBrowse keeps one app bar and fits narrow viewers', async () =
   assert.match(css, /@container nd-freebrowse \(max-width: 700px\)/);
   assert.match(css, /\.nd-freebrowse button\s*\{[^}]*min-height: 44px/);
 });
+
+
+test('small buttons and viewer checkbox labels reserve touch targets without a toolbar ancestor', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const touchRules = css.slice(css.indexOf('@media (pointer: coarse), (max-width: 780px)'));
+  assert.match(touchRules, /\.nd-btn-sm,\s*\.nd-viewer-checkbox\s*\{[^}]*min-width: 44px;[^}]*min-height: 44px;/);
+});
