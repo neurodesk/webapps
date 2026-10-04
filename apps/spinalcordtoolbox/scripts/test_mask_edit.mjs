@@ -41,10 +41,6 @@ function fakeNv() {
   };
 }
 
-function signature(entries) {
-  return entries.map(entry => [entry.file, entry.stage, entry.opacity]);
-}
-
 function makeApp() {
   const app = Object.create(SpinalCordToolboxApp.prototype);
   const nv = fakeNv();
@@ -54,7 +50,10 @@ function makeApp() {
   app.viewerAvailable = true;
   app.viewerController = {
     isAvailable: () => true,
-    isCurrentVolumeStack: (entries) => stacks.length > 0 && JSON.stringify(signature(stacks.at(-1))) === JSON.stringify(signature(entries)),
+    isCurrentVolumeStack: (entries) => stacks.length > 0 && entries.length === stacks.at(-1).length && entries.every((entry, index) => {
+      const previous = stacks.at(-1)[index];
+      return entry.file === previous.file && entry.stage === previous.stage && entry.opacity === previous.opacity;
+    }),
     async loadVolumeStack(entries) {
       stacks.push(entries);
       nv.volumes = entries.map(entry => ({ opacity: entry.opacity ?? 1, hdr: parseNiftiHeader(maskBytes([])) }));
@@ -155,7 +154,8 @@ test('Apply replaces the result file, marks it edited and Download returns the e
 
   nv.drawing[352] = 7;
   editorButton('Apply').click();
-  await until(() => rows().some(row => row.label === 'SCI Lesion (edited)'));
+  await until(() => editor().session.state === 'idle');
+  assert.ok(rows().some(row => row.label === 'SCI Lesion (edited)'));
   const result = app.inferenceExecutor.getResult('lesion');
   assert.equal(result.edited, true);
   assert.notEqual(result.file, original);
@@ -178,6 +178,32 @@ test('Apply replaces the result file, marks it edited and Download returns the e
     URL.createObjectURL = createObjectURL;
   }
   assert.deepEqual(downloaded, [result.file]);
+});
+
+test('Edit stays disabled until Apply finishes reloading the edited viewer stack', async () => {
+  const { app } = makeApp();
+  await deliverResults(app);
+  await app.editStage('lesion');
+  let release;
+  let reloading = false;
+  const pendingLoad = new Promise(resolve => { release = resolve; });
+  const loadVolumeStack = app.viewerController.loadVolumeStack;
+  app.viewerController.loadVolumeStack = async (entries) => {
+    reloading = true;
+    await pendingLoad;
+    await loadVolumeStack(entries);
+  };
+  const applying = editor().apply();
+  try {
+    await until(() => reloading);
+    assert.equal(editor().session.state, 'applying');
+    assert.ok(rows().slice(1).every(row => row.edit.disabled), 'Edit stays disabled while the edited stack loads');
+  } finally {
+    release();
+    await applying;
+  }
+  assert.equal(editor().session.state, 'idle');
+  assert.ok(rows().slice(1).every(row => !row.edit.disabled), 'Edit is enabled after Apply finishes');
 });
 
 test('Cancel leaves the result and its label unchanged', async () => {
