@@ -90,7 +90,7 @@ const editor = createMaskEditor({
     // A load or run that cancelled the session redraws the viewer itself.
     if (busy) return;
     status('Edits discarded');
-    void showImages().catch((error) => status(error.message, true));
+    return showImages().catch((error) => status(error.message, true));
   },
   onError: (_stage, error) => status(error instanceof Error ? error.message : String(error), true),
 });
@@ -284,7 +284,7 @@ const results = createResultList({
   onView: (stage) => {
     if (!result || busy || editor.session.state !== 'idle') return;
     background = stage;
-    void showImages().catch((error) => status(error.message, true));
+    return showImages().catch((error) => status(error.message, true));
   },
   onDownload: (_stage, entry) => downloadFile(entry.file),
   onEdit: () => { void editLabels(); },

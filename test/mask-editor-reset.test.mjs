@@ -95,7 +95,7 @@ for (const app of ['brain-extraction', 'white-matter-lesions']) {
     const run = { signal: new AbortController().signal, current: true, ready: noop, fail: noop };
     const current = { run, controller: new AbortController() };
     const context = vm.createContext({
-      editor: { cancel: () => pending.promise },
+      editor: { session: { state: 'applying' }, cancel: () => pending.promise },
       results: { setEditingEnabled: noop, render: noop },
       renderOutputs: noop,
       exampleControl: { cancel: noop },
