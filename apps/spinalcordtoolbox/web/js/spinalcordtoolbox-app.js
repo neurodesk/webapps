@@ -1417,7 +1417,7 @@ export class SpinalCordToolboxApp {
         editBtn.type = 'button';
         editBtn.title = 'Edit in the viewer';
         editBtn.textContent = 'Edit';
-        editBtn.disabled = this._editStage != null;
+        editBtn.disabled = this._editStage != null || this.maskEditor.session.state !== 'idle';
         editBtn.addEventListener('click', () => void this.editStage(stage));
         row.appendChild(editBtn);
       }
@@ -1444,6 +1444,7 @@ export class SpinalCordToolboxApp {
       this.setStatusError(false);
       this.progress.reset(detail.message);
     });
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.setEditStage(null));
     document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
   }
 
@@ -1516,7 +1517,7 @@ export class SpinalCordToolboxApp {
   setEditStage(stage) {
     this._editStage = stage;
     document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => {
-      btn.disabled = stage != null;
+      btn.disabled = stage != null || Boolean(this.maskEditor && this.maskEditor.session.state !== 'idle');
     });
   }
 
