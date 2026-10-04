@@ -378,6 +378,33 @@ function makeFile(name) {
     assert.equal(created[0].currentSliceType, 'sagittal');
     assert.equal(created[1].currentSliceType, 'sagittal');
 
+    // NiiVue only zooms 2D slices with the wheel in its pan drag mode, so the
+    // Zoom toggle must reach the main viewer and every comparison canvas.
+    const PAN = 3;
+    const CONTRAST = 1;
+    viewer.nv.scene = { pan2Dxyzmm: [4, 5, 6, 2.5] };
+    created[0].scene = { pan2Dxyzmm: [1, 2, 3, 1.5] };
+    viewer.setDragMode(PAN);
+    assert.equal(viewer.nv.opts.dragMode, PAN);
+    assert.equal(created[0].opts.dragMode, PAN);
+    assert.equal(created[1].opts.dragMode, PAN);
+    assert.deepEqual(viewer.nv.scene.pan2Dxyzmm, [4, 5, 6, 2.5], 'changing the drag mode keeps the current zoom');
+
+    const drawsBeforeReset = viewer.nv.drawCount;
+    viewer.resetPanZoom();
+    assert.deepEqual(viewer.nv.scene.pan2Dxyzmm, [0, 0, 0, 1]);
+    assert.deepEqual(created[0].scene.pan2Dxyzmm, [0, 0, 0, 1]);
+    assert.ok(viewer.nv.drawCount > drawsBeforeReset, 'resetting zoom redraws the viewer');
+
+    await viewer.loadComparisonVolumes([
+      { id: 'session-3', name: first.name, file: first }
+    ], { container });
+    assert.equal(created[2].opts.dragMode, PAN, 'comparison canvases created later inherit the zoom mode');
+
+    viewer.setDragMode(CONTRAST);
+    assert.equal(viewer.nv.opts.dragMode, CONTRAST);
+    assert.equal(created[2].opts.dragMode, CONTRAST);
+
     viewer.clearComparisonView(container);
     assert.equal(viewer.getComparisonViewerCount(), 0);
     assert.equal(container.children.length, 0);
@@ -385,6 +412,42 @@ function makeFile(name) {
     assert.equal(created[0].lostContext, true);
     assert.equal(created[1].lostContext, true);
   } finally {
+    globalThis.document = originalDocument;
+  }
+}
+
+{
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeFakeDomElement };
+  const started = Promise.withResolvers();
+  const release = Promise.withResolvers();
+  const created = [];
+  const viewer = new ViewerController({
+    nv: createFakeNiivue(),
+    niivueFactory: () => {
+      const nv = createFakeComparisonNiivue(created);
+      const loadVolumes = nv.loadVolumes.bind(nv);
+      nv.loadVolumes = async volumes => {
+        started.resolve();
+        await release.promise;
+        await loadVolumes(volumes);
+      };
+      return nv;
+    }
+  });
+  try {
+    viewer.setDragMode(1);
+    const loading = viewer.loadComparisonVolumes([
+      { id: 'loading-session', file: makeFile('loading.nii') }
+    ], { container: makeFakeDomElement() });
+    await started.promise;
+    viewer.setDragMode(3);
+    release.resolve();
+    await loading;
+    assert.equal(viewer.nv.opts.dragMode, 3);
+    assert.equal(created[0].opts.dragMode, 3, 'a comparison image finishing its load uses the latest zoom mode');
+  } finally {
+    viewer.dispose();
     globalThis.document = originalDocument;
   }
 }
