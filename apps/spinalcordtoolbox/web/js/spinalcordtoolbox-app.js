@@ -12,12 +12,13 @@ import { registerSctAutomation } from './automation.js';
 import { SctInputSessions } from './controllers/SctInputSessions.js';
 import { ViewerController } from '@neurodesk/webapp-components';
 import { SctPipeline } from './controllers/SctPipeline.js';
-import { ConsoleOutput, bindWindowControls } from '@neurodesk/webapp-components/ui';
+import { defineConsole, bindWindowControls } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
 import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import * as Config from './app/config.js';
+import { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog } from './app/log-channels.js';
 import { generateNiivueColormap, getLabelName } from './app/labels.js';
 import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
@@ -41,11 +42,9 @@ export class SpinalCordToolboxApp {
     });
 
     // UI modules
-    this.console = new ConsoleOutput({
-      outputElementId: 'consoleOutput',
-      lineClass: 'console-line', timeClass: 'console-time', messageClass: 'console-message',
-      separator: ' ', levelOn: 'message', levelClass: () => '', mirror: (t) => console.log(t),
-    });
+    // One console, two logs (analysis and technical); see app/log-channels.js for what goes where.
+    defineConsole();
+    this.log = document.getElementById('spinalcordtoolbox-log');
     this.progress = new ProgressManager(Config.PROGRESS_CONFIG);
 
     // State
@@ -89,7 +88,7 @@ export class SpinalCordToolboxApp {
 
     // Controllers
     this.fileIOController = new SctInputSessions({
-      updateOutput: (msg) => this.updateOutput(msg),
+      updateOutput: (msg) => this.logAnalysis(msg),
       onFileLoaded: (file, context) => (this.inputReady = this.onFileLoaded(file, context)),
       onFilesCleared: () => {
         this.inputCleared = this.onFilesCleared();
@@ -105,7 +104,14 @@ export class SpinalCordToolboxApp {
     });
 
     this.inferenceExecutor = new SctPipeline({
-      updateOutput: (msg) => this.updateOutput(msg),
+      updateOutput: (msg) => {
+        const { channel, level } = routePipelineMessage(msg);
+        this.writeLog(channel, msg, level);
+      },
+      workerLog: (msg, details) => {
+        const { channel, level } = routeWorkerLog(msg, details);
+        this.writeLog(channel, msg, level);
+      },
       setProgress: (val, text) => this.setProgress(val, text),
       onStageData: (data) => this.handleStageData(data),
       onComplete: () => this.onInferenceComplete(),
@@ -188,7 +194,7 @@ export class SpinalCordToolboxApp {
     this.setViewerUnavailableMessage(reason);
     this.setViewerControlsEnabled(false);
     this.updateViewerInfo({ string: 'Image preview unavailable' });
-    this.updateOutput(`Image preview unavailable: ${reason}`);
+    this.updateOutput(`Image preview unavailable: ${reason}`, 'warning');
   }
 
   setViewerUnavailableMessage(reason) {
@@ -264,7 +270,7 @@ export class SpinalCordToolboxApp {
         this.fileIOController.handleFiles(files);
         await this.inputReady;
       },
-      onStatus: (message) => this.updateOutput(message),
+      onStatus: (message, error) => this.updateOutput(message, error ? 'error' : 'info'),
     });
     const input = document.getElementById('fileInput');
     input.closest('.section-content').prepend(this.exampleSelector);
@@ -290,15 +296,6 @@ export class SpinalCordToolboxApp {
 
     const cancelBtn = document.getElementById('cancelButton');
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.abortCurrentStep());
-
-    const copyConsole = document.getElementById('copyConsole');
-    if (copyConsole) copyConsole.addEventListener('click', async () => {
-      const ok = await this.console.copyToClipboard();
-      if (ok) { copyConsole.textContent = 'Copied!'; setTimeout(() => { copyConsole.textContent = 'Copy'; }, 1500); }
-    });
-
-    const clearConsole = document.getElementById('clearConsole');
-    if (clearConsole) clearConsole.addEventListener('click', () => this.console.clear());
 
     document.querySelectorAll('[data-viewer-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -565,7 +562,7 @@ export class SpinalCordToolboxApp {
     if (nextMode === 'compare' && !this.canCompareSessions()) {
       this._viewerMode = 'single';
       this.syncViewerModeControls();
-      this.updateOutput('Load at least two images before using Compare view');
+      this.logAnalysis('Load at least two images before using Compare view', 'warning');
       return;
     }
 
@@ -680,7 +677,7 @@ export class SpinalCordToolboxApp {
 
   downloadCurrentVolume() {
     if (!this.isViewerAvailable() || !this.nv.volumes?.length) {
-      this.updateOutput('No volume loaded');
+      this.logAnalysis('No volume loaded', 'warning');
       return;
     }
     const vol = this.nv.volumes[0];
@@ -695,7 +692,7 @@ export class SpinalCordToolboxApp {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    this.updateOutput(`Downloaded: ${name}.nii`);
+    this.logAnalysis(`Downloaded: ${name}.nii`);
   }
 
 
@@ -710,7 +707,7 @@ export class SpinalCordToolboxApp {
       filename = `${name}_screenshot.png`;
     }
     this.nv.saveScene(filename);
-    this.updateOutput(`Screenshot saved: ${filename}`);
+    this.logAnalysis(`Screenshot saved: ${filename}`);
   }
 
   // ==================== File Handling ====================
@@ -764,7 +761,8 @@ export class SpinalCordToolboxApp {
     this._overlaySliderValue = 0.7;
     this._lastLocationData = null;
 
-    this.console.clear();
+    this.log?.clear(ANALYSIS);
+    this.log?.clear(TECHNICAL);
     this.resetStatusDisplay();
     this.resetProcessingInputs();
     this.resetViewerControls();
@@ -925,19 +923,30 @@ export class SpinalCordToolboxApp {
     const testTimeAugmentation = ttaToggle ? !!ttaToggle.checked : ttaDefault;
 
     if (!isTaskRunnable(selectedTask)) {
-      this.updateOutput(`SCT task "${selectedTask.displayName}" is unavailable.`);
+      this.logAnalysis(`SCT task "${selectedTask.displayName}" is unavailable.`, 'warning');
       this.updateTaskDetails();
       return;
     }
 
     if (!selectedAsset) {
-      this.updateOutput(`SCT task "${selectedTask.displayName}" has no model asset.`);
+      this.logAnalysis(`SCT task "${selectedTask.displayName}" has no model asset.`, 'warning');
       this.updateTaskDetails();
       return;
     }
 
     const modelBaseUrl = new URL(Config.MODEL_BASE_URL, window.location.href).href;
     const modelUrl = getTaskModelUrl(selectedTask);
+    for (const line of describeRun({
+      task: selectedTask.displayName,
+      input: this.inputFile?.name || 'input',
+      model: selectedAsset?.filename || Config.MODEL.name,
+      sourceVersion: selectedAsset?.sourceVersion,
+      threshold,
+      minComponentSize,
+      overlap,
+      testTimeAugmentation,
+      patchSize: effectivePatchSize,
+    })) this.logAnalysis(line);
     this.beginAbortableStep('inference');
 
     // Clear previous results so a stale overlay is not auto-rendered on the
@@ -1365,7 +1374,7 @@ export class SpinalCordToolboxApp {
   downloadMetricsResult(stage) {
     const result = this.inferenceExecutor.getResult(stage);
     if (result?.kind !== 'metrics') {
-      this.updateOutput(`${stage} statistics not available`);
+      this.logAnalysis(`${stage} statistics not available`, 'warning');
       return;
     }
 
@@ -1380,7 +1389,7 @@ export class SpinalCordToolboxApp {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    this.updateOutput(`Downloaded statistics: ${filename}`);
+    this.logAnalysis(`Downloaded statistics: ${filename}`);
   }
 
   formatMetric(value) {
@@ -1814,8 +1823,19 @@ export class SpinalCordToolboxApp {
 
   // ==================== UI Helpers ====================
 
-  updateOutput(msg) {
-    this.console.log(msg);
+  // Technical log: model fetch, backend, tensor shapes, timings, viewer and worker lifecycle.
+  updateOutput(msg, level) {
+    this.writeLog(TECHNICAL, msg, level);
+  }
+
+  // Analysis log: input, task and parameters, result summaries, saved outputs, warnings.
+  logAnalysis(msg, level) {
+    this.writeLog(ANALYSIS, msg, level);
+  }
+
+  writeLog(channel, msg, level = 'info') {
+    console.log(msg);
+    this.log?.log(msg, level, channel);
   }
 
   // Worker progress. The shared executor also reports its terminal states
