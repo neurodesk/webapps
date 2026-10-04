@@ -160,6 +160,7 @@ function legacyApi(nv) {
 }
 
 const PEN_SHAPE_CIRCLE = 1;
+const DRAWING_COLORMAP = 'nd-mask-editor';
 
 function currentApi(nv) {
   return {
@@ -175,7 +176,14 @@ function currentApi(nv) {
       if ('drawPenShape' in nv) nv.drawPenShape = PEN_SHAPE_CIRCLE;
     },
     drawOpacity(opacity) { nv.drawOpacity = opacity; },
-    drawColormap(name) { nv.drawColormap = name; },
+    drawColormap(colormap) {
+      if (typeof colormap === 'string') {
+        nv.drawColormap = colormap;
+        return;
+      }
+      nv.addColormap(DRAWING_COLORMAP, colormap);
+      nv.drawColormap = DRAWING_COLORMAP;
+    },
     volumeOpacity: (index, opacity) => nv.setVolume(index, { opacity }),
     save: () => nv.saveDrawing(''),
   };

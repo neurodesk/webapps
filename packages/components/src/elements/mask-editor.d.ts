@@ -12,6 +12,15 @@ export interface MaskEditorOptions {
   doc?: Document;
 }
 
+export interface DrawingColormap {
+  R: number[];
+  G: number[];
+  B: number[];
+  A?: number[];
+  I?: number[];
+  labels?: string[];
+}
+
 export interface MaskEditStart {
   stage: string;
   file: File;
@@ -19,8 +28,8 @@ export interface MaskEditStart {
   label?: string;
   /** The result's overlay, hidden while its drawing is edited and restored afterwards. */
   overlayIndex?: number | null;
-  /** A NiiVue drawing colormap for the labels. */
-  colormap?: string | null;
+  /** A NiiVue drawing colormap for the labels: a registered name, or a colormap object. */
+  colormap?: string | DrawingColormap | null;
 }
 
 export type MaskEditSession =

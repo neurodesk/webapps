@@ -778,7 +778,8 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
    -------------------------------------------------------------------------- */
 .nd-volume-toggle { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .nd-volume-toggle .nd-stage-label { flex: 1; min-width: 0; color: var(--nd-color-text); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-volume-toggle:has(.nd-result-visibility):has(.nd-view-btn) .nd-stage-label {
+.nd-volume-toggle:has(.nd-result-visibility):has(.nd-view-btn) .nd-stage-label,
+.nd-volume-toggle:has(.nd-edit-btn) .nd-stage-label {
   white-space: normal;
   overflow-wrap: anywhere;
 }

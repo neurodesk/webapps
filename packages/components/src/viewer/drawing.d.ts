@@ -12,7 +12,8 @@ export interface DrawingAdapter {
   setTool(tool: { tool: EditTool; label: number; brushSize: number }): void;
   undo(): void;
   setOpacity(opacity: number): void;
-  setColormap(name: string): void;
+  /** A registered colormap name, or a colormap object registered for the drawing. */
+  setColormap(colormap: string | { R: number[]; G: number[]; B: number[]; A?: number[]; I?: number[]; labels?: string[] }): void;
   volumeOpacity(index: number): number;
   setVolumeOpacity(index: number, opacity: number): Promise<void>;
   /** An uncompressed uint8 NIfTI on the base image's grid. */

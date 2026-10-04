@@ -73,7 +73,10 @@ $('exampleControl').replaceWith(exampleControl);
 
 const results = createResultList({
   element: $('resultList'),
-  onView: (stage, result) => show(result.file, stage),
+  onView: (stage, result) => {
+    if (editing) return;
+    show(result.file, stage);
+  },
   onDownload: (_stage, result) => downloadFile(result.file),
   onEdit: (stage, result) => void editResult(stage, result),
 });

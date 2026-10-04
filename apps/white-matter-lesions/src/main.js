@@ -85,7 +85,10 @@ let job = null;
 
 const results = createResultList({
   element: $("resultList"),
-  onView: (stage) => show(stage),
+  onView: (stage) => {
+    if (editing) return;
+    show(stage);
+  },
   onDownload: (_stage, result) => downloadFile(result.file),
   onEdit: (stage, result) => void editResult(stage, result),
 });

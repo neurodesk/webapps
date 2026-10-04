@@ -208,6 +208,10 @@ test('1.0 adapter sets drawing properties and loads a uint8 File', async () => {
   drawing.setOpacity(0.5);
   drawing.setColormap('$slicer3d');
   assert.deepEqual([nv.drawOpacity, nv.drawColormap], [0.5, '$slicer3d']);
+  const custom = { R: [0, 255], G: [0, 0], B: [0, 0], A: [0, 255], I: [0, 1] };
+  nv.addColormap = (name, map) => { nv.colormaps = { ...nv.colormaps, [name]: map }; };
+  drawing.setColormap(custom);
+  assert.equal(nv.colormaps[nv.drawColormap], custom);
   await drawing.setVolumeOpacity(1, 0);
   assert.deepEqual(labelBytes(await drawing.export()), await expectedLabels());
   drawing.close();
