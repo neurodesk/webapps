@@ -5,6 +5,8 @@
 ### Patch Changes
 
 - Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons and prevent stale passing reports.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
 
 ## 1.4.20261003
 

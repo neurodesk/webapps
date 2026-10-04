@@ -145,7 +145,7 @@ test('supported inputs pass, compressed reads are bounded, and DICOM remains exp
   await assert.rejects(validateRequest(contract, { inputs: { image: [tooLong] } }), /within 1 MiB/);
   const truncated = join(root, 'truncated.nii');
   await writeFile(truncated, nifti().subarray(0, 120));
-  await assert.rejects(validateRequest(contract, { inputs: { image: [truncated] } }), /NIfTI-1/);
+  await assert.rejects(validateRequest(contract, { inputs: { image: [truncated] } }), /NIfTI/);
 });
 
 test('contracts reject altered policy constants and limits on undeclared inputs', () => {

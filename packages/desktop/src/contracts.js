@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'node:path';
 import * as z from 'zod/v4';
 import { operationParameterSchema, operationParametersSchema } from '@neurodesk/webapp-components/automation/parameters';
 import { operationLimitsSchema, validateOperationLimits } from './resource-limits.js';
+import { validateNiftiEncoding } from './input-inspection.js';
 
 const selector = z.string().trim().min(1);
 const name = z.string().regex(/^[a-z][a-z0-9-]*$/);
@@ -225,6 +226,7 @@ export async function validateRequest(contract, value) {
           if (unique.has(canonical)) throw new Error(`${role}: duplicate input file ${path}`);
           unique.add(canonical);
           if (!acceptsFile(field, path)) throw new Error(`${role}: unsupported input format: ${path}`);
+          if (field.formats.includes('nifti') && /\.nii(?:\.gz)?$/i.test(path)) await validateNiftiEncoding(path);
         }
         if (!field.formats.includes('dicom') && (files.length < field.minimum || files.length > (field.maximum ?? Infinity))) {
           throw new Error(`${role}: input cardinality mismatch`);
@@ -240,6 +242,7 @@ export async function validateRequest(contract, value) {
       if (!isAbsolute(path)) throw new Error(`Input path must be absolute: ${path}`);
       if (!/\.nii(?:\.gz)?$/i.test(path)) throw new Error(`Input must be NIfTI: ${path}`);
       if (!(await stat(path)).isFile()) throw new Error(`Input is not a file: ${path}`);
+      await validateNiftiEncoding(path);
     }
   }
   return request;
