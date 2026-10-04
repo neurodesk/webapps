@@ -1468,7 +1468,11 @@ export class SpinalCordToolboxApp {
       'dorsal_bridge_width_mm',
       'ventral_bridge_width_mm',
       'total_bridge_width_mm'
-    ];
+    ].filter(column => (
+      // Damage ratio and tissue bridges need a cord mask; lesion-only tasks
+      // (lesion_ms) produce none, so their table keeps the lesion geometry.
+      this.inferenceExecutor.hasResult('segmentation') || !/damage|bridge/.test(column)
+    ));
     const labelMap = {
       lesion_id: 'Lesion',
       volume_mm3: 'Volume mm3',

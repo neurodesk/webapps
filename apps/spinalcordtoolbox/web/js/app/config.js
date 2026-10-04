@@ -49,7 +49,7 @@ export const PROGRESS_CONFIG = {
 export const STAGE_NAMES = {
   'input': 'Input',
   'segmentation': 'SCT Segmentation',
-  'lesion': 'SCI Lesion',
+  'lesion': 'Lesion',
   'vertebrae': 'Vertebral Labels',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',

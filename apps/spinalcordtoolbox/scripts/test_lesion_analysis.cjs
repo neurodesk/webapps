@@ -80,4 +80,36 @@ function near(actual, expected, tolerance = 1e-6) {
   assert.match(result.csv, /^row_type,lesion_id,voxel_count/, 'empty metrics still emits stable CSV header');
 }
 
+{
+  // Lesion-only models (lesion_ms) have no cord mask: every lesion voxel counts,
+  // lesion geometry is reported, and cord-relative columns stay empty.
+  const dims = [5, 6, 4];
+  const spacing = [1, 1, 2];
+  const lesion = new Uint8Array(dims[0] * dims[1] * dims[2]);
+  for (const z of [1, 2]) {
+    lesion[idx(2, 2, z, dims)] = 1;
+    lesion[idx(2, 3, z, dims)] = 1;
+  }
+  lesion[idx(0, 0, 0, dims)] = 1;
+
+  const result = lesionAnalysis.analyzeLesions({ lesion, dims, spacing });
+  assert.equal(result.cordRestricted, false);
+  assert.equal(result.summary.lesion_count, 2, 'no lesion voxel is dropped without a cord mask');
+  near(result.summary.total_volume_mm3, 10);
+  near(result.summary.total_length_mm, 6);
+  const large = result.rows.find(row => row.voxel_count === 4);
+  near(large.volume_mm3, 8);
+  near(large.length_mm, 4);
+  near(large.max_width_mm, 2);
+  near(large.max_equivalent_diameter_mm, 1.595769);
+  for (const column of lesionAnalysis.CORD_RELATIVE_COLUMNS) {
+    assert.equal(large[column], null, `${column} is undefined without a cord mask`);
+  }
+  const [header, firstRow] = result.csv.split('\n');
+  assert.equal(header, lesionAnalysis.BASE_COLUMNS.join(','), 'lesion-only CSV keeps the stable columns and adds no bridge columns');
+  const cells = firstRow.split(',');
+  assert.equal(cells[header.split(',').indexOf('max_axial_damage_ratio')], '', 'cord-relative cells are empty, not zero');
+  assert.throws(() => lesionAnalysis.analyzeLesions({ lesion, spinalCord: new Uint8Array(3), dims, spacing }), /Mask length mismatch/);
+}
+
 console.log('Lesion analysis tests passed');

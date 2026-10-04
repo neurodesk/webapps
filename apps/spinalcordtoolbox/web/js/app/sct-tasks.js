@@ -434,7 +434,7 @@ export const SCT_TASKS = [
     labelSet: 'lesion',
     supportStatus: TASK_STATUS.UNSUPPORTED,
     validationStatus: 'not-run',
-    unsupportedReason: 'Not yet converted or validated for browser execution.',
+    unsupportedReason: 'Converted and checked against SCT 7.3 locally (scripts/convert_ms_lesion_model.py); the ONNX model is not hosted yet.',
     modelAssets: []
   },
   {

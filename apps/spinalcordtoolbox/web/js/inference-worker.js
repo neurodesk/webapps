@@ -392,6 +392,8 @@ async function stepInference(params) {
         testTimeAugmentation,
         channelCount,
         regions,
+        paddingMode: output.paddingMode,
+        gaussianSigmaScale: output.gaussianSigmaScale,
         onLog: (msg) => postLog(msg),
         onProgress: progressHandler,
         onPatchStats: (pi, s) => {
@@ -410,7 +412,7 @@ async function stepInference(params) {
     let lesionRAS = null;
     for (const region of result.regions) {
       const stage = region.stage || region.name || `channel_${region.channel}`;
-      const description = region.description || (stage === 'lesion' ? 'SCI lesion segmentation' : 'SCT segmentation');
+      const description = region.description || (stage === 'lesion' ? 'Lesion segmentation' : 'SCT segmentation');
       const preCleanupRAS = modelOutputToRas(region.preCleanupLabels, region.dims, Uint8Array);
       const outputRAS = modelOutputToRas(region.labels, region.dims, Uint8Array);
       if (stage === 'segmentation') {
@@ -443,7 +445,11 @@ async function stepInference(params) {
 
     if (workerState.segLabelsRAS) emitSegmentationStateArtifact();
 
-    if (spinalCordRAS && lesionRAS && self.SCTLesionAnalysis) {
+    // A model that segments the cord as well gets cord-relative metrics. A
+    // lesion-only model (lesion_ms) opts in through output.metricsStage and gets
+    // lesion geometry only, with the cord-relative columns left empty.
+    const metricsStage = output.metricsStage || 'lesion_metrics';
+    if (lesionRAS && (spinalCordRAS || output.metricsStage) && self.SCTLesionAnalysis) {
       postProgress(0.94, 'Computing lesion metrics...');
       const metrics = self.SCTLesionAnalysis.analyzeLesions({
         lesion: lesionRAS,
@@ -452,7 +458,7 @@ async function stepInference(params) {
         spacing: workerState.rasSpacing
       });
       metrics.filename = `${taskId}_lesion_metrics.csv`;
-      postMetricsData('lesion_metrics', metrics, 'SCI lesion metrics');
+      postMetricsData(metricsStage, metrics, 'Lesion metrics');
       postLog(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3} mm^3`);
     }
   } else if (output.activation === 'sigmoid-labels') {
