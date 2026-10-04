@@ -29,7 +29,6 @@ export async function runTopofit(options) {
     buffer,
     model = 't1w-1mm',
     conform = true,
-    conformInput,
     overlayThickness = 1,
     loadAsset,
     createSession,
@@ -50,13 +49,11 @@ export async function runTopofit(options) {
   const roi = patches ? readPatchRoi(options.roiBuffer, source) : null;
   let inference = source;
   let conformed = false;
-  if (conform) {
+  if (conform && needsConform(source.affine)) {
     onProgress(0.03, 'Conforming to the 1 mm RAS model grid…');
-    inference = typeof conformInput === 'function'
-      ? readVolume(await conformInput())
-      : conformVolume(source, {
-          onProgress: (fraction) => onProgress(0.03 + fraction * 0.025, 'Conforming to the 1 mm RAS model grid…'),
-        });
+    inference = conformVolume(source, {
+      onProgress: (fraction) => onProgress(0.03 + fraction * 0.025, 'Conforming to the 1 mm RAS model grid…'),
+    });
     conformed = true;
   } else if (needsConform(source.affine)) {
     throw new Error('This scan is not a 1 mm RAS image. Enable conforming to reconstruct it.');
@@ -234,7 +231,10 @@ export async function runTopofit(options) {
     alignmentInputSha256,
     modelInputSha256,
     outputSha256,
-    runtime,
+    runtime: {
+      ...runtime,
+      conformer: conformed ? '@neurodesk/topofit cubic B-spline (order 3), 1 mm RAS' : 'none',
+    },
     ...(analysis ? { surfaceAnalysis: analysis } : {}),
     ...(roi ? { roiSha256: await sha256(options.roiBuffer) } : {}),
   };

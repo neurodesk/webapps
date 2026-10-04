@@ -917,7 +917,7 @@ apps:
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
       - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive volume and surface viewer }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: niimath, url: https://github.com/rordenlab/niimath, role: 1 mm RAS conforming }
+      - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh simplification and smoothing for STL export }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
       - group: Cortical ribbon geometry

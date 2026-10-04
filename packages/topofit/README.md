@@ -19,16 +19,19 @@ browser comparison in `validation/`. The checked-in manifest points to an
 immutable dataset commit and records every runtime asset's byte count and
 SHA-256.
 
-The production browser app injects the pinned npm `@niivue/niimath` WebAssembly
-conformer and applies `-conform -ras` to axis-aligned and oblique scans. The
-package retains its deterministic centered 256³, 1 mm RAS order-3 conformer as
-the non-browser fallback and validation reference. Existing OpenRecon parity
-reports describe that reference path; a new browser end-to-end capture with the
-niimath path is still pending.
+The package owns one OpenRecon-compatible cubic B-spline conformer for both
+browser and Node execution. It preserves nibabel's grid center, RAS axis
+permutation/flips, normalized oblique rotation/shear, and effective scalar dtype.
+Inputs already on an identity 1 mm grid bypass resampling, as in BrainNet.
+The production worker cannot substitute a different conformer.
 ONNX Runtime WebAssembly uses one thread so repeated runs have a fixed executor
 policy. The downloaded processing manifest contains SHA-256 hashes for the
 input, conformed tensor, model inputs, assets, and outputs; elapsed time is kept
 outside that stable manifest.
+
+The fresh production comparison on the pinned OpenNeuro scan measures
+0.046 to 0.068 mm mean anatomical distance, below the 0.25 mm release limit.
+See `validation/README.md` for the reproduction commands and limits.
 
 ## Mid-surfaces
 

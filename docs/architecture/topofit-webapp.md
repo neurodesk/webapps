@@ -52,7 +52,6 @@ export function runTopofit(request: Readonly<{
   overlayThickness?: 0 | 1 | 2 | 3;
   onProgress?: (fraction: number, message: string) => void;
   // Browser boundary adapters for conforming, verified assets, and ONNX.
-  conformInput?: () => Promise<ArrayBuffer>;
   loadAsset: (name: string) => Promise<ArrayBuffer>;
   createSession: (model: ArrayBuffer) => Promise<unknown>;
   Tensor: unknown;
@@ -65,7 +64,7 @@ The implementation parses untrusted image, worker-message, and release-manifest 
 
 ```mermaid
 flowchart TD
-  input[Source NIfTI or shared DICOM import] --> conform[niimath -conform -ras]
+  input[Source NIfTI or shared DICOM import] --> conform[Reference cubic conforming or identity-grid bypass]
   conform --> trega[TReGA ONNX on threaded WASM]
   trega --> affine[Float64 weighted least-squares affine]
   affine --> prepare[176 x 208 x 176 TopoFit frame]
@@ -86,9 +85,10 @@ One worker owns one run and its ONNX sessions. Sessions are released between sta
 
 | Location | Responsibility |
 | --- | --- |
-| `apps/topofit` | Canonical imaging-workspace UI, import, niimath browser conforming, worker lifetime, viewing, and downloads. |
+| `apps/topofit` | Canonical imaging-workspace UI, import, worker lifetime, viewing, and downloads. |
 | `packages/topofit/src/index.js` | Single reconstruction facade and result contract. |
 | `packages/topofit/src/volume.js` | NIfTI geometry, cropping, normalization, and coordinate transforms. |
+| `packages/topofit/src/conform.js` | Nibabel/SciPy-compatible cubic conforming, including oblique and sheared grids. |
 | `packages/topofit/src/affine.js` | Float64 weighted affine solve. |
 | `packages/topofit/src/qc.js` | Native-grid QC rasterization and NIfTI writing. |
 | `packages/topofit/src/browser.js` | Threaded ONNX Runtime WebAssembly setup and session ownership. |
@@ -129,7 +129,7 @@ The checked-in manifest pins an immutable Hugging Face commit and repeats every 
 
 Tolerance values are recorded before activation and are never widened to turn a failed conversion green. Nearest-surface distance and screenshots are diagnostics; neither can replace vertex-correspondence and file-geometry checks.
 
-The controlled `ds000001` comparison passed with 0.052–0.062 mm mean corresponding distance across the four anatomical surfaces, 0.028–0.041 degree mean registration error, exact face topology, and at least 0.9996 symmetric one-voxel QC coverage. An older end-to-end comparison measured a 0.467–0.562 mm mean surface difference between a previous browser Niimath resize path and OpenRecon's nibabel cubic path. That historical result does not validate the current `-conform -ras` path.
+The controlled `ds000001` comparison passed with 0.052–0.062 mm mean corresponding distance across the four anatomical surfaces, 0.028–0.041 degree mean registration error, exact face topology, and at least 0.9996 symmetric one-voxel QC coverage. A fresh production comparison reproduced 0.795–1.564 mm mean differences through niimath `-conform -ras`. Restoring cubic preprocessing reduced them to 0.046–0.068 mm and passed every existing surface, registration, and QC threshold. These neural comparisons cover one axis-aligned scan; oblique preprocessing is checked separately against pinned numerical fixtures.
 
 ## Tradeoffs
 
@@ -140,7 +140,7 @@ The controlled `ds000001` comparison passed with 0.052–0.062 mm mean correspon
 
 ## First gate
 
-Before registry activation, one reference brain must complete through the production browser worker with full order-6 topology and pass the controlled comparison against the pinned container. The production-preprocessing comparison must also be captured and reviewed, but it is not judged against the controlled inference thresholds because the two conformers intentionally use different interpolation kernels. Any measured difference stays visible in the checked-in report and the app remains explicitly experimental.
+Before registry activation, one reference brain must complete through the production browser worker with full order-6 topology. Both controlled and end-to-end comparisons must pass the pinned container's numerical gates: anatomical mean distance at most 0.25 mm, p95 at most 0.5 mm, maximum at most 2 mm, plus the registration and QC limits. Activation checks the actual metrics and rejects weakened thresholds. The app remains explicitly experimental.
 
 ## Analysis after reconstruction
 
