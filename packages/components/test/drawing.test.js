@@ -72,20 +72,35 @@ test('editedFileName keeps NIfTI names and makes others NIfTI', () => {
   assert.equal(editedFileName('lesions'), 'lesions.nii');
 });
 
-function legacyNv() {
+// A stand-in for NiiVue's drawing layer: a save returns what was loaded, read
+// through `scramble` (voxel i comes from voxel scramble(i)) to mimic a bad load.
+function drawingLayer(scramble = (i) => i) {
+  return {
+    loads: 0,
+    stored: null,
+    put(bytes) {
+      this.loads++;
+      const offset = parseNiftiHeader(bytes.buffer).voxOffset;
+      this.stored = bytes.slice();
+      for (let i = 0; i < bytes.length - offset; i++) this.stored[offset + i] = bytes[offset + scramble(i)];
+    },
+  };
+}
+
+function legacyNv(layer = drawingLayer()) {
   const calls = [];
-  const exported = new Uint8Array(352 + 24);
-  new DataView(exported.buffer).setFloat32(124, 900, true);
   return {
     calls,
+    layer,
     opts: { drawingEnabled: false, penSize: 1 },
-    volumes: [{ opacity: 1 }, { opacity: 0.7 }],
+    volumes: [{ opacity: 1, hdr: { dims: [3, ...DIMS, 1] } }, { opacity: 0.7 }],
     setDrawingEnabled(on) { calls.push(['setDrawingEnabled', on]); this.opts.drawingEnabled = on; },
     setPenValue(value, filled) { calls.push(['setPenValue', value, filled, this.opts.penSize]); },
     createEmptyDrawing() { calls.push(['createEmptyDrawing']); },
     async loadDrawingFromUrl(url, binarize) {
       const bytes = new Uint8Array(await resolveObjectURL(url).arrayBuffer());
       calls.push(['loadDrawingFromUrl', parseNiftiHeader(bytes.buffer).datatype, binarize]);
+      layer.put(bytes);
       return true;
     },
     drawUndo() { calls.push(['drawUndo']); },
@@ -93,28 +108,45 @@ function legacyNv() {
     setDrawOpacity(value) { calls.push(['setDrawOpacity', value]); },
     setDrawColormap(name) { calls.push(['setDrawColormap', name]); },
     setOpacity(index, value) { calls.push(['setOpacity', index, value]); },
-    async saveImage(options) { calls.push(['saveImage', options]); return exported; },
+    async saveImage(options) {
+      calls.push(['saveImage', options]);
+      const bytes = layer.stored.slice();
+      new DataView(bytes.buffer).setFloat32(124, 900, true);
+      return bytes;
+    },
   };
 }
 
-function currentNv({ penShape = true } = {}) {
+function currentNv({ penShape = true, layer = drawingLayer() } = {}) {
   const nv = {
+    layer,
     loaded: null,
     drawIsEnabled: false,
     drawPenValue: 1,
     drawPenFilled: false,
     drawPenSize: 1,
-    volumes: [{ opacity: 1 }, { opacity: 0.6 }],
+    volumes: [{ opacity: 1, hdr: { dims: [3, ...DIMS, 1] } }, { opacity: 0.6 }],
     calls: [],
+    accept: true,
     createEmptyDrawing() { this.calls.push(['createEmptyDrawing']); },
-    async loadDrawing(file) { this.loaded = file; return true; },
+    async loadDrawing(file) {
+      if (!this.accept) return false;
+      this.loaded = file;
+      layer.put(new Uint8Array(await file.arrayBuffer()));
+      this.drawIsEnabled = true;
+      return true;
+    },
     drawUndo() { this.calls.push(['drawUndo']); },
     closeDrawing() { this.calls.push(['closeDrawing']); this.drawIsEnabled = false; },
     async setVolume(index, options) { this.calls.push(['setVolume', index, options]); },
-    async saveDrawing(name) { this.calls.push(['saveDrawing', name]); return new Uint8Array(352 + 24); },
+    async saveDrawing(name) { this.calls.push(['saveDrawing', name]); return layer.stored.slice(); },
   };
   if (penShape) nv.drawPenShape = 0;
   return nv;
+}
+
+async function expectedLabels() {
+  return labelBytes(await maskToUint8Nifti(float32Mask()));
 }
 
 test('legacy adapter drives NiiVue 0.x drawing calls', async () => {
@@ -132,9 +164,12 @@ test('legacy adapter drives NiiVue 0.x drawing calls', async () => {
   assert.equal(drawing.volumeOpacity(1), 0.7);
   const bytes = await drawing.export();
   assert.equal(new DataView(bytes.buffer).getFloat32(124, true), 0, 'base display range is cleared');
+  assert.deepEqual(labelBytes(bytes), await expectedLabels());
   drawing.close();
+  const save = ['saveImage', { filename: '', isSaveDrawing: true }];
   assert.deepEqual(nv.calls, [
     ['loadDrawingFromUrl', 2, false],
+    save,
     ['setDrawingEnabled', true],
     ['setPenValue', 3, false, 25],
     ['setPenValue', 0, false, 1],
@@ -143,11 +178,11 @@ test('legacy adapter drives NiiVue 0.x drawing calls', async () => {
     ['setDrawOpacity', 1],
     ['setDrawColormap', '$itksnap'],
     ['setOpacity', 1, 0],
-    ['saveImage', { filename: '', isSaveDrawing: true }],
+    save,
     ['setDrawingEnabled', false],
     ['closeDrawing'],
   ]);
-  assert.equal(Object.is(nv.calls[3][1], -0), false, 'erase is 0, not the cluster eraser -0');
+  assert.equal(Object.is(nv.calls[4][1], -0), false, 'erase is 0, not the cluster eraser -0');
 });
 
 test('legacy adapter opens an empty drawing and rejects a missing export', async () => {
@@ -174,18 +209,46 @@ test('1.0 adapter sets drawing properties and loads a uint8 File', async () => {
   drawing.setColormap('$slicer3d');
   assert.deepEqual([nv.drawOpacity, nv.drawColormap], [0.5, '$slicer3d']);
   await drawing.setVolumeOpacity(1, 0);
-  await drawing.export();
+  assert.deepEqual(labelBytes(await drawing.export()), await expectedLabels());
   drawing.close();
   assert.equal(drawing.enabled, false);
-  assert.deepEqual(nv.calls, [['setVolume', 1, { opacity: 0 }], ['saveDrawing', ''], ['closeDrawing']]);
+  assert.deepEqual(nv.calls, [['saveDrawing', ''], ['setVolume', 1, { opacity: 0 }], ['saveDrawing', ''], ['closeDrawing']]);
+  assert.equal(nv.layer.loads, 1, 'a load that round-trips is not measured');
 });
 
-test('1.0 adapter leaves the pen shape alone before rc.14 and reports a refused load', async () => {
+test('a load that misplaces voxels is measured and undone', async () => {
+  // 1.0 rc.11 to rc.14 reorder a drawing on a permuted background; any bijection stands in for it.
+  const layer = drawingLayer((i) => (i * 5) % 24);
+  const nv = currentNv({ layer });
+  const drawing = createDrawingAdapter(nv);
+  assert.equal(await drawing.open(float32Mask()), true);
+  assert.deepEqual(labelBytes(await drawing.export()), await expectedLabels());
+  assert.equal(layer.loads, 3, 'the first load, one probe for 24 voxels, and the compensated load');
+});
+
+test('a load that cannot be undone closes the drawing and says why', async () => {
+  const nv = currentNv({ layer: drawingLayer(() => 0) });
+  const drawing = createDrawingAdapter(nv);
+  await assert.rejects(drawing.open(float32Mask()), /wrong voxels/);
+  assert.equal(drawing.enabled, false);
+  assert.deepEqual(nv.calls.at(-1), ['closeDrawing']);
+});
+
+test('a mask on another grid or one NiiVue refuses is not opened', async () => {
   const nv = currentNv({ penShape: false });
-  nv.loadDrawing = async () => false;
+  nv.volumes[0].hdr.dims = [3, 3, 4, 2, 1];
   const drawing = createDrawingAdapter(nv);
   assert.equal(await drawing.open(float32Mask()), false);
+  assert.equal(nv.layer.loads, 0);
+  nv.volumes[0].hdr.dims = [3, ...DIMS, 1];
+  nv.accept = false;
+  assert.equal(await drawing.open(float32Mask()), false);
   assert.equal(drawing.enabled, false);
+});
+
+test('1.0 adapter leaves the pen shape alone before rc.14 and rejects unknown tools', () => {
+  const nv = currentNv({ penShape: false });
+  const drawing = createDrawingAdapter(nv);
   drawing.setTool({ tool: 'draw', label: 1, brushSize: 2 });
   assert.equal('drawPenShape' in nv, false);
   assert.throws(() => drawing.setTool({ tool: 'smudge', label: 1, brushSize: 2 }), /Unknown edit tool/);

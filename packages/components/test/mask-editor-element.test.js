@@ -20,19 +20,18 @@ function fakeNv() {
     drawPenValue: 1,
     drawPenFilled: false,
     drawPenSize: 1,
-    volumes: [{ opacity: 1 }, { opacity: 0.6 }],
+    volumes: [{ opacity: 1, hdr: { dims: [3, 4, 3, 2, 1] } }, { opacity: 0.6 }],
     accept: true,
-    async loadDrawing() { return this.accept; },
+    drawing: null,
+    async loadDrawing(file) {
+      if (this.accept) this.drawing = new Uint8Array(await file.arrayBuffer());
+      return this.accept;
+    },
     createEmptyDrawing() {},
     drawUndo() { this.calls.push(['drawUndo']); },
     closeDrawing() { this.calls.push(['closeDrawing']); this.drawIsEnabled = false; },
     async setVolume(index, options) { this.calls.push(['setVolume', index, options]); },
-    async saveDrawing() {
-      const bytes = new Uint8Array(352 + 24);
-      new DataView(bytes.buffer).setFloat32(108, 352, true);
-      bytes[352] = 2;
-      return bytes;
-    },
+    async saveDrawing() { return this.drawing.slice(); },
   };
 }
 
@@ -131,8 +130,9 @@ test('Apply returns a gzipped File with the original name and restores the overl
   assert.equal(stage, 'mask');
   assert.equal(edited.name, 'mask.nii.gz');
   assert.equal(context.original, file);
-  const bytes = gunzipSync(new Uint8Array(await edited.arrayBuffer()));
-  assert.equal(bytes[352], 2);
+  const bytes = new Uint8Array(gunzipSync(new Uint8Array(await edited.arrayBuffer())));
+  assert.equal(parseNiftiHeader(bytes.buffer).datatype, 2);
+  assert.deepEqual([...bytes.subarray(352, 355)], [1, 0, 0]);
   assert.deepEqual(nv.calls.slice(1), [['closeDrawing'], ['setVolume', 1, { opacity: 0.6 }]]);
   assert.equal(editor.session.state, 'idle');
   assert.equal(editor.hidden, true);
