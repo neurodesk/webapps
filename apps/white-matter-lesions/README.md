@@ -4,7 +4,9 @@ Segment white matter lesions on one FLAIR image, in the browser. Choose the mult
 FLAIR from **Example**, or load one NIfTI image or DICOM series, and select **Segment lesions**.
 The outputs are a lesion mask, a lesion probability map and a lesion table (TSV: voxels,
 volume in ml and centroid in scanner coordinates, one row per 26-connected lesion). Every output
-keeps the input grid and affine.
+keeps the input grid and affine. **Edit** on the mask row corrects the mask in the viewer;
+Apply recomputes the lesion count, volume and table from the edited mask. The probability map
+and run report stay as the model produced them.
 
 ## Pipeline
 
@@ -53,4 +55,5 @@ node apps/white-matter-lesions/validation/parity.mjs <stripped FLAIR> <reference
 
 The unit tests cover the pipeline arithmetic with literal values. The browser tests run the
 hosted example and model end to end on WebAssembly, and check the model-download failure,
-cancellation, example retry and settings persistence.
+cancellation, example retry and settings persistence. A mocked worker drives the probability
+display and mask editing tests.
