@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "repository": "neurodeskorg/webapps",
+  "revision": "1409093e00bd7cc072220752352bb8891e5f38c6",
+  "prefix": "musclemap/parity/20261004",
+  "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
+  "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6",
+  "files": [
+    {
+      "path": "bounded-equivalence/body-first17.npz",
+      "bytes": 33786,
+      "sha256": "a3e072fa8084e4c92c2a89ab65ab3483739c9a8a96fb821fadf3dfdb3f1c636e"
+    },
+    {
+      "path": "bounded-equivalence/body-second17.npz",
+      "bytes": 31860,
+      "sha256": "f0deb9959c06533236761b2ab79bcf65dc12fe2a18f3493a3db28a4773a3132f"
+    },
+    {
+      "path": "bounded-equivalence/check.py",
+      "bytes": 767,
+      "sha256": "a6e4abca1d6d7bee55ad726aca35aeac3c1567faa0d65c92531a59f5bb9cb282"
+    },
+    {
+      "path": "bounded-equivalence/equivalence.json",
+      "bytes": 2282,
+      "sha256": "cd412d8df5231c57c345b9bab936e9f55476c5b30cb822b26fd270adc3c50041"
+    },
+    {
+      "path": "bounded-equivalence/knee-central.npz",
+      "bytes": 508,
+      "sha256": "bb1bc9b668c25c3ef1adbe5b5eebb1681df552147efbd23d5edff12102c4cb68"
+    },
+    {
+      "path": "bounded-equivalence/knee-full-ap.npz",
+      "bytes": 6640,
+      "sha256": "bbd683574dde7d3c906f623594e24a1a7d73da891fa302bd10037d032ee6d3b5"
+    },
+    {
+      "path": "inputs/body-first17.nii.gz",
+      "bytes": 746964,
+      "sha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f"
+    },
+    {
+      "path": "inputs/body-full.nii.gz",
+      "bytes": 16134253,
+      "sha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379"
+    },
+    {
+      "path": "inputs/body-single-slice.nii.gz",
+      "bytes": 39170,
+      "sha256": "b3fd7f8cccbecb1242b97a096b8c310f565b6c4c992b51160835d9f404fffd89"
+    },
+    {
+      "path": "inputs/knee-full.nii.gz",
+      "bytes": 2597183,
+      "sha256": "bb4cdef01379236c08f9e6c741f38a0aa435b09ef497ea3268560b868f94b4c2"
+    },
+    {
+      "path": "inputs/knee-slab.nii.gz",
+      "bytes": 96639,
+      "sha256": "19b49ebe20495a4437522704506144c1a9f71a202d8ef6f31856955bf34e220a"
+    },
+    {
+      "path": "provenance/body-first17-multichunk.json",
+      "bytes": 2287,
+      "sha256": "13f3ef0c39a9dd8f51bc55ef8bfe6d22ab071e40f92365ef3ab6accbf7b73f70"
+    },
+    {
+      "path": "provenance/body-first17.json",
+      "bytes": 1023,
+      "sha256": "f0ff46fb1d51d503d2f888ec530740e74968453d9672ac0987a3f19381a8f107"
+    },
+    {
+      "path": "provenance/body-full.json",
+      "bytes": 6941,
+      "sha256": "37bb6fc91f23a1af4982cb47c58861738cf7eefc496763760b72927d23f61197"
+    },
+    {
+      "path": "provenance/body-single-slice.json",
+      "bytes": 2555,
+      "sha256": "5938037bea766cf4f15e756a0409c1892b9242edea41dcad3c7ea1043bf2c922"
+    },
+    {
+      "path": "provenance/knee-full.json",
+      "bytes": 3333,
+      "sha256": "f78380ab5af17a70e98abf20056b1308b37ded39bf17e9b190d1d97f0eeee73b"
+    },
+    {
+      "path": "provenance/knee-slab.json",
+      "bytes": 1799,
+      "sha256": "d835bd35d3610937639cdf8d18a58967445f2b27e98dc9d3d50e0fcd05c5eba8"
+    },
+    {
+      "path": "references/body-first17-multichunk.nii.gz",
+      "bytes": 49779,
+      "sha256": "9699ef226c8892ec4e5751b9b149b4108d81d29115da60534b075a3bfb2271c2"
+    },
+    {
+      "path": "references/body-first17.nii.gz",
+      "bytes": 49692,
+      "sha256": "68aab4a30aa7f8b80bf3dbc8aa55bc00f7c42f0644aada156114ba3f21943c22"
+    },
+    {
+      "path": "references/body-full.nii.gz",
+      "bytes": 694673,
+      "sha256": "38ee7bb490ca4cc659f51ce67e6fafae61c85205966d36a168976c7cb0727a85"
+    },
+    {
+      "path": "references/body-single-slice.nii.gz",
+      "bytes": 4657,
+      "sha256": "3dbc59ce54e6ad1d01bcb8ef1825607315e51bade161c2d3f18ce0b9520f33c3"
+    },
+    {
+      "path": "references/knee-full.nii.gz",
+      "bytes": 139708,
+      "sha256": "60ed4b1fbfbf30c74f55c94a1898c3881232e9d188fa810317cc9b1fd8248cfb"
+    },
+    {
+      "path": "references/knee-slab.nii.gz",
+      "bytes": 6507,
+      "sha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469"
+    }
+  ],
+  "cases": [
+    {
+      "id": "body-first17",
+      "input": "inputs/body-first17.nii.gz",
+      "inputSha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f",
+      "reference": "references/body-first17.nii.gz",
+      "referenceSha256": "68aab4a30aa7f8b80bf3dbc8aa55bc00f7c42f0644aada156114ba3f21943c22",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream-chunk-and-global-cleanup",
+      "extent": "subset",
+      "provenance": "provenance/body-first17.json"
+    },
+    {
+      "id": "body-first17-multichunk",
+      "input": "inputs/body-first17.nii.gz",
+      "inputSha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f",
+      "reference": "references/body-first17-multichunk.nii.gz",
+      "referenceSha256": "9699ef226c8892ec4e5751b9b149b4108d81d29115da60534b075a3bfb2271c2",
+      "sourceChunkSize": 8,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/body-first17-multichunk.json"
+    },
+    {
+      "id": "knee-slab",
+      "input": "inputs/knee-slab.nii.gz",
+      "inputSha256": "19b49ebe20495a4437522704506144c1a9f71a202d8ef6f31856955bf34e220a",
+      "reference": "references/knee-slab.nii.gz",
+      "referenceSha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469",
+      "sourceChunkSize": 45,
+      "overlap": 0,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/knee-slab.json"
+    },
+    {
+      "id": "body-single-slice",
+      "input": "inputs/body-single-slice.nii.gz",
+      "inputSha256": "b3fd7f8cccbecb1242b97a096b8c310f565b6c4c992b51160835d9f404fffd89",
+      "reference": "references/body-single-slice.nii.gz",
+      "referenceSha256": "3dbc59ce54e6ad1d01bcb8ef1825607315e51bade161c2d3f18ce0b9520f33c3",
+      "sourceChunkSize": 1,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/body-single-slice.json"
+    },
+    {
+      "id": "body-full",
+      "input": "inputs/body-full.nii.gz",
+      "inputSha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379",
+      "reference": "references/body-full.nii.gz",
+      "referenceSha256": "38ee7bb490ca4cc659f51ce67e6fafae61c85205966d36a168976c7cb0727a85",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "full-original-volume",
+      "provenance": "provenance/body-full.json"
+    },
+    {
+      "id": "knee-full",
+      "input": "inputs/knee-full.nii.gz",
+      "inputSha256": "bb4cdef01379236c08f9e6c741f38a0aa435b09ef497ea3268560b868f94b4c2",
+      "reference": "references/knee-full.nii.gz",
+      "referenceSha256": "60ed4b1fbfbf30c74f55c94a1898c3881232e9d188fa810317cc9b1fd8248cfb",
+      "sourceChunkSize": 45,
+      "overlap": 0,
+      "authority": "bounded-channel-inversion",
+      "extent": "full-original-volume",
+      "provenance": "provenance/knee-full.json"
+    }
+  ]
+}

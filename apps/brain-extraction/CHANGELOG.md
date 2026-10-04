@@ -4,8 +4,10 @@
 
 ### Patch Changes
 
-- Updated dependencies
-  - @neurodesk/synthsr@0.5.20261004
+- Updated dependencies [257192b]
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/synthstrip@0.1.1
+  - @neurodesk/runtime-support@0.1.3
   - @neurodesk/brain-extraction@0.1.16
 
 

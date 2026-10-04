@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.22.20261004
+
+### Patch Changes
+
+- Verify SYNcro with its packaged pinned T1 and explicit WASM SynthSR, SynthStrip, and Greedy backends.
+
 ## 0.21.20261004
 
 ### Minor Changes

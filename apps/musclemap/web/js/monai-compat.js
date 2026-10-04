@@ -22,45 +22,43 @@
     return result;
   }
 
-  function multiply4Float32(left, right) {
-    const result = identity4();
-    for (let row = 0; row < 4; row++) {
-      for (let column = 0; column < 4; column++) {
-        let value = Math.fround(0);
-        for (let inner = 0; inner < 4; inner++) {
-          value = Math.fround(value + Math.fround(
-            Math.fround(left[row][inner]) * Math.fround(right[inner][column])
-          ));
+  function solve4(left, right) {
+    if (left.length !== 4 || right.length !== 4 || ![...left, ...right].every(row => row.length === 4 && Array.from(row).every(Number.isFinite))) {
+      throw new Error('NIfTI affine must contain finite values');
+    }
+    const factors = left.map(row => Float64Array.from(row));
+    const result = right.map(row => Float64Array.from(row));
+    for (let column = 0; column < 4; column++) {
+      let pivot = column;
+      for (let row = column + 1; row < 4; row++) {
+        if (Math.abs(factors[row][column]) > Math.abs(factors[pivot][column])) pivot = row;
+      }
+      if (Math.abs(factors[pivot][column]) < 1e-12) throw new Error('NIfTI affine is not invertible');
+      if (pivot !== column) {
+        [factors[pivot], factors[column]] = [factors[column], factors[pivot]];
+        [result[pivot], result[column]] = [result[column], result[pivot]];
+      }
+      for (let row = column + 1; row < 4; row++) {
+        factors[row][column] /= factors[column][column];
+        for (let inner = column + 1; inner < 4; inner++) {
+          factors[row][inner] -= factors[row][column] * factors[column][inner];
         }
-        result[row][column] = value;
+      }
+    }
+    for (let column = 0; column < 4; column++) {
+      for (let row = 0; row < 4; row++) {
+        for (let inner = 0; inner < row; inner++) result[row][column] -= factors[row][inner] * result[inner][column];
+      }
+      for (let row = 3; row >= 0; row--) {
+        for (let inner = row + 1; inner < 4; inner++) result[row][column] -= factors[row][inner] * result[inner][column];
+        result[row][column] /= factors[row][row];
       }
     }
     return result;
   }
 
   function invert4(matrix) {
-    const work = Array.from({ length: 4 }, (_, row) => {
-      const values = new Float64Array(8);
-      values.set(matrix[row], 0);
-      values[row + 4] = 1;
-      return values;
-    });
-    for (let column = 0; column < 4; column++) {
-      let pivot = column;
-      for (let row = column + 1; row < 4; row++) {
-        if (Math.abs(work[row][column]) > Math.abs(work[pivot][column])) pivot = row;
-      }
-      if (Math.abs(work[pivot][column]) < 1e-12) throw new Error('NIfTI affine is not invertible');
-      if (pivot !== column) [work[pivot], work[column]] = [work[column], work[pivot]];
-      const divisor = work[column][column];
-      for (let index = 0; index < 8; index++) work[column][index] /= divisor;
-      for (let row = 0; row < 4; row++) {
-        if (row === column) continue;
-        const factor = work[row][column];
-        for (let index = 0; index < 8; index++) work[row][index] -= factor * work[column][index];
-      }
-    }
-    return work.map(row => new Float64Array(row.subarray(4)));
+    return solve4(matrix, identity4());
   }
 
   function transformPoint(matrix, point) {
@@ -146,7 +144,7 @@
   function roundHalfToEven(value) {
     const lower = Math.floor(value);
     const fraction = value - lower;
-    if (Math.abs(fraction - 0.5) < 1e-10) return lower % 2 === 0 ? lower : lower + 1;
+    if (fraction === 0.5) return lower % 2 === 0 ? lower : lower + 1;
     return Math.round(value);
   }
 
@@ -185,7 +183,8 @@
       for (let column = 0; column <= row; column++) {
         let value = gram[row][column];
         for (let inner = 0; inner < column; inner++) value -= lower[row][inner] * lower[column][inner];
-        lower[row][column] = row === column ? Math.sqrt(Math.max(value, 0)) : value / lower[column][column];
+        if (!Number.isFinite(value) || (row === column && value <= 0)) throw new Error('NIfTI affine rotation is not invertible');
+        lower[row][column] = row === column ? Math.sqrt(value) : value / lower[column][column];
       }
     }
     const upper = Array.from({ length: 3 }, (_, row) =>
@@ -203,11 +202,11 @@
     const sourceSpacing = affineSpacing(affine);
     const actualTarget = targetSpacing.map((value, axis) => value > 0 ? value : sourceSpacing[axis]);
     const zeroOffsetAffine = zoomAffine(affine, actualTarget);
-    const outputFromInput = multiply4(invert4(zeroOffsetAffine), affine);
+    const outputFromInput = solve4(zeroOffsetAffine, affine);
     const inputCorners = [];
-    for (const z of [0, dims[2] - 1]) {
+    for (const x of [0, dims[0] - 1]) {
       for (const y of [0, dims[1] - 1]) {
-        for (const x of [0, dims[0] - 1]) inputCorners.push([x, y, z]);
+        for (const z of [0, dims[2] - 1]) inputCorners.push([x, y, z]);
       }
     }
     const outputCorners = inputCorners.map(point => transformPoint(outputFromInput, point));
@@ -220,7 +219,7 @@
     for (let corner = 0; corner < outputCorners.length; corner++) {
       const candidate = outputCorners[corner];
       const isMinimum = [0, 1, 2].every(axis => outputCorners.every(
-        point => point[axis] >= candidate[axis] - 1e-3
+        point => point[axis] >= candidate[axis] - 1e-8
       ));
       if (isMinimum) {
         offset = worldCorners[corner];
@@ -229,7 +228,8 @@
     }
     if (!offset) {
       const inputCenter = transformPoint(affine, dims.map(value => value / 2));
-      offset = inputCenter.map((value, axis) => value - actualTarget[axis] * outputDims[axis] / 2);
+      const outputCenter = transformPoint(zeroOffsetAffine, outputDims.map(value => value / 2));
+      offset = inputCenter.map((value, axis) => value - outputCenter[axis]);
     }
     const outputAffine = zeroOffsetAffine;
     for (let axis = 0; axis < 3; axis++) outputAffine[axis][3] = offset[axis];
@@ -253,26 +253,31 @@
     const c101 = data[x1 + y0 * nx + z1 * plane];
     const c011 = data[x0 + y1 * nx + z1 * plane];
     const c111 = data[x1 + y1 * nx + z1 * plane];
-    const c00 = c000 * (1 - wx) + c100 * wx;
-    const c10 = c010 * (1 - wx) + c110 * wx;
-    const c01 = c001 * (1 - wx) + c101 * wx;
-    const c11 = c011 * (1 - wx) + c111 * wx;
-    return (c00 * (1 - wy) + c10 * wy) * (1 - wz) +
-      (c01 * (1 - wy) + c11 * wy) * wz;
+    // PyTorch's tensor axes are reversed, so its eight corners advance z first.
+    let value = c000 * ((1 - wz) * (1 - wy) * (1 - wx));
+    value += c001 * (wz * (1 - wy) * (1 - wx));
+    value += c010 * ((1 - wz) * wy * (1 - wx));
+    value += c011 * (wz * wy * (1 - wx));
+    value += c100 * ((1 - wz) * (1 - wy) * wx);
+    value += c101 * (wz * (1 - wy) * wx);
+    value += c110 * ((1 - wz) * wy * wx);
+    value += c111 * (wz * wy * wx);
+    return value;
   }
 
   function createTorchGridTransform(sourceAffine, sourceDims, outputAffine, outputDims) {
-    const sourceFromOutput = multiply4(invert4(sourceAffine), outputAffine);
+    const sourceFromOutput = solve4(sourceAffine, outputAffine);
     const normalizeSource = identity4();
     const denormalizeOutput = identity4();
     for (let axis = 0; axis < 3; axis++) {
-      normalizeSource[axis][axis] = Math.fround(2 / sourceDims[axis]);
-      normalizeSource[axis][3] = Math.fround(1 / sourceDims[axis] - 1);
-      denormalizeOutput[axis][axis] = Math.fround(outputDims[axis] / 2);
-      denormalizeOutput[axis][3] = Math.fround((outputDims[axis] - 1) / 2);
+      normalizeSource[axis][axis] = 2 / sourceDims[axis];
+      normalizeSource[axis][3] = 1 / sourceDims[axis] - 1;
+      const scale = 2 / outputDims[axis];
+      denormalizeOutput[axis][axis] = 1 / scale;
+      denormalizeOutput[axis][3] = -(1 / outputDims[axis] - 1) * denormalizeOutput[axis][axis];
     }
-    const normalized = multiply4Float32(
-      multiply4Float32(normalizeSource, sourceFromOutput),
+    const normalized = multiply4(
+      multiply4(normalizeSource, sourceFromOutput),
       denormalizeOutput
     );
     const reversed = identity4();
@@ -283,30 +288,58 @@
     return reversed;
   }
 
+  const gridAxes = new WeakMap();
+
+  function createTorchAxis(size) {
+    const axis = new Float64Array(size);
+    if (size === 1) return axis;
+    const bits = new DataView(new ArrayBuffer(8));
+    bits.setFloat64(0, 2 / (size - 1));
+    const raw = bits.getBigUint64(0);
+    const exponent = Number((raw >> 52n) & 2047n) - 1023 - 52;
+    const significand = (raw & ((1n << 52n) - 1n)) | (1n << 52n);
+    const one = 1n << BigInt(-exponent);
+    for (let index = 0; index < size; index++) {
+      // Round the fused linspace expression once, before exact power-of-two scaling.
+      const numerator = index < Math.floor(size / 2)
+        ? BigInt(index) * significand - one
+        : one - BigInt(size - index - 1) * significand;
+      axis[index] = Number(numerator) * 2 ** exponent * (size - 1) / size;
+    }
+    return axis;
+  }
+
   function torchGridSourcePoint(transform, outputPoint, sourceDims, outputDims) {
-    const outputReversed = [outputPoint[2], outputPoint[1], outputPoint[0]];
-    const normalizedOutput = outputReversed.map((coordinate, axis) => {
-      const size = outputDims[2 - axis];
-      if (size === 1) return 0;
-      const alignCornersCoordinate = Math.fround(-1 + coordinate * (2 / (size - 1)));
-      return Math.fround(alignCornersCoordinate * Math.fround((size - 1) / size));
-    });
+    let grid = gridAxes.get(transform);
+    if (!grid || grid.dims.some((size, axis) => size !== outputDims[axis])) {
+      grid = { dims: [...outputDims], axes: outputDims.map(createTorchAxis) };
+      gridAxes.set(transform, grid);
+    }
+    const normalizedOutput = [2, 1, 0].map(axis => grid.axes[axis][outputPoint[axis]]);
     const normalizedSource = [0, 1, 2].map(row => {
-      let value = Math.fround(transform[row][3]);
+      let value = 0;
       for (let column = 0; column < 3; column++) {
-        value = Math.fround(value + Math.fround(transform[row][column] * normalizedOutput[column]));
+        value += transform[row][column] * normalizedOutput[column];
       }
-      return value;
+      return value + transform[row][3];
     });
     const sourceReversed = normalizedSource.map((coordinate, axis) => {
       const size = sourceDims[2 - axis];
-      return Math.fround(Math.fround(Math.fround(coordinate + 1) * size - 1) / 2);
+      return ((coordinate + 1) * size - 1) / 2;
     });
     return [sourceReversed[2], sourceReversed[1], sourceReversed[0]];
   }
 
   function resampleVolume(data, dims, affine, targetSpacing) {
+    if (dims.length !== 3 || !dims.every(size => Number.isSafeInteger(size) && size > 0 && size <= 0xffffffff) ||
+        data.length !== dims.reduce((count, size) => count * size, 1)) {
+      throw new Error('Volume dimensions must match the input data');
+    }
     const geometry = computeSpacingGeometry(dims, affine, targetSpacing);
+    const unchanged = dims.every((size, axis) => size === geometry.dims[axis]) &&
+      affine.every((row, i) => Array.from(row).every((value, j) =>
+        Math.abs(value - geometry.affine[i][j]) <= 1e-3 + 1e-5 * Math.abs(geometry.affine[i][j])));
+    if (unchanged) return { data: Float32Array.from(data), ...geometry, affine };
     const gridTransform = createTorchGridTransform(affine, dims, geometry.affine, geometry.dims);
     const [nx, ny, nz] = geometry.dims;
     const result = new Float32Array(nx * ny * nz);

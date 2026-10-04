@@ -1,0 +1,2784 @@
+{
+  "sha256": "dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800",
+  "bytes": 10296357,
+  "opset": 17,
+  "input": "input",
+  "output": "output",
+  "tensors": {
+    "encoder.0.0.conv.weight": {
+      "dims": [
+        16,
+        1,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 27358,
+      "protoBytes": 1768
+    },
+    "encoder.0.0.conv.bias": {
+      "dims": [
+        16
+      ],
+      "protoOffset": 29128,
+      "protoBytes": 93
+    },
+    "encoder.0.1.conv.weight": {
+      "dims": [
+        16,
+        16,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 29225,
+      "protoBytes": 27689
+    },
+    "encoder.0.1.conv.bias": {
+      "dims": [
+        16
+      ],
+      "protoOffset": 56916,
+      "protoBytes": 93
+    },
+    "encoder.1.0.conv.weight": {
+      "dims": [
+        32,
+        16,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 57013,
+      "protoBytes": 55337
+    },
+    "encoder.1.0.conv.bias": {
+      "dims": [
+        32
+      ],
+      "protoOffset": 112353,
+      "protoBytes": 158
+    },
+    "encoder.1.1.conv.weight": {
+      "dims": [
+        32,
+        32,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 112515,
+      "protoBytes": 110633
+    },
+    "encoder.1.1.conv.bias": {
+      "dims": [
+        32
+      ],
+      "protoOffset": 223151,
+      "protoBytes": 158
+    },
+    "encoder.2.0.conv.weight": {
+      "dims": [
+        64,
+        32,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 223313,
+      "protoBytes": 221225
+    },
+    "encoder.2.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 444541,
+      "protoBytes": 286
+    },
+    "encoder.2.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 444831,
+      "protoBytes": 442409
+    },
+    "encoder.2.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 887243,
+      "protoBytes": 286
+    },
+    "encoder.3.0.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 887533,
+      "protoBytes": 442409
+    },
+    "encoder.3.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 1329945,
+      "protoBytes": 286
+    },
+    "encoder.3.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 1330235,
+      "protoBytes": 442409
+    },
+    "encoder.3.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 1772647,
+      "protoBytes": 286
+    },
+    "encoder.4.0.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 1772937,
+      "protoBytes": 442409
+    },
+    "encoder.4.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 2215349,
+      "protoBytes": 286
+    },
+    "encoder.4.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 2215639,
+      "protoBytes": 442409
+    },
+    "encoder.4.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 2658051,
+      "protoBytes": 286
+    },
+    "encoder.5.0.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 2658341,
+      "protoBytes": 442409
+    },
+    "encoder.5.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 3100753,
+      "protoBytes": 286
+    },
+    "encoder.5.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 3101043,
+      "protoBytes": 442409
+    },
+    "encoder.5.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 3543455,
+      "protoBytes": 286
+    },
+    "decoder.0.0.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 3543745,
+      "protoBytes": 442409
+    },
+    "decoder.0.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 3986157,
+      "protoBytes": 286
+    },
+    "decoder.0.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 3986447,
+      "protoBytes": 442409
+    },
+    "decoder.0.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 4428859,
+      "protoBytes": 286
+    },
+    "decoder.1.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 4429148,
+      "protoBytes": 286
+    },
+    "decoder.1.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 4429438,
+      "protoBytes": 442409
+    },
+    "decoder.1.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 4871850,
+      "protoBytes": 286
+    },
+    "decoder.2.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 4872139,
+      "protoBytes": 286
+    },
+    "decoder.2.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 4872429,
+      "protoBytes": 442409
+    },
+    "decoder.2.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 5314841,
+      "protoBytes": 286
+    },
+    "decoder.3.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 5315130,
+      "protoBytes": 286
+    },
+    "decoder.3.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 5315420,
+      "protoBytes": 442409
+    },
+    "decoder.3.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 5757832,
+      "protoBytes": 286
+    },
+    "decoder.4.0.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 5758121,
+      "protoBytes": 286
+    },
+    "decoder.4.1.conv.weight": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 5758411,
+      "protoBytes": 442409
+    },
+    "decoder.4.1.conv.bias": {
+      "dims": [
+        64
+      ],
+      "protoOffset": 6200823,
+      "protoBytes": 286
+    },
+    "decoder.5.0.conv.bias": {
+      "dims": [
+        32
+      ],
+      "protoOffset": 6201112,
+      "protoBytes": 158
+    },
+    "decoder.5.1.conv.weight": {
+      "dims": [
+        32,
+        32,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 6201274,
+      "protoBytes": 110633
+    },
+    "decoder.5.1.conv.bias": {
+      "dims": [
+        32
+      ],
+      "protoOffset": 6311910,
+      "protoBytes": 158
+    },
+    "remaining.0.conv.bias": {
+      "dims": [
+        16
+      ],
+      "protoOffset": 6312070,
+      "protoBytes": 93
+    },
+    "remaining.1.conv.weight": {
+      "dims": [
+        16,
+        16,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 6312167,
+      "protoBytes": 27689
+    },
+    "remaining.1.conv.bias": {
+      "dims": [
+        16
+      ],
+      "protoOffset": 6339858,
+      "protoBytes": 93
+    },
+    "remaining.2.conv.weight": {
+      "dims": [
+        1,
+        16,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 6339954,
+      "protoBytes": 1768
+    },
+    "remaining.2.conv.bias": {
+      "dims": [
+        1
+      ],
+      "protoOffset": 6341724,
+      "protoBytes": 33
+    },
+    "/decoder.1.0/conv/Conv_part0_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 6341761,
+      "protoBytes": 442416
+    },
+    "/decoder.1.0/conv/Conv_part1_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 6784181,
+      "protoBytes": 442416
+    },
+    "/decoder.2.0/conv/Conv_part0_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 7226601,
+      "protoBytes": 442416
+    },
+    "/decoder.2.0/conv/Conv_part1_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 7669021,
+      "protoBytes": 442416
+    },
+    "/decoder.3.0/conv/Conv_part0_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 8111441,
+      "protoBytes": 442416
+    },
+    "/decoder.3.0/conv/Conv_part1_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 8553861,
+      "protoBytes": 442416
+    },
+    "/decoder.4.0/conv/Conv_part0_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 8996281,
+      "protoBytes": 442416
+    },
+    "/decoder.4.0/conv/Conv_part1_W": {
+      "dims": [
+        64,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 9438701,
+      "protoBytes": 442416
+    },
+    "/decoder.5.0/conv/Conv_part0_W": {
+      "dims": [
+        32,
+        64,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 9881121,
+      "protoBytes": 221232
+    },
+    "/decoder.5.0/conv/Conv_part1_W": {
+      "dims": [
+        32,
+        32,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 10102357,
+      "protoBytes": 110640
+    },
+    "/remaining.0/conv/Conv_part0_W": {
+      "dims": [
+        16,
+        32,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 10213001,
+      "protoBytes": 55344
+    },
+    "/remaining.0/conv/Conv_part1_W": {
+      "dims": [
+        16,
+        16,
+        3,
+        3,
+        3
+      ],
+      "protoOffset": 10268349,
+      "protoBytes": 27696
+    }
+  },
+  "nodes": [
+    {
+      "op": "Conv",
+      "name": "/encoder.0.0/conv/Conv",
+      "inputs": [
+        "input",
+        "encoder.0.0.conv.weight",
+        "encoder.0.0.conv.bias"
+      ],
+      "output": "/encoder.0.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.0.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.0.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.0.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.0.1/conv/Conv",
+      "inputs": [
+        "/encoder.0.0/activation/LeakyRelu_output_0",
+        "encoder.0.1.conv.weight",
+        "encoder.0.1.conv.bias"
+      ],
+      "output": "/encoder.0.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.0.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.0.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.0.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.0/MaxPool",
+      "inputs": [
+        "/encoder.0.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.0/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.1.0/conv/Conv",
+      "inputs": [
+        "/pools.0/MaxPool_output_0",
+        "encoder.1.0.conv.weight",
+        "encoder.1.0.conv.bias"
+      ],
+      "output": "/encoder.1.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.1.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.1.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.1.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.1.1/conv/Conv",
+      "inputs": [
+        "/encoder.1.0/activation/LeakyRelu_output_0",
+        "encoder.1.1.conv.weight",
+        "encoder.1.1.conv.bias"
+      ],
+      "output": "/encoder.1.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.1.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.1.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.1.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.1/MaxPool",
+      "inputs": [
+        "/encoder.1.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.1/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.2.0/conv/Conv",
+      "inputs": [
+        "/pools.1/MaxPool_output_0",
+        "encoder.2.0.conv.weight",
+        "encoder.2.0.conv.bias"
+      ],
+      "output": "/encoder.2.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.2.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.2.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.2.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.2.1/conv/Conv",
+      "inputs": [
+        "/encoder.2.0/activation/LeakyRelu_output_0",
+        "encoder.2.1.conv.weight",
+        "encoder.2.1.conv.bias"
+      ],
+      "output": "/encoder.2.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.2.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.2.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.2.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.2/MaxPool",
+      "inputs": [
+        "/encoder.2.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.2/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.3.0/conv/Conv",
+      "inputs": [
+        "/pools.2/MaxPool_output_0",
+        "encoder.3.0.conv.weight",
+        "encoder.3.0.conv.bias"
+      ],
+      "output": "/encoder.3.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.3.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.3.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.3.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.3.1/conv/Conv",
+      "inputs": [
+        "/encoder.3.0/activation/LeakyRelu_output_0",
+        "encoder.3.1.conv.weight",
+        "encoder.3.1.conv.bias"
+      ],
+      "output": "/encoder.3.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.3.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.3.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.3.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.3/MaxPool",
+      "inputs": [
+        "/encoder.3.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.3/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.4.0/conv/Conv",
+      "inputs": [
+        "/pools.3/MaxPool_output_0",
+        "encoder.4.0.conv.weight",
+        "encoder.4.0.conv.bias"
+      ],
+      "output": "/encoder.4.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.4.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.4.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.4.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.4.1/conv/Conv",
+      "inputs": [
+        "/encoder.4.0/activation/LeakyRelu_output_0",
+        "encoder.4.1.conv.weight",
+        "encoder.4.1.conv.bias"
+      ],
+      "output": "/encoder.4.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.4.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.4.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.4.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.4/MaxPool",
+      "inputs": [
+        "/encoder.4.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.4/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.5.0/conv/Conv",
+      "inputs": [
+        "/pools.4/MaxPool_output_0",
+        "encoder.5.0.conv.weight",
+        "encoder.5.0.conv.bias"
+      ],
+      "output": "/encoder.5.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.5.0/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.5.0/conv/Conv_output_0"
+      ],
+      "output": "/encoder.5.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/encoder.5.1/conv/Conv",
+      "inputs": [
+        "/encoder.5.0/activation/LeakyRelu_output_0",
+        "encoder.5.1.conv.weight",
+        "encoder.5.1.conv.bias"
+      ],
+      "output": "/encoder.5.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/encoder.5.1/activation/LeakyRelu",
+      "inputs": [
+        "/encoder.5.1/conv/Conv_output_0"
+      ],
+      "output": "/encoder.5.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "MaxPool",
+      "name": "/pools.5/MaxPool",
+      "inputs": [
+        "/encoder.5.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/pools.5/MaxPool_output_0",
+      "attrs": {
+        "ceil_mode": 0,
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "kernel_shape": [
+          2,
+          2,
+          2
+        ],
+        "pads": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "strides": [
+          2,
+          2,
+          2
+        ]
+      },
+      "attributeTypes": {
+        "ceil_mode": 2,
+        "dilations": 7,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.0.0/conv/Conv",
+      "inputs": [
+        "/pools.5/MaxPool_output_0",
+        "decoder.0.0.conv.weight",
+        "decoder.0.0.conv.bias"
+      ],
+      "output": "/decoder.0.0/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.0.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.0.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.0.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.0.1/conv/Conv",
+      "inputs": [
+        "/decoder.0.0/activation/LeakyRelu_output_0",
+        "decoder.0.1.conv.weight",
+        "decoder.0.1.conv.bias"
+      ],
+      "output": "/decoder.0.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.0.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.0.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.0.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize",
+      "inputs": [
+        "/decoder.0.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_1_output_0",
+      "resizeLike": "/encoder.5.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.1.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_output_0",
+        "/decoder.1.0/conv/Conv_part0_W",
+        "decoder.1.0.conv.bias"
+      ],
+      "output": "/decoder.1.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.1.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.5.1/activation/LeakyRelu_output_0",
+        "/decoder.1.0/conv/Conv_part1_W"
+      ],
+      "output": "/decoder.1.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/decoder.1.0/conv/Conv_sum",
+      "inputs": [
+        "/decoder.1.0/conv/Conv_part0",
+        "/decoder.1.0/conv/Conv_part1"
+      ],
+      "output": "/decoder.1.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.1.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.1.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.1.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.1.1/conv/Conv",
+      "inputs": [
+        "/decoder.1.0/activation/LeakyRelu_output_0",
+        "decoder.1.1.conv.weight",
+        "decoder.1.1.conv.bias"
+      ],
+      "output": "/decoder.1.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.1.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.1.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.1.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize_1",
+      "inputs": [
+        "/decoder.1.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_1_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_4_output_0",
+      "resizeLike": "/encoder.4.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.2.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_1_output_0",
+        "/decoder.2.0/conv/Conv_part0_W",
+        "decoder.2.0.conv.bias"
+      ],
+      "output": "/decoder.2.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.2.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.4.1/activation/LeakyRelu_output_0",
+        "/decoder.2.0/conv/Conv_part1_W"
+      ],
+      "output": "/decoder.2.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/decoder.2.0/conv/Conv_sum",
+      "inputs": [
+        "/decoder.2.0/conv/Conv_part0",
+        "/decoder.2.0/conv/Conv_part1"
+      ],
+      "output": "/decoder.2.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.2.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.2.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.2.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.2.1/conv/Conv",
+      "inputs": [
+        "/decoder.2.0/activation/LeakyRelu_output_0",
+        "decoder.2.1.conv.weight",
+        "decoder.2.1.conv.bias"
+      ],
+      "output": "/decoder.2.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.2.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.2.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.2.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize_2",
+      "inputs": [
+        "/decoder.2.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_2_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_7_output_0",
+      "resizeLike": "/encoder.3.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.3.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_2_output_0",
+        "/decoder.3.0/conv/Conv_part0_W",
+        "decoder.3.0.conv.bias"
+      ],
+      "output": "/decoder.3.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.3.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.3.1/activation/LeakyRelu_output_0",
+        "/decoder.3.0/conv/Conv_part1_W"
+      ],
+      "output": "/decoder.3.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/decoder.3.0/conv/Conv_sum",
+      "inputs": [
+        "/decoder.3.0/conv/Conv_part0",
+        "/decoder.3.0/conv/Conv_part1"
+      ],
+      "output": "/decoder.3.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.3.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.3.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.3.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.3.1/conv/Conv",
+      "inputs": [
+        "/decoder.3.0/activation/LeakyRelu_output_0",
+        "decoder.3.1.conv.weight",
+        "decoder.3.1.conv.bias"
+      ],
+      "output": "/decoder.3.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.3.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.3.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.3.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize_3",
+      "inputs": [
+        "/decoder.3.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_3_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_10_output_0",
+      "resizeLike": "/encoder.2.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.4.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_3_output_0",
+        "/decoder.4.0/conv/Conv_part0_W",
+        "decoder.4.0.conv.bias"
+      ],
+      "output": "/decoder.4.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.4.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.2.1/activation/LeakyRelu_output_0",
+        "/decoder.4.0/conv/Conv_part1_W"
+      ],
+      "output": "/decoder.4.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/decoder.4.0/conv/Conv_sum",
+      "inputs": [
+        "/decoder.4.0/conv/Conv_part0",
+        "/decoder.4.0/conv/Conv_part1"
+      ],
+      "output": "/decoder.4.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.4.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.4.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.4.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.4.1/conv/Conv",
+      "inputs": [
+        "/decoder.4.0/activation/LeakyRelu_output_0",
+        "decoder.4.1.conv.weight",
+        "decoder.4.1.conv.bias"
+      ],
+      "output": "/decoder.4.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.4.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.4.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.4.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize_4",
+      "inputs": [
+        "/decoder.4.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_4_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_13_output_0",
+      "resizeLike": "/encoder.1.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.5.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_4_output_0",
+        "/decoder.5.0/conv/Conv_part0_W",
+        "decoder.5.0.conv.bias"
+      ],
+      "output": "/decoder.5.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.5.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.1.1/activation/LeakyRelu_output_0",
+        "/decoder.5.0/conv/Conv_part1_W"
+      ],
+      "output": "/decoder.5.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/decoder.5.0/conv/Conv_sum",
+      "inputs": [
+        "/decoder.5.0/conv/Conv_part0",
+        "/decoder.5.0/conv/Conv_part1"
+      ],
+      "output": "/decoder.5.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.5.0/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.5.0/conv/Conv_output_0"
+      ],
+      "output": "/decoder.5.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/decoder.5.1/conv/Conv",
+      "inputs": [
+        "/decoder.5.0/activation/LeakyRelu_output_0",
+        "decoder.5.1.conv.weight",
+        "decoder.5.1.conv.bias"
+      ],
+      "output": "/decoder.5.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/decoder.5.1/activation/LeakyRelu",
+      "inputs": [
+        "/decoder.5.1/conv/Conv_output_0"
+      ],
+      "output": "/decoder.5.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Resize",
+      "name": "/Resize_5",
+      "inputs": [
+        "/decoder.5.1/activation/LeakyRelu_output_0"
+      ],
+      "output": "/Resize_5_output_0",
+      "attrs": {
+        "coordinate_transformation_mode": "asymmetric",
+        "cubic_coeff_a": -0.75,
+        "mode": "nearest",
+        "nearest_mode": "floor"
+      },
+      "attributeTypes": {
+        "coordinate_transformation_mode": 3,
+        "cubic_coeff_a": 1,
+        "mode": 3,
+        "nearest_mode": 3
+      },
+      "sizesInput": "/Concat_16_output_0",
+      "resizeLike": "/encoder.0.1/activation/LeakyRelu_output_0"
+    },
+    {
+      "op": "Conv",
+      "name": "/remaining.0/conv/Conv_part0",
+      "inputs": [
+        "/Resize_5_output_0",
+        "/remaining.0/conv/Conv_part0_W",
+        "remaining.0.conv.bias"
+      ],
+      "output": "/remaining.0/conv/Conv_part0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/remaining.0/conv/Conv_part1",
+      "inputs": [
+        "/encoder.0.1/activation/LeakyRelu_output_0",
+        "/remaining.0/conv/Conv_part1_W"
+      ],
+      "output": "/remaining.0/conv/Conv_part1",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "Add",
+      "name": "/remaining.0/conv/Conv_sum",
+      "inputs": [
+        "/remaining.0/conv/Conv_part0",
+        "/remaining.0/conv/Conv_part1"
+      ],
+      "output": "/remaining.0/conv/Conv_output_0",
+      "attrs": {},
+      "attributeTypes": {}
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/remaining.0/activation/LeakyRelu",
+      "inputs": [
+        "/remaining.0/conv/Conv_output_0"
+      ],
+      "output": "/remaining.0/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/remaining.1/conv/Conv",
+      "inputs": [
+        "/remaining.0/activation/LeakyRelu_output_0",
+        "remaining.1.conv.weight",
+        "remaining.1.conv.bias"
+      ],
+      "output": "/remaining.1/conv/Conv_output_0",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    },
+    {
+      "op": "LeakyRelu",
+      "name": "/remaining.1/activation/LeakyRelu",
+      "inputs": [
+        "/remaining.1/conv/Conv_output_0"
+      ],
+      "output": "/remaining.1/activation/LeakyRelu_output_0",
+      "attrs": {
+        "alpha": 0.20000000298023224
+      },
+      "attributeTypes": {
+        "alpha": 1
+      }
+    },
+    {
+      "op": "Conv",
+      "name": "/remaining.2/conv/Conv",
+      "inputs": [
+        "/remaining.1/activation/LeakyRelu_output_0",
+        "remaining.2.conv.weight",
+        "remaining.2.conv.bias"
+      ],
+      "output": "output",
+      "attrs": {
+        "dilations": [
+          1,
+          1,
+          1
+        ],
+        "group": 1,
+        "kernel_shape": [
+          3,
+          3,
+          3
+        ],
+        "pads": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "strides": [
+          1,
+          1,
+          1
+        ]
+      },
+      "attributeTypes": {
+        "dilations": 7,
+        "group": 2,
+        "kernel_shape": 7,
+        "pads": 7,
+        "strides": 7
+      }
+    }
+  ]
+}
