@@ -14,6 +14,7 @@ for (const app of ['synthsr', 'synthseg']) {
   for (const [failure, response] of [
     ['HTTP 404', () => new Response('Missing', { status: 404 })],
     ['HTML', () => new Response('<html>Unavailable</html>', { headers: { 'Content-Type': 'text/html' } })],
+    ['rejected fetch', () => { throw new TypeError('network unavailable'); }],
   ]) {
     test(`${app} actual worker preserves recovery guidance on ${failure}`, async () => {
       const worker = await inferenceWorker(app, {

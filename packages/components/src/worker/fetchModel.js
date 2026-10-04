@@ -2,6 +2,8 @@
  * Returns model bytes as an ArrayBuffer after integrity verification.
  * options.cache accepts null, a Cache Storage name, or a get/set adapter with optional delete.
  * Named cache opening is optional. Cache writes publish only verified bytes.
+ * options.requestFailureMessage replaces the error message after all request URLs fail,
+ * retaining the last error as cause. AbortError and errors reading or verifying bytes are unchanged.
  */
 export async function fetchModel(asset, options = {}) {
   const {
@@ -52,7 +54,13 @@ export async function fetchModel(asset, options = {}) {
       lastError = error;
     }
   }
-  if (!response) throw lastError || new Error(`Model download failed: ${normalized.url}`);
+  if (!response) {
+    const error = lastError || new Error(`Model download failed: ${normalized.url}`);
+    if (options.requestFailureMessage && error.name !== 'AbortError') {
+      throw new Error(options.requestFailureMessage, { cause: error });
+    }
+    throw error;
+  }
   const bytes = await readResponse(response, normalized.integrity, onProgress);
 
   await verifyModel(bytes, normalized.integrity);

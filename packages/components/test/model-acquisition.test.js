@@ -5,6 +5,45 @@ import { fetchModel } from '../src/worker/fetchModel.js';
 const bytes = new Uint8Array([1, 2, 3]);
 const hash = '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81';
 const asset = { url: 'https://example.org/model', integrity: { bytes: 3, sha256: hash } };
+const requestFailureMessage = 'Check the connection or choose a local model file.';
+
+test('request guidance retains the final failure after all URLs fail', async () => {
+  const failure = new TypeError('network unavailable');
+  const requested = [];
+  await assert.rejects(fetchModel({ ...asset, urls: ['/missing', '/offline'] }, {
+    requestFailureMessage,
+    fetch: async url => {
+      requested.push(url);
+      if (url === '/missing') return new Response(null, { status: 404 });
+      throw failure;
+    },
+  }), error => error.message === requestFailureMessage && error.cause === failure);
+  assert.deepEqual(requested, ['/missing', '/offline']);
+});
+
+test('request failure retains its identity without guidance and on abort', async () => {
+  for (const [failure, message] of [
+    [new TypeError('offline'), undefined],
+    [new DOMException('Cancelled', 'AbortError'), requestFailureMessage],
+  ]) {
+    await assert.rejects(fetchModel(asset, {
+      requestFailureMessage: message,
+      fetch: async () => { throw failure; },
+    }), error => error === failure);
+  }
+});
+
+for (const [label, response] of [
+  ['wrong size', new Uint8Array([1])],
+  ['wrong checksum', new Uint8Array([9, 9, 9])],
+]) {
+  test(`request guidance does not replace ${label} errors`, async () => {
+    await assert.rejects(fetchModel(asset, {
+      requestFailureMessage,
+      fetch: async () => new Response(response),
+    }), label === 'wrong size' ? /size mismatch/ : /SHA-256 mismatch/);
+  });
+}
 
 function namedCache(t, initial, faults = {}) {
   const previous = globalThis.caches;
@@ -54,10 +93,21 @@ test('corrupt named cache is deleted and replaced in the same call', async t => 
   assert.equal(calls.filter(([op]) => op === 'put').length, 1);
 });
 
+test('request guidance survives corrupt cache eviction and failed download', async t => {
+  const calls = namedCache(t, new Response(new Uint8Array([9, 9, 9])));
+  await assert.rejects(fetchModel(asset, {
+    requestFailureMessage,
+    cache: 'models',
+    fetch: async () => new Response(null, { status: 404 }),
+  }), error => error.message === requestFailureMessage && /404/.test(error.cause.message));
+  assert.equal(calls.filter(([op]) => op === 'delete').length, 1);
+  assert.equal(calls.some(([op]) => op === 'put'), false);
+});
+
 for (const fault of ['read', 'delete']) {
   test(`named cache ${fault} failure remains fatal`, async t => {
     const calls = namedCache(t, new Response(new Uint8Array([9])), { [fault]: Error(fault) });
-    await assert.rejects(fetchModel(asset, { cache: 'models', fetch: async () => { assert.fail('network must not run'); } }), new RegExp(fault));
+    await assert.rejects(fetchModel(asset, { requestFailureMessage, cache: 'models', fetch: async () => { assert.fail('network must not run'); } }), new RegExp(fault));
     assert.equal(calls.some(([op]) => op === 'put'), false);
   });
 }
@@ -93,7 +143,7 @@ test('content length is only a progress hint without a size pin', async () => {
 
 test('HTML response is cancelled without reading or publishing it', async () => {
   let cancelled = false;
-  await assert.rejects(fetchModel('/model', { fetch: async () => ({ ok: true, status: 200, headers: new Headers({ 'Content-Type': 'text/html' }), body: { async cancel() { cancelled = true; } } }) }), /download failed/);
+  await assert.rejects(fetchModel('/model', { requestFailureMessage, fetch: async () => ({ ok: true, status: 200, headers: new Headers({ 'Content-Type': 'text/html' }), body: { async cancel() { cancelled = true; throw Error('cancel failed'); } } }) }), error => error.message === requestFailureMessage && /download failed/.test(error.cause.message));
   assert.equal(cancelled, true);
 });
 
@@ -126,13 +176,14 @@ test('crypto infrastructure failure does not evict cached bytes', async t => {
   Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { subtle: { digest: async () => { throw Error('crypto unavailable'); } } } });
   t.after(() => { Object.defineProperty(globalThis, 'crypto', previous); });
   const calls = namedCache(t, new Response(bytes));
-  await assert.rejects(fetchModel(asset, { cache: 'models', fetch: async () => { assert.fail('network must not run'); } }), /crypto unavailable/);
+  await assert.rejects(fetchModel(asset, { requestFailureMessage, cache: 'models', fetch: async () => { assert.fail('network must not run'); } }), /crypto unavailable/);
   assert.equal(calls.some(([op]) => op === 'delete'), false);
 });
 
 test('adapter preserves keys, callbacks, fallback options and verified publication', async () => {
   const events = [];
   const result = await fetchModel({ ...asset, cacheKey: 'release/hash', urls: ['/failed', '/model'] }, {
+    requestFailureMessage,
     requestCache: 'no-store',
     cache: {
       async get(key) { events.push(['get', key]); return new Uint8Array([9]); },
@@ -152,7 +203,7 @@ test('adapter preserves keys, callbacks, fallback options and verified publicati
 
 test('reader failure is fatal, cancels and retains original error', async () => {
   let cancelled = false;
-  await assert.rejects(fetchModel('/model', { fetch: async () => ({ ok: true, body: { getReader: () => ({
+  await assert.rejects(fetchModel('/model', { requestFailureMessage, fetch: async () => ({ ok: true, body: { getReader: () => ({
     async read() { throw Error('reader failed'); },
     async cancel() { cancelled = true; throw Error('cancel failed'); },
     releaseLock() { throw Error('release failed'); },
