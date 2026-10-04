@@ -1,4 +1,3 @@
-// Drive the production TopoFit app and capture every file emitted by its worker.
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 

@@ -1,5 +1,3 @@
-"""Release limits shared by comparison and asset activation."""
-
 from math import isfinite
 
 

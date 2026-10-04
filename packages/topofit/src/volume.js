@@ -61,10 +61,9 @@ export function readVolume(buffer) {
 
 export function estimateConformMemoryBytes(dims, retainedBytes = 0) {
   const source = product(dims);
-  // RAS reorientation can put the largest dimensions on the last two axes.
-  const ordered = [...dims].sort((a, b) => a - b);
-  const afterX = 256 * ordered[1] * ordered[2];
-  const afterY = 256 * 256 * ordered[2];
+  const dimsAscending = [...dims].sort((a, b) => a - b);
+  const afterX = 256 * dimsAscending[1] * dimsAscending[2];
+  const afterY = 256 * 256 * dimsAscending[2];
   const target = 256 * 256 * 256;
   const simultaneousFloat64 = Math.max(
     2 * source + afterX,

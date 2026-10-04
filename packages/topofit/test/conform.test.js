@@ -73,7 +73,6 @@ test('conform matches nibabel orientation permutations and flips', () => {
 });
 
 test('conform preserves obliquity and world centre while cubic reproduces a linear field', () => {
-  // nibabel preserves the 10° rotation while rescaling the anisotropic columns.
   const [c, s] = [Math.cos(Math.PI / 18), Math.sin(Math.PI / 18)];
   const dims = [32, 32, 32];
   const affine = [
