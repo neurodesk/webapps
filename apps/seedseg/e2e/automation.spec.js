@@ -52,7 +52,7 @@ test('the consensus mask can be corrected in the viewer and downloads edited', a
   expect((await runEnsemble(page)).state).toBe('succeeded');
   const row = page.locator('#stage-item-consensus');
   const label = row.locator('.stage-btn');
-  const edit = row.getByRole('button', { name: 'Edit' });
+  const edit = row.getByRole('button', { name: 'Edit', exact: true });
   const editor = page.locator('nd-mask-editor');
   const original = await downloadRow(page, row);
 
@@ -88,4 +88,10 @@ test('the consensus mask can be corrected in the viewer and downloads edited', a
   const after = await readNifti(edited.bytes);
   expect(after.dims).toEqual([64, 64, 32]);
   expect(after.data.some((value, index) => value !== before.data[index])).toBe(true);
+
+  await edit.click();
+  await expect(editor).toBeVisible();
+  await page.locator('#clearResults').click();
+  await expect(editor).toBeHidden();
+  await expect(row).toHaveCount(0);
 });
