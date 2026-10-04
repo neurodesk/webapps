@@ -20,7 +20,10 @@ Open the URL printed by the development server. The setup command vendors ONNX R
 2. Assign each input its role. Anatomical segmentation accepts MRI or CT; Dixon inputs support fat metrics.
 3. Select an official model and run segmentation, or calculate metrics directly from an uploaded label map.
 4. Inspect the class-index display overlay and statistics.
-5. Download the NIfTI segmentation. Downloads use the model's official anatomical label values, not internal class indices.
+5. Optionally correct a segmentation with Edit, which paints its class-index labels in the viewer. Apply replaces the result; it is then labelled `(edited)`. Metrics already shown stay as computed; Calculate Metrics again reads the edited labels.
+6. Download the NIfTI segmentation. Downloads use the model's official anatomical label values, not internal class indices. An edited segmentation downloads as the uint8 class-index map that was edited, under the same file name.
+
+Edit is offered for a label map whose display copy shares its voxel grid. A display copy that was resampled for the viewer, and an uploaded map before its first metrics run, cannot be edited.
 
 Uploaded segmentation filenames containing `dseg`, `seg`, `label`, or `mask` are recognized as label maps. The selected model supplies the default label-space release, which remains explicit because partial masks cannot reliably distinguish releases. Label encoding defaults to automatic detection of official sparse values, browser class indices, or the reversible OpenRecon int12 mapping. Manual choices remain available for ambiguous files. Metrics and consolidation fail closed when attribution is missing, labels are unknown or meaningfully ambiguous, label spaces differ, or affine geometry differs. A successful metrics run makes a normalized NIfTI with official sparse labels available for download.
 
