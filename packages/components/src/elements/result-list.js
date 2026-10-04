@@ -7,6 +7,13 @@ export function defineResultList(view = globalThis.window) {
       super();
       this.stageLabels ??= {};
       this._rendered = false;
+      this._editingEnabled = true;
+    }
+
+    // Off while an edit session is open: one result is edited at a time.
+    setEditingEnabled(enabled) {
+      this._editingEnabled = enabled;
+      for (const button of this.querySelectorAll('.nd-edit-btn')) button.disabled = !enabled;
     }
 
     connectedCallback() {
@@ -32,7 +39,8 @@ export function defineResultList(view = globalThis.window) {
       for (const row of this.querySelectorAll(':scope > .nd-volume-toggle')) existing.set(row.dataset.stage, row);
       const rows = stageOrder.map((stage) => {
         const result = results[stage];
-        const label = this.stageLabels[stage] || result?.description || stage;
+        const name = this.stageLabels[stage] || result?.description || stage;
+        const label = result?.edited === true ? `${name} (edited)` : name;
         const signature = rowSignature(result, label);
         const kept = existing.get(stage);
         if (kept && kept._signature === signature) {
@@ -101,6 +109,15 @@ export function defineResultList(view = globalThis.window) {
           text: label,
           ownerDocument: doc,
         }),
+        result?.editable === true ? createElement('button', {
+          className: 'nd-edit-btn',
+          type: 'button',
+          title: 'Edit in the viewer',
+          text: 'Edit',
+          disabled: !this._editingEnabled,
+          ownerDocument: doc,
+          onclick: () => emit('nd-edit', { stage, result: row._result }),
+        }) : null,
         createElement('button', {
           className: 'nd-download-btn',
           type: 'button',
@@ -119,7 +136,7 @@ export function defineResultList(view = globalThis.window) {
 
 // What a row's markup depends on, besides the result it reports.
 function rowSignature(result, label) {
-  return JSON.stringify([label, typeof result?.visible === 'boolean', Boolean(result?.viewable), result?.viewable === false]);
+  return JSON.stringify([label, typeof result?.visible === 'boolean', Boolean(result?.viewable), result?.viewable === false, result?.editable === true, result?.edited === true]);
 }
 
 export function createResultList(options = {}, doc = globalThis.document) {
@@ -135,6 +152,9 @@ export function createResultList(options = {}, doc = globalThis.document) {
   }
   if (options.onDownload) {
     element.addEventListener('nd-download', ({ detail }) => options.onDownload(detail.stage, detail.result));
+  }
+  if (options.onEdit) {
+    element.addEventListener('nd-edit', ({ detail }) => options.onEdit(detail.stage, detail.result));
   }
   if (options.onVisibilityChange) {
     element.addEventListener('nd-visibility-change', ({ detail }) => {

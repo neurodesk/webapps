@@ -26,7 +26,7 @@ impl Runner for NativeRunner {
     }
 
     fn run(&self, request: RunRequest, sink: LineSink, cancel: CancellationToken) -> RunFuture {
-        let argv = request.command();
+        let argv = request.argv;
         Box::pin(async move {
             let Some((program, args)) = argv.split_first() else {
                 return Err(std::io::Error::other("empty argv"));

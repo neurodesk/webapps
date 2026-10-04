@@ -81,6 +81,12 @@ On the open example the port fails (at most one candidate in its band): the velo
 is dominated by CSF pulsation and phase noise in low-signal tissue, which the lab's speed images
 suppress. That is why signed data takes the velocity path.
 
+## Editing the labels
+
+Edit on the Carotid labels row opens the shared mask editor over the current background.
+Apply replaces the downloaded label map and redraws both carotids from it. The curves,
+metrics, CSV and automation results keep the detected vessels.
+
 ## Tests
 
 - `pnpm --filter carotid-flow test`: MATLAB `prctile` values, synthetic neck phantoms for both
@@ -89,4 +95,6 @@ suppress. That is why signed data takes the velocity path.
   against PCMCalculator; `CAROTID_FLOW_EXAMPLE=<the lab's unsigned export>` adds the check that
   the port selects the script's vessels (12 and 4 pixels). That export is not public.
 - `pnpm --filter carotid-flow test:e2e`: the hosted example through detection and both
-  downloads, settings validation, failed-download retry and cancellation.
+  downloads, settings validation, failed-download retry and cancellation, and, on the tilted
+  phantom without the network, editing the carotid labels in the viewer through to the edited
+  download.

@@ -72,7 +72,7 @@ impl ValidatedJob {
     pub fn stacks(&self) -> &[StackInput] {
         match &self.inputs {
             JobInputs::Nesvor { stacks } => stacks,
-            JobInputs::Sct { .. } => panic!("SCT inputs are not NeSVoR stacks"),
+            JobInputs::Sct { .. } => &[],
         }
     }
 }
@@ -173,13 +173,16 @@ pub trait Tool: Send + Sync {
     fn id(&self) -> &'static str;
     /// Tool version (`0.5.0`).
     fn version(&self) -> &'static str;
-    /// Pinned container image, or the configured NeSVoR image.
-    fn image<'a>(&self, configured: &'a str) -> &'a str {
-        configured
+    /// Container image that replaces the configured `--image`, for tools pinned
+    /// to their own scientific runtime.
+    fn pinned_image(&self) -> Option<&'static str> {
+        None
     }
-    /// Whether the tool uses a GPU by default.
-    fn uses_gpu(&self) -> bool {
-        true
+    /// Whether the tool runs on the GPU unless the server is started with `--cpu`.
+    fn uses_gpu(&self) -> bool;
+    /// Arguments appended to a GPU tool's command line when it runs on the CPU.
+    fn cpu_flags(&self) -> &'static [&'static str] {
+        &[]
     }
     /// Commands accepted in `spec.command`.
     fn commands(&self) -> &'static [&'static str];
@@ -201,4 +204,38 @@ pub fn registry() -> Vec<Arc<dyn Tool>> {
 /// Looks up a tool by id.
 pub fn find(tools: &[Arc<dyn Tool>], id: &str) -> Option<Arc<dyn Tool>> {
     tools.iter().find(|tool| tool.id() == id).cloned()
+}
+
+/// Splits a Python-logging line `YYYY-MM-DD HH:MM:SS [LEVEL] message` into
+/// the level and the message. Other lines are `info` with the whole line as
+/// message.
+pub fn split_python_log(line: &str) -> (LogLevel, &str) {
+    let trimmed = line.trim_end();
+    let mut fields = trimmed.splitn(4, ' ');
+    let date = fields.next().unwrap_or("");
+    let time = fields.next().unwrap_or("");
+    let level_field = fields.next().unwrap_or("");
+    let rest = fields.next().unwrap_or("");
+    let looks_like_date = date.len() == 10 && date.as_bytes().get(4) == Some(&b'-');
+    let looks_like_time = time.len() == 8 && time.as_bytes().get(2) == Some(&b':');
+    if looks_like_date
+        && looks_like_time
+        && level_field.starts_with('[')
+        && level_field.ends_with(']')
+    {
+        let level = match &level_field[1..level_field.len() - 1] {
+            "WARNING" | "WARN" => LogLevel::Warning,
+            "ERROR" | "CRITICAL" | "FATAL" => LogLevel::Error,
+            _ => LogLevel::Info,
+        };
+        return (level, rest);
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("traceback") || lower.contains("error") {
+        return (LogLevel::Error, trimmed);
+    }
+    if lower.contains("warning") {
+        return (LogLevel::Warning, trimmed);
+    }
+    (LogLevel::Info, trimmed)
 }

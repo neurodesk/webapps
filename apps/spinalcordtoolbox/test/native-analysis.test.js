@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
-import { SctAnalysis, parseMetricTable } from '../web/js/controllers/SctAnalysis.js';
+import { SctAnalysis, jobLabel, parseMetricTable } from '../web/js/controllers/SctAnalysis.js';
 import { SCT_IMAGE, SCT_VERSION, validateSctSpec, sctArgv } from '../web/js/app/analysis-spec.js';
 
 function deferred() {
@@ -125,6 +126,52 @@ test('replaced inputs discard late output and allow retry with the new selection
     assert.equal(analysis.capture().files.cord.name, 'new.nii');
 });
 
+test('clearing generated results keeps analysis of uploaded masks and cancels analysis of generated ones', async () => {
+    const watched = deferred();
+    const { analysis, calls } = await setup({ watch: () => watched.promise });
+    analysis.setGenerated({ cord: new File(['generated'], 'generated.nii') });
+    analysis.uploaded.cord = new File(['uploaded'], 'uploaded.nii');
+    const uploadedRun = analysis.run();
+    await turn();
+    analysis.setGenerated({});
+    assert.equal(analysis.busy, true);
+    assert.equal(calls.filter(call => call.cancel).length, 0);
+    watched.resolve({ id: 'job1', outputs: [] });
+    await uploadedRun;
+
+    const generated = new File(['generated'], 'generated.nii');
+    analysis.setGenerated({ cord: generated });
+    analysis.sources.cord.value = 'generated';
+    const pending = deferred();
+    analysis.connection.client.watch = () => pending.promise;
+    const generatedRun = analysis.run();
+    await turn();
+    analysis.setGenerated({ cord: generated });
+    assert.equal(calls.filter(call => call.cancel).length, 0);
+    analysis.setGenerated({});
+    assert.deepEqual(calls.filter(call => call.cancel), [{ cancel: 'job1' }]);
+    pending.resolve({ id: 'job1', outputs: [] });
+    await generatedRun;
+});
+
+test('a server-confirmed cancellation reports one cancelled status', async () => {
+    const watched = deferred();
+    const { analysis, messages } = await setup({ watch: () => watched.promise });
+    analysis.uploaded.cord = new File(['mask'], 'cord.nii');
+    const running = analysis.run();
+    await turn();
+    await analysis.cancel();
+    watched.resolve(Promise.reject(Object.assign(new Error('Job was cancelled'), { code: 'cancelled' })));
+    await running;
+    const ends = messages.filter(([method]) => method === 'end');
+    assert.deepEqual(ends, [['end', 'Analysis cancelled', { success: false }]]);
+});
+
+test('previous jobs are labelled by analysis name', () => {
+    assert.match(jobLabel({ command: 'process_segmentation', status: 'succeeded', createdAt: '2026-10-04T03:00:00Z' }), /^Cord morphometry · succeeded · (?!2026-10-04T)/);
+    assert.equal(jobLabel({ command: 'analyze_lesion', status: 'running', createdAt: 'unknown' }), 'Lesion analysis · running · unknown');
+});
+
 test('unsupported native runtime is rejected before upload and selected files remain retryable', async () => {
     const { analysis, calls, messages } = await setup({ info: async () => ({ service: 'neurodesk-compute', runner: 'native', tools: [{ id: 'sct', version: SCT_VERSION, image: SCT_IMAGE }] }) });
     analysis.uploaded.cord = new File(['mask'], 'cord.nii');
@@ -210,4 +257,14 @@ test('browser runner errors keep masks retryable and report the failure', async 
     assert.equal(analysis.uploaded.cord.name, 'cord.nii');
     assert.deepEqual(analysis.outputs, {});
     assert.ok(messages.some(([method, text]) => method === 'end' && text === 'Analysis failed: Runtime failed'));
+});
+
+test('the SCT image pin is identical everywhere it is declared', async () => {
+    const read = path => readFile(new URL(`../../../${path}`, import.meta.url), 'utf8');
+    assert.equal(JSON.parse(await read('registry/neurocontainers.json')).containers.spinalcordtoolbox.image, SCT_IMAGE);
+    assert.ok((await read('exes/compute-server/src/tools/sct.rs')).includes(`pub const IMAGE: &str = "${SCT_IMAGE}";`));
+    assert.ok((await read('exes/compute-server/src/tools/sct.rs')).includes(`pub const VERSION: &str = "${SCT_VERSION}";`));
+    for (const path of ['docs/architecture/remote-compute-protocol.md', 'exes/compute-server/README.md', 'apps/spinalcordtoolbox/README.md']) {
+        assert.ok((await read(path)).includes(SCT_IMAGE), path);
+    }
 });

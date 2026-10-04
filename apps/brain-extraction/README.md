@@ -3,6 +3,8 @@
 Choose a T1- or T2-weighted full-head scan from **Example**, or load one NIfTI
 image or DICOM series. Choose MindGrab, BET or SynthStrip, and
 select **Extract brain**. View and download the brain image and binary mask.
+**Edit** on the mask row corrects the mask in the viewer; Download then returns
+the edited mask. The brain image and run report stay as extracted.
 Processing stays in the browser. Cancel stops the worker and active downloads.
 Examples load into the viewer without starting extraction. Their pinned Hugging
 Face URLs are listed in `examples.json` and included in the offline asset catalog.
@@ -36,7 +38,7 @@ MindGrab adapter used by SYNcro. SynthStrip uses the existing
 `registry/app-information.yml`.
 
 The browser tests compare BET's mask byte for byte with QSMbly's Rust output,
-check DICOM import, cancellation and settings persistence, and verify NIfTI
-geometry. The optional model tests run MindGrab on the CPU and SynthStrip on
+check DICOM import, cancellation, settings persistence and mask editing, and
+verify NIfTI geometry. The optional model tests run MindGrab on the CPU and SynthStrip on
 the existing anatomical template fixture. They check pipeline behavior rather
 than clinical extraction accuracy across scan types.

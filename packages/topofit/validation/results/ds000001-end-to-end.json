@@ -25,66 +25,66 @@
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.046485783821369385,
-      "p95_corresponding_distance_mm": 0.09800510452290435,
-      "max_corresponding_distance_mm": 0.23823489726172845,
+      "mean_corresponding_distance_mm": 0.04648760967453618,
+      "p95_corresponding_distance_mm": 0.0980090017700383,
+      "max_corresponding_distance_mm": 0.2382457352296556,
       "browser_sha256": "edaa09a917052bc7d13df7e56ca849ccc0929fe789e98ab6f1bb3f83f8e66b1a",
-      "reference_sha256": "019b12b21a40c525f5b2574af5f31b55725d517b68e02cd811825974f4fc126b"
+      "reference_sha256": "09540225f87552514235cbeaba115ad508092c7dd89ddb1dd12e5ef140757038"
     },
     "rh.white": {
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.06045063498318672,
-      "p95_corresponding_distance_mm": 0.14487772156746148,
-      "max_corresponding_distance_mm": 0.36692496129499,
+      "mean_corresponding_distance_mm": 0.06046174673099072,
+      "p95_corresponding_distance_mm": 0.14492446655062832,
+      "max_corresponding_distance_mm": 0.36687008053150433,
       "browser_sha256": "a63cbd282ddc27fff7aadb2843c70228cba8161711c2afefa6d6b7c5080e6e53",
-      "reference_sha256": "4a0c230add9cece03f713a7f706251a88db176b00faea2fcac0602fa34cdd1cd"
+      "reference_sha256": "78e4c1815368828380e3a509ba3aa3a5cd0eb643e4a632e99da3cb6c4cca1089"
     },
     "lh.pial": {
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.052516863318139706,
-      "p95_corresponding_distance_mm": 0.11478134562339659,
-      "max_corresponding_distance_mm": 0.46656483120072484,
+      "mean_corresponding_distance_mm": 0.05251493094806795,
+      "p95_corresponding_distance_mm": 0.11477538995808516,
+      "max_corresponding_distance_mm": 0.46657130291089804,
       "browser_sha256": "91816561706d4d2fe9a29b4f4c2adaaed227dffdd936d9f9eeb2cf20b45e70ee",
-      "reference_sha256": "ea9d56cfa4274d0e21158bc5fb0b602e322ff92c2a0cffe8fccdb3b9bbd0fd96"
+      "reference_sha256": "d576df9e2d76e1bbc8c506f429c5e24d99ecea559f8c2e810f94b99eef0b8a45"
     },
     "rh.pial": {
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.06787810871728787,
-      "p95_corresponding_distance_mm": 0.16379158078528452,
-      "max_corresponding_distance_mm": 0.442122072739499,
+      "mean_corresponding_distance_mm": 0.06789035735978963,
+      "p95_corresponding_distance_mm": 0.16383973213617117,
+      "max_corresponding_distance_mm": 0.4424377131618973,
       "browser_sha256": "118b6d4d48ded7c6b5161d2bbd8de64d80daa5204f8bcb3f2cc98675ea5d9d6c",
-      "reference_sha256": "ddb4a4c2e9a15dc122928a9557b03b641d93a73594ae7065867b46ef686bd7cc"
+      "reference_sha256": "8ca474d9644cd2f6f424d30030929d5a67d3a58f8f174cd5f9e2219de8fc4ba3"
     },
     "lh.registration": {
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.049167371083383704,
-      "p95_corresponding_distance_mm": 0.10384356814147466,
-      "max_corresponding_distance_mm": 0.1709276742093099,
+      "mean_corresponding_distance_mm": 0.04917134924431304,
+      "p95_corresponding_distance_mm": 0.10383172552716902,
+      "max_corresponding_distance_mm": 0.17094490177725147,
       "browser_sha256": "c314d6df6983d26a98a5ad58963061532679004e98f4f960c5edefeb8dc53683",
-      "reference_sha256": "2ee500bb51fe710f0da82539a732fceb2bf439fd886e09bede2d77e32795d377",
-      "mean_angular_error_degrees": 0.028170828810597407,
-      "p95_angular_error_degrees": 0.059497985644391516,
+      "reference_sha256": "56e5bd990ae2d943f73708bbd51fcea6f3adec3054c853e2a735873711df9b87",
+      "mean_angular_error_degrees": 0.028173108133800546,
+      "p95_angular_error_degrees": 0.05949119617405966,
       "max_radius_error_mm": 1.761826281665435e-05
     },
     "rh.registration": {
       "vertices": 245762,
       "faces": 491520,
       "faces_identical": true,
-      "mean_corresponding_distance_mm": 0.06589012701879929,
-      "p95_corresponding_distance_mm": 0.1393662139974189,
-      "max_corresponding_distance_mm": 0.26951734759367335,
+      "mean_corresponding_distance_mm": 0.06590817270435718,
+      "p95_corresponding_distance_mm": 0.13939770496858944,
+      "max_corresponding_distance_mm": 0.2695850592073515,
       "browser_sha256": "2a45dbf37f60567e7639325523405678d23e3804c197cf4989971a62aab2c928",
-      "reference_sha256": "6642526992336467480a2f786de0c2306c8e5a1c3178842ddd9d3af670070533",
-      "mean_angular_error_degrees": 0.037752263151413654,
-      "p95_angular_error_degrees": 0.0798509665837498,
+      "reference_sha256": "4c083bde8dea047ed8cb0a12850db62b6caf267e73f99dc0de4123f6f2f5d77c",
+      "mean_angular_error_degrees": 0.037762602570560924,
+      "p95_angular_error_degrees": 0.07986900668559871,
       "max_radius_error_mm": 1.6422710359620396e-05
     }
   },
@@ -95,43 +95,51 @@
       192
     ],
     "max_affine_difference_mm": 0.0,
-    "white_dice": 0.9800137130693738,
-    "pial_dice": 0.976289316871984,
+    "white_dice": 0.9800203991826681,
+    "pial_dice": 0.9762927691259687,
     "white_within_one_voxel_symmetric_coverage": 1.0,
     "pial_within_one_voxel_symmetric_coverage": 0.9996424378988842,
-    "browser_sha256": "bab56760f974e9d059c7fc62c8aa66a6f5873beda1305f312f39537ec7b45d7f",
-    "reference_sha256": "c83de586141f6c260a5733d0345921db254abe12dfd8647280572853ba67c38b"
+    "browser_sha256": "0a7a1e0c8865e7e9ba40a10b21dd884d08ac64688462ec6f1e040b6944d8944c",
+    "reference_sha256": "1c887cc5e0dc69b441e426f7e64d56b5bf767c3c945020c377287a12c083fd12"
   },
   "provenance": {
-    "sha256": "2b8095d342709b41d5779ba0a121233e21345920e23103f9ab3ffbc9be6ca473",
+    "sha256": "3265cb87ace463a96106193c2655fb60293bb859947c170945a862a6e3b87d86",
     "inputSha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
     "inferenceSha256": "63cb6de32f0ef41ee536c4d98bd826c0be82b7a3999ab50a3600562d5a802381",
     "alignmentInputSha256": "dfe7f91f20904694784aece9f38c6a6e548806154ebb414ac0f00e01fdcb478e",
     "modelInputSha256": "01c640f9a27e12c8b0dacf3ca8c2d988e238403f7089a8de466db9c05c559ac3",
     "runtime": {
-      "app": "TopoFit web 0.3.20260912",
+      "app": "TopoFit web 0.12.20261004",
       "release": "topofit-0.5.1-onnx-20260911",
       "inference": "ONNX Runtime Web WASM",
       "onnxruntime": "1.29.0",
       "threads": 1,
-      "graphOptimizationLevel": "all"
+      "graphOptimizationLevel": "all",
+      "conformer": "@neurodesk/topofit cubic B-spline (order 3), 1 mm RAS"
     },
     "assetSetSha256": "80274962e92442a88f7e8c8ebddc98a01bd618e5c95070b881d12d38094db9f7",
     "outputSha256": {
       "lh.white": "edaa09a917052bc7d13df7e56ca849ccc0929fe789e98ab6f1bb3f83f8e66b1a",
+      "lh.mid.white": "56584519a16c03c90c3c5ba13020e6d8e95be2a1936b26b5d0cdc9fe9c57c920",
       "lh.pial": "91816561706d4d2fe9a29b4f4c2adaaed227dffdd936d9f9eeb2cf20b45e70ee",
       "lh.registration": "c314d6df6983d26a98a5ad58963061532679004e98f4f960c5edefeb8dc53683",
       "rh.white": "a63cbd282ddc27fff7aadb2843c70228cba8161711c2afefa6d6b7c5080e6e53",
+      "rh.mid.white": "92bdeb061834015a18a75e2d5a492af00983d49dffe2008f2f536eccf367296e",
       "rh.pial": "118b6d4d48ded7c6b5161d2bbd8de64d80daa5204f8bcb3f2cc98675ea5d9d6c",
       "rh.registration": "2a45dbf37f60567e7639325523405678d23e3804c197cf4989971a62aab2c928",
-      "topofit_qc.nii": "bab56760f974e9d059c7fc62c8aa66a6f5873beda1305f312f39537ec7b45d7f"
+      "topofit_qc.nii": "0a7a1e0c8865e7e9ba40a10b21dd884d08ac64688462ec6f1e040b6944d8944c"
     }
   },
   "repeatability": [
     {
-      "run": "browser-parity-v03-run2",
+      "run": "browser",
       "byteIdentical": true,
-      "outputSetSha256": "565fe734f49869309a6fbe5397134c205c512395fe924727d99dbfe330a48146"
+      "outputSetSha256": "6e204c93feaba4dbd201a3a71904ac5b636208c49d0e6fd4cfc42e1a0a1cc91f"
+    },
+    {
+      "run": "browser-repeat",
+      "byteIdentical": true,
+      "outputSetSha256": "6e204c93feaba4dbd201a3a71904ac5b636208c49d0e6fd4cfc42e1a0a1cc91f"
     }
   ]
 }

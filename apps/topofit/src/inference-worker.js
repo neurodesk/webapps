@@ -3,7 +3,6 @@ import { Tensor, browserRuntime, createBrowserSession } from '@neurodesk/topofit
 import manifest from '@neurodesk/topofit/manifest';
 import cortexAtlas from '@neurodesk/topofit/cortex-atlas-manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
-import { Niimath } from '@niivue/niimath';
 
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
 const cachePromise = openModelCache();
@@ -43,24 +42,12 @@ async function asset(name, from, to, baseUrl) {
   );
 }
 
-async function conform(file) {
-  const niimath = new Niimath();
-  try {
-    await niimath.init();
-    const output = await niimath.image(file).gz(0).conform().ras().run('topofit-conformed.nii');
-    return output.arrayBuffer();
-  } finally {
-    niimath.dispose();
-  }
-}
-
 self.onmessage = async ({ data: job }) => {
   try {
     const result = await runTopofit({
       buffer: await job.file.arrayBuffer(),
       model: job.model,
       conform: job.conform,
-      conformInput: () => conform(job.file),
       overlayThickness: job.overlayThickness,
       estimateNormals: job.estimateNormals,
       patches: job.patches,
@@ -77,7 +64,6 @@ self.onmessage = async ({ data: job }) => {
       runtime: {
         app: 'TopoFit web 0.12.20261004',
         release: manifest.release,
-        conformer: '@niivue/niimath -conform -ras',
         assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),
         ...(job.patches ? { cortexAtlasSha256: cortexAtlas.sha256 } : {}),
         ...browserRuntime(),

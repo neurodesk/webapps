@@ -175,7 +175,7 @@ async fn info(State(state): State<AppState>, request: Request) -> Result<Json<Va
             json!({
                 "id": tool.id(),
                 "version": tool.version(),
-                "image": tool.image(&state.config.image),
+                "image": tool.pinned_image().unwrap_or(&state.config.image),
                 "gpuRequired": tool.uses_gpu(),
                 "commands": tool.commands(),
             })

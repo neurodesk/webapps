@@ -10,14 +10,21 @@
 
 ### Minor Changes
 
-- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks without an anatomy image, preserve native output files, and recover or cancel jobs. Keep automatic browser metrics explicitly approximate. Support selected tools and explicit HTTPS reverse-proxy addresses in shared compute connections.
+- Add native SCT cord morphometry and independent lesion analysis through the paired Neurodesk compute server. Analyze uploaded or compatible generated masks, including manually edited ones, without an anatomy image, preserve native output files, and recover or cancel jobs. Keep automatic browser metrics explicitly approximate. Support selected tools and explicit HTTPS reverse-proxy addresses in shared compute connections.
 
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.9.1
+  - @neurodesk/webapp-components@0.10.1
 
 ## 0.5.20261004
+
+### Patch Changes
+
+- a928230: Correct segmentation and label results by hand before downloading them. Every mask and label-map row in Results (cord, lesion, TotalSpineSeg labels and disc markers) now has an Edit button that opens the shared mask editor under the viewer toolbar, with the input image as the base. Apply replaces the result with the edited uint8 NIfTI under the same file name and labels the row `(edited)`; Download then returns the edit. Cancel, a new run, Clear results, a new input or hiding the edited overlay discard unapplied strokes. Lesion statistics and automation reports keep the values the pipeline computed.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
 
 ### Patch Changes
 

@@ -41,12 +41,40 @@ pub struct RunRequest {
     pub job_id: String,
     /// Absolute job directory with `in/` and `out/`.
     pub job_dir: PathBuf,
-    /// Tool command line built from the validated spec.
+    /// Complete tool command line, including the tool's CPU flags when a GPU
+    /// tool runs on the CPU.
     pub argv: Vec<String>,
     /// The validated job.
     pub job: ValidatedJob,
-    /// Run without a GPU.
-    pub cpu: bool,
+    /// Pass the host GPU to the tool.
+    pub gpu: bool,
+    /// The tool's pinned image, which replaces the configured one.
+    pub image: Option<&'static str>,
+}
+
+impl RunRequest {
+    /// Resolves a tool's command line, GPU use and image for one job.
+    pub fn new(
+        tool: &dyn Tool,
+        job_id: String,
+        job_dir: PathBuf,
+        job: ValidatedJob,
+        paths: &ToolPaths,
+        cpu: bool,
+    ) -> Self {
+        let mut argv = tool.argv(&job, paths);
+        if cpu && tool.uses_gpu() {
+            argv.extend(tool.cpu_flags().iter().map(|flag| flag.to_string()));
+        }
+        Self {
+            job_id,
+            job_dir,
+            argv,
+            job,
+            gpu: tool.uses_gpu() && !cpu,
+            image: tool.pinned_image(),
+        }
+    }
 }
 
 /// Executes tool command lines.
@@ -73,35 +101,6 @@ pub fn build(config: &ServeConfig) -> Arc<dyn Runner> {
         RunnerKind::Native => Arc::new(native::NativeRunner),
         RunnerKind::Simulate => Arc::new(simulate::SimulateRunner),
     }
-}
-
-impl RunRequest {
-    pub fn image<'a>(&self, configured: &'a str) -> &'a str {
-        match &self.job.inputs {
-            crate::tools::JobInputs::Sct { .. } => crate::tools::sct::Sct.image(configured),
-            crate::tools::JobInputs::Nesvor { .. } => configured,
-        }
-    }
-
-    pub fn uses_gpu(&self) -> bool {
-        !self.cpu && matches!(self.job.inputs, crate::tools::JobInputs::Nesvor { .. })
-    }
-
-    pub fn command(&self) -> Vec<String> {
-        with_device_flag(
-            self.argv.clone(),
-            self.cpu && matches!(self.job.inputs, crate::tools::JobInputs::Nesvor { .. }),
-        )
-    }
-}
-
-/// Appends `--device -1` when the job must run on the CPU.
-pub fn with_device_flag(mut argv: Vec<String>, cpu: bool) -> Vec<String> {
-    if cpu {
-        argv.push("--device".to_string());
-        argv.push("-1".to_string());
-    }
-    argv
 }
 
 /// Formats a command line for a log line, quoting arguments with spaces.

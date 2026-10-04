@@ -5,10 +5,7 @@ const DEFAULT_SHAPE = [256, 256, 256];
 
 export function conformVolume(volume, options = {}) {
   const shape = options.shape || DEFAULT_SHAPE;
-  // Axis-aligned scans are permuted to RAS first so the resampling is separable (three 1-D
-  // passes); oblique scans keep their grid and go through the full 3-D mapping instead.
-  const canonical = reorientToRas(volume)
-    ?? { data: Float64Array.from(volume.data), dims: [...volume.dims], affine: volume.affine };
+  const canonical = reorientToRas(volume);
   const affine = conformedAffine(canonical.affine, canonical.dims, shape);
   const mapping = multiply(inverseAffine(canonical.affine), affine);
 
@@ -37,22 +34,19 @@ export function conformVolume(volume, options = {}) {
   };
 }
 
-function reorientToRas(volume, tolerance = 1e-5) {
+function reorientToRas(volume) {
   const inputForOutput = new Array(3);
   const signs = new Array(3);
-  const usedWorldAxes = new Set();
+  const rotation = polarRotation(volume.affine);
+  // nibabel 5.3.2 assigns axes in input order, removing each chosen world axis.
   for (let inputAxis = 0; inputAxis < 3; inputAxis += 1) {
-    const column = volume.affine.slice(0, 3).map((row) => row[inputAxis]);
-    const spacing = Math.hypot(...column);
-    if (!Number.isFinite(spacing) || spacing <= 0) throw new Error('Browser conforming requires a valid spatial affine.');
     let worldAxis = 0;
     for (let row = 1; row < 3; row += 1) {
-      if (Math.abs(column[row]) > Math.abs(column[worldAxis])) worldAxis = row;
+      if (Math.abs(rotation[row][inputAxis]) > Math.abs(rotation[worldAxis][inputAxis])) worldAxis = row;
     }
-    if (usedWorldAxes.has(worldAxis) || Math.abs(Math.abs(column[worldAxis]) / spacing - 1) > tolerance) return null;
-    usedWorldAxes.add(worldAxis);
     inputForOutput[worldAxis] = inputAxis;
-    signs[worldAxis] = Math.sign(column[worldAxis]);
+    signs[worldAxis] = Math.sign(rotation[worldAxis][inputAxis]);
+    rotation[worldAxis].fill(0);
   }
 
   const dims = inputForOutput.map((inputAxis) => volume.dims[inputAxis]);
@@ -91,6 +85,24 @@ function reorientToRas(volume, tolerance = 1e-5) {
   return { data, dims, affine };
 }
 
+// Newton's polar iteration yields the same orthogonal factor as nibabel's SVD
+// for an invertible spatial affine, without removing shear from the output grid.
+function polarRotation(affine) {
+  const spacing = [0, 1, 2].map((axis) => Math.hypot(...affine.slice(0, 3).map((row) => row[axis])));
+  if (spacing.some((value) => !Number.isFinite(value) || value <= 0)) {
+    throw new Error('Browser conforming requires a valid spatial affine.');
+  }
+  let rotation = affine.slice(0, 3).map((row) => row.slice(0, 3).map((value, axis) => value / spacing[axis]));
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    const inverse = inverseAffine([...rotation.map((row) => [...row, 0]), [0, 0, 0, 1]]);
+    const next = rotation.map((row, r) => row.map((value, c) => (value + inverse[c][r]) / 2));
+    const change = Math.max(...next.flatMap((row, r) => row.map((value, c) => Math.abs(value - rotation[r][c]))));
+    rotation = next;
+    if (change < 1e-14) return rotation;
+  }
+  throw new Error('Browser conforming could not determine the spatial orientation.');
+}
+
 function conformedAffine(affine, sourceShape, targetShape) {
   const output = [
     [0, 0, 0, 0],
@@ -103,7 +115,10 @@ function conformedAffine(affine, sourceShape, targetShape) {
   const worldCenter = affine.slice(0, 3).map((row) =>
     row[3] + row[0] * sourceCenter[0] + row[1] * sourceCenter[1] + row[2] * sourceCenter[2]
   );
-  for (let axis = 0; axis < 3; axis += 1) output[axis][axis] = 1;
+  for (let axis = 0; axis < 3; axis += 1) {
+    const spacing = Math.hypot(...affine.slice(0, 3).map((row) => row[axis]));
+    for (let row = 0; row < 3; row += 1) output[row][axis] = cleanZero(affine[row][axis] / spacing);
+  }
   for (let row = 0; row < 3; row += 1) {
     output[row][3] = cleanZero(
       worldCenter[row] - output[row][0] * targetCenter[0]

@@ -5,11 +5,12 @@
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.9.1
-
-
-### Patch Changes
-
+  - @neurodesk/webapp-components@0.10.1
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
 - Updated dependencies
   - @neurodesk/webapp-components@0.9.0
 

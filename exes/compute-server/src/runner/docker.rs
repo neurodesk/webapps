@@ -32,7 +32,7 @@ pub fn docker_args(image: &str, request: &RunRequest) -> Vec<String> {
         "--name".to_string(),
         container_name(&request.job_id),
     ];
-    if request.uses_gpu() {
+    if request.gpu {
         args.push("--gpus".to_string());
         args.push("all".to_string());
     }
@@ -42,8 +42,12 @@ pub fn docker_args(image: &str, request: &RunRequest) -> Vec<String> {
     }
     args.push("-v".to_string());
     args.push(format!("{}:/job", request.job_dir.display()));
-    args.push(request.image(image).to_string());
-    args.extend(request.command());
+    match request.image {
+        // A pinned scientific runtime is never pulled implicitly mid-job.
+        Some(pinned) => args.extend(["--pull=never".to_string(), pinned.to_string()]),
+        None => args.push(image.to_string()),
+    }
+    args.extend(request.argv.iter().cloned());
     args
 }
 
@@ -101,7 +105,8 @@ mod tests {
                 options: serde_json::Map::new(),
                 warnings: Vec::new(),
             },
-            cpu: false,
+            gpu: true,
+            image: None,
         };
         let args = docker_args("img", &request);
         let joined = args.join(" ");
@@ -111,11 +116,19 @@ mod tests {
         assert!(joined.ends_with("-v /data/jobs/abc:/job img nesvor reconstruct"));
 
         let cpu_request = RunRequest {
-            cpu: true,
+            gpu: false,
+            ..request.clone()
+        };
+        assert!(!docker_args("img", &cpu_request)
+            .join(" ")
+            .contains("--gpus"));
+
+        let pinned = RunRequest {
+            image: Some("pinned@sha256:abc"),
             ..request
         };
-        let cpu_args = docker_args("img", &cpu_request).join(" ");
-        assert!(!cpu_args.contains("--gpus"));
-        assert!(cpu_args.ends_with("nesvor reconstruct --device -1"));
+        assert!(docker_args("img", &pinned)
+            .join(" ")
+            .ends_with("--pull=never pinned@sha256:abc nesvor reconstruct"));
     }
 }

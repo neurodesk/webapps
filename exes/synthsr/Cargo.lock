@@ -387,6 +387,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neurodesk-nifti"
+version = "0.1.0"
+
+[[package]]
 name = "num-complex"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -734,10 +738,11 @@ dependencies = [
 
 [[package]]
 name = "synthsr"
-version = "0.5.20261004"
+version = "0.6.20261004"
 dependencies = [
  "flate2",
  "metal",
+ "neurodesk-nifti",
  "ort",
  "serde_json",
  "sha2",

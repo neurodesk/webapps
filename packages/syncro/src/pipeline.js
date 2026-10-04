@@ -106,6 +106,22 @@ function background(volume, ct) {
   return ct ? volume.data.reduce((result, item) => Math.min(result, item), 0) : 0;
 }
 
+function validateRegisteredBrain(bytes, template) {
+  const brain = readVolume(asBuffer(bytes));
+  if (!sameGeometry(brain, template)) throw new Error('Normalization failed: registered brain does not match the MNI template grid.');
+  let templateSupport = 0;
+  let overlap = 0;
+  for (let index = 0; index < template.data.length; index += 1) {
+    if (template.data[index] <= 0) continue;
+    templateSupport += 1;
+    if (brain.data[index] > 0) overlap += 1;
+  }
+  if (templateSupport === 0) throw new Error('Invalid MNI template: no positive brain voxels.');
+  if (overlap / templateSupport < 0.01) {
+    throw new Error(`Normalization failed: registered brain covers too little of the MNI template (${overlap}/${templateSupport} positive voxels, ${(100 * overlap / templateSupport).toFixed(2)}%; minimum 1%). Check that the scan contains the brain and has the correct orientation, and inspect the registration.`);
+  }
+}
+
 function defaultImageMath() {
   return {
     async smoothLesion({ buffer }) {
@@ -209,6 +225,7 @@ export async function runSyncro({
     compressed,
   }));
   try {
+    validateRegisteredBrain(registrationResult.warped, fixed);
     outputs[names.syntheticBrain] = registrationResult.warped;
     const apply = async (moving, options = {}) => registration.apply({
       registration: registrationResult,
