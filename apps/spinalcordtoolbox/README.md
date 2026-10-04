@@ -25,6 +25,7 @@ bash run.sh
 - **Manifest-driven model provenance** with supported, unvalidated, unsupported, and retired task states
 - **DICOM and NIfTI** input support
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
+- **Manual correction**: edit any mask or label result in the viewer (draw, erase, fill) before downloading it
 - **Configurable**: overlap, probability threshold, component size filtering
 - **Smart auto-contrast**: percentile-based windowing for better default display
 - **Privacy**: patient image data stays confidential and browser-local; non-patient usage statistics may be collected as telemetry
