@@ -1500,7 +1500,7 @@ export class SpinalCordToolboxApp {
     this.updateOutput(`Applied manual edits to ${Config.STAGE_NAMES[stage] || stage}`);
     this.endMaskEdit();
     this.rebuildResultsList();
-    await this.renderViewerVolumes();
+    await this._renderViewerVolumesNow();
   }
 
   endMaskEdit() {
@@ -1768,12 +1768,12 @@ export class SpinalCordToolboxApp {
     if (this.viewerController.isCurrentVolumeStack?.(stackEntries)) {
       return false;
     }
-    await this.cancelMaskEdit();
     await this.viewerController.loadVolumeStack(stackEntries);
     return true;
   }
 
   async renderViewerVolumes() {
+    await this.cancelMaskEdit();
     if (this.isCompareMode()) return this.renderComparisonView();
     if (!this.isViewerAvailable()) return this.renderFallbackPreview();
     this._renderViewerRequested = true;

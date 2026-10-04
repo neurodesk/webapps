@@ -811,7 +811,7 @@ class SeedSegApp {
     if (showBtn) showBtn.textContent = stageLabel(SeedSegApp.STAGE_NAMES[stage] || stage, this.inferenceExecutor.getResult(stage));
     this.updateOutput(`Applied manual edits to ${file.name}`);
     this.onMaskEditClosed();
-    await this.showResult(stage);
+    await this.renderResult(stage);
   }
 
   onMaskEditClosed() {
@@ -846,6 +846,10 @@ class SeedSegApp {
 
   async showResult(stage) {
     await this.maskEditor.cancel();
+    return this.renderResult(stage);
+  }
+
+  async renderResult(stage) {
     this.currentResultTab = stage;
 
     // Update active state on stage buttons

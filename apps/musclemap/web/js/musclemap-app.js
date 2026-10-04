@@ -1464,9 +1464,13 @@ class MuscleMapApp {
   }
 
   async showSegmentationSource(id) {
+    await this.maskEditor.cancel();
+    return this.renderSegmentationSource(id);
+  }
+
+  async renderSegmentationSource(id) {
     const source = this.getSegmentationSourceById(id);
     if (!source) return;
-    await this.maskEditor.cancel();
     if (source.type === 'uploaded' && !source.displayFile) {
       this.updateOutput('Calculate metrics once to validate and decode this uploaded segmentation before previewing it.');
       return;
@@ -1567,7 +1571,7 @@ class MuscleMapApp {
     }
     this.updateOutput(`Applied manual edits to ${source.label}.`);
     this.endSegmentationEdit();
-    await this.showSegmentationSource(id);
+    await this.renderSegmentationSource(id);
   }
 
   maskEditorOptions(labels = null) {

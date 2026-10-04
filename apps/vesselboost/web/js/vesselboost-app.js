@@ -1494,6 +1494,10 @@ class VesselBoostApp {
 
   async renderVisibleResults() {
     await this.maskEditor.cancel();
+    return this.renderResultStack();
+  }
+
+  async renderResultStack() {
     const stages = this.inferenceExecutor.getStageOrder();
     const results = this.inferenceExecutor.getResults();
     const stack = buildResultVolumeStack({
@@ -1667,7 +1671,7 @@ class VesselBoostApp {
     this.inferenceExecutor.replaceWithEdit(stage, file, original);
     this.updateOutput(`Applied manual edits to ${file.name}`);
     this.progress.setText('Ready');
-    await this.renderVisibleResults();
+    await this.renderResultStack();
     this.rebuildResultsList();
     this.refreshViewerLayerControls();
   }
