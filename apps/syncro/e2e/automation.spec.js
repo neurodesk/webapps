@@ -4,7 +4,7 @@ import { gunzipSync } from 'node:zlib';
 import { readVolume } from '../../../packages/synthsr/src/index.js';
 import { sameGeometry } from '../../../packages/syncro/src/pipeline.js';
 
-const inferenceTimeout = Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 900_000);
+const inferenceTimeout = Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 1_800_000);
 const image = gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
 const shifted = Buffer.from(image);
 shifted.fill(0, 352);

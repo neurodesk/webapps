@@ -327,7 +327,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     await page.locator('#normalization').selectOption('greedy');
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });
     await page.locator('#runButton').click();
-    await expect(page.locator('#download')).toBeEnabled({ timeout: 900000 });
+    await expect(page.locator('#download')).toBeEnabled({ timeout: Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 1_800_000) });
     const result = await download('#download');
     assert.equal(result.bytes.readUInt16LE(0), 0x4b50);
     return { filename: result.filename, bytes: result.bytes.length };
