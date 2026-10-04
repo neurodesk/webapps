@@ -1,10 +1,21 @@
 # @neurodesk/desktop
 
+## 0.22.20261004
+
+### Patch Changes
+
+- Verify SYNcro with its packaged pinned T1 and explicit WASM SynthSR, SynthStrip, and Greedy backends.
+
 ## 0.21.20261004
 
 ### Minor Changes
 
 - Generate NeuroFlow 0.1.1 qualifiers and scalar single-file bindings against the merged upstream schema. Resolve verified app coordinate references, reject invalid qualifier inheritance, and validate NIfTI encoding before legacy and schema-version-2 runs.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
 
 ## 0.20.20261003
 

@@ -6,6 +6,7 @@
  */
 
 import * as ort from '../wasm/ort.webgpu.bundle.min.mjs';
+import { roundtripTemporaryChunk } from './upstream-chunk.js';
 import { createWorkerEmitter, fetchModel as fetchModelAsset, getOptimalWasmThreads, installWorkerRouter } from '../vendor/webapp-components/src/worker/index.js';
 import { createNiftiFromData, parseNiftiVolume } from '../vendor/webapp-components/src/file-io/NiftiUtils.js';
 import {
@@ -399,8 +400,10 @@ function prepareSourceChunk(data, dims, affine, targetSpacing, cropMargin) {
     ? MuscleMapMonaiCompat.resampleVolume(oriented.data, oriented.dims, oriented.affine, targetSpacing)
     : { data: oriented.data, dims: oriented.dims, affine: oriented.affine, spacing: sourceSpacing };
   const normalized = zScoreNormalize(spaced.data, { nonzeroOnly: true });
-  const cropped = cropForeground(normalized, spaced.dims, cropMargin);
-  if (!cropped.data.length) throw new Error('No foreground voxels found in source chunk');
+  const positiveForeground = Uint8Array.from(normalized, value => value > 0 ? 1 : 0);
+  const bbox = computeForegroundBBox(positiveForeground, spaced.dims, cropMargin);
+  if (!bbox) throw new Error('No foreground voxels found in source chunk');
+  const cropped = cropVolume(normalized, spaced.dims, bbox);
   return {
     data: cropped.data,
     dims: cropped.dims,
@@ -1555,7 +1558,7 @@ async function runInference(config) {
 
   postLog('Parsing input volume...');
   postProgress(0.02, 'Reading NIfTI...');
-  const { imageData, dims, voxelSize, headerBytes, affine } = parseNiftiInput(inputData);
+  const { imageData, dims, voxelSize, headerBytes, affine, header } = parseNiftiInput(inputData);
   const [nx, ny, nz] = dims;
   postLog(`Volume: ${nx}x${ny}x${nz}, spacing: ${voxelSize.map(v => v.toFixed(2)).join('x')}mm`);
 
@@ -1599,6 +1602,9 @@ async function runInference(config) {
       for (let chunkIndex = 0, start = 0; start < nz; chunkIndex++, start += sourceChunkSize) {
         const end = Math.min(start + sourceChunkSize, nz);
         const sourceChunk = extractSourceChunk(imageData, dims, start, end);
+        if (sourceChunkSize < nz) {
+          sourceChunk.data = roundtripTemporaryChunk(sourceChunk.data, header.datatype);
+        }
         postProgress(0.25 + 0.60 * (chunkIndex / sourceChunkCount), `Preprocessing source slices ${start + 1}-${end}/${nz}`);
         const prepared = prepareSourceChunk(
           sourceChunk.data,

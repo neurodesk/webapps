@@ -998,7 +998,11 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
 
-  packages/synthstrip: {}
+  packages/synthstrip:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
 
   packages/topofit:
     dependencies:

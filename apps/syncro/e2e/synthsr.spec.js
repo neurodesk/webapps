@@ -5,16 +5,18 @@ import {readVolume} from '@neurodesk/synthsr';
 import {planGpuGraph} from '@neurodesk/synthsr/browser';
 
 test('full-volume CPU activation allocations fit Chromium limits', async ({page}) => {
- const source = await readFile(new URL('../../../packages/synthsr/src/activation-storage.js', import.meta.url), 'utf8');
+ const source = await readFile(new URL('../../../packages/runtime-support/src/streamed-onnx/activation.js', import.meta.url), 'utf8');
  const sizes = planGpuGraph([192, 288, 288]).slots.map(slot => slot.bytes);
  const result = await page.evaluate(async ({source, sizes}) => {
   const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
   try {
-   const {createActivationStorage} = await import(url);
-   const slots = sizes.map(bytes => createActivationStorage(bytes / 4));
+   const {WasmActivation} = await import(url);
+   const slots = sizes.map(bytes => new WasmActivation(bytes / 4));
    return slots.map(storage => {
     storage.set(new Float32Array([17, 31]), storage.length - 2);
-    return {bytes: storage.length * 4, tail: Array.from(storage.slice(storage.length - 2, storage.length))};
+    const tail = new Float32Array(2);
+    storage.copyTo(tail, storage.length - 2, storage.length);
+    return {bytes: storage.length * 4, tail: Array.from(tail)};
    });
   } finally {
    URL.revokeObjectURL(url);

@@ -95,3 +95,6 @@ apps/*/web/examples.json
 /apps/nesvor/public/svort/
 
 /apps/nesvor/public/n4/
+
+# Scratch session emitted by native validation tools.
+/:memory:.ses

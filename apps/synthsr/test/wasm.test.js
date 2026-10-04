@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {planGpuGraph} from '@neurodesk/synthsr/browser';
-import {needsStreamedWasm,slabPlan,createStreamedWasmSession} from '../../../packages/synthsr/src/wasm-session.js';
+import {slabPlan} from '../../../packages/runtime-support/src/streamed-onnx/session.js';
+import {needsStreamedWasm,createStreamedWasmSession} from '../../../packages/synthsr/src/wasm-session.js';
 
 test('larger CT volumes use bounded-memory CPU execution; FLAIR keeps the fast full session',()=>{
   assert.equal(needsStreamedWasm([192,224,256]),true);
@@ -39,7 +40,13 @@ test('streamed full network preserves native predictions across forced slab boun
     ...options,executionProviders:['cpu'],intraOpNumThreads:2,
   })}};
   const dims=[32,32,32],tensor=new ort.Tensor('float32',Float32Array.from({length:32768},(_,i)=>(i*17%101)/100),[1,1,...dims]);
-  const streamed=await createStreamedWasmSession(raw,dims,adapter,{maxElements:32768});
+  let failLayer = false;
+  const streamed=await createStreamedWasmSession(raw,dims,adapter,{
+    maxElements:32768,
+    onProgress(layer) {
+      if (failLayer && layer === 4) throw new Error('Injected layer failure');
+    },
+  });
   const reference=await adapter.InferenceSession.create(raw,{graphOptimizationLevel:'all'});
   let a,b;
   try {
@@ -48,5 +55,46 @@ test('streamed full network preserves native predictions across forced slab boun
     assert.equal(x.length,y.length);
     let max=0;for(let i=0;i<x.length;i++){assert.ok(Number.isFinite(x[i]));max=Math.max(max,Math.abs(x[i]-y[i]));}
     assert.ok(max<1e-5,`maximum float32 difference ${max}`);
+    failLayer = true;
+    await assert.rejects(streamed.run({input:tensor}), /Injected layer failure/);
+    failLayer = false;
+    const rerun = await streamed.run({input:tensor});
+    try {
+      assert.deepEqual(await rerun.output.getData(), x);
+    } finally {
+      rerun.output.dispose();
+    }
   }finally{tensor.dispose();a?.output.dispose();b?.output.dispose();await streamed.release();await reference.release();}
+});
+
+test('constructing the pinned T1 session never reserves volume-sized GPU slots', {
+  skip: !process.env.SYNTHSR_MODEL_PATH && 'Set SYNTHSR_MODEL_PATH for allocation regression',
+}, async () => {
+  const raw = await readFile(process.env.SYNTHSR_MODEL_PATH);
+  const NativeFloat32Array = globalThis.Float32Array;
+  const allocations = [];
+  let created = 0;
+  let released = 0;
+  const ort = { InferenceSession: { create: async () => {
+    created++;
+    return { release: async () => { released++; } };
+  } } };
+  globalThis.Float32Array = new Proxy(NativeFloat32Array, {
+    construct(target, args) {
+      allocations.push(args[0]);
+      if (args[0] === 764411904) {
+        throw new Error(`Unexpected activation allocation during construction: ${args[0]}`);
+      }
+      return new target(0);
+    },
+  });
+  let session;
+  try {
+    session = await createStreamedWasmSession(raw, [192, 288, 288], ort);
+    assert.deepEqual(allocations, []);
+  } finally {
+    globalThis.Float32Array = NativeFloat32Array;
+    await session?.release();
+    assert.equal(released, created);
+  }
 });
