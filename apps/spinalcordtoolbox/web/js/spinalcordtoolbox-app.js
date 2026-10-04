@@ -207,6 +207,13 @@ export class SpinalCordToolboxApp {
     }
   }
 
+  // The wheel scrolls slices by default. Zoom mode switches NiiVue to its pan
+  // drag mode, where the wheel zooms 2D views and right-drag pans them.
+  setZoomMode(enabled) {
+    const modes = niivue.DRAG_MODE;
+    this.viewerController.setDragMode(enabled ? modes.pan : modes.contrast);
+  }
+
   setViewerControlsEnabled(enabled) {
     document.querySelectorAll('.viewer-toolbar button, .viewer-toolbar input, .viewer-toolbar select').forEach(control => {
       control.disabled = !enabled;
@@ -366,6 +373,22 @@ export class SpinalCordToolboxApp {
       crosshairToggle.addEventListener('change', (e) => {
         if (!this.isViewerAvailable()) return;
         this.nv.setCrosshairWidth(e.target.checked ? 1 : 0);
+      });
+    }
+
+    const zoomToggle = document.getElementById('zoomToggle');
+    if (zoomToggle) {
+      zoomToggle.addEventListener('change', (e) => {
+        if (!this.isViewerAvailable()) return;
+        this.setZoomMode(e.target.checked);
+      });
+    }
+
+    const resetZoomButton = document.getElementById('resetZoomButton');
+    if (resetZoomButton) {
+      resetZoomButton.addEventListener('click', () => {
+        if (!this.isViewerAvailable()) return;
+        this.viewerController.resetPanZoom();
       });
     }
 
@@ -1130,6 +1153,13 @@ export class SpinalCordToolboxApp {
     const crosshairToggle = document.getElementById('crosshairToggle');
     if (crosshairToggle) crosshairToggle.checked = true;
     if (this.isViewerAvailable()) this.nv.setCrosshairWidth(Config.VIEWER_CONFIG.crosshairWidth ?? 1);
+
+    const zoomToggle = document.getElementById('zoomToggle');
+    if (zoomToggle) zoomToggle.checked = false;
+    if (this.isViewerAvailable()) {
+      this.setZoomMode(false);
+      this.viewerController.resetPanZoom();
+    }
 
     const downloadBtn = document.getElementById('downloadCurrentVolume');
     if (downloadBtn) downloadBtn.disabled = true;

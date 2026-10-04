@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream, realpathSync } from 'node:fs';
 import { appendFile, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,8 +105,14 @@ export async function runSession({ env = process.env, signal, connect = openDesk
       if (!isReport) result[binding.artifacts[artifact.role]].push(path);
     }
     for (const [role, field] of Object.entries(operation.artifacts)) {
-      const count = result[binding.artifacts[role]].length;
+      const name = binding.artifacts[role];
+      const count = result[name].length;
       if (count < field.minimum || count > (field.maximum ?? Infinity)) throw new Error(`Artifact cardinality mismatch: ${role}`);
+      // A single-file role is a scalar NeuroFlow output; an absent optional one is omitted.
+      if (field.maximum === 1) {
+        if (count) result[name] = result[name][0];
+        else delete result[name];
+      }
     }
     result.report = join(artifactsDir, 'report.json');
     await writeFile(result.report, `${JSON.stringify(report, null, 2)}\n`);
@@ -140,7 +146,8 @@ function resourceBytes(resource, uri) {
   throw new Error('Desktop resource has no content');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Node resolves the module URL through symlinks (macOS puts TMPDIR under /var); compare real paths.
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const controller = new AbortController();
   const cancel = () => controller.abort(new DOMException('NeuroFlow cancelled the tool', 'AbortError'));
   process.once('SIGINT', cancel);

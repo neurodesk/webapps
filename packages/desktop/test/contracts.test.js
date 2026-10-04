@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { readContract, parseContract, validateRequest, generateJob, contractJsonSchema } from '../src/contracts.js';
+import { createAutomationService } from '../src/automation.js';
 
 const synthseg = await readContract(new URL('./fixtures/contracts/synthseg-v1.json', import.meta.url));
 const extraction = await readContract(new URL('./fixtures/contracts/brain-extraction-v1.json', import.meta.url));
@@ -12,7 +14,7 @@ async function input(t) {
   const directory = await mkdtemp(join(tmpdir(), 'automation-contract-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, 'head.nii');
-  await writeFile(path, 'fixture');
+  await writeFile(path, gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url))));
   return { inputs: { image: [path] } };
 }
 
@@ -42,6 +44,32 @@ test('input validation rejects missing files, relative paths, unknown inputs and
   await assert.rejects(validateRequest(extraction, { ...value, parameters: { threshold: 1.5 } }));
   await assert.rejects(validateRequest(extraction, { ...value, parameters: { backend: 'metal' } }));
   await assert.rejects(validateRequest(extraction, { ...value, timeoutMs: 0 }));
+});
+
+test('legacy contracts accept compressed NIfTI and reject disguised bytes before execution', async t => {
+  const value = await input(t);
+  const directory = dirname(value.inputs.image[0]);
+  const compressed = join(directory, 'head.nii.gz');
+  await writeFile(compressed, await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
+  let executions = 0;
+  const service = createAutomationService({
+    contracts: [synthseg, extraction].map(contract => ({ contract, sha256: 'test' })),
+    outputRoot: join(directory, 'runs'),
+    execute: async () => { executions++; },
+  });
+  t.after(() => service.close());
+  for (const contract of [synthseg, extraction]) {
+    await service.validate(contract.app, { inputs: { image: [compressed] } });
+  }
+  for (const path of [value.inputs.image[0], compressed]) {
+    await writeFile(path, 'not a NIfTI image despite the extension');
+    for (const contract of [synthseg, extraction]) {
+      const request = { inputs: { image: [path] } };
+      await assert.rejects(service.validate(contract.app, request), /encoding.*NIfTI/);
+      await assert.rejects(service.start(contract.app, request), /encoding.*NIfTI/);
+    }
+  }
+  assert.equal(executions, 0);
 });
 
 test('omitted CT retains app detection and an explicit value applies after input readiness', async t => {

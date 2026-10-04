@@ -62,6 +62,8 @@ const UI_COVERAGE = Object.freeze([
   { id: 'interpolation', behavior: 'toggles viewer interpolation', coveredBy: ['static-dom'] },
   { id: 'colorbarToggle', behavior: 'toggles viewer colorbar', coveredBy: ['static-dom'] },
   { id: 'crosshairToggle', behavior: 'toggles viewer crosshair', coveredBy: ['static-dom'] },
+  { id: 'zoomToggle', behavior: 'switches the mouse wheel between slice scrolling and 2D zoom', coveredBy: ['viewer', 'static-dom'] },
+  { id: 'resetZoomButton', behavior: 'resets 2D zoom and pan', coveredBy: ['viewer', 'static-dom'] },
   { id: 'colormapSelect', behavior: 'changes base volume colormap', coveredBy: ['static-dom'] },
   { id: 'rangeMin', behavior: 'updates lower display window', coveredBy: ['static-dom'] },
   { id: 'rangeMax', behavior: 'updates upper display window', coveredBy: ['static-dom'] },

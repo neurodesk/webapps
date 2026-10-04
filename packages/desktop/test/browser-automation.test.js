@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { runBrowserOperation } from '../src/browser-automation.js';
 import { completeBrowserArtifacts } from '../src/artifact-completion.js';
 import { generateJob, operationFor, parseContract, validateRequest } from '../src/contracts.js';
@@ -27,9 +28,10 @@ async function fixture(t, { tamperInput = false, tamperOutput = false, failure }
   const root = await mkdtemp(join(tmpdir(), 'desktop-browser-operation-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const inputs = {};
+  const image = gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
   for (const role of ['moving', 'fixed']) {
     const file = join(root, `${role}.nii`);
-    await writeFile(file, role);
+    await writeFile(file, image);
     inputs[role] = [file];
   }
   const request = await validateRequest(contract, { inputs });
