@@ -81,8 +81,8 @@ impl Tool for Sct {
     fn version(&self) -> &'static str {
         VERSION
     }
-    fn image<'a>(&self, _configured: &'a str) -> &'a str {
-        IMAGE
+    fn pinned_image(&self) -> Option<&'static str> {
+        Some(IMAGE)
     }
     fn uses_gpu(&self) -> bool {
         false
@@ -127,7 +127,7 @@ impl Tool for Sct {
                 return Err(SpecError::new(format!("{role} is not a NIfTI-1 file")));
             }
             let header = super::nifti::Header::parse(&part.header).map_err(SpecError::new)?;
-            if header.voxel_count() > super::nesvor::MAX_VOXELS {
+            if header.voxel_count() > super::nifti::MAX_VOXELS {
                 return Err(SpecError::new("mask exceeds voxel limit"));
             }
             used.push(role.to_string());
@@ -214,7 +214,7 @@ impl Tool for Sct {
     }
 
     fn parse_log_line(&self, _job: &ValidatedJob, line: &str) -> LogUpdate {
-        let (level, _) = super::nesvor::split_python_log(line);
+        let (level, _) = super::split_python_log(line);
         LogUpdate {
             level,
             progress: None,
@@ -348,13 +348,14 @@ mod tests {
                 &[part("cord", true)],
             )
             .unwrap();
-        let request = crate::runner::RunRequest {
-            job_id: "sct-test".into(),
-            job_dir: PathBuf::from("/job-test"),
-            argv: Sct.argv(&job, &ToolPaths::container()),
+        let request = crate::runner::RunRequest::new(
+            &Sct,
+            "sct-test".into(),
+            PathBuf::from("/job-test"),
             job,
-            cpu: true,
-        };
+            &ToolPaths::container(),
+            true,
+        );
         let args = crate::runner::docker::docker_args("custom-nesvor-image", &request);
         assert!(args.contains(&IMAGE.to_string()));
         for invalid in ["--gpus", "--device", "custom-nesvor-image"] {

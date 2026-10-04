@@ -263,7 +263,8 @@ This image reports SCT `7.3` through `sct_version`, despite its `7.3.3` tag.
 The authenticated tool entry advertises its version, image and commands. Container
 selection and GPU requirements belong to each tool; NeSVoR keeps its existing
 image override and CPU option. SCT never receives NeSVoR's `--device` flag. SCT is advertised and accepted only
-with Docker or the explicit simulator. Native and Apptainer runners do not
+with Docker or the explicit simulator. Docker runs the pinned image with
+`--pull=never`; the operator pulls it before the first job. Native and Apptainer runners do not
 guarantee the pinned dependency stack and do not advertise SCT.
 
 Morphometry accepts a cord segmentation without an anatomy image:

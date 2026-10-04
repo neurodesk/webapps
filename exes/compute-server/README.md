@@ -154,7 +154,8 @@ With `--runner docker`, the server also advertises the CPU-only `sct` tool.
 It runs `sct_process_segmentation` and `sct_analyze_lesion` in
 `vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83`.
 This image reports SCT 7.3. Pull that exact image on the compute host before
-analysis. `neurodesk-compute pull` and `--image` retain their NeSVoR meaning;
+analysis. The server starts it with `--pull=never`, so a missing image fails
+the job with Docker's "No such image" error instead of downloading it mid-job. `neurodesk-compute pull` and `--image` retain their NeSVoR meaning;
 an image override never replaces SCT's pinned runtime. SCT needs no CUDA/GPU.
 
 The SCT webapp sends role-named NIfTI masks only when the user runs analysis.

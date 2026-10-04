@@ -19,13 +19,13 @@ pub struct ApptainerRunner {
 /// Builds the `apptainer` arguments for a request.
 pub fn apptainer_args(image: &Path, request: &RunRequest) -> Vec<String> {
     let mut args = vec!["exec".to_string(), "--containall".to_string()];
-    if request.uses_gpu() {
+    if request.gpu {
         args.push("--nv".to_string());
     }
     args.push("-B".to_string());
     args.push(format!("{}:/job", request.job_dir.display()));
     args.push(image.display().to_string());
-    args.extend(request.command());
+    args.extend(request.argv.iter().cloned());
     args
 }
 

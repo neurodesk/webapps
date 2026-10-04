@@ -3,17 +3,14 @@
 
 use serde_json::{Map, Value};
 
-use super::nifti;
+use super::nifti::{self, MAX_VOXELS};
 use super::{
-    LogLevel, LogUpdate, OutputSpec, ReceivedPart, SpecError, StackInput, Tool, ToolPaths,
+    split_python_log, LogUpdate, OutputSpec, ReceivedPart, SpecError, StackInput, Tool, ToolPaths,
     ValidatedJob,
 };
 
 /// Maximum number of stacks per job.
 pub const MAX_STACKS: usize = 20;
-
-/// Maximum voxels per input file (a 512³ volume).
-pub const MAX_VOXELS: u64 = 512 * 512 * 512;
 
 /// Default `--n-iter` of NeSVoR, used for progress when the spec omits it.
 pub const DEFAULT_ITERATIONS: u64 = 6000;
@@ -151,6 +148,14 @@ impl Tool for Nesvor {
 
     fn version(&self) -> &'static str {
         "0.5.0"
+    }
+
+    fn uses_gpu(&self) -> bool {
+        true
+    }
+
+    fn cpu_flags(&self) -> &'static [&'static str] {
+        &["--device", "-1"]
     }
 
     fn commands(&self) -> &'static [&'static str] {
@@ -457,40 +462,6 @@ pub fn format_number(value: f64) -> String {
     }
 }
 
-/// Splits a Python-logging line `YYYY-MM-DD HH:MM:SS [LEVEL] message` into
-/// the level and the message. Other lines are `info` with the whole line as
-/// message.
-pub fn split_python_log(line: &str) -> (LogLevel, &str) {
-    let trimmed = line.trim_end();
-    let mut fields = trimmed.splitn(4, ' ');
-    let date = fields.next().unwrap_or("");
-    let time = fields.next().unwrap_or("");
-    let level_field = fields.next().unwrap_or("");
-    let rest = fields.next().unwrap_or("");
-    let looks_like_date = date.len() == 10 && date.as_bytes().get(4) == Some(&b'-');
-    let looks_like_time = time.len() == 8 && time.as_bytes().get(2) == Some(&b':');
-    if looks_like_date
-        && looks_like_time
-        && level_field.starts_with('[')
-        && level_field.ends_with(']')
-    {
-        let level = match &level_field[1..level_field.len() - 1] {
-            "WARNING" | "WARN" => LogLevel::Warning,
-            "ERROR" | "CRITICAL" | "FATAL" => LogLevel::Error,
-            _ => LogLevel::Info,
-        };
-        return (level, rest);
-    }
-    let lower = trimmed.to_ascii_lowercase();
-    if lower.contains("traceback") || lower.contains("error") {
-        return (LogLevel::Error, trimmed);
-    }
-    if lower.contains("warning") {
-        return (LogLevel::Warning, trimmed);
-    }
-    (LogLevel::Info, trimmed)
-}
-
 /// Returns the iteration column of a training table row: the first column is
 /// `H:MM:SS` and the third an integer.
 pub fn training_row_iteration(message: &str) -> Option<u64> {
@@ -521,6 +492,7 @@ fn is_clock(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tools::LogLevel;
     use serde_json::json;
     use std::path::PathBuf;
 
@@ -873,5 +845,34 @@ mod tests {
         assert_eq!(format_number(0.1), "0.1");
         assert_eq!(format_number(1.0), "1.0");
         assert_eq!(format_number(2.5), "2.5");
+    }
+
+    #[test]
+    fn cpu_runs_append_the_device_flag_instead_of_passing_the_gpu() {
+        let job = Nesvor.validate(&example_spec(), &example_parts()).unwrap();
+        let paths = ToolPaths::container();
+        let gpu = crate::runner::RunRequest::new(
+            &Nesvor,
+            "a".into(),
+            PathBuf::from("/j"),
+            job.clone(),
+            &paths,
+            false,
+        );
+        assert!(gpu.gpu);
+        assert_eq!(gpu.image, None);
+        assert!(!gpu.argv.contains(&"--device".to_string()));
+        let cpu = crate::runner::RunRequest::new(
+            &Nesvor,
+            "a".into(),
+            PathBuf::from("/j"),
+            job,
+            &paths,
+            true,
+        );
+        assert!(!cpu.gpu);
+        assert!(cpu
+            .argv
+            .ends_with(&["--device".to_string(), "-1".to_string()]));
     }
 }
