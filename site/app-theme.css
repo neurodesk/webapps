@@ -765,6 +765,20 @@
   margin-top: 8px;
 }
 
+/* Icon-only actions keep their label for assistive technology. */
+.nd-app-bar--compact .nd-app-bar__action {
+  position: relative !important;
+}
+
+.nd-app-bar--compact .nd-app-bar__action > span {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+}
+
 @media (max-width: 1120px) {
   .nd-app-bar {
     gap: 12px !important;
