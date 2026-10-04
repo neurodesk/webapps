@@ -48,7 +48,6 @@ export const STAGE_NAMES = {
   'input': 'Input',
   'segmentation': 'SCT Segmentation',
   'lesion': 'SCI Lesion',
-  'vertebrae': 'Vertebral Labels',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',
   'lesion_metrics': 'Lesion Metrics'

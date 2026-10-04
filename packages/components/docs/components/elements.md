@@ -27,7 +27,7 @@ and `/ui`; individual `/elements/<name>` entries support selective imports.
 
 | Element | Factory | Inputs and commands | Events |
 | --- | --- | --- | --- |
-| `nd-console` | `createConsole` | `collapsed`, `label`, `max-lines` attributes; `log`, `clear`, `getText`, `open`, `close` methods | Native disclosure interaction |
+| `nd-console` | `createConsole` | `collapsed`, `label`, `max-lines`, `resizable`, `channels` attributes; `log(message, level, channel)`, `clear(channel)`, `getText(channel)`, `selectChannel`, `channel`, `open`, `close` methods | Native disclosure interaction; `nd-console-resize` (`detail.height`) and `nd-console-channel` (`detail.channel`) |
 | `nd-file-field` | `createFileField` | `text`, `label`, `kind`, `disabled`, `directory`, `input-id` attributes; `input`, `text` properties; `onFiles`, `setText`, `setHasFiles` methods | `nd-files`: `{ files: Promise<File[]> }` |
 | `nd-result-list` | `createResultList` | `stageLabels` property; `render(results, stageOrder)` method | `nd-view`, `nd-download`: `{ stage, result }`; `nd-visibility-change`: `{ stage, result, visible, input }` |
 | `nd-viewer-toolbar` | `createViewerToolbar` | `options` property before initialization; `setActive`, `control` methods | `nd-view-change`, `nd-overlay-change`, `nd-colormap-change`: `{ value }`; `nd-window-change`: `{ control, value }`; `nd-window-reset`, `nd-download`, `nd-screenshot` |

@@ -149,6 +149,40 @@ test.describe('FreeBrowse viewer', () => {
     await poll(() => page.evaluate(() => app.nv?.volumes.map(volume => volume.name)), { timeout: 120000 }).toEqual(['early.nii']);
   });
 
+  test('the viewer fills the space the log leaves and gives it back; the zoom hint stays visible', async ({ page }) => {
+    await openApp(page);
+    await loadInput(page);
+    const heights = () => page.evaluate(() => {
+      const height = selector => document.querySelector(selector).getBoundingClientRect().height;
+      return {
+        wrapper: height('.viewer-canvas-wrapper'),
+        embed: height('#freebrowseViewer'),
+        canvasBottom: document.getElementById('freebrowseViewer').shadowRoot.querySelector('canvas').getBoundingClientRect().bottom,
+        wrapperBottom: document.querySelector('.viewer-canvas-wrapper').getBoundingClientRect().bottom,
+        backing: document.getElementById('freebrowseViewer').shadowRoot.querySelector('canvas').height,
+      };
+    });
+    const collapsed = await heights();
+    expect(collapsed.embed).toBeCloseTo(collapsed.wrapper, 0);
+    expect(collapsed.canvasBottom).toBeCloseTo(collapsed.wrapperBottom, 0);
+    await expect(page.locator('#viewerInfoPrimary')).toBeVisible();
+    await expect(page.locator('#viewerInfoPrimary')).toContainText('zoom');
+
+    await page.locator('#spinalcordtoolbox-log [data-disclosure-toggle]').click();
+    await poll(async () => (await heights()).wrapper).toBeLessThan(collapsed.wrapper);
+    const open = await heights();
+    expect(open.wrapper).toBeGreaterThanOrEqual(159);
+    expect(open.embed).toBeCloseTo(open.wrapper, 0);
+    expect(open.canvasBottom).toBeCloseTo(open.wrapperBottom, 0);
+    await poll(async () => (await heights()).backing).toBeLessThan(collapsed.backing);
+    await expect(page.locator('#viewerInfoPrimary')).toBeVisible();
+
+    await page.locator('#spinalcordtoolbox-log [data-disclosure-toggle]').click();
+    await poll(async () => (await heights()).wrapper).toBeCloseTo(collapsed.wrapper, 0);
+    await poll(async () => (await heights()).backing).toBe(collapsed.backing);
+    expect((await heights()).embed).toBeCloseTo(collapsed.wrapper, 0);
+  });
+
   test('a result is a labelled overlay that the Results eye and FreeBrowse both control', async ({ page }) => {
     await openApp(page);
     await loadInput(page);

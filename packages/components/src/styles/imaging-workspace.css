@@ -15,7 +15,8 @@
      Messages   .nd-message.(error|warning|success|info), .nd-info-icon
      Viewer     .nd-viewer-toolbar, .nd-view-tabs/.nd-view-tab, .nd-viewer-actions,
                 .nd-viewer-canvas-wrapper, .nd-viewer-empty, .nd-viewer-info
-     Console    .nd-console-container / -header / -title / -actions / -clear / -output
+     Console    .nd-console-container / -header / -title / -actions / -clear / -output,
+                .nd-console-resizer, .nd-console-tabs / -tab, .nd-console-panels
      Status     .nd-imaging-status > .nd-status-label / .nd-status-text / progress
      Dialogs    dialog.nd-dialog > .nd-dialog-header + .nd-dialog-body, .nd-command
 
@@ -558,6 +559,8 @@ nd-imaging-brand {
 .nd-console-header { display: flex; align-items: center; justify-content: space-between; gap: var(--nd-space-sm); min-height: 28px; padding: var(--nd-space-xs) var(--nd-space-md); border-bottom: 1px solid var(--nd-color-border); flex-shrink: 0; }
 .nd-console-container.collapsed > .nd-console-header { border-bottom: 0; }
 .nd-console-title { margin: 0; padding: 0; color: var(--nd-color-text-muted); background: none; border: 0; font: inherit; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+/* Outranks the generic [data-disclosure-toggle] reset, which base.css applies again when an app also loads inference-workspace.css. */
+.nd-console-header > .nd-console-title { color: var(--nd-color-text-muted); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .nd-console-actions { display: flex; gap: var(--nd-space-sm); margin-left: auto; }
 .nd-console-clear { padding: 0 var(--nd-space-xs); color: var(--nd-color-text-dim); background: none; border: 0; font: inherit; font-size: 0.7rem; cursor: pointer; transition: color var(--nd-transition-fast); }
 .nd-console-clear:hover { color: var(--nd-color-text-muted); }
@@ -568,6 +571,26 @@ nd-imaging-brand {
 .nd-console-success .nd-console-message { color: var(--nd-color-success); }
 .nd-console-error .nd-console-message { color: var(--nd-color-error); }
 .nd-console-warning .nd-console-message { color: var(--nd-color-warning); }
+
+/* Resizable log (bindConsoleResize / createConsole({ resizable })): the user's height is kept in
+   --nd-console-height, so it survives collapse; the viewer above keeps the rest of the column. */
+:is(.console-container, .nd-console-container)[data-console-resizable] { position: relative; height: var(--nd-console-height, 120px); min-height: 120px; max-height: max(120px, calc(100% - 200px)); }
+:is(.console-container, .nd-console-container)[data-console-resizable].collapsed { height: auto; min-height: 0; }
+.nd-console-resizer { position: absolute; top: -4px; left: 0; right: 0; z-index: 2; height: 8px; cursor: ns-resize; touch-action: none; }
+.nd-console-resizer::after { content: ''; position: absolute; top: 3px; left: 50%; width: 32px; height: 2px; border-radius: 1px; background: var(--nd-color-border-light); transform: translateX(-50%); transition: background var(--nd-transition-fast); }
+.nd-console-resizer:is(:hover, .dragging)::after { background: var(--nd-color-primary); }
+.nd-console-resizer:focus-visible { outline: none; }
+.nd-console-resizer:focus-visible::after { width: 64px; background: var(--nd-color-primary); }
+.collapsed > .nd-console-resizer { display: none; }
+
+/* Several logs in one console (createConsole({ channels })): tabs beside the title, one panel each. */
+.nd-console-tabs { display: flex; align-items: center; gap: 2px; margin-right: auto; }
+.nd-console-header:has(> .nd-console-tabs) > .nd-console-title { flex: 0 0 auto; }
+.nd-console-tab { padding: 0 var(--nd-space-sm); color: var(--nd-color-text-dim); background: none; border: 0; border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.7rem; cursor: pointer; transition: color var(--nd-transition-fast), background var(--nd-transition-fast); }
+.nd-console-tab:hover { color: var(--nd-color-text-muted); }
+.nd-console-tab[aria-selected="true"] { color: var(--nd-color-primary); background: var(--nd-color-primary-glow); }
+.nd-console-tab:focus-visible { outline: 2px solid var(--nd-color-primary); outline-offset: 1px; }
+.nd-console-panels { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* --------------------------------------------------------------------------
    8. Status bar (QSMbly sidebar status: label, value, cancel, 4px bar)
@@ -658,7 +681,11 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   .nd-viewer-toolbar :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
   .nd-viewer-toolbar select { font-size: 16px; }
   .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }
-  .nd-console-title, .nd-console-clear { min-height: 44px; }
+  .nd-console-title, .nd-console-clear, .nd-console-tab { min-height: 44px; }
+  .nd-console-header :is(.nd-console-title, .nd-console-clear, .nd-console-tab) { min-width: 44px; }
+  /* The 44px grab area extends up over the info bar so it never covers the header buttons. */
+  .nd-console-resizer { top: -36px; height: 44px; }
+  .nd-console-resizer::after { top: 35px; }
   .nd-dialog-body .nd-btn, .nd-command .nd-btn { min-height: 44px; }
   .nd-imaging-status .nd-btn-cancel { width: 44px; height: 44px; }
 }

@@ -25,7 +25,6 @@ const {
   createQcReportHtml,
   getSctExampleDataManifest,
   getBrowserModelInstallPlan,
-  labelVertebraeFromSegmentation,
   registerByCenterOfMass,
   applyTranslation,
   warpTemplate,
@@ -251,17 +250,6 @@ function assertNearlyEqual(actual, expected, tolerance = 1e-6) {
     tasks: [{ id: 'spinalcord', displayName: 'Spinal cord', supportStatus: 'unvalidated', modelAssets: [{ id: 'asset', conversionStatus: 'failed' }] }]
   }, 'spinalcord');
   assert.deepEqual(plan.assets, [{ id: 'asset', filename: null, conversionStatus: 'failed', cacheKey: 'spinalcord:asset:unknown' }]);
-}
-
-{
-  const dims = [3, 3, 4];
-  const seg = new Uint8Array(dims[0] * dims[1] * dims[2]);
-  for (let z = 0; z < 4; z++) seg[index3D(1, 1, z, dims)] = 1;
-  const labeled = labelVertebraeFromSegmentation(seg, dims, { startLevel: 2, slicesPerLevel: 2 });
-  assert.equal(labeled[index3D(1, 1, 0, dims)], 2);
-  assert.equal(labeled[index3D(1, 1, 1, dims)], 2);
-  assert.equal(labeled[index3D(1, 1, 2, dims)], 3);
-  assert.equal(labeled[index3D(1, 1, 3, dims)], 3);
 }
 
 {

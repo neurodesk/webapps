@@ -124,29 +124,6 @@
         </div>
       </section>
 
-      <!-- SCT Processing Utilities -->
-      <section class="sidebar-section step-section step-disabled collapsed" id="stepProcessingSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
-          <span>SCT Processing</span>
-          <span class="step-badge" id="stepProcessingBadge"></span>
-        </button></h2>
-        <div class="section-content" data-disclosure-panel>
-          <div class="param-group">
-            <label class="param-label" for="processingOperationSelect">Operation</label>
-            <select id="processingOperationSelect">
-              <option value="vertebrae">Vertebral labeling</option>
-            </select>
-          </div>
-          <div class="step-buttons">
-            <button class="btn btn-secondary btn-sm" id="runProcessingBtn" disabled>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run
-            </button>
-          </div>
-        </div>
-      </section>
-
       <!-- Results Section -->
       <section class="sidebar-section hidden" id="resultsSection" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
@@ -200,15 +177,9 @@
       <span class="viewer-info-label" id="viewerInfoLabel"></span>
     </div>
 
-    <!-- Console -->
-    <div data-disclosure class="collapsed console-container" id="spinalcordtoolbox-log">
-      <div class="console-header">
-        <button type="button" class="console-title" data-disclosure-toggle>Technical log</button>
-        <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
-        <button class="console-clear" id="clearConsole">Clear</button>
-      </div>
-      <div class="console-output" id="consoleOutput" data-disclosure-panel></div>
-    </div>
+    <!-- Console: the shared nd-console builds the toggle, the Analysis and Technical tabs,
+         Copy, Clear and the resize separator. -->
+    <nd-console id="spinalcordtoolbox-log" collapsed resizable label="Log" channels="analysis:Analysis,technical:Technical"></nd-console>
   </main>
 
   <footer id="status" class="nd-imaging-status">

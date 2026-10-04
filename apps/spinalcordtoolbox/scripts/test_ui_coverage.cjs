@@ -28,8 +28,9 @@ const sharedUiSources = [
   'ModalManager.js',
   'ProgressManager.js'
 ].map(file => fs.readFileSync(path.join(SHARED_UI, file), 'utf8')).join('\n');
+const workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
+const logChannelsJs = fs.readFileSync(path.join(ROOT, 'web/js/app/log-channels.js'), 'utf8');
 const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controller.mjs'), 'utf8');
-const processingTest = fs.readFileSync(path.join(ROOT, 'scripts/test_sct_processing.cjs'), 'utf8');
 const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_analysis.cjs'), 'utf8');
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
@@ -48,8 +49,6 @@ const UI_COVERAGE = Object.freeze([
   { id: 'thresholdInput', behavior: 'passes probability threshold to inference', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'minSizeInput', behavior: 'passes connected-component cleanup threshold', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
-  { id: 'processingOperationSelect', behavior: 'selects SCT browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
-  { id: 'runProcessingBtn', behavior: 'runs selected browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
   { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
@@ -60,8 +59,6 @@ const UI_COVERAGE = Object.freeze([
   { id: 'clearResults', behavior: 'clears pipeline results', coveredBy: ['static-dom'] },
   { id: 'singleViewButton', behavior: 'returns the viewer to the active single-image session', coveredBy: ['viewer', 'static-dom'] },
   { id: 'compareViewButton', behavior: 'shows loaded input sessions in side-by-side comparison canvases', coveredBy: ['viewer', 'static-dom'] },
-  { id: 'copyConsole', behavior: 'copies console output', coveredBy: ['static-dom'] },
-  { id: 'clearConsole', behavior: 'clears console output', coveredBy: ['static-dom'] },
   { id: 'aboutButton', behavior: 'opens About modal', coveredBy: ['static-dom'] },
   { id: 'closeAbout', behavior: 'closes About modal', coveredBy: ['static-dom'] },
   { id: 'citationsButton', behavior: 'opens Citations modal', coveredBy: ['static-dom'] },
@@ -72,7 +69,6 @@ const UI_COVERAGE = Object.freeze([
 
 const TEST_SOURCES = {
   batch: batchTest,
-  processing: processingTest,
   'lesion-analysis': lesionAnalysisTest,
   viewer: viewerTest,
   worker: workerTest,
@@ -130,7 +126,6 @@ assert.ok(!appJs.includes('bindStartPageControls'), 'no start-page handoff remai
 assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" class="nd-status-text"[\s\S]*<progress id="progress"[\s\S]*id="cancelButton" class="nd-btn-cancel"[^>]*hidden/.test(indexHtml), 'status lives in the shared footer with a native progress bar and a hidden cancel');
 assert.ok(!indexHtml.includes('sidebar-status'), 'the sidebar status block is retired');
 assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is the only abort control');
-assert.ok(!indexHtml.includes('id="processingOutput"'), 'processing output goes to the technical log');
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
 assert.ok(indexHtml.includes('id="taskInfoTooltip"') && appJs.includes("getElementById('taskInfoTooltip')"), 'task description lives in the SCT Task info tooltip');
 assert.ok(SpinalCordToolboxGuidanceLength(appJs) <= 90, 'viewer-unavailable guidance stays within 90 characters');
@@ -150,6 +145,43 @@ assert.ok(
   indexHtml.includes('SCT: Spinal Cord Toolbox, an open-source software for processing spinal cord MRI data'),
   'Citations modal includes the primary SCT NeuroImage citation'
 );
+
+// Console: one shared nd-console, collapsed at load, resizable, with an analysis and a technical log.
+const consoleTag = indexHtml.match(/<nd-console\b[^>]*>/)?.[0] || '';
+assert.equal((indexHtml.match(/<nd-console\b/g) || []).length, 1, 'one console region');
+assert.match(consoleTag, /id="spinalcordtoolbox-log"/, 'console keeps its id');
+assert.match(consoleTag, /\scollapsed[\s>]/, 'console starts collapsed');
+assert.match(consoleTag, /\sresizable[\s>]/, 'console can be enlarged by the user');
+assert.match(consoleTag, /channels="analysis:Analysis,technical:Technical"/, 'console holds an analysis and a technical log');
+assert.ok(!/class="[^"]*\bconsole-(container|header|output)\b/.test(indexHtml), 'no hand-written console markup; nd-console builds it');
+assert.ok(!/id="(consoleOutput|copyConsole|clearConsole)"/.test(indexHtml), 'Copy, Clear and the outputs come from nd-console');
+assert.ok(!/console/.test(stylesCss), 'the app stylesheet does not style the console');
+assert.ok(appJs.includes('defineConsole()') && appJs.includes("getElementById('spinalcordtoolbox-log')"), 'app registers and uses the shared console element');
+assert.ok(!appJs.includes('new ConsoleOutput('), 'app does not build its own console output');
+assert.match(appJs, /new SctInputSessions\(\{\s*updateOutput: \(msg\) => this\.logAnalysis\(msg\)/, 'input messages go to the analysis log');
+assert.match(appJs, /updateOutput: \(msg\) => \{\s*const \{ channel, level \} = routePipelineMessage\(msg\)/, 'pipeline messages are routed per line');
+assert.match(appJs, /workerLog: \(msg, details\) => \{\s*const \{ channel, level \} = routeWorkerLog\(msg, details\)/, 'worker messages are routed by their channel');
+assert.match(appJs, /describeRun\(\{[\s\S]*?\}\)\) this\.logAnalysis\(line\);\s*this\.beginAbortableStep\('inference'\)/, 'each run records task, input and parameters in the analysis log');
+assert.match(appJs, /writeLog\(channel, msg, level = 'info'\) \{\s*console\.log\(msg\);\s*this\.log\?\.log\(msg, level, channel\);\s*\}/, 'every line is written once, to one channel');
+assert.match(appJs, /updateOutput\(msg, level\) \{\s*this\.writeLog\(TECHNICAL, msg, level\)/, 'updateOutput is the technical log');
+assert.match(logChannelsJs, /export const ANALYSIS = 'analysis';[\s\S]*export const TECHNICAL = 'technical';/, 'channel ids match the markup');
+for (const line of [
+  'postAnalysis(`Input volume: ',
+  'postAnalysis(`Lesion metrics: ',
+  'postAnalysis(`TotalSpineSeg warning: ',
+  'postAnalysis(`WARNING: Segmentation is empty.',
+  'postAnalysis(`WARNING: ${stage} mask is empty.',
+  "postMaskSummary('segmentation', outputLabels)",
+  'postMaskSummary(stageOutput.stage, outputLabels)',
+]) assert.ok(workerJs.includes(line), `worker writes the analysis log: ${line}`);
+for (const line of [
+  'postLog(`Loaded: ${displayName}',
+  "postLog('Creating ONNX InferenceSession",
+  'postLog(`Inference complete in ',
+  'postLog(`Using WASM backend',
+  'onLog: (msg) => postLog(msg)',
+]) assert.ok(workerJs.includes(line), `worker keeps the technical log: ${line}`);
+assert.equal((indexHtml.match(/role="status"/g) || []).length, 1, 'status stays in footer#status only');
 
 function SpinalCordToolboxHintLength(source) {
   const match = source.match(/VIEWER_HINT =\s*'([^']*)'/);

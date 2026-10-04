@@ -28,7 +28,6 @@ let appJs;
 let executorJs;
 let workerJs;
 let processingJs;
-let vertebraeJs;
 let batchScript;
 
 const WEBAPP_PIPELINE_FEATURES = Object.freeze({
@@ -41,11 +40,6 @@ const WEBAPP_PIPELINE_FEATURES = Object.freeze({
     controls: ['stepInferenceSection', 'modelSelect', 'runSegmentation', 'thresholdInput', 'minSizeInput'],
     workerMessages: ['run-inference'],
     labels: ['SCT Segmentation', 'SCT Task', 'Probability Threshold', 'Min Component Size']
-  },
-  processing: {
-    controls: ['stepProcessingSection', 'processingOperationSelect', 'runProcessingBtn'],
-    workerMessages: ['run-vertebral-labeling'],
-    labels: ['SCT Processing', 'Vertebral labeling']
   },
   results: {
     controls: ['resultsSection', 'stageButtons', 'freebrowseViewer', 'screenshotViewer'],
@@ -68,7 +62,6 @@ const BROWSER_LIBRARY_FEATURES = Object.freeze({
   qcReport: ['createQcReportHtml'],
   sampleDataDownload: ['getSctExampleDataManifest'],
   modelInstall: ['getBrowserModelInstallPlan'],
-  vertebralLabeling: ['labelVertebrae'],
   templateRegistration: ['registerByCenterOfMass', 'applyTranslation', 'warpTemplate'],
   pmjDetection: ['detectPmj'],
   flattening: ['flattenSagittal'],
@@ -97,10 +90,7 @@ function assertBrowserLibraryFeature(featureName) {
   const functionNames = BROWSER_LIBRARY_FEATURES[featureName];
   assert.ok(functionNames, `known browser library feature: ${featureName}`);
   for (const functionName of functionNames) {
-    assert.ok(
-      processingJs.includes(`function ${functionName}`) || vertebraeJs.includes(`function ${functionName}`),
-      `browser modules implement ${functionName}`
-    );
+    assert.ok(processingJs.includes(`function ${functionName}`), `browser modules implement ${functionName}`);
   }
 }
 
@@ -111,6 +101,11 @@ function assertCoverageSurface(step, equivalent) {
     return;
   }
   assert.equal(step.taskId, null, `${step.section}:${step.sourceLine} is implemented as a library feature, not a task selector model`);
+  if (equivalent.status === 'not-applicable') {
+    const replacement = manifest.tasks.find(task => task.id === equivalent.replacedByTask);
+    assert.equal(replacement?.supportStatus, 'supported', `${step.section}:${step.sourceLine} is replaced by a supported task`);
+    return;
+  }
   assertBrowserLibraryFeature(equivalent.feature);
 }
 
@@ -181,7 +176,6 @@ function assertNegativeCases() {
   executorJs = fs.readFileSync(path.join(ROOT, 'web/js/controllers/SctPipeline.js'), 'utf8');
   workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
   processingJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/sct-processing.js'), 'utf8');
-  vertebraeJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/vertebrae.js'), 'utf8');
   batchScript = fs.readFileSync(path.join(ROOT, 'test_data/batch_processing.sh'), 'utf8');
 
   const steps = parseActiveBatchSteps(batchScript);

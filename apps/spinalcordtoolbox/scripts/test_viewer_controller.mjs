@@ -199,7 +199,7 @@ await assert.rejects(
   assert.equal(viewer.getVolumeIndexForStage('input'), 0);
   assert.equal(viewer.getVolumeIndexForStage('segmentation'), 1);
   assert.equal(viewer.getVolumeIndexForStage('lesion'), 2);
-  assert.equal(viewer.getVolumeIndexForStage('vertebrae'), null);
+  assert.equal(viewer.getVolumeIndexForStage('spine_discs'), null);
 
   // NiiVue clamps the colormap's index array in place; the app's copy must survive.
   assert.notEqual(nv.volumes[1].colormapLabel.I, segColormap.I);

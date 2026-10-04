@@ -24,15 +24,6 @@ const FIXTURE_CASES = Object.freeze([
     tolerancePolicy: DEFAULT_NIFTI_POLICY
   },
   {
-    id: 'batch_t2_label_vertebrae',
-    batchStep: { section: 't2', sourceLine: 81 },
-    inputPath: 'test_data/batch_t2_label_vertebrae/input.nii.gz',
-    expectedOutputPath: 'test_data/batch_t2_label_vertebrae/batch_output.nii.gz',
-    producedOutputName: 'batch_output.nii.gz',
-    outputType: 'nifti',
-    tolerancePolicy: DEFAULT_NIFTI_POLICY
-  },
-  {
     id: 'batch_t2_deepseg_lesion_sci_t2',
     batchStep: { section: 't2', sourceLine: null },
     externalReference: 'spinalcordtoolbox/sct_testing_data:t2/t2_fake_lesion',

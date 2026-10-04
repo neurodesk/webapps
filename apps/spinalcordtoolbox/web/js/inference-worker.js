@@ -30,7 +30,6 @@ function loadDependencies() {
     import('../nifti-js/index.js'),
     import('./inference-pipeline.js'),
     import('./modules/lesion-analysis.js'),
-    import('./modules/vertebrae.js'),
     import('./modules/totalspineseg.js')
   ]).then(([localForageModule]) => {
     localforage = localForageModule.default;
@@ -38,7 +37,7 @@ function loadDependencies() {
     SCTInferencePipeline = globalThis.SCTInferencePipeline;
     SCTLesionAnalysis = globalThis.SCTLesionAnalysis;
     TotalSpineSeg = globalThis.TotalSpineSeg;
-    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !globalThis.SCTVertebrae || !TotalSpineSeg) {
+    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !TotalSpineSeg) {
       throw new Error('SCT worker dependencies failed to initialize');
     }
     return { localforage, nifti };
@@ -97,6 +96,31 @@ const {
   stepComplete: postStepComplete,
   volumeInfo: postVolumeInfo,
 } = workerMessages;
+
+// postLog writes the technical log. postAnalysis writes the analysis log: input, results and
+// the warnings that change how a result should be read.
+function postAnalysis(message, level = 'info') {
+  postLog(message, { channel: 'analysis', level });
+}
+
+// Result summary for the analysis log. Returns the labelled voxel count.
+function postMaskSummary(stage, labels) {
+  const seen = new Set();
+  let voxels = 0;
+  let last = 0;
+  for (let i = 0; i < labels.length; i++) {
+    const value = labels[i];
+    if (value > 0) {
+      voxels++;
+      if (value !== last) seen.add(value);
+    }
+    last = value;
+  }
+  const [dx, dy, dz] = workerState.rasSpacing || [1, 1, 1];
+  const labelText = seen.size > 1 ? `${seen.size} labels, ` : '';
+  postAnalysis(`${stage}: ${labelText}${voxels} voxels (${(voxels * dx * dy * dz).toFixed(1)} mm^3)`);
+  return voxels;
+}
 
 function postStageData(stage, niftiData, description) {
   workerMessages.stageData(stage, niftiData, description, {
@@ -229,7 +253,7 @@ function prepareInputState(inputData, { emitUpdates = false } = {}) {
   const prepared = prepareRasWorkerInput(parseNiftiInput(inputData));
   Object.assign(workerState, prepared);
   if (emitUpdates) {
-    postLog(`Volume: ${prepared.origDims.join('x')}, spacing: ${prepared.rasSpacing.map(value => value.toFixed(3)).join('x')}mm`);
+    postAnalysis(`Input volume: ${prepared.origDims.join('x')}, spacing: ${prepared.rasSpacing.map(value => value.toFixed(3)).join('x')}mm`);
     postLog(`RAS dims: ${prepared.rasDims.join('x')}`);
   }
 
@@ -430,14 +454,10 @@ async function stepInference(params) {
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData(stage, outputNifti, description);
 
-      let finalVoxels = 0;
-      for (let i = 0; i < outputLabels.length; i++) {
-        if (outputLabels[i] > 0) finalVoxels++;
-      }
-      postLog(`${stage}: ${finalVoxels} foreground voxels`);
+      const finalVoxels = postMaskSummary(stage, outputLabels);
       if (finalVoxels === 0) {
         const stats = region.probStats;
-        postLog(`WARNING: ${stage} mask is empty. Probability map max=${stats?.max?.toFixed?.(4) || 'n/a'} (threshold=${region.threshold}).`);
+        postAnalysis(`WARNING: ${stage} mask is empty. Probability map max=${stats?.max?.toFixed?.(4) || 'n/a'} (threshold=${region.threshold}).`, 'warning');
       }
     }
 
@@ -453,7 +473,7 @@ async function stepInference(params) {
       });
       metrics.filename = `${taskId}_lesion_metrics.csv`;
       postMetricsData('lesion_metrics', metrics, 'SCI lesion metrics');
-      postLog(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3} mm^3`);
+      postAnalysis(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3} mm^3`);
     }
   } else if (output.activation === 'sigmoid-labels') {
     const channelCount = output.channelCount || output.channelOrder?.length || output.classLabels?.length || 1;
@@ -493,7 +513,7 @@ async function stepInference(params) {
       const processed = self.TotalSpineSeg.postprocessStep1(rawRAS.data, rawRAS.dims, {
         discPointRadius: output.discPointRadius
       });
-      for (const warning of processed.warnings) postLog(`TotalSpineSeg warning: ${warning}`);
+      for (const warning of processed.warnings) postAnalysis(`TotalSpineSeg warning: ${warning}`, 'warning');
 
       const stages = [
         {
@@ -515,6 +535,7 @@ async function stepInference(params) {
         }
         const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
         postStageData(stageOutput.stage, outputNifti, stageOutput.description);
+        postMaskSummary(stageOutput.stage, outputLabels);
       }
     } else {
       let outputLabels = rawRAS.data;
@@ -523,6 +544,7 @@ async function stepInference(params) {
       }
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData('segmentation', outputNifti, 'SCT sigmoid-label segmentation');
+      postMaskSummary('segmentation', outputLabels);
     }
   } else if (output.activation === 'softmax') {
     const channelCount = output.channelCount || output.channelOrder?.length || output.classLabels?.length || 1;
@@ -560,7 +582,7 @@ async function stepInference(params) {
       const processed = self.TotalSpineSeg.postprocessStep1(rawRAS.data, rawRAS.dims, {
         discPointRadius: output.discPointRadius
       });
-      for (const warning of processed.warnings) postLog(`TotalSpineSeg warning: ${warning}`);
+      for (const warning of processed.warnings) postAnalysis(`TotalSpineSeg warning: ${warning}`, 'warning');
 
       const stages = [
         {
@@ -582,6 +604,7 @@ async function stepInference(params) {
         }
         const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
         postStageData(stageOutput.stage, outputNifti, stageOutput.description);
+        postMaskSummary(stageOutput.stage, outputLabels);
       }
     } else {
       let outputLabels = rawRAS.data;
@@ -590,6 +613,7 @@ async function stepInference(params) {
       }
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData('segmentation', outputNifti, 'SCT multiclass segmentation');
+      postMaskSummary('segmentation', outputLabels);
     }
   } else {
     // Delegate the per-patch inference + sliding-window orchestration to the
@@ -631,62 +655,15 @@ async function stepInference(params) {
     const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
     postStageData('segmentation', outputNifti, 'SCT segmentation');
 
-    let finalVoxels = 0;
-    for (let i = 0; i < outputLabels.length; i++) {
-      if (outputLabels[i] > 0) finalVoxels++;
-    }
-    postLog(`Output: ${finalVoxels} foreground voxels`);
+    const finalVoxels = postMaskSummary('segmentation', outputLabels);
     if (finalVoxels === 0) {
-      postLog(`WARNING: Segmentation is empty. Probability map max=${result.probStats.max.toFixed(4)} (threshold=${threshold}). Try lowering the probability threshold or check input contrast/orientation.`);
+      postAnalysis(`WARNING: Segmentation is empty. Probability map max=${result.probStats.max.toFixed(4)} (threshold=${threshold}). Try lowering the probability threshold or check input contrast/orientation.`, 'warning');
     }
   }
 
   postProgress(1.0, 'Complete');
   postStepComplete('inference');
   postComplete();
-}
-
-async function stepVertebralLabeling(params = {}) {
-  if (!workerState.rasData) {
-    throw new Error('No volume loaded. Run Load first.');
-  }
-  if (!workerState.segLabelsRAS) {
-    throw new Error('No spinal cord segmentation is available. Run segmentation first.');
-  }
-  if (!self.SCTVertebrae) {
-    throw new Error('Vertebral labeling module is not available.');
-  }
-
-  self._currentTaskId = 'vertebrae';
-  postProgress(0.05, 'Loading vertebral labeling assets...');
-  const modelBaseUrl = params.modelBaseUrl || '../models';
-  const c2c3ModelUrl = params.c2c3ModelUrl || `${modelBaseUrl}/c2c3_disc_models/t2_model.yml`;
-  const pam50LevelsUrl = params.pam50LevelsUrl || `${modelBaseUrl}/templates/PAM50/PAM50_levels.nii.gz`;
-  const result = await self.SCTVertebrae.labelVertebrae({
-    anatomy: workerState.rasData,
-    segmentation: workerState.segLabelsRAS,
-    dims: workerState.rasDims,
-    spacing: workerState.rasSpacing,
-    c2c3ModelUrl,
-    pam50LevelsUrl,
-    scaleDist: params.scaleDist ?? 0.55,
-    detectorMinScore: params.detectorMinScore ?? 0.1
-  });
-
-  postProgress(0.85, 'Writing vertebral labels...');
-  postLog(`C2-C3 detector: z=${result.detected.z}, score=${Number.isFinite(result.detected.score) ? result.detected.score.toFixed(4) : 'n/a'}, fallback=${!!result.detected.fallback}`);
-  postLog(`Vertebral boundaries: ${result.boundaries.map(boundary => boundary.z).join(', ')}`);
-
-  let outputLabels = result.labels;
-  if (!workerState.isIdentity) {
-    outputLabels = inverseOrient(outputLabels, workerState.rasDims, workerState.perm, workerState.flip, workerState.origDims);
-  }
-
-  const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
-  postStageData('vertebrae', outputNifti, 'SCT vertebral labeling');
-
-  postProgress(1.0, 'Vertebral labeling complete');
-  postStepComplete('processing');
 }
 
 // ==================== Message Handler ====================
@@ -730,15 +707,6 @@ installWorkerRouter({
         await stepInference(data || {});
       } catch (error) {
         console.error('Inference error:', error);
-        postError(error?.message || String(error));
-      }
-      break;
-
-    case 'run-vertebral-labeling':
-      try {
-        await stepVertebralLabeling(data || {});
-      } catch (error) {
-        console.error('Vertebral labeling error:', error);
         postError(error?.message || String(error));
       }
       break;

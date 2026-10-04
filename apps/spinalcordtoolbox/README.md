@@ -25,6 +25,7 @@ bash run.sh
 - **Manifest-driven model provenance** with supported, unvalidated, unsupported, and retired task states
 - **DICOM and NIfTI** input support
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
+- **Spine labels from TotalSpineSeg**: vertebrae, discs and disc points come from the `TotalSpineSeg` task; `sct_label_vertebrae` is not ported
 - **Configurable**: overlap, probability threshold, component size filtering
 - **FreeBrowse viewer**: zoom and pan in 2D slices and the 3D render, layout selection, intensity window, per-layer opacity, colormap and visibility, image download, and a Drawing tab
 - **Privacy**: patient image data stays confidential and browser-local; non-patient usage statistics may be collected as telemetry
