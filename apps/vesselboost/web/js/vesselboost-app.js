@@ -11,7 +11,7 @@ bindSectionDisclosures(document);
 import { SimpleFileIOController } from '@neurodesk/webapp-components/file-io';
 import { VesselBoostViewer } from './controllers/VesselBoostViewer.js';
 import { VesselBoostPipeline } from './controllers/VesselBoostPipeline.js';
-import { ConsoleOutput, bindWindowControls } from '@neurodesk/webapp-components/ui';
+import { ConsoleOutput, bindWindowControls, createMaskEditor } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
 import * as Config from './app/config.js';
@@ -20,6 +20,7 @@ import { computeAutoWindow } from '@neurodesk/webapp-components/volume';
 import { createNiftiFromVolume, downloadArrayBuffer } from '@neurodesk/webapp-components/file-io';
 import { registerVesselBoostAutomation } from './automation.js';
 import {
+  buildEditVolumeStack,
   buildResultVolumeStack,
   defaultResultVisibility,
   getResultDisplay,
@@ -115,6 +116,15 @@ class VesselBoostApp {
         this.refreshViewerLayerControls();
       }
     });
+
+    this.maskEditor = createMaskEditor({
+      nv: this.nv,
+      onApply: (stage, file, { original }) => this.onMaskApplied(stage, file, original),
+      onCancel: () => this.onMaskEditClosed(),
+      onError: (_stage, error) => this.onMaskEditError(error)
+    });
+    this.maskEditor.addEventListener('nd-mask-edit-start', (event) => this.progress.setText(event.detail.message));
+    document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
 
     // Modals
     this.aboutModal = new ModalManager('aboutModal');
@@ -962,6 +972,8 @@ class VesselBoostApp {
   }
 
   async resetAllSteps() {
+    await this.maskEditor.cancel();
+
     // Reset worker state
     if (this.inferenceExecutor.isReady()) {
       await this.inferenceExecutor.resetWorkerState();
@@ -1481,6 +1493,7 @@ class VesselBoostApp {
   }
 
   async renderVisibleResults() {
+    await this.maskEditor.cancel();
     const stages = this.inferenceExecutor.getStageOrder();
     const results = this.inferenceExecutor.getResults();
     const stack = buildResultVolumeStack({
@@ -1583,10 +1596,23 @@ class VesselBoostApp {
       });
       row.appendChild(viewBtn);
 
+      const result = this.inferenceExecutor.getResult(stage);
+      const name = Config.STAGE_NAMES[stage] || stage;
       const label = document.createElement('span');
       label.className = 'stage-label';
-      label.textContent = Config.STAGE_NAMES[stage] || stage;
+      label.textContent = result?.edited === true ? `${name} (edited)` : name;
       row.appendChild(label);
+
+      if (result?.editable === true) {
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'nd-edit-btn';
+        editBtn.textContent = 'Edit';
+        editBtn.title = 'Edit in the viewer';
+        editBtn.disabled = this.maskEditor.session.state !== 'idle';
+        editBtn.addEventListener('click', () => this.editResult(stage));
+        row.appendChild(editBtn);
+      }
 
       // Download button (not for input — user already has the file)
       if (stage !== 'input') {
@@ -1600,6 +1626,67 @@ class VesselBoostApp {
 
       container.appendChild(row);
     }
+  }
+
+  async editResult(stage) {
+    const result = this.inferenceExecutor.getResult(stage);
+    if (!result?.file || this.inferenceExecutor.isRunning()) return;
+    this.setEditButtonsEnabled(false);
+    this.setStatusError(false);
+    try {
+      const { visibility, baseStage, stack } = buildEditVolumeStack({
+        stage,
+        sourceFile: this.inputFile,
+        stages: this.inferenceExecutor.getStageOrder(),
+        results: this.inferenceExecutor.getResults(),
+        visibility: this.resultStageVisibility,
+        preferredBaseStage: this.currentResultTab,
+        segmentationOpacity: this._overlaySliderValue
+      });
+      for (const [visibleStage, visible] of Object.entries(visibility)) this.setResultStageVisibleState(visibleStage, visible);
+      if (isImageResultStage(baseStage)) this.currentResultTab = baseStage;
+      if (!await this.viewerController.loadVolumeStack(stack)) throw new Error(`Could not show ${Config.STAGE_NAMES[stage] || stage} over its image`);
+      this.applyDefaultBaseColormap();
+      this.syncWindowControls();
+      this.applyAutoContrast();
+      this.updateResultButtonStates();
+      this.refreshViewerLayerControls();
+      const started = await this.maskEditor.start({
+        stage,
+        file: result.file,
+        label: Config.STAGE_NAMES[stage] || stage,
+        overlayIndex: stack.findIndex(entry => entry.stage === stage)
+      });
+      if (!started) this.setEditButtonsEnabled(true);
+    } catch (error) {
+      this.onMaskEditError(error);
+    }
+  }
+
+  async onMaskApplied(stage, file, original) {
+    this.inferenceExecutor.replaceWithEdit(stage, file, original);
+    this.updateOutput(`Applied manual edits to ${file.name}`);
+    this.progress.setText('Ready');
+    await this.renderVisibleResults();
+    this.rebuildResultsList();
+    this.refreshViewerLayerControls();
+  }
+
+  onMaskEditClosed() {
+    this.setEditButtonsEnabled(true);
+    this.progress.setText('Ready');
+  }
+
+  onMaskEditError(error) {
+    this.setEditButtonsEnabled(true);
+    const message = error?.message || String(error);
+    this.updateOutput(`Mask editing failed: ${message}`);
+    this.progress.end(`Error: ${message}`, { success: false });
+    this.setStatusError(true);
+  }
+
+  setEditButtonsEnabled(enabled) {
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => { btn.disabled = !enabled; });
   }
 
   async viewStage(stage) {
@@ -1668,7 +1755,8 @@ class VesselBoostApp {
     this._overlaySliderValue = 0.5;
   }
 
-  clearResults() {
+  async clearResults() {
+    await this.maskEditor.cancel();
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.currentResultTab = 'input';
