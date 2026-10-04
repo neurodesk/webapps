@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "app": "spinalcordtoolbox",
   "title": "SpinalCordToolbox",
-  "description": "Run supported SCT browser models with explicit task selection and label measurements.",
+  "description": "Run supported SCT browser models with explicit task selection, and measure masks with ports of sct_process_segmentation and sct_analyze_lesion.",
   "defaultOperation": "segment",
   "operations": {
     "segment": {
@@ -63,6 +63,131 @@
           "type": "neuro:table",
           "mediaType": "text/csv",
           "minimum": 0
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "morphometry": {
+      "title": "Measure spinal cord morphometry",
+      "description": "Port of sct_process_segmentation: cross-sectional area, AP and RL diameter, eccentricity, orientation, solidity, cord angles and length of an existing mask, per slice, per vertebral level or aggregated. No inference.",
+      "mode": "batch",
+      "inputs": {
+        "segmentation": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Mask to measure, binary or weighted in [0, 1], for example a spinal cord segmentation from the segment operation",
+          "space": "native",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "discs": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Intervertebral disc labels on the same grid (SCT -discfile), for example spine_discs from the segment operation with task spine; gives every slice a vertebral level",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "aggregate": {
+          "type": "string",
+          "description": "slice: one row per axial slice (-perslice 1); level: one row per vertebral level (-vert -perlevel 1); levels: one row across the chosen levels (-vert); all: one row over the chosen slices. level and levels need discs",
+          "enum": [
+            "slice",
+            "level",
+            "levels",
+            "all"
+          ],
+          "default": "slice"
+        },
+        "slices": {
+          "type": "string",
+          "description": "Axial slices to include, inferior to superior, in SCT -z syntax such as 30:80 or 12;15;20:25; empty uses every slice",
+          "default": ""
+        },
+        "levels": {
+          "type": "string",
+          "description": "Vertebral levels for aggregate level or levels, in SCT -vert syntax such as 2:5; empty uses every level found on the mask",
+          "default": ""
+        },
+        "angleCorrection": {
+          "type": "boolean",
+          "description": "Correct each slice for the angle between the cord centerline and the slice (SCT -angle-corr)",
+          "default": true
+        },
+        "maskLabel": {
+          "type": "integer",
+          "description": "Measure only voxels with this label value, for example 1 for the cord in TotalSpineSeg step 1 labels; omitted measures every non-zero voxel",
+          "minimum": 1
+        }
+      },
+      "artifacts": {
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    },
+    "lesion-metrics": {
+      "title": "Measure spinal cord lesions",
+      "description": "Port of sct_analyze_lesion -m -s -i: volume, length, width, equivalent diameter, axial damage ratio, midsagittal measures and tissue bridges of every lesion in an existing mask. No inference.",
+      "mode": "batch",
+      "inputs": {
+        "lesion": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Binary lesion mask, for example the lesion output of the segment operation with task lesion_sci_t2",
+          "space": "native",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "cord": {
+          "source": "files",
+          "type": "neuro:label-map",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Spinal cord mask on the same grid; lesion voxels outside it are ignored and it gives the cord angles",
+          "space": "native",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Image on the same grid; adds its mean and standard deviation inside each lesion (SCT -i)",
+          "space": "native",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/csv",
+          "minimum": 1,
+          "maximum": 1
         }
       },
       "engines": [

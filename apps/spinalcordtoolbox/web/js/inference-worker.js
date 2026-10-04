@@ -5,6 +5,8 @@
  * Pipeline is split into interactive steps:
  *   1. Load (NIfTI parse + orient to RAS)
  *   2. Inference (resample → normalize → crop → sliding window → threshold → CC → inverse)
+ *   3. Morphometry (sct_process_segmentation on a mask the page sends as NIfTI)
+ *   4. Lesion metrics (sct_analyze_lesion on masks the page sends as NIfTI)
  */
 
 import * as ort from '../wasm/ort.webgpu.bundle.min.mjs';
@@ -21,6 +23,8 @@ let localforage;
 let nifti;
 let SCTInferencePipeline;
 let SCTLesionAnalysis;
+let SCTCenterline;
+let SCTMorphometry;
 let TotalSpineSeg;
 let dependenciesReady;
 
@@ -29,15 +33,19 @@ function loadDependencies() {
     import('https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm'),
     import('../nifti-js/index.js'),
     import('./inference-pipeline.js'),
+    import('./modules/sct-centerline.js'),
     import('./modules/lesion-analysis.js'),
+    import('./modules/sct-morphometry.js'),
     import('./modules/totalspineseg.js')
   ]).then(([localForageModule]) => {
     localforage = localForageModule.default;
     nifti = globalThis.nifti;
     SCTInferencePipeline = globalThis.SCTInferencePipeline;
     SCTLesionAnalysis = globalThis.SCTLesionAnalysis;
+    SCTCenterline = globalThis.SCTCenterline;
+    SCTMorphometry = globalThis.SCTMorphometry;
     TotalSpineSeg = globalThis.TotalSpineSeg;
-    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !TotalSpineSeg) {
+    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !SCTCenterline || !SCTMorphometry || !TotalSpineSeg) {
       throw new Error('SCT worker dependencies failed to initialize');
     }
     return { localforage, nifti };
@@ -111,6 +119,8 @@ function postMetricsData(stage, metrics, description) {
     rows: metrics.rows || [],
     summary: metrics.summary || null,
     csv: metrics.csv || '',
+    columns: metrics.columns || null,
+    inputs: metrics.inputs || null,
     filename: metrics.filename,
     description,
     taskId: self._currentTaskId || 'spinalcord'
@@ -213,6 +223,130 @@ async function fetchModel(url, modelName, progressBase, progressSpan) {
   );
   postLog(`Loaded: ${displayName} (${(bytes.byteLength / 1048576).toFixed(1)} MB)`);
   return bytes;
+}
+
+// ==================== Derived metrics ====================
+
+/**
+ * `sct_analyze_lesion -m lesion -s cord -i image` on RAS volumes of one grid.
+ * The metrics depend only on the masks and the image, not on the run that
+ * made them, so inference and `run-lesion-metrics` share this function.
+ */
+function emitLesionMetrics({ lesionRAS, cordRAS, imageRAS = null, imageName = 'image', dims, spacing, flip, taskId }) {
+  const metrics = SCTLesionAnalysis.analyzeLesions({
+    lesion: SCTCenterline.rasToRpi(lesionRAS, dims),
+    spinalCord: SCTCenterline.rasToRpi(cordRAS, dims),
+    image: imageRAS ? SCTCenterline.rasToRpi(imageRAS, dims) : null,
+    imageName,
+    dims,
+    spacing,
+    nativeFlips: SCTCenterline.nativeFlipsFromRas(flip)
+  });
+  metrics.filename = `${taskId}_lesion_metrics.csv`;
+  postMetricsData('lesion_metrics', metrics, 'Lesion metrics (sct_analyze_lesion)');
+  for (const warning of metrics.warnings) postLog(`Lesion metrics: ${warning}`);
+  postLog(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3.toFixed(2)} mm^3, total length=${metrics.summary.total_length_mm.toFixed(2)} mm`);
+}
+
+function sameGrid(a, b) {
+  return a.rasDims.every((value, index) => value === b.rasDims[index])
+    && a.perm.every((value, index) => value === b.perm[index])
+    && a.flip.every((value, index) => value === b.flip[index]);
+}
+
+/**
+ * `sct_process_segmentation` on a mask NIfTI. The mask (and optional disc
+ * labels) arrive as files, so this works on any result of the session, on an
+ * edited mask or on an uploaded one, and never needs the loaded image.
+ */
+function stepMorphometry(params) {
+  const { maskData, discData = null, maskLabel = null, options = {} } = params;
+  if (!maskData) throw new Error('Morphometry needs a mask.');
+  postProgress(0.02, 'Reading mask...');
+  const mask = prepareRasWorkerInput(parseNiftiInput(maskData));
+  let seg = mask.rasData;
+  if (maskLabel !== null) {
+    seg = new Uint8Array(mask.rasData.length);
+    for (let i = 0; i < seg.length; i++) seg[i] = Math.round(mask.rasData[i]) === maskLabel ? 1 : 0;
+  }
+
+  let discs = null;
+  if (discData) {
+    const discVolume = prepareRasWorkerInput(parseNiftiInput(discData));
+    if (!sameGrid(mask, discVolume)) {
+      throw new Error('Disc labels and mask are on different grids; they must come from the same image.');
+    }
+    discs = SCTCenterline.rasToRpi(discVolume.rasData, discVolume.rasDims);
+  }
+
+  postProgress(0.05, 'Measuring morphometry...');
+  const filename = params.filename || 'mask.nii';
+  const result = SCTMorphometry.processSegmentation({
+    seg: SCTCenterline.rasToRpi(seg, mask.rasDims),
+    dims: mask.rasDims,
+    spacing: mask.rasSpacing,
+    discs,
+    nativeFlips: SCTCenterline.nativeFlipsFromRas(mask.flip),
+    aggregate: options.aggregate,
+    slices: options.slices,
+    levels: options.levels,
+    angleCorrection: options.angleCorrection,
+    filename,
+    discFilename: params.discFilename,
+    version: self._appVersion ? `7.3 (Neurodesk web port ${self._appVersion})` : '7.3 (Neurodesk web port)',
+    onProgress: (done, total) => postProgress(0.05 + 0.9 * (done / total), `Measuring slice ${done} of ${total}`)
+  });
+
+  postMetricsData('morphometry', {
+    rows: result.rows,
+    summary: result.summary,
+    csv: result.csv,
+    columns: result.columns,
+    inputs: {
+      mask: params.maskName || filename,
+      discs: discData ? (params.discName || params.discFilename || 'disc labels') : null
+    },
+    filename: `${filename.replace(/\.nii(\.gz)?$/i, '')}_morphometry.csv`
+  }, 'Spinal cord morphometry (sct_process_segmentation)');
+  postLog(`Morphometry: ${result.summary.command}`);
+  const fixed = value => (Number.isFinite(value) ? value.toFixed(2) : 'n/a');
+  postLog(`Morphometry: ${result.summary.row_count} row(s); mean CSA=${fixed(result.summary.mean_area_mm2)} mm^2, length=${fixed(result.summary.length_mm)} mm; mask spans slices ${result.summary.slice_range}`);
+  postProgress(1.0, 'Complete');
+  postStepComplete('morphometry');
+}
+
+/**
+ * Lesion metrics from mask files: the lesion mask, the cord mask and
+ * optionally the image, all on one grid. Used to measure masks that did not
+ * come from this session's inference (another tool, or manual editing).
+ */
+function stepLesionMetrics(params) {
+  const { lesionData, cordData, imageData = null } = params;
+  if (!lesionData || !cordData) throw new Error('Lesion metrics need a lesion mask and a cord mask.');
+  postProgress(0.05, 'Reading masks...');
+  const lesion = prepareRasWorkerInput(parseNiftiInput(lesionData));
+  const cord = prepareRasWorkerInput(parseNiftiInput(cordData));
+  if (!sameGrid(lesion, cord)) {
+    throw new Error('Lesion and cord masks are on different grids; they must come from the same image.');
+  }
+  let image = null;
+  if (imageData) {
+    image = prepareRasWorkerInput(parseNiftiInput(imageData));
+    if (!sameGrid(lesion, image)) throw new Error('The image and the lesion mask are on different grids.');
+  }
+  postProgress(0.3, 'Computing lesion metrics...');
+  emitLesionMetrics({
+    lesionRAS: lesion.rasData,
+    cordRAS: cord.rasData,
+    imageRAS: image ? image.rasData : null,
+    imageName: params.imageName || 'image',
+    dims: lesion.rasDims,
+    spacing: lesion.rasSpacing,
+    flip: lesion.flip,
+    taskId: params.taskId || 'lesion'
+  });
+  postProgress(1.0, 'Complete');
+  postStepComplete('lesion_metrics');
 }
 
 // ==================== Utility ====================
@@ -442,17 +576,17 @@ async function stepInference(params) {
 
     if (workerState.segLabelsRAS) emitSegmentationStateArtifact();
 
-    if (spinalCordRAS && lesionRAS && self.SCTLesionAnalysis) {
+    if (spinalCordRAS && lesionRAS) {
       postProgress(0.94, 'Computing lesion metrics...');
-      const metrics = self.SCTLesionAnalysis.analyzeLesions({
-        lesion: lesionRAS,
-        spinalCord: spinalCordRAS,
+      emitLesionMetrics({
+        lesionRAS,
+        cordRAS: spinalCordRAS,
+        imageRAS: workerState.rasData,
         dims: workerState.rasDims,
-        spacing: workerState.rasSpacing
+        spacing: workerState.rasSpacing,
+        flip: workerState.flip,
+        taskId
       });
-      metrics.filename = `${taskId}_lesion_metrics.csv`;
-      postMetricsData('lesion_metrics', metrics, 'SCI lesion metrics');
-      postLog(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3} mm^3`);
     }
   } else if (output.activation === 'sigmoid-labels') {
     const channelCount = output.channelCount || output.channelOrder?.length || output.classLabels?.length || 1;
@@ -686,6 +820,24 @@ installWorkerRouter({
         await stepInference(data || {});
       } catch (error) {
         console.error('Inference error:', error);
+        postError(error?.message || String(error));
+      }
+      break;
+
+    case 'run-morphometry':
+      try {
+        stepMorphometry(data || {});
+      } catch (error) {
+        console.error('Morphometry error:', error);
+        postError(error?.message || String(error));
+      }
+      break;
+
+    case 'run-lesion-metrics':
+      try {
+        stepLesionMetrics(data || {});
+      } catch (error) {
+        console.error('Lesion metrics error:', error);
         postError(error?.message || String(error));
       }
       break;

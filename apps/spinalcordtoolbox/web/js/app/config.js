@@ -52,7 +52,8 @@ export const STAGE_NAMES = {
   'lesion': 'SCI Lesion',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',
-  'lesion_metrics': 'Lesion Metrics'
+  'lesion_metrics': 'Lesion Metrics',
+  'morphometry': 'Morphometry'
 };
 
 export const ONNX_CONFIG = {
@@ -66,6 +67,6 @@ export const CACHE_CONFIG = {
   maxSizeMB: 1024
 };
 
-export const PIPELINE_STEPS = ['load', 'inference', 'processing'];
+export const PIPELINE_STEPS = ['load', 'inference', 'morphometry', 'lesion_metrics'];
 
 if (typeof self !== 'undefined') self.SpinalCordToolboxConfig = { VERSION, MODEL_BASE_URL, MODEL, MODELS, INFERENCE_DEFAULTS, VIEWER_CONFIG, PROGRESS_CONFIG, STAGE_NAMES, ONNX_CONFIG, CACHE_CONFIG, PIPELINE_STEPS };

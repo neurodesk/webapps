@@ -31,6 +31,7 @@ const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controll
 const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_analysis.cjs'), 'utf8');
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
+const morphometryE2e = fs.readFileSync(path.join(ROOT, 'e2e/morphometry.spec.js'), 'utf8');
 
 const htmlIds = new Set([...indexHtml.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const domSource = `${appJs}\n${controllerSources}\n${sharedUiSources}`;
@@ -47,7 +48,14 @@ const UI_COVERAGE = Object.freeze([
   { id: 'minSizeInput', behavior: 'passes connected-component cleanup threshold', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
-  { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
+  { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'morphometry-e2e', 'static-dom'] },
+  { id: 'morphometryMask', behavior: 'chooses the session mask morphometry measures', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
+  { id: 'morphometryDiscs', behavior: 'chooses the disc labels that give slices a vertebral level', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
+  { id: 'morphometryAggregate', behavior: 'chooses per-slice, per-level, across-levels or whole-mask rows', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
+  { id: 'morphometrySlices', behavior: 'restricts morphometry to a slice list', coveredBy: ['morphometry-e2e', 'static-dom'] },
+  { id: 'morphometryLevels', behavior: 'restricts level reports to chosen vertebral levels and reports bad input on the field', coveredBy: ['morphometry-e2e', 'static-dom'] },
+  { id: 'morphometryAngleCorrection', behavior: 'turns centerline angle correction on or off', coveredBy: ['static-dom'] },
+  { id: 'runMorphometry', behavior: 'runs sct_process_segmentation on the chosen mask in the worker', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
   { id: 'downloadCurrentVolume', behavior: 'downloads selected result/input volume', coveredBy: ['batch', 'static-dom'] },
   { id: 'screenshotViewer', behavior: 'exports viewer screenshot', coveredBy: ['batch', 'static-dom'] },
@@ -80,6 +88,7 @@ const UI_COVERAGE = Object.freeze([
 const TEST_SOURCES = {
   batch: batchTest,
   'lesion-analysis': lesionAnalysisTest,
+  'morphometry-e2e': morphometryE2e,
   viewer: viewerTest,
   worker: workerTest,
   'static-dom': domSource
@@ -95,6 +104,9 @@ for (const item of UI_COVERAGE) {
   assert.ok(item.behavior && item.coveredBy.length > 0, `${item.id} has coverage metadata`);
   for (const coverage of item.coveredBy) {
     assert.ok(TEST_SOURCES[coverage], `${item.id} references known coverage source ${coverage}`);
+    if (coverage === 'morphometry-e2e') {
+      assert.ok(morphometryE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/morphometry.spec.js`);
+    }
   }
 }
 
@@ -122,6 +134,10 @@ assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" 
 assert.ok(!indexHtml.includes('sidebar-status'), 'the sidebar status block is retired');
 assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is the only abort control');
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
+assert.match(indexHtml, /<button class="btn btn-secondary" id="runMorphometry" disabled>/, 'Measure is a secondary action, disabled until a mask exists');
+assert.ok(/id="morphometrySection" data-disclosure/.test(indexHtml) && /class="[^"]*step-disabled collapsed"[^>]*id="morphometrySection"/.test(indexHtml), 'Morphometry starts collapsed and disabled');
+assert.ok(appJs.includes("data-metrics-stage") && appJs.includes('renderAllMetricsResults'), 'every metrics stage renders in its own block of the Results section');
+assert.ok(!/morphometry[^\n]*(statusText|sidebar-status)/i.test(indexHtml), 'morphometry reports progress only through the status footer');
 assert.ok(indexHtml.includes('id="taskInfoTooltip"') && appJs.includes("getElementById('taskInfoTooltip')"), 'task description lives in the SCT Task info tooltip');
 assert.ok(SpinalCordToolboxGuidanceLength(appJs) <= 90, 'viewer-unavailable guidance stays within 90 characters');
 assert.ok(indexHtml.includes('id="moreAppsLink"'), 'main app header More Apps link exists');
