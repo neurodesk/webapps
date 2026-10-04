@@ -85,6 +85,7 @@ apps/qsmbly/nifti-js/
 
 packages/greedy/native/
 .audit/
+.e2e/
 
 # Example manifests staged for static development servers
 apps/*/web/examples.json
@@ -94,3 +95,6 @@ apps/*/web/examples.json
 /apps/nesvor/public/svort/
 
 /apps/nesvor/public/n4/
+
+# Scratch session emitted by native validation tools.
+/:memory:.ses
