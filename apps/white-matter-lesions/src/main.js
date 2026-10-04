@@ -10,12 +10,14 @@ import {
   createExampleSelector,
   bindInfoTooltips,
   ProgressManager,
+  createMaskEditor,
 } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { readVolume } from "@neurodesk/synthsr";
 import { APP } from "./config.js";
+import { applyMaskEdit, lesionSummary, segmentationOutputs } from "./outputs.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +34,9 @@ let viewer;
 let viewerReady;
 let viewQueue = Promise.resolve();
 let viewRevision = 0;
+let editor = null;
+// A token for the open edit, so a reset that discards it also ignores its late callbacks.
+let editing = null;
 const layouts = {
   multiplanar: () => {
     viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -82,6 +87,7 @@ const results = createResultList({
   element: $("resultList"),
   onView: (stage) => show(stage),
   onDownload: (_stage, result) => downloadFile(result.file),
+  onEdit: (stage, result) => void editResult(stage, result),
 });
 
 function status(message, error = false) {
@@ -124,6 +130,28 @@ function end(current, message, { success = true, error = false, result } = {}) {
   return true;
 }
 
+function closeEdit() {
+  editing = null;
+  void editor?.cancel();
+  results.setEditingEnabled(true);
+}
+
+async function editResult(stage, result) {
+  if (job || editing || !source) return;
+  const session = {};
+  editing = session;
+  results.setEditingEnabled(false);
+  try {
+    await show(stage);
+    if (editing !== session) return;
+    if (!await editor.start({ stage, file: result.file, label: "Lesion mask", overlayIndex: 1 })) closeEdit();
+  } catch (error) {
+    if (editing !== session) return;
+    status(error.message, true);
+    closeEdit();
+  }
+}
+
 function renderOutputs() {
   results.render(outputs);
   $("outputSection").open = Object.keys(outputs).length > 1;
@@ -135,6 +163,24 @@ async function ensureViewer() {
     await viewer.attachTo("gl1");
     layouts.multiplanar();
     viewer.isLegendVisible = false;
+    editor = createMaskEditor({
+      nv: viewer,
+      onApply: async (stage, file, { original }) => {
+        closeEdit();
+        outputs = applyMaskEdit(outputs, file, original, readVolume(await file.arrayBuffer()));
+        renderOutputs();
+        status(`${outputs.mask.description} · edited`);
+        await show(stage);
+      },
+      onCancel: () => {
+        if (!editing) return;
+        status("Edit discarded");
+        closeEdit();
+      },
+      onError: (_stage, error) => status(error.message, true),
+    });
+    editor.addEventListener("nd-mask-edit-start", ({ detail }) => status(detail.message));
+    toolbar.after(editor);
     viewer.createExtensionContext().on("locationChange", (event) => {
       $("location").textContent = event.detail.string;
     });
@@ -183,6 +229,7 @@ async function loadFiles(filesPromise, signal) {
   const abort = () => current.controller.abort();
   signal?.addEventListener("abort", abort, { once: true });
   source = null;
+  closeEdit();
   outputs = {};
   renderOutputs();
   ++viewRevision;
@@ -253,6 +300,7 @@ async function segment(parameters, onProgress = () => {}) {
   // Cancellation may settle the operation while adapter discovery is still pending.
   void current.completion.promise.catch(() => {});
   const stem = source.name.replace(/\.nii(\.gz)?$/i, "");
+  closeEdit();
   outputs = { flair: outputs.flair };
   renderOutputs();
   show("flair");
@@ -271,11 +319,8 @@ async function segment(parameters, onProgress = () => {}) {
       } else if (data.type === "error") {
         end(current, data.message, { success: false, error: true });
       } else if (data.type === "result") {
-        const { count, totalMl } = data.summary;
-        const summary = `${count} ${count === 1 ? "lesion" : "lesions"} · ${totalMl.toFixed(2)} ml`;
-        outputs.mask = { description: `Lesion mask · ${summary}`, file: new File([data.mask], `${stem}_lesions.nii`) };
-        outputs.probability = { description: "Lesion probability", file: new File([data.probability], `${stem}_lesion_probability.nii`) };
-        outputs.table = { description: "Lesion table (TSV)", viewable: false, file: new File([data.tsv], `${stem}_lesions.tsv`, { type: "text/tab-separated-values" }) };
+        const summary = lesionSummary(data.summary);
+        Object.assign(outputs, segmentationOutputs(stem, data));
         renderOutputs();
         log.log(JSON.stringify(data.provenance));
         end(current, `Segmentation complete · ${summary}`, { result: {
