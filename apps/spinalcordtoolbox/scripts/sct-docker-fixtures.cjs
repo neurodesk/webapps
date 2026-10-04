@@ -6,6 +6,9 @@ const path = require('node:path');
 const fixtures = require('./batch-parity-fixtures.cjs');
 
 const DEFAULT_SCT_IMAGE = 'vnmd/spinalcordtoolbox_7.1:20260428';
+// lesion_ms needs SCT >= 7.2; this is the image pinned in registry/neurocontainers.json.
+const LESION_MS_SCT_IMAGE = 'vnmd/spinalcordtoolbox_7.3.3:20260902';
+const LESION_MS_FIXTURE_ID = 'course_t2_ms_deepseg_lesion_ms';
 
 const DOCKER_FIXTURE_MAP = Object.freeze([
   {
@@ -48,10 +51,39 @@ const DOCKER_FIXTURE_MAP = Object.freeze([
 function missingSctFixturePaths(rootDir) {
   const required = [path.join(rootDir, 'test_data/batch_processing.sh')];
   for (const fixture of fixtures.FIXTURE_CASES) {
+    // The lesion_ms reference has its own generator below (different image and input).
+    if (fixture.id === LESION_MS_FIXTURE_ID) continue;
     required.push(path.join(rootDir, fixture.inputPath));
     required.push(path.join(rootDir, fixture.expectedOutputPath));
   }
   return required.filter(filePath => !fs.existsSync(filePath));
+}
+
+// Regenerates the lesion_ms SCT reference from an input already in test_data
+// (`node scripts/huggingface-fixtures.cjs` fetches it). `-single-fold` is the
+// configuration the browser ships: fold 1 of the five-fold ensemble.
+function generateLesionMsReference(rootDir) {
+  const fixture = fixtures.FIXTURE_CASES.find(item => item.id === LESION_MS_FIXTURE_ID);
+  if (!fixture) throw new Error(`Fixture ${LESION_MS_FIXTURE_ID} is not declared`);
+  const fixtureDir = path.dirname(path.join(rootDir, fixture.inputPath));
+  if (!fs.existsSync(path.join(rootDir, fixture.inputPath))) {
+    throw new Error(`Missing ${fixture.inputPath}; run node scripts/huggingface-fixtures.cjs first`);
+  }
+  const docker = process.env.DOCKER || 'docker';
+  const image = process.env.SCT_LESION_MS_DOCKER_IMAGE || LESION_MS_SCT_IMAGE;
+  run(docker, [
+    'run',
+    '--rm',
+    '--platform',
+    'linux/amd64',
+    '-v',
+    `${fixtureDir}:/outputs`,
+    image,
+    'bash',
+    '-lc',
+    `sct_deepseg lesion_ms -i /outputs/input.nii.gz -single-fold -o /outputs/${path.basename(fixture.expectedOutputPath)} && chmod -R a+rwX /outputs`
+  ], { cwd: rootDir, stdio: 'inherit' });
+  return { generated: true, image };
 }
 
 function hasSctBatchFixtures(rootDir) {
@@ -118,8 +150,15 @@ chmod -R a+rwX /outputs
 module.exports = {
   DEFAULT_SCT_IMAGE,
   DOCKER_FIXTURE_MAP,
+  LESION_MS_SCT_IMAGE,
   dockerBatchCommand,
   ensureSctBatchFixtures,
+  generateLesionMsReference,
   hasSctBatchFixtures,
   missingSctFixturePaths
 };
+
+if (require.main === module && process.argv.includes('--lesion-ms')) {
+  const result = generateLesionMsReference(path.resolve(__dirname, '..'));
+  console.log(`Generated the lesion_ms SCT reference with ${result.image}`);
+}

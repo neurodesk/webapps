@@ -38,6 +38,15 @@ const CRITICAL_BROWSER_OUTPUTS = Object.freeze([
     foregroundRatioTolerance: 0.75
   },
   {
+    id: 'course_t2_ms_deepseg_lesion_ms_lesion',
+    fixtureId: 'course_t2_ms_deepseg_lesion_ms',
+    stage: 'lesion',
+    taskId: 'lesion_ms',
+    // Measured 0.8255 (171 vs 190 voxels) against SCT 7.3 `lesion_ms -single-fold`.
+    minDice: 0.75,
+    foregroundRatioTolerance: 0.2
+  },
+  {
     id: 'batch_dmri_deepseg_spinalcord',
     taskId: 'spinalcord',
     minDice: 0.8,
@@ -161,6 +170,28 @@ function assertLesionMetricsFixture() {
   assertRelativeClose(producedMetrics.summary.max_width_mm, expectedMetrics.summary.max_width_mm, 0.30, 'lesion max width');
 }
 
+// lesion_ms has no cord mask, so the metrics are lesion-only. SCT 7.3 finds 5
+// lesions (673.5 mm3) on the course MS image; the browser finds 4 (606.2 mm3),
+// missing the smallest one (8 voxels).
+function assertMsLesionMetricsFixture() {
+  const fixture = fixtures.FIXTURE_CASES.find(item => item.id === 'course_t2_ms_deepseg_lesion_ms');
+  assert.ok(fixture, 'MS lesion fixture exists for metrics validation');
+  const metricsFor = filePath => {
+    const lesion = loadNifti(filePath);
+    return lesionAnalysis.analyzeLesions({
+      lesion: lesion.data,
+      dims: lesion.header.dims.slice(1, 4),
+      spacing: lesion.header.pixDims.slice(1, 4).map(value => Math.abs(value) || 1)
+    });
+  };
+  const expectedMetrics = metricsFor(expectedOutputPathForCheck({ stage: 'lesion' }, fixture));
+  const producedMetrics = metricsFor(browserOutputPathForCheck({ stage: 'lesion' }, fixture));
+  assert.equal(expectedMetrics.summary.lesion_count, 5, 'SCT reference lesion count on the MS fixture');
+  assert.ok(Math.abs(producedMetrics.summary.lesion_count - expectedMetrics.summary.lesion_count) <= 1, `MS lesion count ${producedMetrics.summary.lesion_count} is within one of ${expectedMetrics.summary.lesion_count}`);
+  assertRelativeClose(producedMetrics.summary.total_volume_mm3, expectedMetrics.summary.total_volume_mm3, 0.2, 'MS lesion total volume');
+  assert.ok(!producedMetrics.csv.includes('sagittal_x_'), 'lesion-only metrics CSV has no tissue-bridge columns');
+}
+
 const supportedTasks = new Set(
   manifest.tasks
     .filter(task => task.supportStatus === 'supported' && task.validationStatus === 'passed')
@@ -247,6 +278,7 @@ function ensureBrowserOutputs() {
     results.push(`${check.id}: dice=${stats.dice.toFixed(4)} expectedNz=${stats.expectedNz} producedNz=${stats.producedNz}`);
   }
   assertLesionMetricsFixture();
+  assertMsLesionMetricsFixture();
 
   console.log(`Browser fixture parity passed:\n${results.join('\n')}`);
 })().catch(error => {

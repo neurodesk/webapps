@@ -39,6 +39,31 @@ assert.ok(segmentationDropdownTasks.includes(lesionSci), 'lesion_sci_t2 must app
 assert.deepEqual(lesionSci.outputStages?.map(stage => stage.id), ['segmentation', 'lesion', 'lesion_metrics'], 'lesion_sci_t2 must declare spinal-cord, lesion, and metrics stages');
 assert.equal(getPrimaryModelAsset(lesionSci)?.output?.activation, 'sigmoid-regions', 'lesion_sci_t2 must use SCIsegV2 region-channel output metadata');
 
+const lesionMs = SCT_TASKS.find(task => task.id === 'lesion_ms');
+const lesionMsAsset = getPrimaryModelAsset(lesionMs);
+assert.ok(lesionMs, 'lesion_ms task is defined');
+assert.equal(lesionMs.supportStatus, 'supported', 'lesion_ms must be runnable from SCT Segmentation');
+assert.ok(segmentationDropdownTasks.includes(lesionMs), 'lesion_ms must appear in the segmentation dropdown');
+assert.deepEqual(lesionMs.outputStages?.map(stage => stage.id), ['lesion', 'lesion_metrics'], 'lesion_ms emits a lesion mask and lesion metrics, and no spinal-cord mask');
+assert.equal(lesionMsAsset?.sourceVersion, 'r20250909', 'lesion_ms must stay on the model release SCT 7.3 pins');
+assert.equal(lesionMsAsset?.preprocessing?.modelOrientation, 'RPI', 'lesion_ms must match SCT dataset.json image_orientation=RPI');
+assert.equal(lesionMsAsset?.preprocessing?.modelAxisOrder, 'zyx', 'lesion_ms must feed nnU-Net its zyx axis order');
+assert.deepEqual(lesionMsAsset?.preprocessing?.targetSpacing, [1, 1, 1], 'lesion_ms must resample to the 1 mm isotropic nnU-Net plan spacing');
+assert.equal(lesionMsAsset?.inferenceDefaults?.overlap, 0.5, 'lesion_ms must mirror SCT tile_step_size=0.5');
+assert.equal(lesionMsAsset?.inferenceDefaults?.testTimeAugmentation, false, 'lesion_ms must mirror SCT use_mirroring=false');
+assert.equal(lesionMsAsset?.output?.activation, 'sigmoid-regions', 'lesion_ms runs through the region pipeline');
+assert.equal(lesionMsAsset?.output?.channelCount, 1, 'lesion_ms ONNX returns one lesion-minus-background logit channel');
+assert.deepEqual(
+  lesionMsAsset?.output?.regions?.map(region => [region.stage, region.channel, region.threshold]),
+  [['lesion', 0, 0.5]],
+  'lesion_ms thresholds the lesion probability at the argmax boundary and emits no segmentation stage'
+);
+assert.equal(lesionMsAsset?.output?.paddingMode, 'center-min-patch', 'lesion_ms pads short axes like nnU-Net');
+assert.equal(lesionMsAsset?.output?.metricsStage, 'lesion_metrics', 'lesion_ms opts in to lesion-only metrics');
+for (const patchDim of lesionMsAsset?.patchSize || [0]) {
+  assert.equal(patchDim % 32, 0, 'lesion_ms patch dimensions must be divisible by the 32x total stride of the six-stage network');
+}
+
 const spinalcord = SCT_TASKS.find(task => task.id === 'spinalcord');
 assert.ok(spinalcord, 'spinalcord task is defined');
 const spinalcordAsset = getPrimaryModelAsset(spinalcord);
