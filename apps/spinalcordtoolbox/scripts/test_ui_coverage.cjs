@@ -28,7 +28,6 @@ const sharedUiSources = [
   'WindowControls.js'
 ].map(file => fs.readFileSync(path.join(SHARED_UI, file), 'utf8')).join('\n');
 const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controller.mjs'), 'utf8');
-const processingTest = fs.readFileSync(path.join(ROOT, 'scripts/test_sct_processing.cjs'), 'utf8');
 const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_analysis.cjs'), 'utf8');
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
@@ -47,8 +46,6 @@ const UI_COVERAGE = Object.freeze([
   { id: 'thresholdInput', behavior: 'passes probability threshold to inference', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'minSizeInput', behavior: 'passes connected-component cleanup threshold', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
-  { id: 'processingOperationSelect', behavior: 'selects SCT browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
-  { id: 'runProcessingBtn', behavior: 'runs selected browser processing operation', coveredBy: ['processing', 'batch', 'static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
   { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
@@ -82,7 +79,6 @@ const UI_COVERAGE = Object.freeze([
 
 const TEST_SOURCES = {
   batch: batchTest,
-  processing: processingTest,
   'lesion-analysis': lesionAnalysisTest,
   viewer: viewerTest,
   worker: workerTest,
@@ -125,7 +121,6 @@ assert.ok(!appJs.includes('bindStartPageControls'), 'no start-page handoff remai
 assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" class="nd-status-text"[\s\S]*<progress id="progress"[\s\S]*id="cancelButton" class="nd-btn-cancel"[^>]*hidden/.test(indexHtml), 'status lives in the shared footer with a native progress bar and a hidden cancel');
 assert.ok(!indexHtml.includes('sidebar-status'), 'the sidebar status block is retired');
 assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is the only abort control');
-assert.ok(!indexHtml.includes('id="processingOutput"'), 'processing output goes to the technical log');
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
 assert.ok(indexHtml.includes('id="taskInfoTooltip"') && appJs.includes("getElementById('taskInfoTooltip')"), 'task description lives in the SCT Task info tooltip');
 assert.ok(SpinalCordToolboxGuidanceLength(appJs) <= 90, 'viewer-unavailable guidance stays within 90 characters');

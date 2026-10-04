@@ -73,7 +73,7 @@ function installModuleLoader(sandbox, selfObj, localforage) {
     const abs = path.resolve(path.dirname(WORKER_PATH), specifier);
     const src = fs.readFileSync(abs, 'utf8');
     vm.runInContext(src, sandbox, { filename: abs });
-    for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'SCTVertebrae', 'TotalSpineSeg']) {
+    for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'TotalSpineSeg']) {
       if (selfObj[name]) sandbox[name] = selfObj[name];
     }
     return {};
@@ -276,7 +276,7 @@ async function runWorkerCase(testCase) {
     // worker modules we evaluate the file so each UMD bootstrap registers on `self`.
     importScripts: (relPath) => {
       if (typeof relPath !== 'string') return;
-      if (!/(inference-pipeline|modules\/lesion-analysis|modules\/vertebrae|modules\/totalspineseg)\.js$/.test(relPath)) return;
+      if (!/(inference-pipeline|modules\/lesion-analysis|modules\/totalspineseg)\.js$/.test(relPath)) return;
       const abs = path.resolve(path.dirname(WORKER_PATH), relPath);
       if (!fs.existsSync(abs)) return;
       const src = fs.readFileSync(abs, 'utf8');
@@ -285,7 +285,7 @@ async function runWorkerCase(testCase) {
       // where root === self in worker context. In our vm sandbox, `self` is a
       // sandbox property (not the global itself), so promote exports to
       // bare global so bare-name references in inference-worker.js resolve.
-      for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'VertebraeLabeling', 'TotalSpineSeg']) {
+      for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'TotalSpineSeg']) {
         if (selfObj[name]) sandbox[name] = selfObj[name];
       }
     },

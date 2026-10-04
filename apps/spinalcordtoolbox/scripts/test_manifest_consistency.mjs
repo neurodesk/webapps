@@ -31,7 +31,7 @@ assert.deepEqual(liveIds, manifestIds, `Task ID set differs.\n  manifest.json on
 // Per-task fields that must match. We only check fields that the runtime uses
 // for inference; UI-only labels/descriptions are derived in sct-tasks.js and
 // rebuilt in the manifest, so we don't enforce strict equality on those.
-const TASK_FIELDS = ['supportStatus', 'validationStatus', 'processingOnly', 'outputType', 'outputStages'];
+const TASK_FIELDS = ['supportStatus', 'validationStatus', 'outputType', 'outputStages'];
 
 // Per-asset fields that the worker reads. Drift here causes silent runtime
 // regressions even when fixture tests (which read manifest.json) stay green.
@@ -48,14 +48,6 @@ const ASSET_FIELDS = [
   'inferenceDefaults',
   'browserFormat',
   'conversionStatus'
-];
-
-const TEMPLATE_ASSET_FIELDS = [
-  'id',
-  'filename',
-  'downloadUrl',
-  'checksum',
-  'sizeBytes'
 ];
 
 const mismatches = [];
@@ -83,10 +75,9 @@ for (const id of manifestIds) {
 
   // A supported task that the user can pick from the segmentation dropdown must
   // have a model asset. Without one, runInference() silently falls back to the
-  // global default model. Tasks that are post-processing only (vertebrae) opt
-  // out via processingOnly: true and are filtered from the segmentation menu.
-  if (!l.processingOnly && lAssets.length === 0) {
-    mismatches.push(`${id}: supported task has no modelAssets and is not processingOnly — segmentation dropdown would route it to the default model`);
+  // global default model.
+  if (lAssets.length === 0) {
+    mismatches.push(`${id}: supported task has no modelAssets — segmentation dropdown would route it to the default model`);
   }
 
   if (lAssets.length !== mAssets.length) {
@@ -105,25 +96,6 @@ for (const id of manifestIds) {
       }
     }
   }
-
-  const mTemplateAssets = Array.isArray(m.templateAssets) ? m.templateAssets : [];
-  const lTemplateAssets = Array.isArray(l.templateAssets) ? l.templateAssets : [];
-  if (lTemplateAssets.length !== mTemplateAssets.length) {
-    mismatches.push(`${id}: template asset count differs (sct-tasks.js=${lTemplateAssets.length} manifest.json=${mTemplateAssets.length})`);
-    continue;
-  }
-
-  for (let i = 0; i < mTemplateAssets.length; i++) {
-    const ma = mTemplateAssets[i];
-    const la = lTemplateAssets[i];
-    for (const field of TEMPLATE_ASSET_FIELDS) {
-      try {
-        assert.deepEqual(la[field], ma[field]);
-      } catch {
-        mismatches.push(`${id}.templateAssets[${i}].${field}: sct-tasks.js=${JSON.stringify(la[field])} manifest.json=${JSON.stringify(ma[field])}`);
-      }
-    }
-  }
 }
 
 if (mismatches.length > 0) {
@@ -136,5 +108,5 @@ if (mismatches.length > 0) {
 console.log(`Manifest consistency OK: ${manifestIds.length} tasks match across web/js/app/sct-tasks.js and web/models/manifest.json`);
 
 const automation = JSON.parse(fs.readFileSync(path.join(ROOT, 'automation.json'), 'utf8'));
-const supportedTasks = live.tasks.filter(task => task.supportStatus === 'supported' && !task.processingOnly).map(task => task.id).sort();
+const supportedTasks = live.tasks.filter(task => task.supportStatus === 'supported').map(task => task.id).sort();
 assert.deepEqual(automation.operations.segment.parameters.task.enum.toSorted(), supportedTasks, 'Automation must expose exactly the runnable model tasks.');

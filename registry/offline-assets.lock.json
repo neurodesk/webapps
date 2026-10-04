@@ -1301,20 +1301,6 @@
       "kind": "model",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz": {
-      "sha256": "5e5b27aee46837abfdb85bffb01d5eb6c20f41ed7d308f5388fc86fd251942b6",
-      "bytes": 129677,
-      "contentType": "application/gzip",
-      "kind": "atlas-template",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz": {
-      "sha256": "3e98b3275454e783a2683af0a6c895a9fa40c5c8da7eac9d6d478516fe85f0a8",
-      "bytes": 24057343,
-      "contentType": "application/gzip",
-      "kind": "atlas-template",
-      "dependencies": []
-    },
     "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx": {
       "sha256": "22f2e6e0b7a028a80ddd8b211d5c732da8c23a6dbb059fb9d379a67b3f9ce74c",
       "bytes": 564385004,
@@ -3057,8 +3043,6 @@
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-graymatter.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-lesion-sci-t2.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-spinalcord.onnx",
-      "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz",
-      "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx",
       "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz"

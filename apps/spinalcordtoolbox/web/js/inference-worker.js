@@ -30,7 +30,6 @@ function loadDependencies() {
     import('../nifti-js/index.js'),
     import('./inference-pipeline.js'),
     import('./modules/lesion-analysis.js'),
-    import('./modules/vertebrae.js'),
     import('./modules/totalspineseg.js')
   ]).then(([localForageModule]) => {
     localforage = localForageModule.default;
@@ -38,7 +37,7 @@ function loadDependencies() {
     SCTInferencePipeline = globalThis.SCTInferencePipeline;
     SCTLesionAnalysis = globalThis.SCTLesionAnalysis;
     TotalSpineSeg = globalThis.TotalSpineSeg;
-    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !globalThis.SCTVertebrae || !TotalSpineSeg) {
+    if (!localforage || !nifti || !SCTInferencePipeline || !SCTLesionAnalysis || !TotalSpineSeg) {
       throw new Error('SCT worker dependencies failed to initialize');
     }
     return { localforage, nifti };
@@ -646,49 +645,6 @@ async function stepInference(params) {
   postComplete();
 }
 
-async function stepVertebralLabeling(params = {}) {
-  if (!workerState.rasData) {
-    throw new Error('No volume loaded. Run Load first.');
-  }
-  if (!workerState.segLabelsRAS) {
-    throw new Error('No spinal cord segmentation is available. Run segmentation first.');
-  }
-  if (!self.SCTVertebrae) {
-    throw new Error('Vertebral labeling module is not available.');
-  }
-
-  self._currentTaskId = 'vertebrae';
-  postProgress(0.05, 'Loading vertebral labeling assets...');
-  const modelBaseUrl = params.modelBaseUrl || '../models';
-  const c2c3ModelUrl = params.c2c3ModelUrl || `${modelBaseUrl}/c2c3_disc_models/t2_model.yml`;
-  const pam50LevelsUrl = params.pam50LevelsUrl || `${modelBaseUrl}/templates/PAM50/PAM50_levels.nii.gz`;
-  const result = await self.SCTVertebrae.labelVertebrae({
-    anatomy: workerState.rasData,
-    segmentation: workerState.segLabelsRAS,
-    dims: workerState.rasDims,
-    spacing: workerState.rasSpacing,
-    c2c3ModelUrl,
-    pam50LevelsUrl,
-    scaleDist: params.scaleDist ?? 0.55,
-    detectorMinScore: params.detectorMinScore ?? 0.1
-  });
-
-  postProgress(0.85, 'Writing vertebral labels...');
-  postLog(`C2-C3 detector: z=${result.detected.z}, score=${Number.isFinite(result.detected.score) ? result.detected.score.toFixed(4) : 'n/a'}, fallback=${!!result.detected.fallback}`);
-  postLog(`Vertebral boundaries: ${result.boundaries.map(boundary => boundary.z).join(', ')}`);
-
-  let outputLabels = result.labels;
-  if (!workerState.isIdentity) {
-    outputLabels = inverseOrient(outputLabels, workerState.rasDims, workerState.perm, workerState.flip, workerState.origDims);
-  }
-
-  const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
-  postStageData('vertebrae', outputNifti, 'SCT vertebral labeling');
-
-  postProgress(1.0, 'Vertebral labeling complete');
-  postStepComplete('processing');
-}
-
 // ==================== Message Handler ====================
 
 installWorkerRouter({
@@ -730,15 +686,6 @@ installWorkerRouter({
         await stepInference(data || {});
       } catch (error) {
         console.error('Inference error:', error);
-        postError(error?.message || String(error));
-      }
-      break;
-
-    case 'run-vertebral-labeling':
-      try {
-        await stepVertebralLabeling(data || {});
-      } catch (error) {
-        console.error('Vertebral labeling error:', error);
         postError(error?.message || String(error));
       }
       break;
