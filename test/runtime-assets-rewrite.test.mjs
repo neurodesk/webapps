@@ -9,6 +9,11 @@ import { pathToFileURL } from 'node:url';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { assembleRuntimeAssetStore } from '../scripts/lib/runtime-assets.mjs';
 
+async function prepareParameterRuntimeFixture(repoRoot) {
+  await cp(new URL('../packages/components/src/automation/parameters.js', import.meta.url), join(repoRoot, 'packages/components/src/automation/parameters.js'), { recursive: true });
+  await symlink(new URL('../packages/components/node_modules', import.meta.url).pathname, join(repoRoot, 'packages/components/node_modules'), 'dir');
+}
+
 test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-assets-rewrite-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -24,8 +29,7 @@ test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t)
     { name: 'ort.min.js', sourceApp: 'calmar' },
   ];
 
-  await cp(new URL('../packages/components/src/automation/parameters.js', import.meta.url), join(repoRoot, 'packages/components/src/automation/parameters.js'), { recursive: true });
-  await symlink(new URL('../packages/components/node_modules', import.meta.url).pathname, join(repoRoot, 'packages/components/node_modules'), 'dir');
+  await prepareParameterRuntimeFixture(repoRoot);
   await mkdir(join(repoRoot, 'runtime-assets'), { recursive: true });
   await mkdir(join(repoRoot, 'packages', 'components', 'src'), { recursive: true });
   await writeFile(join(repoRoot, 'packages', 'components', 'src', 'index.js'), '');
@@ -114,8 +118,7 @@ test('composite rewrite preserves vendored component file suffixes before removi
   const repoRoot = join(root, 'repo');
   const siteDist = join(root, 'site');
   const appDist = join(siteDist, 'calmar');
-  await cp(new URL('../packages/components/src/automation/parameters.js', import.meta.url), join(repoRoot, 'packages/components/src/automation/parameters.js'), { recursive: true });
-  await symlink(new URL('../packages/components/node_modules', import.meta.url).pathname, join(repoRoot, 'packages/components/node_modules'), 'dir');
+  await prepareParameterRuntimeFixture(repoRoot);
   await mkdir(join(repoRoot, 'runtime-assets'), { recursive: true });
   await mkdir(join(repoRoot, 'packages', 'components', 'src', 'styles'), { recursive: true });
   await mkdir(join(appDist, 'js'), { recursive: true });
