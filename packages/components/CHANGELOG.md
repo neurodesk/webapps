@@ -1,5 +1,17 @@
 # @neurodesk/webapp-components
 
+## 0.10.0
+
+### Minor Changes
+
+- ec85a09: Add a shared editor for correcting masks and label maps in the viewer. The `nd-mask-editor` element (`createMaskEditor`) is a second viewer toolbar row with Draw, Erase and Fill tools, a Label select for label maps, brush size, Undo, Apply and Cancel. It edits through NiiVue's drawing layer in both the 0.x and 1.0 generations (`createDrawingAdapter` in `@neurodesk/webapp-components/viewer`). Apply returns the result on its own grid as a uint8 NIfTI with the result's name. `createResultList` shows an Edit button for results marked `editable` and labels edited results. On NiiVue 1.0 rc.11 to rc.14 the adapter corrects a NiiVue load error that put masks on the wrong voxels of images with permuted axes, such as sagittal acquisitions.
+
+  Cancellation waits for pending editor work and prevents a cancelled export from applying to a replacement result. Removing the editor releases its drawing session and keyboard listener. Editing rejects masks whose voxel dimensions or affine differ from the displayed image, and exports preserve the source mask's header and extensions.
+
+### Patch Changes
+
+- 0204fe1: Style the `.nd-edit-btn` result action wherever it appears. Apps that build their own result rows, rather than using `createResultList`, now get the same Edit button as the shared list.
+
 ## 0.9.0
 
 ### Minor Changes

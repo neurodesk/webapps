@@ -19,6 +19,9 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
   topological correction); `fast` is a single pass.
 - **CT** — auto-checked when the loaded image contains negative intensities.
 - **Output** — label-overlay opacity, `<stem>_synthseg.nii.gz`, `<stem>_synthseg.json`.
+- **Edit** — corrects the labels in the viewer with the shared mask editor. Download then
+  saves the edited labels (uint8, same name and grid); the JSON report keeps the pipeline's.
+  An input off SynthSeg's 1 mm grid is shown resampled to that grid while editing.
 
 ## Automation limits
 

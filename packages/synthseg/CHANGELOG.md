@@ -2,6 +2,7 @@
 
 ## 0.5.20261004
 
+
 ### Patch Changes
 
 - Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
@@ -9,7 +10,6 @@
   scaling and geometry rules.
 - Updated dependencies [257192b]
   - @neurodesk/runtime-support@0.1.3
-
 
 ## 0.5.20261003
 

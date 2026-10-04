@@ -2,11 +2,12 @@ import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import NiiVue, { MULTIPLANAR_TYPE, SLICE_TYPE, SHOW_RENDER } from '@niivue/niivue';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
-import { createResultList, createInfoDialog, createConsole, createFileField, createViewerToolbar } from '@neurodesk/webapp-components/ui';
+import { createResultList, createInfoDialog, createConsole, createFileField, createViewerToolbar, createMaskEditor } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
 import examples from '../examples.json';
+import { editedResult, extractionOutputs } from './outputs.js';
 import appPackage from '../package.json';
 import { createRunState, registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
 
@@ -26,6 +27,9 @@ let viewerReady;
 let viewQueue = Promise.resolve();
 let viewRevision = 0;
 let displayedStage = null;
+let editor = null;
+// { previous }: the stage shown before the open edit, restored when it closes.
+let editing = null;
 const layouts = {
   multiplanar: () => {
     viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -69,8 +73,12 @@ $('exampleControl').replaceWith(exampleControl);
 
 const results = createResultList({
   element: $('resultList'),
-  onView: (stage, result) => show(result.file, stage),
+  onView: (stage, result) => {
+    if (editing) return;
+    show(result.file, stage);
+  },
   onDownload: (_stage, result) => downloadFile(result.file),
+  onEdit: (stage, result) => void editResult(stage, result),
 });
 let source = null;
 let outputs = {};
@@ -133,11 +141,36 @@ async function resolveMindgrabBackend(requested, run) {
   if (run.current) status('No WebGPU adapter · using CPU processing');
   return 'cpu';
 }
+function closeEdit() {
+  const previous = editing?.previous;
+  editing = null;
+  results.setEditingEnabled(!editor || editor.session.state === 'idle');
+  if (outputs[previous]) show(outputs[previous].file, previous);
+}
+async function editResult(stage, result) {
+  if (state.phase !== 'idle' || editing || !source) return;
+  const session = { previous: displayedStage ?? 'original' };
+  editing = session;
+  results.setEditingEnabled(false);
+  try {
+    await show(source, stage, { overlay: result.file, throwOnError: true });
+    if (editing !== session) return;
+    if (!await editor.start({ stage, file: result.file, label: result.description, overlayIndex: 1 })) closeEdit();
+  } catch (error) {
+    if (editing !== session) return;
+    status(error.message, true);
+    closeEdit();
+  }
+}
 function resetOutputs() {
+  editing = null;
+  const cancelled = editor?.cancel();
+  results.setEditingEnabled(!editor || editor.session.state === 'idle');
   outputs = source ? { original: { description: 'Original', file: source } } : {};
   results.render(outputs);
   $('outputSection').open = false;
   $('reportBtn').disabled = true;
+  return cancelled;
 }
 async function ensureViewer() {
   if (!viewerReady) {
@@ -146,6 +179,24 @@ async function ensureViewer() {
       await viewer.attachTo('gl1');
       layouts.multiplanar();
       viewer.isLegendVisible = false;
+      editor = createMaskEditor({
+        nv: viewer,
+        onApply: (stage, file, { original }) => {
+          outputs[stage] = editedResult(outputs[stage], file, original);
+          results.render(outputs);
+          status(`${outputs[stage].description} edited`);
+          closeEdit();
+        },
+        onCancel: () => {
+          if (!editing) return;
+          status('Edit discarded');
+          closeEdit();
+        },
+        onError: (_stage, error) => status(error.message, true),
+      });
+      editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(true));
+      editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
+      toolbar.after(editor);
       viewer.createExtensionContext().on('locationChange', event => { $('location').textContent = event.detail.string; });
       automation.registerViewer('main', createNiivueAdapter(viewer, {
         tabs: {
@@ -158,13 +209,15 @@ async function ensureViewer() {
   }
   return viewerReady;
 }
-function show(file, stage, { throwOnError = false } = {}) {
+function show(file, stage, { throwOnError = false, overlay = null } = {}) {
   const revision = ++viewRevision;
   viewQueue = viewQueue.catch(() => {}).then(async () => {
     if (revision !== viewRevision) return;
     const nv = await ensureViewer();
     if (revision !== viewRevision) return;
-    await nv.loadVolumes([{ url: file, name: file.name }]);
+    const layers = [{ url: file, name: file.name }];
+    if (overlay) layers.push({ url: overlay, name: overlay.name, colormap: 'red', opacity: 0.7 });
+    await nv.loadVolumes(layers);
     if (revision !== viewRevision) return;
     displayedStage = stage;
     $('gl1').hidden = false;
@@ -199,12 +252,14 @@ async function importImages(filesSource, signal) {
   $('emptyState').hidden = false;
   $('viewerNotice').hidden = true;
   $('location').textContent = '';
-  resetOutputs();
+  const cancelled = resetOutputs();
   $('fileInfo').hidden = true;
   picker.setHasFiles(false);
   status('Reading images and converting DICOM if needed…');
   try {
+    await cancelled;
     signal?.throwIfAborted();
+    job.run.signal.throwIfAborted();
     const files = await (typeof filesSource === 'function' ? filesSource(job.run.signal) : filesSource);
     job.run.signal.throwIfAborted();
     const images = await readImageFiles(files, { signal: job.run.signal });
@@ -241,8 +296,7 @@ $('folderInput').onchange = event => {
 async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   if (!source || state.phase !== 'idle') throw new Error('Load an image before starting brain extraction.');
   signal?.throwIfAborted();
-  resetOutputs();
-  void show(source, 'original');
+  const cancelled = resetOutputs();
   const { method, threshold = 0.5, backend: requestedBackend = 'auto' } = parameters;
   const effective = { method };
   if (method === 'bet') effective.threshold = threshold;
@@ -253,6 +307,10 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   const abort = () => cancel();
   signal?.addEventListener('abort', abort, { once: true });
   try {
+    await cancelled;
+    signal?.throwIfAborted();
+    job.run.signal.throwIfAborted();
+    void show(source, 'original');
     return await new Promise((resolve, reject) => {
       job.run.signal.addEventListener('abort', () => {
         queueMicrotask(() => {
@@ -290,8 +348,7 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
                 provenance: data.provenance,
               });
               if (!succeeded) throw new DOMException('Cancelled', 'AbortError');
-              outputs.brain = { description: 'Brain', file: brain };
-              outputs.mask = { description: 'Brain mask', file: mask };
+              Object.assign(outputs, extractionOutputs(brain, mask));
               results.render(outputs);
               $('outputSection').open = true;
               $('progress').value = 1;

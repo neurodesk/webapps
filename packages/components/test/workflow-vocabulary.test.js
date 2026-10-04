@@ -177,9 +177,9 @@ test('imaging workspace provides a reusable three-panel viewer layout', async ()
   assert.match(css, /orientation: landscape\) \{\s*\.nd-imaging-viewer:has\([^)]*\) \.nd-viewer-canvas-wrapper \{ height: calc\(100vw \/ 3\); \}/);
 });
 
-test('result labels wrap when visibility and View controls share a row', async () => {
+test('result labels wrap when visibility and View controls, or an Edit button, share a row', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
-  assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);
+  assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label,\s*\.nd-volume-toggle:has\(\.nd-edit-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);
 });
 
 

@@ -883,7 +883,7 @@
   }
 
   [data-neurodesk-app] :is(.viewer-toolbar, .viewer-actions, .window-controls, .view-tabs,
-      .nd-viewer-toolbar, .nd-viewer-actions, .nd-window-controls, .nd-view-tabs) {
+      .nd-viewer-toolbar, .nd-viewer-actions, .nd-window-controls, .nd-view-tabs, .nd-mask-editor, .nd-tool-group) {
     flex-wrap: wrap;
     min-width: 0;
   }

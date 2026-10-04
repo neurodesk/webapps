@@ -17,7 +17,7 @@ export default defineConfig({
     launchOptions: {
       args: process.env.SYNCRO_HARDWARE_GPU
         ? ['--enable-unsafe-webgpu']
-        : ['--enable-unsafe-webgpu', '--use-angle=swiftshader'],
+        : ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-features=Vulkan', '--use-vulkan=swiftshader'],
     },
   },
 });

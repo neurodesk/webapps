@@ -169,3 +169,30 @@ test('a kept checkbox row follows the new visibility', () => {
   assert.equal(checkbox.checked, false);
   window.close();
 });
+
+test('editable results offer Edit between the label and Download, and edited ones say so', () => {
+  const { window } = new JSDOM();
+  const edits = [];
+  const list = createResultList({ onEdit: (stage, result) => edits.push([stage, result]) }, window.document);
+  window.document.body.append(list);
+  const mask = { description: 'Brain mask', editable: true };
+  list.render({ input: { description: 'T1w' }, mask });
+  assert.equal(list.querySelector('[data-stage="input"] .nd-edit-btn'), null);
+  const row = list.querySelector('[data-stage="mask"]');
+  assert.deepEqual([...row.children].map(child => child.className), ['nd-view-btn', 'nd-stage-label', 'nd-edit-btn', 'nd-download-btn']);
+  const edit = row.querySelector('.nd-edit-btn');
+  assert.deepEqual([edit.textContent, edit.title], ['Edit', 'Edit in the viewer']);
+  edit.click();
+  assert.deepEqual(edits, [['mask', mask]]);
+
+  list.setEditingEnabled(false);
+  assert.equal(edit.disabled, true);
+  list.render({ input: { description: 'T1w' }, mask: { ...mask, edited: true } });
+  const replaced = list.querySelector('[data-stage="mask"]');
+  assert.notEqual(replaced, row, 'the edited flag changes the row');
+  assert.equal(replaced.querySelector('.nd-stage-label').textContent, 'Brain mask (edited)');
+  assert.equal(replaced.querySelector('.nd-edit-btn').disabled, true, 'a new row keeps editing disabled');
+  list.setEditingEnabled(true);
+  assert.equal(replaced.querySelector('.nd-edit-btn').disabled, false);
+  window.close();
+});
