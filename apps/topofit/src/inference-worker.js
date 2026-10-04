@@ -75,7 +75,7 @@ self.onmessage = async ({ data: job }) => {
       Tensor,
       onProgress: progress,
       runtime: {
-        app: 'TopoFit web 0.12.20261003',
+        app: 'TopoFit web 0.12.20261004',
         release: manifest.release,
         conformer: '@niivue/niimath -conform -ras',
         assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),

@@ -1,5 +1,14 @@
 # synthsr
 
+## 0.5.20261004
+
+### Patch Changes
+
+- Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/synthsr@0.5.20261004
+
 ## 0.5.20261003
 
 ### Patch Changes
