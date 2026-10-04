@@ -4,7 +4,20 @@
   "type": "module",
   "license": "Apache-2.0",
   "description": "Runtime-independent SynthStrip brain extraction",
-  "exports": {".": "./src/index.js"},
-  "files": ["src", "LICENSE", "NOTICE", "README.md"],
-  "scripts": {"test": "node --test test/*.test.js"}
+  "exports": {
+    ".": "./src/index.js",
+    "./browser": "./src/browser.js"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@neurodesk/runtime-support": "workspace:*"
+  }
 }

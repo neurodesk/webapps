@@ -11,7 +11,8 @@
       "types": "./src/niimath/index.d.ts",
       "default": "./src/niimath/index.js"
     },
-    "./gpu-unet": "./src/gpu-unet/index.js"
+    "./gpu-unet": "./src/gpu-unet/index.js",
+    "./streamed-onnx": "./src/streamed-onnx/session.js"
   },
   "dependencies": {
     "@niivue/dcm2niix": "^1.2.0"
