@@ -10,11 +10,12 @@ import {
   createInfoDialog,
   createConsole,
   createViewerToolbar,
+  createMaskEditor,
 } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile, readNifti } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import manifest from '@neurodesk/synthseg/manifest';
-import { looksLikeCt, outputStem } from './logic.js';
+import { editedResult, gridOf, labelNames, labelsResult, looksLikeCt, outputStem, sameGrid } from './logic.js';
 import freesurferLut from '@neurodesk/webapp-components/automation/freesurfer-lut';
 import './styles.css';
 
@@ -68,22 +69,21 @@ toolbar.control('overlayOpacityValue').textContent = '60%';
 const results = createResultList({
   element: $('resultList'),
   onView: () => {
-    if (output && !busy) void show();
+    if (labels && !busy) void view('labels');
   },
   onDownload: () => {
-    if (output && !busy) downloadFile(output);
+    if (labels && !busy) downloadFile(labels.file);
   },
+  onEdit: () => void editLabels(),
 });
-results.render({ labels: { description: 'FreeSurfer labels' } });
-$('resultList').querySelector('.nd-download-btn').id = 'saveBtn';
-$('resultList').querySelector('.nd-view-btn').id = 'viewResultBtn';
-$('saveBtn').disabled = true;
-$('viewResultBtn').disabled = true;
 const assetBase = import.meta.env.VITE_SYNTHSEG_ASSET_BASE || manifest.base_url;
+const OFF_GRID_NOTE = "The input is shown resampled to SynthSeg's 1 mm label grid.";
 
 const webgpu = Boolean(navigator.gpu);
 let source,
-  output,
+  sourceGrid,
+  labels = null,
+  editor = null,
   provenance,
   worker,
   viewer,
@@ -95,7 +95,16 @@ let operation;
 let viewRevision = 0;
 let displayedStage = null;
 let importedImages = [];
+renderResults();
 
+function renderResults() {
+  results.render({ labels: labels ?? { description: 'FreeSurfer labels' } });
+  $('resultList').querySelector('.nd-download-btn').id = 'saveBtn';
+  $('resultList').querySelector('.nd-view-btn').id = 'viewResultBtn';
+  $('saveBtn').disabled = busy || !labels;
+  $('viewResultBtn').disabled = busy || !labels;
+}
+const editing = () => Boolean(editor) && editor.session.state !== 'idle';
 function status(message, error = false) {
   $('statusText').textContent = message;
   $('statusText').classList.toggle('error', error);
@@ -109,9 +118,10 @@ function setBusy(value, cancellable = false) {
     $(id).disabled = value;
   $('processButton').disabled = value || !source || !webgpu;
   $('cancelBtn').hidden = !value || !cancellable;
-  $('opacity').disabled = value || !output;
-  $('saveBtn').disabled = value || !output;
-  $('viewResultBtn').disabled = value || !output;
+  $('opacity').disabled = value || !labels || editing();
+  $('saveBtn').disabled = value || !labels;
+  $('viewResultBtn').disabled = value || !labels;
+  results.setEditingEnabled(!value && !editing());
   $('reportBtn').disabled = value || runs.snapshot().state !== 'succeeded';
   if (!value) {
     clearInterval(timer);
@@ -131,13 +141,36 @@ async function ensureViewer() {
     viewer.createExtensionContext().on('locationChange', (e) => {
       $('location').textContent = e.detail.string;
     });
+    editor = createMaskEditor({
+      nv: viewer,
+      labelNames: labelNames(freesurferLut),
+      onApply: async (_stage, file, { original }) => {
+        if (labels?.file !== original) return;
+        labels = editedResult(labels, file);
+        renderResults();
+        endEdit();
+        await show('labels');
+        status('Labels edited · Download saves the edited file');
+      },
+      onCancel: () => {
+        endEdit();
+        if (!labels) return;
+        void show('labels');
+        status('Edits discarded · labels unchanged');
+      },
+      onError: (_stage, error) => status(`Editing failed: ${error.message}`, true),
+    });
+    editor.addEventListener('nd-mask-edit-start', ({ detail }) => {
+      status(sameGrid(sourceGrid, labels.grid) ? detail.message : `${detail.message} ${OFF_GRID_NOTE}`);
+    });
+    toolbar.after(editor);
     automation.registerViewer('main', createNiivueAdapter(viewer, {
       tabs: {
         list: () => [
           ...(source ? [{ id: 'original', label: 'Original', active: displayedStage === 'original' }] : []),
-          ...(output ? [{ id: 'labels', label: 'FreeSurfer labels', active: displayedStage === 'labels' }] : []),
+          ...(labels ? [{ id: 'labels', label: 'FreeSurfer labels', active: displayedStage === 'labels' }] : []),
         ],
-        select: id => show(id),
+        select: id => view(id),
       },
       regions: { list: () => runs.snapshot().report?.measurements?.labels ?? [] },
     }));
@@ -145,37 +178,83 @@ async function ensureViewer() {
   })();
   return viewerReady;
 }
-async function show(stage = output ? 'labels' : 'original') {
+// The drawing lives on volume 0's voxels, so off the input's grid the hidden labels are volume 0
+// and the input is resampled onto them.
+function stack(stage) {
+  const input = { url: source, name: source.name };
+  if (!labels) return { title: 'ORIGINAL IMAGE', volumes: [input], labelOverlay: false };
+  const overlay = { url: labels.file, name: labels.file.name };
+  if (stage === 'edit' && sameGrid(sourceGrid, labels.grid)) {
+    return { title: 'ORIGINAL IMAGE · EDITING LABELS', volumes: [input], labelOverlay: false };
+  }
+  if (stage === 'edit') {
+    return {
+      title: 'ORIGINAL IMAGE ON THE 1 MM LABEL GRID · EDITING LABELS',
+      volumes: [{ ...overlay, opacity: 0 }, input],
+      labelOverlay: false,
+    };
+  }
+  const opacity = stage === 'labels' ? Number($('opacity').value) : 0;
+  return {
+    title: stage === 'labels' ? 'ORIGINAL IMAGE · FREESURFER LABELS' : 'ORIGINAL IMAGE',
+    volumes: [input, { ...overlay, opacity }],
+    labelOverlay: true,
+  };
+}
+async function show(stage = labels ? 'labels' : 'original') {
   const revision = ++viewRevision;
-  const displayedOutput = output;
+  const { title, volumes, labelOverlay } = stack(stage);
   $('emptyState').hidden = true;
-  $('imageLabel').textContent = output && stage === 'labels' ? 'ORIGINAL IMAGE · FREESURFER LABELS' : 'ORIGINAL IMAGE';
-  const volumes = [{ url: source, name: source.name }];
-  if (output) volumes.push({ url: output, name: output.name, opacity: stage === 'labels' ? Number($('opacity').value) : 0 });
+  $('imageLabel').textContent = title;
   try {
     const nv = await ensureViewer();
-    if (revision !== viewRevision) return;
+    if (revision !== viewRevision) return false;
     await nv.loadVolumes(volumes);
-    if (revision !== viewRevision) return;
+    if (revision !== viewRevision) return false;
     // Label names too, so the location bar reads e.g. "Left-Hippocampus".
-    if (displayedOutput) await nv.setColormapLabel(1, freesurferLut);
-    if (revision !== viewRevision) return;
+    if (labelOverlay) await nv.setColormapLabel(1, freesurferLut);
+    if (revision !== viewRevision) return false;
     displayedStage = stage;
     $('viewerError').hidden = true;
+    return true;
   } catch (error) {
-    if (revision !== viewRevision) return;
+    if (revision !== viewRevision) return false;
     $('viewerError').hidden = false;
     $('viewerError').textContent =
       `Visualization unavailable: ${error.message}. Processing and NIfTI download remain available.`;
+    return false;
   }
 }
+async function view(stage) {
+  await editor?.cancel();
+  await show(stage);
+}
+async function editLabels() {
+  if (!labels || busy || editing()) return;
+  const { file } = labels;
+  results.setEditingEnabled(false);
+  $('opacity').disabled = true;
+  try {
+    if (!await show('edit') || labels?.file !== file) throw new Error('the viewer could not show the labels');
+    const colormap = viewer.addColormap('FreeSurferLabels', freesurferLut);
+    if (!await editor.start({ stage: 'labels', file, label: 'FreeSurfer labels', overlayIndex: null, colormap })) endEdit();
+  } catch (error) {
+    endEdit();
+    if (labels?.file === file) void show('labels');
+    status(`Editing unavailable: ${error.message}`, true);
+  }
+}
+function endEdit() {
+  results.setEditingEnabled(!busy);
+  $('opacity').disabled = busy || !labels;
+}
 function clearOutputs() {
-  output = null;
+  void editor?.cancel();
+  labels = null;
   provenance = null;
+  renderResults();
   $('outputSection').open = false;
   $('reportBtn').disabled = true;
-  $('saveBtn').disabled = true;
-  $('viewResultBtn').disabled = true;
 }
 function beginImport() {
   operation = runs.begin('loading');
@@ -198,11 +277,13 @@ async function load(file, signal, existingRun) {
     signal?.throwIfAborted();
     if (!/\.nii(\.gz)?$/i.test(file.name)) throw new Error('Choose a .nii or .nii.gz image.');
     status('Reading image…');
-    const { data, dims } = await readNifti(await file.arrayBuffer());
+    const image = await readNifti(await file.arrayBuffer());
+    const { data, dims } = image;
     signal?.throwIfAborted();
     run.signal.throwIfAborted();
     if (!run.current) return false;
     source = file;
+    sourceGrid = gridOf(image);
     $('ct').checked = looksLikeCt(data);
     $('progress').value = 0;
     $('elapsed').textContent = '';
@@ -294,7 +375,7 @@ $('exampleControl').replaceWith(exampleControl);
 $('opacity').oninput = () => {
   const value = Number($('opacity').value);
   toolbar.control('overlayOpacityValue').textContent = `${Math.round(value * 100)}%`;
-  if (output && viewer) void viewer.setVolume(1, { opacity: value });
+  if (labels && viewer) void viewer.setVolume(1, { opacity: value });
 };
 async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
   if (!source || busy) throw new Error('Load an image before starting segmentation.');
@@ -355,7 +436,8 @@ async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
                 measurements,
               });
               if (!succeeded) throw new DOMException('Cancelled', 'AbortError');
-              output = file;
+              labels = labelsResult(file, gridOf(image));
+              renderResults();
               provenance = data.provenance;
               $('outputSection').open = true;
               $('progress').value = 1;
