@@ -1,0 +1,1618 @@
+{
+  "date": "2026-10-04",
+  "baselineCommit": "e1f189f8",
+  "decision": "The reproduced per-label deficit is a preprocessing bug, not an accepted method difference. Keep the per-label Dice >= 0.95 gate.",
+  "originalClaim": "The original 10/26-label, minimum-Dice 0.693 regression pin and report were not found. This independently reproduces the failure class on labeled public data; it does not reproduce that exact historical score.",
+  "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
+  "referenceEnvironment": {
+    "monai": "1.3.2",
+    "torch": "2.4.1+cpu",
+    "numpy": "1.26.4",
+    "nibabel": "5.2.1"
+  },
+  "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6",
+  "checkpointSha256": "45dfa2843d2e0b1fd842152d6a79bfd4bcb90899c076ceb6346c59da9a79a16c",
+  "inputs": [
+    {
+      "id": "body",
+      "source": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/musclemap/body-mri/body_mri_s0175.nii.gz",
+      "derivation": "nibabel array[:, :, :17], preserve affine and original int16 header; saving autoscales integer storage and changes intensities by at most 0.004180908203125",
+      "shape": [
+        320,
+        240,
+        17
+      ],
+      "file": "body-mri-first17.nii.gz",
+      "sha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f"
+    },
+    {
+      "id": "knee",
+      "source": "VHP male series 1.3.6.1.4.1.5962.1.3.2297.18.1672334394.26545",
+      "sourceSha256": "bb4cdef01379236c08f9e6c741f38a0aa435b09ef497ea3268560b868f94b4c2",
+      "derivation": "nibabel array[:, 180:188, :], affine translation += affine[:3, 1] * 180",
+      "shape": [
+        256,
+        8,
+        45
+      ],
+      "file": "knee-diagnostic-y180-188-full-ap.nii.gz",
+      "sha256": "19b49ebe20495a4437522704506144c1a9f71a202d8ef6f31856955bf34e220a"
+    }
+  ],
+  "reproduction": {
+    "download": "python apps/musclemap/scripts/fetch_parity_reference.py \"$TMPDIR/musclemap-reference\"",
+    "build": "pnpm --filter musclemap build",
+    "wasm": "node apps/musclemap/scripts/validate_upstream_parity.mjs --case CASE --reference-root \"$TMPDIR/musclemap-reference\" --backend wasm --output \"$TMPDIR/output.nii\" --report \"$TMPDIR/report.json\"",
+    "webgpu": "node apps/musclemap/scripts/validate_upstream_parity.mjs --case body-single-slice --reference-root \"$TMPDIR/musclemap-reference\" --backend webgpu --software-webgpu --output \"$TMPDIR/output.nii\" --report \"$TMPDIR/report.json\"",
+    "regenerateUpstream": "apps/musclemap/.tmp_model_env/bin/python apps/musclemap/scripts/generate_upstream_reference.py --help"
+  },
+  "limitations": [
+    "References establish agreement with the upstream implementation on these public MRI inputs, not anatomical ground truth or CT validation.",
+    "WebGPU was tested on software SwiftShader, not a hardware GPU.",
+    "Full knee reference uses explicitly modified bounded channel inversion, with exact pre-cleanup equivalence verified on three labeled subsets and one background subset.",
+    "The historical full-knee chunk-size-5 reference is not regenerated here; full-knee validation uses the published chunk-size-45, overlap-0 reference.",
+    "Forward affine fixture coverage does not establish full inference parity for arbitrary sheared affines."
+  ],
+  "verification": {
+    "musclemapUnitTests": 124,
+    "repositoryContracts": 38,
+    "pythonComparatorTests": 2,
+    "pythonFetcherTests": 3,
+    "syntheticFixturesRegenerateByteIdentically": true,
+    "productionBuild": "passed",
+    "artifactAudit": "passed",
+    "baselineRegressionTests": {
+      "tests": 3,
+      "failed": 3,
+      "sourceCommit": "e1f189f8",
+      "note": "Run against baseline worker and monai-compat sources with the same synthetic upstream fixture."
+    }
+  },
+  "referenceBundle": {
+    "repository": "neurodeskorg/webapps",
+    "revision": "1409093e00bd7cc072220752352bb8891e5f38c6",
+    "prefix": "musclemap/parity/20261004",
+    "manifest": "model-sources/parity-reference.json"
+  },
+  "historicalCases": [
+    {
+      "id": "body-before",
+      "backend": "browser WASM",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "referenceSha256": "68aab4a30aa7f8b80bf3dbc8aa55bc00f7c42f0644aada156114ba3f21943c22",
+      "candidateSha256": "bf5fe5ee0ce997c395c85743ff9419d9adf7211ce6588ea8b4f9e8358f1ebf9a",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "reference": "body-mri-first17-upstream-dseg.nii.gz",
+        "candidate": "body-first17-baseline.nii",
+        "shape": [
+          320,
+          240,
+          17
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 0.9939123774509804,
+        "foregroundDice": 0.9859220257788182,
+        "referenceForegroundVoxels": 138257,
+        "candidateForegroundVoxels": 137706,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 4472,
+            "candidateVoxels": 4413,
+            "dice": 0.9762521102982555
+          },
+          "6172": {
+            "referenceVoxels": 4136,
+            "candidateVoxels": 4165,
+            "dice": 0.9815684857246115
+          },
+          "7101": {
+            "referenceVoxels": 11597,
+            "candidateVoxels": 12025,
+            "dice": 0.9629159258318517
+          },
+          "7102": {
+            "referenceVoxels": 7967,
+            "candidateVoxels": 8003,
+            "dice": 0.9616781465247338
+          },
+          "7111": {
+            "referenceVoxels": 11347,
+            "candidateVoxels": 11262,
+            "dice": 0.967844663629528
+          },
+          "7112": {
+            "referenceVoxels": 11264,
+            "candidateVoxels": 10599,
+            "dice": 0.9525682660202168
+          },
+          "7121": {
+            "referenceVoxels": 9046,
+            "candidateVoxels": 8680,
+            "dice": 0.9650231298657339
+          },
+          "7122": {
+            "referenceVoxels": 6423,
+            "candidateVoxels": 6606,
+            "dice": 0.9560211835137002
+          },
+          "7131": {
+            "referenceVoxels": 3695,
+            "candidateVoxels": 3947,
+            "dice": 0.9306464276367443
+          },
+          "7132": {
+            "referenceVoxels": 2810,
+            "candidateVoxels": 3382,
+            "dice": 0.9066537467700259
+          },
+          "7141": {
+            "referenceVoxels": 1419,
+            "candidateVoxels": 1312,
+            "dice": 0.9461735627975101
+          },
+          "7142": {
+            "referenceVoxels": 1637,
+            "candidateVoxels": 1471,
+            "dice": 0.9272844272844273
+          },
+          "7151": {
+            "referenceVoxels": 1253,
+            "candidateVoxels": 1287,
+            "dice": 0.9456692913385827
+          },
+          "7152": {
+            "referenceVoxels": 1646,
+            "candidateVoxels": 1534,
+            "dice": 0.9534591194968554
+          },
+          "7161": {
+            "referenceVoxels": 6201,
+            "candidateVoxels": 6452,
+            "dice": 0.9583497984667668
+          },
+          "7162": {
+            "referenceVoxels": 5513,
+            "candidateVoxels": 5370,
+            "dice": 0.9344849765689608
+          },
+          "7171": {
+            "referenceVoxels": 3305,
+            "candidateVoxels": 3071,
+            "dice": 0.9385194479297365
+          },
+          "7172": {
+            "referenceVoxels": 3468,
+            "candidateVoxels": 2993,
+            "dice": 0.9051230459681164
+          },
+          "7181": {
+            "referenceVoxels": 7137,
+            "candidateVoxels": 7042,
+            "dice": 0.972988222018478
+          },
+          "7182": {
+            "referenceVoxels": 7144,
+            "candidateVoxels": 7161,
+            "dice": 0.9508563439356869
+          },
+          "7191": {
+            "referenceVoxels": 1868,
+            "candidateVoxels": 1876,
+            "dice": 0.9503205128205128
+          },
+          "7192": {
+            "referenceVoxels": 1526,
+            "candidateVoxels": 1435,
+            "dice": 0.8909152313407632
+          },
+          "7201": {
+            "referenceVoxels": 12338,
+            "candidateVoxels": 12003,
+            "dice": 0.9748161538145516
+          },
+          "7202": {
+            "referenceVoxels": 10818,
+            "candidateVoxels": 11407,
+            "dice": 0.9607199100112486
+          },
+          "7212": {
+            "referenceVoxels": 227,
+            "candidateVoxels": 210,
+            "dice": 0.7505720823798627
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        }
+      }
+    },
+    {
+      "id": "body-after",
+      "backend": "browser WASM",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "referenceSha256": "68aab4a30aa7f8b80bf3dbc8aa55bc00f7c42f0644aada156114ba3f21943c22",
+      "candidateSha256": "a5fbf8202bd91f1e838f5ef609b5ad4f9572802e86cc849875e1d24db263e4e8",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "body-mri-first17-upstream-dseg.nii.gz",
+        "candidate": "body-first17-fixed.nii",
+        "shape": [
+          320,
+          240,
+          17
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 1.0,
+        "foregroundDice": 1.0,
+        "referenceForegroundVoxels": 138257,
+        "candidateForegroundVoxels": 138257,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 4472,
+            "candidateVoxels": 4472,
+            "dice": 1.0
+          },
+          "6172": {
+            "referenceVoxels": 4136,
+            "candidateVoxels": 4136,
+            "dice": 1.0
+          },
+          "7101": {
+            "referenceVoxels": 11597,
+            "candidateVoxels": 11597,
+            "dice": 1.0
+          },
+          "7102": {
+            "referenceVoxels": 7967,
+            "candidateVoxels": 7967,
+            "dice": 1.0
+          },
+          "7111": {
+            "referenceVoxels": 11347,
+            "candidateVoxels": 11347,
+            "dice": 1.0
+          },
+          "7112": {
+            "referenceVoxels": 11264,
+            "candidateVoxels": 11264,
+            "dice": 1.0
+          },
+          "7121": {
+            "referenceVoxels": 9046,
+            "candidateVoxels": 9046,
+            "dice": 1.0
+          },
+          "7122": {
+            "referenceVoxels": 6423,
+            "candidateVoxels": 6423,
+            "dice": 1.0
+          },
+          "7131": {
+            "referenceVoxels": 3695,
+            "candidateVoxels": 3695,
+            "dice": 1.0
+          },
+          "7132": {
+            "referenceVoxels": 2810,
+            "candidateVoxels": 2810,
+            "dice": 1.0
+          },
+          "7141": {
+            "referenceVoxels": 1419,
+            "candidateVoxels": 1419,
+            "dice": 1.0
+          },
+          "7142": {
+            "referenceVoxels": 1637,
+            "candidateVoxels": 1637,
+            "dice": 1.0
+          },
+          "7151": {
+            "referenceVoxels": 1253,
+            "candidateVoxels": 1253,
+            "dice": 1.0
+          },
+          "7152": {
+            "referenceVoxels": 1646,
+            "candidateVoxels": 1646,
+            "dice": 1.0
+          },
+          "7161": {
+            "referenceVoxels": 6201,
+            "candidateVoxels": 6201,
+            "dice": 1.0
+          },
+          "7162": {
+            "referenceVoxels": 5513,
+            "candidateVoxels": 5513,
+            "dice": 1.0
+          },
+          "7171": {
+            "referenceVoxels": 3305,
+            "candidateVoxels": 3305,
+            "dice": 1.0
+          },
+          "7172": {
+            "referenceVoxels": 3468,
+            "candidateVoxels": 3468,
+            "dice": 1.0
+          },
+          "7181": {
+            "referenceVoxels": 7137,
+            "candidateVoxels": 7137,
+            "dice": 1.0
+          },
+          "7182": {
+            "referenceVoxels": 7144,
+            "candidateVoxels": 7144,
+            "dice": 1.0
+          },
+          "7191": {
+            "referenceVoxels": 1868,
+            "candidateVoxels": 1868,
+            "dice": 1.0
+          },
+          "7192": {
+            "referenceVoxels": 1526,
+            "candidateVoxels": 1526,
+            "dice": 1.0
+          },
+          "7201": {
+            "referenceVoxels": 12338,
+            "candidateVoxels": 12338,
+            "dice": 1.0
+          },
+          "7202": {
+            "referenceVoxels": 10818,
+            "candidateVoxels": 10818,
+            "dice": 1.0
+          },
+          "7212": {
+            "referenceVoxels": 227,
+            "candidateVoxels": 227,
+            "dice": 1.0
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        }
+      }
+    },
+    {
+      "id": "body-multichunk-after",
+      "backend": "native ONNX diagnostic",
+      "sourceChunkSize": 8,
+      "overlap": 0.5,
+      "referenceSha256": "9699ef226c8892ec4e5751b9b149b4108d81d29115da60534b075a3bfb2271c2",
+      "candidateSha256": "192f158aa9c08ee6ce7bab6d489f9698470d29a0a8d99ca00ac963aacda2c350",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "upstream-body-mri-first17-c8-o50/body-mri-first17_dseg.nii.gz",
+        "candidate": "body-first17-c8-fixed.nii",
+        "shape": [
+          320,
+          240,
+          17
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 0.9998651960784314,
+        "foregroundDice": 0.9996898822273668,
+        "referenceForegroundVoxels": 138648,
+        "candidateForegroundVoxels": 138666,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 4511,
+            "candidateVoxels": 4512,
+            "dice": 0.9996675163471129
+          },
+          "6172": {
+            "referenceVoxels": 4146,
+            "candidateVoxels": 4145,
+            "dice": 0.9998793872874201
+          },
+          "7101": {
+            "referenceVoxels": 11305,
+            "candidateVoxels": 11299,
+            "dice": 0.9994691205096443
+          },
+          "7102": {
+            "referenceVoxels": 8099,
+            "candidateVoxels": 8105,
+            "dice": 0.9987657368550975
+          },
+          "7111": {
+            "referenceVoxels": 11514,
+            "candidateVoxels": 11510,
+            "dice": 0.9995656706045866
+          },
+          "7112": {
+            "referenceVoxels": 11330,
+            "candidateVoxels": 11337,
+            "dice": 0.9990735430361318
+          },
+          "7121": {
+            "referenceVoxels": 9192,
+            "candidateVoxels": 9196,
+            "dice": 0.999347400478573
+          },
+          "7122": {
+            "referenceVoxels": 6449,
+            "candidateVoxels": 6450,
+            "dice": 0.9993022714939143
+          },
+          "7131": {
+            "referenceVoxels": 3610,
+            "candidateVoxels": 3615,
+            "dice": 0.9990311418685122
+          },
+          "7132": {
+            "referenceVoxels": 2794,
+            "candidateVoxels": 2793,
+            "dice": 0.9987470914623232
+          },
+          "7141": {
+            "referenceVoxels": 1363,
+            "candidateVoxels": 1363,
+            "dice": 1.0
+          },
+          "7142": {
+            "referenceVoxels": 1580,
+            "candidateVoxels": 1580,
+            "dice": 0.9987341772151899
+          },
+          "7151": {
+            "referenceVoxels": 1240,
+            "candidateVoxels": 1242,
+            "dice": 0.9991941982272361
+          },
+          "7152": {
+            "referenceVoxels": 1573,
+            "candidateVoxels": 1570,
+            "dice": 0.9977728285077951
+          },
+          "7161": {
+            "referenceVoxels": 6236,
+            "candidateVoxels": 6240,
+            "dice": 0.9991984610452068
+          },
+          "7162": {
+            "referenceVoxels": 5491,
+            "candidateVoxels": 5484,
+            "dice": 0.9979043280182233
+          },
+          "7171": {
+            "referenceVoxels": 3451,
+            "candidateVoxels": 3453,
+            "dice": 0.9988412514484357
+          },
+          "7172": {
+            "referenceVoxels": 3471,
+            "candidateVoxels": 3488,
+            "dice": 0.9958327345883029
+          },
+          "7181": {
+            "referenceVoxels": 7201,
+            "candidateVoxels": 7201,
+            "dice": 0.9991667823913345
+          },
+          "7182": {
+            "referenceVoxels": 7080,
+            "candidateVoxels": 7063,
+            "dice": 0.9983737538004667
+          },
+          "7191": {
+            "referenceVoxels": 1807,
+            "candidateVoxels": 1806,
+            "dice": 0.9986161084970938
+          },
+          "7192": {
+            "referenceVoxels": 1556,
+            "candidateVoxels": 1558,
+            "dice": 0.9987154784842646
+          },
+          "7201": {
+            "referenceVoxels": 12288,
+            "candidateVoxels": 12286,
+            "dice": 0.9994302921787255
+          },
+          "7202": {
+            "referenceVoxels": 11058,
+            "candidateVoxels": 11065,
+            "dice": 0.9990507616507707
+          },
+          "7212": {
+            "referenceVoxels": 303,
+            "candidateVoxels": 305,
+            "dice": 0.9967105263157895
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        }
+      }
+    },
+    {
+      "id": "knee-before",
+      "backend": "native ONNX diagnostic",
+      "sourceChunkSize": 45,
+      "overlap": 0,
+      "referenceSha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469",
+      "candidateSha256": "00d516399c7950d4e72166d02f662396014e87f662c3afec91721b6e68df0c86",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "failed",
+        "reference": "upstream-knee-diagnostic-y180-188-full-ap-c45-o0/knee-diagnostic-y180-188-full-ap_dseg.nii.gz",
+        "candidate": "knee-full-ap-native-baseline.nii",
+        "shape": [
+          256,
+          8,
+          45
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 0.9926540798611111,
+        "foregroundDice": 0.9929783499122293,
+        "referenceForegroundVoxels": 27342,
+        "candidateForegroundVoxels": 27346,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 577,
+            "candidateVoxels": 567,
+            "dice": 0.9895104895104895
+          },
+          "6172": {
+            "referenceVoxels": 610,
+            "candidateVoxels": 608,
+            "dice": 0.993431855500821
+          },
+          "7101": {
+            "referenceVoxels": 2379,
+            "candidateVoxels": 2353,
+            "dice": 0.9822485207100592
+          },
+          "7102": {
+            "referenceVoxels": 2347,
+            "candidateVoxels": 2348,
+            "dice": 0.9857294994675186
+          },
+          "7111": {
+            "referenceVoxels": 2638,
+            "candidateVoxels": 2613,
+            "dice": 0.980384688630737
+          },
+          "7112": {
+            "referenceVoxels": 2486,
+            "candidateVoxels": 2480,
+            "dice": 0.9907370116794201
+          },
+          "7121": {
+            "referenceVoxels": 1982,
+            "candidateVoxels": 2008,
+            "dice": 0.9829573934837093
+          },
+          "7122": {
+            "referenceVoxels": 1992,
+            "candidateVoxels": 2001,
+            "dice": 0.9897320310543452
+          },
+          "7131": {
+            "referenceVoxels": 398,
+            "candidateVoxels": 403,
+            "dice": 0.9612983770287141
+          },
+          "7132": {
+            "referenceVoxels": 382,
+            "candidateVoxels": 380,
+            "dice": 0.9816272965879265
+          },
+          "7141": {
+            "referenceVoxels": 323,
+            "candidateVoxels": 323,
+            "dice": 0.9845201238390093
+          },
+          "7142": {
+            "referenceVoxels": 269,
+            "candidateVoxels": 270,
+            "dice": 0.9795918367346939
+          },
+          "7151": {
+            "referenceVoxels": 279,
+            "candidateVoxels": 272,
+            "dice": 0.9618874773139746
+          },
+          "7152": {
+            "referenceVoxels": 287,
+            "candidateVoxels": 297,
+            "dice": 0.9691780821917808
+          },
+          "7161": {
+            "referenceVoxels": 1219,
+            "candidateVoxels": 1176,
+            "dice": 0.9661795407098122
+          },
+          "7162": {
+            "referenceVoxels": 1289,
+            "candidateVoxels": 1289,
+            "dice": 0.9883630721489527
+          },
+          "7171": {
+            "referenceVoxels": 732,
+            "candidateVoxels": 737,
+            "dice": 0.9557522123893806
+          },
+          "7172": {
+            "referenceVoxels": 757,
+            "candidateVoxels": 784,
+            "dice": 0.9811810512654121
+          },
+          "7181": {
+            "referenceVoxels": 1321,
+            "candidateVoxels": 1327,
+            "dice": 0.9856495468277946
+          },
+          "7182": {
+            "referenceVoxels": 1434,
+            "candidateVoxels": 1445,
+            "dice": 0.9829802014588399
+          },
+          "7191": {
+            "referenceVoxels": 249,
+            "candidateVoxels": 258,
+            "dice": 0.9467455621301775
+          },
+          "7192": {
+            "referenceVoxels": 355,
+            "candidateVoxels": 360,
+            "dice": 0.9762237762237762
+          },
+          "7201": {
+            "referenceVoxels": 1631,
+            "candidateVoxels": 1656,
+            "dice": 0.9796166717371463
+          },
+          "7202": {
+            "referenceVoxels": 1406,
+            "candidateVoxels": 1391,
+            "dice": 0.9882016446192349
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        }
+      }
+    },
+    {
+      "id": "knee-after",
+      "backend": "browser WASM",
+      "sourceChunkSize": 45,
+      "overlap": 0,
+      "referenceSha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469",
+      "candidateSha256": "4ff0a01fc6cc55eeda21d07158482dc198d206970dff4fbf19931bdde58ee62c",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "upstream-knee-diagnostic-y180-188-full-ap-c45-o0/knee-diagnostic-y180-188-full-ap_dseg.nii.gz",
+        "candidate": "knee-browser-fixed.nii",
+        "shape": [
+          256,
+          8,
+          45
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 0.9998480902777778,
+        "foregroundDice": 0.9997805493581069,
+        "referenceForegroundVoxels": 27342,
+        "candidateForegroundVoxels": 27340,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 577,
+            "candidateVoxels": 577,
+            "dice": 1.0
+          },
+          "6172": {
+            "referenceVoxels": 610,
+            "candidateVoxels": 609,
+            "dice": 0.9991796554552912
+          },
+          "7101": {
+            "referenceVoxels": 2379,
+            "candidateVoxels": 2379,
+            "dice": 0.9995796553173603
+          },
+          "7102": {
+            "referenceVoxels": 2347,
+            "candidateVoxels": 2347,
+            "dice": 1.0
+          },
+          "7111": {
+            "referenceVoxels": 2638,
+            "candidateVoxels": 2637,
+            "dice": 0.9998104265402844
+          },
+          "7112": {
+            "referenceVoxels": 2486,
+            "candidateVoxels": 2486,
+            "dice": 1.0
+          },
+          "7121": {
+            "referenceVoxels": 1982,
+            "candidateVoxels": 1981,
+            "dice": 0.9992429977289932
+          },
+          "7122": {
+            "referenceVoxels": 1992,
+            "candidateVoxels": 1993,
+            "dice": 0.9997490589711417
+          },
+          "7131": {
+            "referenceVoxels": 398,
+            "candidateVoxels": 398,
+            "dice": 1.0
+          },
+          "7132": {
+            "referenceVoxels": 382,
+            "candidateVoxels": 382,
+            "dice": 1.0
+          },
+          "7141": {
+            "referenceVoxels": 323,
+            "candidateVoxels": 322,
+            "dice": 0.9984496124031008
+          },
+          "7142": {
+            "referenceVoxels": 269,
+            "candidateVoxels": 269,
+            "dice": 1.0
+          },
+          "7151": {
+            "referenceVoxels": 279,
+            "candidateVoxels": 280,
+            "dice": 0.998211091234347
+          },
+          "7152": {
+            "referenceVoxels": 287,
+            "candidateVoxels": 287,
+            "dice": 1.0
+          },
+          "7161": {
+            "referenceVoxels": 1219,
+            "candidateVoxels": 1220,
+            "dice": 0.999589995899959
+          },
+          "7162": {
+            "referenceVoxels": 1289,
+            "candidateVoxels": 1290,
+            "dice": 0.9996122528111672
+          },
+          "7171": {
+            "referenceVoxels": 732,
+            "candidateVoxels": 732,
+            "dice": 1.0
+          },
+          "7172": {
+            "referenceVoxels": 757,
+            "candidateVoxels": 757,
+            "dice": 1.0
+          },
+          "7181": {
+            "referenceVoxels": 1321,
+            "candidateVoxels": 1321,
+            "dice": 1.0
+          },
+          "7182": {
+            "referenceVoxels": 1434,
+            "candidateVoxels": 1431,
+            "dice": 0.9989528795811519
+          },
+          "7191": {
+            "referenceVoxels": 249,
+            "candidateVoxels": 249,
+            "dice": 1.0
+          },
+          "7192": {
+            "referenceVoxels": 355,
+            "candidateVoxels": 355,
+            "dice": 1.0
+          },
+          "7201": {
+            "referenceVoxels": 1631,
+            "candidateVoxels": 1632,
+            "dice": 0.9996935335580754
+          },
+          "7202": {
+            "referenceVoxels": 1406,
+            "candidateVoxels": 1406,
+            "dice": 1.0
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        }
+      }
+    }
+  ],
+  "historicalCasesNote": "These record the baseline and intermediate fixes, before the final arithmetic and temporary-file roundtrip corrections. Final measured cases are recorded separately.",
+  "rootCauses": [
+    "Foreground crop used all nonzero normalized voxels instead of MONAI positive selection.",
+    "Sampling matrices and grid calculations used float32 and a different PyTorch linspace and accumulation order, altering exact-zero support before normalization.",
+    "Multiple source chunks skipped the upstream temporary NIfTI integer-storage write/reload, changing 15,051,163 of 27,648,000 body values, with maximum absolute error 0.01007080078125."
+  ],
+  "stageEvidence": {
+    "forwardSpacing": "13 saved anatomical cases, including all nine historical knee chunks, matched spaced float32 arrays and crop bounds exactly.",
+    "integerChunkRoundtrip": "Production helper matches 118 independent Nibabel cases, 28,548,252 values byte for byte, including all 22 body chunks verified through unmodified upstream _write_temp_chunk.",
+    "tests": "Synthetic upstream oracles constrain behavior; no measured Dice scores are used as test thresholds."
+  },
+  "finalCases": [
+    {
+      "id": "body-first17",
+      "backend": "wasm",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "body-first17.nii.gz",
+        "candidate": {
+          "precision": "fp32",
+          "path": "musclemap-wholebody-v1.4-fp32.onnx",
+          "bytes": 104946960,
+          "sha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
+        },
+        "shape": [
+          320,
+          240,
+          17
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 1,
+        "foregroundDice": 1,
+        "referenceForegroundVoxels": 138257,
+        "candidateForegroundVoxels": 138257,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 4472,
+            "candidateVoxels": 4472,
+            "dice": 1
+          },
+          "6172": {
+            "referenceVoxels": 4136,
+            "candidateVoxels": 4136,
+            "dice": 1
+          },
+          "7101": {
+            "referenceVoxels": 11597,
+            "candidateVoxels": 11597,
+            "dice": 1
+          },
+          "7102": {
+            "referenceVoxels": 7967,
+            "candidateVoxels": 7967,
+            "dice": 1
+          },
+          "7111": {
+            "referenceVoxels": 11347,
+            "candidateVoxels": 11347,
+            "dice": 1
+          },
+          "7112": {
+            "referenceVoxels": 11264,
+            "candidateVoxels": 11264,
+            "dice": 1
+          },
+          "7121": {
+            "referenceVoxels": 9046,
+            "candidateVoxels": 9046,
+            "dice": 1
+          },
+          "7122": {
+            "referenceVoxels": 6423,
+            "candidateVoxels": 6423,
+            "dice": 1
+          },
+          "7131": {
+            "referenceVoxels": 3695,
+            "candidateVoxels": 3695,
+            "dice": 1
+          },
+          "7132": {
+            "referenceVoxels": 2810,
+            "candidateVoxels": 2810,
+            "dice": 1
+          },
+          "7141": {
+            "referenceVoxels": 1419,
+            "candidateVoxels": 1419,
+            "dice": 1
+          },
+          "7142": {
+            "referenceVoxels": 1637,
+            "candidateVoxels": 1637,
+            "dice": 1
+          },
+          "7151": {
+            "referenceVoxels": 1253,
+            "candidateVoxels": 1253,
+            "dice": 1
+          },
+          "7152": {
+            "referenceVoxels": 1646,
+            "candidateVoxels": 1646,
+            "dice": 1
+          },
+          "7161": {
+            "referenceVoxels": 6201,
+            "candidateVoxels": 6201,
+            "dice": 1
+          },
+          "7162": {
+            "referenceVoxels": 5513,
+            "candidateVoxels": 5513,
+            "dice": 1
+          },
+          "7171": {
+            "referenceVoxels": 3305,
+            "candidateVoxels": 3305,
+            "dice": 1
+          },
+          "7172": {
+            "referenceVoxels": 3468,
+            "candidateVoxels": 3468,
+            "dice": 1
+          },
+          "7181": {
+            "referenceVoxels": 7137,
+            "candidateVoxels": 7137,
+            "dice": 1
+          },
+          "7182": {
+            "referenceVoxels": 7144,
+            "candidateVoxels": 7144,
+            "dice": 1
+          },
+          "7191": {
+            "referenceVoxels": 1868,
+            "candidateVoxels": 1868,
+            "dice": 1
+          },
+          "7192": {
+            "referenceVoxels": 1526,
+            "candidateVoxels": 1526,
+            "dice": 1
+          },
+          "7201": {
+            "referenceVoxels": 12338,
+            "candidateVoxels": 12338,
+            "dice": 1
+          },
+          "7202": {
+            "referenceVoxels": 10818,
+            "candidateVoxels": 10818,
+            "dice": 1
+          },
+          "7212": {
+            "referenceVoxels": 227,
+            "candidateVoxels": 227,
+            "dice": 1
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        },
+        "run": {
+          "modelAuthority": "published-release",
+          "input": {
+            "path": "body-first17.nii.gz",
+            "bytes": 746964,
+            "sha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f"
+          },
+          "reference": {
+            "path": "body-first17.nii.gz",
+            "bytes": 49692,
+            "sha256": "68aab4a30aa7f8b80bf3dbc8aa55bc00f7c42f0644aada156114ba3f21943c22"
+          },
+          "overlap": 0.5,
+          "sourceChunkSize": 17,
+          "backend": "wasm",
+          "scientificSources": {
+            "inference-worker.js": "8cb456de52e49aa191b1b7ccaafe4c6ac647e21d37b47615d42c37daccc2df71",
+            "monai-compat.js": "989c65761048c542e4d46e7c0d8637da5ed271aa4fe506396fec2cd58a60b9ae",
+            "sliding-window-policy.js": "70716f97bca18bade0b2662b5c042e89e4599e6302bab2af04f91d9a5a01ddbe",
+            "upstream-chunk.js": "5717551d4b2407af7d4f5e6d9fa0205b17ff22425b573da6527b689a28bff470"
+          },
+          "ortVersion": "1.21.0",
+          "browserVersion": "149.0.7827.55",
+          "wasmThreads": 4,
+          "output": {
+            "path": "body-first17-browser-final.nii",
+            "sha256": "a5fbf8202bd91f1e838f5ef609b5ad4f9572802e86cc849875e1d24db263e4e8"
+          },
+          "controlledReferenceCase": "body-first17"
+        }
+      }
+    },
+    {
+      "id": "body-first17-multichunk",
+      "backend": "wasm",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "body-first17-multichunk.nii.gz",
+        "candidate": {
+          "precision": "fp32",
+          "path": "musclemap-wholebody-v1.4-fp32.onnx",
+          "bytes": 104946960,
+          "sha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
+        },
+        "shape": [
+          320,
+          240,
+          17
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 1,
+        "foregroundDice": 1,
+        "referenceForegroundVoxels": 138648,
+        "candidateForegroundVoxels": 138648,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 4511,
+            "candidateVoxels": 4511,
+            "dice": 1
+          },
+          "6172": {
+            "referenceVoxels": 4146,
+            "candidateVoxels": 4146,
+            "dice": 1
+          },
+          "7101": {
+            "referenceVoxels": 11305,
+            "candidateVoxels": 11305,
+            "dice": 1
+          },
+          "7102": {
+            "referenceVoxels": 8099,
+            "candidateVoxels": 8099,
+            "dice": 1
+          },
+          "7111": {
+            "referenceVoxels": 11514,
+            "candidateVoxels": 11514,
+            "dice": 1
+          },
+          "7112": {
+            "referenceVoxels": 11330,
+            "candidateVoxels": 11330,
+            "dice": 1
+          },
+          "7121": {
+            "referenceVoxels": 9192,
+            "candidateVoxels": 9192,
+            "dice": 1
+          },
+          "7122": {
+            "referenceVoxels": 6449,
+            "candidateVoxels": 6449,
+            "dice": 1
+          },
+          "7131": {
+            "referenceVoxels": 3610,
+            "candidateVoxels": 3610,
+            "dice": 1
+          },
+          "7132": {
+            "referenceVoxels": 2794,
+            "candidateVoxels": 2794,
+            "dice": 1
+          },
+          "7141": {
+            "referenceVoxels": 1363,
+            "candidateVoxels": 1363,
+            "dice": 1
+          },
+          "7142": {
+            "referenceVoxels": 1580,
+            "candidateVoxels": 1580,
+            "dice": 1
+          },
+          "7151": {
+            "referenceVoxels": 1240,
+            "candidateVoxels": 1240,
+            "dice": 1
+          },
+          "7152": {
+            "referenceVoxels": 1573,
+            "candidateVoxels": 1573,
+            "dice": 1
+          },
+          "7161": {
+            "referenceVoxels": 6236,
+            "candidateVoxels": 6236,
+            "dice": 1
+          },
+          "7162": {
+            "referenceVoxels": 5491,
+            "candidateVoxels": 5491,
+            "dice": 1
+          },
+          "7171": {
+            "referenceVoxels": 3451,
+            "candidateVoxels": 3451,
+            "dice": 1
+          },
+          "7172": {
+            "referenceVoxels": 3471,
+            "candidateVoxels": 3471,
+            "dice": 1
+          },
+          "7181": {
+            "referenceVoxels": 7201,
+            "candidateVoxels": 7201,
+            "dice": 1
+          },
+          "7182": {
+            "referenceVoxels": 7080,
+            "candidateVoxels": 7080,
+            "dice": 1
+          },
+          "7191": {
+            "referenceVoxels": 1807,
+            "candidateVoxels": 1807,
+            "dice": 1
+          },
+          "7192": {
+            "referenceVoxels": 1556,
+            "candidateVoxels": 1556,
+            "dice": 1
+          },
+          "7201": {
+            "referenceVoxels": 12288,
+            "candidateVoxels": 12288,
+            "dice": 1
+          },
+          "7202": {
+            "referenceVoxels": 11058,
+            "candidateVoxels": 11058,
+            "dice": 1
+          },
+          "7212": {
+            "referenceVoxels": 303,
+            "candidateVoxels": 303,
+            "dice": 1
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        },
+        "run": {
+          "modelAuthority": "published-release",
+          "input": {
+            "path": "body-first17.nii.gz",
+            "bytes": 746964,
+            "sha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f"
+          },
+          "reference": {
+            "path": "body-first17-multichunk.nii.gz",
+            "bytes": 49779,
+            "sha256": "9699ef226c8892ec4e5751b9b149b4108d81d29115da60534b075a3bfb2271c2"
+          },
+          "overlap": 0.5,
+          "sourceChunkSize": 8,
+          "backend": "wasm",
+          "scientificSources": {
+            "inference-worker.js": "8cb456de52e49aa191b1b7ccaafe4c6ac647e21d37b47615d42c37daccc2df71",
+            "monai-compat.js": "989c65761048c542e4d46e7c0d8637da5ed271aa4fe506396fec2cd58a60b9ae",
+            "sliding-window-policy.js": "70716f97bca18bade0b2662b5c042e89e4599e6302bab2af04f91d9a5a01ddbe",
+            "upstream-chunk.js": "5717551d4b2407af7d4f5e6d9fa0205b17ff22425b573da6527b689a28bff470"
+          },
+          "ortVersion": "1.21.0",
+          "browserVersion": "149.0.7827.55",
+          "wasmThreads": 4,
+          "output": {
+            "path": "body-multichunk-browser-final.nii",
+            "sha256": "b50bf89f724fad4b510c74280b241907702f7ec2603998dbead910a2f56936e9"
+          },
+          "controlledReferenceCase": "body-first17-multichunk"
+        }
+      }
+    },
+    {
+      "id": "knee-slab",
+      "backend": "wasm",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "knee-slab.nii.gz",
+        "candidate": {
+          "precision": "fp32",
+          "path": "musclemap-wholebody-v1.4-fp32.onnx",
+          "bytes": 104946960,
+          "sha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
+        },
+        "shape": [
+          256,
+          8,
+          45
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 1,
+        "foregroundDice": 1,
+        "referenceForegroundVoxels": 27342,
+        "candidateForegroundVoxels": 27342,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 577,
+            "candidateVoxels": 577,
+            "dice": 1
+          },
+          "6172": {
+            "referenceVoxels": 610,
+            "candidateVoxels": 610,
+            "dice": 1
+          },
+          "7101": {
+            "referenceVoxels": 2379,
+            "candidateVoxels": 2379,
+            "dice": 1
+          },
+          "7102": {
+            "referenceVoxels": 2347,
+            "candidateVoxels": 2347,
+            "dice": 1
+          },
+          "7111": {
+            "referenceVoxels": 2638,
+            "candidateVoxels": 2638,
+            "dice": 1
+          },
+          "7112": {
+            "referenceVoxels": 2486,
+            "candidateVoxels": 2486,
+            "dice": 1
+          },
+          "7121": {
+            "referenceVoxels": 1982,
+            "candidateVoxels": 1982,
+            "dice": 1
+          },
+          "7122": {
+            "referenceVoxels": 1992,
+            "candidateVoxels": 1992,
+            "dice": 1
+          },
+          "7131": {
+            "referenceVoxels": 398,
+            "candidateVoxels": 398,
+            "dice": 1
+          },
+          "7132": {
+            "referenceVoxels": 382,
+            "candidateVoxels": 382,
+            "dice": 1
+          },
+          "7141": {
+            "referenceVoxels": 323,
+            "candidateVoxels": 323,
+            "dice": 1
+          },
+          "7142": {
+            "referenceVoxels": 269,
+            "candidateVoxels": 269,
+            "dice": 1
+          },
+          "7151": {
+            "referenceVoxels": 279,
+            "candidateVoxels": 279,
+            "dice": 1
+          },
+          "7152": {
+            "referenceVoxels": 287,
+            "candidateVoxels": 287,
+            "dice": 1
+          },
+          "7161": {
+            "referenceVoxels": 1219,
+            "candidateVoxels": 1219,
+            "dice": 1
+          },
+          "7162": {
+            "referenceVoxels": 1289,
+            "candidateVoxels": 1289,
+            "dice": 1
+          },
+          "7171": {
+            "referenceVoxels": 732,
+            "candidateVoxels": 732,
+            "dice": 1
+          },
+          "7172": {
+            "referenceVoxels": 757,
+            "candidateVoxels": 757,
+            "dice": 1
+          },
+          "7181": {
+            "referenceVoxels": 1321,
+            "candidateVoxels": 1321,
+            "dice": 1
+          },
+          "7182": {
+            "referenceVoxels": 1434,
+            "candidateVoxels": 1434,
+            "dice": 1
+          },
+          "7191": {
+            "referenceVoxels": 249,
+            "candidateVoxels": 249,
+            "dice": 1
+          },
+          "7192": {
+            "referenceVoxels": 355,
+            "candidateVoxels": 355,
+            "dice": 1
+          },
+          "7201": {
+            "referenceVoxels": 1631,
+            "candidateVoxels": 1631,
+            "dice": 1
+          },
+          "7202": {
+            "referenceVoxels": 1406,
+            "candidateVoxels": 1406,
+            "dice": 1
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        },
+        "run": {
+          "modelAuthority": "published-release",
+          "input": {
+            "path": "knee-slab.nii.gz",
+            "bytes": 96639,
+            "sha256": "19b49ebe20495a4437522704506144c1a9f71a202d8ef6f31856955bf34e220a"
+          },
+          "reference": {
+            "path": "knee-slab.nii.gz",
+            "bytes": 6507,
+            "sha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469"
+          },
+          "overlap": 0,
+          "sourceChunkSize": 45,
+          "backend": "wasm",
+          "scientificSources": {
+            "inference-worker.js": "8cb456de52e49aa191b1b7ccaafe4c6ac647e21d37b47615d42c37daccc2df71",
+            "monai-compat.js": "989c65761048c542e4d46e7c0d8637da5ed271aa4fe506396fec2cd58a60b9ae",
+            "sliding-window-policy.js": "70716f97bca18bade0b2662b5c042e89e4599e6302bab2af04f91d9a5a01ddbe",
+            "upstream-chunk.js": "5717551d4b2407af7d4f5e6d9fa0205b17ff22425b573da6527b689a28bff470"
+          },
+          "ortVersion": "1.21.0",
+          "browserVersion": "149.0.7827.55",
+          "wasmThreads": 4,
+          "output": {
+            "path": "knee-slab-browser-final.nii",
+            "sha256": "faa7b0d3cb6229cc37020f0d156143c099aafcd3c81f1d111c4f7f3efa137bde"
+          },
+          "controlledReferenceCase": "knee-slab"
+        }
+      }
+    },
+    {
+      "id": "body-single-slice",
+      "backend": "webgpu",
+      "comparison": {
+        "schemaVersion": 1,
+        "status": "passed",
+        "reference": "body-single-slice.nii.gz",
+        "candidate": {
+          "precision": "fp32",
+          "path": "musclemap-wholebody-v1.4-fp32.onnx",
+          "bytes": 104946960,
+          "sha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
+        },
+        "shape": [
+          320,
+          240,
+          1
+        ],
+        "shapeMatches": true,
+        "affineMatchesExactly": true,
+        "overallAgreement": 1,
+        "foregroundDice": 1,
+        "referenceForegroundVoxels": 7543,
+        "candidateForegroundVoxels": 7543,
+        "perLabel": {
+          "6171": {
+            "referenceVoxels": 284,
+            "candidateVoxels": 284,
+            "dice": 1
+          },
+          "6172": {
+            "referenceVoxels": 270,
+            "candidateVoxels": 270,
+            "dice": 1
+          },
+          "7101": {
+            "referenceVoxels": 518,
+            "candidateVoxels": 518,
+            "dice": 1
+          },
+          "7102": {
+            "referenceVoxels": 432,
+            "candidateVoxels": 432,
+            "dice": 1
+          },
+          "7111": {
+            "referenceVoxels": 660,
+            "candidateVoxels": 660,
+            "dice": 1
+          },
+          "7112": {
+            "referenceVoxels": 651,
+            "candidateVoxels": 651,
+            "dice": 1
+          },
+          "7121": {
+            "referenceVoxels": 631,
+            "candidateVoxels": 631,
+            "dice": 1
+          },
+          "7122": {
+            "referenceVoxels": 448,
+            "candidateVoxels": 448,
+            "dice": 1
+          },
+          "7131": {
+            "referenceVoxels": 151,
+            "candidateVoxels": 151,
+            "dice": 1
+          },
+          "7132": {
+            "referenceVoxels": 100,
+            "candidateVoxels": 100,
+            "dice": 1
+          },
+          "7141": {
+            "referenceVoxels": 91,
+            "candidateVoxels": 91,
+            "dice": 1
+          },
+          "7142": {
+            "referenceVoxels": 86,
+            "candidateVoxels": 86,
+            "dice": 1
+          },
+          "7151": {
+            "referenceVoxels": 85,
+            "candidateVoxels": 85,
+            "dice": 1
+          },
+          "7152": {
+            "referenceVoxels": 85,
+            "candidateVoxels": 85,
+            "dice": 1
+          },
+          "7161": {
+            "referenceVoxels": 458,
+            "candidateVoxels": 458,
+            "dice": 1
+          },
+          "7162": {
+            "referenceVoxels": 563,
+            "candidateVoxels": 563,
+            "dice": 1
+          },
+          "7171": {
+            "referenceVoxels": 175,
+            "candidateVoxels": 175,
+            "dice": 1
+          },
+          "7172": {
+            "referenceVoxels": 148,
+            "candidateVoxels": 148,
+            "dice": 1
+          },
+          "7181": {
+            "referenceVoxels": 412,
+            "candidateVoxels": 412,
+            "dice": 1
+          },
+          "7182": {
+            "referenceVoxels": 435,
+            "candidateVoxels": 435,
+            "dice": 1
+          },
+          "7191": {
+            "referenceVoxels": 153,
+            "candidateVoxels": 153,
+            "dice": 1
+          },
+          "7192": {
+            "referenceVoxels": 162,
+            "candidateVoxels": 162,
+            "dice": 1
+          },
+          "7201": {
+            "referenceVoxels": 367,
+            "candidateVoxels": 367,
+            "dice": 1
+          },
+          "7202": {
+            "referenceVoxels": 178,
+            "candidateVoxels": 178,
+            "dice": 1
+          }
+        },
+        "thresholds": {
+          "overallAgreement": 0.99,
+          "foregroundDice": 0.95,
+          "presentLabelDice": 0.95
+        },
+        "run": {
+          "modelAuthority": "published-release",
+          "input": {
+            "path": "body-single-slice.nii.gz",
+            "bytes": 39170,
+            "sha256": "b3fd7f8cccbecb1242b97a096b8c310f565b6c4c992b51160835d9f404fffd89"
+          },
+          "reference": {
+            "path": "body-single-slice.nii.gz",
+            "bytes": 4657,
+            "sha256": "3dbc59ce54e6ad1d01bcb8ef1825607315e51bade161c2d3f18ce0b9520f33c3"
+          },
+          "overlap": 0.5,
+          "sourceChunkSize": 1,
+          "backend": "webgpu",
+          "scientificSources": {
+            "inference-worker.js": "8cb456de52e49aa191b1b7ccaafe4c6ac647e21d37b47615d42c37daccc2df71",
+            "monai-compat.js": "989c65761048c542e4d46e7c0d8637da5ed271aa4fe506396fec2cd58a60b9ae",
+            "sliding-window-policy.js": "70716f97bca18bade0b2662b5c042e89e4599e6302bab2af04f91d9a5a01ddbe",
+            "upstream-chunk.js": "5717551d4b2407af7d4f5e6d9fa0205b17ff22425b573da6527b689a28bff470"
+          },
+          "ortVersion": "1.21.0",
+          "browserVersion": "149.0.7827.55",
+          "wasmThreads": 4,
+          "output": {
+            "path": "body-single-slice-float32-final.nii",
+            "sha256": "f4852be376940f1728b8f7c9fe4b0b6669d50e40916987828b12236ff51479ae"
+          },
+          "adapter": {
+            "vendor": "google",
+            "architecture": "swiftshader",
+            "device": "",
+            "description": "",
+            "isFallbackAdapter": true
+          },
+          "softwareWebGpu": true,
+          "gpuKernelCount": 235,
+          "controlledReferenceCase": "body-single-slice"
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # musclemap
 
+## 1.4.20261004
+
+### Patch Changes
+
+- Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons and prevent stale passing reports.
+
 ## 1.4.20261003
 
 ### Patch Changes

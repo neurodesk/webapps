@@ -1,0 +1,91 @@
+name: musclemap-parity
+
+on:
+  pull_request:
+    paths:
+      - 'apps/musclemap/**'
+      - 'packages/components/src/volume/**'
+      - '.github/workflows/musclemap-parity.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/musclemap/**'
+      - 'packages/components/src/volume/**'
+      - '.github/workflows/musclemap-parity.yml'
+  workflow_dispatch:
+    inputs:
+      full_volumes:
+        description: Include the full body MRI and knee WASM references
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musclemap-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [wasm, webgpu]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install comparison dependencies
+        run: |
+          python -m venv apps/musclemap/.tmp_model_env
+          apps/musclemap/.tmp_model_env/bin/pip install numpy==1.26.4 nibabel==5.2.1
+      - name: Check preprocessing and comparison gates
+        run: |
+          pnpm --filter musclemap test
+          apps/musclemap/.tmp_model_env/bin/python -m unittest discover -s apps/musclemap/tests -p test_upstream_comparison.py
+          python -m unittest discover -s apps/musclemap/tests -p test_parity_reference.py
+      - run: pnpm --filter musclemap build
+      - name: Compare pinned labeled references
+        env:
+          BACKEND: ${{ matrix.backend }}
+          FULL_VOLUMES: ${{ inputs.full_volumes || false }}
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          reference_root="$RUNNER_TEMP/musclemap-reference"
+          report_root="$RUNNER_TEMP/musclemap-reports"
+          cases=(body-first17 body-first17-multichunk knee-slab)
+          if [[ "$BACKEND" == webgpu ]]; then
+            cases=(body-single-slice)
+          fi
+          if [[ "$FULL_VOLUMES" == true && "$BACKEND" == wasm ]]; then
+            cases+=(body-full knee-full)
+          fi
+          backend_args=(--backend "$BACKEND")
+          if [[ "$BACKEND" == webgpu ]]; then
+            backend_args+=(--software-webgpu)
+          fi
+          for case_id in "${cases[@]}"; do
+            python apps/musclemap/scripts/fetch_parity_reference.py "$reference_root" --case "$case_id"
+            node apps/musclemap/scripts/validate_upstream_parity.mjs \
+              --reference-manifest apps/musclemap/model-sources/parity-reference.json \
+              --case "$case_id" --reference-root "$reference_root" \
+              "${backend_args[@]}" --port 4322 \
+              --output "$report_root/$case_id.nii" --report "$report_root/$case_id.json"
+          done
+      - name: Retain comparison reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: musclemap-parity-${{ matrix.backend }}
+          path: ${{ runner.temp }}/musclemap-reports/*.json
