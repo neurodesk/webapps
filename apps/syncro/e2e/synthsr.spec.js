@@ -10,7 +10,16 @@ for (const backend of ['wasm','webgpu']) test(`shared SynthSR stage: ${backend} 
  test.setTimeout(300000);
  await page.route('**/test-model/synthsr-v2.onnx',route=>route.fulfill({path:process.env.SYNTHSR_MODEL}));
  await page.goto('./');
- if(backend==='webgpu')expect(await page.evaluate(async()=>!!await navigator.gpu?.requestAdapter())).toBe(true);
+ if (backend === 'webgpu') {
+  const info = await page.evaluate(async () => {
+   const adapter = await navigator.gpu?.requestAdapter();
+   if (!adapter) return null;
+   return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, isFallbackAdapter: adapter.info.isFallbackAdapter };
+  });
+  expect(info).not.toBeNull();
+  if (process.env.SYNCRO_HARDWARE_GPU) expect(info.isFallbackAdapter).toBe(false);
+  await test.info().attach('webgpu-adapter', { body: JSON.stringify(info), contentType: 'application/json' });
+ }
  const fixture=new URL('../../synthsr/test/fixtures/validation.nii.gz',import.meta.url);
  await page.locator('#input').setInputFiles(fileURLToPath(fixture));
  await expect(page.locator('#statusText')).toContainText('Ready to normalize',{timeout:30000});
