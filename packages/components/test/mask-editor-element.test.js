@@ -200,10 +200,11 @@ test('a session cancelled while its mask loads closes its drawing before the nex
   nv.loadDrawing = async (file) => { await gate; return load(file); };
   const first = editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
   await until(() => editor.session.state === 'opening');
-  await editor.cancel();
-  assert.equal(editor.session.state, 'idle');
+  const cancelling = editor.cancel();
+  assert.notEqual(editor.session.state, 'idle');
   const second = editor.start({ stage: 'other', file: maskFile([2]), overlayIndex: 1 });
   release();
+  await cancelling;
   assert.equal(await first, false);
   assert.equal(await second, true);
   assert.equal(editor.session.stage, 'other');
@@ -211,4 +212,99 @@ test('a session cancelled while its mask loads closes its drawing before the nex
   assert.equal(closes, 1, 'the superseded drawing was closed once');
   assert.deepEqual(nv.calls.filter(([name]) => name === 'setVolume').map(([, , options]) => options.opacity), [0, 0.6, 0]);
   assert.deepEqual([...nv.drawing.subarray(352)].filter(Boolean), [2]);
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+test('cancel waits for export and suppresses the stale apply callback', async (t) => {
+  const { window, editor, nv, applied, cancelled } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  const gate = deferred();
+  nv.saveDrawing = async () => { await gate.promise; return nv.drawing.slice(); };
+  const applying = editor.apply();
+  let settled = false;
+  const cancelling = editor.cancel().then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false, 'cancel must wait for the pending export');
+  gate.resolve();
+  assert.equal(await applying, null);
+  await cancelling;
+  assert.deepEqual(applied, []);
+  assert.deepEqual(cancelled, ['mask']);
+  assert.equal(nv.drawIsEnabled, false);
+  assert.equal(editor.session.state, 'idle');
+});
+
+test('cancel waits for a commit already entered and retains ownership through it', async (t) => {
+  const gate = deferred();
+  let entered = false;
+  const { window, editor, cancelled } = setup({ onApply: async () => { entered = true; await gate.promise; } });
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1], 'mask.nii') });
+  const applying = editor.apply();
+  await until(() => entered);
+  assert.equal(editor.session.state, 'applying');
+  let settled = false;
+  const cancelling = editor.cancel().then(() => { settled = true; });
+  await Promise.resolve();
+  assert.equal(settled, false);
+  const next = editor.start({ stage: 'next', file: maskFile([2]) });
+  gate.resolve();
+  assert.ok(await applying instanceof File);
+  await cancelling;
+  assert.equal(await next, true);
+  assert.deepEqual(cancelled, []);
+});
+
+test('configure cannot redirect an existing session or its cancellation callback', async (t) => {
+  const { window, editor, nv } = setup();
+  t.after(() => window.close());
+  const gate = deferred();
+  let entered = false;
+  editor.configure({ nv, onCancel: async () => { entered = true; void editor.cancel(); await gate.promise; } });
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  const nextNv = fakeNv();
+  editor.configure({ nv: nextNv, onCancel: () => assert.fail('new callback used for old session') });
+  let settled = false;
+  const cancelling = editor.cancel().then(() => { settled = true; });
+  await until(() => entered);
+  assert.equal(settled, false);
+  assert.equal(nv.drawIsEnabled, false);
+  assert.deepEqual(nextNv.calls, []);
+  gate.resolve();
+  await cancelling;
+  await editor.start({ stage: 'next', file: maskFile([2]) });
+  assert.equal(nextNv.drawIsEnabled, true);
+});
+
+test('start reserves ownership before yielding and immediate cancellation releases it', async (t) => {
+  const { window, editor, nv, applied } = setup();
+  t.after(() => window.close());
+  const opening = editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  const cancelling = editor.cancel();
+  assert.equal(await opening, false);
+  await cancelling;
+  assert.equal(nv.drawIsEnabled, false);
+  assert.deepEqual(applied, []);
+  assert.equal(editor.session.state, 'idle');
+});
+
+test('permanent removal cancels editing but synchronous moves keep it alive', async (t) => {
+  const { window, editor, nv, key } = setup();
+  t.after(() => window.close());
+  await editor.start({ stage: 'mask', file: maskFile([1]), overlayIndex: 1 });
+  window.document.body.append(editor);
+  await Promise.resolve();
+  assert.equal(editor.session.state, 'editing');
+  editor.remove();
+  await until(() => editor.session.state === 'idle');
+  assert.equal(nv.drawIsEnabled, false);
+  const before = nv.calls.length;
+  key('z', { ctrlKey: true });
+  assert.equal(nv.calls.length, before);
 });
