@@ -70,6 +70,8 @@ declare global {
     'nd-mask-edit-start': CustomEvent<{ stage: string; message: string }>;
     'nd-mask-edit-apply': CustomEvent<{ stage: string }>;
     'nd-mask-edit-cancel': CustomEvent<{ stage: string }>;
+    /** Owner released and session idle after callback settlement, including failure or removal. */
+    'nd-mask-edit-end': CustomEvent<{ readonly stage: string }>;
     'nd-mask-edit-error': CustomEvent<{ stage: string; error: unknown }>;
   }
 }

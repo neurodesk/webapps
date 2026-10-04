@@ -133,3 +133,45 @@ for (const spec of apps) {
     assert.equal(loads.length, 1);
   });
 }
+
+for (const id of ['seedseg', 'vesselboost', 'musclemap']) {
+  test(`${id} keeps Edit disabled until the shared editor completes cancellation`, async t => {
+    const spec = apps.find(app => app.id === id);
+    const { app, stage } = await setup(spec, t);
+    const document = app.maskEditor.ownerDocument;
+    const controls = document.createElement('div');
+    controls.id = 'stageButtons';
+    const button = document.createElement('button');
+    button.className = 'nd-edit-btn';
+    button.disabled = true;
+    controls.append(button);
+    document.body.append(controls);
+    const callbackDone = deferred();
+    const callbackEntered = deferred();
+    const enable = id === 'musclemap' ? 'syncEditButtons' : 'setEditButtonsEnabled';
+    const source = await readFile(new URL(`../apps/${id}/web/js/${id}-app.js`, import.meta.url), 'utf8');
+    const listener = source.split('\n').find(line => line.includes("addEventListener('nd-mask-edit-end'"));
+    assert.ok(listener, 'the app must refresh its buttons when the session ends');
+    vm.runInNewContext(`(function () { ${listener} }).call(app)`, { app });
+    app.maskEditor.configure({
+      nv: {
+        volumes: [{ hdr }],
+        async loadDrawing(file) { this.drawing = new Uint8Array(await file.arrayBuffer()); return true; },
+        async saveDrawing() { return this.drawing.slice(); },
+        closeDrawing: noop,
+      },
+      onCancel: async () => {
+        app[enable](true);
+        callbackEntered.resolve();
+        await callbackDone.promise;
+      },
+    });
+    await app.maskEditor.start({ stage, file: original });
+    const cancelling = app.maskEditor.cancel();
+    await callbackEntered.promise;
+    assert.equal(button.disabled, true, 'app button updates cannot release a pending edit');
+    callbackDone.resolve();
+    await cancelling;
+    assert.equal(button.disabled, false, 'completion must restore the next Edit action');
+  });
+}

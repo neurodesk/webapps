@@ -160,6 +160,7 @@ async function ensureViewer() {
       },
       onError: (_stage, error) => status(`Editing failed: ${error.message}`, true),
     });
+    editor.addEventListener('nd-mask-edit-end', endEdit);
     editor.addEventListener('nd-mask-edit-start', ({ detail }) => {
       status(sameGrid(sourceGrid, labels.grid) ? detail.message : `${detail.message} ${OFF_GRID_NOTE}`);
     });
@@ -245,8 +246,8 @@ async function editLabels() {
   }
 }
 function endEdit() {
-  results.setEditingEnabled(!busy);
-  $('opacity').disabled = busy || !labels;
+  results.setEditingEnabled(!busy && !editing());
+  $('opacity').disabled = busy || !labels || editing();
 }
 function clearOutputs() {
   const cancelled = editor?.cancel();

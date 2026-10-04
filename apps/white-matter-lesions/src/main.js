@@ -136,7 +136,7 @@ function end(current, message, { success = true, error = false, result } = {}) {
 function closeEdit() {
   editing = null;
   const cancelled = editor?.cancel();
-  results.setEditingEnabled(true);
+  results.setEditingEnabled(!editor || editor.session.state === 'idle');
   return cancelled;
 }
 
@@ -186,6 +186,7 @@ async function ensureViewer() {
       },
       onError: (_stage, error) => status(error.message, true),
     });
+    editor.addEventListener("nd-mask-edit-end", () => results.setEditingEnabled(!job));
     editor.addEventListener("nd-mask-edit-start", ({ detail }) => status(detail.message));
     toolbar.after(editor);
     viewer.createExtensionContext().on("locationChange", (event) => {

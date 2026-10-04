@@ -183,6 +183,7 @@ async function getViewer() {
           setStatus(`Could not edit the lesion: ${error.message}`, true);
         },
       });
+      maskEditor.addEventListener('nd-mask-edit-end', updateResultActions);
       maskEditor.addEventListener('nd-mask-edit-start', (event) => {
         updateResultActions();
         setStatus(event.detail.message);

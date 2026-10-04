@@ -175,6 +175,7 @@ function createMaskEditorClass(view) {
       if (this.#owner !== owner) return;
       this.#owner = null;
       this.#set(IDLE);
+      this.#emit('nd-mask-edit-end', { stage: owner.stage });
     }
 
     #set(session) {

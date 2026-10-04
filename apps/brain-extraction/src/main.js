@@ -144,7 +144,7 @@ async function resolveMindgrabBackend(requested, run) {
 function closeEdit() {
   const previous = editing?.previous;
   editing = null;
-  results.setEditingEnabled(true);
+  results.setEditingEnabled(!editor || editor.session.state === 'idle');
   if (outputs[previous]) show(outputs[previous].file, previous);
 }
 async function editResult(stage, result) {
@@ -165,7 +165,7 @@ async function editResult(stage, result) {
 function resetOutputs() {
   editing = null;
   const cancelled = editor?.cancel();
-  results.setEditingEnabled(true);
+  results.setEditingEnabled(!editor || editor.session.state === 'idle');
   outputs = source ? { original: { description: 'Original', file: source } } : {};
   results.render(outputs);
   $('outputSection').open = false;
@@ -194,6 +194,7 @@ async function ensureViewer() {
         },
         onError: (_stage, error) => status(error.message, true),
       });
+      editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(state.phase === 'idle'));
       editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
       toolbar.after(editor);
       viewer.createExtensionContext().on('locationChange', event => { $('location').textContent = event.detail.string; });

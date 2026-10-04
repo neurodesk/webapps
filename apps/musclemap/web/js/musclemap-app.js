@@ -161,6 +161,7 @@ class MuscleMapApp {
     });
 
     this.maskEditor = createMaskEditor(this.maskEditorOptions());
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.syncEditButtons(true));
     this.maskEditor.addEventListener('nd-mask-edit-start', (event) => {
       this.setStatusError(false);
       this.progress.reset(event.detail.message);
@@ -1592,7 +1593,7 @@ class MuscleMapApp {
 
   syncEditButtons(enabled) {
     document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(button => {
-      button.disabled = !enabled;
+      button.disabled = !enabled || this.maskEditor.session.state !== 'idle';
     });
   }
 

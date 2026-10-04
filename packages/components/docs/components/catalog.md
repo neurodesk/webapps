@@ -35,6 +35,22 @@ boolean `visible` field use a visibility checkbox. The controlled callback is
 state and should pass its latest `visible` value whenever it calls `render`
 again. `render` replaces the rows rather than retaining checkbox state.
 
+### `createMaskEditor`
+
+Creates `nd-mask-editor` for editing a mask on the viewer's voxel grid.
+`onApply` and `onCancel` may return promises. The editor retains ownership
+and keeps `session` busy until the callback and drawing cleanup finish.
+
+Refresh app control availability on `nd-mask-edit-end`, whose detail is
+`{ stage }`. This event bubbles after ownership is released and `session`
+is idle. It also fires after failed opening, callback failure, and removal.
+An idle `cancel()` does not fire it. Keep controls disabled during callback
+work; use the end listener only to refresh availability.
+
+`nd-mask-edit-apply` remains a notification before the app callback. Its
+listeners can call `cancel()` to prevent that callback. Neither the apply
+event nor `nd-mask-edit-cancel` means the session has finished.
+
 ### `LabelLegend` and `MetricsSummary`
 
 Render label swatches, label volumes, detected label counts, voxel counts, and summary stats.

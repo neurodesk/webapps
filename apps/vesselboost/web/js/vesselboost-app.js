@@ -123,6 +123,7 @@ class VesselBoostApp {
       onCancel: () => this.onMaskEditClosed(),
       onError: (_stage, error) => this.onMaskEditError(error)
     });
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.setEditButtonsEnabled(true));
     this.maskEditor.addEventListener('nd-mask-edit-start', (event) => this.progress.setText(event.detail.message));
     document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
 
@@ -1690,7 +1691,7 @@ class VesselBoostApp {
   }
 
   setEditButtonsEnabled(enabled) {
-    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => { btn.disabled = !enabled; });
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => { btn.disabled = !enabled || this.maskEditor.session.state !== 'idle'; });
   }
 
   async viewStage(stage) {
