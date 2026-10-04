@@ -130,5 +130,16 @@
       "topofit_qc.nii": "0a7a1e0c8865e7e9ba40a10b21dd884d08ac64688462ec6f1e040b6944d8944c"
     }
   },
-  "repeatability": []
+  "repeatability": [
+    {
+      "run": "browser",
+      "byteIdentical": true,
+      "outputSetSha256": "6e204c93feaba4dbd201a3a71904ac5b636208c49d0e6fd4cfc42e1a0a1cc91f"
+    },
+    {
+      "run": "browser-repeat",
+      "byteIdentical": true,
+      "outputSetSha256": "6e204c93feaba4dbd201a3a71904ac5b636208c49d0e6fd4cfc42e1a0a1cc91f"
+    }
+  ]
 }
