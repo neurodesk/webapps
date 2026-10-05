@@ -45,8 +45,9 @@ export class Tilt {
       return Math.sign(delta) * scaled * scaled;
     };
     this.yaw = clamp(shape(roll - this.neutral.roll));
-    // Leaning the top of the phone away pitches the nose down.
-    this.pitch = clamp(shape(-(lean - this.neutral.lean)));
+    // Beta grows as the top of the phone rises toward you, so tipping the top
+    // away pitches the nose down and tipping it back pitches up.
+    this.pitch = clamp(shape(lean - this.neutral.lean));
     return this;
   }
 }
