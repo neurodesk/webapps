@@ -83,10 +83,11 @@ test('native packages share one gated publisher while signing stays isolated', a
 });
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
-  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
+  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
-      for (const step of job.steps) {
+      if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
+      for (const step of job.steps || []) {
         if (!step.uses) continue;
         if (step.uses === './.github/actions/setup-wasm-opt') continue;
         assert.match(step.uses, /^[\w-]+\/[\w-]+@[0-9a-f]{40}$/, `${name}: ${step.uses}`);
@@ -96,26 +97,42 @@ test('native and independent test workflows pin actions and discard checkout cre
   }
 });
 
-test('SYNcro portable builds use target runners and one gated publisher', async () => {
-  const flow=await workflow('syncro-native');
-  assert.deepEqual(flow.permissions,{contents:'read'});
-  assert.equal(flow.jobs.release.if,"github.event_name == 'workflow_dispatch' && inputs.publish_release");
-  assert.deepEqual(flow.jobs.release.needs,['portable']);
-  assert.deepEqual(
-    flow.jobs.portable.strategy.matrix.include.map(entry=>entry.platform).sort(),
-    ['linux-x64','windows-x64'],
-  );
-  assert.ok(!JSON.stringify(flow.jobs.portable).includes('secrets.'));
-  assert.match(JSON.stringify(flow.jobs.portable),/portable_release\.py package/);
-  assert.match(JSON.stringify(flow.jobs.portable),/portable_release\.py verify/);
-  const steps=flow.jobs.release.steps;
+test('portable Node command lines build on target runners and publish through one gated job', async () => {
+  const shared=await workflow('node-cli-portable');
+  assert.deepEqual(Object.keys(shared.on),['workflow_call']);
+  assert.deepEqual(shared.permissions,{contents:'read'});
+  assert.deepEqual(shared.jobs.portable.permissions,{contents:'read'});
+  assert.equal(shared.jobs.release.if,'inputs.publish_release');
+  assert.deepEqual(shared.jobs.release.needs,['portable']);
+  assert.equal(shared.jobs.release.permissions.contents,'write');
+  assert.ok(!JSON.stringify(shared).includes('secrets.'));
+  const build=JSON.stringify(shared.jobs.portable);
+  for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
+    assert.match(build,new RegExp(command));
+  }
+  const steps=shared.jobs.release.steps;
   const target=steps.findIndex(step=>step.name==='Check release target');
   const verify=steps.findIndex(step=>step.name==='Check portable release assets');
   const publish=steps.findIndex(step=>step.name==='Attach verified release assets');
   assert.ok(target>=0&&target<verify&&verify<publish);
+  assert.match(steps[target].run,/tagPrefix/);
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
-  assert.equal(flow.jobs.release.permissions.contents,'write');
+  const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest'};
+  for(const [name,packageDir] of [['syncro-native','packages/syncro']]) {
+    const flow=await workflow(name);
+    assert.deepEqual(flow.permissions,{contents:'read'},name);
+    assert.equal(flow.jobs.portable.uses,'./.github/workflows/node-cli-portable.yml',name);
+    assert.equal(flow.jobs.portable.with.package,packageDir,name);
+    assert.equal(flow.jobs.portable.with.publish_release,"${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}",name);
+    const release=JSON.parse(await readFile(new URL(`../${packageDir}/release.json`,import.meta.url),'utf8'));
+    const targets=JSON.parse(flow.jobs.portable.with.targets);
+    assert.deepEqual(targets.map(entry=>entry.platform).sort(),Object.keys(release.targets).sort(),`${name} builds every release target`);
+    for(const entry of targets)assert.equal(entry.os,runners[entry.platform],`${name} ${entry.platform}`);
+    for(const trigger of [flow.on.pull_request,flow.on.push]) {
+      for(const path of ['exes/node-cli/**','.github/workflows/node-cli-portable.yml',`${packageDir}/**`])assert.ok(trigger.paths.includes(path),`${name} selects ${path}`);
+    }
+  }
 });
 
 

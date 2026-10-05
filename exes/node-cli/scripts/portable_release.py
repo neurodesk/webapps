@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Build and verify SYNcro portable executable archives."""
+"""Build and verify portable archives of a Node command-line package.
+
+The package directory supplies package.json (name, version, the single bin
+entry and dependencies) and release.json (display name, linked app, run
+arguments, README text, validation script and release targets).
+"""
 
 from __future__ import annotations
 
@@ -11,7 +16,6 @@ import os
 import pathlib
 import platform
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile
@@ -22,56 +26,97 @@ from dataclasses import dataclass
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-DIST = ROOT / "exes/syncro/dist"
+HERE = ROOT / "exes/node-cli"
+DIST = HERE / "dist"
+NODE_PLATFORMS = {"linux": "linux", "windows": "win32", "macos": "darwin"}
 
 
 @dataclass(frozen=True)
 class ReleaseTarget:
     id: str
+    tool: str
+    package: str
+    package_dir: pathlib.Path
+    display_name: str
     version: str
     archive_name: str
     directory: str
     executable: str
     archive_kind: str
+    run: str
+    readme_run: str
+    readme_notes: tuple[str, ...]
+    validation: pathlib.Path
+    onnx_runtime: str
+    build: bool
     node_version: str
     node_url: str
     node_sha256: str
     node_executable: str
     node_platform: str
+    node_arch: str
+
+    @property
+    def windows(self) -> bool:
+        return self.node_platform == "win32"
+
+    @property
+    def private_node(self) -> str:
+        return "runtime/node.exe" if self.windows else "runtime/node"
 
 
 def _read_json(path: pathlib.Path) -> dict:
     return json.loads(path.read_text(encoding="utf8"))
 
 
-def load_target(repo: pathlib.Path, target_id: str) -> ReleaseTarget:
-    package = _read_json(repo / "packages/syncro/package.json")
-    app = _read_json(repo / "apps/syncro/package.json")
-    release = _read_json(repo / "packages/syncro/release.json")
-    runtimes = _read_json(repo / "exes/syncro/node-runtimes.json")
+def load_target(repo: pathlib.Path, package_dir: str, target_id: str) -> ReleaseTarget:
+    directory = (repo / package_dir).resolve()
+    package = _read_json(directory / "package.json")
+    release = _read_json(directory / "release.json")
+    app = _read_json(repo / "apps" / release["app"] / "package.json")
+    runtimes = _read_json(HERE / "node-runtimes.json")
     if package["version"] != app["version"]:
-        raise ValueError("SYNcro package and app versions differ")
+        raise ValueError(f"{package['name']} and app {release['app']} versions differ")
+    if len(package.get("bin", {})) != 1:
+        raise ValueError(f"{package['name']} must declare exactly one bin entry")
+    [(tool, entry)] = package["bin"].items()
+    if pathlib.PurePosixPath(entry) != pathlib.PurePosixPath("bin", f"{tool}.js"):
+        raise ValueError(f"{package['name']} bin must be bin/{tool}.js for the launcher")
     if target_id not in release["targets"] or target_id not in runtimes["targets"]:
-        raise ValueError(f"unknown SYNcro release target: {target_id}")
+        raise ValueError(f"unknown {tool} release target: {target_id}")
     definition = release["targets"][target_id]
     runtime = runtimes["targets"][target_id]
+    if pathlib.PurePath(definition["executable"]).stem != tool:
+        raise ValueError(f"{target_id} executable must be named after {tool}")
+    system, architecture = target_id.split("-", 1)
     version = package["version"]
     archive_kind = definition["archive"]
-    archive_name = f"syncro-{version}-{target_id}.{archive_kind}"
+    archive_name = f"{tool}-{version}-{target_id}.{archive_kind}"
     if not all(character.isalnum() or character in ".-_" for character in archive_name):
         raise ValueError("release target produced an unsafe archive name")
     return ReleaseTarget(
         id=target_id,
+        tool=tool,
+        package=package["name"],
+        package_dir=directory,
+        display_name=release["displayName"],
         version=version,
         archive_name=archive_name,
-        directory=f"syncro-{version}-{target_id}",
+        directory=f"{tool}-{version}-{target_id}",
         executable=definition["executable"],
         archive_kind=archive_kind,
+        run=release["run"],
+        readme_run=release["readme"]["run"],
+        readme_notes=tuple(release["readme"]["notes"]),
+        validation=directory / release["validation"],
+        onnx_runtime=package["dependencies"]["onnxruntime-node"],
+        build="build" in package.get("scripts", {}),
         node_version=runtimes["version"],
         node_url=runtime["url"],
         node_sha256=runtime["sha256"],
         node_executable=runtime["executable"],
-        node_platform="win32" if target_id.startswith("windows-") else "linux",
+        node_platform=NODE_PLATFORMS[system],
+        node_arch=architecture,
     )
 
 
@@ -105,11 +150,17 @@ def _run(command: list[str], *, cwd: pathlib.Path = ROOT, env: dict | None = Non
     return subprocess.run(resolved, cwd=cwd, env=env, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 
-def _assert_native_host(target: ReleaseTarget) -> None:
-    host = "windows" if sys.platform == "win32" else "linux" if sys.platform.startswith("linux") else sys.platform
+def _host() -> str:
+    system = {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux" if sys.platform.startswith("linux") else sys.platform)
     machine = platform.machine().lower()
-    if host not in target.id or machine not in ("x86_64", "amd64"):
-        raise ValueError(f"{target.id} must be packaged on a matching x64 host, not {host}-{machine}")
+    architecture = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64"}.get(machine, machine)
+    return f"{system}-{architecture}"
+
+
+def _assert_native_host(target: ReleaseTarget) -> None:
+    host = _host()
+    if host != target.id:
+        raise ValueError(f"{target.id} must be packaged on a matching host, not {host}")
 
 
 def _download_runtime(target: ReleaseTarget, destination: pathlib.Path) -> pathlib.Path:
@@ -133,35 +184,37 @@ def _archive_member(names: list[str], suffix: str) -> str:
 
 
 def _extract_node_files(archive: pathlib.Path, target: ReleaseTarget, destination: pathlib.Path) -> None:
-    runtime = destination / "runtime"
+    node = destination / target.private_node
     licenses = destination / "licenses/node"
-    runtime.mkdir(parents=True)
+    node.parent.mkdir(parents=True)
     licenses.mkdir(parents=True)
-    if target.archive_kind == "zip":
+    if archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as source:
             executable = _archive_member(source.namelist(), target.node_executable)
             license_name = _archive_member(source.namelist(), "LICENSE")
-            (runtime / "node.exe").write_bytes(source.read(executable))
+            node.write_bytes(source.read(executable))
             (licenses / "LICENSE").write_bytes(source.read(license_name))
     else:
-        with tarfile.open(archive, "r:xz") as source:
+        with tarfile.open(archive, "r:*") as source:
             names = source.getnames()
             executable = source.extractfile(_archive_member(names, target.node_executable))
             license_file = source.extractfile(_archive_member(names, "LICENSE"))
             if executable is None or license_file is None:
                 raise ValueError("Node archive entries are not regular files")
-            (runtime / "node").write_bytes(executable.read())
+            node.write_bytes(executable.read())
             (licenses / "LICENSE").write_bytes(license_file.read())
-            (runtime / "node").chmod(0o755)
+    if not target.windows:
+        node.chmod(0o755)
 
 
-def _deploy_application(stage: pathlib.Path) -> None:
+def _deploy_application(stage: pathlib.Path, target: ReleaseTarget) -> None:
     environment = os.environ.copy()
     environment["ONNXRUNTIME_NODE_INSTALL"] = "skip"
     environment["CI"] = "true"
-    _run(["pnpm", "--filter", "@neurodesk/syncro", "run", "build"], env=environment)
+    if target.build:
+        _run(["pnpm", "--filter", target.package, "run", "build"], env=environment)
     _run(
-        ["pnpm", "--filter", "@neurodesk/syncro", "deploy", str(stage / "app"), "--prod", "--legacy"],
+        ["pnpm", "--filter", target.package, "deploy", str(stage / "app"), "--prod", "--legacy"],
         env=environment,
     )
 
@@ -179,7 +232,7 @@ def _package_entries(container: pathlib.Path):
             yield pathlib.PurePosixPath(entry.name), entry
 
 
-def _flatten_node_modules(app: pathlib.Path) -> None:
+def _flatten_node_modules(app: pathlib.Path, package_name: str) -> None:
     source_root = app / "node_modules"
     flat_root = app / "node_modules.flat"
     packages = {}
@@ -189,7 +242,7 @@ def _flatten_node_modules(app: pathlib.Path) -> None:
             if resolved == app.resolve():
                 continue
             package_json = resolved / "package.json"
-            if package_json.is_file() and _read_json(package_json).get("name") == "@neurodesk/syncro":
+            if package_json.is_file() and _read_json(package_json).get("name") == package_name:
                 continue
             packages[relative] = resolved
     for relative, source in packages.items():
@@ -208,16 +261,16 @@ def _flatten_node_modules(app: pathlib.Path) -> None:
 
 def _prune_onnx_runtime(app: pathlib.Path, target: ReleaseTarget) -> None:
     runtime_root = app / "node_modules/onnxruntime-node/bin/napi-v6"
-    keep = runtime_root / target.node_platform / "x64"
+    keep = runtime_root / target.node_platform / target.node_arch
     if not (keep / "onnxruntime_binding.node").is_file():
         raise ValueError(f"ONNX Runtime target binding is missing: {keep}")
     for platform_directory in runtime_root.iterdir():
         if platform_directory.name != target.node_platform:
             shutil.rmtree(platform_directory)
     for architecture in (runtime_root / target.node_platform).iterdir():
-        if architecture.name != "x64":
+        if architecture.name != target.node_arch:
             shutil.rmtree(architecture)
-    if target.id == "linux-x64":
+    if target.node_platform == "linux":
         for name in ("libonnxruntime_providers_cuda.so", "libonnxruntime_providers_tensorrt.so"):
             path = keep / name
             if path.exists():
@@ -250,36 +303,39 @@ def _copy_dependency_licenses(app: pathlib.Path, destination: pathlib.Path) -> N
 
 
 def _build_launcher(destination: pathlib.Path, target: ReleaseTarget) -> None:
-    _run(["cargo", "build", "--release", "--locked"], cwd=ROOT / "exes/syncro")
-    suffix = ".exe" if target.id.startswith("windows-") else ""
-    source = ROOT / f"exes/syncro/target/release/syncro-launcher{suffix}"
+    _run(["cargo", "build", "--release", "--locked"], cwd=HERE)
+    suffix = ".exe" if target.windows else ""
+    source = HERE / f"target/release/node-cli-launcher{suffix}"
     shutil.copy2(source, destination / target.executable)
     if not suffix:
         (destination / target.executable).chmod(0o755)
 
 
-def _write_readme(stage: pathlib.Path, target: ReleaseTarget) -> None:
-    invocation = ".\\syncro.exe" if target.id.startswith("windows-") else "./syncro"
-    text = f"""SYNcro {target.version} for {target.id}
+def readme_text(target: ReleaseTarget) -> str:
+    invocation = f".\\{target.executable}" if target.windows else f"./{target.executable}"
+    quarantine = ""
+    if target.node_platform == "darwin":
+        quarantine = (
+            "\nIf macOS refuses to open a program in a browser-downloaded archive,\n"
+            f"remove the quarantine flag from the extracted directory:\n  xattr -dr com.apple.quarantine {target.directory}\n"
+        )
+    notes = "\n".join(target.readme_notes)
+    return f"""{target.display_name} {target.version} for {target.id}
 
 Keep this directory intact. No system Node.js installation is required.
-
+{quarantine}
 Check the installation:
   {invocation} self-check
 
-Run normalization:
-  {invocation} input.nii.gz results --threads 4
+{target.readme_run}:
+  {invocation} {target.run}
 
-Models and the MNI template are included and checked locally.
-No network connection or previously populated cache is required.
-
-SYNcro is research software. Review the output alignment before use.
+{notes}
 """
-    (stage / "README.txt").write_text(text, encoding="utf8")
 
 
-def _normalized_mode(relative: pathlib.PurePath) -> int:
-    return 0o755 if relative.as_posix() in ("syncro", "syncro.exe", "runtime/node", "runtime/node.exe") else 0o644
+def _normalized_mode(relative: pathlib.PurePath, target: ReleaseTarget) -> int:
+    return 0o755 if relative.as_posix() in (target.executable, target.private_node) else 0o644
 
 
 def _write_zip(stage: pathlib.Path, target: ReleaseTarget, archive: pathlib.Path) -> None:
@@ -288,7 +344,7 @@ def _write_zip(stage: pathlib.Path, target: ReleaseTarget, archive: pathlib.Path
             relative = pathlib.PurePosixPath(target.directory) / source.relative_to(stage).as_posix()
             info = zipfile.ZipInfo(relative.as_posix(), (1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = (_normalized_mode(relative.relative_to(target.directory)) & 0xFFFF) << 16
+            info.external_attr = (_normalized_mode(relative.relative_to(target.directory), target) & 0xFFFF) << 16
             output.writestr(info, source.read_bytes())
 
 
@@ -299,35 +355,35 @@ def _write_tar(stage: pathlib.Path, target: ReleaseTarget, archive: pathlib.Path
                 relative = pathlib.PurePosixPath(target.directory) / source.relative_to(stage).as_posix()
                 info = tarfile.TarInfo(relative.as_posix())
                 info.size = source.stat().st_size
-                info.mode = _normalized_mode(relative.relative_to(target.directory))
+                info.mode = _normalized_mode(relative.relative_to(target.directory), target)
                 info.mtime = info.uid = info.gid = 0
                 info.uname = info.gname = ""
                 with source.open("rb") as contents:
                     output.addfile(info, contents)
 
 
-def package_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
+def package_target(target: ReleaseTarget) -> pathlib.Path:
     _assert_native_host(target)
     DIST.mkdir(parents=True, exist_ok=True)
     archive = DIST / target.archive_name
-    with tempfile.TemporaryDirectory(prefix="syncro-portable-") as temporary:
+    with tempfile.TemporaryDirectory(prefix=f"{target.tool}-portable-") as temporary:
         work = pathlib.Path(temporary)
         stage = work / target.directory
         stage.mkdir()
-        _deploy_application(stage)
-        _flatten_node_modules(stage / "app")
+        _deploy_application(stage, target)
+        _flatten_node_modules(stage / "app", target.package)
         _prune_onnx_runtime(stage / "app", target)
         runtime_archive = _download_runtime(target, work)
         _extract_node_files(runtime_archive, target, stage)
-        private_node = stage / "runtime" / ("node.exe" if target.id.startswith("windows-") else "node")
-        _run([str(private_node), str(stage / "app/bin/syncro.js"), "download-models", "--cache-dir", str(stage / "models")], cwd=stage)
+        entry = stage / "app/bin" / f"{target.tool}.js"
+        _run([str(stage / target.private_node), str(entry), "download-models", "--cache-dir", str(stage / "models")], cwd=stage)
         _build_launcher(stage, target)
-        shutil.copy2(repo / "packages/syncro/LICENSE", stage / "LICENSE")
-        shutil.copy2(repo / "packages/syncro/NOTICE", stage / "NOTICE")
+        shutil.copy2(target.package_dir / "LICENSE", stage / "LICENSE")
+        shutil.copy2(target.package_dir / "NOTICE", stage / "NOTICE")
         (stage / "licenses/onnxruntime").mkdir(parents=True)
-        shutil.copy2(repo / "exes/syncro/licenses/onnxruntime-LICENSE", stage / "licenses/onnxruntime/LICENSE")
+        shutil.copy2(HERE / "licenses/onnxruntime-LICENSE", stage / "licenses/onnxruntime/LICENSE")
         _copy_dependency_licenses(stage / "app", stage / "licenses/npm")
-        _write_readme(stage, target)
+        (stage / "README.txt").write_text(readme_text(target), encoding="utf8")
         manifest = create_manifest(stage, target.version, target.id)
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf8")
         if target.archive_kind == "zip":
@@ -392,7 +448,7 @@ def verify_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
     expected = checksum_file.read_text(encoding="ascii").split()[0]
     if _sha256(archive) != expected:
         raise ValueError("portable archive checksum mismatch")
-    with tempfile.TemporaryDirectory(prefix="syncro archive check ") as temporary:
+    with tempfile.TemporaryDirectory(prefix=f"{target.tool} archive check ") as temporary:
         extracted = pathlib.Path(temporary)
         _extract_archive(archive, extracted)
         root = extracted / target.directory
@@ -400,27 +456,25 @@ def verify_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
         executable = root / target.executable
         self_check = _run([str(executable), "self-check"], cwd=extracted)
         report = json.loads(self_check.stdout)
-        expected_runtime = (root / "runtime" / ("node.exe" if target.id.startswith("windows-") else "node")).resolve()
+        expected_runtime = (root / target.private_node).resolve()
         if pathlib.Path(report["executable"]).resolve() != expected_runtime:
-            raise ValueError("SYNcro used a Node runtime outside the extracted archive")
-        if report["onnxRuntime"] != "1.29.0" or report["node"] != f"v{target.node_version}":
+            raise ValueError(f"{target.tool} used a Node runtime outside the extracted archive")
+        if report["onnxRuntime"] != target.onnx_runtime or report["node"] != f"v{target.node_version}":
             raise ValueError("portable runtime version mismatch")
-        package_check = _run(
-            ["node", "packages/syncro/validation/package-check.mjs", "--executable", str(executable)],
-            cwd=repo,
-        )
-    validation = archive.with_name(archive.name + ".validation.txt")
-    validation.write_text(
-        f"PASS {target.id}\narchive_sha256={expected}\nself_check={json.dumps(report, sort_keys=True)}\n{package_check.stdout}",
+        validation = _run(["node", str(target.validation), "--executable", str(executable)], cwd=repo)
+    receipt = archive.with_name(archive.name + ".validation.txt")
+    receipt.write_text(
+        f"PASS {target.id}\narchive_sha256={expected}\nself_check={json.dumps(report, sort_keys=True)}\n{validation.stdout}",
         encoding="utf8",
     )
-    return validation
+    return receipt
 
 
-def verify_release_set(repo: pathlib.Path, directory: pathlib.Path) -> None:
+def verify_release_set(repo: pathlib.Path, package_dir: str, directory: pathlib.Path) -> None:
+    release = _read_json(repo / package_dir / "release.json")
     expected = set()
-    for target_id in ("windows-x64", "linux-x64"):
-        target = load_target(repo, target_id)
+    for target_id in release["targets"]:
+        target = load_target(repo, package_dir, target_id)
         expected.update((target.archive_name, target.archive_name + ".sha256", target.archive_name + ".validation.txt"))
         archive = directory / target.archive_name
         checksum = (directory / (target.archive_name + ".sha256")).read_text(encoding="ascii").split()[0]
@@ -436,14 +490,15 @@ def verify_release_set(repo: pathlib.Path, directory: pathlib.Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=("package", "verify", "verify-release-set"))
-    parser.add_argument("value")
+    parser.add_argument("package_dir", help="package directory, for example packages/topofit")
+    parser.add_argument("value", help="release target, or the release asset directory for verify-release-set")
     arguments = parser.parse_args()
     if arguments.command == "verify-release-set":
-        verify_release_set(ROOT, pathlib.Path(arguments.value))
-        print("PASS complete SYNcro portable release set")
+        verify_release_set(ROOT, arguments.package_dir, pathlib.Path(arguments.value))
+        print(f"PASS complete portable release set for {arguments.package_dir}")
         return
-    target = load_target(ROOT, arguments.value)
-    result = package_target(ROOT, target) if arguments.command == "package" else verify_target(ROOT, target)
+    target = load_target(ROOT, arguments.package_dir, arguments.value)
+    result = package_target(target) if arguments.command == "package" else verify_target(ROOT, target)
     print(result)
 
 

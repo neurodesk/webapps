@@ -22,9 +22,11 @@ offline execution after an explicit prefetch.
 
 - `packages/syncro` owns the CLI, scientific pipeline, model cache, and a small
   public catalog of target names, artifact names, URLs, and user commands.
-- `exes/syncro` owns the launcher, private-runtime acquisition, dependency
+- `exes/node-cli` owns the launcher, private-runtime acquisition, dependency
   pruning, archive layout, checksums, manifests, and extracted-archive checks.
-- `.github/workflows/syncro-native.yml` owns target runners and release
+  It is shared with TopoFit and reads `packages/syncro/release.json`.
+- `.github/workflows/syncro-native.yml` calls the shared
+  `node-cli-portable.yml` workflow, which owns target runners and release
   permissions. Build jobs are read-only; only the final publisher may write.
 - `apps/syncro` renders the package-owned release catalog through the shell's
   Standalone action. It does not know archive internals.

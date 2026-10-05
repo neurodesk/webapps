@@ -19,7 +19,7 @@ export function createSyncroRelease(version,spec=releaseSpec) {
       checksumName:`${archiveName}.sha256`,validationName:`${archiveName}.validation.txt`,
       directory,executable,url,checksumUrl:`${url}.sha256`,
       selfCheck:`${invocation} self-check`,
-      run:`${invocation} input.nii.gz results --threads 4`,
+      run:`${invocation} ${spec.run}`,
     });
   }
   return Object.freeze({version,tag,targets:Object.freeze(targets)});

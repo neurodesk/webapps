@@ -14,6 +14,12 @@ portable_release = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = portable_release
 SPEC.loader.exec_module(portable_release)
 
+PACKAGES = ("packages/syncro",)
+
+
+def package_version(package_dir):
+    return json.loads((ROOT / package_dir / "package.json").read_text(encoding="utf8"))["version"]
+
 
 class PortableReleaseTests(unittest.TestCase):
     def test_commands_are_resolved_with_the_supplied_path(self):
@@ -33,15 +39,38 @@ class PortableReleaseTests(unittest.TestCase):
         )
 
     def test_release_target_derives_safe_names(self):
-        target = portable_release.load_target(ROOT, "linux-x64")
-        version = json.loads((ROOT / "packages/syncro/package.json").read_text(encoding="utf8"))["version"]
+        target = portable_release.load_target(ROOT, "packages/syncro", "linux-x64")
+        version = package_version("packages/syncro")
         self.assertEqual(target.version, version)
         self.assertEqual(target.archive_name, f"syncro-{version}-linux-x64.tar.gz")
         self.assertEqual(target.executable, "syncro")
+        self.assertEqual(target.package, "@neurodesk/syncro")
+        self.assertTrue(target.build)
+        windows = portable_release.load_target(ROOT, "packages/syncro", "windows-x64")
+        self.assertEqual(windows.private_node, "runtime/node.exe")
+        self.assertEqual(windows.node_platform, "win32")
+
+    def test_every_release_spec_loads_and_names_its_executables_after_the_tool(self):
+        for package_dir in PACKAGES:
+            release = json.loads((ROOT / package_dir / "release.json").read_text(encoding="utf8"))
+            for target_id in release["targets"]:
+                target = portable_release.load_target(ROOT, package_dir, target_id)
+                self.assertTrue((ROOT / package_dir / "bin" / f"{target.tool}.js").is_file())
+                self.assertTrue(target.validation.is_file())
 
     def test_unknown_target_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "target"):
-            portable_release.load_target(ROOT, "linux-arm64")
+            portable_release.load_target(ROOT, "packages/syncro", "linux-arm64")
+        with self.assertRaisesRegex(ValueError, "target"):
+            portable_release.load_target(ROOT, "packages/syncro", "macos-arm64")
+
+    def test_readme_comes_from_the_release_spec(self):
+        syncro = portable_release.readme_text(portable_release.load_target(ROOT, "packages/syncro", "linux-x64"))
+        self.assertIn("  ./syncro input.nii.gz results --threads 4\n", syncro)
+        self.assertIn("SYNcro is research software.", syncro)
+        self.assertNotIn("quarantine", syncro)
+        windows = portable_release.readme_text(portable_release.load_target(ROOT, "packages/syncro", "windows-x64"))
+        self.assertIn("  .\\syncro.exe self-check\n", windows)
 
     def test_manifest_rejects_symlinks_and_path_escape(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -70,21 +99,25 @@ class PortableReleaseTests(unittest.TestCase):
                 "libonnxruntime_providers_tensorrt.so",
             ):
                 (linux / name).write_text(name)
+            (runtime / "linux/arm64").mkdir(parents=True)
+            (runtime / "linux/arm64/onnxruntime_binding.node").write_text("foreign")
             windows = runtime / "win32/x64"
             windows.mkdir(parents=True)
             (windows / "onnxruntime_binding.node").write_text("foreign")
-            portable_release._prune_onnx_runtime(app, portable_release.load_target(ROOT, "linux-x64"))
+            portable_release._prune_onnx_runtime(app, portable_release.load_target(ROOT, "packages/syncro", "linux-x64"))
             self.assertEqual(
                 sorted(path.name for path in linux.iterdir()),
                 ["libonnxruntime.so.1", "libonnxruntime_providers_shared.so", "onnxruntime_binding.node"],
             )
             self.assertFalse((runtime / "win32").exists())
+            self.assertFalse((runtime / "linux/arm64").exists())
 
     def test_runtime_catalog_has_pinned_node_archives(self):
-        catalog = json.loads((ROOT / "exes/syncro/node-runtimes.json").read_text())
+        catalog = json.loads((ROOT / "exes/node-cli/node-runtimes.json").read_text())
         self.assertEqual(catalog["version"], "22.22.0")
         for target in ("linux-x64", "windows-x64"):
             self.assertRegex(catalog["targets"][target]["sha256"], r"^[0-9a-f]{64}$")
+            self.assertIn(f"/v{catalog['version']}/", catalog["targets"][target]["url"])
 
 
 if __name__ == "__main__":
