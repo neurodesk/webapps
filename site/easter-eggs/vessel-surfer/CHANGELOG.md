@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260929
+
+### Patch Changes
+
+- Phone tilt steering no longer pitches backwards: tipping the top of the phone away now dives and tipping it back climbs.
+
 ## 0.1.20260928
 
 ### Patch Changes
