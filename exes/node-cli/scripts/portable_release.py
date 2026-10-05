@@ -647,12 +647,37 @@ def _verify_manifest(root: pathlib.Path, target: ReleaseTarget) -> None:
             raise ValueError(f"portable manifest checksum mismatch: {entry['path']}")
 
 
+HOME_VARIABLES = ("HOME", "USERPROFILE", "XDG_CACHE_HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME")
+
+
+def isolated_home_environment(home: pathlib.Path) -> dict:
+    environment = os.environ.copy()
+    for name in HOME_VARIABLES:
+        environment[name] = str(home)
+    return environment
+
+
+def check_home_untouched(home: pathlib.Path, target: ReleaseTarget) -> None:
+    written = sorted(path.relative_to(home).as_posix() for path in home.rglob("*") if path.is_file())
+    if written:
+        raise ValueError(f"{target.tool} wrote outside its output directory: {written}")
+
+
 def _exercise(repo: pathlib.Path, target: ReleaseTarget, root: pathlib.Path, executable: pathlib.Path) -> tuple[dict, str]:
     _verify_manifest(root, target)
+    with tempfile.TemporaryDirectory(prefix=f"{target.tool}-home-") as temporary:
+        home = pathlib.Path(temporary)
+        report, validation = _exercise_in(repo, target, root, executable, isolated_home_environment(home))
+        check_home_untouched(home, target)
+    return report, validation
+
+
+def _exercise_in(repo: pathlib.Path, target: ReleaseTarget, root: pathlib.Path, executable: pathlib.Path, environment: dict) -> tuple[dict, str]:
     # The report is standard output alone; ONNX Runtime may log to standard error.
     self_check = subprocess.run(
         [str(executable), "self-check"],
         cwd=root.parent,
+        env=environment,
         check=True,
         text=True,
         stdout=subprocess.PIPE,
@@ -667,7 +692,7 @@ def _exercise(repo: pathlib.Path, target: ReleaseTarget, root: pathlib.Path, exe
         raise ValueError(f"{target.tool} used a Node runtime outside {root}")
     if report.get("onnxRuntime") != target.onnx_runtime or report["node"] != f"v{target.node_version}":
         raise ValueError("portable runtime version mismatch")
-    validation = _run(["node", str(target.validation), "--executable", str(executable)], cwd=repo)
+    validation = _run(["node", str(target.validation), "--executable", str(executable)], cwd=repo, env=environment)
     return report, validation.stdout
 
 

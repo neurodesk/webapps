@@ -52,6 +52,18 @@ class PortableReleaseTests(unittest.TestCase):
                         portable_release._run(["node", "check.mjs"])
         stderr.write.assert_called_once_with("FAIL lh.white mean distance\n")
 
+    def test_verification_fails_when_a_tool_writes_into_home(self):
+        target = portable_release.load_target(ROOT, "packages/topofit", "linux-x64")
+        with tempfile.TemporaryDirectory() as temporary:
+            home = pathlib.Path(temporary)
+            environment = portable_release.isolated_home_environment(home)
+            self.assertTrue(all(environment[name] == str(home) for name in portable_release.HOME_VARIABLES))
+            portable_release.check_home_untouched(home, target)
+            (home / ".cache/Microsoft/DeveloperTools/.onnxruntime").mkdir(parents=True)
+            (home / ".cache/Microsoft/DeveloperTools/.onnxruntime/deviceid").write_text("id")
+            with self.assertRaisesRegex(ValueError, "deviceid"):
+                portable_release.check_home_untouched(home, target)
+
     def test_release_target_derives_safe_names(self):
         target = portable_release.load_target(ROOT, "packages/syncro", "linux-x64")
         version = package_version("packages/syncro")

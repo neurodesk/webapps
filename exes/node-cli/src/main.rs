@@ -86,6 +86,10 @@ fn main() {
         .args(env::args_os().skip(1))
         .env(model_variable(&installation.tool), &installation.models)
         .env("NEURODESK_OFFLINE", "1");
+    // ONNX Runtime's Linux build otherwise records a device ID under ~/.cache.
+    if env::var_os("ORT_DISABLE_TELEMETRY").is_none() {
+        command.env("ORT_DISABLE_TELEMETRY", "1");
+    }
 
     #[cfg(unix)]
     {
