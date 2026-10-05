@@ -9,7 +9,7 @@ import { loadStandalone } from '../scripts/lib/standalone.mjs';
 import { ciWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
-import { portableCommand } from '../scripts/lib/portable-command.mjs';
+import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
 
 test('standalone catalog covers the entire app registry', async () => {
   const registry = await loadAppsRegistry();
@@ -120,8 +120,13 @@ test('portable command-line rows show extraction and the release spec run comman
   const archive = platform => `topofit-${version}-${platform}.${spec.targets[platform].archive}`;
   assert.equal(portableCommand(spec, 'linux-x64', archive('linux-x64')), `tar -xzf topofit-${version}-linux-x64.tar.gz\n./topofit-${version}-linux-x64/topofit input.nii.gz results`);
   assert.equal(portableCommand(spec, 'windows-x64', archive('windows-x64')), `Expand-Archive -Path .\\topofit-${version}-windows-x64.zip -DestinationPath .\n.\\topofit-${version}-windows-x64\\topofit.exe input.nii.gz results`);
-  assert.match(portableCommand(spec, 'macos-arm64', archive('macos-arm64')), new RegExp(`^tar -xzf .*\nxattr -dr com.apple.quarantine topofit-${version}-macos-arm64\n`));
+  assert.equal(portableCommand(spec, 'macos-arm64', archive('macos-arm64')), `sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /\ntopofit self-check\ntopofit input.nii.gz results`);
   assert.throws(() => portableCommand(spec, 'linux-arm64', 'topofit.tar.gz'), /not a release target/);
+  assert.equal(releasePlatform(spec, archive('macos-arm64')), 'macos-arm64');
+  assert.equal(releasePlatform(spec, `topofit-${version}-macos-arm64-adhoc.pkg`), null);
+  assert.equal(releasePlatform(spec, `topofit-${version}-macos-arm64.tar.gz`), null);
+  assert.equal(releasePlatform(spec, `${archive('macos-arm64')}.validation.txt`), null);
+  assert.equal(releasePlatform(null, 'synthsr-0.3.20260910-macos-arm64.pkg'), 'macos-arm64');
   const downloads = Object.keys(spec.targets).map(platform => ({
     kind: 'cli', platform, version, bytes: 91534072, modelsIncluded: true, sha256: 'a'.repeat(64),
     url: `https://github.com/neurodesk/webapps/releases/download/topofit-v${version}/${archive(platform)}`,
@@ -137,9 +142,12 @@ test('portable command-line rows show extraction and the release spec run comman
     'TopoFit command line · Windows · x64 · 92 MB',
     'TopoFit command line · macOS · Apple silicon · 92 MB',
   ]);
-  assert.deepEqual([...section.querySelectorAll('summary')].map(node => node.textContent), ['Extract and run', 'Extract and run', 'Extract and run']);
+  assert.deepEqual([...section.querySelectorAll('summary')].map(node => node.textContent), ['Extract and run', 'Extract and run', 'Install and run']);
   assert.ok([...section.querySelectorAll('details')].every(node => !node.open));
   assert.match(section.textContent, new RegExp(`\\./topofit-${version}-linux-x64/topofit input\\.nii\\.gz results`));
-  assert.doesNotMatch(section.textContent, /sha256|shasum/i);
+  assert.doesNotMatch(section.textContent, /sha256|shasum|xattr|quarantine/i);
+  const lines = [...section.querySelectorAll('pre, code')].flatMap(node => node.textContent.split('\n'));
+  assert.ok(lines.includes(`sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /`));
+  assert.ok(lines.every(line => line.length <= 90), 'visible commands stay within 90 characters');
   dom.window.close();
 });

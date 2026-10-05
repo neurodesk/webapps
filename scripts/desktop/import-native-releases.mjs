@@ -2,7 +2,7 @@
 // Usage: node scripts/desktop/import-native-releases.mjs [app@VERSION ...]
 // Each argument adds or replaces one pinned release; its GitHub tag must already carry archives.
 import { readFile, writeFile } from 'node:fs/promises';
-import { portableCommand } from '../lib/portable-command.mjs';
+import { portableCommand, releasePlatform } from '../lib/portable-command.mjs';
 
 const path = new URL('../../registry/standalone.json', import.meta.url);
 const catalog = JSON.parse(await readFile(path));
@@ -30,10 +30,9 @@ for (const [id, version] of Object.entries(releases)) {
   if (release.draft) throw new Error(`${id}: native release is still a draft`);
   const spec = await portableSpec(id);
   const downloads = release.assets.flatMap(asset => {
-    const match = asset.name.match(/-(macos-arm64|linux-x64|windows-x64)\.(?:pkg|tar\.gz|zip)$/);
-    if (!match) return [];
+    const platform = releasePlatform(spec, asset.name);
+    if (!platform) return [];
     if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest)) throw new Error(`${asset.name}: GitHub has no asset digest`);
-    const platform = match[1];
     return [{ kind: 'cli', platform, version, url: asset.browser_download_url, sha256: asset.digest.slice(7), bytes: asset.size,
       validationUrl: release.assets.find(item => item.name === `${asset.name}.validation.txt`)?.browser_download_url,
       ...(spec ? { modelsIncluded: true, command: portableCommand(spec, platform, asset.name) } : {}),

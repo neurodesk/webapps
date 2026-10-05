@@ -41,20 +41,32 @@ Runtime Node on the CPU. It needs no browser, GPU or Python.
 
 ### Install
 
-Download the archive for your platform from the TopoFit app's Standalone
-dialog: Linux x64, Windows x64 or macOS on Apple silicon. Extract it and keep
-the directory intact. It contains a private Node.js runtime and the
-T1-weighted models, so it runs offline from the first use.
+Download the release for your platform from the TopoFit app's Standalone
+dialog: Linux x64, Windows x64 or macOS on Apple silicon. Each contains a
+private Node.js runtime and the T1-weighted models, so it runs offline from
+the first use.
+
+On Linux, extract the archive and keep the directory intact:
 
 ```bash
 tar -xzf topofit-VERSION-linux-x64.tar.gz
 ./topofit-VERSION-linux-x64/topofit self-check
 ```
 
-On Windows, use `Expand-Archive` and `topofit.exe`. macOS may refuse to open a
-program from a browser-downloaded archive. Run
-`xattr -dr com.apple.quarantine topofit-VERSION-macos-arm64` once after
-extracting.
+On Windows, use `Expand-Archive` and `topofit.exe`.
+
+On macOS, the release is an installer package signed with a Developer ID and
+notarized by Apple. It installs TopoFit in `/usr/local/lib/neurodesk/topofit`
+and the `topofit` command in `/usr/local/bin`:
+
+```bash
+sudo installer -pkg topofit-VERSION-macos-arm64.pkg -target /
+topofit self-check
+```
+
+You can also open the package in Finder. To uninstall, delete
+`/usr/local/lib/neurodesk/topofit` and `/usr/local/bin/topofit`, then run
+`sudo pkgutil --forget org.neurodesk.topofit`.
 
 ### Commands
 
@@ -79,7 +91,7 @@ masks and DICOM input are available in the web app only.
 
 ### Models and offline use
 
-Archives set `NEURODESK_TOPOFIT_MODEL_DIR` to their `models/` directory and
+Releases set `NEURODESK_TOPOFIT_MODEL_DIR` to their `models/` directory and
 `NEURODESK_OFFLINE=1`. Installed from npm or the repository, the command
 downloads the 22 T1-weighted files (95 MB) listed in `model.manifest.json` to
 `~/.cache/neurodesk/topofit/<release>` (or `$XDG_CACHE_HOME`, or
@@ -110,7 +122,8 @@ spheres differ by 0.003 to 0.004 degrees on average. The release limits are
 0.25 mm mean, 0.5 mm p95 and 2.0 mm maximum. Repeated runs with the same
 thread count were byte-identical; another thread count changes the outputs'
 low-order bits. The run took 54 s on 8 threads with 4.7 GB peak memory. Every
-portable archive must pass this check on its own platform before release. One healthy scan is engineering evidence, not
+release must pass this check on its own platform; the macOS package runs it
+after installation. One healthy scan is engineering evidence, not
 clinical validation.
 
 If you use TopoFit, please cite:

@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 import importlib.util
 import json
+import os
 import pathlib
+import plistlib
+import struct
+import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -53,7 +58,10 @@ class PortableReleaseTests(unittest.TestCase):
     def test_topofit_targets_cover_apple_silicon(self):
         version = package_version("packages/topofit")
         target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
-        self.assertEqual(target.archive_name, f"topofit-{version}-macos-arm64.tar.gz")
+        self.assertEqual(target.archive_name, f"topofit-{version}-macos-arm64.pkg")
+        self.assertTrue(target.installer)
+        self.assertEqual(str(target.install_directory), "/usr/local/lib/neurodesk/topofit")
+        self.assertEqual(str(target.command_link), "/usr/local/bin/topofit")
         self.assertEqual((target.node_platform, target.node_arch), ("darwin", "arm64"))
         self.assertEqual(target.package, "@neurodesk/topofit")
         self.assertFalse(target.build)
@@ -83,9 +91,12 @@ class PortableReleaseTests(unittest.TestCase):
         windows = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "windows-x64"))
         self.assertIn("  .\\topofit.exe self-check\n", windows)
         self.assertNotIn("SYNcro", windows)
-        macos_target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
-        macos = portable_release.readme_text(macos_target)
-        self.assertIn(f"xattr -dr com.apple.quarantine {macos_target.directory}", macos)
+        macos = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "macos-arm64"))
+        self.assertIn("  topofit self-check\n", macos)
+        self.assertIn("  topofit input.nii.gz results\n", macos)
+        self.assertIn("  sudo rm -rf /usr/local/lib/neurodesk/topofit /usr/local/bin/topofit\n", macos)
+        self.assertNotIn("quarantine", macos)
+        self.assertNotIn("./topofit", macos)
 
     def test_host_must_match_the_target(self):
         target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
@@ -154,6 +165,232 @@ class PortableReleaseTests(unittest.TestCase):
         for target in ("linux-x64", "windows-x64", "macos-arm64"):
             self.assertRegex(catalog["targets"][target]["sha256"], r"^[0-9a-f]{64}$")
             self.assertIn(f"/v{catalog['version']}/", catalog["targets"][target]["url"])
+
+
+THIN_MACHO = b"\xcf\xfa\xed\xfe" + bytes(28)
+
+
+def macho_with_entitlements(entitlements):
+    blob = struct.pack(">2I", 0xFADE7171, 8 + len(entitlements)) + entitlements
+    signature = struct.pack(">3I", 0xFADE0CC0, 12 + 8 + len(blob), 1) + struct.pack(">2I", 5, 20) + blob
+    header = b"\xcf\xfa\xed\xfe" + struct.pack("<3I", 0x0100000C, 0, 2) + struct.pack("<4I", 1, 16, 0, 0)
+    command = struct.pack("<4I", 0x1D, 16, 48, len(signature))
+    return header + command + signature
+
+
+def xar(table_of_contents):
+    compressed = zlib.compress(table_of_contents)
+    return struct.pack(">4sHHQQI", b"xar!", 28, 1, len(compressed), len(table_of_contents), 1) + compressed
+
+
+class MacInstallerTests(unittest.TestCase):
+    def setUp(self):
+        self.target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
+        self.version = package_version("packages/topofit")
+
+    def test_signing_mode_needs_both_identities_or_neither(self):
+        adhoc = portable_release.mac_signing({})
+        self.assertTrue(adhoc.adhoc)
+        self.assertEqual(adhoc.application, "-")
+        self.assertTrue(portable_release.mac_signing({"MACOS_SIGN_IDENTITY": "-", "MACOS_INSTALLER_IDENTITY": ""}).adhoc)
+        signed = portable_release.mac_signing({"MACOS_SIGN_IDENTITY": "Developer ID Application: Test (ABCDE12345)", "MACOS_INSTALLER_IDENTITY": "Developer ID Installer: Test (ABCDE12345)"})
+        self.assertFalse(signed.adhoc)
+        for partial in ({"MACOS_SIGN_IDENTITY": "Developer ID Application: Test"}, {"MACOS_INSTALLER_IDENTITY": "Developer ID Installer: Test"}):
+            with self.assertRaisesRegex(ValueError, "both"):
+                portable_release.mac_signing(partial)
+
+    def test_only_signed_installers_carry_the_release_name(self):
+        signed = portable_release.MacSigning("Developer ID Application: Test", "Developer ID Installer: Test")
+        self.assertEqual(portable_release.artifact_name(self.target, signed), f"topofit-{self.version}-macos-arm64.pkg")
+        self.assertEqual(portable_release.artifact_name(self.target, portable_release.mac_signing({})), f"topofit-{self.version}-macos-arm64-adhoc.pkg")
+        linux = portable_release.load_target(ROOT, "packages/topofit", "linux-x64")
+        self.assertEqual(portable_release.artifact_name(linux, None), f"topofit-{self.version}-linux-x64.tar.gz")
+
+    def test_macos_targets_must_ship_an_installer_and_others_must_not(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            (repo / "apps/tool").mkdir(parents=True)
+            (repo / "packages/tool/bin").mkdir(parents=True)
+            package = {"name": "@neurodesk/tool", "version": "0.1.20261005", "bin": {"tool": "bin/tool.js"}, "dependencies": {"onnxruntime-node": "1.29.0"}}
+            (repo / "apps/tool/package.json").write_text(json.dumps(package))
+            (repo / "packages/tool/package.json").write_text(json.dumps(package))
+            for target, archive in (("macos-arm64", "tar.gz"), ("linux-x64", "pkg")):
+                release = {"displayName": "Tool", "app": "tool", "run": "", "readme": {"run": "Run", "notes": []}, "validation": "check.mjs", "targets": {target: {"archive": archive, "executable": "tool"}}}
+                (repo / "packages/tool/release.json").write_text(json.dumps(release))
+                with self.assertRaisesRegex(ValueError, "must ship as"):
+                    portable_release.load_target(repo, "packages/tool", target)
+
+    def stage(self, root):
+        files = {
+            "topofit": THIN_MACHO,
+            "runtime/node": THIN_MACHO,
+            "app/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/onnxruntime_binding.node": THIN_MACHO,
+            "app/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.29.0.dylib": THIN_MACHO,
+            "app/node_modules/fat/prebuilds/addon.node": b"\xca\xfe\xba\xbe\x00\x00\x00\x02",
+            "app/node_modules/java/Main.class": b"\xca\xfe\xba\xbe\x00\x00\x00\x34",
+            "app/bin/topofit.js": b"#!/usr/bin/env node\n",
+            "models/topofit.onnx": b"\x08\x07",
+        }
+        for relative, contents in files.items():
+            (root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (root / relative).write_bytes(contents)
+
+    def test_signing_plan_signs_every_mach_o_inside_out(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self.stage(root)
+            plan = portable_release.signing_plan(root, self.target)
+            self.assertEqual(
+                [step.path.relative_to(root).as_posix() for step in plan],
+                [
+                    "app/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/libonnxruntime.1.29.0.dylib",
+                    "app/node_modules/onnxruntime-node/bin/napi-v6/darwin/arm64/onnxruntime_binding.node",
+                    "app/node_modules/fat/prebuilds/addon.node",
+                    "runtime/node",
+                    "topofit",
+                ],
+            )
+            self.assertEqual([step.entitlements for step in plan], [None, None, None, portable_release.NODE_ENTITLEMENTS, None])
+
+    def test_signing_plan_requires_the_runtime_and_launcher(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            self.stage(root)
+            (root / "runtime/node").write_bytes(b"#!/bin/sh\n")
+            with self.assertRaisesRegex(ValueError, r"runtime[/\\]node"):
+                portable_release.signing_plan(root, self.target)
+
+    def test_codesign_uses_the_hardened_runtime_and_entitles_only_node(self):
+        node = portable_release.SigningStep(pathlib.Path("runtime", "node"), portable_release.NODE_ENTITLEMENTS)
+        addon = portable_release.SigningStep(pathlib.Path("binding.node"), None)
+        signed = portable_release.MacSigning("Developer ID Application: Test", "Developer ID Installer: Test")
+        self.assertEqual(
+            portable_release.codesign_command(node, signed),
+            ["codesign", "--force", "--options", "runtime", "--timestamp", "--entitlements", str(portable_release.NODE_ENTITLEMENTS), "--sign", "Developer ID Application: Test", str(node.path)],
+        )
+        self.assertEqual(
+            portable_release.codesign_command(addon, portable_release.mac_signing({})),
+            ["codesign", "--force", "--options", "runtime", "--timestamp=none", "--sign", "-", "binding.node"],
+        )
+
+    def test_committed_entitlements_are_the_official_ones_without_debugging(self):
+        committed = plistlib.loads(portable_release.NODE_ENTITLEMENTS.read_bytes())
+        self.assertIn("com.apple.security.cs.allow-jit", committed)
+        self.assertNotIn("com.apple.security.get-task-allow", committed)
+        official = plistlib.dumps({**committed, "com.apple.security.get-task-allow": True})
+        self.assertEqual(plistlib.loads(portable_release.macho_entitlements(macho_with_entitlements(official))), {**committed, "com.apple.security.get-task-allow": True})
+        with tempfile.TemporaryDirectory() as temporary:
+            node = pathlib.Path(temporary) / "node"
+            node.write_bytes(macho_with_entitlements(official))
+            portable_release.check_node_entitlements(node)
+            node.write_bytes(macho_with_entitlements(plistlib.dumps({"com.apple.security.cs.allow-jit": True})))
+            with self.assertRaisesRegex(ValueError, "differs"):
+                portable_release.check_node_entitlements(node)
+
+    def test_preinstall_replaces_only_this_tool(self):
+        script = portable_release.preinstall_script(self.target)
+        self.assertIn('rm -rf "$3/usr/local/lib/neurodesk/topofit"\n', script)
+        self.assertEqual(script.count("rm "), 1)
+
+    def release_set(self, directory, *, signed=True, notarized=True):
+        for target_id in ("linux-x64", "windows-x64", "macos-arm64"):
+            target = portable_release.load_target(ROOT, "packages/topofit", target_id)
+            archive = directory / target.archive_name
+            signature = b'<signature style="RSA"/>' if signed else b""
+            archive.write_bytes(xar(b"<xar><toc>" + signature + b"</toc></xar>") if target.installer else target_id.encode())
+            (directory / (archive.name + ".sha256")).write_text(f"{portable_release._sha256(archive)}  {archive.name}\n")
+            evidence = "source=Notarized Developer ID\n" if notarized and target.installer else ""
+            (directory / (archive.name + ".validation.txt")).write_text(f"PASS {target_id}\n{evidence}")
+
+    def test_release_set_accepts_a_notarized_installer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            self.release_set(directory)
+            portable_release.verify_release_set(ROOT, "packages/topofit", directory)
+
+    def test_release_set_rejects_ad_hoc_and_unsigned_installers(self):
+        for change, message in (
+            (lambda directory: (directory / f"topofit-{self.version}-macos-arm64-adhoc.pkg").write_bytes(b""), "ad hoc"),
+            (lambda directory: self.release_set(directory, signed=False), "unsigned"),
+            (lambda directory: self.release_set(directory, notarized=False), "notarization"),
+        ):
+            with tempfile.TemporaryDirectory() as temporary:
+                directory = pathlib.Path(temporary)
+                self.release_set(directory)
+                change(directory)
+                with self.assertRaisesRegex(ValueError, message):
+                    portable_release.verify_release_set(ROOT, "packages/topofit", directory)
+
+
+@unittest.skipIf(sys.platform == "win32", "the macOS release Makefile runs on Unix")
+class ReleaseMakefileTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.directory = pathlib.Path(temporary.name)
+        self.bin = self.directory / "bin"
+        self.bin.mkdir()
+
+    def executable(self, path, source):
+        path.write_text("#!/bin/sh\nset -eu\n" + source)
+        path.chmod(0o755)
+        return path
+
+    def make(self, *arguments, **environment):
+        return subprocess.run(
+            ["make", "-j4", "-C", str(ROOT / "exes/node-cli"), *arguments],
+            env={**os.environ, **environment},
+            capture_output=True,
+            text=True,
+        )
+
+    def test_release_phases_run_in_order_and_stop_at_a_failure(self):
+        log = self.directory / "phases"
+        make = self.executable(self.bin / "record-make", 'printf \'%s\\n\' "$1" >> "$PHASE_LOG"\n[ "$1" != "$FAIL_PHASE" ]\n')
+        phases = ["check-notary-profile", "macos-pkg", "macos-notarize", "macos-verify"]
+        for failing in ["", *phases]:
+            with self.subTest(failing=failing):
+                log.write_text("")
+                result = self.make("macos-release", f"MAKE={make}", PHASE_LOG=str(log), FAIL_PHASE=failing)
+                recorded = log.read_text().splitlines()
+                if failing:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertEqual(recorded, phases[: phases.index(failing) + 1])
+                else:
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertEqual(recorded, phases)
+
+    def test_notarization_reuses_synthsr_with_the_node_cli_verifier(self):
+        scripts = self.directory / "synthsr-scripts"
+        scripts.mkdir()
+        record = self.directory / "notarize.log"
+        self.executable(scripts / "notarize_macos.sh", 'printf \'%s\\n\' "$PWD" "$1" "$2" "$PACKAGE" "$VERIFY_MACOS_PKG" > "$RECORD"\n')
+        result = self.make(
+            "macos-notarize",
+            "PACKAGE=packages/topofit",
+            "MACOS_SIGN_IDENTITY=Developer ID Application: Test (ABCDE12345)",
+            "MACOS_INSTALLER_IDENTITY=Developer ID Installer: Test (ABCDE12345)",
+            f"SYNTHSR_SCRIPTS={scripts}",
+            f"DIST={self.directory}",
+            "NOTARY_PROFILE=node-cli-ci",
+            RECORD=str(record),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            record.read_text().splitlines(),
+            [
+                str(self.directory),
+                f"topofit-{package_version('packages/topofit')}-macos-arm64.pkg",
+                "node-cli-ci",
+                "packages/topofit",
+                str(ROOT / "exes/node-cli/scripts/verify_macos_pkg.sh"),
+            ],
+        )
+
+    def test_packaging_needs_a_package_directory(self):
+        result = self.make("macos-pkg-adhoc")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("Set PACKAGE", result.stderr)
 
 
 if __name__ == "__main__":

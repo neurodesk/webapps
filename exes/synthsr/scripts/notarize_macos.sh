@@ -2,9 +2,13 @@
 # Notarize, staple and validate a signed installer package.
 #
 #   notarize_macos.sh FILE.pkg [KEYCHAIN_PROFILE]
+#
+# VERIFY_MACOS_PKG names the payload verifier, run as VERIFIER FILE.pkg; it defaults to
+# this directory's verify_macos_pkg.sh. exes/node-cli supplies its own.
 set -eu
 set -o pipefail
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+verify=${VERIFY_MACOS_PKG:-$root/scripts/verify_macos_pkg.sh}
 pkg=${1:?usage: notarize_macos.sh FILE.pkg [KEYCHAIN_PROFILE]}
 profile=${2:-synthsr-notary}
 : "${EXPECTED_TEAM_ID:?set EXPECTED_TEAM_ID to the release signing team}"
@@ -24,7 +28,7 @@ log="$pkg.validation.txt"
 	date -u +"%Y-%m-%dT%H:%M:%SZ notarize_macos.sh $pkg"
 	xcrun stapler validate "$pkg"
 	pkgutil --check-signature "$pkg"
-	"$root/scripts/verify_macos_pkg.sh" "$pkg"
+	"$verify" "$pkg"
 	# Installer packages are assessed under the "install" policy; "open" is for applications.
 	spctl --assess --type install --verbose=4 "$pkg" 2>&1
 	shasum -a 256 "$pkg" | tee "$pkg.sha256"

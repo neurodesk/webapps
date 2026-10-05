@@ -105,16 +105,28 @@ test('portable Node command lines build on target runners and publish through on
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
   assert.deepEqual(shared.jobs.release.needs,['portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');
-  assert.ok(!JSON.stringify(shared).includes('secrets.'));
+  assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-14' || 'ubuntu-latest' }}");
+  const signing=['APPLEID','APPLEIDPASS','APPLE_TEAM_ID','CSC_LINK','CSC_KEY_PASSWORD','CSC_INSTALLER_LINK','CSC_INSTALLER_KEY_PASSWORD'];
+  assert.deepEqual(Object.keys(shared.on.workflow_call.secrets),signing);
+  assert.ok(!JSON.stringify(shared.jobs.portable).includes('secrets.'));
+  const sign=shared.jobs.release.steps.find(step=>step.name==='Sign and notarize installer');
+  assert.equal(sign.if,'inputs.sign_release');
+  assert.match(sign.run,/^exes\/synthsr\/scripts\/ci_macos_release\.sh exes\/node-cli$/m);
+  for(const name of signing)assert.equal(sign.env[name],`\${{ secrets.${name} }}`);
+  const unsigned=shared.jobs.release.steps.filter(step=>step!==sign);
+  assert.ok(!JSON.stringify(unsigned).includes('secrets.'),'signing secrets reach only the signing step');
+  const upload=shared.jobs.portable.steps.find(step=>step.uses?.startsWith('actions/upload-artifact@'));
+  assert.equal(upload.with.name,"${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ matrix.platform }}");
   const build=JSON.stringify(shared.jobs.portable);
   for(const command of ['portable_release\\.py package','portable_release\\.py verify','test_portable_release\\.py','cargo test --manifest-path exes/node-cli/Cargo\\.toml','cargo clippy --manifest-path exes/node-cli/Cargo\\.toml --locked -- -D warnings','cargo fmt --manifest-path exes/node-cli/Cargo\\.toml --check']) {
     assert.match(build,new RegExp(command));
   }
   const steps=shared.jobs.release.steps;
   const target=steps.findIndex(step=>step.name==='Check release target');
+  const signStep=steps.indexOf(sign);
   const verify=steps.findIndex(step=>step.name==='Check portable release assets');
   const publish=steps.findIndex(step=>step.name==='Attach verified release assets');
-  assert.ok(target>=0&&target<verify&&verify<publish);
+  assert.ok(target>=0&&target<signStep&&signStep<verify&&verify<publish);
   assert.match(steps[target].run,/tagPrefix/);
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
@@ -124,8 +136,14 @@ test('portable Node command lines build on target runners and publish through on
     assert.deepEqual(flow.permissions,{contents:'read'},name);
     assert.equal(flow.jobs.portable.uses,'./.github/workflows/node-cli-portable.yml',name);
     assert.equal(flow.jobs.portable.with.package,packageDir,name);
-    assert.equal(flow.jobs.portable.with.publish_release,"${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}",name);
     const release=JSON.parse(await readFile(new URL(`../${packageDir}/release.json`,import.meta.url),'utf8'));
+    const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
+    // A release with a macOS installer is published only by signing it; SYNcro has no macOS target.
+    const publishInput=installer?'sign_release':'publish_release';
+    assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs),[publishInput],name);
+    assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
+    assert.equal(flow.jobs.portable.with.sign_release,installer?"${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}":undefined,name);
+    assert.equal(Object.keys(flow.jobs.portable.secrets||{}).length,installer?7:0,name);
     const targets=JSON.parse(flow.jobs.portable.with.targets);
     assert.deepEqual(targets.map(entry=>entry.platform).sort(),Object.keys(release.targets).sort(),`${name} builds every release target`);
     for(const entry of targets)assert.equal(entry.os,runners[entry.platform],`${name} ${entry.platform}`);
