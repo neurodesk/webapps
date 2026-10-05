@@ -1,8 +1,9 @@
 # Carotid Flow (web)
 
 Find both carotid arteries in one retrospectively gated phase-contrast slice through the neck
-and extract their flow curves. Everything runs in the browser; `src/carotid.js` is pure
-JavaScript and Node-tested.
+and extract their flow curves. Everything runs in the browser. The detection lives in
+`packages/carotid-flow` (`@neurodesk/carotid-flow`), pure JavaScript and Node-tested, which the
+`carotid-flow` command line also runs.
 
 ## Input
 
@@ -86,6 +87,12 @@ suppress. That is why signed data takes the velocity path.
 Edit on the Carotid labels row opens the shared mask editor over the current background.
 Apply replaces the downloaded label map and redraws both carotids from it. The curves,
 metrics, CSV and automation results keep the detected vessels.
+
+## Command line
+
+The portable `carotid-flow` command writes this app's three downloads, byte for byte, from a
+NIfTI series on a computer without a browser or network. See the "Command line" section of
+`packages/carotid-flow/README.md`.
 
 ## Tests
 
