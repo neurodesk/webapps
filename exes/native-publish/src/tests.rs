@@ -286,7 +286,7 @@ fn parent_failure_keeps_bare_error_category() {
 
 #[cfg(unix)]
 #[test]
-fn native_non_unicode_paths_publish_and_preserve_colliding_native_temporaries() {
+fn native_paths_preserve_bytes_and_filesystem_refusals() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
     let scratch = Scratch::new();
@@ -295,6 +295,18 @@ fn native_non_unicode_paths_publish_and_preserve_colliding_native_temporaries() 
     native_temp.push(format!(".{}.partial", std::process::id()));
     let native_temp = PathBuf::from(native_temp);
     assert_eq!(temp(&path), native_temp);
+    match fs::write(&path, []) {
+        Ok(()) => fs::remove_file(&path).unwrap(),
+        Err(error) if cfg!(target_os = "macos") && error.raw_os_error() == Some(92) => {
+            assert_eq!(
+                publish(&[(&path, vec![0, 255])], false).unwrap_err(),
+                format!("Cannot write {}: {error}", native_temp.display())
+            );
+            assert_eq!(fs::read_dir(&scratch.0).unwrap().count(), 0);
+            return;
+        }
+        Err(error) => panic!("{error}"),
+    }
     let mut calls = 0;
     publish_with_writer(&[(&path, vec![0, 255])], false, |file, data| {
         calls += 1;
