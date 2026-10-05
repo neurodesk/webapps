@@ -257,16 +257,16 @@ class MacInstallerTests(unittest.TestCase):
             root = pathlib.Path(temporary)
             self.stage(root)
             (root / "runtime/node").write_bytes(b"#!/bin/sh\n")
-            with self.assertRaisesRegex(ValueError, "runtime/node"):
+            with self.assertRaisesRegex(ValueError, r"runtime[/\\]node"):
                 portable_release.signing_plan(root, self.target)
 
     def test_codesign_uses_the_hardened_runtime_and_entitles_only_node(self):
-        node = portable_release.SigningStep(pathlib.Path("runtime/node"), portable_release.NODE_ENTITLEMENTS)
+        node = portable_release.SigningStep(pathlib.Path("runtime", "node"), portable_release.NODE_ENTITLEMENTS)
         addon = portable_release.SigningStep(pathlib.Path("binding.node"), None)
         signed = portable_release.MacSigning("Developer ID Application: Test", "Developer ID Installer: Test")
         self.assertEqual(
             portable_release.codesign_command(node, signed),
-            ["codesign", "--force", "--options", "runtime", "--timestamp", "--entitlements", str(portable_release.NODE_ENTITLEMENTS), "--sign", "Developer ID Application: Test", "runtime/node"],
+            ["codesign", "--force", "--options", "runtime", "--timestamp", "--entitlements", str(portable_release.NODE_ENTITLEMENTS), "--sign", "Developer ID Application: Test", str(node.path)],
         )
         self.assertEqual(
             portable_release.codesign_command(addon, portable_release.mac_signing({})),
