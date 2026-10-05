@@ -2,9 +2,9 @@
 
 Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared browser pipeline follows native SYNcro: SynthSR, configurable MindGrab/SynthStrip brain extraction, configurable Greedy/ANTs normalization, pathological-modality alignment, lesion propagation and niimath masking. The packaged Node fallback retains SynthStrip and ANTs for portable CPU execution.
 
-## Portable Windows and Linux builds
+## Portable macOS, Windows and Linux builds
 
-Download the Windows x64 or Linux x64 archive from the webapp's **Standalone** dialog. Each archive contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the webapp's **Standalone** dialog. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
 
 On Linux, download, verify, extract, and check the current release:
 
@@ -33,7 +33,21 @@ Expand-Archive -Path $Archive -DestinationPath .
 & ".\syncro-$Version-windows-x64\syncro.exe" input.nii.gz results --threads 4
 ```
 
-Keep the extracted directory intact. Releases built with this packaging include both models and run offline by default. No model download or cache preparation is needed on the destination machine. Older releases that lack a `models` directory are not complete offline distributions.
+On macOS with Apple silicon, the release is an installer package signed with a Developer ID and notarized by Apple. It installs SYNcro in `/usr/local/lib/neurodesk/syncro` and the `syncro` command in `/usr/local/bin`:
+
+```bash
+version=MAJOR.MINOR.YYYYMMDD
+curl -fLO "https://github.com/neurodesk/webapps/releases/download/syncro-v${version}/syncro-${version}-macos-arm64.pkg"
+curl -fLO "https://github.com/neurodesk/webapps/releases/download/syncro-v${version}/syncro-${version}-macos-arm64.pkg.sha256"
+shasum -a 256 -c "syncro-${version}-macos-arm64.pkg.sha256"
+sudo installer -pkg "syncro-${version}-macos-arm64.pkg" -target /
+syncro self-check
+syncro input.nii.gz results --threads 4
+```
+
+You can also open the package in Finder. To uninstall, delete `/usr/local/lib/neurodesk/syncro` and `/usr/local/bin/syncro`, then run `sudo pkgutil --forget org.neurodesk.syncro`.
+
+Keep the extracted Windows or Linux directory intact. Releases built with this packaging include both models and run offline by default. No model download or cache preparation is needed on the destination machine. Older releases that lack a `models` directory are not complete offline distributions.
 
 Use `--ct` for a CT image in Hounsfield units. Modality is explicit; there is no intensity-based CT autodetection. CT has not yet been validated against the reference container in this port.
 

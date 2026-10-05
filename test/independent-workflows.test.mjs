@@ -138,7 +138,7 @@ test('portable Node command lines build on target runners and publish through on
     assert.equal(flow.jobs.portable.with.package,packageDir,name);
     const release=JSON.parse(await readFile(new URL(`../${packageDir}/release.json`,import.meta.url),'utf8'));
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
-    // A release with a macOS installer is published only by signing it; SYNcro has no macOS target.
+    // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';
     assert.deepEqual(Object.keys(flow.on.workflow_dispatch.inputs),[publishInput],name);
     assert.equal(flow.jobs.portable.with.publish_release,`\${{ github.event_name == 'workflow_dispatch' && inputs.${publishInput} }}`,name);
