@@ -88,7 +88,7 @@
       <details class="nd-sidebar-section" id="outputSection">
         <summary class="nd-section-title">Output</summary>
         <div class="nd-section-content">
-          <p class="nd-hint">View shows one surface; checkboxes combine surfaces to compare or export.</p>
+          <p class="nd-hint">Surfaces stay loaded. Use FreeBrowse or checkboxes to control visibility.</p>
           <section id="patchMeasurements" class="nd-sidebar-section" aria-labelledby="patchMeasurementTitle" hidden>
             <div id="patchMeasurementTitle" class="nd-label"></div>
             <div class="nd-section-content">
@@ -149,7 +149,7 @@
       <p>TopoFit estimates left and right white, mid, pial, and spherical-registration surfaces from one brain MRI. This browser implementation runs the pinned BrainNet model locally from verified ONNX artifacts.</p>
       <p>Optional surface analysis exports area-weighted mid-surface normals and finds connected cortical patches. Patch selection follows OpenRecon's atlas exclusion, geodesic radius, plane-fit error, area and normal-coherence criteria. The input must be a T1-weighted scan.</p>
       <p>Patches that pass every criterion are ranked by flatness: plane-fit RMS plus radius × (1 − normal coherence), lowest first. Area is only an acceptance threshold. Each hemisphere keeps the best-ranked patches that share no vertices with a higher-ranked patch, so Left flat patch 1 is the flattest left patch.</p>
-      <p>In Output, View selects one surface without changing your layout. Slices show surface boundaries; Render shows the surface in 3D. Checkboxes combine surfaces for comparison or STL export.</p>
+      <p>All output surfaces load into FreeBrowse, initially hidden. In Output, View shows a surface without unloading others or changing your layout. FreeBrowse and checkboxes control visibility. Slices show surface boundaries; Render shows surfaces in 3D. Checkboxes also select surfaces for STL export.</p>
       <p>Patch QC shows white and pial boundaries, the mid-surface and a normal glyph. Its line is the true in-plane component at physical scale. A center dot points toward increasing source slice positions; a cross points toward decreasing positions. Select a patch row to center the viewer on that patch and inspect its mid-surface point and outward fitted-plane normal in scanner RAS. Copy preserves full precision; the patch coordinates CSV exports all detected patches.</p>
     </template>
     <template id="stlContent">

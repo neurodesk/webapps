@@ -96,7 +96,7 @@
       "filename": "musclemap-abdomen.onnx",
       "labelSpaceId": "musclemap-abdomen-v0.0",
       "config": { "path": "abdomen-v0.0.json", "bytes": 1091, "sha256": "2643f8c71558d55dcad8ee01f1d61caa208ee1a48845a3430511e2c6b9938005", "publishedBytes": 1120, "publishedMd5": "35e0efb873497ad063fee30fdd4ea69b", "publishedSha256": "9f284550378bf7837a98c03c717b21d8b941cec8ae8adf6a95485ea6568a68f4" },
-      "source": { "record": "19631081", "doi": "10.5281/zenodo.19631081" },
+      "source": { "record": "19631081", "doi": "10.5281/zenodo.19631081", "checkpointUrl": "https://zenodo.org/api/records/19631081/files/contrast_agnostic_abdomen_model.pth/content", "checkpointFilename": "contrast_agnostic_abdomen_model.pth", "checkpointBytes": 103942235, "checkpointMd5": "25d777a05b00a8106bec6acb034c212c", "checkpointSha256": "75043856e3bdb52640558dcd0c071130f2bf1a59199eccb37c8efd614041f5c9" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 38999828, "sha256": "f2e64dd67104422f94c29382136aa438835aaea7aadc91a917178732cfc15d41", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     },
     {
@@ -108,7 +108,7 @@
       "filename": "musclemap-forearm.onnx",
       "labelSpaceId": "musclemap-forearm-v0.0",
       "config": { "path": "forearm-v0.0.json", "bytes": 821, "sha256": "68503ae1276cd75d7f23da8d25321ceb88ab751054aa33df132d07c2aea7a971", "publishedBytes": 849, "publishedMd5": "f80881b5372b0bba403f2f94f1a68e0b", "publishedSha256": "91958f6696386de138c83c8dd57817b229cc37490f9c9551e318e1196ce4bf42" },
-      "source": { "record": "19633115", "doi": "10.5281/zenodo.19633115" },
+      "source": { "record": "19633115", "doi": "10.5281/zenodo.19633115", "checkpointUrl": "https://zenodo.org/api/records/19633115/files/contrast_agnostic_forearm_model.pth/content", "checkpointFilename": "contrast_agnostic_forearm_model.pth", "checkpointBytes": 53624898, "checkpointMd5": "aee13b1f942328cf787679a83fb88137", "checkpointSha256": "296b76dde687f468c4407902af7e9452bc66b8513747cf0ae1935257c4a200b1" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 26364376, "sha256": "48517f2aadc19183025dfe1a1952c24ae79d9a33fa5dd8154b46cf47fd87d3dd", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     },
     {
@@ -120,7 +120,7 @@
       "filename": "musclemap-leg.onnx",
       "labelSpaceId": "musclemap-leg-v0.0",
       "config": { "path": "leg-v0.0.json", "bytes": 1560, "sha256": "d506531930f82da47d0bf343a23b650131da50bc27ff086068a43f25c80fc7ea", "publishedBytes": 1595, "publishedMd5": "9da4d3ae4857a015f615649646e34bd1", "publishedSha256": "d62a6810ee056fb7cb239cac5cfdec981330756bc99fe9d162a7b7f9f50fbd8c" },
-      "source": { "record": "19633057", "doi": "10.5281/zenodo.19633057" },
+      "source": { "record": "19633057", "doi": "10.5281/zenodo.19633057", "checkpointUrl": "https://zenodo.org/api/records/19633057/files/contrast_agnostic_leg_model.pth/content", "checkpointFilename": "contrast_agnostic_leg_model.pth", "checkpointBytes": 103975067, "checkpointMd5": "a293a5fed25a2b298c9fe58a0bfda5f1", "checkpointSha256": "df8fab838fd5a08fa85a4a8d22735670ab6e771c4c73f359aec59f29dbd5e073" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 39028867, "sha256": "3ad1c902998849ea66942863d157e1f8e608fb2c9d6b3230ee56de0e0840bcb4", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     },
     {
@@ -132,7 +132,7 @@
       "filename": "musclemap-pelvis.onnx",
       "labelSpaceId": "musclemap-pelvis-v0.0",
       "config": { "path": "pelvis-v0.0.json", "bytes": 1505, "sha256": "26b82585cb64635e1ddc48948075d64ea172ed52735115176e6a0e92940f29ab", "publishedBytes": 1539, "publishedMd5": "c8cba0118c5dfa5f870ff138187c1c55", "publishedSha256": "78d225099a67b8c225cc8f35b4bd1137e861a4db84a91924b4ca74b457070a89" },
-      "source": { "record": "19632902", "doi": "10.5281/zenodo.19632902" },
+      "source": { "record": "19632902", "doi": "10.5281/zenodo.19632902", "checkpointUrl": "https://zenodo.org/api/records/19632902/files/contrast_agnostic_pelvis_model.pth/content", "checkpointFilename": "contrast_agnostic_pelvis_model.pth", "checkpointBytes": 103969435, "checkpointMd5": "1a085c3c1cee45e8d48120c8805d28f2", "checkpointSha256": "3270f43cadab80924ab6838b861da2079213c8114711e40c5f29f1bf3622f8d2" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 39023986, "sha256": "34babe3b30a587dc4f67f44da44a6f89f7f66dcd2d128351ecf9356cbc0c32e4", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     },
     {
@@ -144,7 +144,7 @@
       "filename": "musclemap-thigh.onnx",
       "labelSpaceId": "musclemap-thigh-v0.0",
       "config": { "path": "thigh-v0.0.json", "bytes": 2789, "sha256": "ceffc56269db84335e9873633ba8102bd962a344b07d11db49fe9846fbe1f5a3", "publishedBytes": 2840, "publishedMd5": "1f820178021a866103e901d7bfa0af68", "publishedSha256": "9d123314d744d21a0c6b8727479771c5fba43a564613bee3d72ec59de1c73025" },
-      "source": { "record": "19633000", "doi": "10.5281/zenodo.19633000" },
+      "source": { "record": "19633000", "doi": "10.5281/zenodo.19633000", "checkpointUrl": "https://zenodo.org/api/records/19633000/files/contrast_agnostic_thigh_model.pth/content", "checkpointFilename": "contrast_agnostic_thigh_model.pth", "checkpointBytes": 104061915, "checkpointMd5": "4e570b2cab9125dfe53cf20b86398581", "checkpointSha256": "9681dec292ec483cc4a9834c8712d97b840663a43bfe390f369b5e84fb94da1a" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 39099153, "sha256": "2d1a607adfa0758516069e039717079a2340811e3d3c70a7e9621aa1564399f2", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     }
   ]

@@ -7,6 +7,7 @@ import vm from 'node:vm';
 import { computeForegroundBBox, cropVolume } from '../../../packages/components/src/volume/geometry.js';
 import { zScoreNormalize } from '../../../packages/components/src/volume/normalization.js';
 import '../web/js/monai-compat.js';
+import '../web/js/sliding-window-policy.js';
 
 const workerSource = readFileSync(new URL('../web/js/inference-worker.js', import.meta.url), 'utf8');
 const context = vm.createContext({
@@ -15,12 +16,15 @@ const context = vm.createContext({
   computeForegroundBBox,
   cropVolume,
   zScoreNormalize,
-  MuscleMapMonaiCompat: globalThis.MuscleMapMonaiCompat
+  MuscleMapMonaiCompat: globalThis.MuscleMapMonaiCompat,
+  MuscleMapSlidingWindowPolicy: globalThis.MuscleMapSlidingWindowPolicy,
+  ort: { Tensor: class { constructor(type, data, dims) { this.dims = dims; } dispose() {} } }
 });
-for (const name of ['cropForeground', 'prepareSourceChunk']) {
-  const start = workerSource.indexOf(`function ${name}(`);
-  const end = workerSource.indexOf('\n}', start) + 2;
-  assert.ok(start >= 0 && end > start, `Worker function ${name} exists`);
+for (const name of ['prepareSourceChunk', 'computeTilePositions', 'inferSliceLogits']) {
+  const match = new RegExp(`^(async )?function ${name}\\(`, 'm').exec(workerSource);
+  assert.ok(match, `Worker function ${name} exists`);
+  const start = match.index;
+  const end = workerSource.indexOf('\n}\n', start) + 2;
   vm.runInContext(workerSource.slice(start, end), context);
 }
 
@@ -39,6 +43,35 @@ test('source chunks crop positive normalized foreground and preserve negative in
   assert.ok(Math.abs(actual.data[20] - Math.sqrt(99)) < 1e-6);
   assert.ok(Math.abs(actual.data[0] + 1 / Math.sqrt(99)) < 1e-7);
   assert.equal(actual.data[0], actual.data[40]);
+});
+
+test('slices pad to the upstream 256 x 256 grid before 128 x 128 sliding windows', async () => {
+  const tiles = [];
+  const session = {
+    inputNames: ['input'],
+    outputNames: ['output'],
+    async run({ input }) {
+      tiles.push(input.dims[0]);
+      return { output: { data: new Float32Array(input.dims[0] * 2 * 128 * 128) } };
+    }
+  };
+  const result = await context.inferSliceLogits({
+    session,
+    slice: new Float32Array(100 * 90),
+    sizeX: 100,
+    sizeY: 90,
+    padHeight: 256,
+    padWidth: 256,
+    roiHeight: 128,
+    roiWidth: 128,
+    numClasses: 2,
+    overlap: 0.5,
+    gaussianWeights: new Float32Array(128 * 128).fill(1),
+    batchSize: 1
+  });
+  assert.deepEqual(Array.from(result.dims), [256, 256]);
+  // MONAI SliceInferer over 256 x 256 with a 128 ROI at 50 % overlap visits a 3 x 3 grid.
+  assert.equal(tiles.length, 9);
 });
 
 test('native-depth grid preserves PyTorch float64 coordinate rounding', () => {

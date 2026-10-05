@@ -16,8 +16,6 @@ export const INFERENCE_DEFAULTS = {
   overlap: MODELS[0].preprocessing.overlapDefault,
   chunkSize: 'auto',
   sourceChunkSize: 17,
-  sliceThickness: -1,
-  lowRes: false,
   imfMetrics: {
     enabled: false,
     method: 'kmeans',

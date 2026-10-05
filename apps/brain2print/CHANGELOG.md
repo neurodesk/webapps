@@ -1,5 +1,11 @@
 # brain2print
 
+## 0.4.20261005
+
+### Patch Changes
+
+- @neurodesk/topofit@0.12.20261005
+
 ## 0.4.20261004
 
 ### Patch Changes

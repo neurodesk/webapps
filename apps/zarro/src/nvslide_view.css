@@ -184,8 +184,8 @@
   pointer-events: none;
 }
 
-.nvslide-layout-active > .crosshair-overlay,
-.nvslide-layout-active > .scale-indicators {
+.nvslide-layout-active .crosshair-overlay,
+.nvslide-layout-active .scale-indicators {
   display: none;
 }
 

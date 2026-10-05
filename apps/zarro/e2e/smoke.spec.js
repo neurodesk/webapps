@@ -10,6 +10,76 @@ async function openTools(page) {
   }
 }
 
+test('slice crosshairs have only one renderer after panning and layout changes', async ({ page }, testInfo) => {
+  await page.route('**/crosshair-fixture/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    const metadata = path.endsWith('/.zgroup')
+      ? { zarr_format: 2 }
+      : path.endsWith('/.zarray')
+        ? {
+            zarr_format: 2,
+            shape: [16, 16, 16],
+            chunks: [16, 16, 16],
+            dtype: '|u1',
+            compressor: null,
+            fill_value: 0,
+            order: 'C',
+            filters: null,
+          }
+        : path.endsWith('/.zattrs') && !path.endsWith('/0/.zattrs')
+          ? {
+              multiscales: [{
+                version: '0.4',
+                axes: ['z', 'y', 'x'].map(name => ({ name, type: 'space', unit: 'millimeter' })),
+                datasets: [{
+                  path: '0',
+                  coordinateTransformations: [{ type: 'scale', scale: [1, 1, 1] }],
+                }],
+              }],
+            }
+          : path.endsWith('/.zattrs') ? {} : null;
+    await route.fulfill(metadata
+      ? { contentType: 'application/json', body: JSON.stringify(metadata) }
+      : { contentType: 'application/octet-stream', body: Buffer.alloc(16 ** 3, 100) });
+  });
+  await page.goto('/?source=custom&layout=30');
+  await page.getByLabel('OME-Zarr store URL 1').fill('http://localhost:4173/crosshair-fixture/');
+  await page.getByRole('button', { name: 'Load volume' }).click();
+  await expect(page.locator('#crosshairOverlay')).toBeVisible();
+  await expect(page.locator('#crosshairLines')).toHaveAttribute('d', /^M/);
+  await openTools(page);
+  await page.locator('#layout').selectOption('34');
+  await expect(page.locator('#nvslideView')).toBeVisible();
+  await expect(page.locator('.nvslide-crosshair:visible')).toHaveCount(3);
+  await expect(page.locator('#crosshairOverlay')).toBeHidden();
+  await page.locator('#showCrosshair').uncheck();
+  await expect(page.locator('.nvslide-crosshair:visible')).toHaveCount(0);
+  await page.locator('#showCrosshair').check();
+  await expect(page.locator('.nvslide-crosshair:visible')).toHaveCount(3);
+  await expect(page.locator('#crosshairOverlay')).toBeHidden();
+  const axialCanvas = page.locator('[data-plane="axial"] canvas');
+  await axialCanvas.click({ position: { x: 50, y: 50 } });
+  await expect(page.locator('#crosshairOverlay')).toBeHidden();
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator('.nvslide-crosshair:visible')).toHaveCount(3);
+    await expect(page.locator('#crosshairOverlay')).toBeHidden();
+    await page.locator('#nvslideView').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: testInfo.outputPath(`crosshair-${viewport.width}.png`) });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const layout of ['30', '31', '33', '0']) {
+    await page.locator('#layout').selectOption(layout);
+    const box = await page.locator('#nv-canvas').boundingBox();
+    await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.3, box.y + box.height * 0.3, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.locator('#crosshairOverlay')).toBeVisible();
+    await expect(page.locator('#nvslideView')).toBeHidden();
+  }
+});
+
 async function createShareUrl(page) {
   await openTools(page);
   await page.getByRole("button", { name: "Create share link" }).click();

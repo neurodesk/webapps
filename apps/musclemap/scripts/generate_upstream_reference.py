@@ -23,6 +23,8 @@ parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--upstream-directory', type=Path, required=True)
 parser.add_argument('--checkpoint', type=Path, required=True)
 parser.add_argument('--release', type=Path, required=True)
+parser.add_argument('--model', default='wholebody', help='release model id; defaults to whole body')
+parser.add_argument('--model-version', default='1.4')
 parser.add_argument('--chunk-size', type=int, required=True)
 parser.add_argument('--overlap-percent', type=int, required=True)
 parser.add_argument('--threads', type=int, default=4)
@@ -47,7 +49,9 @@ def sha(path):
 release = json.loads(args.release.read_text())
 revision = '6e1e1eb6732337c13cab53bd5cc800c69024774f'
 assert release['upstream']['revision'] == revision
-model = next(model for model in release['models'] if model['status'] == 'active')
+model = next(model for model in release['models'] if model['id'] == args.model and
+             json.loads((args.release.parent / model['config']['path']).read_text())['model']['version'] ==
+             float(args.model_version))
 config = args.release.parent / model['config']['path']
 assert sha(config) == model['config']['sha256']
 assert sha(args.checkpoint) == model['source']['checkpointSha256']
@@ -90,9 +94,9 @@ def observed_inference(*positional, **keywords):
 
 
 mm_util._run_inference_on_file = observed_inference
-sys.argv = ['mm_segment.py', '-i', str(args.input), '-r', 'wholebody', '-g', 'N',
+sys.argv = ['mm_segment.py', '-i', str(args.input), '-r', args.model, '-g', 'N',
             '-s', str(args.overlap_percent), '-c', str(args.chunk_size),
-            '-o', str(args.output), '--model_version', '1.4']
+            '-o', str(args.output), '--model_version', args.model_version]
 started = time.perf_counter()
 upstream.main()
 if not output_path.is_file():
@@ -105,6 +109,7 @@ labels, counts = np.unique(np.asarray(result.dataobj), return_counts=True)
 metadata = {
     'input': args.input.name, 'inputSha256': sha(args.input),
     'output': output_path.name, 'outputSha256': sha(output_path),
+    'model': args.model, 'modelVersion': args.model_version,
     'checkpointSha256': sha(args.checkpoint), 'configSha256': sha(config),
     'upstreamRevision': revision, 'sourceSha256': sources,
     'execution': 'bounded-channel-inversion' if args.bounded_channel_inversion else 'unmodified-upstream',

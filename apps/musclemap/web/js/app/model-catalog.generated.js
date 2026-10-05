@@ -46,6 +46,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -1025,6 +1029,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.9,
       "normalization": "nonzero-zscore"
@@ -2156,6 +2164,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2164,7 +2176,7 @@ export const MODEL_RELEASES = [
       "record": "19631081",
       "doi": "10.5281/zenodo.19631081",
       "configSha256": "9f284550378bf7837a98c03c717b21d8b941cec8ae8adf6a95485ea6568a68f4",
-      "checkpointSha256": null,
+      "checkpointSha256": "75043856e3bdb52640558dcd0c071130f2bf1a59199eccb37c8efd614041f5c9",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
@@ -2316,6 +2328,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2324,7 +2340,7 @@ export const MODEL_RELEASES = [
       "record": "19633115",
       "doi": "10.5281/zenodo.19633115",
       "configSha256": "91958f6696386de138c83c8dd57817b229cc37490f9c9551e318e1196ce4bf42",
-      "checkpointSha256": null,
+      "checkpointSha256": "296b76dde687f468c4407902af7e9452bc66b8513747cf0ae1935257c4a200b1",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
@@ -2449,6 +2465,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2457,7 +2477,7 @@ export const MODEL_RELEASES = [
       "record": "19633057",
       "doi": "10.5281/zenodo.19633057",
       "configSha256": "d62a6810ee056fb7cb239cac5cfdec981330756bc99fe9d162a7b7f9f50fbd8c",
-      "checkpointSha256": null,
+      "checkpointSha256": "df8fab838fd5a08fa85a4a8d22735670ab6e771c4c73f359aec59f29dbd5e073",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
@@ -2663,6 +2683,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2671,7 +2695,7 @@ export const MODEL_RELEASES = [
       "record": "19632902",
       "doi": "10.5281/zenodo.19632902",
       "configSha256": "78d225099a67b8c225cc8f35b4bd1137e861a4db84a91924b4ca74b457070a89",
-      "checkpointSha256": null,
+      "checkpointSha256": "3270f43cadab80924ab6838b861da2079213c8114711e40c5f29f1bf3622f8d2",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
@@ -2868,6 +2892,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2876,7 +2904,7 @@ export const MODEL_RELEASES = [
       "record": "19633000",
       "doi": "10.5281/zenodo.19633000",
       "configSha256": "9d123314d744d21a0c6b8727479771c5fba43a564613bee3d72ec59de1c73025",
-      "checkpointSha256": null,
+      "checkpointSha256": "9681dec292ec483cc4a9834c8712d97b840663a43bfe390f369b5e84fb94da1a",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },

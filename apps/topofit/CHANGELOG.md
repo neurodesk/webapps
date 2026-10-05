@@ -1,5 +1,12 @@
 # topofit
 
+## 0.12.20261005
+
+### Patch Changes
+
+- Load every output surface into FreeBrowse when results arrive. Keep surfaces loaded and preserve their visibility when selecting other surfaces or QC images, so FreeBrowse can control visibility.
+  - @neurodesk/topofit@0.12.20261005
+
 ## 0.12.20261004
 
 ### Patch Changes

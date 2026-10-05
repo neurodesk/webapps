@@ -44,14 +44,12 @@ test('upstream reference cases pin source chunk semantics and artifact digests',
   }
 });
 
-test('downloadable parity cases pin immutable files, model and provenance', async () => {
+test('downloadable parity cases pin immutable files, models and provenance', async () => {
   const manifest = JSON.parse(await readFile(
     new URL('../model-sources/parity-reference.json', import.meta.url), 'utf8'
   ));
   assert.equal(manifest.repository, 'neurodeskorg/webapps');
   assert.match(manifest.revision, /^[0-9a-f]{40}$/);
-  const model = MODEL_RELEASES.find(item => item.id === 'wholebody' && item.modelVersion === '1.4');
-  assert.equal(manifest.modelSha256, model.asset.sha256);
   const files = new Map(manifest.files.map(file => [file.path, file]));
   assert.equal(files.size, manifest.files.length);
   for (const file of files.values()) {
@@ -60,6 +58,10 @@ test('downloadable parity cases pin immutable files, model and provenance', asyn
     assert.ok(!file.path.startsWith('/') && !file.path.split('/').includes('..'));
   }
   for (const reference of manifest.cases) {
+    const model = MODEL_RELEASES.find(item =>
+      item.id === reference.model && item.modelVersion === reference.modelVersion
+    );
+    assert.equal(model?.asset.sha256, reference.modelSha256, `${reference.id} pins a published model`);
     assert.equal(files.get(reference.input)?.sha256, reference.inputSha256);
     assert.equal(files.get(reference.reference)?.sha256, reference.referenceSha256);
     assert.ok(files.has(reference.provenance));

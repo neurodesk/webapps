@@ -12,11 +12,6 @@ import { createNiftiFromData, parseNiftiVolume } from '../vendor/webapp-componen
 import {
   computeForegroundBBox,
   cropVolume,
-  getOrientationTransform,
-  inverseOrient,
-  orientToRAS,
-  resampleVolume,
-  uncropVolume as uncrop,
 } from '../vendor/webapp-components/src/volume/geometry.js';
 import { zScoreNormalize } from '../vendor/webapp-components/src/volume/normalization.js';
 
@@ -85,19 +80,7 @@ function createOutputNifti(labelData, sourceHeader, dims) {
   return createNiftiFromData(labelData, sourceHeader, { dims });
 }
 
-// ==================== Preprocessing ====================
-
-
-
-
-
 // ==================== Sliding Window ====================
-
-function cropForeground(data, dims, margin) {
-  const bbox = computeForegroundBBox(data, dims, margin);
-  if (!bbox) return { data: new Float32Array(0), dims: [0, 0, 0], origin: [0, 0, 0] };
-  return cropVolume(data, dims, bbox);
-}
 
 function computeGaussianWeightMap(h, w) {
   return MuscleMapSlidingWindowPolicy.computeGaussianWeightMap(h, w);
@@ -230,44 +213,6 @@ function perLabelLargestComponent(labelVolume, dims, numLabels, progressBase = 0
   }
 
   return result;
-}
-
-// ==================== Inverse Transform ====================
-
-
-function resampleLabelsNearest(data, dims, tgtDims) {
-  const [nx, ny, nz] = dims;
-  const [tnx, tny, tnz] = tgtDims;
-  const result = new Uint8Array(tnx * tny * tnz);
-  const scaleX = (nx - 1) / Math.max(tnx - 1, 1);
-  const scaleY = (ny - 1) / Math.max(tny - 1, 1);
-  const scaleZ = (nz - 1) / Math.max(tnz - 1, 1);
-  for (let z = 0; z < tnz; z++) {
-    const sz = Math.round(z * scaleZ);
-    for (let y = 0; y < tny; y++) {
-      const sy = Math.round(y * scaleY);
-      for (let x = 0; x < tnx; x++) {
-        const sx = Math.round(x * scaleX);
-        result[x + y*tnx + z*tnx*tny] = data[sx + sy*nx + sz*nx*ny];
-      }
-    }
-  }
-  return result;
-}
-
-
-function applyInverseTransforms(labels, workingDims, resampledDims, cropOrigin, needsResample, rasDims, isIdentity, perm, flip, origDims) {
-  let outputLabels = uncrop(labels, workingDims, resampledDims, cropOrigin);
-
-  if (needsResample) {
-    outputLabels = resampleLabelsNearest(outputLabels, resampledDims, rasDims);
-  }
-
-  if (!isIdentity) {
-    outputLabels = inverseOrient(outputLabels, rasDims, perm, flip, origDims);
-  }
-
-  return outputLabels;
 }
 
 // ==================== Model Loading ====================
@@ -422,6 +367,8 @@ async function inferSliceLogits({
   slice,
   sizeX,
   sizeY,
+  padHeight,
+  padWidth,
   roiHeight,
   roiWidth,
   numClasses,
@@ -429,8 +376,8 @@ async function inferSliceLogits({
   gaussianWeights,
   batchSize
 }) {
-  const inferHeight = Math.max(sizeX, roiHeight);
-  const inferWidth = Math.max(sizeY, roiWidth);
+  const inferHeight = Math.max(sizeX, padHeight, roiHeight);
+  const inferWidth = Math.max(sizeY, padWidth, roiWidth);
   const transposed = MuscleMapSlidingWindowPolicy.transposeNiftiSliceToModelOrder(slice, sizeX, sizeY);
   const padded = new Float32Array(inferHeight * inferWidth);
   for (let x = 0; x < sizeX; x++) {
@@ -576,7 +523,7 @@ function writeInverseLogitSlice({
   }
 }
 
-async function emitUpstreamCompatibleOutput({
+async function emitSegmentationOutput({
   outputLabels,
   numClasses,
   imageData,
@@ -1522,8 +1469,6 @@ async function runInference(config) {
     chunkSize: chunkSizeSetting = 'auto',
     sourceChunkSize: sourceChunkSizeSetting = 17,
     useWebGPU: useWebGPUSetting,
-    sliceThickness = -1,
-    lowRes = false,
     calculateMetrics = false,
     imfMetrics = {}
   } = settings;
@@ -1551,8 +1496,8 @@ async function runInference(config) {
 
   const NUM_CLASSES = numClassesSetting || 100;
   const [ROI_H, ROI_W] = roiSizeSetting || [256, 256];
-  const TARGET_SPACING = [1.0, 1.0, (sliceThickness > 0) ? sliceThickness : -1];
-  const UPSTREAM_TARGET_SPACING = model.preprocessing?.targetSpacing || [1.0, 1.0, -1];
+  const TARGET_SPACING = model.preprocessing.targetSpacing;
+  const SPATIAL_PAD = model.preprocessing.spatialPad;
   const CROP_MARGIN = 20;
   const normalizedImfSettings = normalizeImfSettings(imfMetrics);
 
@@ -1565,490 +1510,122 @@ async function runInference(config) {
   const origDims = [...dims];
   const origVoxelSize = [...voxelSize];
 
-  const modelVersion = Number.parseFloat(model.modelVersion);
-  const useUpstreamCompatiblePipeline = model.id === 'wholebody' && modelVersion >= 1.4;
-  if (useUpstreamCompatiblePipeline) {
-    if (sliceThickness > 0) {
-      postLog('Ignoring the legacy slice-thickness control; MuscleMap v1.4 uses its pinned native through-plane spacing');
-    }
-    if (lowRes) {
-      postLog('Low-res cleanup is disabled for MuscleMap v1.4 upstream compatibility');
-    }
+  const sourceChunkSize = resolveSourceChunkSize(sourceChunkSizeSetting, nz);
+  const sourceChunkCount = Math.ceil(nz / sourceChunkSize);
+  const inferenceBatchSize = resolveChunkSize(chunkSizeSetting, NUM_CLASSES, ROI_H, ROI_W);
+  postLog(
+    `MONAI-compatible pipeline: ${sourceChunkCount} source chunks of up to ${sourceChunkSize} slices, ` +
+    `overlap=${overlap}, inference batch=${inferenceBatchSize}`
+  );
 
-    const sourceChunkSize = resolveSourceChunkSize(sourceChunkSizeSetting, nz);
-    const sourceChunkCount = Math.ceil(nz / sourceChunkSize);
-    const inferenceBatchSize = resolveChunkSize(chunkSizeSetting, NUM_CLASSES, ROI_H, ROI_W);
-    postLog(
-      `Upstream-compatible pipeline: ${sourceChunkCount} source chunks of up to ${sourceChunkSize} slices, ` +
-      `overlap=${overlap}, inference batch=${inferenceBatchSize}`
-    );
-
-    const modelData = await fetchModel(model.asset, modelName, 0.05, 0.18);
-    postProgress(0.23, 'Loading ONNX model...');
-    const executionProviders = useWebGPU ? ['webgpu', 'wasm'] : ['wasm'];
-    const session = await ort.InferenceSession.create(modelData, {
-      executionProviders,
-      graphOptimizationLevel: 'all'
-    });
-    postLog(`Session created. Input: ${session.inputNames}, Output: ${session.outputNames}`);
-
-    const outputLabels = new Uint8Array(nx * ny * nz);
-    const gaussianWeights = computeGaussianWeightMap(ROI_H, ROI_W);
-    const inferenceStartTime = performance.now();
-    let processedWorkingSlices = 0;
-    let estimatedWorkingSlices = sourceChunkCount * Math.max(nx, ny);
-
-    try {
-      for (let chunkIndex = 0, start = 0; start < nz; chunkIndex++, start += sourceChunkSize) {
-        const end = Math.min(start + sourceChunkSize, nz);
-        const sourceChunk = extractSourceChunk(imageData, dims, start, end);
-        if (sourceChunkSize < nz) {
-          sourceChunk.data = roundtripTemporaryChunk(sourceChunk.data, header.datatype);
-        }
-        postProgress(0.25 + 0.60 * (chunkIndex / sourceChunkCount), `Preprocessing source slices ${start + 1}-${end}/${nz}`);
-        const prepared = prepareSourceChunk(
-          sourceChunk.data,
-          sourceChunk.dims,
-          affine,
-          UPSTREAM_TARGET_SPACING,
-          CROP_MARGIN
-        );
-        const [workingX, workingY, workingZ] = prepared.dims;
-        estimatedWorkingSlices = sourceChunkCount * workingZ;
-        postLog(
-          `Source chunk ${chunkIndex + 1}/${sourceChunkCount}: ${start}:${end} -> ` +
-          `${Math.max(workingX, ROI_H)}x${Math.max(workingY, ROI_W)}x${workingZ}`
-        );
-        const chunkLabels = new Uint8Array(sourceChunk.data.length);
-        const workingPlane = workingX * workingY;
-
-        for (let workingSlice = 0; workingSlice < workingZ; workingSlice++) {
-          const slice = prepared.data.subarray(
-            workingSlice * workingPlane,
-            (workingSlice + 1) * workingPlane
-          );
-          const inference = await inferSliceLogits({
-            session,
-            slice,
-            sizeX: workingX,
-            sizeY: workingY,
-            roiHeight: ROI_H,
-            roiWidth: ROI_W,
-            numClasses: NUM_CLASSES,
-            overlap,
-            gaussianWeights,
-            batchSize: inferenceBatchSize
-          });
-          writeInverseLogitSlice({
-            logits: inference.logits,
-            inferenceDims: inference.dims,
-            workingSlice,
-            workingDims: prepared.dims,
-            cropOrigin: prepared.cropOrigin,
-            spacingDims: prepared.spacingDims,
-            spacingAffine: prepared.spacingAffine,
-            orientedDims: prepared.orientedDims,
-            orientedAffine: prepared.orientedAffine,
-            perm: prepared.perm,
-            flip: prepared.flip,
-            chunkDims: sourceChunk.dims,
-            chunkLabels,
-            numClasses: NUM_CLASSES
-          });
-          processedWorkingSlices++;
-          if (workingSlice % 5 === 0 || workingSlice === workingZ - 1) {
-            const elapsedSeconds = (performance.now() - inferenceStartTime) / 1000;
-            const remainingSlices = Math.max(estimatedWorkingSlices - processedWorkingSlices, 0);
-            const etaSeconds = elapsedSeconds / processedWorkingSlices * remainingSlices;
-            postProgress(
-              0.25 + 0.60 * Math.min(processedWorkingSlices / estimatedWorkingSlices, 1),
-              `Chunk ${chunkIndex + 1}/${sourceChunkCount}, slice ${workingSlice + 1}/${workingZ} (ETA: ${etaSeconds.toFixed(0)}s)`
-            );
-          }
-        }
-        outputLabels.set(chunkLabels, start * nx * ny);
-      }
-    } finally {
-      await session.release();
-    }
-
-    const totalTime = ((performance.now() - inferenceStartTime) / 1000).toFixed(1);
-    postLog(`Inference complete: ${processedWorkingSlices} working slices in ${totalTime}s`);
-    postProgress(0.86, 'Cleaning labels...');
-    postLog('Keeping the largest 6-connected component for each class in the full source volume...');
-    const cleanedLabels = perLabelLargestComponent(outputLabels, origDims, NUM_CLASSES - 1, 0.86, 0.10);
-    await emitUpstreamCompatibleOutput({
-      outputLabels: cleanedLabels,
-      numClasses: NUM_CLASSES,
-      imageData,
-      origDims,
-      origVoxelSize,
-      headerBytes,
-      labelCodec,
-      provenance,
-      calculateMetrics,
-      normalizedImfSettings
-    });
-    return;
-  }
-
-  postProgress(0.05, 'Orienting to RAS...');
-  postLog('Orienting to RAS...');
-  const { perm, flip } = getOrientationTransform(affine);
-  const isIdentity = perm[0] === 0 && perm[1] === 1 && perm[2] === 2 && !flip[0] && !flip[1] && !flip[2];
-
-  let currentData, currentDims, currentSpacing;
-  if (isIdentity) {
-    currentData = imageData;
-    currentDims = [...dims];
-    currentSpacing = [...voxelSize];
-  } else {
-    const oriented = orientToRAS(imageData, dims, perm, flip);
-    currentData = oriented.data;
-    currentDims = oriented.dims;
-    currentSpacing = [voxelSize[perm[0]], voxelSize[perm[1]], voxelSize[perm[2]]];
-  }
-  postLog(`RAS dims: ${currentDims.join('x')}`);
-
-  const rasDims = [...currentDims];
-  const rasSpacing = [...currentSpacing];
-
-  postProgress(0.08, 'Resampling...');
-  const needsResample = Math.abs(currentSpacing[0] - TARGET_SPACING[0]) > 0.01 ||
-                         Math.abs(currentSpacing[1] - TARGET_SPACING[1]) > 0.01 ||
-                         (TARGET_SPACING[2] > 0 && Math.abs(currentSpacing[2] - TARGET_SPACING[2]) > 0.01);
-
-  let resampledDims;
-  if (needsResample) {
-    postLog('Resampling to target spacing...');
-    const resampled = resampleVolume(currentData, currentDims, currentSpacing, TARGET_SPACING);
-    currentData = resampled.data;
-    currentDims = resampled.dims;
-    currentSpacing = resampled.spacing;
-    postLog(`Resampled: ${currentDims.join('x')}`);
-  }
-  resampledDims = [...currentDims];
-
-  postProgress(0.10, 'Normalizing...');
-  postLog('Z-score normalizing (nonzero voxels)...');
-  currentData = zScoreNormalize(currentData, { nonzeroOnly: true });
-
-  postProgress(0.12, 'Cropping foreground...');
-  const cropped = cropForeground(currentData, currentDims, CROP_MARGIN);
-  if (cropped.dims[0] === 0) {
-    throw new Error('No foreground voxels found in volume');
-  }
-  currentData = cropped.data;
-  currentDims = cropped.dims;
-  const cropOrigin = cropped.origin;
-  postLog(`Cropped: ${currentDims.join('x')} (origin: ${cropOrigin.join(',')})`);
-
-  const modelData = await fetchModel(model.asset, modelName, 0.15, 0.15);
-
-  postProgress(0.30, 'Loading ONNX model...');
+  const modelData = await fetchModel(model.asset, modelName, 0.05, 0.18);
+  postProgress(0.23, 'Loading ONNX model...');
   const executionProviders = useWebGPU ? ['webgpu', 'wasm'] : ['wasm'];
-  postLog(`Creating ONNX InferenceSession (${executionProviders.join(', ')})...`);
   const session = await ort.InferenceSession.create(modelData, {
     executionProviders,
     graphOptimizationLevel: 'all'
   });
   postLog(`Session created. Input: ${session.inputNames}, Output: ${session.outputNames}`);
 
+  const outputLabels = new Uint8Array(nx * ny * nz);
   const gaussianWeights = computeGaussianWeightMap(ROI_H, ROI_W);
-
-  const [cnx, cny, cnz] = currentDims;
-  const labelVolume = new Uint8Array(cnx * cny * cnz);
-  const sliceSize = cnx * cny;
-
-  const resolvedChunkSize = resolveChunkSize(chunkSizeSetting, NUM_CLASSES, ROI_H, ROI_W);
-  postLog(`Starting 2D inference: ${cnz} slices, overlap=${overlap}, chunkSize=${resolvedChunkSize}${chunkSizeSetting === 'auto' ? ' (auto)' : ''}, backend=${useWebGPU ? 'webgpu' : 'wasm'}`);
-  postLog(`Postprocessing mode: ${lowRes ? 'low-res (cleanup before inverse transforms)' : 'full-res (cleanup after inverse transforms)'}`);
   const inferenceStartTime = performance.now();
+  let processedWorkingSlices = 0;
+  let estimatedWorkingSlices = sourceChunkCount * Math.max(nx, ny);
 
-  for (let z = 0; z < cnz; z++) {
-    const slice = currentData.subarray(z * sliceSize, (z + 1) * sliceSize);
-
-    let hasData = false;
-    for (let i = 0; i < sliceSize; i++) {
-      if (slice[i] !== 0) { hasData = true; break; }
-    }
-
-    if (!hasData) {
-      if (z % 20 === 0) {
-        postProgress(0.32 + 0.50 * (z / cnz), `Slice ${z+1}/${cnz} (empty)`);
+  try {
+    for (let chunkIndex = 0, start = 0; start < nz; chunkIndex++, start += sourceChunkSize) {
+      const end = Math.min(start + sourceChunkSize, nz);
+      const sourceChunk = extractSourceChunk(imageData, dims, start, end);
+      if (sourceChunkSize < nz) {
+        sourceChunk.data = roundtripTemporaryChunk(sourceChunk.data, header.datatype);
       }
-      continue;
-    }
+      postProgress(0.25 + 0.60 * (chunkIndex / sourceChunkCount), `Preprocessing source slices ${start + 1}-${end}/${nz}`);
+      const prepared = prepareSourceChunk(
+        sourceChunk.data,
+        sourceChunk.dims,
+        affine,
+        TARGET_SPACING,
+        CROP_MARGIN
+      );
+      const [workingX, workingY, workingZ] = prepared.dims;
+      estimatedWorkingSlices = sourceChunkCount * workingZ;
+      postLog(
+        `Source chunk ${chunkIndex + 1}/${sourceChunkCount}: ${start}:${end} -> ` +
+        `${Math.max(workingX, SPATIAL_PAD[0], ROI_H)}x${Math.max(workingY, SPATIAL_PAD[1], ROI_W)}x${workingZ}`
+      );
+      const chunkLabels = new Uint8Array(sourceChunk.data.length);
+      const workingPlane = workingX * workingY;
 
-    const transposed = MuscleMapSlidingWindowPolicy.transposeNiftiSliceToModelOrder(
-      slice,
-      cnx,
-      cny
-    );
-
-    let inferH = cnx, inferW = cny;
-    let paddedSlice = transposed;
-    let padOffsetX = 0, padOffsetY = 0;
-
-    if (cnx < ROI_H || cny < ROI_W) {
-      inferH = Math.max(cnx, ROI_H);
-      inferW = Math.max(cny, ROI_W);
-      paddedSlice = new Float32Array(inferH * inferW);
-      padOffsetY = 0;
-      padOffsetX = 0;
-      for (let r = 0; r < cnx; r++) {
-        paddedSlice.set(
-          transposed.subarray(r * cny, r * cny + cny),
-          (r + padOffsetY) * inferW + padOffsetX
+      for (let workingSlice = 0; workingSlice < workingZ; workingSlice++) {
+        const slice = prepared.data.subarray(
+          workingSlice * workingPlane,
+          (workingSlice + 1) * workingPlane
         );
-      }
-    }
-
-    const tiles = computeTilePositions(inferH, inferW, ROI_H, ROI_W, overlap);
-
-    const blocks = MuscleMapSlidingWindowPolicy.computeAccumulatorBlocks(
-      inferH,
-      inferW,
-      NUM_CLASSES
-    );
-    const inputName = session.inputNames[0];
-    const outputName = session.outputNames[0];
-    const patchSize = ROI_H * ROI_W;
-
-    for (const block of blocks) {
-      const blockPixelCount = block.width * block.height;
-      const accum = new Float32Array(blockPixelCount * NUM_CLASSES);
-      const weightSum = new Float32Array(blockPixelCount);
-      const blockTiles = tiles.filter(tile => MuscleMapSlidingWindowPolicy.intersects(block, {
-        x: tile.x,
-        y: tile.y,
-        width: ROI_W,
-        height: ROI_H
-      }));
-
-      for (let ti = 0; ti < blockTiles.length; ti += resolvedChunkSize) {
-        const chunkTiles = blockTiles.slice(ti, ti + resolvedChunkSize);
-        const batchInput = new Float32Array(chunkTiles.length * patchSize);
-        for (let batchIndex = 0; batchIndex < chunkTiles.length; batchIndex++) {
-          const tile = chunkTiles[batchIndex];
-          for (let patchY = 0; patchY < ROI_H; patchY++) {
-            const sourceOffset = (tile.y + patchY) * inferW + tile.x;
-            const destinationOffset = batchIndex * patchSize + patchY * ROI_W;
-            batchInput.set(paddedSlice.subarray(sourceOffset, sourceOffset + ROI_W), destinationOffset);
-          }
-        }
-
-        const inputTensor = new ort.Tensor(
-          'float32',
-          batchInput,
-          [chunkTiles.length, 1, ROI_H, ROI_W]
-        );
-        const results = await session.run({ [inputName]: inputTensor });
-        const outputTensor = results[outputName];
-        const output = outputTensor.data;
-        inputTensor.dispose();
-
-        const outputPerTile = NUM_CLASSES * patchSize;
-        for (let batchIndex = 0; batchIndex < chunkTiles.length; batchIndex++) {
-          const tile = chunkTiles[batchIndex];
-          const startY = Math.max(block.y, tile.y);
-          const endY = Math.min(block.y + block.height, tile.y + ROI_H);
-          const startX = Math.max(block.x, tile.x);
-          const endX = Math.min(block.x + block.width, tile.x + ROI_W);
-          const batchOffset = batchIndex * outputPerTile;
-
-          for (let globalY = startY; globalY < endY; globalY++) {
-            const patchY = globalY - tile.y;
-            for (let globalX = startX; globalX < endX; globalX++) {
-              const patchX = globalX - tile.x;
-              const patchPixel = patchY * ROI_W + patchX;
-              const blockPixel = (globalY - block.y) * block.width + globalX - block.x;
-              const weight = gaussianWeights[patchPixel];
-              weightSum[blockPixel] += weight;
-              const accumOffset = blockPixel * NUM_CLASSES;
-              for (let classIndex = 0; classIndex < NUM_CLASSES; classIndex++) {
-                accum[accumOffset + classIndex] +=
-                  output[batchOffset + classIndex * patchSize + patchPixel] * weight;
-              }
-            }
-          }
-        }
-        outputTensor.dispose?.();
-      }
-
-      for (let blockPixel = 0; blockPixel < blockPixelCount; blockPixel++) {
-        if (weightSum[blockPixel] === 0) {
-          throw new Error(`Sliding-window coverage gap at slice ${z}, block pixel ${blockPixel}`);
-        }
-        const accumOffset = blockPixel * NUM_CLASSES;
-        let bestClass = 0;
-        let bestValue = accum[accumOffset];
-        for (let classIndex = 1; classIndex < NUM_CLASSES; classIndex++) {
-          const value = accum[accumOffset + classIndex];
-          if (value > bestValue) {
-            bestValue = value;
-            bestClass = classIndex;
-          }
-        }
-
-        const paddedY = block.y + Math.floor(blockPixel / block.width);
-        const paddedX = block.x + blockPixel % block.width;
-        const outputX = paddedY - padOffsetY;
-        const outputY = paddedX - padOffsetX;
-        if (outputX >= 0 && outputX < cnx && outputY >= 0 && outputY < cny) {
-          labelVolume[z * sliceSize + outputY * cnx + outputX] = bestClass;
+        const inference = await inferSliceLogits({
+          session,
+          slice,
+          sizeX: workingX,
+          sizeY: workingY,
+          padHeight: SPATIAL_PAD[0],
+          padWidth: SPATIAL_PAD[1],
+          roiHeight: ROI_H,
+          roiWidth: ROI_W,
+          numClasses: NUM_CLASSES,
+          overlap,
+          gaussianWeights,
+          batchSize: inferenceBatchSize
+        });
+        writeInverseLogitSlice({
+          logits: inference.logits,
+          inferenceDims: inference.dims,
+          workingSlice,
+          workingDims: prepared.dims,
+          cropOrigin: prepared.cropOrigin,
+          spacingDims: prepared.spacingDims,
+          spacingAffine: prepared.spacingAffine,
+          orientedDims: prepared.orientedDims,
+          orientedAffine: prepared.orientedAffine,
+          perm: prepared.perm,
+          flip: prepared.flip,
+          chunkDims: sourceChunk.dims,
+          chunkLabels,
+          numClasses: NUM_CLASSES
+        });
+        processedWorkingSlices++;
+        if (workingSlice % 5 === 0 || workingSlice === workingZ - 1) {
+          const elapsedSeconds = (performance.now() - inferenceStartTime) / 1000;
+          const remainingSlices = Math.max(estimatedWorkingSlices - processedWorkingSlices, 0);
+          const etaSeconds = elapsedSeconds / processedWorkingSlices * remainingSlices;
+          postProgress(
+            0.25 + 0.60 * Math.min(processedWorkingSlices / estimatedWorkingSlices, 1),
+            `Chunk ${chunkIndex + 1}/${sourceChunkCount}, slice ${workingSlice + 1}/${workingZ} (ETA: ${etaSeconds.toFixed(0)}s)`
+          );
         }
       }
+      outputLabels.set(chunkLabels, start * nx * ny);
     }
-
-    if (z % 5 === 0 || z === cnz - 1) {
-      const elapsed = (performance.now() - inferenceStartTime) / 1000;
-      const eta = (elapsed / (z + 1)) * (cnz - z - 1);
-      postProgress(0.32 + 0.50 * ((z + 1) / cnz), `Slice ${z+1}/${cnz} (ETA: ${eta.toFixed(0)}s)`);
-    }
+  } finally {
+    await session.release();
   }
 
   const totalTime = ((performance.now() - inferenceStartTime) / 1000).toFixed(1);
-  postLog(`Inference complete: ${cnz} slices in ${totalTime}s`);
-
-  await session.release();
-
-  let outputLabels;
-  if (lowRes) {
-    postProgress(0.83, 'Cleaning labels (low-res)...');
-    postLog('Running connected component cleanup in the low-resolution working volume...');
-    const cleanedLabels = perLabelLargestComponent(labelVolume, currentDims, NUM_CLASSES - 1, 0.83, 0.12);
-
-    postProgress(0.95, 'Inverse transform...');
-    postLog('Applying inverse transforms...');
-    outputLabels = applyInverseTransforms(cleanedLabels, currentDims, resampledDims, cropOrigin, needsResample, rasDims, isIdentity, perm, flip, origDims);
-  } else {
-    postProgress(0.83, 'Inverse transform...');
-    postLog('Applying inverse transforms before connected component cleanup...');
-    const transformedLabels = applyInverseTransforms(labelVolume, currentDims, resampledDims, cropOrigin, needsResample, rasDims, isIdentity, perm, flip, origDims);
-
-    postProgress(0.90, 'Cleaning labels...');
-    postLog('Running connected component cleanup at full output resolution...');
-    outputLabels = perLabelLargestComponent(transformedLabels, origDims, NUM_CLASSES - 1, 0.90, 0.08);
-  }
-
-  const labelCounts = new Int32Array(NUM_CLASSES);
-  for (let i = 0; i < outputLabels.length; i++) {
-    if (outputLabels[i] > 0 && outputLabels[i] < NUM_CLASSES) {
-      labelCounts[outputLabels[i]]++;
-    }
-  }
-  const detectedIndices = [];
-  for (let i = 1; i < NUM_CLASSES; i++) {
-    if (labelCounts[i] > 0) detectedIndices.push(i);
-  }
-  postLog(`Detected ${detectedIndices.length} muscles`);
-  postDetectedLabels(detectedIndices);
-
-  if (calculateMetrics || normalizedImfSettings.enabled) {
-    const voxelVolMm3 = origVoxelSize[0] * origVoxelSize[1] * origVoxelSize[2];
-    const labelVolumes = {};
-    let totalVolumeMl = 0;
-
-    for (let i = 0; i < detectedIndices.length; i++) {
-      const idx = detectedIndices[i];
-      const volMl = labelCounts[idx] * voxelVolMm3 / 1000;
-      labelVolumes[idx] = volMl;
-      totalVolumeMl += volMl;
-    }
-
-    const { labelSliceCounts, sliceAxis, nSlices } = countLabelSlices(
-      outputLabels,
-      detectedIndices,
-      origDims,
-      origVoxelSize
-    );
-
-    let imf = null;
-    if (normalizedImfSettings.enabled) {
-      postProgress(0.985, 'Calculating IMF...');
-      postLog(`Calculating IMF metrics (${normalizedImfSettings.method}, ${normalizedImfSettings.components} components)...`);
-      try {
-        imf = calculateImfMetrics(
-          imageData,
-          outputLabels,
-          detectedIndices,
-          labelCounts,
-          voxelVolMm3,
-          normalizedImfSettings
-        );
-        const processedCount = detectedIndices.length - imf.skippedLabels.length;
-        postLog(`IMF metrics complete for ${processedCount}/${detectedIndices.length} labels`);
-        if (imf.skippedLabels.length > 0) {
-          postLog(`IMF skipped labels with too few or degenerate voxels: ${imf.skippedLabels.join(', ')}`);
-        }
-        if (imf.skippedNonFinite > 0) {
-          postLog(`IMF ignored ${imf.skippedNonFinite} non-finite source voxels`);
-        }
-      } catch (error) {
-        postLog(`Warning: IMF metrics failed: ${error.message}`);
-        imf = null;
-      }
-    }
-
-    const metrics = {
-      labelVolumes,
-      labelSliceCounts,
-      totalVolumeMl,
-      voxelSizeMm: origVoxelSize,
-      totalSlices: nSlices,
-      sliceAxis
-    };
-    if (imf) metrics.imf = imf;
-    postMetrics(metrics);
-  }
-
-  const externalLabels = labelCodec.encode(outputLabels);
-  const outputNifti = createOutputNifti(externalLabels, headerBytes, origDims);
-  postStageData('segmentation', outputNifti, 'Muscle segmentation', {
-    ...provenance,
-    encoding: 'sparse'
+  postLog(`Inference complete: ${processedWorkingSlices} working slices in ${totalTime}s`);
+  postProgress(0.86, 'Cleaning labels...');
+  postLog('Keeping the largest 6-connected component for each class in the full source volume...');
+  const cleanedLabels = perLabelLargestComponent(outputLabels, origDims, NUM_CLASSES - 1, 0.86, 0.10);
+  await emitSegmentationOutput({
+    outputLabels: cleanedLabels,
+    numClasses: NUM_CLASSES,
+    imageData,
+    origDims,
+    origVoxelSize,
+    headerBytes,
+    labelCodec,
+    provenance,
+    calculateMetrics,
+    normalizedImfSettings
   });
-
-  const zWasResampled = TARGET_SPACING[2] > 0 && Math.abs(rasSpacing[2] - TARGET_SPACING[2]) > 0.01;
-  const DISPLAY_MAX_DIM = 128;
-  const maxDim = Math.max(...origDims);
-  let displayLabels = outputLabels;
-  let displayDims = origDims;
-  if (zWasResampled && maxDim > DISPLAY_MAX_DIM) {
-    const scale = DISPLAY_MAX_DIM / maxDim;
-    displayDims = origDims.map(d => Math.max(1, Math.round(d * scale)));
-    displayLabels = resampleLabelsNearest(outputLabels, origDims, displayDims);
-  }
-  const displayNifti = createOutputNifti(displayLabels, headerBytes, displayDims);
-  if (displayDims !== origDims) {
-    const dv = new DataView(displayNifti);
-    const srcView = new DataView(headerBytes);
-    for (let i = 1; i <= 3; i++) {
-      const origPixdim = Math.abs(srcView.getFloat32(76 + i * 4, true));
-      dv.setFloat32(76 + i * 4, origPixdim * origDims[i-1] / displayDims[i-1], true);
-    }
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 3; col++) {
-        const offset = 280 + row * 16 + col * 4;
-        const val = srcView.getFloat32(offset, true);
-        dv.setFloat32(offset, val * origDims[col] / displayDims[col], true);
-      }
-    }
-  }
-  postStageData('segmentation_display', displayNifti, 'Muscle segmentation (display)', {
-    ...provenance,
-    encoding: 'class-index'
-  });
-
-  let totalVoxels = 0;
-  for (let i = 0; i < outputLabels.length; i++) {
-    if (outputLabels[i] > 0) totalVoxels++;
-  }
-  postLog(`Output: ${totalVoxels} labeled voxels, ${detectedIndices.length} muscles`);
-
-  postProgress(1.0, 'Complete');
-  postComplete();
 }
 
 // ==================== Message Handler ====================

@@ -118,14 +118,12 @@ class MuscleMapApp {
       modelSelect.value = Config.MODELS[0].labelSpaceId;
       modelSelect.addEventListener('change', () => {
         this.updateAboutModel();
-        this.syncInferenceCompatibilityControls();
         const selectedModel = this.getSelectedModelConfig();
         const overlapSelect = document.getElementById('overlapSelect');
         if (overlapSelect) overlapSelect.value = String(selectedModel.preprocessing.overlapDefault);
       });
     }
     this.updateAboutModel();
-    this.syncInferenceCompatibilityControls();
     const overlapSelect = document.getElementById('overlapSelect');
     if (overlapSelect) overlapSelect.value = String(Config.MODELS[0].preprocessing.overlapDefault);
 
@@ -654,15 +652,6 @@ class MuscleMapApp {
         await this.renderFallbackPreview(file, { stageName: 'Input image' });
       }
       this.syncWindowControls();
-
-      // Set slice thickness default from loaded volume's z-spacing
-      if (this.nv.volumes?.length) {
-        const zSpacing = Math.abs(this.nv.volumes[0].hdr?.pixDims?.[3] || 1);
-        const sliceInput = document.getElementById('sliceThickness');
-        if (sliceInput) {
-          sliceInput.value = parseFloat(zSpacing.toFixed(2));
-        }
-      }
     } else {
       await this.renderFallbackPreview(file, { stageName: 'Input image' });
     }
@@ -734,14 +723,6 @@ class MuscleMapApp {
     }
   }
 
-  syncInferenceCompatibilityControls() {
-    const model = this.getSelectedModelConfig();
-    const usesUpstreamPipeline = model.id === 'wholebody' && Number.parseFloat(model.modelVersion) >= 1.4;
-    document.getElementById('sourceChunkGroup')?.classList.toggle('hidden', !usesUpstreamPipeline);
-    document.getElementById('sliceThicknessGroup')?.classList.toggle('hidden', usesUpstreamPipeline);
-    document.getElementById('lowResGroup')?.classList.toggle('hidden', usesUpstreamPipeline);
-  }
-
   getSelectedModelConfig() {
     const modelSelect = document.getElementById('modelSelect');
     const selectedLabelSpaceId = modelSelect ? modelSelect.value : Config.MODELS[0].labelSpaceId;
@@ -805,12 +786,6 @@ class MuscleMapApp {
     const webgpuToggle = document.getElementById('webgpuToggle');
     const useWebGPU = webgpuToggle ? webgpuToggle.checked : true;
 
-    const sliceThicknessInput = document.getElementById('sliceThickness');
-    const sliceThickness = sliceThicknessInput ? parseFloat(sliceThicknessInput.value) : -1;
-
-    const lowResToggle = document.getElementById('lowResToggle');
-    const lowRes = lowResToggle ? lowResToggle.checked : Config.INFERENCE_DEFAULTS.lowRes;
-
     const segmentEntries = this.fileIOController.getSegmentEntries();
     const uploadedSegmentations = this.fileIOController.getSegmentationEntries();
     if (segmentEntries.length === 0 && uploadedSegmentations.length === 0) {
@@ -857,8 +832,6 @@ class MuscleMapApp {
       chunkSize,
       sourceChunkSize,
       useWebGPU,
-      sliceThickness,
-      lowRes,
       calculateMetrics: false,
       imfMetrics: { enabled: false }
     };

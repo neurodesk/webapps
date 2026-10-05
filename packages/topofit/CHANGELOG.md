@@ -1,5 +1,7 @@
 # @neurodesk/topofit
 
+## 0.12.20261005
+
 ## 0.12.20261004
 
 ### Patch Changes
