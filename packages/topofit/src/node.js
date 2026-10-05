@@ -25,7 +25,7 @@ export function defaultCacheDir() {
   return join(cache, 'neurodesk', 'topofit', manifest.release);
 }
 
-function assetSetSha256(assets) {
+function installedSha256(assets) {
   const entries = assets.map(({ filename, sha256: digest }) => [filename, digest]).sort(([a], [b]) => (a < b ? -1 : 1));
   return sha256(JSON.stringify(Object.fromEntries(entries)));
 }
@@ -69,7 +69,7 @@ async function loadAsset(asset, { cacheDir, offline, onProgress }) {
 
 export async function downloadModels({ cacheDir = defaultCacheDir(), offline = offlineByDefault(), onProgress = () => {} } = {}) {
   for (const asset of MODEL_ASSETS) await loadAsset(asset, { cacheDir, offline, onProgress });
-  return { directory: resolve(cacheDir), count: MODEL_ASSETS.length, assetSetSha256: assetSetSha256(MODEL_ASSETS) };
+  return { directory: resolve(cacheDir), count: MODEL_ASSETS.length, installedSha256: installedSha256(MODEL_ASSETS) };
 }
 
 export async function checkInstallation() {
