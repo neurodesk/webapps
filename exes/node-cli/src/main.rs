@@ -25,10 +25,24 @@ fn model_variable(tool: &str) -> String {
     )
 }
 
+// A package installer links /usr/local/bin/<tool> to the launcher, so the installation root
+// is found from the resolved file. Windows keeps the path it was started from.
+fn launcher_path(executable: PathBuf) -> Result<PathBuf, String> {
+    if cfg!(windows) {
+        return Ok(executable);
+    }
+    std::fs::canonicalize(&executable)
+        .map_err(|error| format!("cannot resolve {}: {error}", executable.display()))
+}
+
 fn installation() -> Result<Installation, String> {
     let executable =
         env::current_exe().map_err(|error| format!("cannot locate this executable: {error}"))?;
-    let tool = tool_name(&executable)
+    installation_at(&launcher_path(executable)?)
+}
+
+fn installation_at(executable: &Path) -> Result<Installation, String> {
+    let tool = tool_name(executable)
         .ok_or_else(|| format!("cannot derive a tool name from {}", executable.display()))?;
     let root = executable
         .parent()
@@ -132,5 +146,32 @@ mod tests {
             model_variable("brain-extraction"),
             "NEURODESK_BRAIN_EXTRACTION_MODEL_DIR"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_launcher_runs_from_its_installation() {
+        let scratch = env::temp_dir().join(format!("node-cli-link-{}", std::process::id()));
+        let root = scratch.join("lib/neurodesk/topofit");
+        std::fs::create_dir_all(root.join("runtime")).unwrap();
+        std::fs::create_dir_all(root.join("app/bin")).unwrap();
+        std::fs::create_dir_all(scratch.join("bin")).unwrap();
+        for file in ["topofit", "runtime/node", "app/bin/topofit.js"] {
+            std::fs::write(root.join(file), "").unwrap();
+        }
+        let link = scratch.join("bin/topofit");
+        std::os::unix::fs::symlink("../lib/neurodesk/topofit/topofit", &link).unwrap();
+
+        let installation = installation_at(&launcher_path(link.clone()).unwrap());
+        let unresolved = installation_at(&link);
+        let root = std::fs::canonicalize(&root).unwrap();
+        std::fs::remove_dir_all(&scratch).unwrap();
+
+        let installation = installation.unwrap();
+        assert_eq!(installation.tool, "topofit");
+        assert_eq!(installation.node, root.join("runtime/node"));
+        assert_eq!(installation.entry, root.join("app/bin/topofit.js"));
+        assert_eq!(installation.models, root.join("models"));
+        assert!(unresolved.is_err());
     }
 }
