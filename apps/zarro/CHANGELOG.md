@@ -1,5 +1,11 @@
 # zarro
 
+## 0.4.20261005
+
+### Patch Changes
+
+- Fix duplicate crosshairs in the NVSlide viewer by hiding the NiiVue overlay inside the shared canvas wrapper. Preserve crosshair toggling and layout switching.
+
 ## 0.4.20261004
 
 ### Patch Changes
