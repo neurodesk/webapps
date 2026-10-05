@@ -5,8 +5,8 @@ import workspaceStyles from '@neurodesk/webapp-components/styles/imaging-workspa
 import { bindTouchGestures } from './touch-gestures.js';
 
 // Mounts FreeBrowse around a host-owned NiiVue instance inside an open shadow
-// root. Returns { nv, ready, showDrawingTools, destroy }; await `ready` before
-// loading files.
+// root. Returns { nv, ready, showDrawingTools, setDrawingPenValue, destroy };
+// await `ready` before loading files.
 // `options` are NiiVue constructor options. `embed.canvasLabel` names the
 // canvas for assistive technology; `embed.sidebar` opens FreeBrowse's panel.
 export function mountViewer(element, options, embed = {}) {
@@ -92,10 +92,23 @@ export function mountViewer(element, options, embed = {}) {
     }
     return false;
   };
+  // Sets the Drawing tab's Pen Value field, which FreeBrowse keeps in its own
+  // state and re-applies to NiiVue whenever a tool is chosen. The field only
+  // exists while the pen is selected; returns false when it is not shown.
+  const setDrawingPenValue = (value) => {
+    const label = [...container.querySelectorAll('label')].find((item) => item.textContent.trim() === 'Pen Value');
+    const input = label?.parentElement?.querySelector('input[type="number"]');
+    if (!input) return false;
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    setValue.call(input, String(value));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  };
   return {
     nv,
     ready,
     showDrawingTools,
+    setDrawingPenValue,
     destroy() {
       if (destroyed) return;
       destroyed = true;
