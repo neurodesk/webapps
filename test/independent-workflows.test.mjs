@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
@@ -7,6 +7,27 @@ import { createAppPlan } from '../scripts/lib/app-plan.mjs';
 
 async function workflow(name) {
   return YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
+}
+
+// Every workflow whose portable job calls the shared Node packager, with its package directory.
+async function portableCallers() {
+  const files = await readdir(new URL('../.github/workflows/', import.meta.url));
+  const callers = [];
+  for (const file of files.filter((name) => name.endsWith('.yml')).sort()) {
+    const name = file.slice(0, -'.yml'.length);
+    const flow = await workflow(name);
+    if (flow.jobs?.portable?.uses === './.github/workflows/node-cli-portable.yml') callers.push([name, flow.jobs.portable.with.package]);
+  }
+  return callers;
+}
+
+async function packagesWithReleaseSpec() {
+  const packages = [];
+  for (const name of (await readdir(new URL('../packages/', import.meta.url))).sort()) {
+    const spec = new URL(`../packages/${name}/release.json`, import.meta.url);
+    if (await access(spec).then(() => true, () => false)) packages.push(`packages/${name}`);
+  }
+  return packages;
 }
 
 test('desktop builds run on the daily schedule or by hand, and publish only on schedule unless asked', async () => {
@@ -83,7 +104,8 @@ test('native packages share one gated publisher while signing stays isolated', a
 });
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
-  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'topofit-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-publish']) {
+  const portable = (await portableCallers()).map(([name]) => name);
+  for (const name of ['synthsr-native', 'synthseg-native', ...portable, 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-publish']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
@@ -131,7 +153,9 @@ test('portable Node command lines build on target runners and publish through on
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
   const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest','macos-arm64':'macos-15'};
-  for(const [name,packageDir] of [['syncro-native','packages/syncro'],['topofit-native','packages/topofit']]) {
+  const callers=await portableCallers();
+  assert.deepEqual(callers.map(([,packageDir])=>packageDir).sort(),await packagesWithReleaseSpec(),'every package with release.json has exactly one portable workflow');
+  for(const [name,packageDir] of callers) {
     const flow=await workflow(name);
     assert.deepEqual(flow.permissions,{contents:'read'},name);
     assert.equal(flow.jobs.portable.uses,'./.github/workflows/node-cli-portable.yml',name);
