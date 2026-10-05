@@ -1,5 +1,11 @@
 # @neurodesk/vessel-surfer-easter-egg
 
+## 0.1.20260930
+
+### Patch Changes
+
+- Phone tilt steering reads gravity in the screen frame instead of raw beta/gamma angles. A raised phone no longer slams to full lock on a small twist, and a landscape phone passing vertical no longer flips the controls.
+
 ## 0.1.20260929
 
 ### Patch Changes
