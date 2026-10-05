@@ -30,7 +30,7 @@ Each package describes its archives in `release.json`:
 
 The package must have exactly one `bin` entry, `bin/<tool>.js`. Packaging runs
 the package's `build` script when it has one, deploys it with `pnpm deploy
---prod`, keeps only the target's ONNX Runtime binding, downloads the Node
+--prod`, keeps only the target's ONNX Runtime binding when the package uses ONNX Runtime, downloads the Node
 runtime pinned in `node-runtimes.json` and runs `<tool> download-models` into
 `models/`.
 

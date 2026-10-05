@@ -59,7 +59,7 @@ class ReleaseTarget:
     readme_run: str
     readme_notes: tuple[str, ...]
     validation: pathlib.Path
-    onnx_runtime: str
+    onnx_runtime: str | None
     build: bool
     node_version: str
     node_url: str
@@ -172,7 +172,7 @@ def load_target(repo: pathlib.Path, package_dir: str, target_id: str) -> Release
         readme_run=release["readme"]["run"],
         readme_notes=tuple(release["readme"]["notes"]),
         validation=directory / release["validation"],
-        onnx_runtime=package["dependencies"]["onnxruntime-node"],
+        onnx_runtime=package.get("dependencies", {}).get("onnxruntime-node"),
         build="build" in package.get("scripts", {}),
         node_version=runtimes["version"],
         node_url=runtime["url"],
@@ -315,6 +315,7 @@ def _flatten_node_modules(app: pathlib.Path, package_name: str) -> None:
             shutil.copytree(source, destination, symlinks=False)
         else:
             shutil.copy2(source, destination)
+    flat_root.mkdir(exist_ok=True)
     shutil.rmtree(source_root)
     flat_root.rename(source_root)
     for command_directory in sorted(source_root.rglob(".bin"), reverse=True):
@@ -563,7 +564,8 @@ def package_target(target: ReleaseTarget) -> pathlib.Path:
         stage.mkdir()
         _deploy_application(stage, target)
         _flatten_node_modules(stage / "app", target.package)
-        _prune_onnx_runtime(stage / "app", target)
+        if target.onnx_runtime:
+            _prune_onnx_runtime(stage / "app", target)
         runtime_archive = _download_runtime(target, work)
         _extract_node_files(runtime_archive, target, stage)
         if target.installer:
@@ -573,8 +575,9 @@ def package_target(target: ReleaseTarget) -> pathlib.Path:
         _build_launcher(stage, target)
         shutil.copy2(target.package_dir / "LICENSE", stage / "LICENSE")
         shutil.copy2(target.package_dir / "NOTICE", stage / "NOTICE")
-        (stage / "licenses/onnxruntime").mkdir(parents=True)
-        shutil.copy2(HERE / "licenses/onnxruntime-LICENSE", stage / "licenses/onnxruntime/LICENSE")
+        if target.onnx_runtime:
+            (stage / "licenses/onnxruntime").mkdir(parents=True)
+            shutil.copy2(HERE / "licenses/onnxruntime-LICENSE", stage / "licenses/onnxruntime/LICENSE")
         _copy_dependency_licenses(stage / "app", stage / "licenses/npm")
         (stage / "README.txt").write_text(readme_text(target), encoding="utf8")
         if target.installer:
@@ -657,7 +660,7 @@ def _exercise(repo: pathlib.Path, target: ReleaseTarget, root: pathlib.Path, exe
     expected_runtime = (root / target.private_node).resolve()
     if pathlib.Path(report["executable"]).resolve() != expected_runtime:
         raise ValueError(f"{target.tool} used a Node runtime outside {root}")
-    if report["onnxRuntime"] != target.onnx_runtime or report["node"] != f"v{target.node_version}":
+    if report.get("onnxRuntime") != target.onnx_runtime or report["node"] != f"v{target.node_version}":
         raise ValueError("portable runtime version mismatch")
     validation = _run(["node", str(target.validation), "--executable", str(executable)], cwd=repo)
     return report, validation.stdout

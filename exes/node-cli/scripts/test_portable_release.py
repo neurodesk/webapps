@@ -83,6 +83,22 @@ class PortableReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "target"):
             portable_release.load_target(ROOT, "packages/syncro", "macos-arm64")
 
+    def test_a_tool_without_onnx_runtime_or_dependencies_packages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            repo = pathlib.Path(temporary)
+            (repo / "apps/tool").mkdir(parents=True)
+            (repo / "packages/tool/bin").mkdir(parents=True)
+            package = {"name": "@neurodesk/tool", "version": "0.1.20261005", "bin": {"tool": "bin/tool.js"}}
+            (repo / "apps/tool/package.json").write_text(json.dumps(package))
+            (repo / "packages/tool/package.json").write_text(json.dumps(package))
+            release = {"displayName": "Tool", "app": "tool", "run": "", "readme": {"run": "Run", "notes": []}, "validation": "check.mjs", "targets": {"linux-x64": {"archive": "tar.gz", "executable": "tool"}}}
+            (repo / "packages/tool/release.json").write_text(json.dumps(release))
+            self.assertIsNone(portable_release.load_target(repo, "packages/tool", "linux-x64").onnx_runtime)
+            app = repo / "stage/app"
+            (app / "node_modules").mkdir(parents=True)
+            portable_release._flatten_node_modules(app, "@neurodesk/tool")
+            self.assertEqual(list((app / "node_modules").iterdir()), [])
+
     def test_readme_comes_from_the_release_spec(self):
         syncro = portable_release.readme_text(portable_release.load_target(ROOT, "packages/syncro", "linux-x64"))
         self.assertIn("  ./syncro input.nii.gz results --threads 4\n", syncro)
