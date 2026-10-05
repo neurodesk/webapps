@@ -7,6 +7,9 @@ const height = (locator) => locator.evaluate((node) => node.getBoundingClientRec
 async function openApp(page) {
   await page.goto('/');
   await page.waitForFunction(() => window.app?.log?.channels?.length === 2);
+  // The viewer mounts without blocking input; measure heights only after its layout settles.
+  await page.waitForFunction(() => window.app?.viewerMount);
+  await page.evaluate(() => window.app.viewerMount.ready);
   return {
     log: page.locator('#spinalcordtoolbox-log'),
     toggle: page.locator('#spinalcordtoolbox-log [data-disclosure-toggle]'),
