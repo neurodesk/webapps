@@ -321,7 +321,7 @@ await assert.rejects(
   await viewer.showVolumes(stack);
   assert.deepEqual(nv.volumes.map(volume => volume.name), ['input.nii', 'seg.nii'], 'the stage is reloaded when shown again');
 
-  // A volume the user loaded through FreeBrowse is not ours: rebuild from the base.
+  // A volume FreeBrowse added is not ours: it is removed and the base image is kept.
   nv.volumes.splice(1, 0, nv.makeVolume({ name: 'user.nii' }));
   await viewer.showVolumes(stack);
   assert.deepEqual(nv.volumes.map(volume => volume.name), ['input.nii', 'seg.nii']);
