@@ -8,8 +8,13 @@
  * Drawing tab; this class only decides which volumes are loaded.
  *
  * `showVolumes(entries)` is the single entry point for the main viewer and
- * `showComparison(sessions)` for the multi-session grid. Nothing else in the
+ * `showComparison(panels)` for the multi-session grid. Nothing else in the
  * app adds, removes or reorders NiiVue volumes.
+ *
+ * Comparison panels are plain NiiVue canvases from the same bundle, not
+ * FreeBrowse embeds: each embed would add a second sidebar and toolbar per
+ * panel, and its controls could not be linked. The main FreeBrowse stays
+ * mounted (hidden) while comparing, so returning to Single keeps its state.
  */
 
 // The bundle is generated next to the app's other runtime files by
@@ -17,6 +22,26 @@
 const VIEWER_MODULE_URL = new URL('../../freebrowse-viewer/index.js', import.meta.url).href;
 
 export const DEFAULT_OVERLAY_OPACITY = 0.7;
+
+// Four panels plus the hidden main viewer is five live WebGL2 contexts,
+// well under the 16 a page may hold in Chromium and WebKit.
+export const MAX_COMPARISON_PANELS = 4;
+
+// What linked panels share, through NiiVue's own sync: 2D zoom and pan, the
+// 3D view, the crosshair in world (mm) coordinates, and the slice layout.
+export const COMPARISON_SYNC = Object.freeze({ '2d': true, '3d': true, crosshair: true, sliceType: true });
+
+// Axial, coronal, sagittal and multiplanar: the layouts a comparison offers.
+const COMPARISON_SLICE_TYPES = [0, 1, 2, 3];
+
+/** The panels to show: the first `max` sessions, always including the active one. */
+export function selectComparisonPanels(panels, activeSessionId, max = MAX_COMPARISON_PANELS) {
+  const candidates = panels.filter(panel => panel?.id && (panel.entries?.length || panel.file));
+  const shown = candidates.slice(0, max);
+  const active = candidates.find(panel => panel.id === activeSessionId);
+  if (active && shown.length && !shown.includes(active)) shown[shown.length - 1] = active;
+  return shown;
+}
 
 const entryKey = entry => `${entry.stage || ''}|${entry.colormapKey || ''}`;
 
@@ -41,7 +66,7 @@ export class SctViewer {
     }
   }
 
-  constructor({ module, handle, nv, niivueOptions = {}, onLocationChange, onStageVisibilityChange, updateOutput }) {
+  constructor({ module, handle, nv, niivueOptions = {}, onLocationChange, onStageVisibilityChange, onComparisonActivate, onComparisonLocation, updateOutput }) {
     this.module = module;
     this.handle = handle;
     this.nv = nv;
@@ -51,6 +76,12 @@ export class SctViewer {
     this.tracked = new Map();
     this.stageOpacity = new Map();
     this.compareViewers = new Map();
+    this.compareContainer = null;
+    this.compareActiveId = null;
+    this.compareLinked = true;
+    this.compareSliceType = null;
+    this.onComparisonActivate = onComparisonActivate || (() => {});
+    this.onComparisonLocation = onComparisonLocation || (() => {});
     this.applying = false;
     this.queue = Promise.resolve();
 
@@ -92,19 +123,25 @@ export class SctViewer {
     return this.stageOpacity.get(stage) ?? (isLabelMask ? DEFAULT_OVERLAY_OPACITY : 1);
   }
 
-  async applyVolumes(entries) {
-    const nv = this.nv;
+  applyVolumes(entries) {
+    return this.applyStack(this, entries);
+  }
+
+  // `target` is the main viewer (`this`) or a comparison panel record; both
+  // carry `nv` and `tracked` (NiiVue volume id → shown entry).
+  async applyStack(target, entries) {
+    const nv = target.nv;
     if (!nv) return false;
     this.applying = true;
     try {
       if (!entries.length) {
         if (nv.volumes.length) await nv.removeAllVolumes();
-        this.tracked.clear();
+        target.tracked.clear();
         nv.drawScene();
         return true;
       }
 
-      const shown = this.getShownEntries();
+      const shown = nv.volumes.map(volume => target.tracked.get(volume.id) || null);
       let keep = 0;
       if (shown.every(Boolean)) {
         while (
@@ -116,20 +153,20 @@ export class SctViewer {
       }
 
       if (keep === 0) {
-        this.tracked.clear();
+        target.tracked.clear();
         await nv.loadVolumes([this.volumeOptions(entries[0])]);
-        await this.trackVolume(0, entries[0]);
+        await this.trackVolume(target, 0, entries[0]);
         keep = 1;
       } else {
         for (let index = nv.volumes.length - 1; index >= keep; index -= 1) {
-          this.tracked.delete(nv.volumes[index].id);
+          target.tracked.delete(nv.volumes[index].id);
           await nv.removeVolume(index);
         }
       }
 
       for (let index = keep; index < entries.length; index += 1) {
         await nv.addVolume(this.volumeOptions(entries[index]));
-        await this.trackVolume(index, entries[index]);
+        await this.trackVolume(target, index, entries[index]);
       }
 
       for (let index = 0; index < entries.length; index += 1) {
@@ -154,12 +191,12 @@ export class SctViewer {
     return { url: entry.file, name: entry.file.name, opacity: this.entryOpacity(entry) };
   }
 
-  async trackVolume(index, entry) {
-    const volume = this.nv.volumes[index];
-    this.tracked.set(volume.id, { file: entry.file, stage: entry.stage, key: entryKey(entry) });
+  async trackVolume(target, index, entry) {
+    const volume = target.nv.volumes[index];
+    target.tracked.set(volume.id, { file: entry.file, stage: entry.stage, key: entryKey(entry) });
     if (entry.labelColormap) {
       // NiiVue clamps `I` in place, so it gets its own copy.
-      await this.nv.setColormapLabel(index, { ...entry.labelColormap, I: [...entry.labelColormap.I] });
+      await target.nv.setColormapLabel(index, { ...entry.labelColormap, I: [...entry.labelColormap.I] });
     }
   }
 
@@ -196,45 +233,142 @@ export class SctViewer {
   // ==================== Multi-session comparison ====================
 
   /**
-   * Show up to `maxSessions` input sessions side by side, each on its own
-   * NiiVue canvas inside `container`. Panels start in the main viewer's
-   * layout and drag mode, so zoom and pan work the same way in each.
+   * Show input sessions side by side, one plain NiiVue canvas per session in
+   * `container`. `panels` is `[{ id, name, entries }]`, where `entries` is the
+   * stack `showVolumes()` takes: that session's input, then its own label
+   * masks. Panels persist between calls and only a changed stack reloads, so
+   * zoom, pan and crosshair survive new results and session switches. At most
+   * `maxPanels` are shown, always including the active session.
    */
-  async showComparison(sessions, { container, activeSessionId, maxSessions = 4 } = {}) {
-    if (!container) return false;
-    this.clearComparison(container);
-    const visible = sessions.filter(session => session?.file).slice(0, maxSessions);
-    container.dataset.count = String(visible.length);
-    for (const session of visible) {
-      const name = session.name || session.file.name;
-      const panel = document.createElement('div');
-      panel.className = 'comparison-panel';
-      if (session.id === activeSessionId) panel.classList.add('active');
-      const label = document.createElement('div');
-      label.className = 'comparison-label';
-      label.textContent = name;
-      const canvas = document.createElement('canvas');
-      canvas.id = `comparisonCanvas-${session.id}`;
-      canvas.setAttribute('aria-label', `Comparison view of ${name}`);
-      panel.append(label, canvas);
-      container.appendChild(panel);
-
-      const nv = new this.module.NiiVue({ ...this.niivueOptions });
-      this.compareViewers.set(session.id, { nv, file: session.file });
-      await nv.attachToCanvas(canvas);
-      if (!nv.backend) throw new Error(`WebGL2 context unavailable for ${name}.`);
-      nv.sliceType = this.nv.sliceType;
-      nv.showRender = this.nv.showRender;
-      nv.secondaryDragMode = this.nv.secondaryDragMode;
-      await nv.loadVolumes([{ url: session.file, name: session.file.name }]);
-      nv.drawScene();
-    }
-    return Boolean(visible.length);
+  showComparison(panels, options = {}) {
+    const request = this.queue.then(() => this.applyComparison(panels, options));
+    this.queue = request.catch(() => {});
+    return request;
   }
 
-  clearComparison(container = null) {
-    for (const { nv } of this.compareViewers.values()) nv.destroy();
-    this.compareViewers.clear();
+  async applyComparison(panels = [], { container, activeSessionId = null, maxPanels = MAX_COMPARISON_PANELS } = {}) {
+    if (!container || !this.nv) return false;
+    this.compareContainer = container;
+    const shown = selectComparisonPanels(panels, activeSessionId, maxPanels);
+    const wanted = new Set(shown.map(panel => panel.id));
+    for (const id of [...this.compareViewers.keys()]) {
+      if (!wanted.has(id)) this.releaseComparisonPanel(id);
+    }
+    if (this.compareSliceType === null) this.compareSliceType = this.defaultComparisonSliceType();
+
+    let created = false;
+    for (const [index, panel] of shown.entries()) {
+      let record = this.compareViewers.get(panel.id);
+      if (!record) {
+        record = await this.createComparisonPanel(panel);
+        created = true;
+      }
+      const anchor = container.children[index] || null;
+      if (anchor !== record.element) container.insertBefore(record.element, anchor);
+      this.labelComparisonPanel(record, panel, panel.id === activeSessionId);
+      await this.applyStack(record, panel.entries || [{ file: panel.file, stage: 'input' }]);
+    }
+    container.dataset.count = String(shown.length);
+    const activeChanged = this.compareActiveId !== activeSessionId;
+    this.compareActiveId = activeSessionId;
+    if (created || activeChanged) this.setComparisonLinked(this.compareLinked);
+    return shown.length > 0;
+  }
+
+  defaultComparisonSliceType() {
+    const sliceType = this.nv?.sliceType;
+    return COMPARISON_SLICE_TYPES.includes(sliceType) ? sliceType : this.module.SLICE_TYPE.MULTIPLANAR;
+  }
+
+  async createComparisonPanel(panel) {
+    const element = document.createElement('div');
+    element.className = 'nd-compare-panel';
+    element.dataset.sessionId = panel.id;
+    const title = document.createElement('button');
+    title.type = 'button';
+    title.className = 'nd-compare-title';
+    const canvas = document.createElement('canvas');
+    canvas.id = `comparisonCanvas-${panel.id}`;
+    element.append(title, canvas);
+    // NiiVue sizes its canvas from layout, so the panel joins the grid first.
+    this.compareContainer.appendChild(element);
+
+    const nv = new this.module.NiiVue({ ...this.niivueOptions });
+    const record = { id: panel.id, nv, element, title, canvas, tracked: new Map() };
+    this.compareViewers.set(panel.id, record);
+    try {
+      await nv.attachToCanvas(canvas);
+      if (!nv.backend) throw new Error(`WebGL2 context unavailable for ${panel.name || panel.id}.`);
+    } catch (error) {
+      this.releaseComparisonPanel(panel.id);
+      throw error;
+    }
+    nv.sliceType = this.compareSliceType;
+    nv.showRender = this.nv.showRender;
+    nv.secondaryDragMode = this.nv.secondaryDragMode;
+    nv.addEventListener('locationChange', event => this.onComparisonLocation(panel.id, event.detail));
+    // Pointer users pick a panel by working in it, keyboard users by its title.
+    element.addEventListener('pointerdown', () => this.onComparisonActivate(panel.id));
+    title.addEventListener('click', () => this.onComparisonActivate(panel.id));
+    return record;
+  }
+
+  labelComparisonPanel(record, panel, active) {
+    const name = panel.name || panel.id;
+    record.title.textContent = active ? `${name} · active` : name;
+    record.title.title = active ? `${name} is used for processing` : `Use ${name} for processing`;
+    record.title.setAttribute('aria-pressed', String(active));
+    record.element.setAttribute('aria-current', String(active));
+    record.canvas.setAttribute('aria-label', `Comparison view of ${name}`);
+  }
+
+  /**
+   * Link or unlink the panels. Linked panels follow each other through
+   * NiiVue's own `broadcastTo`, which maps the crosshair through world (mm)
+   * coordinates; on linking, the active panel leads.
+   */
+  setComparisonLinked(linked) {
+    this.compareLinked = Boolean(linked);
+    const viewers = [...this.compareViewers.values()].map(record => record.nv);
+    for (const nv of viewers) {
+      const others = viewers.filter(other => other !== nv);
+      if (this.compareLinked && others.length) nv.broadcastTo(others, COMPARISON_SYNC);
+      else nv.broadcastTo();
+    }
+    if (this.compareLinked) this.compareViewers.get(this.compareActiveId)?.nv.drawScene();
+  }
+
+  isComparisonLinked() {
+    return this.compareLinked;
+  }
+
+  setComparisonSliceType(sliceType) {
+    this.compareSliceType = sliceType;
+    for (const { nv } of this.compareViewers.values()) nv.sliceType = sliceType;
+  }
+
+  getComparisonSliceType() {
+    return this.compareSliceType ?? this.defaultComparisonSliceType();
+  }
+
+  async saveComparisonScreenshot(sessionId, filename) {
+    const record = this.compareViewers.get(sessionId);
+    if (!record) return false;
+    return record.nv.saveBitmap(filename);
+  }
+
+  releaseComparisonPanel(id) {
+    const record = this.compareViewers.get(id);
+    if (!record) return;
+    this.compareViewers.delete(id);
+    record.nv.broadcastTo?.();
+    record.nv.destroy();
+    record.element.remove?.();
+  }
+
+  clearComparison(container = this.compareContainer) {
+    for (const id of [...this.compareViewers.keys()]) this.releaseComparisonPanel(id);
+    this.compareActiveId = null;
     if (container) {
       container.replaceChildren();
       container.dataset.count = '0';
@@ -245,8 +379,13 @@ export class SctViewer {
     return this.compareViewers.size;
   }
 
+  getComparisonViewer(sessionId) {
+    return this.compareViewers.get(sessionId)?.nv || null;
+  }
+
   destroy() {
     this.clearComparison();
+    this.compareContainer = null;
     this.handle?.destroy();
     this.tracked.clear();
     this.nv = null;
