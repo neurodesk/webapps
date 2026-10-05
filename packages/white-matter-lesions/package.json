@@ -7,13 +7,18 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "flames": "./bin/flames.js"
+  },
   "exports": {
     ".": "./src/pipeline.js",
     "./assets": "./src/assets.js",
     "./results": "./src/results.js",
+    "./node": "./src/node.js",
     "./manifest": "./model.manifest.json"
   },
   "files": [
+    "bin",
     "src",
     "model.manifest.json",
     "LICENSE",
@@ -22,10 +27,12 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/*.js"
+    "lint": "node --check src/*.js && node --check bin/flames.js"
   },
   "dependencies": {
-    "@neurodesk/synthsr": "workspace:*"
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/synthstrip": "workspace:*",
+    "onnxruntime-node": "1.29.0"
   },
   "repository": {
     "type": "git",

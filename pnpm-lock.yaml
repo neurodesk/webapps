@@ -1034,6 +1034,12 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
+      '@neurodesk/synthstrip':
+        specifier: workspace:*
+        version: link:../synthstrip
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   site/easter-eggs/vessel-surfer:
     dependencies:
