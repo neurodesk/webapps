@@ -1,19 +1,17 @@
-import { createUint8Nifti } from '@neurodesk/webapp-components/file-io';
-import { stem } from './config.js';
+import { labelImages } from '@neurodesk/carotid-flow/outputs';
 
 export function niftiFile(buffer, name) {
   return new File([buffer], name, { type: 'application/octet-stream' });
 }
 
-/** The label map (1 = left carotid, 2 = right) and one binary mask per side, on the series grid.
- *  An edited label map is kept as given; the per-side masks are always derived from `labels`. */
+/** The label map and one binary mask per side as files. An edited label map is kept as
+ *  given; the per-side masks are always derived from `labels`. */
 export function labelFiles(labels, source, mask = null) {
-  const base = stem(source.name);
-  const side = (value, name) => niftiFile(createUint8Nifti(labels.map((label) => (label === value ? 1 : 0)), source.headerBytes), `${base}_carotid_${name}.nii`);
+  const images = labelImages(labels, source);
   return {
-    mask: mask ?? niftiFile(createUint8Nifti(labels, source.headerBytes), `${base}_carotid_labels.nii`),
-    left: side(1, 'left'),
-    right: side(2, 'right'),
+    mask: mask ?? niftiFile(images.mask.bytes, images.mask.name),
+    left: niftiFile(images.left.bytes, images.left.name),
+    right: niftiFile(images.right.bytes, images.right.name),
   };
 }
 

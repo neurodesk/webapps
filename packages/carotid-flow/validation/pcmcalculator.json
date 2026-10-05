@@ -1,0 +1,13 @@
+{
+  "description": "PCMCalculator's open test data (Mark B. Vestergaard, MIT licence), pinned in apps/carotid-flow/examples.json. The reference is PCMCalculator's manual, frame-by-frame ROI measurement of the right carotid, from its Test/Output/PCMTest_ph_Flow_data.csv.",
+  "example": "carotid-pc",
+  "referenceRightFlowMlMin": [131.1, 135.5, 360.0, 367.5, 343.2, 334.9, 294.8, 302.8, 281.5, 281.8, 216.4, 218.0, 235.7, 236.8, 235.6, 239.6, 212.1, 215.0, 190.9, 201.9, 178.7, 180.2, 166.3, 160.5, 149.7, 145.7, 144.4, 144.0],
+  "rightMeanTolerance": 0.1,
+  "minimumCorrelation": 0.99,
+  "expected": {
+    "method": "velocity",
+    "leftMeanMlMin": 231,
+    "rightMeanMlMin": 211,
+    "rightPeakFrame": 3
+  }
+}

@@ -1,0 +1,11 @@
+Carotid Flow
+Copyright (c) 2026 Neurodesk
+MIT
+
+The variability method ports the requesting laboratory's
+standalone_automatic_carotid_flow.m.
+
+The validation example and its reference measurement are the open test data
+of PCMCalculator (Mark B. Vestergaard, MIT licence):
+https://doi.org/10.5281/zenodo.18712355
+https://github.com/MarkVestergaard/PCMCalculator

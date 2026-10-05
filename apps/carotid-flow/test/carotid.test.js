@@ -1,12 +1,13 @@
-import { tiltedPhantom } from './tilted-phantom.js';
 // DOM-independent unit tests (Node, no browser). Browser behaviour is covered in e2e/.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createNiftiHeaderFromVolume, createUint8Nifti, decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io';
-import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, splitSeries, velocityScale } from '../src/carotid.js';
+import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, splitSeries, velocityScale } from '@neurodesk/carotid-flow';
+import { stem } from '@neurodesk/carotid-flow/outputs';
+import { tiltedPhantom } from '@neurodesk/carotid-flow/phantom';
 import { flowChartSvg, tickStep } from '../src/chart.js';
-import { APP, assignSeries, stem } from '../src/config.js';
+import { APP, assignSeries } from '../src/config.js';
 import { labelFiles, niftiFile, resultRows, withEditedLabels } from '../src/outputs.js';
 
 test('app id is lowercase kebab-case and the config is frozen', () => {
@@ -219,18 +220,19 @@ test('draws one polyline per carotid on round axes', () => {
   assert.match(svg, />250</);
 });
 
-// The open example (PCMCalculator's test data), when it is on disk: PCMCalculator's manual
-// measurement of the right carotid, from its Test/Output/PCMTest_ph_Flow_data.csv (ml/min).
-const PCM_RIGHT_FLOW = [131.1, 135.5, 360.0, 367.5, 343.2, 334.9, 294.8, 302.8, 281.5, 281.8, 216.4, 218.0, 235.7, 236.8, 235.6, 239.6, 212.1, 215.0, 190.9, 201.9, 178.7, 180.2, 166.3, 160.5, 149.7, 145.7, 144.4, 144.0];
+// The open example (PCMCalculator's test data), when it is on disk, against PCMCalculator's
+// manual measurement of the right carotid. The command line's release check reads the same pins.
+const pcm = JSON.parse(readFileSync(new URL('../../../packages/carotid-flow/validation/pcmcalculator.json', import.meta.url), 'utf8'));
+const PCM_RIGHT_FLOW = pcm.referenceRightFlowMlMin;
 const OPEN = process.env.CAROTID_FLOW_OPEN_EXAMPLE;
 test('matches PCMCalculator on the right carotid of the open example', { skip: !OPEN || !existsSync(`${OPEN}/carotid_pc_ph.nii.gz`) }, async () => {
   const read = async (name) => readNiftiFrames(await decodeNiftiBuffer(readFileSync(`${OPEN}/${name}`)));
   const modulus = await read('carotid_pc_mod.nii.gz');
   const velocity = await read('carotid_pc_ph.nii.gz');
   const found = detectCarotids({ amplitude: modulus.data, phase: velocity.data, phases: modulus.frames, nx: modulus.dims[0], ny: modulus.dims[1], affine: modulus.header.affine, voxelSize: modulus.header.voxelSize });
-  assert.equal(found.method, 'velocity');
+  assert.equal(found.method, pcm.expected.method);
   const reference = PCM_RIGHT_FLOW.reduce((sum, value) => sum + value, 0) / PCM_RIGHT_FLOW.length;
-  assert.ok(Math.abs(found.right.mean / reference - 1) < 0.1, `right carotid ${found.right.mean} ml/min against ${reference}`);
+  assert.ok(Math.abs(found.right.mean / reference - 1) < pcm.rightMeanTolerance, `right carotid ${found.right.mean} ml/min against ${reference}`);
   const correlation = (a, b) => {
     const mean = (x) => x.reduce((s, v) => s + v, 0) / x.length;
     const [ma, mb] = [mean(a), mean(b)];
@@ -240,9 +242,10 @@ test('matches PCMCalculator on the right carotid of the open example', { skip: !
     a.forEach((value, t) => { ab += (value - ma) * (b[t] - mb); aa += (value - ma) ** 2; bb += (b[t] - mb) ** 2; });
     return ab / Math.sqrt(aa * bb);
   };
-  assert.ok(correlation(Array.from(found.right.curve), PCM_RIGHT_FLOW) > 0.99);
-  assert.equal(Math.round(found.left.mean), 231);
-  assert.equal(found.right.peakFrame, 3);
+  assert.ok(correlation(Array.from(found.right.curve), PCM_RIGHT_FLOW) > pcm.minimumCorrelation);
+  assert.equal(Math.round(found.left.mean), pcm.expected.leftMeanMlMin);
+  assert.equal(Math.round(found.right.mean), pcm.expected.rightMeanMlMin);
+  assert.equal(found.right.peakFrame, pcm.expected.rightPeakFrame);
 });
 
 // The hospital example, when it is on disk: the carotids the MATLAB script picks.

@@ -12,19 +12,14 @@ import {
   createResultList,
   createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
-import {
-  createFloat32Nifti,
-  decodeNiftiBuffer,
-  downloadBlob,
-  downloadFile,
-  extractNiftiHeader,
-  readNiftiFrames,
-} from '@neurodesk/webapp-components/file-io';
+import { createFloat32Nifti, downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
-import { curvesCsv, detectCarotids, meanFrames, splitSeries } from './carotid.js';
+import { detectCarotids, meanFrames } from '@neurodesk/carotid-flow';
+import { curvesTable, stem, variabilityImage } from '@neurodesk/carotid-flow/outputs';
+import { readSeries, readVolume } from '@neurodesk/carotid-flow/series';
 import { flowChartSvg } from './chart.js';
-import { APP, assignSeries, stem } from './config.js';
+import { APP, assignSeries } from './config.js';
 import { labelFiles, niftiFile, resultRows, withEditedLabels } from './outputs.js';
 import examples from '../examples.json';
 import './styles.css';
@@ -133,44 +128,12 @@ function setBusy(value) {
   refreshActions();
 }
 
-/** One stored NIfTI, every frame, checked to be a single slice. */
-async function readVolume(file) {
-  const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
-  const volume = readNiftiFrames(buffer);
-  if (volume.dims[2] !== 1) {
-    throw new Error(`${file.name} has ${volume.dims[2]} slices; Carotid Flow reads one gated slice.`);
-  }
-  return { ...volume, headerBytes: extractNiftiHeader(buffer) };
-}
-
-async function readSeries(chosen) {
-  if (chosen.error) throw new Error(chosen.error);
-  let volume;
-  let split;
-  if (chosen.combined) {
-    volume = await readVolume(chosen.combined);
-    split = splitSeries(volume.data, volume.dims[0] * volume.dims[1], volume.frames);
-  } else {
-    volume = await readVolume(chosen.amplitude);
-    const phase = await readVolume(chosen.phase);
-    if (phase.dims[0] !== volume.dims[0] || phase.dims[1] !== volume.dims[1] || phase.frames !== volume.frames) {
-      throw new Error(`${chosen.amplitude.name} and ${chosen.phase.name} differ in size or frame count.`);
-    }
-    split = { phases: volume.frames, amplitude: volume.data, phase: phase.data };
-  }
-  const [nx, ny] = volume.dims;
-  const name = (chosen.combined ?? chosen.amplitude).name;
-  const meanAmplitude = Float32Array.from(meanFrames(split.amplitude, nx * ny, split.phases));
-  return {
-    ...split,
-    name,
-    nx,
-    ny,
-    affine: volume.header.affine.map((row) => Array.from(row)),
-    voxelSize: volume.header.voxelSize,
-    headerBytes: volume.headerBytes,
-    amplitudeFile: niftiFile(createFloat32Nifti(meanAmplitude, volume.headerBytes), `${stem(name)}_mean_amplitude.nii`),
-  };
+/** The series with its mean amplitude, the background the carotids are drawn on. */
+async function loadSeries(chosen) {
+  const loaded = await readSeries(chosen);
+  const meanAmplitude = Float32Array.from(meanFrames(loaded.amplitude, loaded.nx * loaded.ny, loaded.phases));
+  const amplitudeName = `${stem(loaded.name)}_mean_amplitude.nii`;
+  return { ...loaded, amplitudeFile: niftiFile(createFloat32Nifti(meanAmplitude, loaded.headerBytes), amplitudeName) };
 }
 
 function baseImage(state) {
@@ -220,7 +183,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {}, label, chose
     const images = await readImageFiles(await files, { signal: controller.signal });
     controller.signal.throwIfAborted();
     assertCurrent();
-    const next = await readSeries(chosen ?? assignSeries(images));
+    const next = await loadSeries(chosen ?? assignSeries(images));
     controller.signal.throwIfAborted();
     assertCurrent();
     try {
@@ -442,12 +405,13 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
     await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
     signal?.throwIfAborted();
     const found = detectCarotids(source, options);
+    const variability = variabilityImage(found, source);
     result = {
       found,
       source,
       files: {
         ...labelFiles(found.mask, source),
-        variability: niftiFile(createFloat32Nifti(found.variability, source.headerBytes), `${stem(source.name)}_phase_sd.nii`),
+        variability: niftiFile(variability.bytes, variability.name),
       },
     };
     background = 'mask';
@@ -479,7 +443,8 @@ $('runButton').onclick = () => { void runDetection(); };
 
 $('saveButton').onclick = () => {
   if (!result) return;
-  downloadBlob(new Blob([curvesCsv(result.found)], { type: 'text/csv' }), `${stem(result.source.name)}_carotid_curves.csv`);
+  const curves = curvesTable(result.found, result.source);
+  downloadBlob(new Blob([curves.text], { type: 'text/csv' }), curves.name);
 };
 
 async function init() {
@@ -527,7 +492,8 @@ async function detectOperation({ inputs, parameters, signal, progress }) {
   await loadFiles(Object.values(chosen), { signal, chosen });
   progress('Detecting carotids');
   const completed = await runDetection({ options: parameters, signal, throwOnError: true });
-  const csv = new File([curvesCsv(completed.found)], `${stem(completed.source.name)}_carotid_curves.csv`, { type: 'text/csv' });
+  const curves = curvesTable(completed.found, completed.source);
+  const csv = new File([curves.text], curves.name, { type: 'text/csv' });
   return {
     artifacts: [
       { role: 'labels', file: completed.files.mask },
