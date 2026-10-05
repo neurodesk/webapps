@@ -1,0 +1,27 @@
+{
+  "example": "t1-mni",
+  "inputs": {
+    "t1_brain.nii.gz": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+    "MNI152_T1_1mm_brain.nii.gz": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212"
+  },
+  "engine": "@fireants/fireants 0.1.20260913",
+  "path": "register() in-process, as apps/fireants/src/main.js calls it, with worker: false",
+  "transform": "greedy",
+  "threads": 4,
+  "variant": "mt",
+  "seconds": 853,
+  "stages": [
+    "Moments: 2.2s (NCC -0.7516)",
+    "Rigid: 390.0s (NCC -0.7170)",
+    "Affine: 401.1s (NCC -0.6884)",
+    "Greedy: 58.7s (NCC -0.8586)"
+  ],
+  "finalNcc": -0.8586,
+  "dims": [
+    182,
+    218,
+    182
+  ],
+  "voxelSha256": "05e38ea61ef41b3100c079c83d37b68e336108fbf649618c9aa21fa134d69e98",
+  "fixedCorrelation": 0.718989
+}

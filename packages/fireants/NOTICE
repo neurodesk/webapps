@@ -3,8 +3,9 @@ Apache-2.0
 
 Registration runs @fireants/fireants, a C/WebAssembly reimplementation of
 FireANTs (https://github.com/rohitrango/FireANTs) that is not endorsed by the
-FireANTs authors. Its FireANTs License 1.0 and third-party notices are in
-licenses/npm/ of each portable archive.
+FireANTs authors. In a portable archive, its FireANTs License 1.0 is in
+licenses/npm/@fireants__fireants/ and its third-party notices are in
+app/node_modules/@fireants/fireants/THIRD_PARTY_NOTICES.md.
 
 Please cite: Jena R, Chaudhari P, Gee JC. Adaptive Riemannian optimization for
 multi-scale diffeomorphic matching. Nature Communications. 2026;17:4774.

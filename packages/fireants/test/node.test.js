@@ -105,6 +105,15 @@ test('help states that brain extraction and WebGPU are not included', () => {
   assert.match(result.stdout, /CPU only/);
 });
 
+test('download-models installs nothing because FireANTs uses no model files', async (t) => {
+  const { root } = await workspace(t);
+  const cache = join(root, 'models');
+  const result = run(['download-models', '--cache-dir', cache]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /needs no model files/);
+  await assert.rejects(readdir(cache), { code: 'ENOENT' });
+});
+
 test('self-check compiles the engine and reports the Node runtime that ran it', () => {
   const result = run(['self-check']);
   assert.equal(result.status, 0, result.stderr);
