@@ -641,8 +641,19 @@ def _verify_manifest(root: pathlib.Path, target: ReleaseTarget) -> None:
 
 def _exercise(repo: pathlib.Path, target: ReleaseTarget, root: pathlib.Path, executable: pathlib.Path) -> tuple[dict, str]:
     _verify_manifest(root, target)
-    self_check = _run([str(executable), "self-check"], cwd=root.parent)
-    report = json.loads(self_check.stdout)
+    # The report is standard output alone; ONNX Runtime may log to standard error.
+    self_check = subprocess.run(
+        [str(executable), "self-check"],
+        cwd=root.parent,
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        report = json.loads(self_check.stdout)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"self-check printed no JSON report:\n{self_check.stdout}\n{self_check.stderr}") from error
     expected_runtime = (root / target.private_node).resolve()
     if pathlib.Path(report["executable"]).resolve() != expected_runtime:
         raise ValueError(f"{target.tool} used a Node runtime outside {root}")
