@@ -20,8 +20,10 @@ pnpm --filter topofit test:e2e
 For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release directory and `VITE_TOPOFIT_ASSET_BASE=/model-assets/`. See [`packages/topofit/validation/README.md`](../../packages/topofit/validation/README.md) for the pinned-container comparison.
 
 The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
-NIfTI. The processing manifest is recorded in the technical log. Each surface's View button selects it alone
-without changing the current layout. Slice views show its boundaries, while Render
+NIfTI. The processing manifest is recorded in the technical log. All output surfaces
+are loaded into FreeBrowse, initially hidden. Each surface's View button shows it
+without unloading other surfaces or changing the current layout. FreeBrowse owns
+surface visibility, and switching to QC preserves the loaded surfaces. Slice views show its boundaries, while Render
 shows it in 3D with the MRI clipped away so the skull cannot obscure it. White,
 mid-surface and pial checkboxes combine surfaces for comparison or STL export.
 The 2D slices show thin surface boundaries. FreeBrowse provides axial, coronal,
