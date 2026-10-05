@@ -94,6 +94,10 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   round-trips mz3 and writes STL itself. Both are fixed upstream in `~/src/niimath` for the release after
   1.4.20260909 — once that ships, drop the direct `callMain` path and `writeMz3`/`readMz3` for the fluent
   API's own STL output.
+- The `topofit` command (`packages/topofit/bin/topofit.js`, `src/node.js`) runs the same pipeline on the CPU
+  with `onnxruntime-node`; `exes/node-cli` packages it (shared with SYNcro, driven by `release.json`), and
+  every archive must pass `validation/cli-check.mjs`. Only presets in the pipeline's `MODELS` are accepted or
+  installed; add `synth-1mm` there only together with its own parity report.
 
 ## nesvor and the compute server
 
