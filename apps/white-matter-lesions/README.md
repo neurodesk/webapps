@@ -44,6 +44,11 @@ against 0.648 on MS). As shipped, with SynthStrip including CSF, the app scores 
 and 0.608 on MS with one fold, and 0.733 and 0.647 with the ensemble. Mirroring at test time is
 not implemented.
 
+## Command line
+
+The `flames` command runs this pipeline offline on the CPU and writes the same three files. See
+[`packages/white-matter-lesions/README.md`](../../packages/white-matter-lesions/README.md#command-line).
+
 ## Development
 
 ```sh
