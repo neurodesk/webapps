@@ -210,7 +210,12 @@ def _run(command: list[str], *, cwd: pathlib.Path = ROOT, env: dict | None = Non
     if executable is None:
         raise FileNotFoundError(f"required executable is not on PATH: {command[0]}")
     resolved = [executable, *command[1:]]
-    return subprocess.run(resolved, cwd=cwd, env=env, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        return subprocess.run(resolved, cwd=cwd, env=env, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError as error:
+        # The output is captured for receipts; a failure must still show it in the CI log.
+        sys.stderr.write(error.output or "")
+        raise
 
 
 def _host() -> str:

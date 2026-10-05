@@ -43,6 +43,15 @@ class PortableReleaseTests(unittest.TestCase):
             stderr=portable_release.subprocess.STDOUT,
         )
 
+    def test_a_failing_command_prints_its_captured_output(self):
+        failure = subprocess.CalledProcessError(1, ["check"], output="FAIL lh.white mean distance\n")
+        with mock.patch.object(portable_release.shutil, "which", return_value="/usr/bin/node"):
+            with mock.patch.object(portable_release.subprocess, "run", side_effect=failure):
+                with mock.patch.object(portable_release.sys, "stderr") as stderr:
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        portable_release._run(["node", "check.mjs"])
+        stderr.write.assert_called_once_with("FAIL lh.white mean distance\n")
+
     def test_release_target_derives_safe_names(self):
         target = portable_release.load_target(ROOT, "packages/syncro", "linux-x64")
         version = package_version("packages/syncro")
