@@ -160,6 +160,11 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - The Standalone bar action belongs to the shell and renders `registry/standalone.json`; an app
   cannot replace it with its own dialog. Every registered app needs an entry there or the
   catalog check fails.
+- The `disconnectome` command line is `packages/nii2tvx/bin/disconnectome.js`. It shares the
+  row id, file name and grid refusal with the app through `@neurodesk/nii2tvx/disconnectome`, and
+  ships a copy of `models/disconnectome.manifest.json` that its tests require to be identical;
+  `repoint_manifest.sh` writes both. Its release check compares each example's table with the
+  committed native goldens in `exes/nii2tvx/test`.
 - Examples are declared once, in `apps/disconnectome/examples.json`, which the shared
   `nd-example-selector` downloads and checksums. Re-pinning the dataset changes every URL, so
   after `repoint_manifest.sh` run `apps/disconnectome/scripts/sync-examples.mjs` and then

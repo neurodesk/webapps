@@ -66,6 +66,12 @@ re-pins them after an upload. The example pairs are declared in `examples.json`,
 `nd-example-selector` downloads and checksums, and which `scripts/lock-example-assets.mjs` mirrors
 into the offline inventory.
 
+## Command line
+
+The portable `disconnectome` command writes this app's TSV download, byte for byte, for a lesion
+on a computer without a browser or network, with either atlas. See the "Command line" section of
+`packages/nii2tvx/README.md`.
+
 ## Agent automation
 
 The `analyze` automation operation accepts an explicit `lesion` and optional `anatomical` image, each as NIfTI or DICOM. The lesion must use the MNI152 1 mm atlas grid; no registration is implied. `atlas` selects `enigma` or `hcp1065`. The shared interface handler runs the query worker and returns the exact CLI-compatible TSV, atlas checksum and per-bundle fractions. The registered image viewer exposes its slice/3D tabs and measured bundle regions. Its decimated display tracts remain distinct from the full-resolution query atlas. Cancellation terminates the query worker.
