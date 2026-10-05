@@ -26,6 +26,19 @@ FireANTs package license and third-party notices are copied beside its runtime
 and linked from the app's About dialog. The package is a modified cfireants
 C/WebAssembly reimplementation and is not endorsed by the FireANTs authors.
 
+## Command line
+
+`fireants` from `packages/fireants` runs the same CPU registration with Node:
+
+```bash
+fireants moving.nii.gz fixed.nii.gz results --transform greedy
+```
+
+It writes `results/<moving>_registered.nii.gz`, the web app's download name.
+It has no WebGPU backend, MindGrab brain extraction or DICOM import. Portable
+archives for Linux x64, Windows x64 and macOS arm64 bundle their own Node
+runtime. See packages/fireants/README.md.
+
 ## Example data
 
 The app shares Greedy's brain-extracted registration examples from the
