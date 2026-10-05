@@ -367,7 +367,9 @@ def package_target(target: ReleaseTarget) -> pathlib.Path:
     DIST.mkdir(parents=True, exist_ok=True)
     archive = DIST / target.archive_name
     with tempfile.TemporaryDirectory(prefix=f"{target.tool}-portable-") as temporary:
-        work = pathlib.Path(temporary)
+        # pnpm links workspace packages relative to the path it is given. On macOS the temporary
+        # directory sits behind the /var symlink, so stage under its resolved path.
+        work = pathlib.Path(temporary).resolve()
         stage = work / target.directory
         stage.mkdir()
         _deploy_application(stage, target)
