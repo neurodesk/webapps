@@ -4,6 +4,7 @@ mod metal;
 mod nifti;
 mod volume;
 
+use neurodesk_result_publish::publish;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
 use sha2::Digest;
@@ -397,46 +398,6 @@ fn run(a: &Args) -> Result<(), String> {
     )?;
     progress(&format!("Wrote {}", output.display()));
     Ok(())
-}
-
-// Stage to unique sibling temp files, then publish atomically; hard links refuse to clobber without --force.
-fn publish(files: &[(&Path, Vec<u8>)], force: bool) -> Result<(), String> {
-    let mut temps = Vec::new();
-    let mut published = Vec::new();
-    let result = (|| {
-        for (path, data) in files {
-            if let Some(dir) = path.parent() {
-                fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-            }
-            let temp = PathBuf::from(format!("{}.{}.partial", path.display(), std::process::id()));
-            fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temp)
-                .and_then(|mut f| f.write_all(data))
-                .map_err(|e| format!("Cannot write {}: {e}", temp.display()))?;
-            temps.push(temp);
-        }
-        for ((path, _), temp) in files.iter().zip(&temps) {
-            if force {
-                fs::rename(temp, path)
-            } else {
-                fs::hard_link(temp, path)
-            }
-            .map_err(|e| format!("Cannot write {}: {e}", path.display()))?;
-            published.push(path);
-        }
-        Ok(())
-    })();
-    if result.is_err() && !force {
-        for p in published {
-            let _ = fs::remove_file(p);
-        }
-    }
-    for t in temps {
-        let _ = fs::remove_file(t);
-    }
-    result
 }
 
 fn main() {

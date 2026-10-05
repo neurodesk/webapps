@@ -1,0 +1,52 @@
+name: native-result-publish
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/native-result-publish.yml'
+      - 'exes/result-publish/**'
+      - 'exes/synthsr/src/main.rs'
+      - 'exes/synthsr/Cargo.*'
+      - 'exes/synthseg/src/main.rs'
+      - 'exes/synthseg/Cargo.*'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/native-result-publish.yml'
+      - 'exes/result-publish/**'
+      - 'exes/synthsr/src/main.rs'
+      - 'exes/synthsr/Cargo.*'
+      - 'exes/synthseg/src/main.rs'
+      - 'exes/synthseg/Cargo.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-result-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  filesystem:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87
+        with:
+          components: clippy, rustfmt
+      - name: Check formatting
+        run: cargo fmt --manifest-path exes/result-publish/Cargo.toml --check
+      - name: Lint filesystem-only publication
+        run: cargo clippy --locked --offline --manifest-path exes/result-publish/Cargo.toml --all-targets -- -D warnings
+      - name: Test publication without models in debug mode
+        run: cargo test --locked --offline --manifest-path exes/result-publish/Cargo.toml
+      - name: Test publication without models in release mode
+        run: cargo test --locked --offline --release --manifest-path exes/result-publish/Cargo.toml

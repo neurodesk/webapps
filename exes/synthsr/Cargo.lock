@@ -391,6 +391,10 @@ name = "neurodesk-nifti"
 version = "0.1.0"
 
 [[package]]
+name = "neurodesk-result-publish"
+version = "0.1.0"
+
+[[package]]
 name = "num-complex"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -743,6 +747,7 @@ dependencies = [
  "flate2",
  "metal",
  "neurodesk-nifti",
+ "neurodesk-result-publish",
  "ort",
  "serde_json",
  "sha2",

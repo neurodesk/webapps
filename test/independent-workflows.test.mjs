@@ -83,7 +83,7 @@ test('native packages share one gated publisher while signing stays isolated', a
 });
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
-  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
+  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-result-publish']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
       for (const step of job.steps) {
@@ -93,6 +93,28 @@ test('native and independent test workflows pin actions and discard checkout cre
         if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
       }
     }
+  }
+});
+
+test('native result publication runs model-free on every supported desktop platform', async () => {
+  const flow = await workflow('native-result-publish');
+  assert.deepEqual(flow.permissions, { contents: 'read' });
+  assert.deepEqual(flow.jobs.filesystem.strategy.matrix.os, ['ubuntu-24.04', 'windows-latest', 'macos-latest']);
+  const checks = flow.jobs.filesystem.steps.filter(step => step.run);
+  assert.equal(checks.length, 4, 'each check has its own exit status on Windows too');
+  for (const step of checks) assert.equal(step.run.split('\n').length, 1);
+  const commands = checks.map(step => step.run).join('\n');
+  assert.match(commands, /cargo test --locked --offline --manifest-path exes\/result-publish\/Cargo.toml/);
+  assert.match(commands, /cargo test --locked --offline --release --manifest-path exes\/result-publish\/Cargo.toml/);
+  assert.doesNotMatch(commands, /check-model|fetch_model|test-real/);
+  for (const event of ['pull_request', 'push']) {
+    assert.ok(flow.on[event].paths.includes('exes/result-publish/**'));
+    assert.ok(flow.on[event].paths.includes('exes/synthsr/src/main.rs'));
+    assert.ok(flow.on[event].paths.includes('exes/synthseg/src/main.rs'));
+  }
+  for (const name of ['synthsr-native', 'synthseg-native']) {
+    const native = await workflow(name);
+    assert.ok(native.on.pull_request.paths.includes('exes/result-publish/**'));
   }
 });
 
