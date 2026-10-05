@@ -309,7 +309,7 @@ async function segment(parameters, onProgress = () => {}) {
   current.completion = Promise.withResolvers();
   // Cancellation may settle the operation while adapter discovery is still pending.
   void current.completion.promise.catch(() => {});
-  const stem = source.name.replace(/\.nii(\.gz)?$/i, "");
+  const inputName = source.name;
   const cancelled = closeEdit();
   outputs = { flair: outputs.flair };
   renderOutputs();
@@ -332,7 +332,7 @@ async function segment(parameters, onProgress = () => {}) {
         end(current, data.message, { success: false, error: true });
       } else if (data.type === "result") {
         const summary = lesionSummary(data.summary);
-        Object.assign(outputs, segmentationOutputs(stem, data));
+        Object.assign(outputs, segmentationOutputs(inputName, data));
         renderOutputs();
         log.log(JSON.stringify(data.provenance));
         end(current, `Segmentation complete · ${summary}`, { result: {

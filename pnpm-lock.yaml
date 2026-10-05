@@ -1029,7 +1029,11 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
 
-  packages/white-matter-lesions: {}
+  packages/white-matter-lesions:
+    dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
 
   site/easter-eggs/vessel-surfer:
     dependencies:

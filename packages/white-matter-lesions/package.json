@@ -8,10 +8,14 @@
     "node": ">=22"
   },
   "exports": {
-    ".": "./src/pipeline.js"
+    ".": "./src/pipeline.js",
+    "./assets": "./src/assets.js",
+    "./results": "./src/results.js",
+    "./manifest": "./model.manifest.json"
   },
   "files": [
     "src",
+    "model.manifest.json",
     "LICENSE",
     "NOTICE",
     "README.md"
@@ -19,6 +23,9 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "lint": "node --check src/*.js"
+  },
+  "dependencies": {
+    "@neurodesk/synthsr": "workspace:*"
   },
   "repository": {
     "type": "git",

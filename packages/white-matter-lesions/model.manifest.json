@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "app": "white-matter-lesions",
+  "license": "CC-BY-4.0",
+  "preprocessing_contract": {
+    "source": "packages/white-matter-lesions/src/pipeline.js",
+    "spacing_mm": [
+      1,
+      0.9,
+      0.9
+    ],
+    "layout": "NCDHW; NIfTI voxel axes reversed (k, j, i), no reorientation",
+    "patch": [
+      112,
+      128,
+      160
+    ],
+    "normalization": "z-score inside the brain mask, zero outside"
+  },
+  "assets": [
+    {
+      "filename": "flames-fold0.onnx",
+      "bytes": 61642305,
+      "sha256": "fe21c42078aa462091a5a553b7d2608bde0836647ab7866e1bad376744bcd0ec",
+      "checkpoint_sha256": "4fc7db24e7c1541b59023df2a2f498a964eb629fe38f4eaec763297dd3fdf861",
+      "source_url": "https://zenodo.org/records/17955359/files/Dataset004_WML.zip"
+    },
+    {
+      "filename": "flames-fold1.onnx",
+      "bytes": 61642305,
+      "sha256": "f185f5dc5f4f5820be22678127f2614bda4ddcd89593006314106189c1ee69b5",
+      "checkpoint_sha256": "3966dd256074a0ea3c7d16c3a8e7412a6cb5071220df71b54745aeb50c33c33c",
+      "source_url": "https://zenodo.org/records/17955359/files/Dataset004_WML.zip"
+    },
+    {
+      "filename": "flames-fold2.onnx",
+      "bytes": 61642305,
+      "sha256": "e02192e2a74112740992c1716dacae1034c1526de78e7a001a517cae9d5e43bc",
+      "checkpoint_sha256": "734be69b968cc6578bcf079bb79db166cd8f5edba0f0dc19a62bbe68021364d8",
+      "source_url": "https://zenodo.org/records/17955359/files/Dataset004_WML.zip"
+    },
+    {
+      "filename": "flames-fold3.onnx",
+      "bytes": 61642305,
+      "sha256": "fd4903b2c4678cfa25fcc7098fd127fed40f4f7cc1022ad2df12b993d7c45a18",
+      "checkpoint_sha256": "8e989caccdcf45368cc8f1ef8a00598f9f072c1fbe23e57458fc572fea434c3f",
+      "source_url": "https://zenodo.org/records/17955359/files/Dataset004_WML.zip"
+    },
+    {
+      "filename": "flames-fold4.onnx",
+      "bytes": 61642305,
+      "sha256": "4214c079c83a6fef9aa3d662af9504118359fb943d00b932289b63ffffc1148a",
+      "checkpoint_sha256": "ff723a2eda28a7f78f75d96a993d029ea8f65aa3657f5aea7caab9b217792df2",
+      "source_url": "https://zenodo.org/records/17955359/files/Dataset004_WML.zip"
+    }
+  ],
+  "source_commit": "FLAMeS 2.0 (Zenodo 17955359, md5 8b90b789d6ceca1886f42fa1724a08cc), fold_<N>/checkpoint_final.pth",
+  "graph_optimization": "ConvTranspose rewritten as an equivalent 1x1x1 Conv plus depth-to-space for the WebGPU backend; convolution weights stored as float16 and cast to float32 in the graph, so arithmetic is float32. Built by apps/white-matter-lesions/scripts/export_model.py",
+  "repository": "neurodeskorg/webapps",
+  "revision": "ee0b2a1d563bec6821398d1ceaa0a474934d5013",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee0b2a1d563bec6821398d1ceaa0a474934d5013/white-matter-lesions/models/"
+}
