@@ -9,7 +9,6 @@
   },
   "exports": {
     ".": "./src/index.js",
-    "./browser": "./src/browser.js",
     "./results": "./src/results.js",
     "./normal-arrows": "./src/normal-arrows.js",
     "./manifest": "./model.manifest.json",
@@ -29,9 +28,7 @@
     "lint": "node --check src/*.js"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*",
-    "nifti-reader-js": "0.8.0",
-    "onnxruntime-web": "1.29.0"
+    "nifti-reader-js": "0.8.0"
   },
   "repository": {
     "type": "git",

@@ -93,7 +93,7 @@ and rejects inputs above the 768 MiB preprocessing budget.
 | `packages/topofit/src/volume.js` | Decode NIfTI geometry, scaling, scalar type, and source-grid QC data. |
 | `packages/topofit/src/conform.js` | Own reference-compatible cubic preprocessing and its memory lifetime. |
 | `packages/topofit/src/pipeline.js` | Select identity-grid bypass or cubic conforming, run the neural schedule, and assemble outputs. |
-| `packages/topofit/src/browser.js` | Create ONNX Runtime sessions and bind executor settings to executor identity. |
+| `apps/topofit/src/onnx-runtime.js` | Create ONNX Runtime sessions and bind executor settings to executor identity. |
 | `packages/topofit/src/results.js` | Write deterministic FreeSurfer surfaces. |
 | `apps/topofit/src/inference-worker.js` | Fetch verified assets, create one executor per worker, and transfer results. |
 | `packages/topofit/validation` | Capture the pinned container, run the production browser, and compare immutable evidence. |

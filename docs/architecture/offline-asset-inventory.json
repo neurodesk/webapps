@@ -3261,7 +3261,8 @@
         "@neurodesk/topofit": "workspace:*",
         "@neurodesk/webapp-components": "workspace:*",
         "@niivue/niimath": "1.4.20260909",
-        "@niivue/niivue": "1.0.0-rc.11"
+        "@niivue/niivue": "1.0.0-rc.11",
+        "onnxruntime-web": "1.29.0"
       },
       "notes": [
         "All assets in packages/topofit/model.manifest.json plus cortex atlas are listed. Runtime appends ?sha256= to model/geometry requests. Preserve SHA-256 query alias."
