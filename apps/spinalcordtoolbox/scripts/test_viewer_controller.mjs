@@ -80,7 +80,16 @@ class FakeNiiVue extends EventTarget {
     return true;
   }
 
-  drawScene() {}
+  drawScene() {
+    this.draws = (this.draws || 0) + 1;
+  }
+
+  // NiiVue's own sync. `undefined` clears it.
+  broadcastTo(targets, opts) {
+    this.calls.push(['broadcastTo', targets ? targets.length : 0]);
+    this.syncTargets = targets || [];
+    this.syncOpts = targets ? opts : null;
+  }
 
   destroy() {
     this.destroyed = true;
@@ -342,64 +351,128 @@ await assert.rejects(
 }
 
 // ---------------------------------------------------------------------------
-// Comparison grid: one independent NiiVue canvas per loaded session.
+// Comparison grid: one plain NiiVue canvas per loaded session, kept across
+// updates, each with its own overlays, linked through NiiVue's broadcastTo.
 // ---------------------------------------------------------------------------
 {
+  const { JSDOM } = await import('jsdom');
+  const window = new JSDOM('<!doctype html><body><div id="grid"></div></body>').window;
   const originalDocument = globalThis.document;
-  const makeElement = tagName => {
-    const element = {
-      tagName,
-      id: '',
-      className: '',
-      textContent: '',
-      dataset: {},
-      children: [],
-      attributes: {},
-      classList: {
-        classes: new Set(),
-        add(name) { this.classes.add(name); },
-        contains(name) { return this.classes.has(name); }
-      },
-      setAttribute(name, value) { this.attributes[name] = value; },
-      append(...nodes) { this.children.push(...nodes); },
-      appendChild(node) { this.children.push(node); return node; },
-      replaceChildren(...nodes) { this.children = nodes; }
-    };
-    return element;
-  };
-  globalThis.document = { createElement: makeElement };
+  globalThis.document = window.document;
 
   try {
     const created = [];
-    const { viewer, nv } = await mountViewer({ module: makeModule({ created }) });
-    nv.sliceType = SLICE_TYPE.AXIAL;
+    const activations = [];
+    const comparisonLocations = [];
+    const { viewer, nv } = await mountViewer({
+      module: makeModule({ created }),
+      onComparisonActivate: id => activations.push(id),
+      onComparisonLocation: (id, detail) => comparisonLocations.push([id, detail])
+    });
+    nv.sliceType = SLICE_TYPE.SAGITTAL;
     nv.secondaryDragMode = DRAG_MODE.pan;
-    const container = makeElement('div');
-    const first = makeFile('session_one.nii.gz');
-    const second = makeFile('session_two.nii.gz');
-    const third = makeFile('session_three.nii.gz');
+    const container = window.document.getElementById('grid');
+    const pre = makeFile('pre_op.nii.gz');
+    const post = makeFile('post_op.nii.gz');
+    const third = makeFile('follow_up.nii.gz');
+    const preSeg = makeFile('pre_seg.nii');
+    const panel = (id, file, overlays = []) => ({
+      id,
+      name: file.name,
+      entries: [{ file, stage: 'input', visible: true }, ...overlays]
+    });
+    const cord = file => ({ file, stage: 'segmentation', visible: true, colormapKey: 'sct-spinalcord', labelColormap: cordColormap() });
 
-    const rendered = await viewer.showComparison([
-      { id: 'session-1', name: first.name, file: first },
-      { id: 'session-2', name: second.name, file: second },
-      { id: 'session-3', name: third.name, file: third }
-    ], { container, activeSessionId: 'session-2', maxSessions: 2 });
+    // Two sessions, the second active; only the first has a result.
+    assert.equal(await viewer.showComparison([
+      panel('session-1', pre, [cord(preSeg)]),
+      panel('session-2', post)
+    ], { container, activeSessionId: 'session-2' }), true);
 
-    assert.equal(rendered, true);
-    assert.equal(container.dataset.count, '2', 'at most maxSessions panels are shown');
-    assert.equal(container.children.length, 2);
-    assert.equal(container.children[0].children[0].textContent, 'session_one.nii.gz');
-    assert.equal(container.children[1].classList.contains('active'), true, 'the active session is marked');
+    const panels = [...container.children];
+    assert.equal(container.dataset.count, '2');
+    assert.equal(panels.length, 2);
+    assert.equal(panels[0].className, 'nd-compare-panel');
+    const titles = panels.map(element => element.querySelector('button.nd-compare-title'));
+    assert.deepEqual(titles.map(title => title.textContent), ['pre_op.nii.gz', 'post_op.nii.gz · active'], 'each panel is labelled; the active one says so');
+    assert.deepEqual(titles.map(title => title.getAttribute('aria-pressed')), ['false', 'true']);
+    assert.deepEqual(panels.map(element => element.getAttribute('aria-current')), ['false', 'true']);
     assert.equal(created.length, 2, 'each panel has its own NiiVue instance');
     assert.equal(created[0].canvas.id, 'comparisonCanvas-session-1');
-    assert.match(created[0].canvas.attributes['aria-label'], /session_one/);
+    assert.match(created[0].canvas.getAttribute('aria-label'), /pre_op/);
     assert.deepEqual(created[0].options, { backend: 'webgl2', isDragDropEnabled: false });
-    assert.deepEqual(created[0].callsNamed('loadVolumes'), [['loadVolumes', ['session_one.nii.gz']]]);
-    assert.deepEqual(created[1].callsNamed('loadVolumes'), [['loadVolumes', ['session_two.nii.gz']]]);
-    assert.equal(created[1].sliceType, SLICE_TYPE.AXIAL, 'panels follow the main viewer layout');
+    assert.deepEqual(created[0].callsNamed('loadVolumes'), [['loadVolumes', ['pre_op.nii.gz']]]);
+    assert.deepEqual(created[0].callsNamed('addVolume'), [['addVolume', 'pre_seg.nii']], 'a panel shows its own session\'s overlays');
+    assert.deepEqual(created[0].callsNamed('setColormapLabel'), [['setColormapLabel', 1, ['Background', 'Spinal cord']]], 'with the label colours of the single view');
+    assert.deepEqual(created[1].callsNamed('addVolume'), [], 'a session without results shows only its image');
+    assert.equal(created[1].sliceType, SLICE_TYPE.SAGITTAL, 'panels start in the main viewer layout');
     assert.equal(created[1].secondaryDragMode, DRAG_MODE.pan, 'panels follow the main viewer drag mode, so zoom works alike');
-    assert.equal(viewer.getComparisonViewerCount(), 2);
     assert.equal(nv.callsNamed('loadVolumes').length, 0, 'comparison never touches the main viewer stack');
+
+    // Linked by default through NiiVue's own sync, crosshair and all.
+    assert.equal(viewer.isComparisonLinked(), true);
+    assert.deepEqual(created[0].syncTargets, [created[1]]);
+    assert.deepEqual(created[1].syncTargets, [created[0]]);
+    assert.deepEqual(created[0].syncOpts, { '2d': true, '3d': true, crosshair: true, sliceType: true });
+
+    // Pointer and keyboard both activate a panel.
+    panels[0].dispatchEvent(new window.Event('pointerdown', { bubbles: true }));
+    titles[0].click();
+    assert.deepEqual(activations, ['session-1', 'session-1']);
+    created[0].dispatchEvent(new CustomEvent('locationChange', { detail: { string: '1 2 3' } }));
+    assert.deepEqual(comparisonLocations, [['session-1', { string: '1 2 3' }]]);
+
+    // A switch of active session, and a new result for the second, keep both
+    // canvases: only the changed stack reloads, so zoom and pan survive.
+    const postSeg = makeFile('post_seg.nii');
+    await viewer.showComparison([
+      panel('session-1', pre, [cord(preSeg)]),
+      panel('session-2', post, [cord(postSeg)])
+    ], { container, activeSessionId: 'session-1' });
+    assert.equal(created.length, 2, 'no panel is recreated');
+    assert.equal(created[0].callsNamed('loadVolumes').length, 1, 'the unchanged panel is not reloaded');
+    assert.deepEqual(created[1].callsNamed('addVolume'), [['addVolume', 'post_seg.nii']], 'a new result is added to its own panel only');
+    assert.deepEqual([...container.children].map(element => element.getAttribute('aria-current')), ['true', 'false'], 'the active marker follows the session');
+
+    // Eye toggles change opacity in place.
+    await viewer.showComparison([
+      panel('session-1', pre, [{ ...cord(preSeg), visible: false }]),
+      panel('session-2', post, [{ ...cord(postSeg), visible: false }])
+    ], { container, activeSessionId: 'session-1' });
+    assert.deepEqual(created[0].callsNamed('setVolume').at(-1), ['setVolume', 1, { opacity: 0 }]);
+    assert.deepEqual(created[1].callsNamed('setVolume').at(-1), ['setVolume', 1, { opacity: 0 }]);
+
+    // Unlinking clears NiiVue's sync on every panel; linking restores it and
+    // lets the active panel lead.
+    viewer.setComparisonLinked(false);
+    assert.equal(viewer.isComparisonLinked(), false);
+    assert.deepEqual(created.map(instance => instance.syncTargets), [[], []]);
+    const drawsBefore = created[0].draws || 0;
+    viewer.setComparisonLinked(true);
+    assert.deepEqual(created[0].syncTargets, [created[1]]);
+    assert.equal(created[0].draws, drawsBefore + 1, 'the active panel redraws so the others align to it');
+
+    // Layout applies to every panel.
+    viewer.setComparisonSliceType(SLICE_TYPE.AXIAL);
+    assert.deepEqual(created.map(instance => instance.sliceType), [SLICE_TYPE.AXIAL, SLICE_TYPE.AXIAL]);
+    assert.equal(viewer.getComparisonSliceType(), SLICE_TYPE.AXIAL);
+
+    // Three sessions with a limit of two: the active session is always shown,
+    // and a session that drops out releases its canvas.
+    await viewer.showComparison([
+      panel('session-1', pre),
+      panel('session-2', post),
+      panel('session-3', third)
+    ], { container, activeSessionId: 'session-3', maxPanels: 2 });
+    assert.equal(container.dataset.count, '2');
+    assert.deepEqual([...container.children].map(element => element.dataset.sessionId), ['session-1', 'session-3']);
+    assert.equal(created[1].destroyed, true, 'a dropped panel releases its WebGL context');
+    assert.equal(created[2].sliceType, SLICE_TYPE.AXIAL, 'a new panel joins in the current comparison layout');
+    assert.deepEqual(created[0].syncTargets, [created[2]], 'links are rebuilt over the panels now shown');
+    assert.equal(viewer.getComparisonViewerCount(), 2);
+
+    assert.deepEqual(await viewer.saveComparisonScreenshot('session-3', 'follow_up.png'), true);
+    assert.deepEqual(created[2].callsNamed('saveBitmap'), [['saveBitmap', 'follow_up.png']]);
 
     viewer.clearComparison(container);
     assert.equal(viewer.getComparisonViewerCount(), 0);
@@ -408,9 +481,23 @@ await assert.rejects(
     assert.equal(created.every(instance => instance.destroyed), true, 'panel viewers release their WebGL contexts');
 
     assert.equal(await viewer.showComparison([], { container }), false);
-    assert.equal(await viewer.showComparison([{ id: 'x', file: first }], {}), false, 'a missing container is a no-op');
+    assert.equal(await viewer.showComparison([{ id: 'x', file: pre }], {}), false, 'a missing container is a no-op');
 
-    await viewer.showComparison([{ id: 'session-1', name: first.name, file: first }], { container });
+    // A panel whose canvas cannot get a context is removed again and the error surfaces.
+    const failing = await mountViewer({ module: makeModule({ created }) });
+    const brokenClass = failing.module.NiiVue;
+    failing.module.NiiVue = class extends brokenClass {
+      async attachToCanvas(canvas) {
+        this.canvas = canvas;
+        this.backend = null;
+        return this;
+      }
+    };
+    await assert.rejects(failing.viewer.showComparison([panel('session-1', pre)], { container }), /WebGL2 context unavailable/);
+    assert.equal(failing.viewer.getComparisonViewerCount(), 0);
+    assert.equal(container.children.length, 0, 'the failed panel leaves no element behind');
+
+    await viewer.showComparison([{ id: 'session-1', name: pre.name, file: pre }], { container });
     const handle = viewer.handle;
     viewer.destroy();
     assert.equal(handle.destroyed, true, 'destroy releases FreeBrowse');
