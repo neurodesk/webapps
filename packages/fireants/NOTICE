@@ -1,0 +1,11 @@
+FireANTs command line
+Apache-2.0
+
+Registration runs @fireants/fireants, a C/WebAssembly reimplementation of
+FireANTs (https://github.com/rohitrango/FireANTs) that is not endorsed by the
+FireANTs authors. Its FireANTs License 1.0 and third-party notices are in
+licenses/npm/ of each portable archive.
+
+Please cite: Jena R, Chaudhari P, Gee JC. Adaptive Riemannian optimization for
+multi-scale diffeomorphic matching. Nature Communications. 2026;17:4774.
+doi:10.1038/s41467-026-72508-3
