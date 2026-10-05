@@ -21,6 +21,8 @@ import { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog 
 import { generateLabelColormap, getLabelName } from './app/labels.js';
 import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import './modules/sct-processing.js';
+import './modules/sct-centerline.js';
+import './modules/sct-morphometry.js';
 
 export class SpinalCordToolboxApp {
   // Shown in the viewer panel when WebGL2/NiiVue cannot initialize. Names the
@@ -67,6 +69,10 @@ export class SpinalCordToolboxApp {
     this._viewerMode = 'single';
     this._activeSessionId = null;
     this.selectedTask = getDefaultTask();
+    // Masks and disc labels of the current image that morphometry can
+    // measure. They outlive a new segmentation run so a cord mask from one
+    // task can be combined with TotalSpineSeg discs from another.
+    this.morphometrySources = { masks: new Map(), discs: null };
     this.viewerAvailable = false;
     this.viewerUnavailableReason = '';
     this.fallbackPreview = new FallbackNiftiPreview({
@@ -285,6 +291,15 @@ export class SpinalCordToolboxApp {
     if (modelSelect) {
       modelSelect.addEventListener('change', () => this.onTaskSelectionChanged(modelSelect.value));
     }
+
+    const morphometryBtn = document.getElementById('runMorphometry');
+    if (morphometryBtn) morphometryBtn.addEventListener('click', () => this.runMorphometry());
+    const morphometryDiscs = document.getElementById('morphometryDiscs');
+    if (morphometryDiscs) morphometryDiscs.addEventListener('change', () => this.syncMorphometryControls());
+    for (const id of ['morphometrySlices', 'morphometryLevels']) {
+      document.getElementById(id)?.addEventListener('input', event => event.target.setCustomValidity(''));
+    }
+    this.syncMorphometryControls();
 
     const cancelBtn = document.getElementById('cancelButton');
     if (cancelBtn) cancelBtn.addEventListener('click', () => this.abortCurrentStep());
@@ -587,6 +602,7 @@ export class SpinalCordToolboxApp {
     this._inputVisible = true;
     this.resetStageVisibility();
     this._lastLocationData = null;
+    this.resetMorphometrySources();
 
     this.log?.clear(ANALYSIS);
     this.log?.clear(TECHNICAL);
@@ -603,7 +619,7 @@ export class SpinalCordToolboxApp {
     const sectionEnabled = {};
     const buttonsEnabled = {};
 
-    for (const pipelineStep of ['inference']) {
+    for (const pipelineStep of ['inference', 'morphometry']) {
       sectionEnabled[pipelineStep] = this.isStepEnabled(pipelineStep);
       buttonsEnabled[pipelineStep] = this.areStepButtonsEnabled(pipelineStep);
     }
@@ -618,12 +634,12 @@ export class SpinalCordToolboxApp {
     };
   }
 
-  beginAbortableStep(step) {
+  beginAbortableStep(step, message = 'Running segmentation…') {
     this.currentRunningStep = step;
     this.abortUICheckpoint = this.captureAbortUICheckpoint(step);
     this.inferenceExecutor.captureCheckpoint(step);
     this.setStatusError(false);
-    this.progress.begin('Running segmentation…', { cancellable: true });
+    this.progress.begin(message, { cancellable: true });
     // Node test harnesses must not be kept alive by the elapsed counter.
     this.progress.timer?.unref?.();
   }
@@ -645,6 +661,7 @@ export class SpinalCordToolboxApp {
     } finally {
       this.currentRunningStep = null;
       this.abortUICheckpoint = null;
+      this.syncMorphometryControls();
     }
   }
 
@@ -686,6 +703,7 @@ export class SpinalCordToolboxApp {
     };
 
     this.rebuildResultsList();
+    this.renderAllMetricsResults();
 
     const targetStage = (this.currentResultTab === 'input' || this.inferenceExecutor.getResult(this.currentResultTab))
       ? this.currentResultTab
@@ -757,6 +775,7 @@ export class SpinalCordToolboxApp {
       patchSize: effectivePatchSize,
     })) this.logAnalysis(line);
     this.beginAbortableStep('inference');
+    this.syncMorphometryControls();
 
     // Clear previous results so a stale overlay is not auto-rendered on the
     // new run.
@@ -802,14 +821,16 @@ export class SpinalCordToolboxApp {
   getStepSectionId(step) {
     const sectionMap = {
       'load': null,
-      'inference': 'stepInferenceSection'
+      'inference': 'stepInferenceSection',
+      'morphometry': 'morphometrySection'
     };
     return sectionMap[step] || null;
   }
 
   getStepButtonIds(step) {
     const buttonMap = {
-      'inference': ['runSegmentation']
+      'inference': ['runSegmentation'],
+      'morphometry': ['runMorphometry']
     };
     return buttonMap[step] || [];
   }
@@ -920,6 +941,7 @@ export class SpinalCordToolboxApp {
       case 'inference':
         break;
     }
+    this.syncMorphometryControls();
 
     // Load stage data into viewer for preprocessing steps
     // (stageData is already handled in handleStageData)
@@ -932,7 +954,8 @@ export class SpinalCordToolboxApp {
   updateStepBadge(step, status) {
     const badgeMap = {
       'load': null,
-      'inference': 'stepInferenceBadge'
+      'inference': 'stepInferenceBadge',
+      'morphometry': 'morphometryBadge'
     };
     // Load step doesn't have a visible badge
     if (step === 'load') return;
@@ -996,6 +1019,8 @@ export class SpinalCordToolboxApp {
       resultsSection.classList.remove('collapsed');
     }
 
+    this.registerMorphometrySource(data.stage, data.taskId);
+
     if (this.isOverlayStage(data.stage)) {
       this.setStageVisible(data.stage, this.getDefaultStageVisibility()[data.stage] !== false);
       this.setStageVisible('input', true);
@@ -1010,7 +1035,6 @@ export class SpinalCordToolboxApp {
       if (result?.file) {
         this.currentResultTab = data.stage;
         this.setStageVisible('input', true);
-        this.clearMetricsResult();
         await this.renderViewerVolumes();
       }
     }
@@ -1128,76 +1152,128 @@ export class SpinalCordToolboxApp {
     return Number.isInteger(number) ? String(number) : number.toFixed(3).replace(/\.?0+$/, '');
   }
 
-  clearMetricsResult() {
+  // Removes one metrics block, or all of them when no stage is given.
+  clearMetricsResult(stage = null) {
     const panel = document.getElementById('metricsResults');
     if (!panel) return;
-    panel.innerHTML = '';
-    panel.classList.add('hidden');
+    if (stage) {
+      panel.querySelector(`[data-metrics-stage="${stage}"]`)?.remove();
+    } else {
+      panel.innerHTML = '';
+    }
+    panel.classList.toggle('hidden', panel.children.length === 0);
+  }
+
+  renderAllMetricsResults() {
+    this.clearMetricsResult();
+    for (const stage of this.inferenceExecutor.getStageOrder()) {
+      if (this.isMetricsResultStage(stage)) this.renderMetricsResult(stage);
+    }
+  }
+
+  describeLesionMetrics(result) {
+    const summary = result.summary || {};
+    // Damage ratio, midsagittal measures and tissue bridges need a cord mask;
+    // a lesion-only task (lesion_ms) has none, so its table keeps the columns
+    // its CSV actually has.
+    const present = Array.isArray(result.raw?.columns) ? new Set(result.raw.columns) : null;
+    const keep = ([column]) => !present || present.has(column);
+    return {
+      summary: [
+        ['Lesions', summary.lesion_count],
+        ['Volume mm3', summary.total_volume_mm3],
+        ['Length mm', summary.total_length_mm],
+        ['Max width mm', summary.max_width_mm]
+      ],
+      columns: [
+        ['label', 'Lesion'],
+        ['volume [mm3]', 'Volume mm3'],
+        ['length [mm]', 'Length mm'],
+        ['width [mm]', 'Width mm'],
+        ['max_equivalent_diameter [mm]', 'Max diameter mm'],
+        ['max_axial_damage_ratio []', 'Axial damage'],
+        ['length_interpolated_midsagittal_slice [mm]', 'Midsag. length mm'],
+        ['width_interpolated_midsagittal_slice [mm]', 'Midsag. width mm'],
+        ['interpolated_dorsal_bridge_width [mm]', 'Dorsal bridge mm'],
+        ['interpolated_ventral_bridge_width [mm]', 'Ventral bridge mm'],
+        ['interpolated_total_bridge_width [mm]', 'Total bridge mm']
+      ].filter(keep)
+    };
+  }
+
+  describeMorphometryMetrics(result) {
+    const summary = result.summary || {};
+    const inputs = result.raw?.inputs || {};
+    const levels = inputs.discs ? `levels from ${inputs.discs}` : 'no vertebral levels';
+    return {
+      note: `${inputs.mask || 'Mask'}, ${levels}`,
+      summary: [
+        ['Mean CSA mm2', summary.mean_area_mm2],
+        ['Length mm', summary.length_mm],
+        ['Mean AP mm', summary.mean_diameter_AP_mm],
+        ['Mean RL mm', summary.mean_diameter_RL_mm]
+      ],
+      columns: [
+        ['slices', 'Slice'],
+        ['vert_level', 'Level'],
+        ['MEAN(area)', 'CSA mm2'],
+        ['MEAN(diameter_AP)', 'AP mm'],
+        ['MEAN(diameter_RL)', 'RL mm'],
+        ['MEAN(eccentricity)', 'Eccentricity'],
+        ['MEAN(solidity)', 'Solidity'],
+        ['MEAN(orientation)', 'Orientation deg'],
+        ['MEAN(angle_AP)', 'Angle AP deg'],
+        ['MEAN(angle_RL)', 'Angle RL deg'],
+        ['SUM(length)', 'Length mm']
+      ]
+    };
   }
 
   renderMetricsResult(stage) {
     const panel = document.getElementById('metricsResults');
     const result = this.inferenceExecutor.getResult(stage);
     if (!panel || result?.kind !== 'metrics') {
-      this.clearMetricsResult();
+      this.clearMetricsResult(stage);
       return;
     }
 
-    const summary = result.summary || {};
+    const view = stage === 'morphometry'
+      ? this.describeMorphometryMetrics(result)
+      : this.describeLesionMetrics(result);
     const rows = Array.isArray(result.rows) ? result.rows : [];
-    const tableColumns = [
-      'lesion_id',
-      'volume_mm3',
-      'length_mm',
-      'max_width_mm',
-      'max_axial_damage_ratio',
-      'dorsal_bridge_width_mm',
-      'ventral_bridge_width_mm',
-      'total_bridge_width_mm'
-    ].filter(column => (
-      // Damage ratio and tissue bridges need a cord mask; lesion-only tasks
-      // (lesion_ms) produce none, so their table keeps the lesion geometry.
-      this.inferenceExecutor.hasResult('segmentation') || !/damage|bridge/.test(column)
-    ));
-    const labelMap = {
-      lesion_id: 'Lesion',
-      volume_mm3: 'Volume mm3',
-      length_mm: 'Length mm',
-      max_width_mm: 'Width mm',
-      max_axial_damage_ratio: 'Damage',
-      dorsal_bridge_width_mm: 'Dorsal mm',
-      ventral_bridge_width_mm: 'Ventral mm',
-      total_bridge_width_mm: 'Bridge mm'
-    };
+    const title = Config.STAGE_NAMES[stage] || 'Statistics';
 
-    panel.innerHTML = '';
-    panel.classList.remove('hidden');
+    const block = document.createElement('div');
+    block.className = 'metrics-block';
+    block.dataset.metricsStage = stage;
 
     const dlSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>';
     const header = document.createElement('div');
     header.className = 'metrics-header';
-    const title = document.createElement('span');
-    title.className = 'metrics-title';
-    title.textContent = Config.STAGE_NAMES[stage] || 'Statistics';
-    header.appendChild(title);
+    const titleEl = document.createElement('span');
+    titleEl.className = 'metrics-title';
+    titleEl.textContent = title;
+    header.appendChild(titleEl);
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'metrics-download-btn';
     downloadBtn.type = 'button';
-    downloadBtn.title = 'Download statistics CSV';
-    downloadBtn.setAttribute('aria-label', 'Download statistics CSV');
+    downloadBtn.title = `Download ${title} CSV`;
+    downloadBtn.setAttribute('aria-label', `Download ${title} CSV`);
     downloadBtn.innerHTML = `${dlSvg}<span>CSV</span>`;
     downloadBtn.addEventListener('click', () => this.downloadMetricsResult(stage));
     header.appendChild(downloadBtn);
-    panel.appendChild(header);
+    block.appendChild(header);
+
+    if (view.note) {
+      const note = document.createElement('p');
+      note.className = 'step-description metrics-note';
+      note.textContent = view.note;
+      block.appendChild(note);
+    }
 
     const summaryGrid = document.createElement('div');
     summaryGrid.className = 'metrics-summary';
-    [
-      ['Lesions', summary.lesion_count],
-      ['Volume mm3', summary.total_volume_mm3],
-      ['Length mm', summary.total_length_mm],
-      ['Max width mm', summary.max_width_mm]
-    ].forEach(([label, value]) => {
+    view.summary.forEach(([label, value]) => {
       const item = document.createElement('div');
       item.className = 'metrics-summary-item';
       const labelEl = document.createElement('span');
@@ -1210,17 +1286,20 @@ export class SpinalCordToolboxApp {
       item.appendChild(valueEl);
       summaryGrid.appendChild(item);
     });
-    panel.appendChild(summaryGrid);
+    block.appendChild(summaryGrid);
 
     const wrapper = document.createElement('div');
     wrapper.className = 'metrics-table-wrapper';
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute('role', 'region');
+    wrapper.setAttribute('aria-label', `${title} table`);
     const table = document.createElement('table');
     table.className = 'metrics-table';
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
-    for (const column of tableColumns) {
+    for (const [, label] of view.columns) {
       const th = document.createElement('th');
-      th.textContent = labelMap[column] || column;
+      th.textContent = label;
       headRow.appendChild(th);
     }
     thead.appendChild(headRow);
@@ -1229,7 +1308,7 @@ export class SpinalCordToolboxApp {
     const tbody = document.createElement('tbody');
     for (const row of rows) {
       const tr = document.createElement('tr');
-      for (const column of tableColumns) {
+      for (const [column] of view.columns) {
         const td = document.createElement('td');
         td.textContent = this.formatMetric(row[column]);
         tr.appendChild(td);
@@ -1238,7 +1317,162 @@ export class SpinalCordToolboxApp {
     }
     table.appendChild(tbody);
     wrapper.appendChild(table);
-    panel.appendChild(wrapper);
+    block.appendChild(wrapper);
+
+    const existing = panel.querySelector(`[data-metrics-stage="${stage}"]`);
+    if (existing) existing.replaceWith(block);
+    else panel.appendChild(block);
+    panel.classList.remove('hidden');
+  }
+
+  // ==================== Morphometry ====================
+
+  resetMorphometrySources() {
+    this.morphometrySources = { masks: new Map(), discs: null };
+    this.syncMorphometryControls();
+  }
+
+  // Remembers which results of this image morphometry can measure.
+  registerMorphometrySource(stage, taskId) {
+    const file = this.inferenceExecutor.getResult(stage)?.file;
+    if (!file) return;
+    if (stage === 'segmentation') {
+      const task = SCT_TASKS.find(item => item.id === taskId) || this.selectedTask;
+      this.morphometrySources.masks.delete('segmentation');
+      this.morphometrySources.masks.set('segmentation', {
+        id: 'segmentation',
+        // The lesion task's `segmentation` stage is its spinal cord mask.
+        label: taskId === 'lesion_sci_t2' ? 'SCIseg spinal cord mask' : `${task?.displayName || 'SCT'} mask`,
+        file,
+        labelValue: null
+      });
+    } else if (stage === 'spine_step1') {
+      this.morphometrySources.masks.delete('spine_step1');
+      this.morphometrySources.masks.set('spine_step1', {
+        id: 'spine_step1',
+        label: 'TotalSpineSeg cord',
+        file,
+        labelValue: 1
+      });
+    } else if (stage === 'spine_discs') {
+      this.morphometrySources.discs = { id: 'spine_discs', label: 'TotalSpineSeg discs', file };
+    } else {
+      return;
+    }
+    this.syncMorphometryControls({ preferNewest: stage !== 'spine_discs' });
+  }
+
+  syncMorphometryControls({ preferNewest = false } = {}) {
+    const { masks, discs } = this.morphometrySources;
+    const maskSelect = document.getElementById('morphometryMask');
+    const discSelect = document.getElementById('morphometryDiscs');
+    const aggregateSelect = document.getElementById('morphometryAggregate');
+    if (!maskSelect || !discSelect || !aggregateSelect) return;
+
+    const fill = (select, entries, chosen) => {
+      select.innerHTML = '';
+      for (const [value, label] of entries) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = label;
+        select.appendChild(option);
+      }
+      if (entries.some(([value]) => value === chosen)) select.value = chosen;
+    };
+
+    const maskEntries = [...masks.values()].map(mask => [mask.id, mask.label]);
+    const newestMask = maskEntries.length ? maskEntries[maskEntries.length - 1][0] : '';
+    const previousMask = maskSelect.value;
+    fill(
+      maskSelect,
+      maskEntries.length ? maskEntries : [['', 'Run a segmentation first']],
+      preferNewest || !masks.has(previousMask) ? newestMask : previousMask
+    );
+
+    // Disc labels are used as soon as they exist; the choice stays visible
+    // and can be set back to "None".
+    const hadDiscOption = discSelect.querySelector('option[value="spine_discs"]') !== null;
+    const previousDiscs = discSelect.value;
+    fill(
+      discSelect,
+      discs ? [['', 'None'], [discs.id, discs.label]] : [['', 'None (run TotalSpineSeg)']],
+      discs && (!hadDiscOption || previousDiscs) ? discs.id : ''
+    );
+
+    const levelsAvailable = Boolean(discs) && discSelect.value !== '';
+    for (const option of aggregateSelect.options) {
+      if (option.value === 'level' || option.value === 'levels') option.disabled = !levelsAvailable;
+    }
+    if (!levelsAvailable && (aggregateSelect.value === 'level' || aggregateSelect.value === 'levels')) {
+      aggregateSelect.value = 'slice';
+    }
+    const levelsInput = document.getElementById('morphometryLevels');
+    if (levelsInput) levelsInput.disabled = !levelsAvailable;
+
+    const section = document.getElementById('morphometrySection');
+    const available = masks.size > 0;
+    const wasDisabled = section?.classList.contains('step-disabled');
+    this.setStepEnabled('morphometry', available);
+    if (section && available && wasDisabled) section.classList.remove('collapsed');
+    this.setStepButtonsEnabled('morphometry', available && !this.currentRunningStep);
+  }
+
+  // Reads the Morphometry section. Returns null after flagging the field
+  // that needs attention.
+  readMorphometrySettings() {
+    const { masks, discs } = this.morphometrySources;
+    const mask = masks.get(document.getElementById('morphometryMask')?.value);
+    if (!mask) return null;
+    const useDiscs = discs && document.getElementById('morphometryDiscs')?.value === discs.id;
+    const options = {
+      aggregate: document.getElementById('morphometryAggregate')?.value || 'slice',
+      angleCorrection: document.getElementById('morphometryAngleCorrection')?.checked !== false,
+      slices: '',
+      levels: ''
+    };
+    for (const [key, id] of [['slices', 'morphometrySlices'], ['levels', 'morphometryLevels']]) {
+      const input = document.getElementById(id);
+      if (!input || input.disabled) continue;
+      const text = input.value.trim();
+      if (/^all$/i.test(text)) continue;
+      try {
+        globalThis.SCTMorphometry.parseNumList(text);
+        input.setCustomValidity('');
+        options[key] = text;
+      } catch (error) {
+        input.setCustomValidity(`Use numbers and ranges such as 2:5 or 3;7. ${error.message}`);
+        const details = input.closest('details');
+        if (details) details.open = true;
+        input.reportValidity();
+        return null;
+      }
+    }
+    if (options.aggregate !== 'level' && options.aggregate !== 'levels') options.levels = '';
+    return { mask, discs: useDiscs ? discs : null, options };
+  }
+
+  async runMorphometry() {
+    if (this.inferenceExecutor.isRunning() || this.currentRunningStep) return;
+    const settings = this.readMorphometrySettings();
+    if (!settings) return;
+    const { mask, discs, options } = settings;
+
+    const maskData = await mask.file.arrayBuffer();
+    const discData = discs ? await discs.file.arrayBuffer() : null;
+    this.beginAbortableStep('morphometry', 'Measuring morphometry…');
+    this.setStepRunning('morphometry');
+    this.clearMetricsResult('morphometry');
+    this.logAnalysis(`Morphometry on ${mask.label}${discs ? ` with ${discs.label}` : ' without vertebral levels'}`);
+    await this.inferenceExecutor.runMorphometry({
+      maskData,
+      maskName: mask.label,
+      maskLabel: mask.labelValue,
+      filename: mask.file.name,
+      discData,
+      discName: discs?.label || null,
+      discFilename: discs?.file.name || null,
+      options
+    });
   }
 
   async viewStage(stage) {
@@ -1259,7 +1493,6 @@ export class SpinalCordToolboxApp {
     if (!file) return;
 
     this.currentResultTab = stage;
-    this.clearMetricsResult();
     this.setStageVisible('input', true);
 
     await this.renderViewerVolumes();
@@ -1454,6 +1687,7 @@ export class SpinalCordToolboxApp {
     this.abortUICheckpoint = null;
     this.setStatusError(false);
     this.progress.end('Complete');
+    this.syncMorphometryControls();
 
     if (this.isViewerAvailable() && this.getVisibleOverlayStages().length > 0) {
       await this.renderViewerVolumes();
@@ -1475,6 +1709,7 @@ export class SpinalCordToolboxApp {
         this.setStepButtonsEnabled(step, true);
       }
     }
+    this.syncMorphometryControls();
   }
 
   disableAllResultTabs() {
@@ -1487,6 +1722,7 @@ export class SpinalCordToolboxApp {
   clearResults() {
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
+    this.resetMorphometrySources();
     this.currentResultTab = 'input';
     this.setStageVisible('input', true);
 
@@ -1526,6 +1762,8 @@ export class SpinalCordToolboxApp {
     if (text === 'Cancelled') {
       this.setStatusError(false);
       this.progress.reset('Cancelled');
+      this.currentRunningStep = null;
+      this.syncMorphometryControls();
       return;
     }
     let label = null;

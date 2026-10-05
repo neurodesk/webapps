@@ -16,8 +16,6 @@ const {
   createCylinderMask,
   boundingBoxFromMask,
   cropVolume,
-  sliceMorphometry,
-  morphometryToCsv,
   createLabelsFromVertBody,
   smoothAlongAxis,
   extractMetricByLabels,
@@ -177,29 +175,6 @@ function assertNearlyEqual(actual, expected, tolerance = 1e-6) {
   assert.deepEqual(cropped.origin, [1, 1, 0]);
   assert.equal(cropped.data[index3D(0, 0, 0, cropped.dims)], 11);
   assert.equal(cropped.data[index3D(1, 1, 1, cropped.dims)], 22);
-}
-
-{
-  const dims = [4, 4, 2];
-  const seg = new Uint8Array(dims[0] * dims[1] * dims[2]);
-  seg[index3D(1, 1, 0, dims)] = 1;
-  seg[index3D(2, 1, 0, dims)] = 1;
-  seg[index3D(1, 2, 0, dims)] = 1;
-  seg[index3D(2, 2, 0, dims)] = 1;
-
-  const rows = sliceMorphometry(seg, dims, [0.5, 0.5, 2]);
-  assert.equal(rows[0].voxelCount, 4);
-  assert.equal(rows[0].areaMm2, 1);
-  assert.equal(rows[0].centroidX, 1.5);
-  assert.equal(rows[0].centroidY, 1.5);
-  assert.equal(rows[1].voxelCount, 0);
-
-  assert.equal(
-    morphometryToCsv(rows),
-    'slice,voxel_count,area_mm2,equivalent_diameter_mm,centroid_x,centroid_y\n'
-      + '0,4,1,1.128379,1.5,1.5\n'
-      + '1,0,0,0,,\n'
-  );
 }
 
 {

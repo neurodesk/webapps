@@ -5,12 +5,11 @@ const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const loadClassicScript = require('./load-classic-script.cjs');
 const fixtures = require('./batch-parity-fixtures.cjs');
 const { loadNifti } = require('./batch-parity-lib.cjs');
 const { ensureSctBatchFixtures } = require('./huggingface-fixtures.cjs');
 const manifest = require('../web/models/manifest.json');
-const lesionAnalysis = loadClassicScript(path.join(__dirname, '../web/js/modules/lesion-analysis.js'));
+const { lesionAnalysis, loadRpiVolume } = require('./sct-metrics-lib.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -126,14 +125,15 @@ function assertMetadataComparable(fixture, expected, produced) {
   assert.equal(produced.header.datatypeCode, 2, `${fixture.id}: browser output is uint8 label data`);
 }
 
-function lesionMetricsFor(scPath, lesionPath) {
-  const spinalCord = loadNifti(scPath);
-  const lesion = loadNifti(lesionPath);
+async function lesionMetricsFor(scPath, lesionPath) {
+  const spinalCord = await loadRpiVolume(scPath);
+  const lesion = await loadRpiVolume(lesionPath);
   return lesionAnalysis.analyzeLesions({
     spinalCord: spinalCord.data,
     lesion: lesion.data,
-    dims: spinalCord.header.dims.slice(1, 4),
-    spacing: spinalCord.header.pixDims.slice(1, 4).map(value => Math.abs(value) || 1)
+    dims: spinalCord.dims,
+    spacing: spinalCord.spacing,
+    nativeFlips: spinalCord.nativeFlips
   });
 }
 
@@ -142,23 +142,27 @@ function assertRelativeClose(actual, expected, tolerance, label) {
   assert.ok(Math.abs(actual - expected) <= allowed, `${label}: ${actual} is within ${tolerance * 100}% of ${expected}`);
 }
 
-function assertLesionMetricsFixture() {
+async function assertLesionMetricsFixture() {
   const fixture = fixtures.FIXTURE_CASES.find(item => item.id === 'batch_t2_deepseg_lesion_sci_t2');
   assert.ok(fixture, 'SCI lesion fixture exists for metrics validation');
-  const expectedMetrics = lesionMetricsFor(
+  const expectedMetrics = await lesionMetricsFor(
     expectedOutputPathForCheck({ stage: 'segmentation' }, fixture),
     expectedOutputPathForCheck({ stage: 'lesion' }, fixture)
   );
-  const producedMetrics = lesionMetricsFor(
+  const producedMetrics = await lesionMetricsFor(
     browserOutputPathForCheck({ stage: 'segmentation' }, fixture),
     browserOutputPathForCheck({ stage: 'lesion' }, fixture)
   );
-  assert.ok(producedMetrics.csv.includes('dorsal_bridge_width_mm'), 'browser lesion metrics CSV includes tissue-bridge columns');
+  assert.ok(producedMetrics.csv.includes('interpolated_dorsal_bridge_width [mm]'), 'browser lesion metrics CSV includes tissue-bridge columns');
   assert.ok(producedMetrics.summary.lesion_count >= expectedMetrics.summary.lesion_count, 'browser metrics preserve the expected SCI lesion component');
   assert.ok(producedMetrics.summary.lesion_count <= expectedMetrics.summary.lesion_count + 1, 'browser metrics do not add more than one small extra component on the fake-lesion fixture');
   assertRelativeClose(producedMetrics.summary.total_volume_mm3, expectedMetrics.summary.total_volume_mm3, 0.25, 'lesion total volume');
-  assertRelativeClose(producedMetrics.summary.total_length_mm, expectedMetrics.summary.total_length_mm, 0.25, 'lesion total length');
   assertRelativeClose(producedMetrics.summary.max_width_mm, expectedMetrics.summary.max_width_mm, 0.30, 'lesion max width');
+  // SCT's total length sums the lengths of all lesions, so the small extra
+  // component allowed above would add its whole length. Compare the lesion
+  // that both segmentations find: the largest one.
+  const largest = metrics => metrics.rows.reduce((best, row) => (row['volume [mm3]'] > best['volume [mm3]'] ? row : best));
+  assertRelativeClose(largest(producedMetrics)['length [mm]'], largest(expectedMetrics)['length [mm]'], 0.25, 'largest lesion length');
 }
 
 const supportedTasks = new Set(
@@ -246,7 +250,7 @@ function ensureBrowserOutputs() {
     assert.ok(stats.dice >= check.minDice, `${check.id}: Dice ${stats.dice.toFixed(4)} >= ${check.minDice.toFixed(4)}`);
     results.push(`${check.id}: dice=${stats.dice.toFixed(4)} expectedNz=${stats.expectedNz} producedNz=${stats.producedNz}`);
   }
-  assertLesionMetricsFixture();
+  await assertLesionMetricsFixture();
 
   console.log(`Browser fixture parity passed:\n${results.join('\n')}`);
 })().catch(error => {

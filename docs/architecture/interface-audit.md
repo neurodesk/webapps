@@ -53,7 +53,7 @@ Data workflows exercised for this change include:
 - SynthSR compact input bounds, shared examples, failed-download state preservation, and real `chris_t1` loading at 188 × 256 × 190 voxels. All 19 shared example URLs returned HTTP 200.
 - Easy MP2RAGE parameter-family selection, parameter retention, NIfTI denoising, downloads, and About.
 - MRI2VID NIfTI import and the About and Privacy dialogs.
-- SCT NIfTI import and threshold preservation across disclosure changes.
+- SCT NIfTI import and threshold preservation across disclosure changes; the Morphometry section staying closed until the session has a mask, then measuring it without inference and keeping its settings across disclosure changes.
 - SurfAnnotate surface loading, curvature overlays, ROI filling, and exported labels using cortical fixtures, plus initial panel states using a small OBJ file.
 - ZARRo volume loading, measurement, contrast, share links, and large NIfTI export progress and cancellation.
 - dicompare keyboard workflow cards and runtime status positioning.

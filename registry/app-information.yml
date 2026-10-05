@@ -142,6 +142,18 @@ apps:
         title: TotalSpineSeg
         reference: "Warszawer Y, Molinier N, Valošek J, et al. TotalSpineSeg: Robust spine segmentation and labeling across multiple MRI contrasts. Proceedings of the ISMRM. 2025."
         url: https://github.com/neuropoly/totalspineseg
+      - group: Lesion analysis
+        title: Midsagittal tissue bridges
+        reference: "Huber E, Lachappelle P, Sutter R, Curt A, Freund P. Are midsagittal tissue bridges predictive of outcome after cervical spinal cord injury? Annals of Neurology. 2017;81(5):740–748."
+        doi: 10.1002/ana.24932
+      - group: Lesion analysis
+        title: Axial damage ratio
+        reference: "Smith AC, Albin SR, O'Dell DR, et al. Axial MRI biomarkers of spinal cord damage to predict future walking and motor function: a retrospective study. Spinal Cord. 2021;59(6):693–699."
+        doi: 10.1038/s41393-020-00561-w
+      - group: Morphometry
+        title: Cord centerline smoothing spline (FITPACK)
+        reference: "Dierckx P. Curve and Surface Fitting with Splines. Oxford University Press; 1993."
+        url: https://www.netlib.org/dierckx/
       - group: Deep learning framework
         title: PyTorch
         reference: "Paszke A, Gross S, Massa F, et al. PyTorch: An imperative style, high-performance deep learning library. Advances in Neural Information Processing Systems. 2019;32."
