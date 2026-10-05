@@ -4463,7 +4463,7 @@ function syncCrosshairAppearance(): void {
 }
 
 function syncCrosshairOverlay(): void {
-  if (!nv || !els.showCrosshair.checked || nv.volumes.length === 0) {
+  if (!nv || nvSlideLayoutActive() || !els.showCrosshair.checked || nv.volumes.length === 0) {
     els.crosshairOverlay.setAttribute('hidden', '')
     return
   }
