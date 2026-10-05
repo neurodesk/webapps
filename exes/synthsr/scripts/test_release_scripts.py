@@ -94,6 +94,29 @@ fi
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse(executed)
 
+    def notarize(self, verifier_exit):
+        self.executable("pkgutil", "echo 'Status: signed by a developer certificate'\n")
+        self.executable("xcrun", "echo \"xcrun $*\"\n")
+        self.executable("spctl", "echo 'source=Notarized Developer ID'\n")
+        verifier = self.executable("node-cli-verifier", f'echo "verified $1"\nexit {verifier_exit}\n')
+        package = self.directory / "tool.pkg"
+        package.touch()
+        result = subprocess.run(
+            ["sh", str(ROOT / "scripts/notarize_macos.sh"), str(package), "tool-ci"],
+            env={**self.environment, "EXPECTED_TEAM_ID": "ABCDE12345", "VERIFY_MACOS_PKG": str(verifier)},
+            capture_output=True, text=True,
+        )
+        return result, self.directory / "tool.pkg.validation.txt"
+
+    def test_notarization_runs_the_named_payload_verifier(self):
+        result, evidence = self.notarize(0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"verified {self.directory / 'tool.pkg'}", evidence.read_text())
+        self.assertIn("source=Notarized Developer ID", evidence.read_text())
+        result, _ = self.notarize(7)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("Notarized, stapled", result.stdout)
+
     def test_reference_generation_creates_new_output_directory(self):
         out = self.directory / "new output"
         source = self.directory / "input.nii.gz"
