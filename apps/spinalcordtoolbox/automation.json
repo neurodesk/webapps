@@ -164,9 +164,9 @@
           "formats": [
             "nifti"
           ],
-          "description": "Spinal cord mask on the same grid; lesion voxels outside it are ignored and it gives the cord angles",
+          "description": "Spinal cord mask on the same grid; lesion voxels outside it are ignored and it gives the cord angles. Without it only lesion volume, length, width and equivalent diameter are reported (lengths not angle-corrected)",
           "space": "native",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 1
         },
         "image": {

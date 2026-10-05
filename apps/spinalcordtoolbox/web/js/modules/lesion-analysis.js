@@ -7,6 +7,11 @@
  * the interpolated midsagittal slice, and tissue bridges. The CSV has the
  * columns of SCT's `measures` sheet, in SCT's order.
  *
+ * Without a cord mask (lesion-only models such as lesion_ms) SCT computes the
+ * volume only; the app also reports length, width and equivalent diameter
+ * without angle correction (there is no cord to take angles from) and leaves
+ * every cord-relative column empty. See `analyzeLesionsWithoutCord`.
+ *
  * Not ported: `-f` (lesion distribution over a registered PAM50 atlas, which
  * needs template registration), `-perslice` (only meaningful with `-f`),
  * `-nli-slice` and the QC report. Where SCT stops with an error (no lesion,
@@ -139,7 +144,8 @@
   /**
    * @param {object} input
    * @param {ArrayLike<number>} input.lesion RPI binary lesion mask
-   * @param {ArrayLike<number>} input.spinalCord RPI cord mask
+   * @param {ArrayLike<number>} [input.spinalCord] RPI cord mask; without
+   *   it only lesion geometry is measured
    * @param {number[]} input.dims [nx, ny, nz]
    * @param {number[]} input.spacing voxel size in mm
    * @param {boolean[]} [input.nativeFlips] per RPI axis, whether the stored
@@ -151,12 +157,12 @@
    */
   function analyzeLesions(input) {
     const { lesion, spinalCord, dims } = input;
-    if (!lesion || !spinalCord || !dims) {
-      throw new Error('lesion, spinalCord, and dims are required');
+    if (!lesion || !dims) {
+      throw new Error('lesion and dims are required');
     }
     const [nx, ny, nz] = dims;
     const voxels = nx * ny * nz;
-    if (lesion.length !== voxels || spinalCord.length !== voxels) {
+    if (lesion.length !== voxels || (spinalCord && spinalCord.length !== voxels)) {
       throw new Error(`Mask length mismatch for dims ${dims.join('x')}`);
     }
     if (input.image && input.image.length !== voxels) {
@@ -175,6 +181,7 @@
       : [];
     const columns = [...BASE_COLUMNS, ...imageColumns];
     const emptySummary = { lesion_count: 0, total_volume_mm3: 0, total_length_mm: 0, max_width_mm: 0 };
+    if (!spinalCord) return analyzeLesionsWithoutCord(input, { spacing, columns, imageColumns, emptySummary });
 
     // label_lesion, then measure(): the labels come from the whole mask, the
     // measures from its part inside the cord.
@@ -202,7 +209,8 @@
         summary: emptySummary,
         csv: buildCsv([], [...columns, ...CORD_COLUMNS]),
         warnings,
-        componentLabels: labels
+        componentLabels: labels,
+        cordRestricted: true
       };
     }
 
@@ -440,8 +448,72 @@
       summary,
       csv: buildCsv(rows, allColumns),
       warnings,
-      componentLabels: labels
+      componentLabels: labels,
+      cordRestricted: true
     };
+  }
+
+  /**
+   * `sct_analyze_lesion -m lesion [-i image]` without `-s`. SCT measures the
+   * volume only. Length, width and equivalent diameter are added here with
+   * the cord angle taken as zero, because a lesion-only model has no cord to
+   * correct by. The cord-relative columns are not written at all, as in SCT.
+   */
+  function analyzeLesionsWithoutCord(input, { spacing, columns, imageColumns, emptySummary }) {
+    const { lesion, dims } = input;
+    const [nx, ny, nz] = dims;
+    const [px, py, pz] = spacing;
+    const at = (x, y, z) => x + y * nx + z * nx * ny;
+    const { labels, count } = labelLesions(lesion, dims);
+    const voxelsByLabel = Array.from({ length: count + 1 }, () => []);
+    for (let x = 0; x < nx; x++) {
+      for (let y = 0; y < ny; y++) {
+        for (let z = 0; z < nz; z++) {
+          const label = labels[at(x, y, z)];
+          if (label) voxelsByLabel[label].push([x, y, z]);
+        }
+      }
+    }
+    const warnings = ['No cord mask: cord-relative metrics are empty and lengths are not angle-corrected.'];
+    const rows = [];
+    for (let label = 1; label <= count; label++) {
+      const lesionVoxels = voxelsByLabel[label];
+      const countByZ = new Int32Array(nz);
+      const minYByZ = new Int32Array(nz).fill(ny);
+      const maxYByZ = new Int32Array(nz).fill(-1);
+      for (const [, y, z] of lesionVoxels) {
+        countByZ[z] += 1;
+        if (y < minYByZ[z]) minYByZ[z] = y;
+        if (y > maxYByZ[z]) maxYByZ[z] = y;
+      }
+      const lesionSlices = [];
+      for (let z = 0; z < nz; z++) if (countByZ[z]) lesionSlices.push(z);
+      const maxCount = Math.max(...lesionSlices.map(z => countByZ[z]));
+      const row = {
+        label,
+        'volume [mm3]': lesionVoxels.length * px * py * pz,
+        'length [mm]': lesionSlices.length * pz,
+        'width [mm]': Math.max(...lesionSlices.map(z => (maxYByZ[z] - minYByZ[z] + 1) * py)),
+        'max_equivalent_diameter [mm]': 2 * Math.sqrt((maxCount * px * py) / Math.PI)
+      };
+      if (input.image) {
+        const values = lesionVoxels.map(([x, y, z]) => input.image[at(x, y, z)]).filter(value => value !== 0);
+        const mean = values.length ? sum(values) / values.length : NaN;
+        row[imageColumns[0]] = mean;
+        row[imageColumns[1]] = values.length ? Math.sqrt(sum(values.map(value => (value - mean) * (value - mean))) / values.length) : NaN;
+      }
+      rows.push(row);
+    }
+    const summary = rows.length
+      ? {
+          lesion_count: rows.length,
+          total_volume_mm3: sum(rows.map(row => row['volume [mm3]'])),
+          total_length_mm: sum(rows.map(row => row['length [mm]'])),
+          max_width_mm: Math.max(...rows.map(row => row['width [mm]']))
+        }
+      : emptySummary;
+    if (!rows.length) warnings.push('No lesion in the mask.');
+    return { rows, columns, summary, csv: buildCsv(rows, columns), warnings, componentLabels: labels, cordRestricted: false };
   }
 
   return {
@@ -449,6 +521,8 @@
     buildCsv,
     labelLesions,
     BASE_COLUMNS,
-    CORD_COLUMNS
+    CORD_COLUMNS,
+    // Columns that need a cord mask: empty in a lesion-only table.
+    CORD_RELATIVE_COLUMNS: Object.freeze(['max_axial_damage_ratio []', ...CORD_COLUMNS])
   };
 });

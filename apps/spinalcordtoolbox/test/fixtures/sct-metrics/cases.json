@@ -21,46 +21,66 @@
       "id": "t2_perslice",
       "mask": "t2_seg",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     },
     {
       "id": "t2_all",
       "mask": "t2_seg",
       "sct": "",
-      "app": { "aggregate": "all" }
+      "app": {
+        "aggregate": "all"
+      }
     },
     {
       "id": "t2_z",
       "mask": "t2_seg",
       "sct": "-z 50:100",
-      "app": { "aggregate": "all", "slices": "50:100" }
+      "app": {
+        "aggregate": "all",
+        "slices": "50:100"
+      }
     },
     {
       "id": "t2_noangle",
       "mask": "t2_seg",
       "sct": "-angle-corr 0 -z 60:90 -perslice 1",
-      "app": { "aggregate": "slice", "slices": "60:90", "angleCorrection": false }
+      "app": {
+        "aggregate": "slice",
+        "slices": "60:90",
+        "angleCorrection": false
+      }
     },
     {
       "id": "t2_perlevel",
       "mask": "t2_seg",
       "discs": true,
       "sct": "-vert 2:8 -perlevel 1",
-      "app": { "aggregate": "level", "levels": "2:8" }
+      "app": {
+        "aggregate": "level",
+        "levels": "2:8"
+      }
     },
     {
       "id": "t2_levels",
       "mask": "t2_seg",
       "discs": true,
       "sct": "-vert 3:5",
-      "app": { "aggregate": "levels", "levels": "3:5" }
+      "app": {
+        "aggregate": "levels",
+        "levels": "3:5"
+      }
     },
     {
       "id": "t2_perslice_levels",
       "mask": "t2_seg",
       "discs": true,
       "sct": "-z 150:200 -perslice 1",
-      "app": { "aggregate": "slice", "slices": "150:200" }
+      "app": {
+        "aggregate": "slice",
+        "slices": "150:200"
+      }
     },
     {
       "id": "t2_ail_perlevel",
@@ -68,49 +88,67 @@
       "discs": true,
       "orient": "AIL",
       "sct": "-vert 1:11 -perlevel 1",
-      "app": { "aggregate": "level", "levels": "1:11" }
+      "app": {
+        "aggregate": "level",
+        "levels": "1:11"
+      }
     },
     {
       "id": "t1_z_perslice",
       "mask": "t1_seg",
       "sct": "-z 20:60 -perslice 1",
-      "app": { "aggregate": "slice", "slices": "20:60" }
+      "app": {
+        "aggregate": "slice",
+        "slices": "20:60"
+      }
     },
     {
       "id": "t1_all",
       "mask": "t1_seg",
       "sct": "",
-      "app": { "aggregate": "all" }
+      "app": {
+        "aggregate": "all"
+      }
     },
     {
       "id": "mt_perslice",
       "mask": "mt_seg",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     },
     {
       "id": "t2s_perslice",
       "mask": "t2s_seg",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     },
     {
       "id": "t2s_gm_perslice",
       "mask": "t2s_gmseg",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     },
     {
       "id": "dmri_perslice",
       "mask": "dmri_seg",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     },
     {
       "id": "lesion_cord_perslice",
       "mask": "les_sc",
       "sct": "-perslice 1",
-      "app": { "aggregate": "slice" }
+      "app": {
+        "aggregate": "slice"
+      }
     }
   ],
   "lesion": [
@@ -130,6 +168,12 @@
       "lesion": "les_multi",
       "synthetic": true,
       "cord": "les_sc"
+    },
+    {
+      "id": "fake_lesion_no_cord",
+      "lesion": "les_lesion",
+      "image": "les",
+      "note": "SCT without -s measures the volume only; the app adds uncorrected length, width and equivalent diameter"
     }
   ]
 }

@@ -105,6 +105,31 @@ const {
   volumeInfo: postVolumeInfo,
 } = workerMessages;
 
+// postLog writes the technical log. postAnalysis writes the analysis log: input, results and
+// the warnings that change how a result should be read.
+function postAnalysis(message, level = 'info') {
+  postLog(message, { channel: 'analysis', level });
+}
+
+// Result summary for the analysis log. Returns the labelled voxel count.
+function postMaskSummary(stage, labels) {
+  const seen = new Set();
+  let voxels = 0;
+  let last = 0;
+  for (let i = 0; i < labels.length; i++) {
+    const value = labels[i];
+    if (value > 0) {
+      voxels++;
+      if (value !== last) seen.add(value);
+    }
+    last = value;
+  }
+  const [dx, dy, dz] = workerState.rasSpacing || [1, 1, 1];
+  const labelText = seen.size > 1 ? `${seen.size} labels, ` : '';
+  postAnalysis(`${stage}: ${labelText}${voxels} voxels (${(voxels * dx * dy * dz).toFixed(1)} mm^3)`);
+  return voxels;
+}
+
 function postStageData(stage, niftiData, description) {
   workerMessages.stageData(stage, niftiData, description, {
     kind: 'nifti',
@@ -232,10 +257,10 @@ async function fetchModel(url, modelName, progressBase, progressSpan) {
  * The metrics depend only on the masks and the image, not on the run that
  * made them, so inference and `run-lesion-metrics` share this function.
  */
-function emitLesionMetrics({ lesionRAS, cordRAS, imageRAS = null, imageName = 'image', dims, spacing, flip, taskId }) {
+function emitLesionMetrics({ lesionRAS, cordRAS = null, imageRAS = null, imageName = 'image', dims, spacing, flip, taskId, stage = 'lesion_metrics' }) {
   const metrics = SCTLesionAnalysis.analyzeLesions({
     lesion: SCTCenterline.rasToRpi(lesionRAS, dims),
-    spinalCord: SCTCenterline.rasToRpi(cordRAS, dims),
+    spinalCord: cordRAS ? SCTCenterline.rasToRpi(cordRAS, dims) : null,
     image: imageRAS ? SCTCenterline.rasToRpi(imageRAS, dims) : null,
     imageName,
     dims,
@@ -243,9 +268,9 @@ function emitLesionMetrics({ lesionRAS, cordRAS, imageRAS = null, imageName = 'i
     nativeFlips: SCTCenterline.nativeFlipsFromRas(flip)
   });
   metrics.filename = `${taskId}_lesion_metrics.csv`;
-  postMetricsData('lesion_metrics', metrics, 'Lesion metrics (sct_analyze_lesion)');
-  for (const warning of metrics.warnings) postLog(`Lesion metrics: ${warning}`);
-  postLog(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3.toFixed(2)} mm^3, total length=${metrics.summary.total_length_mm.toFixed(2)} mm`);
+  postMetricsData(stage, metrics, 'Lesion metrics (sct_analyze_lesion)');
+  for (const warning of metrics.warnings) postAnalysis(`Lesion metrics: ${warning}`, 'warning');
+  postAnalysis(`Lesion metrics: ${metrics.summary.lesion_count} lesion(s), total volume=${metrics.summary.total_volume_mm3.toFixed(2)} mm^3, total length=${metrics.summary.total_length_mm.toFixed(2)} mm`);
 }
 
 function sameGrid(a, b) {
@@ -308,9 +333,9 @@ function stepMorphometry(params) {
     },
     filename: `${filename.replace(/\.nii(\.gz)?$/i, '')}_morphometry.csv`
   }, 'Spinal cord morphometry (sct_process_segmentation)');
-  postLog(`Morphometry: ${result.summary.command}`);
+  postAnalysis(`Morphometry: ${result.summary.command}`);
   const fixed = value => (Number.isFinite(value) ? value.toFixed(2) : 'n/a');
-  postLog(`Morphometry: ${result.summary.row_count} row(s); mean CSA=${fixed(result.summary.mean_area_mm2)} mm^2, length=${fixed(result.summary.length_mm)} mm; mask spans slices ${result.summary.slice_range}`);
+  postAnalysis(`Morphometry: ${result.summary.row_count} row(s); mean CSA=${fixed(result.summary.mean_area_mm2)} mm^2, length=${fixed(result.summary.length_mm)} mm; mask spans slices ${result.summary.slice_range}`);
   postProgress(1.0, 'Complete');
   postStepComplete('morphometry');
 }
@@ -322,11 +347,11 @@ function stepMorphometry(params) {
  */
 function stepLesionMetrics(params) {
   const { lesionData, cordData, imageData = null } = params;
-  if (!lesionData || !cordData) throw new Error('Lesion metrics need a lesion mask and a cord mask.');
+  if (!lesionData) throw new Error('Lesion metrics need a lesion mask.');
   postProgress(0.05, 'Reading masks...');
   const lesion = prepareRasWorkerInput(parseNiftiInput(lesionData));
-  const cord = prepareRasWorkerInput(parseNiftiInput(cordData));
-  if (!sameGrid(lesion, cord)) {
+  const cord = cordData ? prepareRasWorkerInput(parseNiftiInput(cordData)) : null;
+  if (cord && !sameGrid(lesion, cord)) {
     throw new Error('Lesion and cord masks are on different grids; they must come from the same image.');
   }
   let image = null;
@@ -337,7 +362,7 @@ function stepLesionMetrics(params) {
   postProgress(0.3, 'Computing lesion metrics...');
   emitLesionMetrics({
     lesionRAS: lesion.rasData,
-    cordRAS: cord.rasData,
+    cordRAS: cord ? cord.rasData : null,
     imageRAS: image ? image.rasData : null,
     imageName: params.imageName || 'image',
     dims: lesion.rasDims,
@@ -362,7 +387,7 @@ function prepareInputState(inputData, { emitUpdates = false } = {}) {
   const prepared = prepareRasWorkerInput(parseNiftiInput(inputData));
   Object.assign(workerState, prepared);
   if (emitUpdates) {
-    postLog(`Volume: ${prepared.origDims.join('x')}, spacing: ${prepared.rasSpacing.map(value => value.toFixed(3)).join('x')}mm`);
+    postAnalysis(`Input volume: ${prepared.origDims.join('x')}, spacing: ${prepared.rasSpacing.map(value => value.toFixed(3)).join('x')}mm`);
     postLog(`RAS dims: ${prepared.rasDims.join('x')}`);
   }
 
@@ -525,6 +550,8 @@ async function stepInference(params) {
         testTimeAugmentation,
         channelCount,
         regions,
+        paddingMode: output.paddingMode,
+        gaussianSigmaScale: output.gaussianSigmaScale,
         onLog: (msg) => postLog(msg),
         onProgress: progressHandler,
         onPatchStats: (pi, s) => {
@@ -543,7 +570,7 @@ async function stepInference(params) {
     let lesionRAS = null;
     for (const region of result.regions) {
       const stage = region.stage || region.name || `channel_${region.channel}`;
-      const description = region.description || (stage === 'lesion' ? 'SCI lesion segmentation' : 'SCT segmentation');
+      const description = region.description || (stage === 'lesion' ? 'Lesion segmentation' : 'SCT segmentation');
       const preCleanupRAS = modelOutputToRas(region.preCleanupLabels, region.dims, Uint8Array);
       const outputRAS = modelOutputToRas(region.labels, region.dims, Uint8Array);
       if (stage === 'segmentation') {
@@ -563,20 +590,20 @@ async function stepInference(params) {
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData(stage, outputNifti, description);
 
-      let finalVoxels = 0;
-      for (let i = 0; i < outputLabels.length; i++) {
-        if (outputLabels[i] > 0) finalVoxels++;
-      }
-      postLog(`${stage}: ${finalVoxels} foreground voxels`);
+      const finalVoxels = postMaskSummary(stage, outputLabels);
       if (finalVoxels === 0) {
         const stats = region.probStats;
-        postLog(`WARNING: ${stage} mask is empty. Probability map max=${stats?.max?.toFixed?.(4) || 'n/a'} (threshold=${region.threshold}).`);
+        postAnalysis(`WARNING: ${stage} mask is empty. Probability map max=${stats?.max?.toFixed?.(4) || 'n/a'} (threshold=${region.threshold}).`, 'warning');
       }
     }
 
     if (workerState.segLabelsRAS) emitSegmentationStateArtifact();
 
-    if (spinalCordRAS && lesionRAS) {
+    // A model that segments the cord as well gets cord-relative metrics. A
+    // lesion-only model (lesion_ms) opts in through output.metricsStage and gets
+    // lesion geometry only, with the cord-relative columns left empty.
+    const metricsStage = output.metricsStage || 'lesion_metrics';
+    if (lesionRAS && (spinalCordRAS || output.metricsStage)) {
       postProgress(0.94, 'Computing lesion metrics...');
       emitLesionMetrics({
         lesionRAS,
@@ -585,7 +612,8 @@ async function stepInference(params) {
         dims: workerState.rasDims,
         spacing: workerState.rasSpacing,
         flip: workerState.flip,
-        taskId
+        taskId,
+        stage: metricsStage
       });
     }
   } else if (output.activation === 'sigmoid-labels') {
@@ -626,7 +654,7 @@ async function stepInference(params) {
       const processed = self.TotalSpineSeg.postprocessStep1(rawRAS.data, rawRAS.dims, {
         discPointRadius: output.discPointRadius
       });
-      for (const warning of processed.warnings) postLog(`TotalSpineSeg warning: ${warning}`);
+      for (const warning of processed.warnings) postAnalysis(`TotalSpineSeg warning: ${warning}`, 'warning');
 
       const stages = [
         {
@@ -648,6 +676,7 @@ async function stepInference(params) {
         }
         const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
         postStageData(stageOutput.stage, outputNifti, stageOutput.description);
+        postMaskSummary(stageOutput.stage, outputLabels);
       }
     } else {
       let outputLabels = rawRAS.data;
@@ -656,6 +685,7 @@ async function stepInference(params) {
       }
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData('segmentation', outputNifti, 'SCT sigmoid-label segmentation');
+      postMaskSummary('segmentation', outputLabels);
     }
   } else if (output.activation === 'softmax') {
     const channelCount = output.channelCount || output.channelOrder?.length || output.classLabels?.length || 1;
@@ -693,7 +723,7 @@ async function stepInference(params) {
       const processed = self.TotalSpineSeg.postprocessStep1(rawRAS.data, rawRAS.dims, {
         discPointRadius: output.discPointRadius
       });
-      for (const warning of processed.warnings) postLog(`TotalSpineSeg warning: ${warning}`);
+      for (const warning of processed.warnings) postAnalysis(`TotalSpineSeg warning: ${warning}`, 'warning');
 
       const stages = [
         {
@@ -715,6 +745,7 @@ async function stepInference(params) {
         }
         const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
         postStageData(stageOutput.stage, outputNifti, stageOutput.description);
+        postMaskSummary(stageOutput.stage, outputLabels);
       }
     } else {
       let outputLabels = rawRAS.data;
@@ -723,6 +754,7 @@ async function stepInference(params) {
       }
       const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
       postStageData('segmentation', outputNifti, 'SCT multiclass segmentation');
+      postMaskSummary('segmentation', outputLabels);
     }
   } else {
     // Delegate the per-patch inference + sliding-window orchestration to the
@@ -764,13 +796,9 @@ async function stepInference(params) {
     const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
     postStageData('segmentation', outputNifti, 'SCT segmentation');
 
-    let finalVoxels = 0;
-    for (let i = 0; i < outputLabels.length; i++) {
-      if (outputLabels[i] > 0) finalVoxels++;
-    }
-    postLog(`Output: ${finalVoxels} foreground voxels`);
+    const finalVoxels = postMaskSummary('segmentation', outputLabels);
     if (finalVoxels === 0) {
-      postLog(`WARNING: Segmentation is empty. Probability map max=${result.probStats.max.toFixed(4)} (threshold=${threshold}). Try lowering the probability threshold or check input contrast/orientation.`);
+      postAnalysis(`WARNING: Segmentation is empty. Probability map max=${result.probStats.max.toFixed(4)} (threshold=${threshold}). Try lowering the probability threshold or check input contrast/orientation.`, 'warning');
     }
   }
 

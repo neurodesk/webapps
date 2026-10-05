@@ -33,6 +33,7 @@ const ROOT = path.resolve(__dirname, '..');
 const FIXTURE_DIR = path.join(ROOT, 'test/fixtures/sct-metrics');
 const cases = require(path.join(FIXTURE_DIR, 'cases.json'));
 const TOLERANCE = 1e-9;
+const UNCORRECTED_WITHOUT_CORD = new Set(['length [mm]', 'width [mm]', 'max_equivalent_diameter [mm]']);
 const VERBOSE = process.argv.includes('--report');
 
 const worst = new Map();
@@ -113,7 +114,8 @@ async function checkMorphometry(item, volumes, discs) {
 }
 
 async function checkLesion(item, volumes) {
-  const cord = volumes[item.cord];
+  // A lesion-only case has no cord: the lesion mask gives the grid.
+  const cord = volumes[item.cord || item.lesion];
   let lesion;
   if (item.synthetic) {
     const stored = JSON.parse(fs.readFileSync(path.join(FIXTURE_DIR, `${item.lesion}.json`), 'utf8'));
@@ -124,7 +126,7 @@ async function checkLesion(item, volumes) {
   }
   const result = lesionAnalysis.analyzeLesions({
     lesion,
-    spinalCord: cord.data,
+    spinalCord: item.cord ? cord.data : null,
     dims: cord.dims,
     spacing: cord.spacing,
     nativeFlips: cord.nativeFlips,
@@ -141,6 +143,9 @@ async function checkLesion(item, volumes) {
       const where = `${item.id} lesion ${expectedRow[0].text}`;
       if (column === 'label') {
         assert.equal(actualRow[index].text, expectedRow[index].text, `${where}: label`);
+      } else if (expectedRow[index].text === '' && !item.cord && UNCORRECTED_WITHOUT_CORD.has(column)) {
+        // Documented extension: SCT leaves these empty without -s.
+        assert.ok(Number.isFinite(Number(actualRow[index].text)), `${where} ${column}: the app measures it without a cord`);
       } else if (expectedRow[index].text === '') {
         assert.equal(actualRow[index].text, '', `${where} ${column}: empty in SCT`);
       } else {

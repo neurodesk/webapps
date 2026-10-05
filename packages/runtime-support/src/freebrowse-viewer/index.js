@@ -1,9 +1,15 @@
-import { NiiVue, SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
+import { DRAG_MODE, NiiVue, SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue';
 import { mountFreeBrowse } from 'freebrowse';
 import freebrowseStyles from 'freebrowse/style.css?inline';
 import workspaceStyles from '@neurodesk/webapp-components/styles/imaging-workspace.css?inline';
+import { bindTouchGestures } from './touch-gestures.js';
 
-export function mountViewer(element, options) {
+// Mounts FreeBrowse around a host-owned NiiVue instance inside an open shadow
+// root. Returns { nv, ready, destroy }; await `ready` before loading files.
+// `options` are NiiVue constructor options. `embed.canvasLabel` names the
+// canvas for assistive technology; `embed.sidebar` opens FreeBrowse's panel.
+export function mountViewer(element, options, embed = {}) {
+  const { canvasLabel = 'Image viewer', sidebar = false } = embed;
   const shadow = element.shadowRoot || element.attachShadow({ mode: 'open' });
   shadow.replaceChildren();
   const style = document.createElement('style');
@@ -12,6 +18,7 @@ export function mountViewer(element, options) {
   container.className = 'nd-freebrowse';
   shadow.append(style, container);
   let destroyed = false;
+  let releaseGestures = null;
   const { promise: ready, resolve, reject } = Promise.withResolvers();
   const timeout = setTimeout(() => reject(new Error('FreeBrowse could not initialize its canvas. Reload the page to retry.')), 30_000);
   void ready.then(() => clearTimeout(timeout), () => clearTimeout(timeout));
@@ -20,11 +27,14 @@ export function mountViewer(element, options) {
     async attachToCanvas(canvas, ...args) {
       if (destroyed) return this;
       canvas.id = 'gl1';
-      canvas.setAttribute('aria-label', 'Brain image and cortical surface viewer');
+      canvas.setAttribute('aria-label', canvasLabel);
       try {
         const result = await super.attachToCanvas(canvas, ...args);
         if (destroyed) this.destroy();
-        else resolve(this);
+        else {
+          releaseGestures = bindTouchGestures(this, canvas, { dragModePan: DRAG_MODE.pan, sliceTypeRender: SLICE_TYPE.RENDER });
+          resolve(this);
+        }
         return result;
       } catch (error) {
         reject(error);
@@ -41,7 +51,7 @@ export function mountViewer(element, options) {
     persist: false,
     readUrlParams: false,
     dragDrop: false,
-    sidebar: false,
+    sidebar,
     footer: false,
   });
   const syncHost = () => {
@@ -71,6 +81,7 @@ export function mountViewer(element, options) {
       reject(new Error('FreeBrowse viewer was closed before initialization completed.'));
       clearTimeout(timeout);
       observer.disconnect();
+      releaseGestures?.();
       handle.destroy();
       nv.destroy();
     },

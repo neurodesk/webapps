@@ -147,10 +147,6 @@
         "kind": "runtime-cdn"
       },
       {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-        "kind": "runtime-cdn"
-      },
-      {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz",
         "sha256": "97638eee6df7c75b4de8921163e708420587de28b03eefb3fb1efbcdad659506",
         "bytes": 9092309,

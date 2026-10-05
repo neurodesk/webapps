@@ -167,4 +167,37 @@ const voxels = dims[0] * dims[1] * dims[2];
   assert.throws(() => lesionAnalysis.analyzeLesions({ lesion: new Uint8Array(3), spinalCord: cord, dims, spacing }), /length mismatch/);
 }
 
+// ---- Lesion-only models (lesion_ms): no cord mask ----
+{
+  // Every lesion voxel counts, lesion geometry is reported without angle
+  // correction, and the cord-relative columns are not written.
+  const small = [5, 6, 4];
+  const lesion = new Uint8Array(small[0] * small[1] * small[2]);
+  for (const z of [1, 2]) {
+    lesion[idx(2, 2, z, small)] = 1;
+    lesion[idx(2, 3, z, small)] = 1;
+  }
+  lesion[idx(0, 0, 0, small)] = 1;
+  const image = new Float64Array(lesion.length).fill(7);
+
+  const result = lesionAnalysis.analyzeLesions({ lesion, dims: small, spacing: [1, 1, 2], image, imageName: 't2' });
+  assert.equal(result.cordRestricted, false);
+  assert.equal(result.summary.lesion_count, 2, 'no lesion voxel is dropped without a cord mask');
+  near(result.summary.total_volume_mm3, 10, 1e-12);
+  near(result.summary.total_length_mm, 6, 1e-12);
+  const large = result.rows.find(row => row['volume [mm3]'] === 8);
+  near(large['length [mm]'], 4, 1e-12);
+  near(large['width [mm]'], 2, 1e-12);
+  near(large['max_equivalent_diameter [mm]'], 2 * Math.sqrt(2 / Math.PI), 1e-12);
+  near(large.mean_t2, 7, 1e-12);
+  for (const column of lesionAnalysis.CORD_RELATIVE_COLUMNS) {
+    assert.equal(large[column], undefined, `${column} is undefined without a cord mask`);
+  }
+  const [header, firstRow] = result.csv.split('\n');
+  assert.equal(header, [...lesionAnalysis.BASE_COLUMNS, 'mean_t2', 'std_t2'].join(','), 'no bridge or midsagittal columns, as SCT without -s');
+  assert.equal(firstRow.split(',')[header.split(',').indexOf('max_axial_damage_ratio []')], '', 'cord-relative cells are empty, not zero');
+  assert.match(result.warnings[0], /No cord mask/);
+  assert.throws(() => lesionAnalysis.analyzeLesions({ lesion, spinalCord: new Uint8Array(3), dims: small, spacing: [1, 1, 2] }), /length mismatch/);
+}
+
 console.log('Lesion analysis tests passed');

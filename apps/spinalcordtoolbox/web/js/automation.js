@@ -68,7 +68,7 @@ export function registerSctAutomation(app) {
         const image = inputs.image?.[0] || null;
         const request = {
           lesionData: await inputs.lesion[0].arrayBuffer(),
-          cordData: await inputs.cord[0].arrayBuffer(),
+          cordData: inputs.cord?.[0] ? await inputs.cord[0].arrayBuffer() : null,
           imageData: image ? await image.arrayBuffer() : null,
           imageName: image ? image.name.replace(/\.nii(\.gz)?$/i, '') : null,
         };
@@ -91,7 +91,7 @@ export function registerSctAutomation(app) {
             provenance: {
               appVersion: VERSION,
               method: 'sct_analyze_lesion (SCT 7.3) browser port',
-              equivalentCommand: `sct_analyze_lesion -m ${inputs.lesion[0].name} -s ${inputs.cord[0].name}${image ? ` -i ${image.name}` : ''}`,
+              equivalentCommand: `sct_analyze_lesion -m ${inputs.lesion[0].name}${inputs.cord?.[0] ? ` -s ${inputs.cord[0].name}` : ''}${image ? ` -i ${image.name}` : ''}`,
             },
           };
         } finally {
@@ -149,6 +149,7 @@ export function registerSctAutomation(app) {
       },
     },
   });
-  automation.registerViewer('main', createNiivueAdapter(app.nv));
+  // No viewer is registered when WebGL2 is unavailable; processing still runs.
+  if (app.nv) automation.registerViewer('main', createNiivueAdapter(app.nv));
   return automation;
 }

@@ -1,10 +1,10 @@
 #!/usr/bin/env node --no-warnings
 
-// Asserts the NiiVue label LUT builder emits a step LUT — each label index
-// gets a stop at the integer plus a second stop just below the next index,
-// holding the color flat across (i, i+1). Without the second stop, NiiVue
-// linearly interpolates between adjacent label colors and smears one
-// label into its neighbour at sub-voxel boundaries.
+// Asserts the label colormap handed to NiiVue 1.0's `setColormapLabel()`.
+// NiiVue builds an index-addressed lookup table from it: entry `I[n]` paints
+// label value `I[n]` with `R/G/B/A[n]` and names it `labels[n]`. The table is
+// sampled nearest-neighbour, so adjacent labels never blend, and it starts at
+// the lowest index, so label 0 must be present and transparent.
 
 import assert from 'node:assert/strict';
 import path from 'node:path';
@@ -12,88 +12,74 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
-const { generateNiivueColormap } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/labels.js')));
+const { generateLabelColormap, getLabelName } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/labels.js')));
+const { getTaskLabels } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/sct-tasks.js')));
 
-const lut = generateNiivueColormap('spineDiscs');
-
-// Background plus 23 disc labels (3..25). Background is followed by a gap, so
-// it gets no held stop; every disc label but the last gets one: 1 + 23 + 22.
-assert.equal(lut.I.length, 46, `expected 46 LUT stops, got ${lut.I.length}`);
-assert.equal(lut.R.length, lut.I.length, 'R/I length mismatch');
-assert.equal(lut.G.length, lut.I.length, 'G/I length mismatch');
-assert.equal(lut.B.length, lut.I.length, 'B/I length mismatch');
-assert.equal(lut.A.length, lut.I.length, 'A/I length mismatch');
-
-assert.equal(lut.min, 0);
-assert.equal(lut.max, 25);
-assert.equal(lut.I.at(0), 0);
-assert.equal(lut.I.at(-1), 255);
-
-// Each label index is followed by a held stop just below the next index,
-// painted with the same color. That keeps NiiVue from interpolating across
-// neighbouring discs.
-for (let i = 1; i < lut.I.length - 1; i += 2) {
-  const labelIndex = 3 + (i - 1) / 2;
-  const indexAtStart = lut.I[i];
-  const indexBeforeNext = lut.I[i + 1];
-  const expectedStart = (labelIndex / 25) * 255;
-  const expectedNext = ((labelIndex + 1) / 25) * 255;
-  assert.ok(Math.abs(indexAtStart - expectedStart) < 1e-9, `LUT[${i}] should scale label ${labelIndex} to ${expectedStart}, got ${indexAtStart}`);
-  assert.ok(indexBeforeNext > indexAtStart, `held stop must come after label ${labelIndex} start`);
-  assert.ok(indexBeforeNext < expectedNext, `held stop must come before next label ${labelIndex + 1}`);
-  assert.equal(lut.R[i], lut.R[i + 1], `R held flat across label ${indexAtStart}`);
-  assert.equal(lut.G[i], lut.G[i + 1], `G held flat across label ${indexAtStart}`);
-  assert.equal(lut.B[i], lut.B[i + 1], `B held flat across label ${indexAtStart}`);
+// The table NiiVue 1.0 derives from a label colormap (`makeLabelLut`).
+function buildLabelLut(colormap) {
+  const min = Math.min(...colormap.I);
+  const max = Math.max(...colormap.I);
+  const lut = new Uint8ClampedArray((max - min + 1) * 4);
+  const labels = Array(max - min + 1).fill('?');
+  colormap.I.forEach((index, entry) => {
+    const offset = (index - min) * 4;
+    lut.set([colormap.R[entry], colormap.G[entry], colormap.B[entry], colormap.A[entry]], offset);
+    labels[index - min] = colormap.labels[entry];
+  });
+  return { lut, labels, min, max };
 }
 
-// The spinalcord label set has only 2 labels (background + cord). Step LUT
-// rule still applies: 2 + 1 held stop = 3 entries.
-const cordLut = generateNiivueColormap('spinalcord');
-assert.equal(cordLut.I.length, 3, 'spinalcord step LUT: 2 labels + 1 held stop');
-assert.equal(cordLut.max, 1);
-assert.equal(cordLut.I.at(0), 0);
-assert.equal(cordLut.I.at(-1), 255);
+for (const labelSet of ['spinalcord', 'lesion_sci_t2', 'totalspineseg', 'spineDiscs']) {
+  const source = getTaskLabels(labelSet);
+  const colormap = generateLabelColormap(labelSet);
+  const length = colormap.I.length;
 
-// Regression: NiiVue's `makeLut()` rounds `I` through `Uint8ClampedArray`
-// before painting the GPU LUT. If the held stop and the next label start
-// round to the same Uint8 bucket, the resulting LUT segment has zero range
-// and produces NaN (divide-by-zero) clamped to 0, leaving the binary
-// spinalcord overlay entirely transparent. The held stop and the label start
-// MUST therefore land on distinct integer buckets after Uint8 rounding.
-// (A many-label LUT silently masks this bug — its later iterations
-// overwrite the corrupted bucket — so spinalcord is the canary.)
-for (let i = 0; i < cordLut.I.length - 1; i++) {
-  const lo = Math.round(cordLut.I[i]);
-  const hi = Math.round(cordLut.I[i + 1]);
-  assert.notEqual(lo, hi,
-    `spinalcord LUT stops ${cordLut.I[i]} and ${cordLut.I[i + 1]} both round to Uint8 ${lo}; ` +
-    `held stop must round to a distinct bucket from the next label start, otherwise NiiVue ` +
-    `produces an all-transparent LUT and the segmentation overlay disappears.`);
-}
+  for (const channel of ['R', 'G', 'B', 'A', 'labels']) {
+    assert.equal(colormap[channel].length, length, `${labelSet}: ${channel} has one value per label`);
+  }
+  assert.deepEqual(colormap.I, [...colormap.I].sort((a, b) => a - b), `${labelSet}: labels are in index order`);
+  assert.equal(new Set(colormap.I).size, length, `${labelSet}: label indices are unique`);
+  assert.ok(colormap.I.every(Number.isInteger), `${labelSet}: I holds raw label values, not a 0..255 ramp`);
+  assert.equal(colormap.I[0], 0, `${labelSet}: label 0 anchors the table`);
+  assert.equal(colormap.A[0], 0, `${labelSet}: background is transparent`);
 
-// Stronger end-to-end check: simulate `Uint8ClampedArray.from(I)` and walk
-// the same segment-fill loop NiiVue's `makeLut` runs. If any LUT bucket up
-// to the highest label index ends with non-zero alpha equal to the cord's
-// labelled colour, the overlay is visible.
-const Is = Array.from(Uint8ClampedArray.from(cordLut.I));
-let cordVisible = false;
-for (let i = 0; i < Is.length - 1; i++) {
-  const idxLo = Is[i];
-  const idxHi = Is[i + 1];
-  const range = idxHi - idxLo;
-  if (range <= 0) continue;
-  for (let j = idxLo; j <= idxHi; j++) {
-    const f = (j - idxLo) / range;
-    const r = cordLut.R[i] + f * (cordLut.R[i + 1] - cordLut.R[i]);
-    const g = cordLut.G[i] + f * (cordLut.G[i + 1] - cordLut.G[i]);
-    const b = cordLut.B[i] + f * (cordLut.B[i + 1] - cordLut.B[i]);
-    const a = cordLut.A[i] + f * (cordLut.A[i + 1] - cordLut.A[i]);
-    if (j === 255 && a > 0 && (r > 0 || g > 0 || b > 0)) cordVisible = true;
+  const { lut, labels } = buildLabelLut(colormap);
+  for (const label of source) {
+    if (label.index === 0) continue;
+    const color = label.color || label.rgba;
+    assert.deepEqual(
+      Array.from(lut.slice(label.index * 4, label.index * 4 + 4)),
+      [color[0], color[1], color[2], color[3] ?? 255],
+      `${labelSet}: label ${label.index} paints its own colour`
+    );
+    assert.ok(lut[label.index * 4 + 3] > 0, `${labelSet}: label ${label.index} is visible`);
+    assert.equal(labels[label.index], label.name, `${labelSet}: label ${label.index} is named for the viewer legend`);
+    assert.equal(getLabelName(label.index, labelSet), label.name);
   }
 }
-assert.ok(cordVisible,
-  'spinalcord LUT must paint a visible (non-transparent, non-black) colour at LUT[255]; ' +
-  'a binary mask voxel value of 1 maps to LUT[255] and an invisible bucket there means ' +
-  'the segmentation overlay is silently hidden.');
 
-console.log(`Label LUT step encoding OK: spineDiscs=${lut.I.length} stops, spinalcord=${cordLut.I.length} stops`);
+// Regression guard for the binary cord mask: its single label must be painted.
+// (The NiiVue 0.68 step LUT once rounded this mask fully transparent.)
+{
+  const cord = generateLabelColormap('spinalcord');
+  assert.deepEqual(cord.I, [0, 1]);
+  assert.deepEqual(cord.labels, ['Background', 'Spinal cord']);
+  assert.deepEqual([cord.R[1], cord.G[1], cord.B[1], cord.A[1]], [68, 128, 255, 255]);
+}
+
+// Each call returns fresh arrays: NiiVue clamps `I` in place.
+{
+  const first = generateLabelColormap('totalspineseg');
+  const second = generateLabelColormap('totalspineseg');
+  first.I[1] = 999;
+  assert.notEqual(second.I[1], 999);
+}
+
+// Multi-label sets keep every label distinct, so neighbours are told apart.
+{
+  const spine = generateLabelColormap('totalspineseg');
+  assert.ok(spine.I.length > 10, 'TotalSpineSeg ships its full label set');
+  assert.equal(Math.max(...spine.I), Math.max(...getTaskLabels('totalspineseg').map(label => label.index)), 'the highest label value is preserved');
+}
+
+console.log('Label colormap tests passed');

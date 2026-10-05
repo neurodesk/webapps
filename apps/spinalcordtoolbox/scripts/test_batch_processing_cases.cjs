@@ -42,7 +42,7 @@ const WEBAPP_PIPELINE_FEATURES = Object.freeze({
     labels: ['SCT Segmentation', 'SCT Task', 'Probability Threshold', 'Min Component Size']
   },
   results: {
-    controls: ['resultsSection', 'stageButtons', 'downloadCurrentVolume', 'screenshotViewer', 'overlayOpacity'],
+    controls: ['resultsSection', 'stageButtons', 'freebrowseViewer', 'screenshotViewer'],
     workerMessages: ['stageData'],
     labels: ['Results']
   },

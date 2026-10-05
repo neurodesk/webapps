@@ -138,10 +138,21 @@ function buildScript() {
   lines.push(`${PYTHON} helpers.py multi les_lesion.nii.gz les_sc.nii.gz les_multi.nii.gz out/les_multi.json`);
   for (const item of cases.lesion) {
     const image = item.image ? `-i ${item.image}.nii.gz ` : '';
-    lines.push(`sct_analyze_lesion -m ${item.lesion}.nii.gz -s ${item.cord}.nii.gz ${image}-ofolder lesion_${item.id} -v 0`);
+    const cord = item.cord ? `-s ${item.cord}.nii.gz ` : '';
+    lines.push(`sct_analyze_lesion -m ${item.lesion}.nii.gz ${cord}${image}-ofolder lesion_${item.id} -v 0`);
     lines.push(`${PYTHON} helpers.py measures lesion_${item.id}/${item.lesion}_analysis.pkl out/${item.id}.csv`);
   }
   return `${lines.join('\n')}\n`;
+}
+
+// `--only id[,id]` regenerates just those cases (and leaves the other tables untouched).
+const only = (() => {
+  const index = process.argv.indexOf('--only');
+  return index < 0 ? null : new Set(process.argv[index + 1].split(','));
+})();
+if (only) {
+  cases.morphometry = cases.morphometry.filter(item => only.has(item.id));
+  cases.lesion = cases.lesion.filter(item => only.has(item.id));
 }
 
 async function main() {
