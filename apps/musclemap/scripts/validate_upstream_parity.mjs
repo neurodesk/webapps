@@ -23,10 +23,6 @@ function hasArgument(name) {
   return process.argv.includes(name);
 }
 
-const modelId = argument('--model', 'wholebody');
-const modelVersion = argument('--model-version', '1.4');
-const defaultStage = resolve(appDir, '.tmp_model_release', `${modelId}-v${modelVersion}`);
-
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
@@ -69,10 +65,27 @@ async function startBinaryServer(port, files) {
   return server;
 }
 
+async function loadStagedCandidate(asset, path) {
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  process.stdout.write(`Downloading ${basename(path)}...\n`);
+  const response = await fetch(asset.url, { redirect: 'follow' });
+  if (!response.ok) throw new Error(`Failed to download ${asset.url}: ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.byteLength !== asset.bytes || sha256(bytes) !== asset.sha256) {
+    throw new Error(`Downloaded ${basename(path)} does not match the published release`);
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, bytes);
+  return bytes;
+}
+
 async function main() {
-  const reportPath = resolve(argument('--report', resolve(defaultStage, 'upstream-parity-report.json')));
-  await mkdir(dirname(reportPath), { recursive: true });
-  await rm(reportPath, { force: true });
+  const reportArgument = argument('--report', null);
+  if (reportArgument) await rm(resolve(reportArgument), { force: true });
   const caseId = argument('--case', null);
   let controlledCase = null;
   if (caseId) {
@@ -80,7 +93,16 @@ async function main() {
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
     controlledCase = manifest.cases?.find(item => item.id === caseId);
     if (!controlledCase) throw new Error(`Unknown controlled reference case: ${caseId}`);
+    if (hasArgument('--model') || hasArgument('--model-version')) {
+      throw new Error('Controlled reference cases use their pinned model');
+    }
   }
+  const modelId = controlledCase?.model ?? argument('--model', 'wholebody');
+  const modelVersion = controlledCase?.modelVersion ?? argument('--model-version', '1.4');
+  const defaultStage = resolve(appDir, '.tmp_model_release', `${modelId}-v${modelVersion}`);
+  const reportPath = resolve(reportArgument ?? resolve(defaultStage, 'upstream-parity-report.json'));
+  await mkdir(dirname(reportPath), { recursive: true });
+  await rm(reportPath, { force: true });
   const referenceRoot = argument('--reference-root', null);
   const inputValue = argument('--input', controlledCase && referenceRoot
     ? resolve(referenceRoot, controlledCase.input)
@@ -123,7 +145,12 @@ async function main() {
     candidatePath = resolve(defaultStage, basename(new URL(stagedModel.asset.url).pathname));
     candidate = { ...stagedModel.asset, path: candidatePath };
   }
-  const candidateBytes = await readFile(candidatePath);
+  const candidateBytes = conversionValue
+    ? await readFile(candidatePath)
+    : await loadStagedCandidate(stagedModel.asset, candidatePath);
+  if (controlledCase && !conversionValue && candidate.sha256 !== controlledCase.modelSha256) {
+    throw new Error(`Controlled reference case ${caseId} pins a different model`);
+  }
   if (candidateBytes.byteLength !== candidate.bytes || sha256(candidateBytes) !== candidate.sha256) {
     throw new Error(`Candidate does not match its ${modelAuthority} integrity metadata`);
   }
