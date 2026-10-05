@@ -3,8 +3,13 @@ import { clamp } from "./controls.js";
 // Phone steering by tilting. Orientation angles are compared with a neutral
 // pose captured when the run starts (or when the player taps to recentre), so
 // any comfortable holding angle works. A small dead zone keeps a steady hand
-// straight and full authority arrives at `range` degrees of tilt. Screen
-// rotation is handled by mapping the device axes into the screen frame.
+// straight and full authority arrives at `range` degrees of tilt.
+//
+// Beta and gamma are Euler angles: gamma only measures a sideways tilt while
+// the phone lies flat, swings ever harder for the same twist as the phone is
+// raised, and jumps by 180 degrees when a landscape phone passes vertical.
+// Steering therefore reads the up vector in the screen frame instead: roll is
+// how far it leans sideways, lean is its angle about the screen's x axis.
 export class Tilt {
   constructor({ dead = 3, range = 22 } = {}) {
     this.dead = dead;
@@ -22,21 +27,19 @@ export class Tilt {
   update({ beta, gamma }, angle = 0) {
     if (!Number.isFinite(beta) || !Number.isFinite(gamma)) return this;
     this.samples++;
-    // Roll (left/right) and lean (forward/back) in the screen frame.
-    let roll, lean;
-    if (angle === 90) {
-      roll = beta;
-      lean = -gamma;
-    } else if (angle === 270 || angle === -90) {
-      roll = -beta;
-      lean = gamma;
-    } else if (angle === 180) {
-      roll = -gamma;
-      lean = -beta;
-    } else {
-      roll = gamma;
-      lean = beta;
-    }
+    const rad = Math.PI / 180;
+    const b = beta * rad;
+    const g = gamma * rad;
+    // World up in the device frame (W3C ZXY Euler order).
+    const ux = -Math.cos(b) * Math.sin(g);
+    const uy = Math.sin(b);
+    const uz = Math.cos(b) * Math.cos(g);
+    // Into the screen frame; at 90 the device top points to screen left.
+    const a = angle * rad;
+    const sx = ux * Math.cos(a) - uy * Math.sin(a);
+    const sy = ux * Math.sin(a) + uy * Math.cos(a);
+    const roll = Math.asin(clamp(-sx)) / rad;
+    const lean = Math.atan2(sy, uz) / rad;
     if (!this.neutral) this.neutral = { roll, lean };
     const shape = (delta) => {
       const magnitude = Math.abs(delta);
@@ -45,9 +48,9 @@ export class Tilt {
       return Math.sign(delta) * scaled * scaled;
     };
     this.yaw = clamp(shape(roll - this.neutral.roll));
-    // Beta grows as the top of the phone rises toward you, so tipping the top
+    // Lean grows as the top of the phone rises toward you, so tipping the top
     // away pitches the nose down and tipping it back pitches up.
-    this.pitch = clamp(shape(lean - this.neutral.lean));
+    this.pitch = clamp(shape(((lean - this.neutral.lean + 540) % 360) - 180));
     return this;
   }
 }
