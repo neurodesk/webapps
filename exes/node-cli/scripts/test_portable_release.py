@@ -102,7 +102,7 @@ class PortableReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "target"):
             portable_release.load_target(ROOT, "packages/syncro", "linux-arm64")
         with self.assertRaisesRegex(ValueError, "target"):
-            portable_release.load_target(ROOT, "packages/syncro", "macos-arm64")
+            portable_release.load_target(ROOT, "packages/topofit", "windows-arm64")
 
     def test_a_tool_without_onnx_runtime_or_dependencies_packages(self):
         with tempfile.TemporaryDirectory() as temporary:
