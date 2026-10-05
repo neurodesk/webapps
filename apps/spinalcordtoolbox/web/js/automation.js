@@ -61,6 +61,92 @@ export function registerSctAutomation(app) {
           executor.setProgress = previousProgress;
         }
       },
+      // sct_analyze_lesion on mask files: no inference.
+      'lesion-metrics': async ({ inputs, signal, progress }) => {
+        const executor = app.inferenceExecutor;
+        if (executor.isRunning()) throw new Error('SCT is already processing an image.');
+        const image = inputs.image?.[0] || null;
+        const request = {
+          lesionData: await inputs.lesion[0].arrayBuffer(),
+          cordData: inputs.cord?.[0] ? await inputs.cord[0].arrayBuffer() : null,
+          imageData: image ? await image.arrayBuffer() : null,
+          imageName: image ? image.name.replace(/\.nii(\.gz)?$/i, '') : null,
+        };
+        signal.throwIfAborted();
+        const previousProgress = executor.setProgress;
+        executor.setProgress = (value, message) => {
+          previousProgress.call(executor, value, message);
+          progress({ value, message });
+        };
+        try {
+          await awaitPipelineStep(executor, { step: 'lesion_metrics' }, () => {
+            app.beginAbortableStep('lesion_metrics', 'Measuring lesions…');
+            return executor.runLesionMetrics(request);
+          }, signal);
+          const result = executor.getResult('lesion_metrics');
+          if (result?.kind !== 'metrics') throw new Error('Lesion analysis produced no table.');
+          return {
+            artifacts: [{ role: 'metrics', id: 'lesion_metrics', file: result.file }],
+            measurements: { lesion_metrics: { summary: result.summary, rows: result.rows } },
+            provenance: {
+              appVersion: VERSION,
+              method: 'sct_analyze_lesion (SCT 7.3) browser port',
+              equivalentCommand: `sct_analyze_lesion -m ${inputs.lesion[0].name}${inputs.cord?.[0] ? ` -s ${inputs.cord[0].name}` : ''}${image ? ` -i ${image.name}` : ''}`,
+            },
+          };
+        } finally {
+          executor.setProgress = previousProgress;
+        }
+      },
+      // sct_process_segmentation on mask files: no image and no inference.
+      morphometry: async ({ inputs, parameters, signal, progress }) => {
+        const executor = app.inferenceExecutor;
+        if (executor.isRunning()) throw new Error('SCT is already processing an image.');
+        const mask = inputs.segmentation[0];
+        const discs = inputs.discs?.[0] || null;
+        const request = {
+          maskData: await mask.arrayBuffer(),
+          maskName: mask.name,
+          maskLabel: parameters.maskLabel ?? null,
+          filename: mask.name,
+          discData: discs ? await discs.arrayBuffer() : null,
+          discName: discs?.name || null,
+          discFilename: discs?.name || null,
+          options: {
+            aggregate: parameters.aggregate,
+            slices: parameters.slices,
+            levels: parameters.levels,
+            angleCorrection: parameters.angleCorrection,
+          },
+        };
+        signal.throwIfAborted();
+        const previousProgress = executor.setProgress;
+        executor.setProgress = (value, message) => {
+          previousProgress.call(executor, value, message);
+          progress({ value, message });
+        };
+        try {
+          await awaitPipelineStep(executor, { step: 'morphometry' }, () => {
+            app.beginAbortableStep('morphometry', 'Measuring morphometry…');
+            app.setStepRunning('morphometry');
+            return executor.runMorphometry(request);
+          }, signal);
+          const result = executor.getResult('morphometry');
+          if (result?.kind !== 'metrics') throw new Error('Morphometry produced no table.');
+          return {
+            artifacts: [{ role: 'metrics', id: 'morphometry', file: result.file }],
+            measurements: { morphometry: { summary: result.summary, rows: result.rows } },
+            provenance: {
+              appVersion: VERSION,
+              method: 'sct_process_segmentation (SCT 7.3) browser port',
+              equivalentCommand: result.summary.command,
+              settings: executor.lastMorphometrySettings,
+            },
+          };
+        } finally {
+          executor.setProgress = previousProgress;
+        }
+      },
     },
   });
   // No viewer is registered when WebGL2 is unavailable; processing still runs.
