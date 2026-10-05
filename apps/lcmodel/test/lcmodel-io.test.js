@@ -1,10 +1,29 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { buildControl, parseCoord, parseTable, concentrationsCsv, presentRows, FILES, LINE_BROADENING } from "../src/lcmodel-io.js";
+import { gunzipSync } from "node:zlib";
+import { buildControl, parseCoord, fillGaps, parseTable, concentrationsCsv, presentRows, FILES, LINE_BROADENING } from "../src/lcmodel-io.js";
 import { spectrumSvg, fitSeries, metaboliteSeries, visibleIndices, tickStep, splitAtGaps } from "../src/spectrum-plot.js";
 
 const native = new URL("../../../exes/lcmodel/tests/data/test_lcm/", import.meta.url);
+
+// The Siemens MEGA-PRESS example fitted as the app fits it (co-edited MM
+// model, PPMGAP 1.95-1.2 ppm): the .RAW LCModel read and the .COORD it wrote.
+const mega = async (ext) => gunzipSync(await readFile(new URL(`data/siemens-megapress.${ext}.gz`, import.meta.url))).toString("utf8");
+const MEGA_ACQUISITION = { deltat: 4.167e-4, hzpppm: 123.247115 };
+
+/** `raw` with its spectrum moved by `ppm` (the FID times a complex exponential). */
+function shiftRaw(raw, ppm, { deltat, hzpppm }) {
+  const end = raw.lastIndexOf("$END") + 4;
+  const numbers = raw.slice(end).trim().split(/\s+/).map(Number);
+  const lines = [];
+  for (let k = 0; k < numbers.length; k += 2) {
+    const w = 2 * Math.PI * ppm * hzpppm * (k / 2) * deltat;
+    const [re, im] = [numbers[k], numbers[k + 1]];
+    lines.push(`${(re * Math.cos(w) - im * Math.sin(w)).toExponential(6)} ${(re * Math.sin(w) + im * Math.cos(w)).toExponential(6)}`);
+  }
+  return `${raw.slice(0, end)}\n${lines.join("\n")}\n`;
+}
 
 test("control file names the inputs and enables water scaling only with water", () => {
   const plain = buildControl({ nunfil: 2048, deltat: 2.5e-4, hzpppm: 123.247, teMs: 30 });
@@ -118,4 +137,51 @@ test("spectrum plot scales ppm right to left and escapes labels", async () => {
   assert.deepEqual(splitAtGaps(gapped, [0, 1, 2, 3, 4, 5, 6]), [[0, 1, 2, 3], [4, 5, 6]]);
   const gapSvg = spectrumSvg({ ppm: gapped, series: [{ values: [0, 1, 0, 1, 0, 1, 0], kind: "data", label: "d" }], range: [2.2, 0.9], ariaLabel: "gap" });
   assert.equal((gapSvg.match(/<polyline/g) || []).length, 2);
+});
+
+test("the window left out of a MEGA-PRESS fit is rebuilt from the .RAW file", async () => {
+  const coord = parseCoord(await mega("coord"));
+  const raw = await mega("raw");
+  assert.equal(coord.gaps.length, 1);
+  assert.ok(Math.abs(coord.gaps[0].hi - 1.95) < 0.01 && Math.abs(coord.gaps[0].lo - 1.2) < 0.01, JSON.stringify(coord.gaps));
+  const [gap] = fillGaps(coord, raw, MEGA_ACQUISITION);
+  assert.equal(gap.ppm.length, 160, "the .COORD spacing across 1.95-1.2 ppm");
+  assert.ok(gap.ppm.every((p) => p < gap.hi && p > gap.lo));
+  // Over the fitted points it reproduces LCModel's data to 2.5 %; a wrong
+  // first-order phase sign takes that past 4 %.
+  assert.ok(fillGaps(coord, raw, MEGA_ACQUISITION, { tolerance: 0.03 })[0].data);
+
+  // Hide 2.5-2.2 ppm (Glx, NAA's shoulder) as if it were excluded too: the
+  // rebuilt spectrum there must be LCModel's own phased data.
+  const hidden = coord.ppm.map((p, k) => (p < 2.5 && p > 2.2 ? k : -1)).filter((k) => k >= 0);
+  const keep = (values) => values.filter((_, k) => !hidden.includes(k));
+  const window = { hi: coord.ppm[hidden[0] - 1], lo: coord.ppm[hidden.at(-1) + 1] };
+  const [rebuilt] = fillGaps({ ...coord, ppm: keep(coord.ppm), data: keep(coord.data), gaps: [window] }, raw, MEGA_ACQUISITION);
+  assert.equal(rebuilt.ppm.length, hidden.length);
+  const truth = hidden.map((k) => coord.data[k]);
+  const miss = Math.sqrt(truth.reduce((sum, d, i) => sum + (rebuilt.data[i] - d) ** 2, 0) / truth.reduce((sum, d) => sum + d * d, 0));
+  assert.ok(miss < 0.05, `rebuilt 2.5-2.2 ppm misses LCModel's data by ${(miss * 100).toFixed(1)} %`);
+
+  // LCModel references a shifted spectrum back; the rebuild follows its shift.
+  const shifted = shiftRaw(raw, 0.03, MEGA_ACQUISITION);
+  const summary = { ...coord.summary, shiftPpm: 0.03 };
+  assert.ok(fillGaps({ ...coord, summary }, shifted, MEGA_ACQUISITION)[0].data, "shift applied");
+  // A rebuild that does not line up is not drawn.
+  assert.equal(fillGaps(coord, shifted, MEGA_ACQUISITION)[0].data, undefined);
+});
+
+test("a MEGA-PRESS fit plot shades the excluded window and draws the data through it", async () => {
+  const coord = parseCoord(await mega("coord"));
+  const filled = { ...coord, gaps: fillGaps(coord, await mega("raw"), MEGA_ACQUISITION) };
+  const svg = spectrumSvg({ ppm: coord.ppm, series: fitSeries(filled), range: [4.4, 0.3], gaps: filled.gaps, ariaLabel: "MEGA" });
+  assert.equal((svg.match(/<rect class="lcm-gap"/g) || []).length, 1);
+  assert.match(svg, />not fitted</);
+  const lines = (kind) => (svg.match(new RegExp(`class="lcm-${kind}"`, "g")) || []).length;
+  assert.equal(lines("data"), 1, "data runs through the window");
+  assert.equal(lines("fit"), 2, "the fit stops at it");
+  assert.equal(lines("residual"), 2);
+  // Without the rebuilt data the window is still shaded, and nothing crosses it.
+  const bare = spectrumSvg({ ppm: coord.ppm, series: fitSeries(coord), range: [4.4, 0.3], gaps: coord.gaps, ariaLabel: "MEGA" });
+  assert.equal((bare.match(/<rect class="lcm-gap"/g) || []).length, 1);
+  assert.equal((bare.match(/class="lcm-data"/g) || []).length, 2);
 });
