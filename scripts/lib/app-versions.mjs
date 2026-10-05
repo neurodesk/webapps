@@ -18,6 +18,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/nesvor': 'nesvor',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });
 
 export function releaseDate(now = new Date()) {

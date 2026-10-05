@@ -75,8 +75,8 @@ replace those measurements.
 
 ## Port checks
 
-- `parity.mjs` runs `src/pipeline.js` with ONNX Runtime Web (WebAssembly) against
-  `reference.py` on the same skull-stripped input and model. Utrecht 9: Dice 0.998, 111 of about
+- `parity.mjs` runs `packages/white-matter-lesions/src/pipeline.js` with ONNX Runtime Web
+  (WebAssembly) against `reference.py` on the same skull-stripped input and model. Utrecht 9: Dice 0.998, 111 of about
   34 500 lesion voxels differ, from float rounding between runtimes. The port's resampling matches
   nnunetv2's `resample_data_or_seg_to_shape` to 2.4 × 10⁻⁷ on anisotropic and isotropic volumes,
   and on the 22 MS scans its five-fold masks agree with `nnUNetv2_predict`'s at Dice 0.97 to 0.99.

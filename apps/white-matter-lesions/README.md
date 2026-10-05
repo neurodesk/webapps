@@ -12,8 +12,8 @@ and run report stay as the model produced them.
 
 1. SynthStrip (`@neurodesk/synthstrip`, the shared browser port) finds the brain. Tick
    *Image is already skull-stripped* in the advanced settings to use nonzero voxels instead.
-2. `src/pipeline.js` repeats nnU-Net's inference for FLAMeS without reorienting: permute the
-   axes as the plans' `transpose_forward` does, crop to the brain, z-score inside it, resample to
+2. `packages/white-matter-lesions/src/pipeline.js` (`@neurodesk/white-matter-lesions`)
+   repeats nnU-Net's inference for FLAMeS without reorienting: permute the axes as the plans' `transpose_forward` does, crop to the brain, z-score inside it, resample to
    1 × 0.9 × 0.9 mm with nnU-Net's cubic, per-slice-when-anisotropic resampling, run
    112 × 128 × 160 patches at half overlap with Gaussian weighting, resample the lesion
    probability back and threshold at 0.5.

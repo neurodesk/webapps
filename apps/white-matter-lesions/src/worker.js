@@ -6,7 +6,7 @@ import { runSynthstrip } from '@neurodesk/synthstrip';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { browserSynthstrip } from '../../../packages/syncro/src/assets.js';
 import { flamesFolds } from './model.js';
-import { PLAN, segmentFlair, threshold, labelLesions, lesionTable } from './pipeline.js';
+import { PLAN, segmentFlair, threshold, labelLesions, lesionTable } from '@neurodesk/white-matter-lesions';
 
 ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
 ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardwareConcurrency || 1) : 1;

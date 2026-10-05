@@ -875,6 +875,9 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@neurodesk/white-matter-lesions':
+        specifier: workspace:*
+        version: link:../../packages/white-matter-lesions
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -1025,6 +1028,8 @@ importers:
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/white-matter-lesions: {}
 
   site/easter-eggs/vessel-surfer:
     dependencies:

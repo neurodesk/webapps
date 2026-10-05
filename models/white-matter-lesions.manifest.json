@@ -3,7 +3,7 @@
   "app": "white-matter-lesions",
   "license": "CC-BY-4.0",
   "preprocessing_contract": {
-    "source": "apps/white-matter-lesions/src/pipeline.js",
+    "source": "packages/white-matter-lesions/src/pipeline.js",
     "spacing_mm": [
       1,
       0.9,

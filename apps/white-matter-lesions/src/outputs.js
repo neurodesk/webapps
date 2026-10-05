@@ -1,4 +1,4 @@
-import { labelLesions, lesionTable } from "./pipeline.js";
+import { labelLesions, lesionTable } from "@neurodesk/white-matter-lesions";
 
 export function lesionSummary({ count, totalMl }) {
   return `${count} ${count === 1 ? "lesion" : "lesions"} · ${totalMl.toFixed(2)} ml`;
