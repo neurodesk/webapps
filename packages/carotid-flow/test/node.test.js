@@ -97,9 +97,20 @@ test('the executable rejects unknown options and wrong argument counts', () => {
   const missing = run('in.nii');
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /output directory/);
+  const misplaced = run('in.nii', 'out', '--cache-dir', 'models');
+  assert.equal(misplaced.status, 1);
+  assert.match(misplaced.stderr, /--cache-dir only applies to download-models/);
   const check = run('self-check');
   assert.equal(check.status, 0, check.stderr);
   assert.equal(JSON.parse(check.stdout).executable, process.execPath);
+});
+
+test('download-models installs nothing, for the portable packager', async (t) => {
+  const directory = await workspace(t);
+  const run = spawnSync(process.execPath, [bin, 'download-models', '--cache-dir', join(directory, 'models')], { encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /^0 model files/);
+  assert.deepEqual(await readdir(directory), []);
 });
 
 test('self-check runs the detection on the phantom', () => {

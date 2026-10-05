@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { PARAMETERS, checkInstallation, detect, optionName } from '../src/node.js';
 
@@ -28,7 +29,10 @@ ${settingsHelp}
 Writes the web app's downloads, named after SERIES or AMPLITUDE:
 <name>_carotid_labels.nii (1 = left, 2 = right), <name>_phase_sd.nii and
 <name>_carotid_curves.csv. OUTPUT_DIR must be new or empty. NIfTI input only:
-convert DICOM with dcm2niix first, or use the Carotid Flow web app.`;
+convert DICOM with dcm2niix first, or use the Carotid Flow web app.
+
+Carotid Flow has no model files. "download-models [--cache-dir DIR]" exists for
+the portable packager and installs nothing.`;
 
 const options = Object.fromEntries(Object.keys(PARAMETERS).map((key) => [optionName(key), { type: 'string' }]));
 
@@ -44,14 +48,18 @@ function summary({ method, vessels, qc }) {
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { help: { type: 'boolean', short: 'h' }, ...options },
+    options: { help: { type: 'boolean', short: 'h' }, 'cache-dir': { type: 'string' }, ...options },
   });
   const [command] = positionals;
+  if (values['cache-dir'] !== undefined && command !== 'download-models') throw new Error('--cache-dir only applies to download-models.');
   if (values.help) {
     console.log(HELP);
   } else if (command === 'self-check') {
     if (positionals.length !== 1) throw new Error('self-check does not accept arguments.');
     console.log(JSON.stringify(checkInstallation()));
+  } else if (command === 'download-models') {
+    if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
+    console.log(`0 model files: Carotid Flow has nothing to install in ${resolve(values['cache-dir'] ?? '.')}`);
   } else {
     if (positionals.length < 2 || positionals.length > 3) {
       throw new Error('Give one combined series, or an amplitude and a phase series, and a new output directory. Use --help for options.');

@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "carotid-flow-v",
+  "displayName": "Carotid Flow",
+  "app": "carotid-flow",
+  "run": "amplitude.nii.gz phase.nii.gz results",
+  "readme": {
+    "run": "Detect both carotids and write their flow curves",
+    "notes": [
+      "Give one series holding the amplitude frames followed by the phase frames,",
+      "or the amplitude and phase series as two files, amplitude first.",
+      "Raw phase stored as +-4096 needs --venc. Add --help for every setting.",
+      "No network connection is required. Input is NIfTI only: convert DICOM with",
+      "dcm2niix first, or use the web app. Label editing needs the web app.",
+      "",
+      "Carotid Flow is research software. Review the detected vessels before use.",
+      "The example reference is PCMCalculator: Vestergaard MB. PCMCalculator",
+      "[Computer software]. Zenodo; 2026. https://doi.org/10.5281/zenodo.18712355"
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "carotid-flow"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "carotid-flow.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "carotid-flow"
+    }
+  }
+}

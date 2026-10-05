@@ -8,6 +8,8 @@
     "method": "velocity",
     "leftMeanMlMin": 231,
     "rightMeanMlMin": 211,
-    "rightPeakFrame": 3
+    "rightPeakFrame": 3,
+    "leftPixels": 39,
+    "rightPixels": 34
   }
 }

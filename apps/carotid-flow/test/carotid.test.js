@@ -246,6 +246,8 @@ test('matches PCMCalculator on the right carotid of the open example', { skip: !
   assert.equal(Math.round(found.left.mean), pcm.expected.leftMeanMlMin);
   assert.equal(Math.round(found.right.mean), pcm.expected.rightMeanMlMin);
   assert.equal(found.right.peakFrame, pcm.expected.rightPeakFrame);
+  assert.equal(found.left.pixels.length, pcm.expected.leftPixels);
+  assert.equal(found.right.pixels.length, pcm.expected.rightPixels);
 });
 
 // The hospital example, when it is on disk: the carotids the MATLAB script picks.
