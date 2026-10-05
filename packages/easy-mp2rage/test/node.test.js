@@ -116,6 +116,14 @@ test('each command rejects the other command\'s options', async (t) => {
   assert.match(correct.stderr, /correct does not accept --regularization/);
 });
 
+test('download-models installs nothing because the WASM core ships with the package', async (t) => {
+  const cache = join(await workspace(t), 'models');
+  const result = run(['download-models', '--cache-dir', cache]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /needs no model files/);
+  await assert.rejects(readdir(cache), { code: 'ENOENT' });
+});
+
 test('self-check reports the Node runtime that ran it and the WASM core', () => {
   const result = run(['self-check']);
   assert.equal(result.status, 0, result.stderr);

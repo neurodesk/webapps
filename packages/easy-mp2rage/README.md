@@ -12,16 +12,46 @@ needs no browser, GPU or network.
 
 ### Install
 
-Download the archive for your platform from the Standalone dialog of the web
-app, or from the `easy-mp2rage-vVERSION` GitHub release. Extract it and keep the
-directory intact. The archive bundles its own Node runtime.
+Download the release for your platform from the web app's Standalone dialog:
+Linux x64, Windows x64 or macOS on Apple silicon. Each contains a private
+Node.js runtime.
 
-From a checkout of this repository, build the WebAssembly core first. This
-needs Rust with the `wasm32-unknown-unknown` target and `wasm-pack`:
+On Linux, extract the archive and keep the directory intact:
 
 ```bash
-pnpm --filter @neurodesk/easy-mp2rage build
+tar -xzf easy-mp2rage-VERSION-linux-x64.tar.gz
+./easy-mp2rage-VERSION-linux-x64/easy-mp2rage self-check
+```
+
+On Windows, use `Expand-Archive` and `easy-mp2rage.exe`.
+
+On macOS, the release is an installer package signed with a Developer ID and
+notarized by Apple. It installs Easy MP2RAGE in
+`/usr/local/lib/neurodesk/easy-mp2rage` and the `easy-mp2rage` command in
+`/usr/local/bin`:
+
+```bash
+sudo installer -pkg easy-mp2rage-VERSION-macos-arm64.pkg -target /
+easy-mp2rage self-check
+```
+
+To uninstall, delete `/usr/local/lib/neurodesk/easy-mp2rage` and
+`/usr/local/bin/easy-mp2rage`, then run
+`sudo pkgutil --forget org.neurodesk.easy-mp2rage`.
+
+From a checkout of this repository, the committed WebAssembly core in `wasm/`
+runs as is:
+
+```bash
 node packages/easy-mp2rage/bin/easy-mp2rage.js --help
+```
+
+After changing `apps/easy-mp2rage/crates/mp2rage-core` or `mp2rage-wasm`,
+rebuild it with Rust, the `wasm32-unknown-unknown` target and wasm-pack 0.13.1,
+then commit `wasm/`:
+
+```bash
+pnpm --filter @neurodesk/easy-mp2rage build:wasm
 ```
 
 ### Commands
@@ -42,6 +72,9 @@ easy-mp2rage denoise --uni UNI.nii.gz --inv1 INV1.nii.gz --inv2 INV2.nii.gz resu
 
 easy-mp2rage self-check
 ```
+
+`download-models` exists for the shared packager and does nothing: the
+WebAssembly core is part of the installation and no model files are needed.
 
 The options are the parameters of the `correct` and `denoise` operations in
 `apps/easy-mp2rage/automation.json`:

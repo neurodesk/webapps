@@ -19,7 +19,6 @@
     ]
   },
   "validation": "validation/cli-check.mjs",
-  "models": false,
   "targets": {
     "linux-x64": {
       "label": "Linux x64",
@@ -33,7 +32,7 @@
     },
     "macos-arm64": {
       "label": "macOS Apple silicon",
-      "archive": "tar.gz",
+      "archive": "pkg",
       "executable": "easy-mp2rage"
     }
   }

@@ -5,6 +5,7 @@ import { MP2RAGE_PARAMETERS, SA2RAGE_PARAMETERS, checkInstallation, correct, den
 const HELP = `Usage: easy-mp2rage correct --uni UNI --mp2rage LIST (--b1 B1 --b1-type TYPE | --sa2rage SA2RAGE --sa2rage-params LIST) [options] OUTPUT_DIR
        easy-mp2rage denoise --uni UNI --inv1 INV1 --inv2 INV2 [--regularization N] OUTPUT_DIR
        easy-mp2rage self-check
+       easy-mp2rage download-models [--cache-dir DIR]
 
 correct writes a B1-corrected T1 map (T1map.nii.gz, ms), the B1 map, the
 uncorrected T1 map, the B1-corrected UNI and parameters.json.
@@ -31,7 +32,8 @@ denoise options:
 
 Inputs are NIfTI (.nii or .nii.gz). Convert DICOM with dcm2niix first, or use the
 web app, which also reads parameters from DICOM headers and BIDS sidecars.
-OUTPUT_DIR must be new or empty.
+OUTPUT_DIR must be new or empty. download-models does nothing: the WebAssembly
+core is part of the installation and no model files are needed.
 
 Example (the web app's 7 T example with a relative B1 map):
   easy-mp2rage correct --uni MP2RAGE_UNI.nii.gz --inv2 MP2RAGE_INV2.nii.gz \\
@@ -52,12 +54,14 @@ const OPTIONS = {
   mp2rage: { type: 'string' },
   'fallback-uncorrected': { type: 'boolean' },
   regularization: { type: 'string' },
+  'cache-dir': { type: 'string' },
 };
 
 const ALLOWED = {
   correct: ['uni', 'inv2', 'b1', 'b1-type', 'reference-angle', 'extend-fov', 'sa2rage', 'sa2rage-params', 'mp2rage', 'fallback-uncorrected'],
   denoise: ['uni', 'inv1', 'inv2', 'regularization'],
   'self-check': [],
+  'download-models': ['cache-dir'],
 };
 
 function number(text, option) {
@@ -78,6 +82,9 @@ try {
     if (command === 'self-check') {
       if (rest.length) throw new Error('self-check does not accept arguments.');
       console.log(JSON.stringify(checkInstallation()));
+    } else if (command === 'download-models') {
+      if (rest.length) throw new Error('download-models does not accept positional arguments.');
+      console.log('easy-mp2rage needs no model files; nothing to download.');
     } else {
       if (rest.length !== 1) throw new Error(`Provide one output directory after the ${command} options. Use --help for usage.`);
       const [output] = rest;
