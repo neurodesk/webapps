@@ -1,9 +1,9 @@
-import { assertHardwareAdapter } from './hardware-adapter.js';
 import {test,expect} from '@playwright/test';
 import {readFile,readdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {readVolume} from '@neurodesk/synthsr';
 import {planGpuGraph} from '@neurodesk/synthsr/browser';
+import {assertHardwareAdapter,hardwareGpu,readAdapterInfo} from '../../../test-utils/hardware-gpu.mjs';
 
 test('full-volume CPU activation allocations fit Chromium limits', async ({page}) => {
  const source = await readFile(new URL('../../../packages/runtime-support/src/streamed-onnx/activation.js', import.meta.url), 'utf8');
@@ -35,13 +35,9 @@ for (const backend of ['wasm','webgpu']) test(`shared SynthSR stage: ${backend} 
  await page.route('**/test-model/synthsr-v2.onnx',route=>route.fulfill({path:process.env.SYNTHSR_MODEL}));
  await page.goto('./');
  if (backend === 'webgpu') {
-  const info = await page.evaluate(async () => {
-   const adapter = await navigator.gpu?.requestAdapter();
-   if (!adapter) return null;
-   return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, device: adapter.info.device, description: adapter.info.description, isFallbackAdapter: adapter.info.isFallbackAdapter };
-  });
+  const info = await readAdapterInfo(page);
   expect(info).not.toBeNull();
-  if (process.env.SYNCRO_HARDWARE_GPU) assertHardwareAdapter(info);
+  if (hardwareGpu) assertHardwareAdapter(info);
   await test.info().attach('webgpu-adapter', { body: JSON.stringify(info), contentType: 'application/json' });
  }
  const fixture=new URL('../../synthsr/test/fixtures/validation.nii.gz',import.meta.url);

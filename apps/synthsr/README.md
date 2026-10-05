@@ -204,7 +204,7 @@ The same script accepts `--onnx /tmp/synthsr-assets/synthsr-v2.onnx` instead of
 Python preprocessing/postprocessing, flip averaging and sharpening. `--no-flip`
 disables augmentation. It also writes 10,000 deterministic sampled voxel values.
 
-For the optional full-volume regression, set `SYNTHSR_HARDWARE_GPU=1`,
+For the optional full-volume regression, set `NEURODESK_HARDWARE_GPU=1`,
 `SYNTHSR_FULL_INPUT=/path/to/input.nii.gz`, and
 `SYNTHSR_FULL_REFERENCE=/path/to/reference.nii.gz` alongside `SYNTHSR_ASSET_DIR`
 when running the browser suite. This requires a GPU with sufficient buffer limits

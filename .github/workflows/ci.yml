@@ -33,6 +33,8 @@ jobs:
       has_apps: ${{ steps.plan.outputs.has_apps }}
       browser_apps: ${{ steps.plan.outputs.browser_apps }}
       has_browser_apps: ${{ steps.plan.outputs.has_browser_apps }}
+      gpu_apps: ${{ steps.plan.outputs.gpu_apps }}
+      has_gpu_apps: ${{ steps.plan.outputs.has_gpu_apps }}
       all_apps: ${{ steps.plan.outputs.all_apps }}
     steps:
       - uses: actions/checkout@v7
@@ -265,6 +267,55 @@ jobs:
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} in a browser
+        run: pnpm --filter ${{ matrix.app }} test:e2e
+
+  # The free macOS runners expose a paravirtual Apple GPU that full Chromium
+  # reaches through Metal, for WebGL2 and WebGPU alike (niivue/mono#199). This
+  # runs the hardware-GPU tests that Linux SwiftShader skips or cannot finish.
+  # The VM has 3 cores and 7 GB: it checks correctness, not speed.
+  browser-e2e-gpu:
+    needs: app-plan
+    if: needs.app-plan.outputs.has_gpu_apps == 'true'
+    runs-on: macos-15
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.app-plan.outputs.gpu_apps) }}
+    env:
+      NEURODESK_HARDWARE_GPU: '1'
+      NEURODESK_HARDWARE_GPU_VENDOR: apple
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.rust_wasm
+      - name: Install Greedy WebAssembly toolchain
+        if: matrix.rust_wasm
+        run: |
+          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        if: matrix.rust_wasm
+        uses: ./.github/actions/setup-wasm-opt
+      - uses: actions/setup-python@v7
+        if: matrix.python_reference
+        with:
+          python-version: '3.13'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Python reference dependencies
+        if: matrix.python_reference
+        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
+      - name: Install full Chromium
+        run: node node_modules/@playwright/test/cli.js install chromium
+      - name: Check that Chromium reaches the Metal GPU
+        run: node scripts/probe-hardware-gpu.mjs
+      - name: Build ${{ matrix.app }} browser runtime
+        run: pnpm --filter ${{ matrix.app }} build
+      - name: Test ${{ matrix.app }} on the hardware GPU
         run: pnpm --filter ${{ matrix.app }} test:e2e
 
   homepage-easter-egg:

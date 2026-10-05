@@ -1,20 +1,15 @@
-import { assertHardwareAdapter } from './hardware-adapter.js';
 import { test, expect } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { unzipSync } from 'fflate';
 import { readVolume } from '@neurodesk/synthsr';
 import { asBuffer, sameGeometry } from '../../../packages/syncro/src/pipeline.js';
+import { assertHardwareAdapter, hardwareGpu, readAdapterInfo } from '../../../test-utils/hardware-gpu.mjs';
 
 test.beforeEach(async ({ page }, testInfo) => {
-  if (!process.env.SYNCRO_HARDWARE_GPU) return;
+  if (!hardwareGpu) return;
   await page.goto('./');
-  const info = await page.evaluate(async () => {
-    const adapter = await navigator.gpu?.requestAdapter();
-    if (!adapter) return null;
-    return { vendor: adapter.info.vendor, architecture: adapter.info.architecture, device: adapter.info.device, description: adapter.info.description, isFallbackAdapter: adapter.info.isFallbackAdapter };
-  });
-  expect(info, 'Hardware WebGPU requires an available adapter').not.toBeNull();
+  const info = await readAdapterInfo(page);
   await testInfo.attach('webgpu-adapter', { body: JSON.stringify(info), contentType: 'application/json' });
   assertHardwareAdapter(info);
 });
@@ -64,7 +59,7 @@ test('pinned T1 example completes with the WASM SynthSR backend', async ({ page 
   expect(overlap / templateSupport).toBeGreaterThanOrEqual(0.1);
   const provenance = JSON.parse(new TextDecoder().decode(files['provenance.json']));
   expect(provenance.stages.synthsr).toMatchObject({ backend: 'wasm', flip: true, tiled: false });
-  if (process.env.SYNCRO_HARDWARE_GPU) expect(provenance.stages.mindgrab.backend).toBe('webgpu');
+  if (hardwareGpu) expect(provenance.stages.mindgrab.backend).toBe('webgpu');
 });
 
 test('cropped head fixture cannot publish nearly empty normalized outputs', async ({ page }) => {

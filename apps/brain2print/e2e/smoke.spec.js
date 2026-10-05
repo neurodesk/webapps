@@ -6,12 +6,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
-
-// Headless Chromium otherwise exposes only a SwiftShader WebGPU adapter, on which
-// MindGrab does not finish; these flags hand it the real GPU. Must stay top level
-// (Playwright forbids launchOptions inside a describe group).
-const hardwareGpu = process.platform === "darwin";
-test.use({ launchOptions: { args: ["--enable-unsafe-webgpu", ...(hardwareGpu ? ["--use-angle=metal", "--enable-features=Metal"] : ["--use-angle=swiftshader", "--use-vulkan=swiftshader", "--enable-features=Vulkan", "--disable-vulkan-surface"])] } });
+import { hardwareGpu } from "../../../test-utils/hardware-gpu.mjs";
 
 test("app boots", async ({ page }) => {
   await page.goto("/");

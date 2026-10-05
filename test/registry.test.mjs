@@ -87,6 +87,27 @@ test('CI browser-e2e matrix covers exactly the apps with runnable browser suites
   assert.match(workflow.jobs['browser-e2e'].strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.browser_apps\)/);
 });
 
+test('hardware-GPU apps run their browser suite on a macOS runner with Metal', async () => {
+  const registry = await loadAppsRegistry();
+  assert.ok(registry.apps.some((app) => app.ci.hardware_gpu), 'at least one app needs hardware GPU coverage');
+  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  const job = workflow.jobs['browser-e2e-gpu'];
+  assert.equal(job.needs, 'app-plan');
+  assert.match(job.if, /has_gpu_apps/);
+  assert.match(job['runs-on'], /^macos-/);
+  assert.match(job.strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.gpu_apps\)/);
+  assert.equal(job.env.NEURODESK_HARDWARE_GPU, '1');
+});
+
+test('registry validation rejects ci.hardware_gpu without a browser suite', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  raw.apps[0].ci.browser_test = false;
+  raw.apps[0].ci.hardware_gpu = true;
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-registry-')), 'apps.yml');
+  await writeFile(path, stringify(raw));
+  await assert.rejects(loadAppsRegistry(path), /ci\.hardware_gpu needs ci\.browser_test/);
+});
+
 test('registry validation rejects a non-boolean ci.browser_test', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   raw.apps[0].ci.browser_test = 'sometimes';

@@ -6,6 +6,7 @@ import { expect, test } from '@playwright/test';
 import { readNifti } from '../../../packages/components/src/file-io/NiftiUtils.js';
 import { summarizeLabels } from '../../../packages/components/src/automation/label-measurements.js';
 import { planGpuGraph } from '../../../packages/runtime-support/src/gpu-unet/session.js';
+import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 
 const freesurferLut = JSON.parse(readFileSync(new URL('../../../packages/components/src/automation/freesurfer-lut.json', import.meta.url), 'utf8'));
 const graph = JSON.parse(readFileSync(new URL('../../../packages/synthseg/src/gpu-model.json', import.meta.url), 'utf8'));
@@ -19,7 +20,7 @@ const evidence = {
   schemaVersion: 1,
   startedAt: new Date().toISOString(),
   scope: probeOnly ? 'adapter and planned buffer limits only; no inference' : references ? 'small fixtures and full-volume WebGPU parity' : 'small fixtures only',
-  requireHardware: Boolean(process.env.SYNTHSEG_HARDWARE_GPU),
+  requireHardware: hardwareGpu,
   results: [],
 };
 const save = () => {
@@ -69,7 +70,7 @@ async function adapterEvidence(page) {
     };
   });
   save();
-  if (process.env.SYNTHSEG_HARDWARE_GPU) {
+  if (hardwareGpu) {
     expect(adapter.isFallbackAdapter, 'Hardware validation cannot use a fallback adapter').not.toBe(true);
     expect(JSON.stringify(adapter.info)).not.toMatch(/swiftshader|llvmpipe|lavapipe/i);
   }
