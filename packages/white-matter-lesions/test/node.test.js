@@ -149,6 +149,15 @@ test('the ensemble size is one fold or all five', async (t) => {
   assert.deepEqual(await readdir(root), ['input.nii']);
 });
 
+test('self-check writes nothing to the home directory', async (t) => {
+  const { root } = await workspace(t);
+  const home = join(root, 'home');
+  await mkdir(home);
+  const result = spawnSync(process.execPath, [cli, 'self-check'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home } });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(await readdir(home, { recursive: true }), []);
+});
+
 test('command line reports help, rejects unsupported options and checks the CPU runtime', async () => {
   const help = run(['--help']);
   assert.equal(help.status, 0);

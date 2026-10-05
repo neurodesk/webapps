@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { checkInstallation, downloadModels, segment } from '../src/node.js';
+
+// ONNX Runtime's Linux build otherwise writes a telemetry device ID under ~/.cache/Microsoft.
+// It reads the variable when its library loads, so node.js is imported afterwards.
+process.env.ORT_DISABLE_TELEMETRY ??= '1';
+const { checkInstallation, downloadModels, segment } = await import('../src/node.js');
 
 const HELP = `Usage: flames INPUT.nii[.gz] OUTPUT_DIR [options]
        flames download-models [--cache-dir DIR]
