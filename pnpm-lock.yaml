@@ -1040,6 +1040,10 @@ importers:
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+    devDependencies:
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
 
   site/easter-eggs/vessel-surfer:
     dependencies:

@@ -34,6 +34,9 @@
     "@neurodesk/synthstrip": "workspace:*",
     "onnxruntime-node": "1.29.0"
   },
+  "devDependencies": {
+    "onnxruntime-web": "1.29.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/neurodesk/webapps.git",
