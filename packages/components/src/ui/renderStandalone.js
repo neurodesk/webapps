@@ -37,7 +37,8 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
     const instructions = download.command?.split('\n').filter(line => !/sha256|sha-256|shasum|get-filehash/i.test(line)).join('\n');
     if (instructions && (download.parts?.length || download.kind === 'cli')) {
       const details = element('details');
-      details.append(element('summary', download.parts?.length ? 'Installation instructions' : 'Extract and run'));
+      const summary = download.parts?.length ? 'Installation instructions' : download.url?.endsWith('.pkg') ? 'Install and run' : 'Extract and run';
+      details.append(element('summary', summary));
       command(details, `install-${id}`, instructions);
       row.append(details);
     }

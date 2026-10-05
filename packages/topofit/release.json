@@ -30,7 +30,7 @@
     },
     "macos-arm64": {
       "label": "macOS Apple silicon",
-      "archive": "tar.gz",
+      "archive": "pkg",
       "executable": "topofit"
     }
   }
