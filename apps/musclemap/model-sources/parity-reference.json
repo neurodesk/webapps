@@ -4,7 +4,6 @@
   "revision": "1409093e00bd7cc072220752352bb8891e5f38c6",
   "prefix": "musclemap/parity/20261004",
   "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
-  "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6",
   "files": [
     {
       "path": "bounded-equivalence/body-first17.npz",
@@ -133,7 +132,10 @@
       "overlap": 0.5,
       "authority": "unmodified-upstream-chunk-and-global-cleanup",
       "extent": "subset",
-      "provenance": "provenance/body-first17.json"
+      "provenance": "provenance/body-first17.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     },
     {
       "id": "body-first17-multichunk",
@@ -145,7 +147,10 @@
       "overlap": 0.5,
       "authority": "unmodified-upstream",
       "extent": "subset",
-      "provenance": "provenance/body-first17-multichunk.json"
+      "provenance": "provenance/body-first17-multichunk.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     },
     {
       "id": "knee-slab",
@@ -157,7 +162,10 @@
       "overlap": 0,
       "authority": "unmodified-upstream",
       "extent": "subset",
-      "provenance": "provenance/knee-slab.json"
+      "provenance": "provenance/knee-slab.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     },
     {
       "id": "body-single-slice",
@@ -169,7 +177,10 @@
       "overlap": 0.5,
       "authority": "unmodified-upstream",
       "extent": "subset",
-      "provenance": "provenance/body-single-slice.json"
+      "provenance": "provenance/body-single-slice.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     },
     {
       "id": "body-full",
@@ -181,7 +192,10 @@
       "overlap": 0.5,
       "authority": "unmodified-upstream",
       "extent": "full-original-volume",
-      "provenance": "provenance/body-full.json"
+      "provenance": "provenance/body-full.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     },
     {
       "id": "knee-full",
@@ -193,7 +207,10 @@
       "overlap": 0,
       "authority": "bounded-channel-inversion",
       "extent": "full-original-volume",
-      "provenance": "provenance/knee-full.json"
+      "provenance": "provenance/knee-full.json",
+      "model": "wholebody",
+      "modelVersion": "1.4",
+      "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
     }
   ]
 }
