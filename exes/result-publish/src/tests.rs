@@ -223,14 +223,40 @@ fn preserves_unicode_paths() {
 
 #[cfg(unix)]
 #[test]
-fn preserves_non_utf8_paths() {
+fn temporary_names_preserve_non_utf8_path_bytes() {
+    use std::os::unix::ffi::{OsStrExt, OsStringExt};
+    let path = PathBuf::from(std::ffi::OsString::from_vec(
+        b"native-\xff/result-\xfe.nii".to_vec(),
+    ));
+    let mut expected = path.as_os_str().as_bytes().to_vec();
+    expected.extend_from_slice(format!(".{}.partial", std::process::id()).as_bytes());
+    assert_eq!(temporary_path(&path).as_os_str().as_bytes(), expected);
+}
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_publication_matches_filesystem_support() {
     use std::os::unix::ffi::OsStringExt;
     let dir = Directory::new();
     let parent = dir
         .0
         .join(std::ffi::OsString::from_vec(b"native-\xff".to_vec()));
     let path = parent.join(std::ffi::OsString::from_vec(b"result-\xfe.nii".to_vec()));
-    publish(&[(path.as_path(), vec![42])], false).unwrap();
-    assert_eq!(fs::read(&path).unwrap(), [42]);
-    assert_eq!(fs::read_dir(parent).unwrap().count(), 1);
+    // Linux filesystems accept these bytes; macOS APFS rejects them with EILSEQ.
+    // Compare with the filesystem itself instead of assuming every Unix accepts
+    // a non-UTF-8 directory name. A rejection must propagate without staging.
+    match fs::create_dir(&parent) {
+        Ok(()) => {
+            publish(&[(path.as_path(), vec![42])], false).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), [42]);
+            assert_eq!(fs::read_dir(parent).unwrap().count(), 1);
+        }
+        Err(error) => {
+            assert_eq!(
+                publish(&[(path.as_path(), vec![42])], false).unwrap_err(),
+                error.to_string()
+            );
+            assert_eq!(fs::read_dir(&dir.0).unwrap().count(), 0);
+        }
+    }
 }
