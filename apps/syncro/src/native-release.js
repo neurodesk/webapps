@@ -8,20 +8,27 @@ function element(root,id) {
   return value;
 }
 
+// Controls are named after the target's system: macos-arm64 fills #nativeMacosDownload.
+function controlPrefix(id) {
+  const system=id.split('-')[0];
+  return `native${system[0].toUpperCase()}${system.slice(1)}`;
+}
+
 export function configureNativeDownloads(root,release=syncroRelease) {
-  for(const id of ['windows-x64','linux-x64']) {
-    const target=release.targets[id],name=id.startsWith('windows')?'Windows':'Linux';
-    const link=element(root,`native${name}Download`),checksum=element(root,`native${name}Checksum`);
-    link.href=target.url;link.download=target.archiveName;link.textContent=`Download ${target.archiveName}`;
-    checksum.href=target.checksumUrl;
-    const setup=id.startsWith('windows')
-      ?`Expand-Archive -Path .\\${target.archiveName} -DestinationPath .\n${target.selfCheck}\n${target.run}`
-      :`curl -fLO ${target.url}\ncurl -fLO ${target.checksumUrl}\nsha256sum -c ${target.checksumName}\ntar -xzf ${target.archiveName}\n${target.selfCheck}\n${target.run}`;
-    element(root,`native${name}Commands`).textContent=setup;
+  for(const target of Object.values(release.targets)) {
+    const prefix=controlPrefix(target.id);
+    const link=element(root,`${prefix}Download`);
+    link.href=target.url;
+    link.download=target.archiveName;
+    link.textContent=`Download ${target.archiveName}`;
+    element(root,`${prefix}Checksum`).href=target.checksumUrl;
+    element(root,`${prefix}Commands`).textContent=[...target.setup,target.selfCheck,target.run].join('\n');
   }
   const npm=`neurodesk-syncro-${release.version}.tgz`;
   const npmLink=element(root,'packageLink');
-  npmLink.href=`downloads/${npm}`;npmLink.download=true;npmLink.textContent=`Download npm package · ${release.version}`;
+  npmLink.href=`downloads/${npm}`;
+  npmLink.download=true;
+  npmLink.textContent=`Download npm package · ${release.version}`;
   element(root,'downloadCommand').textContent=`curl -fLO https://webapps.neurodesk.org/syncro/downloads/${npm}`;
   element(root,'installCommand').textContent=`ONNXRUNTIME_NODE_INSTALL=skip npm install -g --prefix "$HOME/.local" ./${npm}`;
 }

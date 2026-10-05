@@ -100,12 +100,13 @@
 </template>
 
 <template id="standaloneContent">
-  <div class="nd-dialog-highlight"><div><strong>Run SYNcro from a terminal</strong><p>Download a portable build for Windows or Linux. No Node.js installation or administrator access is required. Models download and verify on first use.</p></div></div>
+  <div class="nd-dialog-highlight"><div><strong>Run SYNcro from a terminal</strong><p>Download a build for macOS, Windows or Linux. Node.js and the models are included.</p></div></div>
   <div >
+    <section><h3>macOS Apple silicon</h3><p>Signed installer. It adds the <code>syncro</code> command to /usr/local/bin.</p><p><a id="nativeMacosDownload" class="nd-btn nd-btn-secondary nd-btn-sm">Download for macOS</a> <a id="nativeMacosChecksum" class="nd-btn nd-btn-secondary nd-btn-sm">SHA-256</a></p><div class="nd-command"><code id="nativeMacosCommands"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="nativeMacosCommands" aria-label="Copy macOS commands">Copy</button></div></section>
     <section><h3>Windows x64</h3><p>Extract the zip in PowerShell, then run the included executable.</p><p><a id="nativeWindowsDownload" class="nd-btn nd-btn-secondary nd-btn-sm">Download for Windows</a> <a id="nativeWindowsChecksum" class="nd-btn nd-btn-secondary nd-btn-sm">SHA-256</a></p><div class="nd-command"><code id="nativeWindowsCommands"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="nativeWindowsCommands" aria-label="Copy Windows commands">Copy</button></div></section>
     <section><h3>Linux x64</h3><p>Built and tested on Ubuntu 22.04. Keep the extracted directory intact.</p><p><a id="nativeLinuxDownload" class="nd-btn nd-btn-secondary nd-btn-sm">Download for Linux</a> <a id="nativeLinuxChecksum" class="nd-btn nd-btn-secondary nd-btn-sm">SHA-256</a></p><div class="nd-command"><code id="nativeLinuxCommands"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="nativeLinuxCommands" aria-label="Copy Linux commands">Copy</button></div></section>
   </div>
-  <p class="nd-hint">Replace <code>input.nii.gz</code> with your scan. Add <code>--ct</code> for CT. Run <code>download-models</code> first to prepare an offline cache.</p>
+  <p class="nd-hint">Replace <code>input.nii.gz</code> with your scan. Add <code>--ct</code> for CT.</p>
   <details id="nodePackageDetails" class="nd-sidebar-section"><summary class="nd-section-title">Node.js package for other systems and HPC</summary>
     <p>Install with Node.js 22 or later. This route supports managed clusters and shared model caches.</p>
     <a id="packageLink" class="nd-btn nd-btn-secondary nd-btn-sm" download>Download npm package</a>

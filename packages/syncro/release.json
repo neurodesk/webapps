@@ -24,6 +24,11 @@
       "label": "Linux x64",
       "archive": "tar.gz",
       "executable": "syncro"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "syncro"
     }
   }
 }
