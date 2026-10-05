@@ -1,0 +1,30 @@
+// The files a run produces, shared by the web downloads and the command line so both name and
+// describe their results the same way. Keys are the automation artifact roles in automation.json.
+
+// Unit codes the WASM core takes for a measured B1 map.
+export const B1_MAP_KINDS = Object.freeze({ tfl: 0, percent: 1, relative: 2 });
+
+export function outputFiles(task, mode) {
+  if (task === 'denoise') return [['unic', 'UNI_denoised.nii.gz']];
+  const b1 = mode === 'sa2rage' ? 'B1map_from_SA2RAGE.nii.gz' : 'B1map.nii.gz';
+  if (task === 'b1only') return [['b1', b1]];
+  return [
+    ['t1', 'T1map.nii.gz'],
+    ['b1', b1],
+    ['t1u', 'T1map_uncorrected.nii.gz'],
+    ['unic', 'UNI_b1corrected.nii.gz'],
+  ];
+}
+
+export function parametersRecord({ software, note, task, mode, mp2rage, sa2rage, b1MapType, regularization }) {
+  return {
+    software,
+    task,
+    mode: task === 'denoise' ? undefined : mode,
+    mp2rage: task === 'denoise' ? undefined : mp2rage,
+    sa2rage: mode === 'sa2rage' ? sa2rage : undefined,
+    b1_map_type: mode === 'b1map' ? b1MapType : undefined,
+    regularization: task === 'denoise' ? regularization : undefined,
+    note,
+  };
+}

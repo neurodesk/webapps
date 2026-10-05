@@ -2,10 +2,10 @@
 // The main thread parses NIfTI/DICOM (via NiiVue) and posts flat typed arrays;
 // results are posted back with transferable ArrayBuffers (zero-copy).
 //
-// The .wasm is built by `wasm-pack build --target web` and copied to web/wasm/.
-import init, { t1map_sa2rage, t1map_b1, denoise_uni, version } from '../wasm/mp2rage_wasm.js';
+// The .wasm is built by `wasm-pack build --target web` and staged into web/vendor/easy-mp2rage/wasm/.
+import init, { t1map_sa2rage, t1map_b1, denoise_uni, version } from '../vendor/easy-mp2rage/wasm/mp2rage_wasm.js';
 
-const ready = init(new URL('../wasm/mp2rage_wasm_bg.wasm', import.meta.url));
+const ready = init(new URL('../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm', import.meta.url));
 
 self.onmessage = async (e) => {
   const msg = e.data || {};

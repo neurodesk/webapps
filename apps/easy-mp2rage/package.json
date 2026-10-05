@@ -15,5 +15,8 @@
     "test:examples": "node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app easy-mp2rage && node ../../test/easy-mp2rage-workspace.smoke.mjs",
     "predev": "pnpm run build"
+  },
+  "dependencies": {
+    "@neurodesk/easy-mp2rage": "workspace:*"
   }
 }

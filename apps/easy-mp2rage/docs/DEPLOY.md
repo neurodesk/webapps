@@ -25,7 +25,7 @@ the headless data-path check) runs on every push/PR.
 ## How the deploy works
 
 `build` job: install Rust + `wasm-pack` → `tools/build_wasm.sh` (builds the WASM
-into `web/wasm/`) → upload `web/` as the Pages artifact. `deploy` job publishes it.
+into `web/vendor/easy-mp2rage/`) → upload `web/` as the Pages artifact. `deploy` job publishes it.
 All asset paths are relative, so it works at the custom-domain root with no config.
 
 ## NeuroDesk custom domain + listing

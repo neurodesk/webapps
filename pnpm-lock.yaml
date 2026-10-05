@@ -486,7 +486,11 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
-  apps/easy-mp2rage: {}
+  apps/easy-mp2rage:
+    dependencies:
+      '@neurodesk/easy-mp2rage':
+        specifier: workspace:*
+        version: link:../../packages/easy-mp2rage
 
   apps/edgereg:
     dependencies:
@@ -945,6 +949,8 @@ importers:
       electron-builder:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+
+  packages/easy-mp2rage: {}
 
   packages/greedy: {}
 

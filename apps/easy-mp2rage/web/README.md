@@ -11,7 +11,7 @@ contains no analytics bootstrap.)
 ## Build the WASM, then run
 
 ```bash
-# 1. build the wasm core and stage it into web/wasm/  (needs wasm-pack)
+# 1. build the wasm core and stage it into web/vendor/easy-mp2rage/  (needs wasm-pack)
 tools/build_wasm.sh
 
 # 2. serve the web/ folder over http (ES modules + wasm need http, not file://)
@@ -32,7 +32,7 @@ click **Compute T1 map**, preview the result, and download the outputs
 |------|------|
 | `index.html` | layout + styles |
 | `js/app.js` | drag-drop, role assignment, params, orchestration, canvas viewer, downloads |
-| `js/nifti.js` | NIfTI-1 read/write in JS (mirrors the Rust I/O; validated against golden) |
+| `vendor/easy-mp2rage/src/nifti.js` | NIfTI-1 read/write in JS, staged from `packages/easy-mp2rage` (mirrors the Rust I/O; validated against golden) |
 | `js/worker.js` | Web Worker that runs the WASM core off the UI thread |
 | `wasm/` | `wasm-pack` output (built by `tools/build_wasm.sh`; gitignored) |
 | `test/e2e_node.mjs` | headless check: nifti.js → WASM → nifti.js reproduces the Python golden |

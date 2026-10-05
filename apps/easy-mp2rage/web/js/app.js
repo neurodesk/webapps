@@ -10,19 +10,20 @@ import {
 // with a self-contained canvas viewer, and offers client-side downloads. Your
 // images/results never leave the tab (the hosted page loads GA4, which sees
 // anonymous page views only).
-import { readNifti, writeNiftiF32, writeNiftiGz } from "./nifti.js";
+import { readNifti, writeNiftiF32, writeNiftiGz } from "../vendor/easy-mp2rage/src/nifti.js";
+import { B1_MAP_KINDS, outputFiles, parametersRecord } from "../vendor/easy-mp2rage/src/outputs.js";
 import { zipStore } from "./zip.js";
 import { indexBids } from "./bids.js";
 import initWasm, {
   parse_dicom_series,
   write_dicom_t1,
-} from "../wasm/mp2rage_wasm.js";
+} from "../vendor/easy-mp2rage/wasm/mp2rage_wasm.js";
 
 let wasmReady;
 function ensureWasm() {
   if (!wasmReady)
     wasmReady = initWasm(
-      new URL("../wasm/mp2rage_wasm_bg.wasm", import.meta.url)
+      new URL("../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm", import.meta.url)
     );
   return wasmReady;
 }
@@ -846,7 +847,7 @@ async function runSelectedTask() {
     msg.b1 = b1Copy;
     msg.b1Dims = Uint32Array.from(b1.dims.slice(0, 3));
     msg.b1Aff = b1.affine;
-    msg.kind = { tfl: 0, percent: 1, relative: 2 }[$("#b1_type").value];
+    msg.kind = B1_MAP_KINDS[$("#b1_type").value];
     msg.refAngle = num("#b1_refangle");
     msg.extendFov = $("#extendFov") ? $("#extendFov").checked : true;
     transfer.push(b1Copy.buffer);
@@ -1015,19 +1016,7 @@ async function buildDownloads(task, mode, uni) {
   derivedFiles = [];
   revokeDownloadUrls();
   dd.innerHTML = "";
-  const b1name =
-    mode === "sa2rage" ? "B1map_from_SA2RAGE.nii.gz" : "B1map.nii.gz";
-  const items =
-    task === "denoise"
-      ? [["unic", "UNI_denoised.nii.gz"]]
-      : task === "b1only"
-      ? [["b1", b1name]]
-      : [
-          ["t1", "T1map.nii.gz"],
-          ["b1", b1name],
-          ["t1u", "T1map_uncorrected.nii.gz"],
-          ["unic", "UNI_b1corrected.nii.gz"],
-        ];
+  const items = outputFiles(task, mode);
   results.render(
     Object.fromEntries(
       items
@@ -1099,15 +1088,16 @@ async function buildDownloads(task, mode, uni) {
       log("DICOM export skipped: " + e);
     }
   }
-  const prov = {
+  const prov = parametersRecord({
     software: "easy-mp2rage-t1map (wasm)",
+    note: "Computed entirely in-browser; no data uploaded.",
     task,
     mode,
     mp2rage: mpParams(),
-    sa2rage: mode === "sa2rage" ? saParams() : undefined,
-    b1_map_type: mode === "b1map" ? $("#b1_type").value : undefined,
-    note: "Computed entirely in-browser; no data uploaded.",
-  };
+    sa2rage: saParams(),
+    b1MapType: $("#b1_type").value,
+    regularization: num("#reg"),
+  });
   const provBytes = new TextEncoder().encode(JSON.stringify(prov, null, 2));
   derivedFiles.push({ role: "parameters", file: new File([provBytes], "parameters.json", { type: "application/json" }) });
   addLink(
