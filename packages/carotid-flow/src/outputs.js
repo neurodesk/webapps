@@ -30,3 +30,24 @@ export function variabilityImage(found, source) {
 export function curvesTable(found, source) {
   return { name: `${stem(source.name)}_carotid_curves.csv`, text: curvesCsv(found) };
 }
+
+/** The detection summary the web app's automation reports as measurements. */
+export function measurements(found) {
+  return {
+    method: found.method,
+    ...(found.qc ? { qc: found.qc, baseline: found.baseline, arterialSign: found.arterialSign } : {}),
+    curveUnit: found.method === 'velocity' ? 'ml/min' : 'a.u.',
+    vessels: Object.fromEntries(['left', 'right'].map((side) => {
+      const vessel = found[side];
+      return [side, {
+        areaMm2: vessel.areaMm2,
+        pixelCount: vessel.pixels.length,
+        mean: vessel.mean,
+        peak: vessel.peak,
+        peakFrame: vessel.peakFrame,
+        pulsatility: vessel.pulsatility,
+        curve: Array.from(vessel.curve),
+      }];
+    })),
+  };
+}

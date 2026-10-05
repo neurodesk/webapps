@@ -131,14 +131,19 @@ export function isSignedPhase(phase) {
   return low < -0.05 * Math.max(high, 1e-9);
 }
 
+/** Raw ±4096 phase rather than velocity already scaled to cm/s. */
+export function isRawPhase(phase) {
+  let largest = 0;
+  for (const value of phase) largest = Math.max(largest, Math.abs(value));
+  return largest > RAW_PHASE;
+}
+
 /**
  * cm/s per stored unit. Velocity-scaled phase (Philips and GE through dcm2niix) is already cm/s;
  * raw ±4096 phase needs the VENC, which maps ±4096 to ±VENC.
  */
 export function velocityScale(phase, venc) {
-  let largest = 0;
-  for (const value of phase) largest = Math.max(largest, Math.abs(value));
-  if (largest <= RAW_PHASE) return 1;
+  if (!isRawPhase(phase)) return 1;
   if (!(venc > 0)) throw new Error('This phase series is stored as raw phase (±4096). Enter the velocity encoding (VENC) under Advanced settings.');
   return venc / 4096;
 }

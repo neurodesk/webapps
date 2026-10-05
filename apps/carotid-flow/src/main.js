@@ -16,7 +16,7 @@ import { createFloat32Nifti, downloadBlob, downloadFile } from '@neurodesk/webap
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
 import { detectCarotids, meanFrames } from '@neurodesk/carotid-flow';
-import { curvesTable, stem, variabilityImage } from '@neurodesk/carotid-flow/outputs';
+import { curvesTable, measurements, stem, variabilityImage } from '@neurodesk/carotid-flow/outputs';
 import { readSeries, readVolume } from '@neurodesk/carotid-flow/series';
 import { flowChartSvg } from './chart.js';
 import { APP, assignSeries } from './config.js';
@@ -470,19 +470,6 @@ window.addEventListener('pagehide', () => {
   loading?.abort();
 });
 const initialized = init();
-
-function measurements(found) {
-  return {
-    method: found.method,
-    ...(found.qc ? { qc: found.qc, baseline: found.baseline, arterialSign: found.arterialSign } : {}),
-    curveUnit: found.method === 'velocity' ? 'ml/min' : 'a.u.',
-    vessels: Object.fromEntries(['left', 'right'].map(side => {
-      const vessel = found[side];
-      return [side, { areaMm2: vessel.areaMm2, pixelCount: vessel.pixels.length, mean: vessel.mean,
-        peak: vessel.peak, peakFrame: vessel.peakFrame, pulsatility: vessel.pulsatility, curve: Array.from(vessel.curve) }];
-    })),
-  };
-}
 
 async function detectOperation({ inputs, parameters, signal, progress }) {
   await initialized;
