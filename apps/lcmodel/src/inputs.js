@@ -31,20 +31,25 @@ export function parseControl(text) {
   };
 }
 
-/**
- * An LCModel .RAW/.H2O file: its point count (values after $NMID ... $END),
- * and any acquisition numbers in an optional $SEQPAR block (FID-A and spec2nii
- * write hzpppm, echot and dwellTime there).
- */
-export function parseRaw(text) {
+/** The numbers after a .RAW/.H2O file's $NMID block: real and imaginary parts, interleaved. */
+export function rawValues(text) {
   const nmid = text.search(/[$&]NMID\b/i);
   if (nmid < 0) throw new Error("Not an LCModel .RAW file (no $NMID).");
   const after = text.slice(nmid);
   const close = after.search(/[$&]END\b/i);
   if (close < 0) throw new Error("The $NMID block of this .RAW file is not closed.");
   const body = after.slice(close).split(/\r?\n/).slice(1).join("\n");
-  const values = body.trim().split(/\s+/).filter((t) => t !== "" && Number.isFinite(Number(t.replace(/[dD]/, "e"))));
-  const head = text.slice(0, nmid);
+  return body.trim().split(/\s+/).map((t) => Number(t.replace(/[dD]/, "e"))).filter(Number.isFinite);
+}
+
+/**
+ * An LCModel .RAW/.H2O file: its point count (values after $NMID ... $END),
+ * and any acquisition numbers in an optional $SEQPAR block (FID-A and spec2nii
+ * write hzpppm, echot and dwellTime there).
+ */
+export function parseRaw(text) {
+  const values = rawValues(text);
+  const head = text.slice(0, text.search(/[$&]NMID\b/i));
   const seqpar = /[$&]SEQPAR\b/i.test(head) ? head : "";
   const dwell = namelistNumber(seqpar, "dwellTime") ?? namelistNumber(seqpar, "deltat");
   return {
