@@ -60,6 +60,7 @@ let viewerBusy = false;
 let normalArrowWorker;
 let normalArrowKey = '';
 const visibleMeshes = new Set();
+const loadedSurfaces = new Map();
 const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
 const stageLabels = {
   qc: 'Source-grid QC overlay',
@@ -399,6 +400,7 @@ async function resetMeshes(nv) {
   displayedResult = null;
   showPatchMeasurements(null);
   await nv.removeAllMeshes();
+  loadedSurfaces.clear();
   normalArrowKey = '';
   $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
   visibleMeshes.clear();
@@ -407,10 +409,46 @@ async function resetMeshes(nv) {
   for (const input of $('resultList').querySelectorAll('.nd-result-visibility input')) input.checked = false;
 }
 
-async function showSource() {
+async function loadResultSurfaces() {
   const nv = await ensureViewer();
-  anatomyIn3D = false;
-  await resetMeshes(nv);
+  setViewerBusy(true);
+  try {
+    const surfaceFiles = new Map([...outputs.values()]
+      .filter((file) => file.type === 'application/vnd.freesurfer.surface')
+      .map((file) => [file.name, file]));
+    for (let index = nv.meshes.length - 1; index >= 0; index -= 1) {
+      const name = nv.meshes[index].name;
+      if (loadedSurfaces.has(name) && loadedSurfaces.get(name) !== surfaceFiles.get(name)) {
+        await nv.removeMesh(index);
+        loadedSurfaces.delete(name);
+      }
+    }
+    nv.meshThicknessOn2D = 1;
+    for (const [stage, file] of outputs) {
+      if (file.type !== 'application/vnd.freesurfer.surface' || nv.meshes.some((mesh) => mesh.name === file.name)) continue;
+      await nv.addMesh({
+        url: file,
+        name: file.name,
+        opacity: 0,
+        sliceShaderType: 'crosscut',
+        color: meshColors[stage] || [1, 0.85, 0, 1],
+      });
+      loadedSurfaces.set(file.name, file);
+    }
+  } catch (error) {
+    $('viewerError').hidden = false;
+    $('viewerError').textContent = `Visualization unavailable: ${error.message}. Downloads remain available.`;
+  } finally {
+    setViewerBusy(false);
+  }
+}
+
+async function showSource({ reset = false } = {}) {
+  const nv = await ensureViewer();
+  if (reset) {
+    anatomyIn3D = false;
+    await resetMeshes(nv);
+  }
   nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
@@ -427,15 +465,14 @@ async function setMeshVisible(stage, visible, input) {
   setViewerBusy(true);
   try {
     const nv = await ensureViewer();
-    if (visible && !meshSceneReady) {
+    if (visible) {
+      if (displayedResult === 'qc' || displayedResult === 'patch-qc') {
+        await nv.loadVolumes([{ url: source, name: source.name }]);
+      }
       displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = 1;
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.removeAllMeshes();
-      normalArrowKey = '';
-      await nv.loadVolumes([{ url: source, name: source.name }]);
-      visibleMeshes.clear();
       meshSceneReady = true;
     }
     const index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
@@ -471,7 +508,7 @@ async function showResult(stage, { duringRun = false } = {}) {
   setViewerBusy(true);
   try {
     const nv = await ensureViewer();
-    await resetMeshes(nv);
+    showPatchMeasurements(null);
     if (stage === 'qc' || stage === 'patch-qc') {
       nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
@@ -490,17 +527,22 @@ async function showResult(stage, { duringRun = false } = {}) {
       // Hide the MRI in 3D until the user explicitly shows it in FreeBrowse.
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       await nv.loadVolumes([{ url: source, name: source.name }]);
-      await nv.loadMeshes([{
-        url: file,
-        name: file.name,
-        sliceShaderType: 'crosscut',
-        ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
-        ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
-      }]);
+      let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      if (index < 0) {
+        await nv.addMesh({
+          url: file,
+          name: file.name,
+          sliceShaderType: 'crosscut',
+          ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
+          ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
+        });
+        index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      }
+      await nv.setMesh(index, { opacity: 1 });
       meshSceneReady = surfaceStages.has(stage);
       displayedResult = surfaceStages.has(stage) ? null : stage;
       if (surfaceStages.has(stage)) {
-        const mesh = nv.meshes[0];
+        const mesh = nv.meshes[index];
         nv.setCrosshairPos([0, 1, 2].map((axis) => (mesh.extentsMin[axis] + mesh.extentsMax[axis]) / 2));
       }
       $('imageLabel').textContent = resultLabel(stage);
@@ -540,7 +582,7 @@ async function load(file) {
     $('fileInfo').textContent = file.name;
     $('dropZone').classList.add('has-files');
     $('progress').value = 0;
-    await showSource();
+    await showSource({ reset: true });
     status('Image loaded · ready to reconstruct');
     return true;
   } catch (error) {
@@ -646,7 +688,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
     $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`;
   }, 1000);
   try {
-    if (!analysisOnly) await showSource();
+    if (!analysisOnly) await showSource({ reset: true });
   } catch (error) {
     $('viewerError').hidden = false;
     $('viewerError').textContent = `Visualization unavailable: ${error.message}. Reconstruction can continue.`;
@@ -722,6 +764,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
           $('progress').value = 1;
           status(analysisOnly ? `Surface analysis ready · ${Math.round(data.elapsedSeconds)} s` : `Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.elapsedSeconds)} s`);
           if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status('Surfaces ready · no cortical patch meets the selected criteria');
+          await loadResultSurfaces();
           await showResult(outputs.has('patch-qc') ? 'patch-qc' : 'qc', { duringRun: true });
           finish(null, { artifacts: automationArtifacts(data.files), provenance: data.provenance, measurements: { elapsedSeconds: data.elapsedSeconds, ...(data.provenance.surfaceAnalysis ? { surfaceAnalysis: data.provenance.surfaceAnalysis } : {}) } });
         }
