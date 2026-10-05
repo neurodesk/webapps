@@ -12,7 +12,6 @@ import { MODEL_RELEASES } from '../web/js/app/model-catalog.generated.js';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const appDir = resolve(scriptDir, '..');
-const defaultStage = resolve(appDir, '.tmp_model_release', 'wholebody-v1.4');
 const defaultReferenceManifest = resolve(appDir, 'model-sources', 'parity-reference.json');
 
 function argument(name, fallback) {
@@ -23,6 +22,10 @@ function argument(name, fallback) {
 function hasArgument(name) {
   return process.argv.includes(name);
 }
+
+const modelId = argument('--model', 'wholebody');
+const modelVersion = argument('--model-version', '1.4');
+const defaultStage = resolve(appDir, '.tmp_model_release', `${modelId}-v${modelVersion}`);
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -100,9 +103,9 @@ async function main() {
   const sourceChunkSize = sourceChunkSizeRaw === 'full' ? 'full' : Number(sourceChunkSizeRaw);
   const outputPath = resolve(argument('--output', resolve(defaultStage, 'upstream-parity-output.nii')));
   const stagedModel = MODEL_RELEASES.find(model =>
-    model.id === 'wholebody' && model.modelVersion === '1.4'
+    model.id === modelId && model.modelVersion === modelVersion
   );
-  if (!stagedModel) throw new Error('Generated catalog has no staged whole-body v1.4 descriptor');
+  if (!stagedModel) throw new Error(`Generated catalog has no ${modelId} v${modelVersion} descriptor`);
   const conversionValue = argument('--conversion-report', null);
   const modelAuthority = conversionValue ? 'conversion-candidate' : 'published-release';
   let candidate;
