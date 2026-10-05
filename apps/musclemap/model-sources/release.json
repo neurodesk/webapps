@@ -144,7 +144,7 @@
       "filename": "musclemap-thigh.onnx",
       "labelSpaceId": "musclemap-thigh-v0.0",
       "config": { "path": "thigh-v0.0.json", "bytes": 2789, "sha256": "ceffc56269db84335e9873633ba8102bd962a344b07d11db49fe9846fbe1f5a3", "publishedBytes": 2840, "publishedMd5": "1f820178021a866103e901d7bfa0af68", "publishedSha256": "9d123314d744d21a0c6b8727479771c5fba43a564613bee3d72ec59de1c73025" },
-      "source": { "record": "19633000", "doi": "10.5281/zenodo.19633000" },
+      "source": { "record": "19633000", "doi": "10.5281/zenodo.19633000", "checkpointSha256": "9681dec292ec483cc4a9834c8712d97b840663a43bfe390f369b5e84fb94da1a" },
       "asset": { "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11", "bytes": 39099153, "sha256": "2d1a607adfa0758516069e039717079a2340811e3d3c70a7e9621aa1564399f2", "precision": "q8", "validationReport": "legacy-provenance-not-recorded" }
     }
   ]

@@ -78,16 +78,6 @@
           "type": "boolean",
           "default": true,
           "description": "Allow the app's WebGPU backend with its existing CPU fallback"
-        },
-        "sliceThickness": {
-          "type": "number",
-          "minimum": 0.1,
-          "description": "Legacy-model target slice thickness in millimeters; omitted preserves input spacing"
-        },
-        "lowResolution": {
-          "type": "boolean",
-          "default": false,
-          "description": "Use the selected model's existing low-resolution mode"
         }
       },
       "artifacts": {

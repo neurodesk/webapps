@@ -46,6 +46,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -1025,6 +1029,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.9,
       "normalization": "nonzero-zscore"
@@ -2156,6 +2164,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2316,6 +2328,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2449,6 +2465,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2663,6 +2683,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2868,6 +2892,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2876,7 +2904,7 @@ export const MODEL_RELEASES = [
       "record": "19633000",
       "doi": "10.5281/zenodo.19633000",
       "configSha256": "9d123314d744d21a0c6b8727479771c5fba43a564613bee3d72ec59de1c73025",
-      "checkpointSha256": null,
+      "checkpointSha256": "9681dec292ec483cc4a9834c8712d97b840663a43bfe390f369b5e84fb94da1a",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
