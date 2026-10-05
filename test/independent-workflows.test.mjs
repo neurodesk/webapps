@@ -83,7 +83,7 @@ test('native packages share one gated publisher while signing stays isolated', a
 });
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
-  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
+  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'topofit-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
@@ -118,8 +118,8 @@ test('portable Node command lines build on target runners and publish through on
   assert.match(steps[target].run,/tagPrefix/);
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
-  const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest'};
-  for(const [name,packageDir] of [['syncro-native','packages/syncro']]) {
+  const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest','macos-arm64':'macos-14'};
+  for(const [name,packageDir] of [['syncro-native','packages/syncro'],['topofit-native','packages/topofit']]) {
     const flow=await workflow(name);
     assert.deepEqual(flow.permissions,{contents:'read'},name);
     assert.equal(flow.jobs.portable.uses,'./.github/workflows/node-cli-portable.yml',name);

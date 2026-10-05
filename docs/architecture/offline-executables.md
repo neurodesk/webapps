@@ -48,7 +48,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `seedseg` | Fiducial marker segmentation | `apps/seedseg/web/js/inference-worker.js`. Add headless inference, local model resolution and packaging. |
 | `deface` | Batch MRI defacing | `apps/deface/src/main.ts` and `src/mindgrab`. Separate reusable execution from UI and provide headless inference. |
 | `browserqc` | Segmentation and QC reports | `apps/browserqc/src/qc.ts` separates metrics, but `src/main.ts` owns inference. Add headless execution and report export. |
-| `topofit` | Cortical surface reconstruction | `packages/topofit/src/pipeline.js` and `src/browser.js`. Supply Node/native sessions, offline assets and meshing adapters. |
+| `topofit` | Cortical surface reconstruction | `packages/topofit/bin/topofit.js` runs reconstruction on the CPU with `onnxruntime-node`; `exes/node-cli` packages it with its models for Linux x64, Windows x64 and macOS arm64. Surface analysis and DICOM input remain web-only. |
 | `dwi2trx` | Tensor fitting and tractography | `apps/dwi2trx/src/dwi2trx` needs WebGPU and subgroup support for tracking. Prove a headless GPU runtime and retain the vendored dtifit-enabled niimath. |
 | `brain2print` | Segmentation to printable mesh | `apps/brain2print/src/mesh.js` has pure mesh validation. Extract the `src/main.js` pipeline with headless MindGrab and niimath meshing. |
 | `brain-extraction` | BET, MindGrab and SynthStrip brain extraction | Packaged in suite 0.4.20260915 with pinned models, the shared extraction adapters and an offline BET extraction/export check. |

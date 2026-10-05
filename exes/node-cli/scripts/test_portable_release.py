@@ -14,7 +14,7 @@ portable_release = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = portable_release
 SPEC.loader.exec_module(portable_release)
 
-PACKAGES = ("packages/syncro",)
+PACKAGES = ("packages/syncro", "packages/topofit")
 
 
 def package_version(package_dir):
@@ -50,6 +50,17 @@ class PortableReleaseTests(unittest.TestCase):
         self.assertEqual(windows.private_node, "runtime/node.exe")
         self.assertEqual(windows.node_platform, "win32")
 
+    def test_topofit_targets_cover_apple_silicon(self):
+        version = package_version("packages/topofit")
+        target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
+        self.assertEqual(target.archive_name, f"topofit-{version}-macos-arm64.tar.gz")
+        self.assertEqual((target.node_platform, target.node_arch), ("darwin", "arm64"))
+        self.assertEqual(target.package, "@neurodesk/topofit")
+        self.assertFalse(target.build)
+        self.assertEqual(target.validation, ROOT / "packages/topofit/validation/cli-check.mjs")
+        self.assertTrue(target.validation.is_file())
+        self.assertEqual(target.onnx_runtime, "1.29.0")
+
     def test_every_release_spec_loads_and_names_its_executables_after_the_tool(self):
         for package_dir in PACKAGES:
             release = json.loads((ROOT / package_dir / "release.json").read_text(encoding="utf8"))
@@ -69,8 +80,20 @@ class PortableReleaseTests(unittest.TestCase):
         self.assertIn("  ./syncro input.nii.gz results --threads 4\n", syncro)
         self.assertIn("SYNcro is research software.", syncro)
         self.assertNotIn("quarantine", syncro)
-        windows = portable_release.readme_text(portable_release.load_target(ROOT, "packages/syncro", "windows-x64"))
-        self.assertIn("  .\\syncro.exe self-check\n", windows)
+        windows = portable_release.readme_text(portable_release.load_target(ROOT, "packages/topofit", "windows-x64"))
+        self.assertIn("  .\\topofit.exe self-check\n", windows)
+        self.assertNotIn("SYNcro", windows)
+        macos_target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
+        macos = portable_release.readme_text(macos_target)
+        self.assertIn(f"xattr -dr com.apple.quarantine {macos_target.directory}", macos)
+
+    def test_host_must_match_the_target(self):
+        target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
+        with mock.patch.object(portable_release.sys, "platform", "linux"), mock.patch.object(portable_release.platform, "machine", return_value="x86_64"):
+            with self.assertRaisesRegex(ValueError, "matching host"):
+                portable_release._assert_native_host(target)
+        with mock.patch.object(portable_release.sys, "platform", "darwin"), mock.patch.object(portable_release.platform, "machine", return_value="arm64"):
+            portable_release._assert_native_host(target)
 
     def test_manifest_rejects_symlinks_and_path_escape(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -112,10 +135,23 @@ class PortableReleaseTests(unittest.TestCase):
             self.assertFalse((runtime / "win32").exists())
             self.assertFalse((runtime / "linux/arm64").exists())
 
+    def test_onnx_pruner_keeps_only_the_apple_silicon_runtime(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = pathlib.Path(temporary)
+            runtime = app / "node_modules/onnxruntime-node/bin/napi-v6"
+            for directory in ("darwin/arm64", "darwin/x64", "linux/x64"):
+                (runtime / directory).mkdir(parents=True)
+                (runtime / directory / "onnxruntime_binding.node").write_text(directory)
+            portable_release._prune_onnx_runtime(app, portable_release.load_target(ROOT, "packages/topofit", "macos-arm64"))
+            self.assertEqual(
+                sorted(path.relative_to(runtime).as_posix() for path in runtime.rglob("onnxruntime_binding.node")),
+                ["darwin/arm64/onnxruntime_binding.node"],
+            )
+
     def test_runtime_catalog_has_pinned_node_archives(self):
         catalog = json.loads((ROOT / "exes/node-cli/node-runtimes.json").read_text())
         self.assertEqual(catalog["version"], "22.22.0")
-        for target in ("linux-x64", "windows-x64"):
+        for target in ("linux-x64", "windows-x64", "macos-arm64"):
             self.assertRegex(catalog["targets"][target]["sha256"], r"^[0-9a-f]{64}$")
             self.assertIn(f"/v{catalog['version']}/", catalog["targets"][target]["url"])
 

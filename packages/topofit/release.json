@@ -1,0 +1,37 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "topofit-v",
+  "displayName": "TopoFit",
+  "app": "topofit",
+  "run": "input.nii.gz results",
+  "readme": {
+    "run": "Reconstruct cortical surfaces",
+    "notes": [
+      "The T1-weighted TopoFit models are included and checked locally.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for options. Surface analysis and DICOM input need the web app.",
+      "",
+      "TopoFit is research software. Review the surfaces before use. Please cite:",
+      "Hoopes A, Iglesias JE, Fischl B, Greve D, Dalca AV. TopoFit: Rapid",
+      "Reconstruction of Topologically-Correct Cortical Surfaces. MIDL 2022."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "topofit"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "topofit.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "tar.gz",
+      "executable": "topofit"
+    }
+  }
+}
