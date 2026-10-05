@@ -1,5 +1,13 @@
 # synthseg
 
+## 0.5.20261005
+
+### Patch Changes
+
+- Share native result publication between SynthSR and SynthSeg. Clean up newly created temporary files after failed writes while preserving each caller’s publication order and overwrite policy. Keep native path bytes when naming sibling temporaries.
+- Updated dependencies
+  - @neurodesk/synthseg@0.5.20261005
+
 ## 0.5.20261004
 
 ### Patch Changes

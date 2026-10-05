@@ -1,11 +1,12 @@
 [package]
 name = "synthseg"
-version = "0.5.20261004"
+version = "0.5.20261005"
 edition = "2021"
 license = "Apache-2.0"
 description = "SynthSeg 2.0 brain segmentation with ONNX Runtime and native Metal"
 
 [dependencies]
+neurodesk-native-publish = { path = "../native-publish" }
 neurodesk-nifti = { path = "../nifti" }
 ort = "=2.0.0-rc.13"
 flate2 = "1"
