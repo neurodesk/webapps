@@ -373,40 +373,6 @@
     return { data: out, dims: outDims, origin: bbox.origin.slice() };
   }
 
-  function sliceMorphometry(segmentation, dims, spacing) {
-    assertVolume(segmentation, dims, 'segmentation');
-    if (!Array.isArray(spacing) || spacing.length !== 3 || spacing.some(v => !Number.isFinite(v) || v <= 0)) {
-      throw new Error('spacing must be three positive numbers');
-    }
-    const [nx, ny, nz] = dims;
-    const voxelArea = spacing[0] * spacing[1];
-    const rows = [];
-    for (let z = 0; z < nz; z++) {
-      let count = 0;
-      let sumX = 0;
-      let sumY = 0;
-      for (let y = 0; y < ny; y++) {
-        for (let x = 0; x < nx; x++) {
-          if (segmentation[index3D(x, y, z, dims)] > 0) {
-            count++;
-            sumX += x;
-            sumY += y;
-          }
-        }
-      }
-      const areaMm2 = count * voxelArea;
-      rows.push({
-        slice: z,
-        voxelCount: count,
-        areaMm2,
-        equivalentDiameterMm: count ? Math.sqrt((4 * areaMm2) / Math.PI) : 0,
-        centroidX: count ? sumX / count : null,
-        centroidY: count ? sumY / count : null
-      });
-    }
-    return rows;
-  }
-
   function createLabelsFromVertBody(labeledSegmentation, dims, vertebralLevels) {
     assertVolume(labeledSegmentation, dims, 'labeledSegmentation');
     if (!Array.isArray(vertebralLevels) || !vertebralLevels.length) {
@@ -710,19 +676,6 @@
     return out;
   }
 
-  function morphometryToCsv(rows) {
-    const header = 'slice,voxel_count,area_mm2,equivalent_diameter_mm,centroid_x,centroid_y';
-    const body = rows.map(row => [
-      row.slice,
-      row.voxelCount,
-      formatNumber(row.areaMm2),
-      formatNumber(row.equivalentDiameterMm),
-      row.centroidX == null ? '' : formatNumber(row.centroidX),
-      row.centroidY == null ? '' : formatNumber(row.centroidY)
-    ].join(','));
-    return [header, ...body].join('\n') + '\n';
-  }
-
   function formatNumber(value) {
     return Number.isInteger(value) ? String(value) : Number(value).toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
   }
@@ -805,8 +758,6 @@
     createCylinderMask,
     boundingBoxFromMask,
     cropVolume,
-    sliceMorphometry,
-    morphometryToCsv,
     createLabelsFromVertBody,
     smoothAlongAxis,
     extractMetricByLabels,

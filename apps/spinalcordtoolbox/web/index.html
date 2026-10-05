@@ -124,6 +124,57 @@
         </div>
       </section>
 
+      <!-- Morphometry (sct_process_segmentation) on a mask of this session -->
+      <section class="sidebar-section step-section step-disabled collapsed" id="morphometrySection" data-disclosure>
+        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
+          <span>Morphometry</span>
+          <span class="step-badge" id="morphometryBadge"></span>
+        </button></h2>
+        <div class="section-content" data-disclosure-panel>
+          <div class="param-group">
+            <label class="param-label" for="morphometryMask">Mask <span class="info-icon">i<span class="info-tooltip">Runs sct_process_segmentation on a mask from this session, without new inference: cross-sectional area, AP and RL diameter, eccentricity, orientation, solidity, cord angles and length.</span></span></label>
+            <select id="morphometryMask"></select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="morphometryDiscs">Vertebral levels <span class="info-icon">i<span class="info-tooltip">Disc labels of the same image (SCT -discfile). They are projected onto the cord centerline to give every slice a vertebral level. Run TotalSpineSeg to create them.</span></span></label>
+            <select id="morphometryDiscs"></select>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="morphometryAggregate">Report</label>
+            <select id="morphometryAggregate">
+              <option value="slice" selected>Per slice</option>
+              <option value="level">Per vertebral level</option>
+              <option value="levels">Across vertebral levels</option>
+              <option value="all">All slices together</option>
+            </select>
+          </div>
+          <details class="nd-workflow-disclosure"><summary>Advanced morphometry settings</summary>
+            <div class="param-group">
+              <label class="param-label" for="morphometrySlices">Slices <span class="info-icon">i<span class="info-tooltip">Axial slices to include, inferior to superior, as in SCT -z: for example 30:80 or 12;15;20:25. Empty uses every slice.</span></span></label>
+              <input type="text" id="morphometrySlices" placeholder="all" autocomplete="off">
+            </div>
+            <div class="param-group">
+              <label class="param-label" for="morphometryLevels">Levels <span class="info-icon">i<span class="info-tooltip">Vertebral levels for the two level reports, as in SCT -vert: for example 2:5 for C2 to C5. Empty uses every level found on the mask.</span></span></label>
+              <input type="text" id="morphometryLevels" placeholder="all" autocomplete="off">
+            </div>
+            <div class="param-group">
+              <label class="param-label">
+                <input type="checkbox" id="morphometryAngleCorrection" checked>
+                Angle correction
+                <span class="info-icon">i<span class="info-tooltip">Corrects every slice for the angle between the cord centerline and the slice (SCT -angle-corr 1). Turn off when the cord is already perpendicular to the slices.</span></span>
+              </label>
+            </div>
+          </details>
+          <div class="step-buttons">
+            <button class="btn btn-secondary" id="runMorphometry" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Measure
+            </button>
+          </div>
+        </div>
+      </section>
+
       <!-- Results Section -->
       <section class="sidebar-section hidden" id="resultsSection" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
@@ -207,7 +258,7 @@
         </div>
       </div>
 
-      <p>Spinal Cord Toolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows.</p>
+      <p>Spinal Cord Toolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows. It also measures cord morphometry and lesions with ports of SCT 7.3 <code>sct_process_segmentation</code> and <code>sct_analyze_lesion</code>, checked number by number against SCT; the atlas, PMJ and image-based options of those tools are not included.</p>
       <p>All image computation runs locally in your browser using ONNX Runtime Web. Patient image data is not uploaded to any server.</p>
       <p>Long runs can continue if this site is allowed to stay active in your browser.</p>
 
