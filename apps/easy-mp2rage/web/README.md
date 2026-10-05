@@ -8,11 +8,11 @@ hosting shell reports page views only, respects Do Not Track and Global Privacy
 Control, and never sends images, results, or custom events. The app source itself
 contains no analytics bootstrap.)
 
-## Build the WASM, then run
+## Stage the WASM core, then run
 
 ```bash
-# 1. build the wasm core and stage it into web/vendor/easy-mp2rage/  (needs wasm-pack)
-tools/build_wasm.sh
+# 1. stage the committed wasm core from packages/easy-mp2rage into web/vendor/easy-mp2rage/
+tools/stage_core.sh
 
 # 2. serve the web/ folder over http (ES modules + wasm need http, not file://)
 cd web
@@ -34,13 +34,13 @@ click **Compute T1 map**, preview the result, and download the outputs
 | `js/app.js` | drag-drop, role assignment, params, orchestration, canvas viewer, downloads |
 | `vendor/easy-mp2rage/src/nifti.js` | NIfTI-1 read/write in JS, staged from `packages/easy-mp2rage` (mirrors the Rust I/O; validated against golden) |
 | `js/worker.js` | Web Worker that runs the WASM core off the UI thread |
-| `wasm/` | `wasm-pack` output (built by `tools/build_wasm.sh`; gitignored) |
+| `vendor/easy-mp2rage/wasm/` | the WASM core committed in `packages/easy-mp2rage/wasm/` (staged by `tools/stage_core.sh`; gitignored here) |
 | `test/e2e_node.mjs` | headless check: nifti.js → WASM → nifti.js reproduces the Python golden |
 
 ## Validate headlessly
 
 ```bash
-node web/test/e2e_node.mjs   # after tools/build_wasm.sh
+node web/test/e2e_node.mjs   # after tools/stage_core.sh
 ```
 
 ## Notes

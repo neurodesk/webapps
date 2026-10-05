@@ -107,14 +107,15 @@ bundle their own Node runtime. See packages/easy-mp2rage/README.md.
 The web app is a static site (Rust compiled to WebAssembly). To build and run it
 yourself, following the same approach as QSMbly:
 
-Prerequisites:
+The WebAssembly build is committed in packages/easy-mp2rage/wasm/. Stage it
+into web/:
 
-- Rust: install from https://rustup.rs/
-- wasm-pack: `cargo install wasm-pack`
+    bash tools/stage_core.sh
 
-Build the WebAssembly and stage it into web/:
+After changing crates/mp2rage-core or crates/mp2rage-wasm, rebuild it with Rust
+(https://rustup.rs/) and wasm-pack (`cargo install wasm-pack --version 0.13.1`):
 
-    bash tools/build_wasm.sh
+    pnpm --filter @neurodesk/easy-mp2rage build:wasm
 
 Serve the web/ folder over HTTP and open it. It uses ES modules and WebAssembly,
 so it must be served over http, not opened as a file:// path:

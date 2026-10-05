@@ -7,10 +7,10 @@
   "description": "Browser-native MP2RAGE T1 mapping, B1 correction, and UNI denoising.",
   "scripts": {
     "dev": "python3 -m http.server 8080 --bind 127.0.0.1 --directory dist",
-    "prebuild": "bash tools/build_wasm.sh",
+    "prebuild": "bash tools/stage_core.sh",
     "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app easy-mp2rage",
     "lint": "node ../../scripts/check-app-js.mjs web",
-    "pretest": "bash tools/build_wasm.sh",
+    "pretest": "bash tools/stage_core.sh",
     "test": "cargo test --release && node web/test/bids_test.mjs && node web/test/e2e_node.mjs && node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
     "test:examples": "node --test web/test/examples_test.mjs web/test/orientation_test.mjs",
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app easy-mp2rage && node ../../test/easy-mp2rage-workspace.smoke.mjs",

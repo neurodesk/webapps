@@ -173,6 +173,11 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - Left and right are the patient's, from the affine. The MATLAB script called the image-left vessel left, which on the scanner's radiological grid is the patient's right; do not "fix" the app back to the script.
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
 
+## easy-mp2rage
+
+- The WASM core in `packages/easy-mp2rage/wasm/` is committed. The web app stages it (`tools/stage_core.sh`) and the `easy-mp2rage` command line loads it, so both run one binary. After changing `crates/mp2rage-core` or `crates/mp2rage-wasm`, run `pnpm --filter @neurodesk/easy-mp2rage build:wasm` (wasm-pack 0.13.1) and commit the result; `cargo test` alone does not check it.
+- `packages/easy-mp2rage/validation/cli-check.mjs` holds the command line to the Python golden phantom and to the web worker's WASM calls on the pinned example.
+
 ## lcmodel
 
 - `exes/lcmodel` is a subprogram-by-subprogram port of LCModel 6.3-1N's Fortran; `PORTING.md` is its contract (REAL stays f32, REAL literals in DOUBLE expressions go through `r2d`, `X**2` is `x * x`, operation order kept). `tests/native_parity.rs` compares every number of `.TABLE` and `.COORD` with gfortran's output on LCModel's test case; they are identical. Keep them identical: a change that alters a number needs the native build (`gfortran -O2 -std=legacy -fno-f2c -fno-backslash -fall-intrinsics LCModel.f`) to show the Fortran does the same.

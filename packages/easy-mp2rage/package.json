@@ -25,8 +25,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "bash scripts/build-wasm.sh",
-    "pretest": "bash scripts/build-wasm.sh",
+    "build:wasm": "bash scripts/build-wasm.sh",
     "test": "node --test test/*.test.js",
     "lint": "node --check src/node.js && node --check bin/easy-mp2rage.js"
   },

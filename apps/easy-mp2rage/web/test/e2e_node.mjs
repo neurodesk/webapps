@@ -1,7 +1,7 @@
 // Headless end-to-end check of the browser app's data path:
 //   nifti.js read  ->  WASM core  ->  nifti.js write/read-back
 // exactly as web/js/app.js + worker.js do, compared to the Python golden.
-// Requires `tools/build_wasm.sh` to have staged web/vendor/easy-mp2rage/.
+// Requires `tools/stage_core.sh` to have staged web/vendor/easy-mp2rage/.
 //
 // run:  node web/test/e2e_node.mjs
 import { readFileSync } from 'fs';

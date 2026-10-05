@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build the MP2RAGE WebAssembly core into wasm/. The web app stages this directory and the
+# Rebuild the committed MP2RAGE WebAssembly core in wasm/ after a change to the Rust crates.
+# The web app stages this directory and the
 # command line loads it, so both run the same binary.
 set -euo pipefail
 cd "$(dirname "$0")/.."
