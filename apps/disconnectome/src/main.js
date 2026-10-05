@@ -7,6 +7,7 @@ import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
 import { toTsv } from '@neurodesk/nii2tvx';
+import { gridAdvice, isGridMismatch, lesionId, tableName } from '@neurodesk/nii2tvx/disconnectome';
 import { APP, ATLASES, DEFAULT_ATLAS, GRID, TEMPLATE, assignInputs, damagedBundles } from './config.js';
 import examples from '../examples.json';
 import './styles.css';
@@ -329,11 +330,11 @@ async function analyze({ scored = lesion, runAtlas = atlas, signal, progress } =
   } catch (error) {
     // The core reports a grid mismatch by name; say what to do about it.
     // The status line gives the advice; the header detail goes to the technical log.
-    if (!/grid|dim|sto_xyz/i.test(error.message)) throw error;
+    if (!isGridMismatch(error)) throw error;
     log.log(error.message, 'error');
-    throw new Error(`Not on the ${GRID.dim.join(' × ')} MNI152 grid; normalize it with SYNcro first.`);
+    throw new Error(gridAdvice(GRID));
   }
-  result = { ...data, id: scored.name.replace(/\.nii(\.gz)?$/i, ''), atlas: runAtlas.id };
+  result = { ...data, id: lesionId(scored.name), atlas: runAtlas.id };
 
   if (drawnAtlas !== runAtlas.id) {
     status('Loading the tract geometry…');
@@ -355,7 +356,7 @@ async function analyze({ scored = lesion, runAtlas = atlas, signal, progress } =
   status(`${damaged.length} of ${result.tracts.length} bundles disconnected · ${((performance.now() - started) / 1000).toFixed(1)} s`);
   const tsv = toTsv(result.tracts, [{ id: result.id, fractions: result.fractions }]);
   return {
-    artifacts: [{ role: 'table', file: new File([tsv], `${result.id}_${runAtlas.id}_disconnectome.tsv`, { type: 'text/tab-separated-values' }) }],
+    artifacts: [{ role: 'table', file: new File([tsv], tableName(result.id, runAtlas.id), { type: 'text/tab-separated-values' }) }],
     provenance: { algorithm: 'nii2tvx', atlas: { id: runAtlas.id, label: runAtlas.label, sha256: runAtlas.tvx.sha256 }, grid: GRID, elapsedMs: performance.now() - started },
     measurements: { bundles: result.tracts.map((name, index) => ({ name, fraction: Number.isFinite(result.fractions[index]) ? result.fractions[index] : null })) },
   };
@@ -366,8 +367,7 @@ $('runButton').onclick = () => void runTask('Starting…', () => analyze());
 $('saveButton').onclick = () => {
   if (!result) return;
   const tsv = toTsv(result.tracts, [{ id: result.id, fractions: result.fractions }]);
-  // The atlas is in the name: the two produce different tables for the same lesion.
-  downloadBlob(new Blob([tsv], { type: 'text/tab-separated-values' }), `${result.id}_${result.atlas}_disconnectome.tsv`);
+  downloadBlob(new Blob([tsv], { type: 'text/tab-separated-values' }), tableName(result.id, result.atlas));
 };
 
 async function init() {
