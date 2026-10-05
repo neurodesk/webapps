@@ -88,6 +88,20 @@ Check these against your protocol:
       --uni UNI.nii.gz --inv2 INV2.nii.gz --b1-map B1.nii.gz \
       --b1-map-type tfl --b1-extend-fov --out out
 
+The Rust CLI has no denoising or DICOM input and is not released.
+
+## Command line (portable)
+
+The released command line is `easy-mp2rage` from `packages/easy-mp2rage`. It
+runs the web app's WebAssembly core with Node, offers the `correct` and
+`denoise` operations with the web app's parameters, and writes the web app's
+download files. Portable archives for Linux x64, Windows x64 and macOS arm64
+bundle their own Node runtime. See packages/easy-mp2rage/README.md.
+
+    easy-mp2rage correct --uni UNI.nii.gz --inv2 INV2.nii.gz \
+      --b1 B1.nii.gz --b1-type tfl \
+      --mp2rage 5.0,0.7,2.5,4,5,64,128,0.0067,0.96 results
+
 ## Run the web app locally
 
 The web app is a static site (Rust compiled to WebAssembly). To build and run it
