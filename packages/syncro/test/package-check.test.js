@@ -32,7 +32,7 @@ const [nx,ny,nz]=[42,44,46].map(offset=>view.getInt16(offset,true));
 const brain=new Int16Array(nx*ny*nz);
 for(let i=0;i<brain.length;i+=1)brain[i]=bytes.readInt16LE(352+i*2);
 const shifted=new Int16Array(brain.length);
-const shift=defect==='shift'?5:0;
+const shift=defect==='shift'?2:0;
 for(let i=0;i<brain.length;i+=1){const x=i%nx;if(x+shift<nx)shifted[i+shift]=brain[i];}
 const lesion=new Int16Array(brain.length);
 const centreX=defect==='lesion-right'?30:-30;
@@ -79,7 +79,7 @@ test('the release check fails a lesion propagated into the wrong hemisphere',pos
   assert.match(output,/^FAIL lesion centre/m);
 });
 
-test('the release check fails a normalisation 5 mm off the template',posix,async()=>{
+test('the release check fails a normalisation 2 mm off the template',posix,async()=>{
   const {status,output}=await runCheck('shift');
   assert.equal(status,1,output);
   assert.match(output,/^FAIL warped brain correlation/m);

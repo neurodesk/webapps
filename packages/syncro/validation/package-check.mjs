@@ -24,10 +24,12 @@ const TEMPLATE={
 // The lesion sits this far from the head's intensity centroid, in native world millimetres (RAS).
 const LESION_OFFSET_MM=[-30,0,10];
 const LESION_RADIUS_MM=6;
+// Linux, Windows and macOS archives measured Dice 0.9665, correlations 0.815-0.816 and 0.701-0.702
+// (2026-10-06). Without registration the scan correlates 0.13; the template shifted 2 mm, 0.74.
 const LIMITS={
-  brainDice:0.9,
-  brainCorrelation:0.6,
-  primaryCorrelation:0.5,
+  brainDice:0.95,
+  brainCorrelation:0.78,
+  primaryCorrelation:0.65,
   lesionXMm:[-42,-18],
   lesionInsideBrain:0.9,
 };

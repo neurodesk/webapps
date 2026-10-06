@@ -85,10 +85,20 @@ SYNcro writes there.
 the template and registration WebAssembly, imports the registration module,
 and reports the actual Node executable path. Portable verification requires
 that path to be inside the extracted private runtime. It also exercises help,
-argument validation, output preservation, and the empty offline-cache boundary
-without downloading models or running the multi-gigabyte scientific workflow.
-Numerical validation remains the responsibility of the existing shared
-pipeline validation.
+argument validation, output preservation, and the empty offline-cache boundary.
+
+`validation/package-check.mjs` then normalises OpenNeuro ds000001 sub-01's T1w
+scan offline through the installed command, with a synthetic 6 mm lesion 30 mm
+left of the head's centre. It judges the outputs against references that do
+not come from SYNcro: the FSL MNI152 1 mm brain template, pinned by SHA-256,
+and the lesion's hemisphere, fixed by construction. The warped synthetic brain
+must reach Dice 0.95 and correlation 0.78 with the template, the warped scan
+correlation 0.65 inside the template brain, and the lesion must land left of
+the midline with its centre at x between -42 and -18 mm. The archives measured
+Dice 0.9665 and correlations 0.815 and 0.701 on all three targets. The run
+takes about 4 minutes on the Linux and Windows runners and 6 on macOS arm64.
+The comparison with the Neurodesk container remains in
+[the validation report](../../packages/syncro/validation/README.md).
 
 Every build produces the archive, `<archive>.sha256`, and
 `<archive>.validation.txt`. The publisher requires every target's set, rechecks
