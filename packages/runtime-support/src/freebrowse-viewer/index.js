@@ -3,9 +3,10 @@ import { mountFreeBrowse } from 'freebrowse';
 import freebrowseStyles from 'freebrowse/style.css?inline';
 import workspaceStyles from '@neurodesk/webapp-components/styles/imaging-workspace.css?inline';
 import { bindTouchGestures } from './touch-gestures.js';
+import { LOCKED_ATTRIBUTE, applyDrawingLock } from './drawing-lock.js';
 
 // Mounts FreeBrowse around a host-owned NiiVue instance inside an open shadow
-// root. Returns { nv, ready, showDrawingTools, setDrawingPenValue, destroy };
+// root. Returns { nv, ready, setDrawingLocked, destroy };
 // await `ready` before loading files.
 // `options` are NiiVue constructor options. `embed.canvasLabel` names the
 // canvas for assistive technology; `embed.sidebar` opens FreeBrowse's panel.
@@ -14,12 +15,14 @@ export function mountViewer(element, options, embed = {}) {
   const shadow = element.shadowRoot || element.attachShadow({ mode: 'open' });
   shadow.replaceChildren();
   const style = document.createElement('style');
-  style.textContent = `${freebrowseStyles}\n${workspaceStyles}`;
+  // Locked drawing controls stay in place, dimmed, while a host edits the layer.
+  style.textContent = `${freebrowseStyles}\n${workspaceStyles}\n[${LOCKED_ATTRIBUTE}] { opacity: 0.5; }`;
   const container = document.createElement('div');
   container.className = 'nd-freebrowse';
   shadow.append(style, container);
   let destroyed = false;
   let releaseGestures = null;
+  let drawingLocked = false;
   const { promise: ready, resolve, reject } = Promise.withResolvers();
   const timeout = setTimeout(() => reject(new Error('FreeBrowse could not initialize its canvas. Reload the page to retry.')), 30_000);
   void ready.then(() => clearTimeout(timeout), () => clearTimeout(timeout));
@@ -69,46 +72,21 @@ export function mountViewer(element, options, embed = {}) {
     inputs.forEach((input, index) => {
       input.dataset.neurodeskInput = index === 0 ? 'image' : 'surface';
     });
+    if (drawingLocked) applyDrawingLock(container, true);
   };
   const observer = new MutationObserver(syncHost);
   observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-neurodesk-theme'] });
-  // Opens FreeBrowse's sidebar on its Drawing tab, for a host that has just
-  // put a drawing layer in place. The tab stays disabled until FreeBrowse has
-  // seen the layer, so this waits a few frames for it. Resolves false if the
-  // tab never becomes available.
-  const showDrawingTools = async () => {
-    for (let frame = 0; frame < 60 && !destroyed; frame += 1) {
-      container.querySelector('button[title="Show sidebar"]')?.click();
-      const tab = container.querySelector('[role="tab"][id$="-trigger-drawing"]');
-      if (tab && !tab.disabled) {
-        if (tab.getAttribute('aria-selected') !== 'true') {
-          // Radix tabs activate on mousedown, not click.
-          tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
-        }
-        return true;
-      }
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-    }
-    return false;
-  };
-  // Sets the Drawing tab's Pen Value field, which FreeBrowse keeps in its own
-  // state and re-applies to NiiVue whenever a tool is chosen. The field only
-  // exists while the pen is selected; returns false when it is not shown.
-  const setDrawingPenValue = (value) => {
-    const label = [...container.querySelectorAll('label')].find((item) => item.textContent.trim() === 'Pen Value');
-    const input = label?.parentElement?.querySelector('input[type="number"]');
-    if (!input) return false;
-    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-    setValue.call(input, String(value));
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    return true;
+  // A host editing the drawing layer with its own tools locks FreeBrowse's
+  // Drawing tab and "Edit as drawing" buttons for the session (drawing-lock.js).
+  const setDrawingLocked = (locked) => {
+    drawingLocked = Boolean(locked);
+    applyDrawingLock(container, drawingLocked);
   };
   return {
     nv,
     ready,
-    showDrawingTools,
-    setDrawingPenValue,
+    setDrawingLocked,
     destroy() {
       if (destroyed) return;
       destroyed = true;

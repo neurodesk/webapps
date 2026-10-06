@@ -1,381 +1,294 @@
 /**
- * The Edit masks section: correct a result stage by hand, or draw a new mask,
- * on FreeBrowse's drawing layer, and make the result the stage's data.
+ * Manual mask edits with the shared `nd-mask-editor` on FreeBrowse's NiiVue.
  *
- * FreeBrowse's Drawing tab owns the tools (pen, erase, pen fill, undo). This
- * controller adds what it lacks: which stage to edit, which label the pen
- * paints (by name), Apply, Discard and Restore, and the guard that keeps a new
- * run or a new file from dropping unsaved edits unnoticed. Applying goes
- * through `app.setStageData()`, the one place a stage's mask changes; derived
- * results listen to `app.onStageDataChanged()`.
+ * A result row's Edit button opens the shared editor's toolbar row under the
+ * viewer toolbar (Draw, Erase, Fill, Label, Brush, Undo, Apply, Cancel); the
+ * editor and its drawing adapter own the session and the voxel round trip.
+ * This controller adds what SCT needs around it:
+ *
+ * - Apply goes through `app.setStageData()`, the one place a stage's mask
+ *   changes, so the viewer, Results, Compare panels and SCT analysis's mask
+ *   choices follow. The edited file is `<model output>_edited.nii[.gz]` and
+ *   the result carries its provenance (`manualEdit`).
+ * - FreeBrowse's own Drawing tab and Edit as drawing are locked for the
+ *   session; if a drawing layer is opened or closed by anything but the
+ *   editor anyway, the session is cancelled rather than shared.
+ * - Unsaved edits (a drawing with strokes, or an applied edit that was not
+ *   downloaded) are confirmed before an action drops them.
+ * - Before the active image changes, a drawing with strokes is applied to its
+ *   own image and an untouched one is closed.
  */
-import { createNiftiFromData, decodeNiftiBuffer, extractNiftiHeader, readNiftiImageData } from '@neurodesk/webapp-components/file-io';
-import { MaskEditor, labelCounts } from '../modules/mask-editor.js';
+import { createMaskEditor } from '@neurodesk/webapp-components/ui';
+import { decodeNiftiBuffer, readNiftiImageData } from '@neurodesk/webapp-components/file-io';
 import { generateLabelColormap } from './labels.js';
 import { getTaskLabels } from './sct-tasks.js';
 import { STAGE_NAMES } from './config.js';
 
-// Stages a mask can be drawn for from nothing, and the label set it uses.
-export const NEW_MASKS = Object.freeze([
-  { stage: 'segmentation', labelSetId: 'spinalcord', name: 'New spinal cord mask' },
-  { stage: 'lesion', labelSetId: 'lesion', name: 'New lesion mask' }
-]);
+export const EDITABLE_STAGES = Object.freeze(['segmentation', 'lesion', 'spine_step1', 'spine_discs']);
 
-const EDITABLE_STAGES = ['segmentation', 'lesion', 'spine_step1', 'spine_discs'];
+const IDLE = Object.freeze({ state: 'idle' });
 
-/** `spinalcord_segmentation.nii` -> `spinalcord_segmentation_edited.nii`. */
+const stageName = stage => STAGE_NAMES[stage] || stage;
+
+/** `spinalcord_segmentation.nii` -> `spinalcord_segmentation_edited.nii`; `.nii.gz` stays gzipped. */
 export function editedFileName(name) {
-  const base = String(name || 'mask.nii').replace(/(_edited)?\.nii(\.gz)?$/i, '');
-  return `${base}_edited.nii`;
+  const text = String(name || 'mask.nii');
+  const extension = /\.nii\.gz$/i.test(text) ? '.nii.gz' : '.nii';
+  const base = text.replace(/(_edited)?\.nii(\.gz)?$/i, '');
+  return `${base}_edited${extension}`;
 }
 
-/**
- * A mask NIfTI with `template`'s header (the stage's own file, or the input),
- * uint8 voxels and `cal_max` set to the largest label, as the worker writes
- * model output. Unchanged voxels give back the model's file byte for byte.
- */
-export function buildMaskNifti(native, template) {
-  const header = extractNiftiHeader(template);
-  const view = new DataView(header);
-  const dims = [view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)];
-  return createNiftiFromData(native, header, { dims });
-}
-
-export async function readMaskVoxels(file) {
+/** Label values of a mask file in its own voxel order, rounded as the editor paints them. */
+export async function readMaskLabels(file) {
   const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
-  return { buffer, voxels: readNiftiImageData(buffer, Uint8Array).data };
+  const { data } = readNiftiImageData(buffer, Float64Array);
+  return Uint8Array.from(data, value => Math.min(255, Math.max(0, Math.round(value))) || 0);
+}
+
+/** Voxels whose label differs between two masks on one grid. */
+export function countChanged(a, b) {
+  if (a.length !== b.length) throw new Error(`The edited mask has ${b.length} voxels; the result has ${a.length}.`);
+  let changed = 0;
+  for (let index = 0; index < a.length; index += 1) if (a[index] !== b[index]) changed += 1;
+  return changed;
+}
+
+/** Labelled voxel count per label value, label 0 excluded. */
+export function labelCounts(mask) {
+  const counts = new Map();
+  for (const value of mask) if (value) counts.set(value, (counts.get(value) || 0) + 1);
+  return counts;
+}
+
+/** `{ value: name }` for the Label select of a stage's label set. */
+export function labelNames(labelSetId) {
+  const names = {};
+  for (const label of getTaskLabels(labelSetId)) {
+    if (label.index > 0 && label.index < 256) names[label.index] = label.name;
+  }
+  return names;
 }
 
 export class SctManualEdits {
   constructor(app) {
     this.app = app;
     this.editor = null;
-    this.section = document.getElementById('editSection');
-    this.stageSelect = document.getElementById('editStageSelect');
-    this.labelSelect = document.getElementById('editLabelSelect');
-    this.buttons = {
-      start: document.getElementById('editStart'),
-      apply: document.getElementById('editApply'),
-      discard: document.getElementById('editDiscard'),
-      revert: document.getElementById('editRevert')
-    };
-    this.stageSelect?.addEventListener('change', () => this.sync());
-    this.labelSelect?.addEventListener('change', () => this.editor?.setLabel(Number(this.labelSelect.value)));
-    this.buttons.start?.addEventListener('click', () => void this.start());
-    this.buttons.apply?.addEventListener('click', () => void this.apply());
-    this.buttons.discard?.addEventListener('click', () => this.discard());
-    this.buttons.revert?.addEventListener('click', () => this.revert());
+    this.viewer = null;
+    // The stage whose session is open, from Edit until the editor is idle.
+    this.stage = null;
+    // The stage whose overlay the viewer hides because the drawing shows it.
+    this.hiddenStage = null;
+    this.strokes = 0;
+    this.switching = null;
   }
 
-  attachViewer(viewer) {
-    if (!viewer?.nv) return;
-    this.editor = new MaskEditor({
-      nv: viewer.nv,
-      showDrawingTools: () => viewer.handle?.showDrawingTools?.() ?? false,
-      setPenField: value => viewer.handle?.setDrawingPenValue?.(value) ?? false,
-      onAdopt: request => this.adopt(request),
-      onAdopted: () => this.adopted(),
-      onClosedByViewer: (native, stage) => void this.closedByViewer(native, stage),
-      onPenValue: value => this.showLabel(value)
+  /** Puts the shared editor's toolbar row under the viewer toolbar, on FreeBrowse's NiiVue. */
+  attachViewer(viewer, { toolbar = document.querySelector('main.app-main > .viewer-toolbar') } = {}) {
+    if (!viewer?.nv || this.editor) return;
+    this.viewer = viewer;
+    const editor = createMaskEditor({ nv: viewer.nv });
+    editor.addEventListener('nd-mask-edit-start', ({ detail }) => {
+      this.app.setStatusError?.(false);
+      this.app.progress?.reset(detail.message);
     });
+    editor.addEventListener('nd-mask-edit-end', () => void this.ended());
+    toolbar?.after(editor);
+    viewer.nv.addEventListener('drawingChanged', event => this.onDrawingChanged(event.detail || {}));
+    this.editor = editor;
     this.sync();
   }
 
+  get session() {
+    return this.editor?.session ?? IDLE;
+  }
+
   get editingStage() {
-    return this.editor?.stage || null;
+    return this.stage;
   }
 
   isEditing() {
-    return Boolean(this.editor?.isActive());
+    return this.stage !== null || this.session.state !== 'idle';
   }
 
   /** True while `stage`'s overlay must stay hidden: its mask is on the drawing layer. */
   isHiding(stage) {
-    return Boolean(stage) && (stage === this.editingStage || stage === this.pendingStage);
+    return Boolean(stage) && stage === this.hiddenStage;
   }
 
-  // ==================== Choices ====================
-
-  result(stage) {
-    return this.app.inferenceExecutor.getResult(stage);
+  /** True once the drawing has seen a stroke; Undo does not count back. */
+  isDirty() {
+    return this.session.state === 'editing' && this.strokes > 0;
   }
 
-  /** `{ value, stage, labelSetId, name, isNew }` for each choice in the Mask select. */
-  choices() {
-    const list = [];
-    for (const stage of EDITABLE_STAGES) {
-      if (!this.app.inferenceExecutor.hasResult(stage)) continue;
-      const edited = this.result(stage)?.manualEdit;
-      list.push({
-        value: stage,
-        stage,
-        labelSetId: this.app.getOverlayLabelTaskId(stage),
-        name: `${STAGE_NAMES[stage] || stage}${edited ? ' (edited)' : ''}`,
-        isNew: false
-      });
-    }
-    for (const mask of NEW_MASKS) {
-      if (this.app.inferenceExecutor.hasResult(mask.stage)) continue;
-      list.push({ value: `new:${mask.stage}`, stage: mask.stage, labelSetId: mask.labelSetId, name: mask.name, isNew: true });
-    }
-    return list;
+  /** `stage` has a mask the editor can open. */
+  canEdit(stage) {
+    return Boolean(this.editor) && EDITABLE_STAGES.includes(stage) && Boolean(this.app.inferenceExecutor.getResult(stage)?.file);
   }
 
-  selectedChoice() {
-    const list = this.choices();
-    return list.find(choice => choice.value === this.stageSelect?.value) || list[0] || null;
-  }
-
-  isAvailable() {
-    return Boolean(this.editor && this.app.inputFile && this.app.isViewerAvailable() && !this.app.isCompareMode?.());
+  /** Edit buttons are live: no session open, no run, a viewer to draw in. */
+  canStart() {
+    const app = this.app;
+    return Boolean(this.editor && app.isViewerAvailable?.())
+      && !this.isEditing()
+      && !app.currentRunningStep
+      && !app.inferenceExecutor?.isRunning?.();
   }
 
   sync() {
-    const available = this.isAvailable();
-    const editing = this.isEditing();
-    const running = Boolean(this.app.currentRunningStep || this.app.inferenceExecutor?.isRunning());
-    this.section?.classList.toggle('step-disabled', !available);
-
-    if (this.stageSelect) {
-      // After an apply the stage just edited stays selected, so Restore is at hand.
-      const previous = editing ? null : this.preferredStage || this.stageSelect.value;
-      this.preferredStage = null;
-      const list = this.choices();
-      this.stageSelect.replaceChildren(...list.map(choice => new Option(choice.name, choice.value)));
-      const keep = editing
-        ? list.find(choice => choice.stage === this.editingStage && !choice.isNew)?.value
-          ?? list.find(choice => choice.stage === this.editingStage)?.value
-        : list.some(choice => choice.value === previous) ? previous : list[0]?.value;
-      if (keep) this.stageSelect.value = keep;
-      this.stageSelect.disabled = !available || editing;
-    }
-
-    const choice = this.selectedChoice();
-    if (this.labelSelect) {
-      const labels = choice ? getTaskLabels(choice.labelSetId).filter(label => label.index > 0) : [];
-      const previous = Number(this.labelSelect.value);
-      this.labelSelect.replaceChildren(...labels.map(label => new Option(label.name, String(label.index))));
-      const wanted = editing ? this.editor.session.label : previous;
-      if (labels.some(label => label.index === wanted)) this.labelSelect.value = String(wanted);
-      this.labelSelect.disabled = !available || labels.length < 2;
-    }
-
-    const edited = !editing && choice && !choice.isNew ? this.result(choice.stage)?.manualEdit : null;
-    this.setButton('start', !editing, available && !running && Boolean(choice));
-    this.setButton('apply', editing, true);
-    this.setButton('discard', editing, true);
-    this.setButton('revert', Boolean(edited), available && !running);
-    if (this.buttons.revert) {
-      this.buttons.revert.textContent = edited?.kind === 'new' ? 'Remove mask' : 'Restore model mask';
-    }
-  }
-
-  setButton(name, shown, enabled) {
-    const button = this.buttons[name];
-    if (!button) return;
-    button.hidden = !shown;
-    button.disabled = !enabled;
-  }
-
-  showLabel(value) {
-    if (!this.labelSelect) return;
-    if ([...this.labelSelect.options].some(option => Number(option.value) === value)) {
-      this.labelSelect.value = String(value);
-    }
+    const enabled = this.canStart();
+    for (const button of document.querySelectorAll('#stageButtons .nd-edit-btn')) button.disabled = !enabled;
   }
 
   // ==================== Session ====================
 
-  /** Builds an editor request for `choice`: the stage's voxels, colours and label. */
-  async request(choice) {
-    let native = null;
-    if (!choice.isNew) {
-      const file = this.result(choice.stage)?.file;
-      if (!file) throw new Error(`${choice.name} has no mask.`);
-      native = (await readMaskVoxels(file)).voxels;
-    }
-    const label = Number(this.labelSelect?.value) || getTaskLabels(choice.labelSetId).find(item => item.index > 0)?.index || 1;
-    return {
-      stage: choice.stage,
-      native,
-      labelSetId: choice.labelSetId,
-      labelColormap: generateLabelColormap(choice.labelSetId),
-      label,
-      opacity: this.app.viewer?.getStageOpacity(choice.stage, true) ?? 0.7,
-      choice
-    };
-  }
-
-  async start(choice = this.selectedChoice()) {
-    if (!choice || !this.isAvailable() || this.isEditing()) return false;
+  async start(stage) {
+    const app = this.app;
+    const result = app.inferenceExecutor.getResult(stage);
+    if (!this.canEdit(stage) || !this.canStart()) return false;
+    this.stage = stage;
+    this.hiddenStage = stage;
+    this.strokes = 0;
+    this.lockFreeBrowse(true);
+    this.sync();
     try {
-      // The input must be the base image: the drawing layer takes its grid.
-      if (this.app.currentResultTab !== 'input') {
-        this.app.currentResultTab = 'input';
+      // The drawing takes the input's grid, so the input is the base image.
+      if (app.isCompareMode()) await app.setViewerMode('single');
+      app.currentResultTab = 'input';
+      app.setStageVisible('input', true);
+      app.setStageVisible(stage, true);
+      await app.renderViewerVolumes();
+      app.syncResultViewButtons();
+      if (app.inferenceExecutor.getResult(stage) !== result || this.stage !== stage) {
+        await this.ended();
+        return false;
       }
-      const request = await this.request(choice);
-      this.editor.stageChoice = choice;
-      // The stage's overlay is hidden while its mask is on the drawing layer.
-      this.pendingStage = choice.stage;
-      await this.app.renderViewerVolumes();
-      await this.editor.begin(request);
-      this.pendingStage = null;
-      this.app.logAnalysis(choice.isNew
-        ? `Manual edit: drawing a ${choice.name.replace(/^New /, '')} on ${this.app.inputFile?.name || 'the image'}`
-        : `Manual edit: editing ${choice.name} in the Drawing tab`);
-      this.sync();
+      const labelSetId = app.getOverlayLabelTaskId(stage);
+      this.editor.configure({
+        nv: app.nv,
+        labelNames: labelNames(labelSetId),
+        onApply: (edited, file, { original }) => this.commit(edited, file, original),
+        onCancel: cancelled => this.cancelled(cancelled),
+        onError: (_stage, error) => this.report(error),
+      });
+      const started = await this.editor.start({
+        stage,
+        file: result.file,
+        label: stageName(stage),
+        colormap: generateLabelColormap(labelSetId),
+      });
+      if (!started) return false;
+      app.logAnalysis(`Manual edit: editing ${stageName(stage)} (${result.file.name})`);
       return true;
     } catch (error) {
-      this.pendingStage = null;
-      this.app.logAnalysis(`Manual edit could not start: ${error.message}`, 'error');
-      await this.app.renderViewerVolumes();
-      this.sync();
+      this.report(error);
+      await this.ended();
       return false;
     }
   }
 
-  async apply() {
-    if (!this.isEditing()) return false;
-    const stage = this.editingStage;
-    const native = this.editor.apply();
-    await this.commit(stage, native);
-    return true;
+  // The editor calls this from Apply: `file` is the drawing on `original`'s grid.
+  async commit(stage, file, original) {
+    const app = this.app;
+    const previous = app.inferenceExecutor.getResult(stage);
+    this.hiddenStage = null;
+    const before = await readMaskLabels(original);
+    const after = await readMaskLabels(file);
+    const changed = countChanged(before, after);
+    if (changed === 0) {
+      app.logAnalysis(`Manual edit: no voxels changed in ${stageName(stage)}; the result is unchanged`);
+      return;
+    }
+    const model = previous?.manualEdit?.original || { file: original, raw: previous?.raw ?? null };
+    const name = editedFileName(model.file.name);
+    const named = new File([file], name, { type: file.type || 'application/octet-stream' });
+    await app.setStageData(stage, named, {
+      source: 'edit',
+      manualEdit: { kind: 'edited', original: model, changedVoxels: changed, downloaded: false, at: new Date().toISOString() }
+    });
+    const counts = [...labelCounts(after)].map(([label, count]) => `${label}: ${count}`).join(', ') || 'empty';
+    app.logAnalysis(`Manual edit applied to ${stageName(stage)}: ${changed} voxels changed; voxels per label ${counts}; saved as ${name}`);
   }
 
-  discard() {
-    if (!this.isEditing()) return;
-    const stage = this.editingStage;
-    const changed = this.editor.changedVoxels();
-    this.editor.discard();
-    this.app.logAnalysis(`Manual edit discarded for ${STAGE_NAMES[stage] || stage}${changed ? ` (${changed} voxels not kept)` : ''}`, changed ? 'warning' : 'info');
-    void this.app.renderViewerVolumes();
+  cancelled(stage) {
+    this.app.logAnalysis(`Manual edit closed without changes to ${stageName(stage)}${this.strokes ? ' (strokes discarded)' : ''}`, this.strokes ? 'warning' : 'info');
+  }
+
+  report(error) {
+    const message = error?.message || String(error);
+    this.app.logAnalysis(`Manual edit failed: ${message}`, 'error');
+    this.app.progress?.end(`Error: ${message}`, { success: false });
+    this.app.setStatusError?.(true);
+  }
+
+  // The editor is idle again (applied, cancelled or failed): the overlay
+  // returns, FreeBrowse's drawing controls unlock and Edit is live again.
+  async ended() {
+    if (this.session.state !== 'idle') return;
+    const wasOpen = this.stage !== null;
+    this.stage = null;
+    this.hiddenStage = null;
+    this.strokes = 0;
+    this.lockFreeBrowse(false);
     this.sync();
+    if (!wasOpen) return;
+    const status = document.getElementById('statusText');
+    if (!status?.classList.contains('error')) this.app.progress?.reset('Ready');
+    await this.app.renderViewerVolumes();
+    this.app.rebuildResultsList();
+  }
+
+  lockFreeBrowse(locked) {
+    this.viewer?.handle?.setDrawingLocked?.(locked);
+  }
+
+  // Strokes make the drawing dirty. A layer opened, replaced or closed while
+  // the editor is editing did not come from the editor (it only does so
+  // while opening or applying): the session is cancelled, not shared.
+  onDrawingChanged({ action }) {
+    if (this.session.state !== 'editing') return;
+    if (action === 'stroke') {
+      this.strokes += 1;
+      return;
+    }
+    if (action === 'create' || action === 'load' || action === 'close') {
+      this.app.logAnalysis(`Manual edit of ${stageName(this.stage)} cancelled: another tool changed the drawing layer`, 'warning');
+      void this.editor.cancel();
+    }
   }
 
   /**
    * Before the active image changes (another image, Compare): a drawing with
-   * changes is applied to its own image's stage, an unchanged one is closed.
-   * Concurrent callers share one apply, so results are parked only after it.
+   * strokes is applied to its own image's stage, an untouched one is closed.
+   * Concurrent callers share one settle, so results are parked only after it.
    */
   settleBeforeSwitch() {
     if (this.switching) return this.switching;
     if (!this.isEditing()) return Promise.resolve();
-    if (!this.editor.isDirty()) {
-      this.reset();
-      return Promise.resolve();
-    }
-    this.app.logAnalysis(`Manual edit applied to ${STAGE_NAMES[this.editingStage] || this.editingStage} before switching images`);
-    this.switching = this.apply().finally(() => {
+    const stage = this.stage;
+    const settle = this.isDirty()
+      ? (this.app.logAnalysis(`Manual edit applied to ${stageName(stage)} before switching images`), this.editor.apply())
+      : this.editor.cancel();
+    this.switching = Promise.resolve(settle).then(() => this.ended()).finally(() => {
       this.switching = null;
     });
     return this.switching;
   }
 
-  /** Closes a session without asking, for a new file or a cleared session. */
-  reset() {
-    if (this.isEditing()) this.editor.discard();
-    this.pendingStage = null;
-    this.sync();
-  }
-
-  /** Makes `native` (voxels in the input's file order) the data of `stage`. */
-  async commit(stage, native) {
-    const previous = this.result(stage);
-    const original = previous?.manualEdit?.original || (previous?.file ? { file: previous.file, raw: previous.raw } : null);
-    const template = previous?.file
-      ? await decodeNiftiBuffer(await previous.file.arrayBuffer())
-      : await decodeNiftiBuffer(await this.app.inputFile.arrayBuffer());
-    let changed = 0;
-    if (previous?.file) {
-      const before = readNiftiImageData(template, Uint8Array).data;
-      for (let index = 0; index < native.length; index += 1) if (before[index] !== native[index]) changed += 1;
-    } else {
-      for (const value of native) if (value) changed += 1;
-    }
-    if (changed === 0) {
-      this.app.logAnalysis(`Manual edit: no voxels changed in ${STAGE_NAMES[stage] || stage}; the result is unchanged`);
-      await this.app.renderViewerVolumes();
-      this.sync();
-      return false;
-    }
-    const kind = original ? 'edited' : 'new';
-    const name = original
-      ? editedFileName(original.file.name)
-      : `${(this.app.inputFile?.name || 'image').replace(/\.nii(\.gz)?$/i, '')}_${stage}_manual.nii`;
-    const file = new File([buildMaskNifti(native, template)], name, { type: 'application/octet-stream' });
-    const choice = NEW_MASKS.find(mask => mask.stage === stage);
-    await this.app.setStageData(stage, file, {
-      source: 'edit',
-      labelSetId: previous?.labelSetId || (previous ? null : choice?.labelSetId),
-      manualEdit: { kind, original, changedVoxels: changed, downloaded: false, at: new Date().toISOString() }
-    });
-    this.preferredStage = stage;
-    const counts = [...labelCounts(native)].map(([label, count]) => `${label}: ${count}`).join(', ') || 'empty';
-    this.app.logAnalysis(`Manual edit applied to ${STAGE_NAMES[stage] || stage}: ${changed} voxels changed; voxels per label ${counts}; saved as ${name}`);
-    this.sync();
-    return true;
-  }
-
-  /** Back to the model's mask, or remove a mask drawn from nothing. */
-  async revert(stage = this.selectedChoice()?.stage) {
-    const result = this.result(stage);
-    const edit = result?.manualEdit;
-    if (!edit || this.isEditing()) return false;
-    if (edit.kind === 'new' || !edit.original) {
-      await this.app.removeStageData(stage, { source: 'restore' });
-      this.app.logAnalysis(`Manual mask removed: ${STAGE_NAMES[stage] || stage}`);
-    } else {
-      await this.app.setStageData(stage, edit.original.file, { source: 'restore', manualEdit: null });
-      this.app.logAnalysis(`Model mask restored: ${STAGE_NAMES[stage] || stage} (${edit.original.file.name})`);
-    }
-    this.sync();
-    return true;
-  }
-
-  // ==================== FreeBrowse's own drawing buttons ====================
-
-  // FreeBrowse's Create empty drawing layer or Edit as drawing opened a layer.
-  // It becomes an edit of the stage it came from (Edit as drawing on an SCT
-  // result) or of the stage chosen in the Mask select, and its voxels are
-  // refilled with the exact mapping, which NiiVue's loadDrawing lacks.
-  async adopt({ action, stage }) {
-    if (!this.isAvailable()) return null;
-    let choice = null;
-    if (action === 'load') {
-      if (!stage) return null;
-      choice = this.choices().find(item => item.stage === stage && !item.isNew);
-    } else {
-      choice = this.selectedChoice();
-    }
-    if (!choice) return null;
-    const request = await this.request(choice);
-    this.app.logAnalysis(`Manual edit: FreeBrowse's drawing layer now edits ${choice.name}`);
-    return request;
-  }
-
-  adopted() {
-    this.sync();
-    void this.app.renderViewerVolumes();
-  }
-
-  // FreeBrowse's Save Drawing closes the layer and adds it as a new volume.
-  // The edit is applied to its stage instead, and that volume is dropped by
-  // the next render.
-  async closedByViewer(native, stage) {
-    this.app.logAnalysis(`Manual edit saved from the Drawing tab for ${STAGE_NAMES[stage] || stage}`);
-    await this.commit(stage, native);
-    const nv = this.app.nv;
-    nv?.addEventListener('volumeLoaded', () => void this.app.renderViewerVolumes(), { once: true });
+  /** Closes an open session without keeping its drawing (new file, cleared results). */
+  async reset() {
+    if (!this.isEditing()) return;
+    await this.editor.cancel();
+    await this.ended();
   }
 
   // ==================== Unsaved edits ====================
 
   unsavedStages() {
     const stages = EDITABLE_STAGES.filter(stage => {
-      const edit = this.result(stage)?.manualEdit;
+      const edit = this.app.inferenceExecutor.getResult(stage)?.manualEdit;
       return edit && !edit.downloaded;
     });
-    if (this.isEditing() && this.editor.isDirty() && !stages.includes(this.editingStage)) stages.unshift(this.editingStage);
+    if (this.isDirty() && !stages.includes(this.stage)) stages.unshift(this.stage);
     return stages;
   }
 
@@ -383,11 +296,11 @@ export class SctManualEdits {
     return this.unsavedStages().length > 0;
   }
 
-  /** `Image: stage` for every unsaved edit in a parked image's `snapshot`. */
+  /** `Stage of image` for every unsaved edit in a parked image's `snapshot`. */
   static unsavedInSnapshot(snapshot, imageName) {
     return Object.entries(snapshot?.results || {})
       .filter(([, result]) => result?.manualEdit && !result.manualEdit.downloaded)
-      .map(([stage]) => `${STAGE_NAMES[stage] || stage} of ${imageName}`);
+      .map(([stage]) => `${stageName(stage)} of ${imageName}`);
   }
 
   /**
@@ -398,14 +311,13 @@ export class SctManualEdits {
   confirmDiscard(action, { current = true, others = [] } = {}) {
     const stages = current ? this.unsavedStages() : [];
     if (!stages.length && !others.length) return true;
-    const names = [...stages.map(stage => STAGE_NAMES[stage] || stage), ...others].join(', ');
+    const names = [...stages.map(stageName), ...others].join(', ');
     const ok = globalThis.confirm?.(`${action} discards your manual edits to ${names}, which you have not downloaded. Continue?`) ?? false;
     if (!ok) {
       this.app.logAnalysis(`Kept manual edits to ${names}: ${action.toLowerCase()} was cancelled`, 'warning');
       return false;
     }
     this.app.logAnalysis(`Manual edits to ${names} discarded: ${action.toLowerCase()}`, 'warning');
-    if (current && this.isEditing()) this.editor.discard();
     return true;
   }
 }

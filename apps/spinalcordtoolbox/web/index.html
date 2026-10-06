@@ -124,31 +124,6 @@
         </div>
       </section>
 
-      <!-- Manual editing of a result mask on FreeBrowse's drawing layer -->
-      <section class="sidebar-section step-section step-disabled collapsed" id="editSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-          <span>Edit masks</span>
-        </button></h2>
-        <div class="section-content" data-disclosure-panel>
-          <div class="param-group">
-            <label class="param-label" for="editStageSelect">Mask <span class="info-icon">i<span class="info-tooltip">Correct a result, or draw a new spinal cord or lesion mask on the image. Edit mask opens the viewer's Drawing tab: choose Pen as Draw Mode, tick Pen Erases to erase, keep Pen Fill to fill a closed outline, and Undo steps back. Apply edits makes the mask the result: its download, overlay, lesion metrics and morphometry follow. Restore model mask brings back the model's output.</span></span></label>
-            <select id="editStageSelect"></select>
-          </div>
-          <div class="param-group">
-            <label class="param-label" for="editLabelSelect">Paint label</label>
-            <select id="editLabelSelect"></select>
-          </div>
-          <p class="step-description">Draw, erase and fill in the viewer's Drawing tab, then apply.</p>
-          <div class="step-buttons">
-            <button class="btn btn-secondary" id="editStart" type="button" disabled>Edit mask</button>
-            <button class="btn btn-secondary" id="editApply" type="button" hidden>Apply edits</button>
-            <button class="btn btn-secondary" id="editDiscard" type="button" hidden>Discard edits</button>
-            <button class="btn btn-secondary" id="editRevert" type="button" hidden>Restore model mask</button>
-          </div>
-        </div>
-      </section>
-
       <!-- Results Section -->
       <section class="sidebar-section hidden" id="resultsSection" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>

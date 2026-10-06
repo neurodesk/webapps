@@ -35,8 +35,6 @@ const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controll
 const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_analysis.cjs'), 'utf8');
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
-const manualEditsE2e = fs.readFileSync(path.join(ROOT, 'e2e/manual-edits.spec.js'), 'utf8');
-const manualEditsTest = fs.readFileSync(path.join(ROOT, 'scripts/test_manual_edits.mjs'), 'utf8');
 
 const htmlIds = new Set([...indexHtml.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const domSource = `${appJs}\n${controllerSources}\n${sharedUiSources}`;
@@ -54,12 +52,6 @@ const UI_COVERAGE = Object.freeze([
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
   { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
-  { id: 'editStageSelect', behavior: 'chooses the result stage to edit, or a new cord or lesion mask', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
-  { id: 'editLabelSelect', behavior: 'chooses by name the label the pen paints', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
-  { id: 'editStart', behavior: 'puts the chosen mask on the drawing layer and opens the Drawing tab', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
-  { id: 'editApply', behavior: 'makes the drawing the stage data: download, overlay and derived metrics', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
-  { id: 'editDiscard', behavior: 'closes the drawing layer without keeping the edit', coveredBy: ['manual-edits-e2e', 'static-dom'] },
-  { id: 'editRevert', behavior: "restores the model's mask or removes a drawn mask", coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
   { id: 'screenshotViewer', behavior: 'exports viewer screenshot', coveredBy: ['viewer', 'batch', 'static-dom'] },
   { id: 'freebrowseViewer', behavior: 'hosts the FreeBrowse viewer: layout, zoom/pan, window, opacity, colormap, drawing', coveredBy: ['viewer', 'static-dom'] },
@@ -82,8 +74,6 @@ const UI_COVERAGE = Object.freeze([
 const TEST_SOURCES = {
   batch: batchTest,
   'lesion-analysis': lesionAnalysisTest,
-  'manual-edits-e2e': manualEditsE2e,
-  'manual-edits': manualEditsTest,
   viewer: viewerTest,
   worker: workerTest,
   'static-dom': domSource
@@ -99,9 +89,6 @@ for (const item of UI_COVERAGE) {
   assert.ok(item.behavior && item.coveredBy.length > 0, `${item.id} has coverage metadata`);
   for (const coverage of item.coveredBy) {
     assert.ok(TEST_SOURCES[coverage], `${item.id} references known coverage source ${coverage}`);
-    if (coverage === 'manual-edits-e2e') {
-      assert.ok(manualEditsE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/manual-edits.spec.js`);
-    }
   }
 }
 
@@ -144,15 +131,15 @@ assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" 
 assert.ok(!indexHtml.includes('sidebar-status'), 'the sidebar status block is retired');
 assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is the only abort control');
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
-// Manual edits: SCT adds stage choice, label names, Apply/Discard/Restore; the
-// pen, erase, fill and undo are FreeBrowse's Drawing tab.
+// Manual edits: the shared nd-mask-editor (Edit in a result row, its toolbar
+// row under the viewer toolbar) on FreeBrowse's NiiVue. No SCT section, no
+// second drawing toolbar in the page.
 const manualEditsJs = fs.readFileSync(path.join(ROOT, 'web/js/app/manual-edits.js'), 'utf8');
-assert.ok(/class="[^"]*step-disabled collapsed"[^>]*id="editSection"/.test(indexHtml), 'Edit masks starts collapsed and disabled');
-for (const id of ['editStart', 'editApply', 'editDiscard', 'editRevert']) {
-  assert.match(indexHtml, new RegExp(`<button class="btn btn-secondary" id="${id}"`), `${id} is a secondary action`);
-}
-assert.ok(!/id="[^"]*(pen|eraser|undo|brush)[^"]*"/i.test(indexHtml), 'no second drawing toolbar: pen, erase, fill and undo stay in FreeBrowse');
-assert.ok(manualEditsJs.includes('this.app.setStageData(') && manualEditsJs.includes('this.app.removeStageData('), 'applied edits change stage data only through setStageData/removeStageData');
+assert.ok(!indexHtml.includes('id="editSection"'), 'manual edits have no sidebar section: Edit sits on each result row');
+assert.ok(!/id="[^"]*(pen|eraser|undo|brush)[^"]*"/i.test(indexHtml), 'no app-drawn drawing toolbar: the shared editor builds its own row');
+assert.ok(manualEditsJs.includes('createMaskEditor(') && appJs.includes("editBtn.className = 'nd-edit-btn'"), 'the shared editor opens from the Edit button of a result row');
+assert.ok(/\bapp\.setStageData\(/.test(manualEditsJs), 'applied edits change stage data only through setStageData');
+assert.ok(manualEditsJs.includes('setDrawingLocked'), "FreeBrowse's own drawing controls are locked while the shared editor is open");
 assert.equal((appJs.match(/'stagedatachanged'/g) || []).length, 3, 'stage data changes are one event: dispatch, subscribe, unsubscribe');
 assert.ok(appJs.includes("this.notifyStageDataChanged(data.stage, 'model')"), 'model output announces its stage data too');
 assert.ok(appJs.includes('!this.manualEdits?.isHiding(overlayStage)'), 'the stage on the drawing layer is hidden as an overlay');
