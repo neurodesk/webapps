@@ -16,8 +16,8 @@ const bin = fileURLToPath(new URL('../bin/carotid-flow.js', import.meta.url));
 const automation = JSON.parse(await readFile(new URL('../../../apps/carotid-flow/automation.json', import.meta.url), 'utf8'));
 
 /** A stored NIfTI of `frames` frames on an nx × ny × slices grid, float32, frame-major. */
-function nifti({ nx, ny, slices = 1, frames, affine }, data) {
-  const header = createNiftiHeaderFromVolume({ hdr: { dims: [4, nx, ny, slices, frames], affine } });
+function nifti({ nx, ny, slices = 1, frames, affine, pixDims }, data) {
+  const header = createNiftiHeaderFromVolume({ hdr: { dims: [4, nx, ny, slices, frames], affine, pixDims } });
   return Buffer.concat([Buffer.from(header), Buffer.from(Float32Array.from(data).buffer)]);
 }
 
@@ -70,6 +70,30 @@ test('raw ±4096 phase without a VENC is refused before anything is written', as
   const output = join(directory, 'results');
   await assert.rejects(detect({ inputs: [input], output }), /raw phase.*--venc/);
   await assert.rejects(readdir(output), { code: 'ENOENT' });
+});
+
+test('an amplitude and phase pair on different grids is refused', async (t) => {
+  const directory = await workspace(t);
+  const series = tiltedPhantom();
+  const grid = { nx: series.nx, ny: series.ny, frames: series.phases };
+  const amplitude = join(directory, 'neck.nii');
+  await writeFile(amplitude, nifti({ ...grid, affine: series.affine }, series.amplitude));
+  const shifted = series.affine.map((row) => [...row]);
+  shifted[0][3] += 10;
+  const flipped = series.affine.map((row) => [...row]);
+  flipped[1][1] = -flipped[1][1];
+  const finer = series.affine.map((row) => [...row]);
+  finer[0][0] = -0.5;
+  const cases = [['origin', { affine: shifted }], ['orientation', { affine: flipped }], ['spacing', { affine: finer }], ['pixdim', { affine: series.affine, pixDims: [0.5, 1, 2] }]];
+  for (const [label, geometry] of cases) {
+    const phase = join(directory, `neck_${label}_ph.nii`);
+    await writeFile(phase, nifti({ ...grid, ...geometry }, series.phase));
+    await assert.rejects(detect({ inputs: [amplitude, phase], output: join(directory, label) }), /different voxel grids/, label);
+  }
+  const phase = join(directory, 'neck_ph.nii');
+  await writeFile(phase, nifti({ ...grid, affine: series.affine }, series.phase));
+  const result = await detect({ inputs: [amplitude, phase], output: join(directory, 'results'), parameters: { candidatePercentile: '97' } });
+  assert.equal(result.measurements.method, 'variability');
 });
 
 test('a series with more than one slice is refused', async (t) => {

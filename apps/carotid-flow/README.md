@@ -10,7 +10,8 @@ and extract their flow curves. Everything runs in the browser. The detection liv
 One NIfTI (or DICOM series, converted locally by dcm2niix) holding a single slice: the
 amplitude frames followed by the same number of phase frames. Separate amplitude and phase
 series also work when the phase file name carries `_ph`; beside a Philips angiographic
-magnitude (`_mag`), the modulus is the one named `_mod`.
+magnitude (`_mag`), the modulus is the one named `_mod`. A pair must share its size, affine and
+voxel spacing; the app refuses a pair that does not.
 
 ## Two methods, chosen by the phase data
 

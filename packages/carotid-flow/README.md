@@ -57,7 +57,7 @@ carotid-flow --help
 `SERIES` holds the amplitude frames followed by the same number of phase
 frames, as the app's "Detect carotids" operation takes a combined series.
 Otherwise give the amplitude and phase series as two files, amplitude first.
-Both must be single-slice NIfTI images with the same grid and frame count.
+Both must be single-slice NIfTI images with the same frame count, size, affine and voxel spacing.
 Input is NIfTI only. Convert DICOM with dcm2niix first, or use the web app,
 which converts it in the browser.
 
