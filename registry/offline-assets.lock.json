@@ -232,13 +232,6 @@
       "kind": "python-runtime",
       "dependencies": []
     },
-    "https://dicompare.neurodesk.org/embed/dicompare-worker.js": {
-      "sha256": "08b0d02891f2614f41c520c30b4d89f2b78b6d3fc5798d3d26bdbc00d54ea905",
-      "bytes": 7122,
-      "contentType": "application/javascript; charset=utf-8",
-      "kind": "runtime",
-      "dependencies": []
-    },
     "https://dicompare.neurodesk.org/embed/DicompareController.js": {
       "sha256": "990ceeb5b264dca46ecbc37923ff6986d2beac560855ce303900a9dd64a55a96",
       "bytes": 12111,
@@ -3621,7 +3614,7 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed42.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed456.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/seedseg-model-seed789.onnx",
-      "https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js"
+      "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"
     ],
     "dicompare": [
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",
