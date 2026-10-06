@@ -1,5 +1,6 @@
 // LCModel's own files: the control file (NAMELIST /LCMODL/) the app writes,
 // and the .COORD and .TABLE files LCModel writes back. Pure, Node-tested.
+import { rawValues } from "./inputs.js";
 
 // Names the fit reads its inputs from; the worker supplies files under these.
 export const FILES = Object.freeze({
@@ -211,7 +212,102 @@ export function parseCoord(text) {
     }
   }
   result.summary = summarizeMisc(result.misc);
+  result.gaps = coordGaps(result.ppm);
   return result;
+}
+
+/**
+ * Windows LCModel left out of the fit (PPMGAP). The .COORD file has no
+ * points there, so its ppm axis jumps across each one.
+ * @returns {{hi: number, lo: number}[]}  the last point before and the first after
+ */
+export function coordGaps(ppm) {
+  const steps = [];
+  for (let k = 1; k < ppm.length; k += 1) steps.push(Math.abs(ppm[k] - ppm[k - 1]));
+  const typical = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)] ?? 0;
+  const gaps = [];
+  steps.forEach((step, k) => {
+    if (step > 5 * typical) gaps.push({ hi: ppm[k], lo: ppm[k + 1] });
+  });
+  return gaps;
+}
+
+// LCModel's ppm axis is centred on PPMCEN, which the app leaves at its default.
+const PPM_CENTRE = 4.65;
+
+/**
+ * `coord.gaps` with the data inside each window, so the plot can show what
+ * the fit left out. LCModel writes nothing there; the spectrum is rebuilt
+ * from the .RAW file it fitted, on the .COORD grid (twice zero-filled).
+ * LCModel's referencing shift and first-order phase come from its summary.
+ * Its data scaling and its zero-order phase (printed to the nearest degree)
+ * are fitted to the .COORD data by least squares. If the rebuilt spectrum
+ * misses that data by more than `tolerance` (relative RMS), the windows
+ * stay empty rather than show a trace that does not line up.
+ * @param {{deltat: number, hzpppm: number}} acquisition
+ * @returns {{hi: number, lo: number, ppm?: number[], data?: number[]}[]}
+ */
+export function fillGaps(coord, raw, { deltat, hzpppm }, { tolerance = 0.1 } = {}) {
+  const gaps = coord.gaps ?? [];
+  if (!gaps.length) return gaps;
+  const values = rawValues(raw);
+  const n = values.length >> 1;
+  if (!n || !(deltat > 0) || !(hzpppm > 0)) return gaps;
+  const shift = coord.summary?.shiftPpm ?? 0;
+  const degPerPpm = coord.summary?.phase1DegPerPpm ?? 0;
+  // The spectrum at `ppm`, with LCModel's first-order phase applied.
+  const spectrum = (ppm) => {
+    const hz = (PPM_CENTRE - ppm + shift) * hzpppm;
+    const wr = Math.cos(-2 * Math.PI * hz * deltat);
+    const wi = Math.sin(-2 * Math.PI * hz * deltat);
+    let zr = 1;
+    let zi = 0;
+    let sr = 0;
+    let si = 0;
+    for (let k = 0; k < n; k += 1) {
+      const re = values[2 * k];
+      const im = values[2 * k + 1];
+      sr += re * zr - im * zi;
+      si += re * zi + im * zr;
+      [zr, zi] = [zr * wr - zi * wi, zr * wi + zi * wr];
+    }
+    const phase = (degPerPpm * ppm * Math.PI) / 180;
+    return [sr * Math.cos(phase) - si * Math.sin(phase), sr * Math.sin(phase) + si * Math.cos(phase)];
+  };
+  // data ≈ a·Re(S) − b·Im(S): the complex factor a + ib, by least squares.
+  let uu = 0;
+  let uv = 0;
+  let vv = 0;
+  let ud = 0;
+  let vd = 0;
+  const rebuilt = coord.ppm.map((p, k) => {
+    const [u, v] = spectrum(p);
+    const d = coord.data[k];
+    uu += u * u;
+    uv += u * v;
+    vv += v * v;
+    ud += u * d;
+    vd += v * d;
+    return [u, v];
+  });
+  const det = uu * vv - uv * uv;
+  if (!(Math.abs(det) > 0)) return gaps;
+  const a = (ud * vv - vd * uv) / det;
+  const b = (ud * uv - vd * uu) / det;
+  const real = ([u, v]) => a * u - b * v;
+  let miss = 0;
+  let total = 0;
+  rebuilt.forEach((s, k) => {
+    miss += (real(s) - coord.data[k]) ** 2;
+    total += coord.data[k] ** 2;
+  });
+  if (!(Math.sqrt(miss / total) <= tolerance)) return gaps;
+  const step = Math.abs(coord.ppm[1] - coord.ppm[0]);
+  return gaps.map(({ hi, lo }) => {
+    const ppm = [];
+    for (let p = hi - step; p > lo + step / 2; p -= step) ppm.push(p);
+    return { hi, lo, ppm, data: ppm.map((p) => real(spectrum(p))) };
+  });
 }
 
 /** FWHM, S/N, data shift and phases from LCModel's misc table. */

@@ -1,5 +1,11 @@
 # lcmodel
 
+## 0.5.20261005
+
+### Patch Changes
+
+- Shade the ppm window a MEGA-PRESS fit leaves out (1.95-1.2 ppm with the co-edited macromolecule model) and label it "not fitted", and draw the data through it. LCModel writes no points there, so the app rebuilds that stretch from the .RAW file it fitted, with LCModel's shift and phase, and leaves it empty if the rebuild does not reproduce LCModel's data.
+
 ## 0.5.20261004
 
 ### Patch Changes

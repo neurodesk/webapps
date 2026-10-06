@@ -53,6 +53,7 @@ svg .lcm-label { fill: black; font-size: 10px; }
 svg polyline { fill: none; stroke-linejoin: round; }
 svg .lcm-axis { stroke: black; }
 svg .lcm-grid { stroke: lightgray; stroke-dasharray: 2 4; }
+svg .lcm-gap { fill: whitesmoke; }
 svg .lcm-data, svg .lcm-reference { stroke: black; stroke-width: 0.8; }
 svg .lcm-fit, svg .lcm-metabolite { stroke: red; stroke-width: 1.2; }
 svg .lcm-background { stroke: dimgray; stroke-width: 0.8; stroke-dasharray: 4 3; }
@@ -201,11 +202,11 @@ export function buildReport({ generated, versions, dataset, basis, control, prep
   const s = coord.summary ?? {};
   const title = `LCModel fit: ${dataset.name}`;
   const fitPlot = coord.ppm.length
-    ? spectrumSvg({ ppm: coord.ppm, series: fitSeries(coord), range: fit.range, height: 640, ariaLabel: "LCModel fit: data, fit, baseline and residual" })
+    ? spectrumSvg({ ppm: coord.ppm, series: fitSeries(coord), range: fit.range, gaps: coord.gaps, height: 640, ariaLabel: "LCModel fit: data, fit, baseline and residual" })
     : "<p>LCModel wrote no fit curves.</p>";
   const metabolites = metaboliteSeries(coord, { limit: 16 });
   const metabolitePlot = metabolites.length
-    ? `<figure>${spectrumSvg({ ppm: coord.ppm, series: metabolites, range: fit.range, height: 440, ariaLabel: "Fitted metabolite spectra" })}<figcaption>Each fitted metabolite's contribution, baseline removed, largest at the bottom.</figcaption></figure>`
+    ? `<figure>${spectrumSvg({ ppm: coord.ppm, series: metabolites, range: fit.range, gaps: coord.gaps, height: 440, ariaLabel: "Fitted metabolite spectra" })}<figcaption>Each fitted metabolite's contribution, baseline removed, largest at the bottom.</figcaption></figure>`
     : "";
   const fitSummary = definitionList([
     ["FWHM", s.fwhmPpm != null && `${s.fwhmPpm} ppm`],

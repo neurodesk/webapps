@@ -15,7 +15,7 @@ on:
   workflow_dispatch:
     inputs:
       full_volumes:
-        description: Include the full body MRI and knee WASM references
+        description: Include the full body MRI, full knee and full-knee leg WASM references
         type: boolean
         default: false
 
@@ -69,12 +69,13 @@ jobs:
         run: |
           reference_root="$RUNNER_TEMP/musclemap-reference"
           report_root="$RUNNER_TEMP/musclemap-reports"
-          cases=(body-first17 body-first17-multichunk knee-slab)
+          cases=(body-first17 body-first17-multichunk knee-slab
+            wholebody13-first17 abdomen-slab leg-slab pelvis-slab thigh-slab)
           if [[ "$BACKEND" == webgpu ]]; then
             cases=(body-single-slice)
           fi
           if [[ "$FULL_VOLUMES" == true && "$BACKEND" == wasm ]]; then
-            cases+=(body-full knee-full)
+            cases+=(body-full knee-full leg-knee)
           fi
           backend_args=(--backend "$BACKEND")
           if [[ "$BACKEND" == webgpu ]]; then

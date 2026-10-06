@@ -6,6 +6,7 @@ on:
       - '.github/workflows/synthseg-native.yml'
       - 'exes/synthseg/**'
       - 'exes/nifti/**'
+      - 'exes/native-publish/**'
       - 'test-utils/native-nifti/**'
       - 'packages/synthseg/**'
       - 'exes/synthsr/scripts/ci_macos_release.sh'

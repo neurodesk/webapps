@@ -83,7 +83,7 @@ test('native packages share one gated publisher while signing stays isolated', a
 });
 
 test('native and independent test workflows pin actions and discard checkout credentials', async () => {
-  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'topofit-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti']) {
+  for (const name of ['synthsr-native', 'synthseg-native', 'syncro-native', 'topofit-native', 'node-cli-portable', 'greedy-native', 'sct-full-tests', 'native-nifti', 'native-publish']) {
     const flow = await workflow(name);
     for (const job of Object.values(flow.jobs)) {
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
@@ -207,4 +207,30 @@ test('shared NIfTI changes select both native suites and the model-free cross-pl
   assert.ok(steps.some(step => step.with?.targets === 'wasm32-unknown-unknown'));
   assert.ok(steps.some(step => step.with?.['node-version'] === 24));
   assert.ok(steps.some(step => step.uses === './.github/actions/setup-wasm-opt'));
+});
+
+test('shared publication changes select both callers and independently test the dependency', async () => {
+  for (const name of ['synthsr-native', 'synthseg-native', 'native-publish']) {
+    const flow = await workflow(name);
+    assert.ok(flow.on.pull_request, `${name} runs on pull requests`);
+    for (const trigger of [flow.on.pull_request, flow.on.push].filter(Boolean)) {
+      assert.ok(trigger.paths.includes('exes/native-publish/**'), `${name} selects shared publication changes`);
+    }
+  }
+  const flow = await workflow('native-publish');
+  assert.deepEqual(flow.permissions, { contents: 'read' });
+  assert.deepEqual(flow.jobs.core.strategy.matrix.os, ['ubuntu-24.04', 'windows-latest', 'macos-latest']);
+  const steps = flow.jobs.core.steps;
+  const commands = steps.map(step => step.run || '').join('\n');
+  const manifest = 'exes/native-publish/Cargo.toml';
+  for (const command of [
+    `cargo test --locked --manifest-path ${manifest}`,
+    `cargo test --locked --release --manifest-path ${manifest}`,
+    `cargo fmt --manifest-path ${manifest} --check`,
+    `cargo clippy --locked --manifest-path ${manifest} --all-targets -- -D warnings`,
+  ]) {
+    assert.ok(commands.split('\n').includes(command), `isolated dependency gate runs ${command}`);
+  }
+  assert.ok(steps.some(step => step.with?.components === 'rustfmt, clippy'));
+  assert.doesNotMatch(JSON.stringify(flow), /fetch_model|test-real|ort|setup-node|pnpm|secrets\./);
 });

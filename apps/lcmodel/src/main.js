@@ -27,7 +27,7 @@ import lcmodelPackage from "../../../packages/lcmodel/package.json" with { type:
 import examples from "../examples.json" with { type: "json" };
 import { APP, basisLibrary } from "./config.js";
 import { rankBases, assessBasis, parseBasisHeader, recommendBasis } from "./basis-select.js";
-import { buildControl, parseCoord, parseTable, concentrationsCsv, presentRows, FILES } from "./lcmodel-io.js";
+import { buildControl, parseCoord, fillGaps, parseTable, concentrationsCsv, presentRows, FILES } from "./lcmodel-io.js";
 import { sortInputs, textHead, parseRaw, parseControl } from "./inputs.js";
 import { spectrumSvg, fitSeries, metaboliteSeries } from "./spectrum-plot.js";
 import { STATUS, groupRecord, groupCsvLong, groupCsvWide, planBases, uniqueNames, fileStem } from "./group.js";
@@ -679,7 +679,8 @@ async function fitDataset(k, { choice, range, settings, onStep }) {
   const basis = await basisFor(choice);
   onStep("Fitting with LCModel…");
   const out = await runJob({ type: "fit", control, files, basis: basis.job, fdate: generated.toString() });
-  const coord = parseCoord(out.outputs[FILES.coord] ?? "");
+  const parsed = parseCoord(out.outputs[FILES.coord] ?? "");
+  const coord = { ...parsed, gaps: fillGaps(parsed, lcm.raw, lcm) };
   const tableText = out.outputs[FILES.table] ?? "";
   const table = parseTable(tableText);
   for (const d of coord.diagnostics) log.log(`LCModel, ${name}: ${d}`, "info");
@@ -1182,11 +1183,11 @@ function showView(id) {
     plot.innerHTML = spectrumSvg({ ppm: processed.spectrum.ppm, series, range: [4.5, 0], ariaLabel: "Spectrum before and after FID-A preprocessing" });
     $("plotLabel").textContent = `FID-A preprocessing, grey before and coloured after bad-average removal and drift correction: ${summarizeReport(processed.report)}`;
   } else if (id === "metabolites" && fit) {
-    plot.innerHTML = spectrumSvg({ ppm: fit.coord.ppm, series: metaboliteSeries(fit.coord), range, height: 560, ariaLabel: "Fitted metabolite spectra" });
+    plot.innerHTML = spectrumSvg({ ppm: fit.coord.ppm, series: metaboliteSeries(fit.coord), range, gaps: fit.coord.gaps, height: 560, ariaLabel: "Fitted metabolite spectra" });
     $("plotLabel").textContent = "Each fitted metabolite's contribution, largest at the bottom";
   } else if (fit) {
-    plot.innerHTML = spectrumSvg({ ppm: fit.coord.ppm, series: fitSeries(fit.coord), range, ariaLabel: "LCModel fit: data, fit, baseline and residual" });
-    $("plotLabel").textContent = "Data (grey), LCModel fit (coloured), baseline (dashed), residual (top)";
+    plot.innerHTML = spectrumSvg({ ppm: fit.coord.ppm, series: fitSeries(fit.coord), range, gaps: fit.coord.gaps, ariaLabel: "LCModel fit: data, fit, baseline and residual" });
+    $("plotLabel").textContent = `Data (grey), LCModel fit (coloured), baseline (dashed), residual (top)${fit.coord.gaps.length ? "; shaded: not fitted" : ""}`;
   } else {
     plot.replaceChildren();
     $("plotLabel").textContent = "";

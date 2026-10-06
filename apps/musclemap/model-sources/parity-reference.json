@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "neurodeskorg/webapps",
-  "revision": "1409093e00bd7cc072220752352bb8891e5f38c6",
+  "revision": "33a49bbe2d5ec66cd6356c923283b6ab89aa64d1",
   "prefix": "musclemap/parity/20261004",
   "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
   "files": [
@@ -36,6 +36,11 @@
       "sha256": "bbd683574dde7d3c906f623594e24a1a7d73da891fa302bd10037d032ee6d3b5"
     },
     {
+      "path": "inputs/body-abdomen-slab.nii.gz",
+      "bytes": 1601220,
+      "sha256": "daf31c44911fc200618b84bdaa80bce38dea97fbaefc2deb5d864e9f7bdd1e6d"
+    },
+    {
       "path": "inputs/body-first17.nii.gz",
       "bytes": 746964,
       "sha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f"
@@ -46,9 +51,19 @@
       "sha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379"
     },
     {
+      "path": "inputs/body-pelvis-slab.nii.gz",
+      "bytes": 1690464,
+      "sha256": "91ac83872129ecf54cfcb648d6696d65cac37d61ec779102025acb7144154c7d"
+    },
+    {
       "path": "inputs/body-single-slice.nii.gz",
       "bytes": 39170,
       "sha256": "b3fd7f8cccbecb1242b97a096b8c310f565b6c4c992b51160835d9f404fffd89"
+    },
+    {
+      "path": "inputs/body-thigh-slab.nii.gz",
+      "bytes": 1366566,
+      "sha256": "b3a7f8cdf1fb2b33a876674b25e8b91f39ed5b3c4fee3fd73fc6b3e9fabb2856"
     },
     {
       "path": "inputs/knee-full.nii.gz",
@@ -56,9 +71,19 @@
       "sha256": "bb4cdef01379236c08f9e6c741f38a0aa435b09ef497ea3268560b868f94b4c2"
     },
     {
+      "path": "inputs/knee-leg-slab.nii.gz",
+      "bytes": 912102,
+      "sha256": "10f0ec6a28087c0876b25de3b09e7180fa12cf9dda3db2795d469e29a80af1fd"
+    },
+    {
       "path": "inputs/knee-slab.nii.gz",
       "bytes": 96639,
       "sha256": "19b49ebe20495a4437522704506144c1a9f71a202d8ef6f31856955bf34e220a"
+    },
+    {
+      "path": "provenance/abdomen-slab.json",
+      "bytes": 2241,
+      "sha256": "2cfefa4055b6978139954dcd6916fdf57e7c4779824d89ea8d318bfc1c181c55"
     },
     {
       "path": "provenance/body-first17-multichunk.json",
@@ -91,6 +116,36 @@
       "sha256": "d835bd35d3610937639cdf8d18a58967445f2b27e98dc9d3d50e0fcd05c5eba8"
     },
     {
+      "path": "provenance/leg-knee.json",
+      "bytes": 2419,
+      "sha256": "b492de94e87f760edeab6d02612344f2bb4ec9d1ac52b9fa4b36eeb42af18ad9"
+    },
+    {
+      "path": "provenance/leg-slab.json",
+      "bytes": 2433,
+      "sha256": "507a12df610cdfb68bea4d04905583ab2c07a03f10158dd6ac1d2dd1a20007fa"
+    },
+    {
+      "path": "provenance/pelvis-slab.json",
+      "bytes": 2321,
+      "sha256": "c7da2550c17a0118adcddbe7fe5e69847868942e6b530b9073b48e8a64a1093d"
+    },
+    {
+      "path": "provenance/thigh-slab.json",
+      "bytes": 2530,
+      "sha256": "f7d69e3624fb2658f53d9c7a534571271605f830a11ed1144f7f1381373be010"
+    },
+    {
+      "path": "provenance/wholebody13-first17.json",
+      "bytes": 2698,
+      "sha256": "20718355102e83f2de71d081a91a1a7a5da932acfc3853ac352c5bfdcd6965a6"
+    },
+    {
+      "path": "references/abdomen-slab.nii.gz",
+      "bytes": 48335,
+      "sha256": "6a4ea582b8a4c38db376834ef6f733306e4ccf8e0fb59c4496d798a8dba8d047"
+    },
+    {
       "path": "references/body-first17-multichunk.nii.gz",
       "bytes": 49779,
       "sha256": "9699ef226c8892ec4e5751b9b149b4108d81d29115da60534b075a3bfb2271c2"
@@ -119,6 +174,31 @@
       "path": "references/knee-slab.nii.gz",
       "bytes": 6507,
       "sha256": "904e983564171af72a99a8d58802a20a45af4b00de00355ca007bbd1bc984469"
+    },
+    {
+      "path": "references/leg-knee.nii.gz",
+      "bytes": 53166,
+      "sha256": "6a219c18e1f30588d5fd53a2b1a52fbdaa336cd8b17caf6c5cbd249a6d11c4ce"
+    },
+    {
+      "path": "references/leg-slab.nii.gz",
+      "bytes": 36560,
+      "sha256": "5eab614ad214e123e8393d447e71dc770c027ed240b7867fe74ac441e5465534"
+    },
+    {
+      "path": "references/pelvis-slab.nii.gz",
+      "bytes": 84259,
+      "sha256": "ac31245450066a03f65c58271f03efd3806cb75b42902e847fea7597a741c95e"
+    },
+    {
+      "path": "references/thigh-slab.nii.gz",
+      "bytes": 98552,
+      "sha256": "7e36190ade24ac6140b03330bc3d87bffd406a2d9f5735aa727aabee22b032c9"
+    },
+    {
+      "path": "references/wholebody13-first17.nii.gz",
+      "bytes": 49925,
+      "sha256": "39265e82a0e1f0f0843f11534b63059dc7437c46c12a782d0c4025986f0d63ec"
     }
   ],
   "cases": [
@@ -211,6 +291,96 @@
       "model": "wholebody",
       "modelVersion": "1.4",
       "modelSha256": "6380bd2487eeb47bdc59d63eef69fb0241bd11976712677ccee329f83552a1e6"
+    },
+    {
+      "id": "thigh-slab",
+      "input": "inputs/body-thigh-slab.nii.gz",
+      "inputSha256": "b3a7f8cdf1fb2b33a876674b25e8b91f39ed5b3c4fee3fd73fc6b3e9fabb2856",
+      "reference": "references/thigh-slab.nii.gz",
+      "referenceSha256": "7e36190ade24ac6140b03330bc3d87bffd406a2d9f5735aa727aabee22b032c9",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/thigh-slab.json",
+      "model": "thigh",
+      "modelVersion": "0.0",
+      "modelSha256": "43a416a50578ef6efd8aa1ba46b06808157d4377019e6cf4ecfdf7fa9279d805"
+    },
+    {
+      "id": "pelvis-slab",
+      "input": "inputs/body-pelvis-slab.nii.gz",
+      "inputSha256": "91ac83872129ecf54cfcb648d6696d65cac37d61ec779102025acb7144154c7d",
+      "reference": "references/pelvis-slab.nii.gz",
+      "referenceSha256": "ac31245450066a03f65c58271f03efd3806cb75b42902e847fea7597a741c95e",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/pelvis-slab.json",
+      "model": "pelvis",
+      "modelVersion": "0.0",
+      "modelSha256": "fd405e107fbbe1248fe5953f1de92873c20108f524d97bcbe93246cd5019cf18"
+    },
+    {
+      "id": "abdomen-slab",
+      "input": "inputs/body-abdomen-slab.nii.gz",
+      "inputSha256": "daf31c44911fc200618b84bdaa80bce38dea97fbaefc2deb5d864e9f7bdd1e6d",
+      "reference": "references/abdomen-slab.nii.gz",
+      "referenceSha256": "6a4ea582b8a4c38db376834ef6f733306e4ccf8e0fb59c4496d798a8dba8d047",
+      "sourceChunkSize": 17,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/abdomen-slab.json",
+      "model": "abdomen",
+      "modelVersion": "0.0",
+      "modelSha256": "75810a91be42e64efbd468f1b8d6cfd2c233fd7748c443eeb91c4846fc893901"
+    },
+    {
+      "id": "leg-slab",
+      "input": "inputs/knee-leg-slab.nii.gz",
+      "inputSha256": "10f0ec6a28087c0876b25de3b09e7180fa12cf9dda3db2795d469e29a80af1fd",
+      "reference": "references/leg-slab.nii.gz",
+      "referenceSha256": "5eab614ad214e123e8393d447e71dc770c027ed240b7867fe74ac441e5465534",
+      "sourceChunkSize": 15,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/leg-slab.json",
+      "model": "leg",
+      "modelVersion": "0.0",
+      "modelSha256": "ced5b7f5654ffdaf44774d98de1bc9b0bfdf022c04d815a97dc28c079015e6e0"
+    },
+    {
+      "id": "leg-knee",
+      "input": "inputs/knee-full.nii.gz",
+      "inputSha256": "bb4cdef01379236c08f9e6c741f38a0aa435b09ef497ea3268560b868f94b4c2",
+      "reference": "references/leg-knee.nii.gz",
+      "referenceSha256": "6a219c18e1f30588d5fd53a2b1a52fbdaa336cd8b17caf6c5cbd249a6d11c4ce",
+      "sourceChunkSize": 15,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "full-original-volume",
+      "provenance": "provenance/leg-knee.json",
+      "model": "leg",
+      "modelVersion": "0.0",
+      "modelSha256": "ced5b7f5654ffdaf44774d98de1bc9b0bfdf022c04d815a97dc28c079015e6e0"
+    },
+    {
+      "id": "wholebody13-first17",
+      "input": "inputs/body-first17.nii.gz",
+      "inputSha256": "79c25d6d9e907eac27e59ab9b1779c1606cca80cb966f8f810bcdc2ba660d24f",
+      "reference": "references/wholebody13-first17.nii.gz",
+      "referenceSha256": "39265e82a0e1f0f0843f11534b63059dc7437c46c12a782d0c4025986f0d63ec",
+      "sourceChunkSize": 8,
+      "overlap": 0.5,
+      "authority": "unmodified-upstream",
+      "extent": "subset",
+      "provenance": "provenance/wholebody13-first17.json",
+      "model": "wholebody",
+      "modelVersion": "1.3",
+      "modelSha256": "f29a492f85e2f68b627b7b43da35759b5e56081e6a1b165c1b03ccbb8ad6dff1"
     }
   ]
 }
