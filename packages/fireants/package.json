@@ -1,0 +1,36 @@
+{
+  "name": "@neurodesk/fireants",
+  "version": "0.2.20261004",
+  "description": "FireANTs image registration on the CPU from the command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "fireants": "./bin/fireants.js"
+  },
+  "exports": {
+    "./node": "./src/node.js",
+    "./outputs": "./src/outputs.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/node.js && node --check bin/fireants.js"
+  },
+  "dependencies": {
+    "@fireants/fireants": "0.1.20260913"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/fireants"
+  }
+}

@@ -228,6 +228,9 @@ importers:
 
   apps/carotid-flow:
     dependencies:
+      '@neurodesk/carotid-flow':
+        specifier: workspace:*
+        version: link:../../packages/carotid-flow
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -525,6 +528,9 @@ importers:
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
+      '@neurodesk/fireants':
+        specifier: workspace:*
+        version: link:../../packages/fireants
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -875,6 +881,9 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@neurodesk/white-matter-lesions':
+        specifier: workspace:*
+        version: link:../../packages/white-matter-lesions
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -925,6 +934,12 @@ importers:
         specifier: workspace:*
         version: link:../synthsr
 
+  packages/carotid-flow:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/components:
     dependencies:
       zod:
@@ -955,6 +970,12 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/fireants:
+    dependencies:
+      '@fireants/fireants':
+        specifier: 0.1.20260913
+        version: 0.1.20260913
 
   packages/greedy: {}
 
@@ -1023,6 +1044,22 @@ importers:
         specifier: 0.8.0
         version: 0.8.0
       onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
+  packages/white-matter-lesions:
+    dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/synthstrip':
+        specifier: workspace:*
+        version: link:../synthstrip
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
 

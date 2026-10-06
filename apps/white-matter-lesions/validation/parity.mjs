@@ -1,4 +1,4 @@
-// src/pipeline.js against reference.py on the same skull-stripped input and ONNX model.
+// @neurodesk/white-matter-lesions against reference.py on the same skull-stripped input and ONNX model.
 //
 //   node validation/parity.mjs <stripped FLAIR> <reference.py mask> <model.onnx>
 //
@@ -6,7 +6,7 @@
 import * as ort from "onnxruntime-web";
 import { readFileSync } from "node:fs";
 import { readVolume } from "@neurodesk/synthsr";
-import { PLAN, segmentFlair, threshold } from "../src/pipeline.js";
+import { PLAN, segmentFlair, threshold } from "@neurodesk/white-matter-lesions";
 
 const [flairPath, referencePath, modelPath] = process.argv.slice(2);
 const bytes = (path) => {

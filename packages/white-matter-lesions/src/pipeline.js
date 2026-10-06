@@ -1,4 +1,4 @@
-// FLAMeS inference around a patch runner. Pure: no DOM, no ONNX Runtime.
+// FLAMeS inference around a patch runner. Pure: no DOM, no ONNX Runtime import (sessions are injected).
 //
 // Arrays use nnU-Net's axis order. nnU-Net reads a NIfTI volume as a C-order (z, y, x) array
 // and then applies the FLAMeS plans' transpose_forward [2, 0, 1], so the network sees (x, z, y):
@@ -367,6 +367,47 @@ export async function segmentFlair({ volume, brainMask, runPatch, folds, onPatch
     windows: windows(resampledShape.map((n, a) => Math.max(n, PLAN.patch[a]))).length,
     resampledShape,
   };
+}
+
+// The brain mask of an image that is already skull-stripped.
+export function nonzeroMask(volume) {
+  return Uint8Array.from(volume.data, (v) => (v !== 0 ? 1 : 0));
+}
+
+// segmentFlair over one ONNX session per fold, opened when its first patch arrives and released
+// before the next, so one model is in memory at a time. `models` holds each fold's graph bytes.
+export async function runFolds({ volume, brainMask, models, createSession, Tensor, onPatch, signal }) {
+  let session = null;
+  let loaded = -1;
+  const open = async (fold) => {
+    if (fold === loaded) return;
+    await session?.release();
+    session = null;
+    session = await createSession(models[fold]);
+    loaded = fold;
+  };
+  await open(0);
+  try {
+    return await segmentFlair({
+      volume,
+      brainMask,
+      folds: models.length,
+      runPatch: async (tile, fold) => {
+        await open(fold);
+        const input = new Tensor('float32', tile, [1, 1, ...PLAN.patch]);
+        const outputs = await session.run({ [session.inputNames[0]]: input });
+        const logits = outputs[session.outputNames[0]];
+        const data = await logits.getData();
+        input.dispose();
+        logits.dispose();
+        return data;
+      },
+      onPatch,
+      signal,
+    });
+  } finally {
+    await session?.release();
+  }
 }
 
 export function threshold(probability, cutoff = 0.5) {

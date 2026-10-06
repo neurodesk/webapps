@@ -46,7 +46,7 @@ const pin = `source: ${app.source}`;
 if (registry.split(pin).length !== 2) throw new Error(`Cannot find a unique '${pin}' in registry/apps.yml`);
 await writeFile(registryPath, registry.replace(pin, `source: ${repository}@${target}`));
 const short = `${base.slice(0, 7)}..${target.slice(0, 7)}`;
-await writeFile(join(repoRoot, '.changeset', `upstream-${id}.md`), [
+await writeFile(join(repoRoot, '.changeset', `upstream-${id}-${target.slice(0, 7)}.md`), [
   '---', `"${name}": patch`, '---', '',
   `Merge upstream ${repository} ${short}:`, '',
   ...commits.map(([, subject]) => `- ${subject}`), '',

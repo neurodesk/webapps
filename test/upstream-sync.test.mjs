@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -53,8 +53,9 @@ function write(root, files) {
   }
 }
 
-function commit(repo, files) {
+function commit(repo, files, executable = []) {
   write(repo, files);
+  for (const path of executable) chmodSync(join(repo, path), 0o755);
   execFileSync('git', ['-C', repo, 'add', '-A']);
   execFileSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'c']);
   return execFileSync('git', ['-C', repo, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -86,9 +87,11 @@ test('merges upstream into a monorepo copy that diverged on purpose', () => {
       'src/new.js': lines('import { PipelineExecutor } from "./PipelineExecutor.js"'),
       'controllers/Dicom.js': lines('upstream dicom v2'),
       'controllers/Extra.js': lines('needs Dicom.js'),
+      'controllers/helpers/nested.js': lines('deeper inside a replaced directory'),
+      'src/run.sh': lines('#!/bin/sh', 'echo run'),
       'landing.css': lines('body { color: red }'),
       '.github/workflows/ci.yml': lines('ci'),
-    });
+    }, ['src/run.sh']);
     write(app, {
       'package.json': pkg('0.3.20261004', { a: '1', '@neurodesk/webapp-components': 'workspace:*' }),
       'src/main.js': lines('monorepo header', 'one', 'two', 'three', 'four', 'footer'),
@@ -116,12 +119,14 @@ test('merges upstream into a monorepo copy that diverged on purpose', () => {
     assert.equal(read('src/new.js'), lines('import { QsmPipelineController } from "./QsmPipelineController.js"'));
     assert.equal(existsSync(join(app, 'src/old.js')), false);
     assert.equal(existsSync(join(app, 'controllers')), false, 'a directory the monorepo replaced stays gone');
+    assert.equal(statSync(join(app, 'src/run.sh')).mode & 0o111, 0o111, 'an executable upstream file stays executable');
     assert.equal(read('landing.css'), lines('body {}'));
     assert.equal(existsSync(join(app, '.github')), false);
     assert.deepEqual(status, {
       '.github/workflows/ci.yml': 'ignored',
       'controllers/Dicom.js': 'dropped',
       'controllers/Extra.js': 'dropped',
+      'controllers/helpers/nested.js': 'dropped',
       'landing.css': 'ignored',
       'package.json': 'merged',
       'src/QsmPipelineController.js': 'merged',
@@ -129,6 +134,7 @@ test('merges upstream into a monorepo copy that diverged on purpose', () => {
       'src/main.js': 'merged',
       'src/new.js': 'added',
       'src/old.js': 'deleted',
+      'src/run.sh': 'added',
     });
   } finally {
     rmSync(root, { recursive: true, force: true });

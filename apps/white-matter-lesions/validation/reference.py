@@ -1,4 +1,4 @@
-"""Browser-shaped FLAMeS pipeline in NumPy + ONNX Runtime, the reference src/pipeline.js is ported from.
+"""Browser-shaped FLAMeS pipeline in NumPy + ONNX Runtime, the reference packages/white-matter-lesions/src/pipeline.js is ported from.
 
     python reference.py <work> <name> --inputs <dir of skull-stripped FLAIR> [--folds 0] [--order nnunet|1|3] [--mirror]
 

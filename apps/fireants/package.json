@@ -15,6 +15,7 @@
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260813",
     "@fireants/fireants": "0.1.20260913",
+    "@neurodesk/fireants": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.13"
