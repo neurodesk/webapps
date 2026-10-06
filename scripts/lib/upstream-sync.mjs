@@ -2,7 +2,7 @@
 // of an app. Base is the commit the app was last synced from, "local" is the
 // checkout and "upstream" is the new commit; nothing outside appDir is touched.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const PACKAGE_VERSION_SITE = { file: 'package.json', pattern: /("version":\s*")[^"]+(")/ };
@@ -81,7 +81,22 @@ function threeWay(local, base, upstream) {
 export function mergeUpstream({ upstream, base, target, appDir, config = {}, versionSites = [] }) {
   const rules = config.rewrite || {};
   const patterns = config.ignore || [];
-  const baseTree = new Set(git(upstream, 'ls-tree', '-r', '--name-only', base).toString().split('\n').filter(Boolean));
+  const baseDirs = new Set();
+  for (const item of git(upstream, 'ls-tree', '-r', '--name-only', base).toString().split('\n').filter(Boolean)) {
+    for (let dir = dirname(item); dir !== '.'; dir = dirname(dir)) baseDirs.add(dir);
+  }
+  // True when an upstream directory above name existed at base and the monorepo removed it.
+  const insideRemovedDirectory = name => {
+    for (let dir = dirname(name); dir !== '.'; dir = dirname(dir)) {
+      if (baseDirs.has(dir) && !existsSync(join(appDir, rewrite(dir, rules)))) return true;
+    }
+    return false;
+  };
+  const addFile = (name, file, bytes) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, bytes);
+    if (git(upstream, 'ls-tree', target, '--', name).toString().startsWith('100755')) chmodSync(file, 0o755);
+  };
   const changes = git(upstream, 'diff', '--name-status', '--no-renames', base, target).toString().split('\n').filter(Boolean);
   const report = [];
   for (const line of changes) {
@@ -103,9 +118,7 @@ export function mergeUpstream({ upstream, base, target, appDir, config = {}, ver
     }
     // A file upstream had at base and the monorepo removed was replaced by
     // shared code on purpose; so was a new file in a directory it removed.
-    const dropped = status === 'A'
-      ? !existsSync(join(appDir, dirname(path))) && [...baseTree].some(item => item.startsWith(`${dirname(name)}/`))
-      : !local;
+    const dropped = status === 'A' ? insideRemovedDirectory(name) : !local;
     if (dropped) {
       report.push({ path, status: 'dropped', reason: 'the monorepo replaced this upstream file' });
       continue;
@@ -114,8 +127,8 @@ export function mergeUpstream({ upstream, base, target, appDir, config = {}, ver
     const baseBytes = status === 'A' ? Buffer.alloc(0) : show(upstream, base, name);
     if (isBinary(upstreamBytes, baseBytes, local)) {
       if (!local || local.equals(baseBytes)) {
-        mkdirSync(dirname(file), { recursive: true });
-        writeFileSync(file, upstreamBytes);
+        if (local) writeFileSync(file, upstreamBytes);
+        else addFile(name, file, upstreamBytes);
         report.push({ path, status: local ? 'updated' : 'added' });
       } else if (local.equals(upstreamBytes)) report.push({ path, status: 'unchanged' });
       else report.push({ path, status: 'conflict', reason: 'binary file changed on both sides; kept the monorepo copy' });
@@ -124,8 +137,7 @@ export function mergeUpstream({ upstream, base, target, appDir, config = {}, ver
     const localText = local ? local.toString('latin1') : '';
     const upstreamText = pinVersions(rewrite(upstreamBytes.toString('latin1'), rules), path, localText, versionSites);
     if (!local) {
-      mkdirSync(dirname(file), { recursive: true });
-      writeFileSync(file, Buffer.from(upstreamText, 'latin1'));
+      addFile(name, file, Buffer.from(upstreamText, 'latin1'));
       report.push({ path, status: 'added' });
       continue;
     }
