@@ -86,25 +86,43 @@ fixed grid, with the web app's download name.
 
 `validation/cli-check.mjs` is the release gate. It registers the web app's
 pinned example (`t1-mni`, a T1 brain to the MNI152 1 mm template) with the
-command line on 4 threads. It compares the result with
-`validation/t1-mni-reference.json`, which `--write-reference` records from the
-web app's own `register()` call, made in-process with the same build and
-thread count. The final Greedy NCC must agree within 0.001, and the registered
-image's correlation with the fixed brain within 0.0005.
+command line on 4 threads, once with `--transform greedy` and once with
+`--transform syn`. It compares each result with
+`validation/t1-mni-reference.json`, which holds two recordings per preset:
 
-The limits allow for float rounding on other CPUs and operating systems. The
-threaded engine splits its sums by thread. On Linux x64, 8 threads instead of
-4 changed voxels but not the reported NCC (-0.8586), and moved the correlation
-by 2e-6. With 4 threads, the packaged command line reproduced the reference
-voxel for voxel.
+- `browser`: the web app's own download, recorded by
+  `apps/fireants/e2e/reference.spec.js` through the built app, its automation
+  and its registration worker, in Chromium on 4 cores.
+- `inProcess`: the engine's `register()` called in Node with `worker: false`,
+  recorded by `cli-check.mjs --write-reference`.
+
+For each preset the output's header geometry (dims, pixdim, qform, sform) must
+equal the fixed image's and the browser reference's. Its voxels must hash
+identically to both references. Its voxel mean and std must agree with the
+browser reference within 1e-4 (relative) and its correlation with the fixed
+brain within 1e-4. Its final NCC must agree with the in-process reference
+within 0.001.
+
+On 4 threads the output is deterministic. The web app in Chromium, the engine
+in-process and the packaged command line on Linux x64, Windows x64 and macOS
+arm64 all produced the same voxels for Greedy, and the web app and the engine
+produced the same voxels for SyN. Another thread count changes the float
+rounding. On Linux x64, 8 threads instead of 4 changed the Greedy voxels, moved
+the mean by 1.5e-6, the std by 7.6e-7 and the correlation by 1.6e-6, and left
+the NCC at -0.8586. The statistics limits are about 60 times those shifts. They
+show how far a differing output is; the voxel hash is the gate.
 
 ```bash
 node packages/fireants/validation/cli-check.mjs
 node packages/fireants/validation/cli-check.mjs --executable path/to/fireants
+node packages/fireants/validation/cli-check.mjs --transform syn
 node packages/fireants/validation/cli-check.mjs --write-reference
+FIREANTS_BROWSER_REFERENCE=write taskset -c 0-3 pnpm --filter fireants exec playwright test e2e/reference.spec.js
 ```
 
-Regenerate the reference with `--write-reference` when `@fireants/fireants`
-changes; the check refuses a reference recorded with another engine version.
-A Greedy registration of the example took 12 to 15 minutes on 4 threads of the
-shared Linux test host.
+Regenerate both recordings when `@fireants/fireants` changes; the check refuses
+a reference recorded with another engine version. The `web-app-reference` job
+in `fireants-native.yml` reruns the browser recording with
+`FIREANTS_BROWSER_REFERENCE=check` on a 4-core runner. The browser run needs
+exactly 4 CPUs, because the app uses every core the browser reports. Each
+preset takes 15 to 35 minutes on 4 threads.
