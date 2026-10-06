@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "white-matter-lesions-v",
+  "displayName": "FLAMeS white matter lesions",
+  "app": "white-matter-lesions",
+  "run": "flair.nii.gz results",
+  "readme": {
+    "run": "Segment white matter lesions on a FLAIR image",
+    "notes": [
+      "SynthStrip and all five FLAMeS folds are included and checked locally.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for options, such as --folds 5 for the ensemble.",
+      "DICOM input and mask editing need the web app.",
+      "",
+      "FLAMeS is research software. Review the lesion masks before use. Please cite:",
+      "Dereskewicz E, La Rosa F, dos Santos Silva J, et al. FLAMeS: a robust deep",
+      "learning model for automated multiple sclerosis lesion segmentation. medRxiv. 2025."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "flames"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "flames.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "flames"
+    }
+  }
+}

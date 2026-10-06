@@ -99,6 +99,14 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   every archive must pass `validation/cli-check.mjs`. Only presets in the pipeline's `MODELS` are accepted or
   installed; add `synth-1mm` there only together with its own parity report.
 
+## white-matter-lesions
+
+- The pipeline, output writer and model pins live in `packages/white-matter-lesions`, shared by the
+  worker and the `flames` command (`bin/flames.js`, `src/node.js`); change outputs there so both stay
+  identical. Its `model.manifest.json` must equal `models/white-matter-lesions.manifest.json` (tested).
+  Every `flames` archive must pass `validation/cli-check.mjs`: mask Dice >= 0.998 against the worker path
+  on ONNX Runtime Web (`validation/web-reference.mjs`).
+
 ## nesvor and the compute server
 
 - `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the

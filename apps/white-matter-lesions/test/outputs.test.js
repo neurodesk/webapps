@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyMaskEdit, segmentationOutputs } from "../src/outputs.js";
 
-const pipeline = () => segmentationOutputs("flair", {
+const pipeline = () => segmentationOutputs("flair.nii.gz", {
   mask: new Uint8Array([1]),
   probability: new Uint8Array([2]),
   tsv: "lesion\tvoxels\n1\t3\n2\t1\n",
