@@ -115,12 +115,12 @@ async function runErrorCase() {
     self: selfObj,
     importScripts: (relPath) => {
       if (typeof relPath !== 'string') return;
-      if (!/(inference-pipeline|modules\/sct-centerline|modules\/lesion-analysis|modules\/sct-morphometry|modules\/totalspineseg)\.js$/.test(relPath)) return;
+      if (!/(inference-pipeline|modules\/lesion-analysis|modules\/totalspineseg)\.js$/.test(relPath)) return;
       const abs = path.resolve(path.dirname(WORKER_PATH), relPath);
       if (!fs.existsSync(abs)) return;
       const src = fs.readFileSync(abs, 'utf8');
       vm.runInContext(src, sandbox, { filename: abs });
-      for (const name of ['SCTInferencePipeline', 'SCTCenterline', 'SCTLesionAnalysis', 'SCTMorphometry', 'TotalSpineSeg']) {
+      for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'TotalSpineSeg']) {
         if (selfObj[name]) sandbox[name] = selfObj[name];
       }
     },

@@ -68,24 +68,20 @@ function metricsStage(executor, stage, rows) {
   maskStage(executor, 'segmentation', 'spinalcord');
   maskStage(executor, 'lesion', 'lesion_sci_t2');
   metricsStage(executor, 'lesion_metrics', [{ label: 1 }]);
-  metricsStage(executor, 'morphometry', [{ slices: 0 }, { slices: 1 }]);
   executor.stepStatus.inference = 'complete';
-  executor.stepStatus.morphometry = 'complete';
   executor.lastRunSettings = { taskId: 'spinalcord', threshold: 0.5 };
-  executor.lastMorphometrySettings = { mask: 'Spinal cord mask', options: { aggregate: 'slice' } };
 
-  const snapshot = snapshotSessionResults(executor, { morphometryMasks: [['segmentation', { id: 'segmentation' }]], morphometryDiscs: null });
-  assert.deepEqual(snapshot.stageOrder, ['segmentation', 'lesion', 'lesion_metrics', 'morphometry']);
+  const snapshot = snapshotSessionResults(executor, { note: 'app state' });
+  assert.deepEqual(snapshot.stageOrder, ['segmentation', 'lesion', 'lesion_metrics']);
   assert.equal(snapshot.results.segmentation.file, executor.getResult('segmentation').file, 'parked results keep the same File');
   assert.equal(snapshot.results.segmentation.raw.niftiData, undefined, 'the transfer buffer is not kept twice');
   assert.equal(snapshot.results.segmentation.raw.taskId, 'spinalcord', 'the producing task is kept for colours');
   assert.ok(executor.getResult('segmentation').raw.niftiData, 'the active results are left untouched');
-  assert.deepEqual(snapshot.results.morphometry.rows, [{ slices: 0 }, { slices: 1 }]);
+  assert.deepEqual(snapshot.results.lesion_metrics.rows, [{ label: 1 }]);
   assert.deepEqual(snapshot.results.lesion_metrics.raw.columns, ['a']);
-  assert.deepEqual(snapshot.stepStatus, { inference: 'complete', morphometry: 'complete' });
+  assert.deepEqual(snapshot.stepStatus, { inference: 'complete' });
   assert.deepEqual(snapshot.lastRunSettings, { taskId: 'spinalcord', threshold: 0.5 });
-  assert.deepEqual(snapshot.lastMorphometrySettings.options, { aggregate: 'slice' });
-  assert.deepEqual(snapshot.morphometryMasks, [['segmentation', { id: 'segmentation' }]]);
+  assert.equal(snapshot.note, 'app state', 'extra app state travels with the snapshot');
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +106,7 @@ function metricsStage(executor, stage, rows) {
   executor.postRaw = () => {};
 
   maskStage(executor, 'segmentation', 'spinalcord', [1]);
-  metricsStage(executor, 'morphometry', [{ slices: 4 }]);
+  metricsStage(executor, 'lesion_metrics', [{ label: 4 }]);
   executor.stepStatus.inference = 'complete';
   const fileA = executor.getResult('segmentation').file;
 
@@ -124,16 +120,16 @@ function metricsStage(executor, stage, rows) {
 
   assert.equal(await switchTo('B', 'A'), true);
   assert.equal(executor.getResult('segmentation').file, fileA, 'A\'s mask is back: downloads and Results act on it');
-  assert.deepEqual(executor.getResult('morphometry').rows, [{ slices: 4 }], 'A\'s metrics come back with it');
+  assert.deepEqual(executor.getResult('lesion_metrics').rows, [{ label: 4 }], 'A\'s metrics come back with it');
   assert.equal(executor.getStepStatus('inference'), 'complete');
   assert.equal(executor.getResults().segmentation.raw.taskId, 'spinalcord');
   assert.equal(store.peek('B').results.segmentation.file, fileB, 'B is parked in turn');
   assert.equal(store.peek('B').results.segmentation.raw.taskId, 'graymatter', 'B keeps its own task colours');
 
   // Restoring replaces, never merges.
-  executor.removeResult('morphometry');
+  executor.removeResult('lesion_metrics');
   assert.equal(await switchTo('A', 'B'), true);
-  assert.equal(executor.hasResult('morphometry'), false, 'B never had morphometry');
+  assert.equal(executor.hasResult('lesion_metrics'), false, 'B never had lesion metrics');
 }
 
 console.log('Session result ownership tests passed');

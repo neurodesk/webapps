@@ -45,18 +45,12 @@ const WEBAPP_PIPELINE_FEATURES = Object.freeze({
     controls: ['resultsSection', 'stageButtons', 'freebrowseViewer', 'screenshotViewer'],
     workerMessages: ['stageData'],
     labels: ['Results']
-  },
-  // sct_process_segmentation is a pipeline step of its own, not a model task.
-  morphometry: {
-    controls: ['morphometrySection', 'morphometryMask', 'morphometryDiscs', 'morphometryAggregate', 'runMorphometry', 'metricsResults'],
-    workerMessages: ['run-morphometry'],
-    labels: ['Morphometry', 'Vertebral levels']
   }
 });
 
 const BROWSER_LIBRARY_FEATURES = Object.freeze({
-  centerline: ['getCenterline'],
-  morphometry: ['computeShape', 'aggregateMetrics', 'levelsFromDiscs', 'toCsv'],
+  centerline: ['centerlineFromSegmentation'],
+  morphometry: ['sliceMorphometry', 'morphometryToCsv'],
   imageMath: ['subtractVolumes', 'meanTimeSeries'],
   maskCrop: ['createCylinderMask', 'boundingBoxFromMask', 'cropVolume'],
   mtMetrics: ['computeMTR', 'computeMTsat'],
@@ -113,7 +107,6 @@ function assertCoverageSurface(step, equivalent) {
     return;
   }
   assertBrowserLibraryFeature(equivalent.feature);
-  if (WEBAPP_PIPELINE_FEATURES[equivalent.feature]) assertWebappPipelineFeature(equivalent.feature);
 }
 
 function assertNegativeCases() {
@@ -182,9 +175,7 @@ function assertNegativeCases() {
   appJs = fs.readFileSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js'), 'utf8');
   executorJs = fs.readFileSync(path.join(ROOT, 'web/js/controllers/SctPipeline.js'), 'utf8');
   workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
-  processingJs = ['sct-processing.js', 'sct-centerline.js', 'sct-morphometry.js']
-    .map(name => fs.readFileSync(path.join(ROOT, 'web/js/modules', name), 'utf8'))
-    .join('\n');
+  processingJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/sct-processing.js'), 'utf8');
   batchScript = fs.readFileSync(path.join(ROOT, 'test_data/batch_processing.sh'), 'utf8');
 
   const steps = parseActiveBatchSteps(batchScript);

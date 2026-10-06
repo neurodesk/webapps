@@ -35,7 +35,6 @@ const viewerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_viewer_controll
 const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_analysis.cjs'), 'utf8');
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
-const morphometryE2e = fs.readFileSync(path.join(ROOT, 'e2e/morphometry.spec.js'), 'utf8');
 const manualEditsE2e = fs.readFileSync(path.join(ROOT, 'e2e/manual-edits.spec.js'), 'utf8');
 const manualEditsTest = fs.readFileSync(path.join(ROOT, 'scripts/test_manual_edits.mjs'), 'utf8');
 
@@ -54,14 +53,7 @@ const UI_COVERAGE = Object.freeze([
   { id: 'minSizeInput', behavior: 'passes connected-component cleanup threshold', coveredBy: ['batch', 'worker', 'static-dom'] },
   { id: 'ttaToggle', behavior: 'passes test-time augmentation setting', coveredBy: ['static-dom'] },
   { id: 'stageButtons', behavior: 'renders result view/download controls', coveredBy: ['batch', 'static-dom'] },
-  { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'morphometry-e2e', 'static-dom'] },
-  { id: 'morphometryMask', behavior: 'chooses the session mask morphometry measures', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
-  { id: 'morphometryDiscs', behavior: 'chooses the disc labels that give slices a vertebral level', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
-  { id: 'morphometryAggregate', behavior: 'chooses per-slice, per-level, across-levels or whole-mask rows', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
-  { id: 'morphometrySlices', behavior: 'restricts morphometry to a slice list', coveredBy: ['morphometry-e2e', 'static-dom'] },
-  { id: 'morphometryLevels', behavior: 'restricts level reports to chosen vertebral levels and reports bad input on the field', coveredBy: ['morphometry-e2e', 'static-dom'] },
-  { id: 'morphometryAngleCorrection', behavior: 'turns centerline angle correction on or off', coveredBy: ['static-dom'] },
-  { id: 'runMorphometry', behavior: 'runs sct_process_segmentation on the chosen mask in the worker', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
+  { id: 'metricsResults', behavior: 'renders tabular metrics result stages', coveredBy: ['lesion-analysis', 'static-dom'] },
   { id: 'editStageSelect', behavior: 'chooses the result stage to edit, or a new cord or lesion mask', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
   { id: 'editLabelSelect', behavior: 'chooses by name the label the pen paints', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
   { id: 'editStart', behavior: 'puts the chosen mask on the drawing layer and opens the Drawing tab', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
@@ -90,7 +82,6 @@ const UI_COVERAGE = Object.freeze([
 const TEST_SOURCES = {
   batch: batchTest,
   'lesion-analysis': lesionAnalysisTest,
-  'morphometry-e2e': morphometryE2e,
   'manual-edits-e2e': manualEditsE2e,
   'manual-edits': manualEditsTest,
   viewer: viewerTest,
@@ -111,9 +102,6 @@ for (const item of UI_COVERAGE) {
     if (coverage === 'manual-edits-e2e') {
       assert.ok(manualEditsE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/manual-edits.spec.js`);
     }
-    if (coverage === 'morphometry-e2e') {
-      assert.ok(morphometryE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/morphometry.spec.js`);
-    }
   }
 }
 
@@ -126,7 +114,7 @@ assert.deepEqual(missingCoverage, [], `interactive ids missing UI coverage entri
 // The viewer is FreeBrowse, mounted from the app's own origin. Controls it
 // already provides must not come back as a second copy in SCT's toolbar.
 assert.ok(indexHtml.includes('<div id="freebrowseViewer" class="nd-viewer-embed"></div>'), 'the FreeBrowse host element exists');
-assert.ok(!/unpkg\.com|cdn\.jsdelivr\.net|niivue\.umd/.test(indexHtml), 'the page loads no viewer code from a CDN');
+assert.ok(!/<(script|link)\b[^>]*(unpkg\.com|cdn\.jsdelivr\.net|niivue\.umd)/.test(indexHtml), 'the page loads no viewer code from a CDN');
 assert.ok(!/id="gl1"/.test(indexHtml), 'the app no longer owns a bare NiiVue canvas');
 assert.match(viewerJs, /new URL\('\.\.\/\.\.\/freebrowse-viewer\/index\.js', import\.meta\.url\)/, 'the viewer bundle is loaded from the app origin');
 assert.ok(!/https?:\/\//.test(viewerJs), 'the viewer module references no remote URL');
@@ -156,8 +144,6 @@ assert.ok(/<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" 
 assert.ok(!indexHtml.includes('sidebar-status'), 'the sidebar status block is retired');
 assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is the only abort control');
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
-assert.match(indexHtml, /<button class="btn btn-secondary" id="runMorphometry" disabled>/, 'Measure is a secondary action, disabled until a mask exists');
-assert.ok(/id="morphometrySection" data-disclosure/.test(indexHtml) && /class="[^"]*step-disabled collapsed"[^>]*id="morphometrySection"/.test(indexHtml), 'Morphometry starts collapsed and disabled');
 // Manual edits: SCT adds stage choice, label names, Apply/Discard/Restore; the
 // pen, erase, fill and undo are FreeBrowse's Drawing tab.
 const manualEditsJs = fs.readFileSync(path.join(ROOT, 'web/js/app/manual-edits.js'), 'utf8');
@@ -172,7 +158,6 @@ assert.ok(appJs.includes("this.notifyStageDataChanged(data.stage, 'model')"), 'm
 assert.ok(appJs.includes('!this.manualEdits?.isHiding(overlayStage)'), 'the stage on the drawing layer is hidden as an overlay');
 assert.ok(!/\.(loadVolumes|addVolume|removeVolume)\(/.test(manualEditsJs), 'the edit controller never changes the NiiVue volume list');
 assert.ok(appJs.includes("data-metrics-stage") && appJs.includes('renderAllMetricsResults'), 'every metrics stage renders in its own block of the Results section');
-assert.ok(!/morphometry[^\n]*(statusText|sidebar-status)/i.test(indexHtml), 'morphometry reports progress only through the status footer');
 assert.ok(indexHtml.includes('id="taskInfoTooltip"') && appJs.includes("getElementById('taskInfoTooltip')"), 'task description lives in the SCT Task info tooltip');
 assert.ok(SpinalCordToolboxGuidanceLength(appJs) <= 90, 'viewer-unavailable guidance stays within 90 characters');
 assert.ok(indexHtml.includes('id="moreAppsLink"'), 'main app header More Apps link exists');

@@ -199,21 +199,6 @@ try {
     const toggle = page.locator('#stepInferenceSection [data-disclosure-toggle]');
     await toggle.tap(); await expect(page.locator('#thresholdInput')).toBeHidden();
     await toggle.tap(); await expect(page.locator('#thresholdInput')).toHaveValue('0.2');
-    // Morphometry stays closed until the session has a mask, then measures it without inference.
-    const morphometry = page.locator('#morphometrySection');
-    await expect(morphometry).toHaveClass(/step-disabled/);
-    await expect(morphometry).toHaveClass(/collapsed/);
-    await page.evaluate(bytes => window.app.inferenceExecutor.handleStageData({
-      stage: 'segmentation', taskId: 'spinalcord', kind: 'nifti', niftiData: new Uint8Array(bytes).buffer,
-    }), [...nifti('interface-cord-mask.nii', 1).buffer]);
-    await expect(morphometry).not.toHaveClass(/step-disabled|collapsed/);
-    await page.locator('#morphometryAggregate').selectOption('all');
-    await page.locator('#runMorphometry').tap();
-    await expect(page.locator('#metricsResults [data-metrics-stage="morphometry"] tbody tr')).toHaveCount(1);
-    await expect(page.locator('#statusText')).toHaveText('Complete');
-    const morphometryToggle = page.locator('#morphometrySection > .section-title > [data-disclosure-toggle]');
-    await morphometryToggle.tap(); await expect(page.locator('#morphometryAggregate')).toBeHidden();
-    await morphometryToggle.tap(); await expect(page.locator('#morphometryAggregate')).toHaveValue('all');
   });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));

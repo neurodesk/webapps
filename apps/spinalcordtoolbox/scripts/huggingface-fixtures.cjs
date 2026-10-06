@@ -61,27 +61,6 @@ async function ensureSctBatchFixtures(rootDir, options = {}) {
   return { downloaded: true, repoId, revision, count: targets.length };
 }
 
-/**
- * Download only the named fixture files (paths relative to the app root).
- * The SCT metric parity test needs a few small masks, not the whole batch.
- */
-async function ensureFixtureFiles(rootDir, relativePaths, options = {}) {
-  const repoId = options.repoId || process.env.SCT_HF_DATASET_REPO || DEFAULT_HF_DATASET_REPO;
-  const revision = options.revision || process.env.SCT_HF_REVISION || DEFAULT_HF_REVISION;
-  let count = 0;
-  for (const relativePath of relativePaths) {
-    const filePath = path.join(rootDir, relativePath);
-    if (fs.existsSync(filePath)) continue;
-    if (SCT_TESTING_DATA_FIXTURE_MAP[relativePath]) {
-      await downloadSctTestingDataFile(SCT_TESTING_DATA_FIXTURE_MAP[relativePath], filePath);
-    } else {
-      await downloadHfFile(repoId, revision, relativePath, filePath);
-    }
-    count += 1;
-  }
-  return { downloaded: count > 0, count };
-}
-
 function downloadHfFile(repoId, revision, relativePath, destination) {
   const url = `https://huggingface.co/datasets/${repoId}/resolve/${encodeURIComponent(revision)}/${relativePath}`;
   return download(url, destination);
@@ -168,7 +147,6 @@ module.exports = {
   DEFAULT_HF_REVISION,
   SCT_TESTING_DATA_FIXTURE_MAP,
   download,
-  ensureFixtureFiles,
   ensureSctBatchFixtures,
   hasSctBatchFixtures,
   missingSctFixturePaths,

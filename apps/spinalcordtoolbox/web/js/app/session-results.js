@@ -2,8 +2,8 @@
  * Which loaded image owns which results.
  *
  * The pipeline executor holds the results of the active session only: the
- * Results list, downloads, metrics, morphometry sources, automation artifacts
- * and the main viewer all read it. When the user makes another image active,
+ * Results list, downloads, metrics, SCT analysis mask choices, automation
+ * artifacts and the main viewer all read it. When the user makes another image active,
  * the outgoing session's results are parked here and the incoming session's
  * parked results, if any, are handed back to the executor. Compare reads
  * parked results to draw each panel's own overlays.
@@ -49,7 +49,6 @@ export function snapshotSessionResults(executor, extra = {}) {
     stageOrder,
     stepStatus,
     lastRunSettings: executor.lastRunSettings ?? null,
-    lastMorphometrySettings: executor.lastMorphometrySettings ?? null,
     ...extra
   };
 }
@@ -60,7 +59,6 @@ export function restoreSessionResults(executor, snapshot) {
   executor.stageOrder = [...snapshot.stageOrder];
   for (const [step, status] of Object.entries(snapshot.stepStatus || {})) executor.stepStatus[step] = status;
   executor.lastRunSettings = snapshot.lastRunSettings ?? null;
-  executor.lastMorphometrySettings = snapshot.lastMorphometrySettings ?? null;
 }
 
 export class SessionResultStore {
