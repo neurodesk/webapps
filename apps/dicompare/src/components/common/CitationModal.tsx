@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Copy, Check } from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
+import Modal from './Modal';
 import { VERSION } from '../../version';
 
 interface CitationModalProps {
@@ -41,28 +42,11 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose, schema }
   const [copied, setCopied] = React.useState(false);
   const [copiedSchema, setCopiedSchema] = React.useState(false);
 
-  if (!isOpen) return null;
-
   const handleCopy = () => copyText(CITATION_TEXT, setCopied);
   const schemaCitation = schema ? buildSchemaCitation(schema) : null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full max-h-[70vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-          <h3 className="text-lg font-semibold text-content-primary">Cite dicompare</h3>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-content-tertiary hover:text-content-primary hover:bg-surface-secondary rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal isOpen={isOpen} onClose={onClose} title="Cite dicompare" size="md" panelClassName="max-h-[70vh]">
         {/* Body */}
         <div className="px-6 py-5 space-y-5 overflow-y-auto">
           {/* Citation block */}
@@ -166,8 +150,7 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose, schema }
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -1,0 +1,113 @@
+{
+  "id": "bvalue_shell_counts",
+  "name": "B-value Shell Counts",
+  "description": "Validates the number of images in each b-value shell against a configurable specification, e.g. '0:5, 1000:45-55, 2000:25' means >=5 b=0 images, 45-55 b~1000 images and >=25 b~2000 images.",
+  "category": "Diffusion",
+  "fields": [
+    "DiffusionBValue"
+  ],
+  "requiredSystemFields": [
+    "Count"
+  ],
+  "implementation": "spec = params.get(\"shell_spec\") or \"\"\ntol = params.get(\"shell_tolerance\") if params.get(\"shell_tolerance\") is not None else 100\nb = value[\"DiffusionBValue\"].fillna(0).astype(float)\ncounts = value[\"Count\"]\nproblems = []\nfor part in [p.strip() for p in spec.split(\",\") if p.strip()]:\n    center_str, _, rng = part.partition(\":\")\n    center = float(center_str)\n    n = int(counts[(b - center).abs() <= tol].sum())\n    if \"-\" in rng:\n        lo_str, hi_str = rng.split(\"-\", 1)\n        lo, hi = float(lo_str), float(hi_str)\n    else:\n        lo, hi = float(rng), None\n    if n < lo:\n        problems.append(f\"b~{center:g}: found {n} images, expected >= {lo:g}\")\n    elif hi is not None and n > hi:\n        problems.append(f\"b~{center:g}: found {n} images, expected <= {hi:g}\")\nif problems:\n    raise ValidationError(\"; \".join(problems))\n",
+  "testCases": [
+    {
+      "id": "spec_pass",
+      "name": "Counts match the specification",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000,
+          2000
+        ],
+        "Count": [
+          10,
+          50,
+          50
+        ]
+      },
+      "params": {
+        "shell_spec": "0:8-12, 1000:45-55, 2000:45-55"
+      }
+    },
+    {
+      "id": "too_few_fail",
+      "name": "Too few b=1000 images fail",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000,
+          2000
+        ],
+        "Count": [
+          10,
+          20,
+          50
+        ]
+      },
+      "params": {
+        "shell_spec": "0:8-12, 1000:45-55, 2000:45-55"
+      }
+    },
+    {
+      "id": "too_many_fail",
+      "name": "Too many b=0 images fail a bounded spec",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000
+        ],
+        "Count": [
+          20,
+          50
+        ]
+      },
+      "params": {
+        "shell_spec": "0:8-12, 1000:45-55"
+      }
+    },
+    {
+      "id": "min_only",
+      "name": "Min-only spec passes with more images",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000,
+          2000,
+          3000
+        ],
+        "Count": [
+          6,
+          30,
+          30,
+          30
+        ]
+      },
+      "params": {
+        "shell_spec": "0:5, 1000:25, 2000:25, 3000:25"
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "shell_spec",
+      "label": "Shell specification",
+      "type": "string",
+      "default": "0:1, 1000:1",
+      "description": "Comma-separated 'center:min' or 'center:min-max' image counts per shell"
+    },
+    {
+      "name": "shell_tolerance",
+      "label": "Shell tolerance",
+      "type": "number",
+      "default": 100,
+      "min": 0,
+      "unit": "s/mm\u00b2",
+      "description": "b-values within \u00b1 this of a shell center belong to that shell"
+    }
+  ]
+}

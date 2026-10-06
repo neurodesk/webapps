@@ -7,6 +7,9 @@ import { formatSeriesFieldValue, formatFieldTypeInfo } from '../../utils/fieldFo
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
+import FieldConstraintText from './FieldConstraintText';
+import FieldSeverityIndicator, { isColumnReferenceOnly } from './FieldSeverityIndicator';
+import { FieldNoteMarker } from './FieldNote';
 
 interface SeriesTableProps {
   // seriesFields removed - now embedded in series[].fields[]
@@ -15,6 +18,8 @@ interface SeriesTableProps {
   incompleteFields?: Set<string>;
   acquisitionId?: string;
   mode?: 'edit' | 'view' | 'compliance';
+  // Severity dots describe schema constraints; plain test data has none.
+  showSeverity?: boolean;
   // Compliance-specific props
   complianceResults?: any[];
   onSeriesUpdate: (seriesIndex: number, fieldTag: string, updates: Partial<SeriesField>) => void;
@@ -22,6 +27,7 @@ interface SeriesTableProps {
   onSeriesDelete: (seriesIndex: number) => void;
   onFieldConvert: (fieldTag: string) => void;
   onSeriesNameUpdate?: (seriesIndex: number, name: string) => void;
+  onSeriesNotesUpdate?: (seriesIndex: number, notes: string) => void;
   onSeriesView?: (seriesIndex: number, seriesName: string) => void;
   onSeriesViewTestData?: (seriesIndex: number, seriesName: string) => void;
 }
@@ -32,12 +38,14 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   incompleteFields = new Set(),
   acquisitionId = '',
   mode = 'edit',
+  showSeverity = true,
   complianceResults = [],
   onSeriesUpdate,
   onSeriesAdd,
   onSeriesDelete,
   onFieldConvert,
   onSeriesNameUpdate,
+  onSeriesNotesUpdate,
   onSeriesView,
   onSeriesViewTestData,
 }) => {
@@ -87,7 +95,8 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
       name: fieldData.name || fieldData.field || tag,
       keyword: fieldData.keyword,
       value: fieldData.value,
-      validationRule: fieldData.validationRule
+      validationRule: fieldData.validationRule,
+      severity: fieldData.severity
     }));
   };
 
@@ -95,7 +104,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   const allFieldTags = new Set<string>();
   series.forEach(s => {
     const fieldsArray = getFieldsArray(s.fields);
-    fieldsArray.forEach(f => allFieldTags.add(f.tag));
+    fieldsArray.forEach(f => allFieldTags.add(f.tag ?? f.name));
   });
 
   if (allFieldTags.size === 0) {
@@ -110,7 +119,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   }
 
   // Display all existing series (no minimum requirement)
-  const displaySeries = [];
+  const displaySeries: Series[] = [];
   for (let i = 0; i < series.length; i++) {
     if (series[i]) {
       displaySeries.push(series[i]);
@@ -123,6 +132,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
   // Use tag or name as key (for derived fields that have null tags)
   const allFields: SeriesField[] = [];
   const fieldMap = new Map<string, SeriesField>();
+  const severitiesByField = new Map<string, (SeriesField['severity'])[]>();
 
   series.forEach(s => {
     const fieldsArray = getFieldsArray(s.fields);
@@ -132,6 +142,7 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
         fieldMap.set(fieldKey, f);
         allFields.push(f);
       }
+      severitiesByField.set(fieldKey, [...(severitiesByField.get(fieldKey) ?? []), f.severity]);
     });
   });
 
@@ -153,8 +164,22 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium truncate">{field.keyword || field.name}</p>
-                      <p className="text-xs font-normal text-content-muted font-mono">
+                      {/* A div, not a p: the severity dot is tooltip-wrapped,
+                          and a tooltip's wrapper is a block element, which a
+                          paragraph cannot legally contain. */}
+                      <div className="font-medium truncate flex items-center gap-1.5">
+                        {showSeverity && (
+                          <FieldSeverityIndicator
+                            severity={
+                              isColumnReferenceOnly(severitiesByField.get(field.tag || field.name) ?? [])
+                                ? 'warning'
+                                : 'error'
+                            }
+                          />
+                        )}
+                        <span className="truncate">{field.keyword || field.name}</span>
+                      </div>
+                      <p className={`text-xs font-normal text-content-muted font-mono ${showSeverity ? 'pl-3' : ''}`}>
                         {field.fieldType === 'derived' ? 'Derived field' :
                          field.fieldType === 'custom' ? 'Custom field' :
                          field.fieldType === 'private' ? 'Private field' :
@@ -210,21 +235,46 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                   isEditMode ? 'hover:bg-surface-hover transition-colors' : ''
                 }`}
               >
-                <td className="px-2 py-1.5 whitespace-nowrap font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px]">
-                  {isEditMode && onSeriesNameUpdate ? (
+                <td className={`px-2 py-1.5 font-medium text-content-primary sticky left-0 bg-inherit min-w-[140px] ${
+                  isEditMode && onSeriesNotesUpdate ? 'max-w-[240px] whitespace-normal align-top' : 'whitespace-nowrap'
+                }`}>
+                  <span className="flex items-center gap-1.5">
+                    {isEditMode && onSeriesNameUpdate ? (
+                      <input
+                        type="text"
+                        value={ser.name}
+                        onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
+                        className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full text-content-primary"
+                        onBlur={(e) => {
+                          if (!e.target.value.trim()) {
+                            onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="text-xs">{ser.name}</span>
+                    )}
+                    {/* Read-only: the series rationale lives in a hover tooltip, same as field notes. */}
+                    {!isEditMode && ser.notes && <FieldNoteMarker note={ser.notes} />}
+                  </span>
+                  {/* Edit mode gets an inline box so the note is authorable in
+                      place. A single-line input, not a textarea: the height stays
+                      put as you type, and Enter means "done" rather than a newline. */}
+                  {isEditMode && onSeriesNotesUpdate && (
                     <input
                       type="text"
-                      value={ser.name}
-                      onChange={(e) => onSeriesNameUpdate(seriesIndex, e.target.value)}
-                      className="bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 -my-0.5 text-xs w-full text-content-primary"
-                      onBlur={(e) => {
-                        if (!e.target.value.trim()) {
-                          onSeriesNameUpdate(seriesIndex, `Series ${String(seriesIndex + 1).padStart(2, '0')}`);
-                        }
+                      value={ser.notes || ''}
+                      onChange={(e) => onSeriesNotesUpdate(seriesIndex, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
                       }}
+                      onBlur={(e) => {
+                        const trimmed = e.target.value.trim();
+                        if (trimmed !== e.target.value) onSeriesNotesUpdate(seriesIndex, trimmed);
+                      }}
+                      placeholder="Add a note…"
+                      className="mt-0.5 w-full bg-transparent border border-transparent hover:border-border focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 rounded px-1 py-0.5 -mx-1 text-xs italic font-normal text-content-tertiary placeholder:text-content-muted"
                     />
-                  ) : (
-                    <span className="text-xs">{ser.name}</span>
                   )}
                 </td>
                 {allFields.map((headerField) => {
@@ -258,16 +308,18 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex-1">
-                            <p className="text-xs text-content-primary break-words">
-                              {seriesField ? formatSeriesFieldValue(seriesField.value, seriesField.validationRule) : '-'}
-                            </p>
-                            {seriesField && (
-                              <p className="text-xs text-content-tertiary mt-0.5">
-                                {formatFieldTypeInfo(
+                            {seriesField ? (
+                              <FieldConstraintText
+                                graded={seriesField.graded}
+                                value={formatSeriesFieldValue(seriesField.value, seriesField.validationRule)}
+                                typeInfo={formatFieldTypeInfo(
                                   inferDataTypeFromValue(seriesField.value),
-                                  seriesField.validationRule
+                                  seriesField.validationRule,
+                                  seriesField.graded
                                 )}
-                              </p>
+                              />
+                            ) : (
+                              <p className="text-xs text-content-primary break-words">-</p>
                             )}
                           </div>
                         </div>
@@ -380,7 +432,14 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
                 value: existingField.value,
                 vr: 'UN',
                 level: 'series' as const,
-                validationRule: existingField.validationRule
+                validationRule: existingField.validationRule,
+                // Without this the toggle always opens on 'Fail', so a
+                // reference-only column looks like a requirement.
+                severity: existingField.severity,
+                // Scalar numeric series cells edit through the number-line control.
+                graded: existingField.graded,
+                warningMessage: existingField.warningMessage,
+                errorMessage: existingField.errorMessage
               };
             }
             // Otherwise create a new field with defaults
@@ -397,9 +456,13 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].value
             : ''}
           onSave={(updates) => {
-            const fieldTag = editingCell.fieldIndex >= 0
-              ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex].tag
-              : editingCell.fieldTag || '';
+            const targetField = editingCell.fieldIndex >= 0
+              ? getFieldsArray(displaySeries[editingCell.seriesIndex].fields)[editingCell.fieldIndex]
+              : undefined;
+            // Custom/derived fields have no tag, so fall back to the name identifier.
+            const fieldTag = targetField
+              ? (targetField.tag ?? targetField.name)
+              : (editingCell.fieldTag || '');
 
             const fieldUpdate: Partial<SeriesField> = {
               name: editingCell.fieldName || editingCell.fieldTag || '',
@@ -409,11 +472,44 @@ const SeriesTable: React.FC<SeriesTableProps> = ({
             if ('value' in updates && updates.value !== undefined) {
               fieldUpdate.value = updates.value;
             }
-            if ('validationRule' in updates && updates.validationRule !== undefined) {
+            // The number-line editor owns numeric cells: its graded constraint is
+            // authoritative, so store it and drop the legacy validationRule.
+            if ('graded' in updates) {
+              fieldUpdate.graded = updates.graded;
+              fieldUpdate.validationRule = updates.graded ? undefined : updates.validationRule;
+            } else if ('validationRule' in updates && updates.validationRule !== undefined) {
               fieldUpdate.validationRule = updates.validationRule;
+            }
+            if ('severity' in updates) {
+              fieldUpdate.severity = updates.severity;
+            }
+            // Custom warn/fail messages (with %V) for this series cell.
+            if ('warningMessage' in updates) {
+              fieldUpdate.warningMessage = updates.warningMessage;
+            }
+            if ('errorMessage' in updates) {
+              fieldUpdate.errorMessage = updates.errorMessage;
             }
 
             onSeriesUpdate(editingCell.seriesIndex, fieldTag, fieldUpdate);
+
+            // Severity is presented per column — the header carries one dot for
+            // the whole field — so changing it on one cell has to apply to every
+            // series, or the header keeps reporting the old state.
+            if ('severity' in updates) {
+              displaySeries.forEach((otherSeries, otherIndex) => {
+                if (otherIndex === editingCell.seriesIndex) return;
+                const otherFields = getFieldsArray(otherSeries.fields);
+                const match = otherFields.find(f => (f.tag ?? f.name) === fieldTag);
+                if (!match) return;
+                onSeriesUpdate(otherIndex, fieldTag, {
+                  name: match.name,
+                  tag: match.tag ?? match.name,
+                  severity: updates.severity,
+                });
+              });
+            }
+
             setEditingCell(null);
           }}
           onClose={() => setEditingCell(null)}

@@ -1,0 +1,72 @@
+{
+  "id": "validate_temporal_volumes",
+  "name": "Trigger-Time Volume Count",
+  "description": "Validates the number of temporal volumes (unique TriggerTime values). Configure an exact required count and/or a minimum.",
+  "category": "Timing",
+  "fields": [
+    "TriggerTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "n = len(value[\"TriggerTime\"].dropna().unique())\nexact = params.get(\"exact_volumes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact:g} temporal volumes, found {n}.\")\nelse:\n    min_n = params.get(\"min_volumes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Expected at least {min_n:g} temporal volumes, found {n}.\")\n",
+  "testCases": [
+    {
+      "id": "exact_pass",
+      "name": "Exact volume count matches",
+      "expectedResult": "pass",
+      "data": {
+        "TriggerTime": [
+          0,
+          800,
+          1600
+        ]
+      },
+      "params": {
+        "exact_volumes": 3
+      }
+    },
+    {
+      "id": "exact_fail",
+      "name": "Exact volume count mismatch fails",
+      "expectedResult": "fail",
+      "data": {
+        "TriggerTime": [
+          0,
+          800,
+          1600
+        ]
+      },
+      "params": {
+        "exact_volumes": 156
+      }
+    },
+    {
+      "id": "min_fail",
+      "name": "3 volumes fail default minimum 100",
+      "expectedResult": "fail",
+      "data": {
+        "TriggerTime": [
+          0,
+          800,
+          1600
+        ]
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "exact_volumes",
+      "label": "Exact volumes",
+      "type": "number",
+      "default": null,
+      "description": "Require exactly this many unique TriggerTime values"
+    },
+    {
+      "name": "min_volumes",
+      "label": "Minimum volumes",
+      "type": "number",
+      "default": 100,
+      "min": 1,
+      "description": "Fail if fewer unique TriggerTime values than this (used when no exact count is set)"
+    }
+  ]
+}

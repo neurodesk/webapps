@@ -1,0 +1,205 @@
+{
+  "id": "diffusion_direction_count",
+  "name": "Diffusion Direction Count",
+  "description": "Validates the number of unique diffusion gradient directions, excluding b=0 volumes. Configure a minimum (error below), an optional recommended count (warning below), or an exact required count.",
+  "category": "Diffusion",
+  "fields": [
+    "DiffusionGradientOrientation",
+    "DiffusionBValue"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "dir_col = next((c for c in value.columns if c not in (\"DiffusionBValue\", \"Count\")), None)\nif dir_col is None:\n    raise ValidationWarning(\"Cannot count directions (no gradient orientation field available).\")\nrows = value\nb0_thr = params.get(\"b0_threshold\")\nif \"DiffusionBValue\" in value.columns and b0_thr is not None:\n    b = value[\"DiffusionBValue\"].fillna(0).astype(float)\n    rows = value[b > b0_thr]\ndirs = set()\nfor o in rows[dir_col]:\n    if o is None or o != o:\n        continue\n    try:\n        dirs.add(tuple(round(float(x), 3) for x in as_list(o)))\n    except (TypeError, ValueError):\n        dirs.add(str(o))\nn = len(dirs)\nexact = params.get(\"exact_directions\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} unique diffusion directions, found {n}.\")\nelse:\n    min_n = params.get(\"min_directions\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} unique diffusion directions; at least {min_n} required.\")\n    rec = params.get(\"recommended_directions\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"{n} unique diffusion directions; {rec}+ recommended.\")\n",
+  "testCases": [
+    {
+      "id": "enough_pass",
+      "name": "3 directions pass with minimum 3",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionGradientOrientation": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "DiffusionBValue": [
+          0,
+          1000,
+          1000,
+          1000
+        ]
+      },
+      "params": {
+        "min_directions": 3
+      }
+    },
+    {
+      "id": "b0_excluded",
+      "name": "b=0 orientation is not counted",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionGradientOrientation": [
+          [
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        "DiffusionBValue": [
+          0,
+          1000,
+          1000
+        ]
+      },
+      "params": {
+        "min_directions": 3
+      }
+    },
+    {
+      "id": "min_moves",
+      "name": "3 directions fail when minimum raised to 30",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionGradientOrientation": [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "DiffusionBValue": [
+          1000,
+          1000,
+          1000
+        ]
+      }
+    },
+    {
+      "id": "recommended_warns",
+      "name": "3 directions warn below recommended 6",
+      "expectedResult": "warning",
+      "data": {
+        "DiffusionGradientOrientation": [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "DiffusionBValue": [
+          1000,
+          1000,
+          1000
+        ]
+      },
+      "params": {
+        "min_directions": 2,
+        "recommended_directions": 6
+      }
+    },
+    {
+      "id": "exact_check",
+      "name": "Exact direction count enforced",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionGradientOrientation": [
+          [
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0
+          ]
+        ],
+        "DiffusionBValue": [
+          1000,
+          1000
+        ]
+      },
+      "params": {
+        "exact_directions": 3
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "min_directions",
+      "label": "Minimum directions",
+      "type": "number",
+      "default": 30,
+      "min": 1,
+      "description": "Fail if fewer unique directions than this"
+    },
+    {
+      "name": "recommended_directions",
+      "label": "Recommended directions",
+      "type": "number",
+      "default": null,
+      "description": "Warn if fewer unique directions than this (optional)"
+    },
+    {
+      "name": "exact_directions",
+      "label": "Exact directions",
+      "type": "number",
+      "default": null,
+      "description": "Require exactly this many directions (overrides min/recommended)"
+    },
+    {
+      "name": "b0_threshold",
+      "label": "b=0 threshold",
+      "type": "number",
+      "default": 50,
+      "min": 0,
+      "unit": "s/mm\u00b2",
+      "description": "Volumes with b-value at or below this are excluded (b=0 orientations are meaningless)"
+    }
+  ]
+}

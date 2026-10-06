@@ -23,7 +23,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "tsc --noEmit",
-    "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app dicompare"
+    "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app dicompare",
+    "sync:registry": "python3 -m dicompare.fields > src/data/fieldRegistry.json"
   },
   "dependencies": {
     "@codemirror/lang-json": "^6.0.2",

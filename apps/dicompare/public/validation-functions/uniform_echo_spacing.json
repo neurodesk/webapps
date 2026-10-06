@@ -1,30 +1,64 @@
 {
   "id": "uniform_echo_spacing",
   "name": "Uniform Echo Spacing",
-  "description": "The spacing between echoes (ΔTE) should be uniform.",
+  "description": "Validates that echo times are evenly spaced, within a configurable tolerance.",
   "category": "Echo Timing",
-  "fields": ["EchoTime"],
+  "fields": [
+    "EchoTime"
+  ],
   "requiredSystemFields": [],
-  "parameters": null,
-  "implementation": "echo_times = value[\"EchoTime\"].dropna().sort_values()\nspacings = echo_times.diff().iloc[1:]\nif not all(abs(spacings.iloc[0] - s) < 0.01 for s in spacings):\n    raise ValidationError(f\"Echo spacing is not uniform. Found spacings: {spacings}.\")",
+  "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\nspacings = te.diff().iloc[1:]\ntol = params.get(\"tolerance_ms\") or 0.1\nif len(spacings) > 0 and not all(abs(spacings.iloc[0] - s) <= tol for s in spacings):\n    raise ValidationError(f\"Echo spacing not uniform (tolerance {tol} ms). Found spacings: {list(spacings.round(3))}.\")\n",
   "testCases": [
     {
-      "id": "uniform_spacing",
-      "name": "Uniform Spacing Test",
-      "description": "Should pass with uniform 5ms spacing",
+      "id": "uniform_pass",
+      "name": "Evenly spaced echoes pass",
       "expectedResult": "pass",
       "data": {
-        "EchoTime": [5.0, 10.0, 15.0, 20.0]
+        "EchoTime": [
+          5.0,
+          10.0,
+          15.0,
+          20.0
+        ]
       }
     },
     {
-      "id": "non_uniform_spacing",
-      "name": "Non-uniform Spacing Test",
-      "description": "Should fail with non-uniform spacing",
+      "id": "nonuniform_fail",
+      "name": "Uneven spacing fails",
       "expectedResult": "fail",
       "data": {
-        "EchoTime": [5.0, 10.0, 17.0, 20.0]
+        "EchoTime": [
+          5.0,
+          10.0,
+          17.0
+        ]
       }
+    },
+    {
+      "id": "tolerance_moves",
+      "name": "Uneven spacing passes with loose tolerance",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0,
+          17.0
+        ]
+      },
+      "params": {
+        "tolerance_ms": 5.0
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "tolerance_ms",
+      "label": "Tolerance",
+      "type": "number",
+      "default": 0.1,
+      "min": 0,
+      "unit": "ms",
+      "description": "Maximum allowed deviation between echo spacings"
     }
   ]
 }

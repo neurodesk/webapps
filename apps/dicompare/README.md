@@ -100,6 +100,9 @@ Schemas from the [dicompare schema library](https://dicompare.neurodesk.org) are
 - `https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json`
 - `https://dicompare.neurodesk.org/schemas/hcp_schema.json`
 
+Authoring or reviewing a schema for the library? See the
+[schema authoring best practices](docs/schema-best-practices.md).
+
 ### CSS theming
 
 The embed CSS uses CSS custom properties. Define these in your app to match your theme:

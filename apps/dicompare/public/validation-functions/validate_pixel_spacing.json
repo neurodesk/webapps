@@ -1,32 +1,76 @@
 {
   "id": "validate_pixel_spacing",
   "name": "Voxel Size Limit",
-  "description": "Use a combined voxel size of at most 1 mm³ to reduce partial volume-related estimation errors.",
-  "category": "Spatial",
-  "fields": ["PixelSpacing", "SliceThickness"],
+  "description": "Validates that the voxel volume (PixelSpacing \u00d7 SliceThickness) does not exceed a configurable maximum (reduces partial-volume estimation errors).",
+  "category": "Geometry",
+  "fields": [
+    "PixelSpacing",
+    "SliceThickness"
+  ],
   "requiredSystemFields": [],
-  "parameters": null,
-  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\n\nif voxel_size_mm3 > 1:\n    raise ValidationError(f\"Voxel size should be ≤1 mm³. Got {voxel_size_mm3:.2f} mm³.\")\n",
+  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\nslice_thickness = value[\"SliceThickness\"].iloc[0]\nvoxel_size_mm3 = math.prod(list(pixel_spacing) + [slice_thickness])\nmax_vol = params.get(\"max_voxel_mm3\")\nif max_vol is not None and voxel_size_mm3 > max_vol:\n    raise ValidationError(f\"Voxel size should be <= {max_vol:g} mm\u00b3. Got {voxel_size_mm3:.2f} mm\u00b3.\")\n",
   "testCases": [
     {
-      "id": "small_voxels",
-      "name": "Small Voxels Test",
-      "description": "Should pass with 0.512 mm³ voxels",
+      "id": "small_pass",
+      "name": "1 mm isotropic passes default 1 mm\u00b3",
       "expectedResult": "pass",
       "data": {
-        "PixelSpacing": [[0.8, 0.8]],
-        "SliceThickness": [0.8]
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "SliceThickness": [
+          1.0
+        ]
       }
     },
     {
-      "id": "large_voxels",
-      "name": "Large Voxels Test",
-      "description": "Should fail with 3.375 mm³ voxels",
+      "id": "large_fail",
+      "name": "2 mm slices fail default 1 mm\u00b3",
       "expectedResult": "fail",
       "data": {
-        "PixelSpacing": [[1.5, 1.5]],
-        "SliceThickness": [1.5]
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "SliceThickness": [
+          2.0
+        ]
       }
+    },
+    {
+      "id": "limit_moves",
+      "name": "2 mm\u00b3 voxels pass when limit raised",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "SliceThickness": [
+          2.0
+        ]
+      },
+      "params": {
+        "max_voxel_mm3": 3
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_voxel_mm3",
+      "label": "Maximum voxel volume",
+      "type": "number",
+      "default": 1,
+      "min": 0,
+      "unit": "mm\u00b3",
+      "description": "Fail if the voxel volume exceeds this"
     }
   ]
 }

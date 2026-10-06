@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 
 interface CustomTooltipProps {
   content: string;
@@ -102,9 +103,18 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
       >
         {children}
       </div>
+<<<<<<< monorepo
 
       {/* Tooltip Portal */}
       {typeof document !== 'undefined' && (
+=======
+      
+      {/* Rendered into <body>, not in place: `position: sticky` creates a
+          stacking context, so a tooltip left inside a sticky table cell is
+          trapped at that cell's level and paints underneath the sticky header
+          row — no z-index on the tooltip itself can lift it out. */}
+      {typeof document !== 'undefined' && createPortal(
+>>>>>>> upstream
         <div
           className={getTooltipClasses()}
           style={{
@@ -114,7 +124,8 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({
         >
           {content}
           <div className={getArrowClasses()} />
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

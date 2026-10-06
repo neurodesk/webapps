@@ -1,0 +1,154 @@
+{
+  "id": "vendor_text_contains",
+  "name": "Vendor-Specific Sequence Check",
+  "description": "Validates that a text field (e.g. ScanningSequence, SequenceVariant) contains a vendor-specific required value (Siemens / GE / Philips). Use 'A+B' to require all values, 'A|B' to require any. Leave a vendor blank to skip it.",
+  "category": "Vendor-Specific",
+  "fields": [
+    "Manufacturer",
+    "ScanningSequence"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "field = [c for c in value.columns if c not in (\"Manufacturer\", \"Count\")][0]\nm = str(value[\"Manufacturer\"].iloc[0]).upper() if \"Manufacturer\" in value.columns else \"\"\nraw = value[field].iloc[0]\ntext = \"\\\\\".join(map(str, raw)) if isinstance(raw, (list, tuple)) else str(raw)\nlabel = params.get(\"label\") or field\n\ndef matches(needle):\n    if \"|\" in needle:\n        return any(part.strip() in text for part in needle.split(\"|\"))\n    return all(part.strip() in text for part in needle.split(\"+\"))\n\nrequired = {\n    \"SIEMENS\": params.get(\"siemens_contains\"),\n    \"PHILIPS\": params.get(\"philips_contains\"),\n    \"GE\": params.get(\"ge_contains\"),\n}\nfor vendor, needle in required.items():\n    if vendor in m:\n        if needle and not matches(needle):\n            raise ValidationError(f\"{vendor.title()} {label} should contain '{needle}'. Found: {text}\")\n        break\n",
+  "testCases": [
+    {
+      "id": "contains_pass",
+      "name": "Siemens sequence contains required value",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "ScanningSequence": [
+          [
+            "SE",
+            "EP"
+          ]
+        ]
+      },
+      "params": {
+        "siemens_contains": "EP"
+      }
+    },
+    {
+      "id": "missing_fail",
+      "name": "Siemens sequence missing required value",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "ScanningSequence": [
+          [
+            "GR"
+          ]
+        ]
+      },
+      "params": {
+        "siemens_contains": "EP"
+      }
+    },
+    {
+      "id": "other_vendor_ignored",
+      "name": "Vendor without a configured value is not checked",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "PHILIPS"
+        ],
+        "ScanningSequence": [
+          [
+            "GR"
+          ]
+        ]
+      },
+      "params": {
+        "siemens_contains": "EP"
+      }
+    },
+    {
+      "id": "all_of_pass",
+      "name": "A+B requires both values (pass)",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "ScanningSequence": [
+          [
+            "IR",
+            "GR"
+          ]
+        ]
+      },
+      "params": {
+        "siemens_contains": "IR+GR"
+      }
+    },
+    {
+      "id": "all_of_fail",
+      "name": "A+B fails when one value missing",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "ScanningSequence": [
+          [
+            "GR"
+          ]
+        ]
+      },
+      "params": {
+        "siemens_contains": "IR+GR"
+      }
+    },
+    {
+      "id": "any_of_pass",
+      "name": "A|B passes with either value",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "PHILIPS"
+        ],
+        "ScanningSequence": [
+          [
+            "SE"
+          ]
+        ]
+      },
+      "params": {
+        "philips_contains": "EP|SE"
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "label",
+      "label": "Value label",
+      "type": "string",
+      "default": "sequence",
+      "description": "Human-readable name of the checked value, used in messages"
+    },
+    {
+      "name": "siemens_contains",
+      "label": "Siemens must contain",
+      "type": "string",
+      "default": null,
+      "description": "Required value(s): 'A+B' = must contain all, 'A|B' = must contain any"
+    },
+    {
+      "name": "ge_contains",
+      "label": "GE must contain",
+      "type": "string",
+      "default": null,
+      "description": "Required value(s): 'A+B' = must contain all, 'A|B' = must contain any"
+    },
+    {
+      "name": "philips_contains",
+      "label": "Philips must contain",
+      "type": "string",
+      "default": null,
+      "description": "Required value(s): 'A+B' = must contain all, 'A|B' = must contain any"
+    }
+  ]
+}

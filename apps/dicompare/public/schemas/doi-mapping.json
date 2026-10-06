@@ -1,102 +1,132 @@
 {
   "ASL_Clinical_Guidelines_v1.0": {
-    "checksum": "sha256:81e5da7b11390656d21d49306d41025a89523127cad813abf299051e198aa100",
+    "checksum": "sha256:bc1b8eecd96a92c9748f1eea9732b458999f806db9693345ea0e44560e7b232a",
     "concept_doi": "10.5281/zenodo.20805042",
     "concept_recid": "20805042",
-    "record_id": "20805043",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160664",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805043",
-    "zenodo_url": "https://zenodo.org/record/20805043"
+    "version_doi": "10.5281/zenodo.22160664",
+    "zenodo_url": "https://zenodo.org/record/22160664"
+  },
+  "Axon_diameter_mapping_v1.2": {
+    "checksum": "sha256:9592136cf43996c5720aa7098ee74de1834e591e9a8cd67039b50f78422d552f",
+    "concept_doi": "10.5281/zenodo.22143660",
+    "concept_recid": "22143660",
+    "record_id": "22160685",
+    "updated_at": "2026-08-29T11:06:40Z",
+    "version": "1.2",
+    "version_doi": "10.5281/zenodo.22160685",
+    "zenodo_url": "https://zenodo.org/record/22160685"
   },
   "Generic_Spine_v1.0": {
-    "checksum": "sha256:e164d3eb9a42292b8c77fd65fcfa67477ca4082e80b07959a6719e637940d625",
+    "checksum": "sha256:52a2d303ae097c48bb18051bfb7701e2452b173bfbb9acde8e8c192a491c592c",
     "concept_doi": "10.5281/zenodo.20805053",
     "concept_recid": "20805053",
-    "record_id": "20805054",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160676",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "r20210521",
-    "version_doi": "10.5281/zenodo.20805054",
-    "zenodo_url": "https://zenodo.org/record/20805054"
+    "version_doi": "10.5281/zenodo.22160676",
+    "zenodo_url": "https://zenodo.org/record/22160676"
+  },
+  "HC-ChiSep_Validation_v1.0": {
+    "checksum": "sha256:b41ffe45902716a11ec40cfa06ed2619f8e2ce5a608e33cfe81e824bb16d3ca4",
+    "concept_doi": "10.5281/zenodo.21921349",
+    "concept_recid": "21921349",
+    "record_id": "22160668",
+    "updated_at": "2026-08-29T11:06:40Z",
+    "version": "1.0",
+    "version_doi": "10.5281/zenodo.22160668",
+    "zenodo_url": "https://zenodo.org/record/22160668"
   },
   "MS_CMSC_Guidelines_v1.0": {
-    "checksum": "sha256:f80cff5375b577bbebc25b6c3bd9ac0c0d89f495b4a1f6dbb12fa00c8c9dd19e",
+    "checksum": "sha256:154f0d541a5750e3083afb19db73473dd4a4a82d03be2ba8fc0f8ba1935a2bb9",
     "concept_doi": "10.5281/zenodo.20805040",
     "concept_recid": "20805040",
-    "record_id": "20805041",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160663",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805041",
-    "zenodo_url": "https://zenodo.org/record/20805041"
+    "version_doi": "10.5281/zenodo.22160663",
+    "zenodo_url": "https://zenodo.org/record/22160663"
   },
   "MY-RADS_Myeloma_v1.0": {
-    "checksum": "sha256:f634637938f43490e43c3391920e46e1cba973ccb2a082d58497c1714f69b9b3",
+    "checksum": "sha256:1c3a6fe6dd8d1737d0e0e6e84f677379590b90067b99de0c403ce499631c3335",
     "concept_doi": "10.5281/zenodo.20805046",
     "concept_recid": "20805046",
-    "record_id": "20805047",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160669",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805047",
-    "zenodo_url": "https://zenodo.org/record/20805047"
+    "version_doi": "10.5281/zenodo.22160669",
+    "zenodo_url": "https://zenodo.org/record/22160669"
+  },
+  "Protocols_for_DWI_analysis_v1.1": {
+    "checksum": "sha256:b8dfbb3c95a1fd19063ce7d0e6837a63b28b02ced848386ae5c56e60f35ff57c",
+    "concept_doi": "10.5281/zenodo.22143662",
+    "concept_recid": "22143662",
+    "record_id": "22160688",
+    "updated_at": "2026-08-29T11:06:40Z",
+    "version": "1.1",
+    "version_doi": "10.5281/zenodo.22160688",
+    "zenodo_url": "https://zenodo.org/record/22160688"
   },
   "QSM_Consensus_Guidelines_v1.0": {
-    "checksum": "sha256:151070e92963a19ff2e7ce022d13a710ba0378cfee0b2804d79c6ee78435967a",
+    "checksum": "sha256:6b272556f51e775ee74bd3ab4ec4277b65d10dbf56328515bac52c62c81779c3",
     "concept_doi": "10.5281/zenodo.20805044",
     "concept_recid": "20805044",
-    "record_id": "20805045",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160665",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805045",
-    "zenodo_url": "https://zenodo.org/record/20805045"
+    "version_doi": "10.5281/zenodo.22160665",
+    "zenodo_url": "https://zenodo.org/record/22160665"
   },
   "SeedSeg_Prostate_T1w_v1.0": {
-    "checksum": "sha256:c8813ffb9779f7e021c56be3b0ad67f6d5b4e35bcbef9c42819c9dad1d8d9274",
+    "checksum": "sha256:e1d248bdc8abe9f4b2b15d9510c1a57553391cfd4c24364ac4e0f968344e09fb",
     "concept_doi": "10.5281/zenodo.20805059",
     "concept_recid": "20805059",
-    "record_id": "20805060",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160684",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805060",
-    "zenodo_url": "https://zenodo.org/record/20805060"
+    "version_doi": "10.5281/zenodo.22160684",
+    "zenodo_url": "https://zenodo.org/record/22160684"
   },
   "UK_Biobank_v1.0": {
-    "checksum": "sha256:62e5dfb65143981a52e74e70a94f0f4907d5a45aae6d6c11cecc559e4261aaa5",
+    "checksum": "sha256:0d9ad35ddc3e2f1a90a92aca8cc48a0aa6d4665915ec0c947b29c83cba757ad4",
     "concept_doi": "10.5281/zenodo.20805048",
     "concept_recid": "20805048",
-    "record_id": "20805049",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160670",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805049",
-    "zenodo_url": "https://zenodo.org/record/20805049"
+    "version_doi": "10.5281/zenodo.22160670",
+    "zenodo_url": "https://zenodo.org/record/22160670"
   },
   "UMMS_Ping_v1.0": {
-    "checksum": "sha256:f2f687b2d5986a9f349cccb5c47508854d8a307908805652ec4c4bc558525335",
+    "checksum": "sha256:ad310bbb5fa19fc26ffb67456413b7b37c18136a68fabb46b6a23e2d3f5568ca",
     "concept_doi": "10.5281/zenodo.20805050",
     "concept_recid": "20805050",
-    "record_id": "20805051",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160675",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805051",
-    "zenodo_url": "https://zenodo.org/record/20805051"
+    "version_doi": "10.5281/zenodo.22160675",
+    "zenodo_url": "https://zenodo.org/record/22160675"
   },
   "abcd_schema_cleaned": {
-    "checksum": "sha256:5963e710c787ceee0baf9bcef778289ea56e92c48adfbef38472a554559f0c5e",
+    "checksum": "sha256:6a1c12d9e4e3a1fc59148e2c8b64e4eab1ee4d603f4d107d6e8b7cd9c6ad5c98",
     "concept_doi": "10.5281/zenodo.20805057",
     "concept_recid": "20805057",
-    "record_id": "20805058",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160681",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.1",
-    "version_doi": "10.5281/zenodo.20805058",
-    "zenodo_url": "https://zenodo.org/record/20805058"
+    "version_doi": "10.5281/zenodo.22160681",
+    "zenodo_url": "https://zenodo.org/record/22160681"
   },
   "hcp_schema": {
-    "checksum": "sha256:2dbec991140a40fc1cff668f30c18fb10a0bda88aebaa88219f7f33ec19b5a6a",
+    "checksum": "sha256:f9a0197854c340fdcc738276ec3de4276ed4908a0a731b971dec255675326b90",
     "concept_doi": "10.5281/zenodo.20805055",
     "concept_recid": "20805055",
-    "record_id": "20805056",
-    "updated_at": "2026-06-22T23:59:57Z",
+    "record_id": "22160678",
+    "updated_at": "2026-08-29T11:06:40Z",
     "version": "1.0",
-    "version_doi": "10.5281/zenodo.20805056",
-    "zenodo_url": "https://zenodo.org/record/20805056"
+    "version_doi": "10.5281/zenodo.22160678",
+    "zenodo_url": "https://zenodo.org/record/22160678"
   }
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2 } from 'lucide-react';
+import Modal from '../common/Modal';
 
 export interface DeleteConfirmModalProps {
   isOpen: boolean;
@@ -14,11 +15,9 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
   onConfirm,
   onCancel
 }) => {
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg max-w-md w-full p-6">
+    <Modal isOpen={isOpen} onClose={onCancel} size="sm" ariaLabel="Delete schema">
+      <div className="p-6">
         <div className="flex items-start mb-4">
           <div className="flex-shrink-0">
             <div className="h-12 w-12 rounded-full bg-status-error-bg flex items-center justify-center">
@@ -47,7 +46,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

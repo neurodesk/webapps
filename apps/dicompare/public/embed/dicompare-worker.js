@@ -13,7 +13,7 @@
 const OFFLINE = navigator.userAgent.includes('NeurodeskOffline/1');
 const PYODIDE_CDN = OFFLINE ? new URL('/_offline/python/', self.location.origin).href : 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
 // Version updated automatically by the version-bump GitHub Action on release
-const DICOMPARE_PACKAGE = 'dicompare==0.6.0';
+const DICOMPARE_PACKAGE = 'dicompare==0.11.1';
 
 let pyodide = null;
 

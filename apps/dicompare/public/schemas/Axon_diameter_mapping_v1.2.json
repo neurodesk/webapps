@@ -1,0 +1,876 @@
+{
+  "name": "Axon diameter mapping",
+  "description": "\n**Axon Diameter Mapping**\n\n**Overview:** Multi-shell diffusion-weighted MRI of the human brain that was optimized for axon diameter mapping using the power-law approach of Veraart et al. (2020)\n\n**Hardware requirements:** The modeling approach leverages (a) high *b*-values to suppress extra-axonal signal, and (b) strong diffusion-weighted strengths to maximize the sensitivity of diffusion-weighted MRI signal to restricted diffusion within micrometer-thin axons. Therefore, axon diameter mapping is currently limited to MRI scanners that are equipped with ultra-strong diffusion-weighting gradients, i.e. 300mT/m. Examples include Siemens 3T Connectom, Siemens 3T Connectom.X, and GE 3T Magnus. The protocol was optimized and tested on Siemens 3T Connectom.\n\n**Code:** Code to analyze the data is provided in https://github.com/NYU-DiffusionMRI/AxonRadiusMapping.  \n\n**Supporting data:** Rician signal biases impact the accuracy of Axon Diameter Mapping. Therefore it is important to collect supporting data from which a noise map can be derived.\n\n**References:**\n\n*Model:*  Veraart J, Nunes D, Rudrapatna U, Fieremans E, Jones DK, Novikov DS, Shemesh N. Noninvasive quantification of axon radii using diffusion MRI. Elife. 2020 Feb 12;9:e49855. doi: 10.7554/eLife.49855.\n\n*Reproducibility and protocol:* Veraart J, Raven EP, Edwards LJ, Weiskopf N, Jones DK. The variability of MR axon radii estimates in the human white matter. Hum Brain Mapp. 2021 May;42(7):2201-2213. doi: 10.1002/hbm.25359.\n\n*Interpretation:* Karat BG, Wren-Jarvis J, Raven EP, Khan AR, Jones DK, Palombo M, Veraart J. Revisiting the interpretation of axon diameter mapping using higher-order signal representations. Imaging Neurosci (Camb). 2026 Jan 9;4:IMAG.a.1080. doi: 10.1162/IMAG.a.1080. ",
+  "version": "1.2",
+  "authors": [
+    "Jelle Veraart",
+    "Erika Raven"
+  ],
+  "acquisitions": {
+    "T1w MPRAGE": {
+      "description": "Structural MRI image",
+      "detailed_description": "",
+      "fields": [
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "contains_any": [
+            "Connectom",
+            "Magnus"
+          ]
+        },
+        {
+          "field": "SoftwareVersions",
+          "tag": "0018,1020",
+          "value": "syngo MR D11",
+          "severity": "warning"
+        },
+        {
+          "field": "ProtocolName",
+          "tag": "0018,1030",
+          "value": "t1_mprage_sag_iso_1mm",
+          "severity": "warning"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 2300,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 2,
+          "tolerance": 1.0,
+          "severity": "warning"
+        },
+        {
+          "field": "InversionTime",
+          "tag": "0018,0082",
+          "value": 857,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 9,
+          "tolerance": 2.0,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 1,
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 256,
+          "severity": "warning"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 256,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            1,
+            1
+          ],
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 230,
+          "tolerance": 50.0,
+          "severity": "warning"
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "ROW",
+          "severity": "warning"
+        },
+        {
+          "field": "ReceiveCoilName",
+          "tag": "0018,1250",
+          "value": "HEA;HEP",
+          "severity": "warning"
+        },
+        {
+          "field": "EchoSpacing",
+          "tag": "derived",
+          "value": 5.9,
+          "tolerance": 0.05,
+          "severity": "warning"
+        },
+        {
+          "field": "GradientMode",
+          "tag": "derived",
+          "value": "Normal",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelAcquisitionTechnique",
+          "tag": "0018,9078",
+          "value": "GRAPPA",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100,
+          "tolerance": 10.0,
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "structural",
+        "brain"
+      ]
+    },
+    "Axon Diameter Mapping": {
+      "description": "Multi-shell diffusion MRI protocol for axon diameter mapping",
+      "detailed_description": "**Overview:** Multi-shell diffusion-weighted MRI of the human brain that was optimized for axon diameter mapping using the power-law approach of Veraart et al. (2020)\n\n**Hardware requirements:** The modeling approach leverages (a) high b-values to suppress extra-axonal signal, and (b) strong diffusion-weighted strengths to maximize the sensitivity of diffusion-weighted MRI signal to restricted diffusion within micrometer-thin axons. Therefore, axon diameter mapping is currently limited to MRI scanners that are equipped with ultra-strong diffusion-weighting gradients, i.e. 300mT/m. Examples include Siemens 3T Connectom, Siemens 3T Connectom.X, and GE 3T Magnus. The protocol was optimized and tested on Siemens 3T Connectom.\n\n**Code:** Code to analyze the data is provided in https://github.com/NYU-DiffusionMRI/AxonRadiusMapping.\n\n**Diffusion-weighting gradients:** Diffusion-weighting gradients are provided in a .dvs file (Siemens format). Diffusion-weighting gradients are scaled to result in two distinct b-values, i.e. *b*=6,000 and 30,450 s/mm^2. By selecting *b*=30,450 s/mm^2 on the scanner, the *b*=6,000 s/mm^2 will be acquired automatically.\n\n**Supporting data:** \n1. Rician signal biases impact the accuracy of Axon Diameter Mapping. Therefore it is important to collect data from which a corresponding noise map can be derived.  \n2. Reverse-phase encoded b=0 data would advance distortion correction as part of data preprocessing.\n\n**References:**\n\n*Model:* Veraart J, Nunes D, Rudrapatna U, Fieremans E, Jones DK, Novikov DS, Shemesh N. Noninvasive quantification of axon radii using diffusion MRI. Elife. 2020 Feb 12;9:e49855. doi: 10.7554/eLife.49855.\n\n*Reproducibility and protocol:* Veraart J, Raven EP, Edwards LJ, Weiskopf N, Jones DK. The variability of MR axon radii estimates in the human white matter. Hum Brain Mapp. 2021 May;42(7):2201-2213. doi: 10.1002/hbm.25359.\n\n*Interpretation:* Karat BG, Wren-Jarvis J, Raven EP, Khan AR, Jones DK, Palombo M, Veraart J. Revisiting the interpretation of axon diameter mapping using higher-order signal representations. Imaging Neurosci (Camb). 2026 Jan 9;4:IMAG.a.1080. doi: 10.1162/IMAG.a.1080.",
+      "fields": [
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "contains_any": [
+            "Connectom",
+            "Magnus"
+          ]
+        },
+        {
+          "field": "ProtocolName",
+          "tag": "0018,1030",
+          "value": "Axon Diameter Mapping",
+          "severity": "warning"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 3500,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 66,
+          "tolerance": 1.0,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.5,
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.5,
+            2.5
+          ],
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2272,
+          "tolerance": 50.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 77,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfSlices",
+          "tag": "0054,0081",
+          "value": 54,
+          "severity": "warning"
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL",
+          "severity": "warning"
+        },
+        {
+          "field": "PhaseEncodingDirectionPositive",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "ReceiveCoilName",
+          "tag": "0018,1250",
+          "value": "HEA;HEP",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "value": 30450
+        },
+        {
+          "field": "BigDelta",
+          "tag": "derived",
+          "value": 30,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionDirectionSet",
+          "tag": "derived",
+          "value": "Custom",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionMode",
+          "tag": "derived",
+          "value": "Free",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionWeightings",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoSpacing",
+          "tag": "derived",
+          "value": 0.52,
+          "tolerance": 0.05,
+          "severity": "warning"
+        },
+        {
+          "field": "GradientMode",
+          "tag": "derived",
+          "value": "Fast",
+          "severity": "warning"
+        },
+        {
+          "field": "MaxDiffGradient",
+          "tag": "derived",
+          "value": 280
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelAcquisitionTechnique",
+          "tag": "0018,9078",
+          "value": "GRAPPA",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "SmallDelta",
+          "tag": "derived",
+          "value": 15,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            5990,
+            30450
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            10,
+            60,
+            120
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 190,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 10,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "axon diameter mapping",
+        "diffusion",
+        "Connectom",
+        "analysis:diffusion"
+      ],
+      "rules": [
+        {
+          "id": "custom_1784818594180",
+          "name": "Compatible with axon diameter mapping",
+          "description": "Evaluates compatibility with axon diameter mapping from Veraart et al. (2020)",
+          "implementation": "# Axon diameter mapping needs ultra-strong gradients and multi-shell data.\nfor row in ctx.rows:\n    if float(row[\"MaxDiffGradient\"]) < 250:\n        ctx.error(\"MaxDiffGradient too low for axon diameter mapping (need >= 250 mT/m)\")\n    if float(row[\"NumberOfDiffusionShells\"]) < 2:\n        ctx.error(\"At least two diffusion shells are required for axon diameter mapping\")",
+          "fields": [
+            "MaxDiffGradient",
+            "NumberOfDiffusionShells"
+          ],
+          "testCases": [
+            {
+              "id": "test_axon_pass",
+              "name": "Connectom axon protocol",
+              "data": {
+                "MaxDiffGradient": [
+                  "280"
+                ],
+                "NumberOfDiffusionShells": [
+                  "2"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "The schema's own protocol: 280 mT/m, 2 shells."
+            },
+            {
+              "id": "test_axon_fail_gradient",
+              "name": "Clinical gradient strength",
+              "data": {
+                "MaxDiffGradient": [
+                  "80"
+                ],
+                "NumberOfDiffusionShells": [
+                  "2"
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "Standard 80 mT/m gradients cannot resolve axon radii."
+            }
+          ]
+        }
+      ]
+    },
+    "Low b-shell for noise mapping": {
+      "description": "Low-b diffusion scan for noise map estimation",
+      "detailed_description": "**Overview:** Diffusion-weighted MRI with low b-value to supplement to axon diameter mapping protocol. Rician signal biases impact the accuracy of Axon Diameter Mapping. Therefore it is important to collect data from which a corresponding noise map can be derived. Data with low b-values (e.g., *b*=1000s/mm^2) generate accurate noise maps. We recommend the use of MPPCA (Veraart et al. Neuroimage, 2016) for this purpose. A minimum of 30 DW gradient directions is recommended. \n\n**Code for noise map estimation:** https://mrtrix.readthedocs.io/en/dev/reference/commands/dwidenoise.html\n\n",
+      "fields": [
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "contains_any": [
+            "Connectom",
+            "Magnus"
+          ]
+        },
+        {
+          "field": "SoftwareVersions",
+          "tag": "0018,1020",
+          "value": "syngo MR D11",
+          "severity": "warning"
+        },
+        {
+          "field": "ProtocolName",
+          "tag": "0018,1030",
+          "value": "fast DKI_fornoise",
+          "severity": "warning"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 3500,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 66,
+          "tolerance": 1.0,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.5,
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.5,
+            2.5
+          ],
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2272,
+          "tolerance": 50.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 77,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfSlices",
+          "tag": "0054,0081",
+          "value": 54,
+          "severity": "warning"
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL",
+          "severity": "warning"
+        },
+        {
+          "field": "PhaseEncodingDirectionPositive",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "ReceiveCoilName",
+          "tag": "0018,1250",
+          "value": "HEA;HEP",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "min": 0,
+          "max": 1000
+        },
+        {
+          "field": "BigDelta",
+          "tag": "derived",
+          "value": 30,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionDirectionSet",
+          "tag": "derived",
+          "value": "Jones31",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionMode",
+          "tag": "derived",
+          "value": "Free",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionWeightings",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoSpacing",
+          "tag": "derived",
+          "value": 0.52,
+          "tolerance": 0.05,
+          "severity": "warning"
+        },
+        {
+          "field": "GradientMode",
+          "tag": "derived",
+          "value": "Fast",
+          "severity": "warning"
+        },
+        {
+          "field": "MaxDiffGradient",
+          "tag": "derived",
+          "value": 80,
+          "severity": "warning"
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelAcquisitionTechnique",
+          "tag": "0018,9078",
+          "value": "GRAPPA",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "SmallDelta",
+          "tag": "derived",
+          "value": 15,
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "custom_1784818252589",
+          "name": "Detect low b-value",
+          "description": "Detect low b-value for accurate noise mapping",
+          "implementation": "thr = params.get(\"max_low_b\") if params.get(\"max_low_b\") is not None else 1100\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    bvals = as_list(value[\"DiffusionBValues\"][i])\n    if len([x for x in bvals if 0 < x < thr]) == 0:\n        errors.append(f\"Entry {i}: no non-zero b-value below {thr:g} s/mm\u00b2 present\")\nif errors:\n    raise ValidationError(chr(10).join(errors))\n",
+          "parameters": {
+            "max_low_b": 1100
+          },
+          "fields": [
+            "DiffusionBValues"
+          ],
+          "testCases": [
+            {
+              "id": "test_noise_pass",
+              "name": "Low-b noise scan",
+              "data": {
+                "DiffusionBValues": [
+                  "[0, 500]"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "b=500 shell is suitable for noise estimation."
+            },
+            {
+              "id": "test_noise_fail",
+              "name": "High-b only",
+              "data": {
+                "DiffusionBValues": [
+                  "[0, 6000]"
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "No low-b shell for noise estimation."
+            }
+          ],
+          "parameterDefinitions": [
+            {
+              "name": "max_low_b",
+              "label": "Low b-value threshold",
+              "type": "number",
+              "default": 1100,
+              "min": 0,
+              "unit": "s/mm\u00b2",
+              "description": "At least one non-zero b-value below this must be present"
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "noise mapping"
+      ]
+    },
+    "nonDWI-PA": {
+      "description": "Reverse phase-encoded b=0 scan for distortion correction",
+      "detailed_description": "**Overview:** Diffusion-weighted MRI with reversed-phase encoding (*b*=0 only) to supplement to axon diameter mapping protocol. Geometric distortions due to susceptibility effects impact anatomical accuracy. These distortions can be mitigated through preprocessing if supplementary data is available. \n\n**Code for preprocessing:** https://github.com/NYU-DiffusionMRI/DESIGNER-v2",
+      "fields": [
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "contains_any": [
+            "Connectom",
+            "Magnus"
+          ]
+        },
+        {
+          "field": "SoftwareVersions",
+          "tag": "0018,1020",
+          "value": "syngo MR D11",
+          "severity": "warning"
+        },
+        {
+          "field": "ProtocolName",
+          "tag": "0018,1030",
+          "value": "nonDWI-PA",
+          "severity": "warning"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 3500,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 66,
+          "tolerance": 1.0,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 10,
+          "severity": "warning"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.5,
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.5,
+            2.5
+          ],
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2272,
+          "tolerance": 50.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 77,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfSlices",
+          "tag": "0054,0081",
+          "value": 54,
+          "severity": "warning"
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL",
+          "severity": "warning"
+        },
+        {
+          "field": "PhaseEncodingDirectionPositive",
+          "tag": "derived",
+          "value": 0
+        },
+        {
+          "field": "ReceiveCoilName",
+          "tag": "0018,1250",
+          "value": "HEA;HEP",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "value": 0
+        },
+        {
+          "field": "BigDelta",
+          "tag": "derived",
+          "value": 30,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionDirectionSet",
+          "tag": "derived",
+          "value": "Jones31",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionMode",
+          "tag": "derived",
+          "value": "Free",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionWeightings",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoSpacing",
+          "tag": "derived",
+          "value": 0.52,
+          "tolerance": 0.05,
+          "severity": "warning"
+        },
+        {
+          "field": "GradientMode",
+          "tag": "derived",
+          "value": "Fast",
+          "severity": "warning"
+        },
+        {
+          "field": "MaxDiffGradient",
+          "tag": "derived",
+          "value": 280,
+          "severity": "warning"
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelAcquisitionTechnique",
+          "tag": "0018,9078",
+          "value": "GRAPPA",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "SmallDelta",
+          "tag": "derived",
+          "value": 15,
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "distortion correction"
+      ]
+    }
+  }
+}

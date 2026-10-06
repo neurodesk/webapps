@@ -103,6 +103,7 @@ interface WorkspaceContextType {
   addSeries: (id: string) => void;
   deleteSeries: (id: string, seriesIndex: number) => void;
   updateSeriesName: (id: string, seriesIndex: number, name: string) => void;
+  updateSeriesNotes: (id: string, seriesIndex: number, notes: string) => void;
   addValidationFunction: (id: string, func: SelectedValidationFunction) => void;
   updateValidationFunction: (id: string, index: number, func: SelectedValidationFunction) => void;
   deleteValidationFunction: (id: string, index: number) => void;
@@ -1152,6 +1153,7 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
     addSeries: editing.addSeries,
     deleteSeries: editing.deleteSeries,
     updateSeriesName: editing.updateSeriesName,
+    updateSeriesNotes: editing.updateSeriesNotes,
     addValidationFunction: editing.addValidationFunction,
     updateValidationFunction: editing.updateValidationFunction,
     deleteValidationFunction: editing.deleteValidationFunction,
