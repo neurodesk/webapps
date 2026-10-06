@@ -19,6 +19,8 @@ test.beforeEach(async ({ page }, testInfo) => {
 
 test("live data examples download and both registration modes complete", async ({ page }) => {
   test.skip(!process.env.GREEDY_LIVE_DATA, "Set GREEDY_LIVE_DATA=1 to exercise the pinned Hugging Face images.");
+  // Full 1 mm images: deformable registration takes minutes on a CI runner's CPU.
+  test.setTimeout(900_000);
   await page.goto("/");
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready");
@@ -26,11 +28,11 @@ test("live data examples download and both registration modes complete", async (
   await page.locator("#runButton").click();
   await expect(page.locator("#movingInfo")).toContainText("t1_brain.nii.gz", { timeout: 60_000 });
   await expect(page.locator("#stationaryInfo")).toContainText("MNI152_T1_1mm_brain.nii.gz", { timeout: 60_000 });
-  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 120_000 });
+  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 420_000 });
   await page.locator("#method").selectOption("deformable");
   await expect(page.locator("#resultList")).toBeEmpty();
   await page.locator("#runButton").click();
-  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 120_000 });
+  await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 420_000 });
 });
 
 test("selected examples load into three panels and affine registration completes", async ({ page }) => {

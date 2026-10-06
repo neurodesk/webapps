@@ -264,6 +264,19 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
+      # Pinned examples and models for the data-gated tests. Hardware-GPU apps
+      # get theirs on the macOS job: SwiftShader cannot finish those workloads.
+      - uses: actions/cache@v6
+        if: ${{ !matrix.hardware_gpu }}
+        with:
+          path: ~/.cache/neurodesk-e2e-test-data
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+      - name: Download ${{ matrix.app }} test data
+        if: ${{ !matrix.hardware_gpu }}
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} in a browser
@@ -319,16 +332,16 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: |
-            ~/.cache/neurodesk-gpu-test-data
+            ~/.cache/neurodesk-e2e-test-data
             exes/synthseg/models
             exes/synthsr/models
-          key: gpu-test-data-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'packages/synthseg/model.manifest.json', 'packages/synthsr/model.manifest.json') }}
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
       - name: Download ${{ matrix.app }} models and fixtures
         # Explicit bash adds pipefail, so a failed download fails the step.
         shell: bash
         env:
           APP: ${{ matrix.app }}
-        run: node scripts/gpu-test-data.mjs "$APP" ~/.cache/neurodesk-gpu-test-data | tee -a "$GITHUB_ENV"
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} on the hardware GPU
