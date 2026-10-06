@@ -228,6 +228,9 @@ importers:
 
   apps/carotid-flow:
     dependencies:
+      '@neurodesk/carotid-flow':
+        specifier: workspace:*
+        version: link:../../packages/carotid-flow
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -924,6 +927,12 @@ importers:
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
+
+  packages/carotid-flow:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/components:
     dependencies:

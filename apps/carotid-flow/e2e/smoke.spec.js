@@ -10,7 +10,7 @@ const local = process.env.CAROTID_FLOW_EXAMPLE;
 
 /** The tilted phantom as one combined amplitude-then-phase NIfTI, for runs without the network. */
 async function tiltedSeries() {
-  const { tiltedPhantom } = await import('../test/tilted-phantom.js');
+  const { tiltedPhantom } = await import('@neurodesk/carotid-flow/phantom');
   const { createNiftiHeaderFromVolume, createFloat32Nifti } = await import('@neurodesk/webapp-components/file-io');
   const series = tiltedPhantom();
   const data = new Float32Array(series.amplitude.length * 2);

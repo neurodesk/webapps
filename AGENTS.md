@@ -172,6 +172,7 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - The example is PCMCalculator's MIT test data. Its right carotid must stay within 10 % of PCMCalculator's 225 ml/min (`CAROTID_FLOW_OPEN_EXAMPLE`), and the e2e and offline workflow tests pin 231 and 211 ml/min.
 - Left and right are the patient's, from the affine. The MATLAB script called the image-left vessel left, which on the scanner's radiological grid is the patient's right; do not "fix" the app back to the script.
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
+- The detection, series reading and output naming live in `packages/carotid-flow`, which the app and the `carotid-flow` command line both import. Change the outputs there, not in the app, so the command line keeps writing the app's downloads byte for byte. `validation/pcmcalculator.json` holds the example's pins for both the open-example unit test and the command line's release check.
 
 ## easy-mp2rage
 
