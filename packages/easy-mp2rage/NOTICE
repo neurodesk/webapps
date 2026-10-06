@@ -1,0 +1,11 @@
+Easy MP2RAGE
+GPL-3.0-or-later
+
+The T1 lookup, B1 correction, SA2RAGE B1 mapping and robust-combination
+denoising are a Rust port of the T1-mapping parts of Jose Marques'
+MP2RAGE-related-scripts:
+https://github.com/JosePMarques/MP2RAGE-related-scripts
+
+Please cite Marques et al. 2010 (NeuroImage), Marques and Gruetter 2013
+(PLoS ONE), Eggenschwiler et al. 2012 (Magn Reson Med) and O'Brien et al.
+2014 (PLoS ONE).

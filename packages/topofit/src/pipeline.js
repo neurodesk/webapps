@@ -22,7 +22,7 @@ const FEATURE_SHAPES = [
   [1, 32, 88, 104, 88],
   [1, 16, 176, 208, 176],
 ];
-const MODEL_NAMES = new Set(['t1w-1mm']);
+export const MODELS = Object.freeze(['t1w-1mm']);
 
 export async function runTopofit(options) {
   const {
@@ -37,7 +37,7 @@ export async function runTopofit(options) {
     runtime = {},
   } = options;
   if (!(buffer instanceof ArrayBuffer)) throw new Error('TopoFit requires NIfTI bytes.');
-  if (!MODEL_NAMES.has(model)) throw new Error(`Unknown TopoFit model ${model}.`);
+  if (!MODELS.includes(model)) throw new Error(`Unknown TopoFit model ${model}. Available: ${MODELS.join(', ')}.`);
   if (typeof loadAsset !== 'function' || typeof createSession !== 'function' || typeof Tensor !== 'function') {
     throw new Error('TopoFit runtime dependencies are missing.');
   }

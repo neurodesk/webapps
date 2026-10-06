@@ -1,7 +1,7 @@
 // Headless end-to-end check of the browser app's data path:
 //   nifti.js read  ->  WASM core  ->  nifti.js write/read-back
 // exactly as web/js/app.js + worker.js do, compared to the Python golden.
-// Requires `tools/build_wasm.sh` to have staged web/wasm/.
+// Requires `tools/stage_core.sh` to have staged web/vendor/easy-mp2rage/.
 //
 // run:  node web/test/e2e_node.mjs
 import { readFileSync } from 'fs';
@@ -10,10 +10,10 @@ import { dirname, resolve } from 'path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(here, '..', '..');
-const readNifti = (await import(resolve(here, '../js/nifti.js'))).readNifti;
-const { writeNiftiGz } = await import(resolve(here, '../js/nifti.js'));
-const wasm = await import(resolve(here, '../wasm/mp2rage_wasm.js'));
-await wasm.default(readFileSync(resolve(here, '../wasm/mp2rage_wasm_bg.wasm')));
+const readNifti = (await import(resolve(here, '../vendor/easy-mp2rage/src/nifti.js'))).readNifti;
+const { writeNiftiGz } = await import(resolve(here, '../vendor/easy-mp2rage/src/nifti.js'));
+const wasm = await import(resolve(here, '../vendor/easy-mp2rage/wasm/mp2rage_wasm.js'));
+await wasm.default(readFileSync(resolve(here, '../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm')));
 
 const ab = (p) => { const b = readFileSync(p); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
 function readNpy(p) {

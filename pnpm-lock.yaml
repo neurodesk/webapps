@@ -486,7 +486,11 @@ importers:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
-  apps/easy-mp2rage: {}
+  apps/easy-mp2rage:
+    dependencies:
+      '@neurodesk/easy-mp2rage':
+        specifier: workspace:*
+        version: link:../../packages/easy-mp2rage
 
   apps/edgereg:
     dependencies:
@@ -824,6 +828,9 @@ importers:
       freebrowse:
         specifier: 2.5.0-next.1
         version: 2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
+      onnxruntime-web:
+        specifier: 1.29.0
+        version: 1.29.0
     devDependencies:
       '@playwright/test':
         specifier: 1.63.0
@@ -943,6 +950,12 @@ importers:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
 
+  packages/easy-mp2rage:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+
   packages/greedy: {}
 
   packages/lcmodel: {}
@@ -1006,13 +1019,10 @@ importers:
 
   packages/topofit:
     dependencies:
-      '@neurodesk/webapp-components':
-        specifier: workspace:*
-        version: link:../components
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
-      onnxruntime-web:
+      onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
 

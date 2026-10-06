@@ -10,37 +10,37 @@
         "license": "MIT"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-abdomen.onnx",
-        "sha256": "f2e64dd67104422f94c29382136aa438835aaea7aadc91a917178732cfc15d41",
-        "bytes": 38999828,
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-abdomen-v0.0-fp32.onnx",
+        "sha256": "75810a91be42e64efbd468f1b8d6cfd2c233fd7748c443eeb91c4846fc893901",
+        "bytes": 103996488,
         "kind": "model",
         "license": "MIT"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-forearm.onnx",
-        "sha256": "48517f2aadc19183025dfe1a1952c24ae79d9a33fa5dd8154b46cf47fd87d3dd",
-        "bytes": 26364376,
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-forearm-v0.0-fp32.onnx",
+        "sha256": "a26c0547fd70eea60025b7cb77084f392725a22e6baf6c748f3d7dc066d44d8f",
+        "bytes": 53665289,
         "kind": "model",
         "license": "MIT"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-leg.onnx",
-        "sha256": "3ad1c902998849ea66942863d157e1f8e608fb2c9d6b3230ee56de0e0840bcb4",
-        "bytes": 39028867,
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-leg-v0.0-fp32.onnx",
+        "sha256": "ced5b7f5654ffdaf44774d98de1bc9b0bfdf022c04d815a97dc28c079015e6e0",
+        "bytes": 104029416,
         "kind": "model",
         "license": "MIT"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-pelvis.onnx",
-        "sha256": "34babe3b30a587dc4f67f44da44a6f89f7f66dcd2d128351ecf9356cbc0c32e4",
-        "bytes": 39023986,
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-pelvis-v0.0-fp32.onnx",
+        "sha256": "fd405e107fbbe1248fe5953f1de92873c20108f524d97bcbe93246cd5019cf18",
+        "bytes": 104023748,
         "kind": "model",
         "license": "MIT"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-thigh.onnx",
-        "sha256": "2d1a607adfa0758516069e039717079a2340811e3d3c70a7e9621aa1564399f2",
-        "bytes": 39099153,
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-thigh-v0.0-fp32.onnx",
+        "sha256": "43a416a50578ef6efd8aa1ba46b06808157d4377019e6cf4ecfdf7fa9279d805",
+        "bytes": 104116334,
         "kind": "model",
         "license": "MIT"
       },
@@ -64,6 +64,13 @@
         "sha256": "0f311daa4f19d8b89c1380832332db11d5f32cf406d2b591ba6800e6433eb379",
         "bytes": 16134253,
         "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-wholebody-v1.3-fp32.onnx",
+        "sha256": "f29a492f85e2f68b627b7b43da35759b5e56081e6a1b165c1b03ccbb8ad6dff1",
+        "bytes": 54458661,
+        "kind": "model",
+        "license": "MIT"
       }
     ],
     "vesselboost": [

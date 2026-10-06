@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   scientific-example:
     # This explicit runner label is a requirement, not a simulator fallback.

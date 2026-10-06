@@ -129,6 +129,15 @@ test("the Siemens MEGA-PRESS example fits GABA on the difference spectrum (86 MB
   expect(Number(await cell(page, "GABA+MM3co", 3))).toBeCloseTo(0.291, 2);
   expect(Number(await cell(page, "GABA", 3))).toBeCloseTo(0.075, 2);
   expect(Number((await cell(page, "GABA", 2)).replace("%", ""))).toBeLessThan(20);
+  // 1.95-1.2 ppm is left out of the fit: shaded, with the data drawn through it.
+  await expect(page.locator("#plot .lcm-gap")).toHaveCount(1);
+  await expect(page.locator("#plot polyline.lcm-data")).toHaveCount(1);
+  await expect(page.locator("#plot polyline.lcm-fit")).toHaveCount(2);
+  await expect(page.locator("#plotLabel")).toContainText("shaded: not fitted");
+  await page.screenshot({ path: test.info().outputPath("siemens-megapress-fit.png") });
+  await page.locator(".nd-view-tab:has-text('Metabolites')").click();
+  await expect(page.locator("#plot .lcm-gap")).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath("siemens-megapress-metabolites.png") });
   await page.locator(".nd-view-tab:has-text('Preprocessing')").click();
   await expect(page.locator("#plotLabel")).toContainText("edit-OFF");
   const download = page.waitForEvent("download");

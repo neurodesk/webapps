@@ -1,0 +1,172 @@
+name: node-cli-portable
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Package directory with release.json, for example packages/topofit
+        type: string
+        required: true
+      targets:
+        description: JSON list of {os, platform} runners, one per release.json target
+        type: string
+        required: true
+      publish_release:
+        description: Attach every verified archive to the package's existing release
+        type: boolean
+        default: false
+      sign_release:
+        description: Sign, notarize and attach the macOS installer with the Developer ID identities
+        type: boolean
+        default: false
+    secrets:
+      APPLEID:
+        required: false
+      APPLEIDPASS:
+        required: false
+      APPLE_TEAM_ID:
+        required: false
+      CSC_LINK:
+        required: false
+      CSC_KEY_PASSWORD:
+        required: false
+      CSC_INSTALLER_LINK:
+        required: false
+      CSC_INSTALLER_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.targets) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      PACKAGE_DIR: ${{ inputs.package }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          components: clippy, rustfmt
+      - name: Install frozen dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      - name: Test portable release code
+        run: |
+          pnpm --dir "$PACKAGE_DIR" test
+          cargo test --manifest-path exes/node-cli/Cargo.toml --locked
+          cargo clippy --manifest-path exes/node-cli/Cargo.toml --locked -- -D warnings
+          cargo fmt --manifest-path exes/node-cli/Cargo.toml --check
+          python exes/node-cli/scripts/test_portable_release.py
+      - name: Package and verify the extracted archive
+        run: |
+          python exes/node-cli/scripts/portable_release.py package "$PACKAGE_DIR" "$PLATFORM"
+          python exes/node-cli/scripts/portable_release.py verify "$PACKAGE_DIR" "$PLATFORM"
+          cat exes/node-cli/dist/*.validation.txt
+      # The macOS installer built here is ad hoc signed; it is uploaded for testing, never released.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ runner.os == 'macOS' && 'test-installer' || 'portable' }}-${{ matrix.platform }}
+          path: |
+            exes/node-cli/dist/*-${{ matrix.platform }}.zip
+            exes/node-cli/dist/*-${{ matrix.platform }}.zip.sha256
+            exes/node-cli/dist/*-${{ matrix.platform }}.zip.validation.txt
+            exes/node-cli/dist/*-${{ matrix.platform }}.tar.gz
+            exes/node-cli/dist/*-${{ matrix.platform }}.tar.gz.sha256
+            exes/node-cli/dist/*-${{ matrix.platform }}.tar.gz.validation.txt
+            exes/node-cli/dist/*-${{ matrix.platform }}-adhoc.pkg
+            exes/node-cli/dist/*-${{ matrix.platform }}-adhoc.pkg.sha256
+            exes/node-cli/dist/*-${{ matrix.platform }}-adhoc.pkg.validation.txt
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: inputs.publish_release
+    needs: [portable]
+    runs-on: ${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      PACKAGE_DIR: ${{ inputs.package }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check release target
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./$PACKAGE_DIR/package.json').version")
+          prefix=$(node -p "require('./$PACKAGE_DIR/release.json').tagPrefix")
+          tag="$prefix$version"
+          gh release view "$tag" >/dev/null
+          test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: portable-*
+          path: exes/node-cli/dist/portable
+          merge-multiple: true
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        if: inputs.sign_release
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        if: inputs.sign_release
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        if: inputs.sign_release
+      - name: Install frozen dependencies
+        if: inputs.sign_release
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      # SynthSR's signing script builds, notarizes, installs and validates the package
+      # through exes/node-cli/Makefile; the secrets reach this step only.
+      - name: Sign and notarize installer
+        if: inputs.sign_release
+        env:
+          PACKAGE: ${{ inputs.package }}
+          APPLEID: ${{ secrets.APPLEID }}
+          APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+        run: |
+          exes/synthsr/scripts/ci_macos_release.sh exes/node-cli
+          cp exes/node-cli/dist/*.pkg exes/node-cli/dist/*.pkg.sha256 exes/node-cli/dist/*.pkg.validation.txt exes/node-cli/dist/portable/
+      - name: Check portable release assets
+        run: python3 exes/node-cli/scripts/portable_release.py verify-release-set "$PACKAGE_DIR" exes/node-cli/dist/portable
+      - name: Attach verified release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" exes/node-cli/dist/portable/* --clobber

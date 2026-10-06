@@ -19,6 +19,10 @@ concurrency:
   group: neurodesk-webapps-release
   cancel-in-progress: false
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   app-plan:
     runs-on: ubuntu-latest

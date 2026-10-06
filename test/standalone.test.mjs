@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,6 +9,7 @@ import { loadStandalone } from '../scripts/lib/standalone.mjs';
 import { ciWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
+import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
 
 test('standalone catalog covers the entire app registry', async () => {
   const registry = await loadAppsRegistry();
@@ -110,5 +111,43 @@ test('compute server setup does not fabricate an unpublished backend download', 
   const section = dialog.root.querySelector('#standalone-compute').parentElement;
   assert.match(section.textContent, /released backend download is not available/);
   assert.equal(section.querySelector('a[download]'), null);
+  dom.window.close();
+});
+
+test('portable command-line rows show extraction and the release spec run command', async () => {
+  const spec = JSON.parse(await readFile(new URL('../packages/topofit/release.json', import.meta.url), 'utf8'));
+  const version = '0.13.20261006';
+  const archive = platform => `topofit-${version}-${platform}.${spec.targets[platform].archive}`;
+  assert.equal(portableCommand(spec, 'linux-x64', archive('linux-x64')), `tar -xzf topofit-${version}-linux-x64.tar.gz\n./topofit-${version}-linux-x64/topofit input.nii.gz results`);
+  assert.equal(portableCommand(spec, 'windows-x64', archive('windows-x64')), `Expand-Archive -Path .\\topofit-${version}-windows-x64.zip -DestinationPath .\n.\\topofit-${version}-windows-x64\\topofit.exe input.nii.gz results`);
+  assert.equal(portableCommand(spec, 'macos-arm64', archive('macos-arm64')), `sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /\ntopofit self-check\ntopofit input.nii.gz results`);
+  assert.throws(() => portableCommand(spec, 'linux-arm64', 'topofit.tar.gz'), /not a release target/);
+  assert.equal(releasePlatform(spec, archive('macos-arm64')), 'macos-arm64');
+  assert.equal(releasePlatform(spec, `topofit-${version}-macos-arm64-adhoc.pkg`), null);
+  assert.equal(releasePlatform(spec, `topofit-${version}-macos-arm64.tar.gz`), null);
+  assert.equal(releasePlatform(spec, `${archive('macos-arm64')}.validation.txt`), null);
+  assert.equal(releasePlatform(null, 'synthsr-0.3.20260910-macos-arm64.pkg'), 'macos-arm64');
+  const downloads = Object.keys(spec.targets).map(platform => ({
+    kind: 'cli', platform, version, bytes: 91534072, modelsIncluded: true, sha256: 'a'.repeat(64),
+    url: `https://github.com/neurodesk/webapps/releases/download/topofit-v${version}/${archive(platform)}`,
+    command: portableCommand(spec, platform, archive(platform)),
+  }));
+  const dom = new JSDOM('<html><body></body></html>');
+  const dialog = openStandalone({ title: 'TopoFit', app: { downloads, containers: [] } }, dom.window.document);
+  const section = dialog.root.querySelector('section[aria-labelledby="standalone-downloads"]');
+  assert.match(section.textContent, /Models are included\./);
+  assert.doesNotMatch(section.textContent, /Models download when first used/);
+  assert.deepEqual([...section.querySelectorAll('h4')].map(node => node.textContent), [
+    'TopoFit command line · Linux · x64 · 92 MB',
+    'TopoFit command line · Windows · x64 · 92 MB',
+    'TopoFit command line · macOS · Apple silicon · 92 MB',
+  ]);
+  assert.deepEqual([...section.querySelectorAll('summary')].map(node => node.textContent), ['Extract and run', 'Extract and run', 'Install and run']);
+  assert.ok([...section.querySelectorAll('details')].every(node => !node.open));
+  assert.match(section.textContent, new RegExp(`\\./topofit-${version}-linux-x64/topofit input\\.nii\\.gz results`));
+  assert.doesNotMatch(section.textContent, /sha256|shasum|xattr|quarantine/i);
+  const lines = [...section.querySelectorAll('pre, code')].flatMap(node => node.textContent.split('\n'));
+  assert.ok(lines.includes(`sudo installer -pkg topofit-${version}-macos-arm64.pkg -target /`));
+  assert.ok(lines.every(line => line.length <= 90), 'visible commands stay within 90 characters');
   dom.window.close();
 });

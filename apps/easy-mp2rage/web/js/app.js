@@ -10,19 +10,21 @@ import {
 // with a self-contained canvas viewer, and offers client-side downloads. Your
 // images/results never leave the tab (the hosted page loads GA4, which sees
 // anonymous page views only).
-import { readNifti, writeNiftiF32, writeNiftiGz } from "./nifti.js";
+import { readNifti, voxelGrid, writeNiftiF32, writeNiftiGz } from "../vendor/easy-mp2rage/src/nifti.js";
+import { sameVoxelGrid } from "../vendor/webapp-components/src/file-io/NiftiUtils.js";
+import { B1_MAP_KINDS, outputFiles, parametersRecord } from "../vendor/easy-mp2rage/src/outputs.js";
 import { zipStore } from "./zip.js";
 import { indexBids } from "./bids.js";
 import initWasm, {
   parse_dicom_series,
   write_dicom_t1,
-} from "../wasm/mp2rage_wasm.js";
+} from "../vendor/easy-mp2rage/wasm/mp2rage_wasm.js";
 
 let wasmReady;
 function ensureWasm() {
   if (!wasmReady)
     wasmReady = initWasm(
-      new URL("../wasm/mp2rage_wasm_bg.wasm", import.meta.url)
+      new URL("../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm", import.meta.url)
     );
   return wasmReady;
 }
@@ -676,10 +678,7 @@ $("#resetAll").onclick = resetAll;
 function validateBeforeRun(sel) {
   const { uni, inv1, inv2, sa, mode, task } = sel;
   const d3 = (f) => f.dims.slice(0, 3).join("×");
-  const sameGrid = (a, b) =>
-    a.dims[0] === b.dims[0] &&
-    a.dims[1] === b.dims[1] &&
-    a.dims[2] === b.dims[2];
+  const sameGrid = (a, b) => sameVoxelGrid(voxelGrid(a), voxelGrid(b));
   for (const [nm, f] of [
     ["INV2", inv2],
     ["INV1", task === "denoise" ? inv1 : null],
@@ -687,7 +686,7 @@ function validateBeforeRun(sel) {
     if (f && !sameGrid(uni, f))
       return `${nm} (${d3(f)}) and UNI (${d3(
         uni
-      )}) have different dimensions. They must be on the same grid.`;
+      )}) are not on the same voxel grid. Dimensions, voxel size, orientation and origin must all match.`;
   }
   if (mode === "sa2rage" && sa && (sa.dims[3] || 1) < 2)
     return `SA2RAGE must be a 2-volume (S1,S2) image, this one is ${sa.dims
@@ -754,6 +753,17 @@ async function runSelectedTask() {
   setProgress(5);
   const t0 = performance.now();
   const dims = uni.dims.slice(0, 3);
+  // Read once, so the run and its parameters.json record the same values.
+  const settings = {
+    mp2rage: mpParams(),
+    sa2rage: saParams(),
+    b1MapType: $("#b1_type").value,
+    referenceAngle: num("#b1_refangle"),
+    extendFov: $("#extendFov") ? $("#extendFov").checked : true,
+    fallbackUncorrected: $("#fallbackUncorr") ? $("#fallbackUncorr").checked : false,
+    maskSource: inv2 ? "INV2" : "UNI",
+    regularization: num("#reg"),
+  };
   if ($("#verbose")?.checked) {
     const roles = state.files
       .filter((f) => f.role !== "(ignore)")
@@ -785,7 +795,7 @@ async function runSelectedTask() {
   }
   const w = freshWorker();
   w.onmessage = (e) => {
-    onResult(e.data, uni, task, mode, t0).catch(error => stopProcessing(undefined, error));
+    onResult(e.data, uni, task, mode, t0, settings).catch(error => stopProcessing(undefined, error));
   };
   // Copy every array we post. postMessage transfers *detach* the source buffer,
   // which would empty state.files and crash the next run. Copies keep the loaded
@@ -810,7 +820,7 @@ async function runSelectedTask() {
       inv1: inv1Copy,
       inv2: inv2Copy,
       dims: Uint32Array.from(dims),
-      reg: num("#reg"),
+      reg: settings.regularization,
     };
     setProgress(15);
     try {
@@ -830,25 +840,25 @@ async function runSelectedTask() {
     inv2: inv2Copy,
     dims: Uint32Array.from(dims),
     uniAff: uni.affine,
-    mp: Float64Array.from(mpParams()),
+    mp: Float64Array.from(settings.mp2rage),
   };
-  msg.fallback = $("#fallbackUncorr") ? $("#fallbackUncorr").checked : false;
+  msg.fallback = settings.fallbackUncorrected;
   const transfer = [uniCopy.buffer, inv2Copy.buffer];
   if (mode === "sa2rage") {
     const saCopy = sa.data.slice();
     msg.sa = saCopy;
     msg.saDims = Uint32Array.from(sa.dims.slice(0, 3));
     msg.saAff = sa.affine;
-    msg.saP = Float64Array.from(saParams());
+    msg.saP = Float64Array.from(settings.sa2rage);
     transfer.push(saCopy.buffer);
   } else {
     const b1Copy = b1.data.slice();
     msg.b1 = b1Copy;
     msg.b1Dims = Uint32Array.from(b1.dims.slice(0, 3));
     msg.b1Aff = b1.affine;
-    msg.kind = { tfl: 0, percent: 1, relative: 2 }[$("#b1_type").value];
-    msg.refAngle = num("#b1_refangle");
-    msg.extendFov = $("#extendFov") ? $("#extendFov").checked : true;
+    msg.kind = B1_MAP_KINDS[settings.b1MapType];
+    msg.refAngle = settings.referenceAngle;
+    msg.extendFov = settings.extendFov;
     transfer.push(b1Copy.buffer);
   }
   setProgress(15);
@@ -879,7 +889,7 @@ function setupViews(list) {
   sel.value = list[0][0];
 }
 
-async function onResult(res, uni, task, mode, t0) {
+async function onResult(res, uni, task, mode, t0, settings) {
   if (!running) return; // stale message from a stopped/replaced worker
   if (res.type === "log") {
     if ($("#verbose")?.checked) log("  · " + res.message);
@@ -994,7 +1004,7 @@ async function onResult(res, uni, task, mode, t0) {
   setProgress(100);
   lastViews = views;
   setupViews(views);
-  await buildDownloads(task, mode, uni);
+  await buildDownloads(task, mode, uni, settings);
   resetPlanes(dims, aff); // axial ~2/3 up, coronal/sagittal mid
   setViewerVisible(true);
   showView($("#viewSel").value);
@@ -1010,24 +1020,12 @@ async function onResult(res, uni, task, mode, t0) {
 }
 
 // ---- downloads -------------------------------------------------------------
-async function buildDownloads(task, mode, uni) {
+async function buildDownloads(task, mode, uni, settings) {
   const dd = $("#downloads");
   derivedFiles = [];
   revokeDownloadUrls();
   dd.innerHTML = "";
-  const b1name =
-    mode === "sa2rage" ? "B1map_from_SA2RAGE.nii.gz" : "B1map.nii.gz";
-  const items =
-    task === "denoise"
-      ? [["unic", "UNI_denoised.nii.gz"]]
-      : task === "b1only"
-      ? [["b1", b1name]]
-      : [
-          ["t1", "T1map.nii.gz"],
-          ["b1", b1name],
-          ["t1u", "T1map_uncorrected.nii.gz"],
-          ["unic", "UNI_b1corrected.nii.gz"],
-        ];
+  const items = outputFiles(task, mode);
   results.render(
     Object.fromEntries(
       items
@@ -1099,15 +1097,13 @@ async function buildDownloads(task, mode, uni) {
       log("DICOM export skipped: " + e);
     }
   }
-  const prov = {
+  const prov = parametersRecord({
     software: "easy-mp2rage-t1map (wasm)",
+    note: "Computed entirely in-browser; no data uploaded.",
     task,
     mode,
-    mp2rage: mpParams(),
-    sa2rage: mode === "sa2rage" ? saParams() : undefined,
-    b1_map_type: mode === "b1map" ? $("#b1_type").value : undefined,
-    note: "Computed entirely in-browser; no data uploaded.",
-  };
+    ...settings,
+  });
   const provBytes = new TextEncoder().encode(JSON.stringify(prov, null, 2));
   derivedFiles.push({ role: "parameters", file: new File([provBytes], "parameters.json", { type: "application/json" }) });
   addLink(

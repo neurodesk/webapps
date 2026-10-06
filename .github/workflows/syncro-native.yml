@@ -4,7 +4,10 @@ on:
   pull_request:
     paths:
       - '.github/workflows/syncro-native.yml'
-      - 'exes/syncro/**'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/syncro/**'
       - 'apps/syncro/**'
       - 'test/independent-workflows.test.mjs'
@@ -12,14 +15,17 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/syncro-native.yml'
-      - 'exes/syncro/**'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/syncro/**'
       - 'apps/syncro/**'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
     inputs:
-      publish_release:
-        description: Attach both verified portable packages to the existing SYNcro release
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing SYNcro release
         type: boolean
         default: false
 
@@ -32,88 +38,22 @@ permissions:
 
 jobs:
   portable:
-    name: ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            platform: linux-x64
-          - os: windows-latest
-            platform: windows-x64
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 22.22.0
-          cache: pnpm
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          components: clippy, rustfmt
-      - name: Install frozen dependencies
-        env:
-          ONNXRUNTIME_NODE_INSTALL: skip
-        run: pnpm install --frozen-lockfile
-      - name: Test portable release code
-        run: |
-          pnpm --filter @neurodesk/syncro test
-          cargo test --manifest-path exes/syncro/Cargo.toml --locked
-          cargo clippy --manifest-path exes/syncro/Cargo.toml --locked -- -D warnings
-          cargo fmt --manifest-path exes/syncro/Cargo.toml --check
-          python exes/syncro/scripts/test_portable_release.py
-      - name: Package and verify the extracted archive
-        run: |
-          python exes/syncro/scripts/portable_release.py package ${{ matrix.platform }}
-          python exes/syncro/scripts/portable_release.py verify ${{ matrix.platform }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: syncro-${{ matrix.platform }}-archive
-          path: |
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.zip
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.zip.sha256
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.zip.validation.txt
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.tar.gz
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.tar.gz.sha256
-            exes/syncro/dist/syncro-*-${{ matrix.platform }}.tar.gz.validation.txt
-          if-no-files-found: error
-          retention-days: 7
-
-  release:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_release
-    needs: [portable]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - name: Check release target
-        id: target
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          version=$(node -p "require('./packages/syncro/package.json').version")
-          tag="syncro-v$version"
-          gh release view "$tag" >/dev/null
-          test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          pattern: syncro-*-x64-archive
-          path: exes/syncro/dist/portable
-          merge-multiple: true
-      - name: Check portable release assets
-        run: python3 exes/syncro/scripts/portable_release.py verify-release-set exes/syncro/dist/portable
-      - name: Attach verified release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.target.outputs.tag }}
-        run: gh release upload "$RELEASE_TAG" exes/syncro/dist/portable/* --clobber
+    with:
+      package: packages/syncro
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

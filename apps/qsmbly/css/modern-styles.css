@@ -1372,19 +1372,6 @@ select {
   color: var(--nd-color-text-muted);
 }
 
-.console-clear {
-  font-size: 0.7rem;
-  color: var(--nd-color-text-dim);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: color var(--nd-transition-fast);
-}
-
-.console-clear:hover {
-  color: var(--nd-color-text-muted);
-}
-
 .console-output {
   flex: 1;
   overflow-y: auto;

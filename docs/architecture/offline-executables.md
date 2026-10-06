@@ -19,7 +19,7 @@ The Apple installer carries a stapled notarization ticket so installation can be
 ## Delivery order
 
 1. Finish Greedy's existing Rust CLI distribution and run the release workflow on all three target runners.
-2. Package Easy MP2RAGE's existing Rust CLI. Add Linux and Windows distributions for SynthSeg, then its npm CLI. Add macOS packaging for SYNcro. Verify SynthSR's current release assets against the contract.
+2. Package Easy MP2RAGE's existing Rust CLI. Add Linux and Windows distributions for SynthSeg, then its npm CLI. Publish SYNcro's signed macOS installer. Verify SynthSR's current release assets against the contract.
 3. Adapt engines already usable outside a browser: ANTs, EdgeReg, NiiMath, dicompare and FireANTs. Check upstream packaging and licenses before choosing an adapter or a native bundle.
 4. Extract the inference and quantitative pipelines listed below. Prove filesystem input/output and offline model resolution before packaging. Preserve the browser algorithm and numerical tests.
 5. Address GPU and video workflows after proving their runtime on each target. Avoid announcing platform support based on compilation alone.
@@ -34,7 +34,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `easy-mp2rage` | T1 mapping, B1 correction, UNI denoising | `apps/easy-mp2rage/crates/mp2rage-cli` and `mp2rage_t1/cli.py` already provide CLIs. Package the Rust binary and synchronize its version. |
 | `synthsr` | Super-resolution image synthesis | `exes/synthsr`, `packages/synthsr` and `.github/workflows/synthsr-native.yml` provide native target packaging, Apple notarization and a Node CLI. Audit published assets and offline model provisioning. |
 | `synthseg` | Brain segmentation | `exes/synthseg` has a CLI and macOS release workflow. Add Linux/Windows builds, dependency packaging and npm CLI delivery. The current JS package is private and browser-oriented. |
-| `syncro` | MNI normalization and aligned lesion transformation | `exes/syncro` launches a private Node runtime. Linux/Windows portable packages and npm CLI exist. Add macOS packaging and explicit offline asset provisioning. The Node workflow is narrower than the browser workflow. |
+| `syncro` | MNI normalization and aligned lesion transformation | `exes/node-cli` launches a private Node runtime. Linux x64 and Windows x64 portable packages, a macOS arm64 installer and an npm CLI exist; each portable package bundles its models. The Node workflow is narrower than the browser workflow. |
 | `ants` | Affine and SyN registration | `packages/registration` already runs its kernel under Node for SYNcro. Add an app-level command and distribute the runtime. Preserve the WASM memory limit in the command contract. |
 | `edgereg` | Affine registration | `apps/edgereg/src/main.js` owns orchestration around niimath. Extract file-based execution and reuse the existing engine. |
 | `niimath` | Image maths | `apps/niimath/package.json` uses `@niivue/niimath`. Assess upstream native distribution and reuse it rather than porting the algorithm. |
@@ -48,7 +48,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `seedseg` | Fiducial marker segmentation | `apps/seedseg/web/js/inference-worker.js`. Add headless inference, local model resolution and packaging. |
 | `deface` | Batch MRI defacing | `apps/deface/src/main.ts` and `src/mindgrab`. Separate reusable execution from UI and provide headless inference. |
 | `browserqc` | Segmentation and QC reports | `apps/browserqc/src/qc.ts` separates metrics, but `src/main.ts` owns inference. Add headless execution and report export. |
-| `topofit` | Cortical surface reconstruction | `packages/topofit/src/pipeline.js` and `src/browser.js`. Supply Node/native sessions, offline assets and meshing adapters. |
+| `topofit` | Cortical surface reconstruction | `packages/topofit/bin/topofit.js` runs reconstruction on the CPU with `onnxruntime-node`; `exes/node-cli` packages it with its models for Linux x64, Windows x64 and macOS arm64. Surface analysis and DICOM input remain web-only. |
 | `dwi2trx` | Tensor fitting and tractography | `apps/dwi2trx/src/dwi2trx` needs WebGPU and subgroup support for tracking. Prove a headless GPU runtime and retain the vendored dtifit-enabled niimath. |
 | `brain2print` | Segmentation to printable mesh | `apps/brain2print/src/mesh.js` has pure mesh validation. Extract the `src/main.js` pipeline with headless MindGrab and niimath meshing. |
 | `brain-extraction` | BET, MindGrab and SynthStrip brain extraction | Packaged in suite 0.4.20260915 with pinned models, the shared extraction adapters and an offline BET extraction/export check. |

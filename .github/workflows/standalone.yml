@@ -17,6 +17,10 @@ concurrency:
   group: standalone-daily
   cancel-in-progress: false
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   bundle:
     runs-on: ubuntu-22.04

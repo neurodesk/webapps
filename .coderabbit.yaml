@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  # No "Draft PR not reviewed" / "Review skipped" comments.
+  review_status: false
+  auto_review:
+    drafts: false
