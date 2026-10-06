@@ -153,7 +153,6 @@ function offsetRawPhantom(venc) {
 test('raw 0–4095 phase is velocity once the VENC is given', () => {
   const raw = offsetRawPhantom(100);
   assert.equal(phaseEncoding(raw.phase), 'raw-offset');
-  assert.throws(() => detectCarotids(raw), /raw phase \(0–4095\).*VENC/);
   const found = detectCarotids(raw, { venc: 100 });
   const reference = detectCarotids(velocityPhantom());
   assert.equal(found.method, 'velocity');
@@ -162,6 +161,16 @@ test('raw 0–4095 phase is velocity once the VENC is given', () => {
   // 60 cm/s at VENC 100 is stored as round(2048 + 1228.8) = 3277, which decodes to 60.0390625.
   assert.ok(Math.abs(found.left.velocity[5] - 60) < 0.05);
   assert.ok(Math.abs(found.left.mean / reference.left.mean - 1) < 0.01);
+});
+
+test('without a VENC, a series centred on 2048 keeps the lab\'s variability path', () => {
+  // The tilted phantom's static tissue at 2048: unsigned and centred, as raw 0–4095 phase is.
+  const centred = tiltedPhantom();
+  centred.phase = centred.phase.map((value) => Math.round(2048 + (value - 100) * 2048 / 100));
+  assert.equal(phaseEncoding(centred.phase), 'raw-offset');
+  const found = detectCarotids(centred, { candidatePercentile: 97 });
+  assert.equal(found.method, 'variability');
+  assert.equal(detectCarotids(centred, { candidatePercentile: 97, venc: 100 }).method, 'velocity');
 });
 
 test('a VENC with an unsigned speed image beyond ±1000 is refused, not guessed', () => {

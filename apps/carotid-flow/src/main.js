@@ -15,7 +15,7 @@ import {
 import { createFloat32Nifti, downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
-import { detectCarotids, meanFrames } from '@neurodesk/carotid-flow';
+import { detectCarotids, meanFrames, phaseEncoding } from '@neurodesk/carotid-flow';
 import { curvesTable, measurements, stem, variabilityImage } from '@neurodesk/carotid-flow/outputs';
 import { readSeries, readVolume } from '@neurodesk/carotid-flow/series';
 import { flowChartSvg } from './chart.js';
@@ -299,7 +299,7 @@ function readSetting(id, low, high) {
   return value;
 }
 
-/** The VENC is optional: only raw ±4096 or 0–4095 phase needs it. */
+/** The VENC is optional: raw ±4096 phase needs it, and raw 0–4095 phase is decoded with it. */
 function readVenc() {
   if (!$('venc').value.trim()) return undefined;
   return readSetting('venc', 0, 1000);
@@ -426,6 +426,9 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
       : `left ${left.pixels.length} px, right ${right.pixels.length} px`;
     status(`Both carotids found · ${summary} · systolic peak at frame ${right.peakFrame + 1}`);
     if (found.qc?.flag) status('Review flagged carotid pair · see quality checks in Flow curves');
+    if (options.venc === undefined && phaseEncoding(source.phase) === 'raw-offset') {
+      status('Looks like raw 0–4095 phase; enter the VENC to measure flow');
+    }
     log.log(`Detection took ${Math.round(performance.now() - started)} ms`);
     return result;
   } catch (error) {

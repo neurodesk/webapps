@@ -177,20 +177,20 @@ export function phaseVelocity(phase, venc) {
   return phase.map(value => (value - raw.zero) * scale);
 }
 
-/** The stored range of raw phase, such as `±4096`, or undefined for velocity and speed. */
-export function rawPhaseRange(phase) {
-  return RAW_ENCODINGS[phaseEncoding(phase)]?.range;
-}
-
 /**
- * Find both carotids and their curves: the velocity method for velocity or raw phase, the port
- * of the lab's script for an unsigned speed image. A VENC beside an unsigned series that is not
- * raw 0–4095 phase is refused, since the two cannot then be told apart.
+ * Find both carotids and their curves: the velocity method for velocity, ±4096 phase, or 0–4095
+ * phase given a VENC; otherwise the port of the lab's script, as for an unsigned speed image.
+ * A VENC beside an unsigned series above 1000 that is not centred on 2048 is refused, since it
+ * cannot then be told apart from a speed image.
  * @param {{ amplitude: ArrayLike<number>, phase: ArrayLike<number>, nx: number, ny: number,
  *           phases: number, affine: number[][], voxelSize?: number[] }} series
  */
 export function detectCarotids(series, options = {}) {
-  if (phaseEncoding(series.phase) !== 'speed') return detectFromVelocity(series, options);
+  const encoding = phaseEncoding(series.phase);
+  if (encoding === 'velocity' || encoding === 'raw-signed') return detectFromVelocity(series, options);
+  // Without a VENC an unsigned series keeps the lab's path, whatever its median.
+  if (encoding === 'raw-offset' && options.venc === undefined) return detectFromVariability(series, options);
+  if (encoding === 'raw-offset') return detectFromVelocity(series, options);
   if (options.venc !== undefined && isRawPhase(series.phase)) {
     throw new Error('A VENC was given, but this phase series is unsigned and not centred on 2048, so it cannot be told apart from a speed image. Leave the VENC empty to analyse it as a speed image.');
   }

@@ -18,7 +18,8 @@ through the neck and writes their flow curves. SERIES holds the amplitude frames
 followed by the same number of phase frames; otherwise give the amplitude and
 phase series as two files, amplitude first.
 
-Signed velocity gives flow in ml/min. Raw phase (±4096 or 0–4095) needs --venc.
+Signed velocity gives flow in ml/min. Raw ±4096 phase needs --venc, and raw
+0–4095 phase (centred on 2048) gives flow only with --venc.
 An unsigned speed image goes through the variability method and gives
 intensity curves; the geometry settings apply only to that method.
 

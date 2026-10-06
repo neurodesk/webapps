@@ -15,20 +15,23 @@ voxel spacing; the app refuses a pair that does not.
 
 ## Two methods, chosen by the phase data
 
-The phase series decides (`phaseEncoding`). A real negative lobe means signed velocity or raw
-±4096 phase. An unsigned series is raw 0–4095 phase when its values stay within 0–4095, exceed
-1000 and have a median between 1536 and 2560, since raw phase sits at 2048 wherever nothing
-moves. Any other unsigned series is a speed image.
+The phase series decides (`phaseEncoding`), together with the VENC. A real negative lobe means
+signed velocity or raw ±4096 phase, which take the velocity method. An unsigned series looks
+like raw 0–4095 phase when its values stay within 0–4095, exceed 1000 and have a median between
+1536 and 2560, since raw phase sits at 2048 wherever nothing moves. It takes the velocity method
+only when a VENC is entered. Without a VENC every unsigned series takes the variability method,
+as before, so the lab's exports are never refused or rerouted by this check; the status bar
+then notes that the series looks like raw phase.
 
 ### Velocity: `detectFromVelocity`
 
 Phase already scaled to cm/s (Philips and GE through dcm2niix) is used as is. Raw 12-bit
-Siemens phase needs the VENC: rescaled phase (±4096) maps ±4096 to ±VENC, and unrescaled phase
-(0–4095) maps 0 and 4096 to ±VENC around 2048. The app asks for the VENC rather than guessing.
-A VENC entered for an unsigned series above 1000 that is not centred on 2048 is refused,
-because such a series cannot be told apart from a speed image; leave the VENC empty to analyse
-it as one. Before this check, raw 0–4095 phase went to the variability method and the VENC was
-ignored.
+Siemens phase is decoded with the VENC: rescaled phase (±4096) maps ±4096 to ±VENC and needs it,
+and unrescaled phase (0–4095) maps 0 and 4096 to ±VENC around 2048 once a VENC is entered. The
+app asks for the VENC rather than guessing. A VENC entered for an unsigned series above 1000
+that is not centred on 2048 is refused, because such a series cannot be told apart from a speed
+image; leave the VENC empty to analyse it as one. Before this change an entered VENC was ignored
+for raw 0–4095 phase, which went to the variability method.
 
 1. The head mask is the port's (below).
 2. Vessels are 8-connected blobs, one direction at a time, of mean velocity above a quarter of

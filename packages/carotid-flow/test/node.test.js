@@ -72,12 +72,15 @@ test('raw ±4096 phase without a VENC is refused before anything is written', as
   await assert.rejects(readdir(output), { code: 'ENOENT' });
 });
 
-test('raw 0–4095 phase without a VENC is refused, and decoded to velocity with one', async (t) => {
+test('raw 0–4095 phase is decoded with --venc and keeps the variability path without it', async (t) => {
   const directory = await workspace(t);
   const input = join(directory, 'raw.nii');
   // Unrescaled Siemens phase: zero velocity at 2048, VENC 100 cm/s at 4096.
   await writeFile(input, combined((value) => Math.round(2048 + (value - 100) * 2048 / 100)));
-  await assert.rejects(detect({ inputs: [input], output: join(directory, 'refused') }), /raw phase \(0–4095\).*--venc/);
+  const notes = [];
+  const unscaled = await detect({ inputs: [input], output: join(directory, 'unscaled'), parameters: { candidatePercentile: '97' }, onProgress: (message) => notes.push(message) });
+  assert.equal(unscaled.measurements.method, 'variability');
+  assert.ok(notes.includes('Looks like raw 0–4095 phase; give --venc to measure flow'), notes.join(' | '));
   const result = await detect({ inputs: [input], output: join(directory, 'results'), parameters: { venc: '100' } });
   assert.equal(result.measurements.method, 'velocity');
 });
