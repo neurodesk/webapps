@@ -28,6 +28,7 @@ bash run.sh
 - **Spine labels from TotalSpineSeg**: vertebrae, discs and disc points come from the `TotalSpineSeg` task; `sct_label_vertebrae` is not ported
 - **Morphometry** (`sct_process_segmentation`): cross-sectional area, AP and RL diameter, eccentricity, orientation, solidity, cord angles and length of any mask of the session, per slice, per vertebral level or aggregated, as a CSV in SCT's column layout
 - **Lesion metrics** (`sct_analyze_lesion -m -s -i`): volume, length, width, equivalent diameter, axial damage ratio, midsagittal measures and tissue bridges for every lesion, as a CSV with SCT's `measures` columns
+- **Manual edits**: correct any result mask (cord, gray matter, lesion, TotalSpineSeg labels and discs) or draw a new cord or lesion mask with FreeBrowse's pen, eraser, fill and undo; the edited mask replaces the result for download, overlay, lesion metrics and morphometry, and the model's mask can be restored
 - **Configurable**: overlap, probability threshold, component size filtering
 - **FreeBrowse viewer**: zoom and pan in 2D slices and the 3D render, layout selection, intensity window, per-layer opacity, colormap and visibility, image download, and a Drawing tab
 - **Privacy**: patient image data stays confidential and browser-local; non-patient usage statistics may be collected as telemetry
@@ -69,6 +70,7 @@ The viewer is [FreeBrowse](https://github.com/freesurfer/freebrowse) around NiiV
 - **Zoom and pan**: choose **pan/zoom** beside "Right drag" in the viewer toolbar, then scroll to zoom and right-drag to pan. On a touch screen, pinch to zoom and drag with two fingers to pan, in any mode. In the 3D render the wheel always zooms. The ⟲ button resets view and contrast.
 - **Layers**: the sidebar button opens the Volumes tab with visibility, opacity, intensity window and colormap for every layer, and Download for the current images. The Results eye buttons in the left sidebar toggle the same layers.
 - **SCT's own toolbar** keeps only what FreeBrowse lacks: Single/Compare for multiple loaded images, and the PNG screenshot.
+- **Editing a mask**: open **Edit masks**, choose a result (or *New spinal cord mask* / *New lesion mask*) and the label to paint, and press **Edit mask**. The mask moves onto FreeBrowse's drawing layer and its Drawing tab opens: set Draw Mode to **Pen**, tick **Pen Erases** to erase, keep **Pen Fill** to fill a closed outline, and use **Undo**. **Apply edits** (or FreeBrowse's Save Drawing) makes the drawing the result: the Results row reads *(edited)* or *(drawn)*, the download is `<name>_edited.nii` with the model output's header, and lesion metrics and morphometry made from that mask are recomputed. **Restore model mask** brings back the model's output. A new run, a new image or Clear All asks first while an edit is not applied or not downloaded.
 - Without WebGL2 the app shows a 2D axial preview instead; segmentation, results and downloads still work.
 
 ## Pipeline
