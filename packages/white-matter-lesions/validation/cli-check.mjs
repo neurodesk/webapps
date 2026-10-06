@@ -125,7 +125,8 @@ try {
   const names = outputNames('MSLesSeg_P57_T1_FLAIR.nii.gz');
   const cli = await segment(input, join(work, 'cli'), names, 1);
   const reference = join(work, 'web');
-  await webReference({ input, output: reference });
+  // The release check runs with an empty home that must stay empty, so the models go beside the example.
+  await webReference({ input, output: reference, cacheDir: join(tmpdir(), 'neurodesk-flames-validation', 'models') });
   compareWithWorker(names, cli, await files(reference));
   await segment(input, join(work, 'cli-ensemble'), names, 5);
 } finally {
