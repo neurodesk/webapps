@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { access, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -97,6 +98,15 @@ test('hardware-GPU apps run their browser suite on a macOS runner with Metal', a
   assert.match(job['runs-on'], /^macos-/);
   assert.match(job.strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.gpu_apps\)/);
   assert.equal(job.env.NEURODESK_HARDWARE_GPU, '1');
+  assert.ok(job.steps.some((step) => step.run?.includes('scripts/gpu-test-data.mjs')), 'the job downloads test data');
+});
+
+test('every hardware-GPU app has its test data provisioned', async () => {
+  const registry = await loadAppsRegistry();
+  const usage = spawnSync(process.execPath, [join(repoRoot, 'scripts/gpu-test-data.mjs')], { encoding: 'utf8' });
+  assert.equal(usage.status, 2);
+  const provisioned = usage.stderr.match(/<([^>]+)>/)[1].split('|').sort();
+  assert.deepEqual(provisioned, registry.apps.filter((app) => app.ci.hardware_gpu).map((app) => app.id).sort());
 });
 
 test('registry validation rejects ci.hardware_gpu without a browser suite', async () => {

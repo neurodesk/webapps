@@ -70,40 +70,48 @@ export function verifySynthseg(kind, report) {
   for (const result of report.results) assert.equal(result.pass, true, 'A scientific case is incomplete or failed');
 }
 
-export async function prepareCatalog(cache, evidence, fetchImpl = fetch) {
+// Downloads an app's pinned example into cache/<app>/, checked against the
+// offline asset lock. A cached copy is reused only if it still matches.
+export async function fetchPinnedExample(app, exampleId, roles, cache, fetchImpl = fetch) {
   const inventory = await readJson(join(root, 'registry/offline-assets.lock.json'));
+  const examples = await readJson(join(root, 'apps', app, 'examples.json'));
+  const example = examples.find(({ id }) => id === exampleId);
+  assert.ok(example, `${app}: missing pinned example ${exampleId}`);
+  const assets = [];
+  for (const role of roles) {
+    const file = example.files.find((entry) => entry.role === role);
+    assert.ok(file && /^[^/\\]+$/.test(file.name), `${app}: missing or invalid example file`);
+    assert.match(file.url, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[a-f0-9]{40}\//);
+    const locked = inventory.assets[file.url];
+    assert.ok(locked?.sha256 && locked.bytes > 0, `${app}: example has no locked checksum and size`);
+    if (file.sha256) assert.equal(file.sha256, locked.sha256);
+    const path = resolve(cache, app, file.name);
+    await mkdir(dirname(path), { recursive: true });
+    let bytes;
+    try { bytes = await readFile(path); }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      console.log(`Downloading ${app}/${file.name}`);
+      const response = await fetchImpl(file.url, { signal: AbortSignal.timeout(600_000) });
+      if (!response.ok) throw new Error(`${response.status}: ${file.url}`);
+      bytes = Buffer.from(await response.arrayBuffer());
+      assert.equal(checksum(bytes), locked.sha256, `${path}: downloaded checksum mismatch`);
+      assert.equal(bytes.length, locked.bytes, `${path}: downloaded size mismatch`);
+      const temporary = `${path}.${process.pid}.partial`;
+      await writeFile(temporary, bytes);
+      await rename(temporary, path);
+    }
+    assert.equal(checksum(bytes), locked.sha256, `${path}: cached checksum mismatch; remove this file and retry`);
+    assert.equal(bytes.length, locked.bytes, `${path}: cached size mismatch`);
+    assets.push({ app, example: exampleId, role, path, url: file.url, bytes: bytes.length, sha256: locked.sha256 });
+  }
+  return assets;
+}
+
+export async function prepareCatalog(cache, evidence, fetchImpl = fetch) {
   const assets = [];
   for (const [app, exampleId, roles] of [['dwi2trx','dwi-gradients',['image','bval','bvec']], ['syncro','trace-t1',['primary']], ['topofit','openneuro-t1',['image']]]) {
-    const examples = await readJson(join(root, 'apps', app, 'examples.json'));
-    const example = examples.find(({ id }) => id === exampleId);
-    assert.ok(example, `${app}: missing pinned example ${exampleId}`);
-    for (const role of roles) {
-      const file = example.files.find((entry) => entry.role === role);
-      assert.ok(file && /^[^/\\]+$/.test(file.name), `${app}: missing or invalid example file`);
-      assert.match(file.url, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[a-f0-9]{40}\//);
-      const locked = inventory.assets[file.url];
-      assert.ok(locked?.sha256 && locked.bytes > 0, `${app}: example has no locked checksum and size`);
-      if (file.sha256) assert.equal(file.sha256, locked.sha256);
-      const path = resolve(cache, app, file.name);
-      await mkdir(dirname(path), { recursive: true });
-      let bytes;
-      try { bytes = await readFile(path); }
-      catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-        console.log(`Downloading ${app}/${file.name}`);
-        const response = await fetchImpl(file.url, { signal: AbortSignal.timeout(600_000) });
-        if (!response.ok) throw new Error(`${response.status}: ${file.url}`);
-        bytes = Buffer.from(await response.arrayBuffer());
-        assert.equal(checksum(bytes), locked.sha256, `${path}: downloaded checksum mismatch`);
-        assert.equal(bytes.length, locked.bytes, `${path}: downloaded size mismatch`);
-        const temporary = `${path}.${process.pid}.partial`;
-        await writeFile(temporary, bytes);
-        await rename(temporary, path);
-      }
-      assert.equal(checksum(bytes), locked.sha256, `${path}: cached checksum mismatch; remove this file and retry`);
-      assert.equal(bytes.length, locked.bytes, `${path}: cached size mismatch`);
-      assets.push({ app, example: exampleId, role, path, url: file.url, bytes: bytes.length, sha256: locked.sha256 });
-    }
+    assets.push(...await fetchPinnedExample(app, exampleId, roles, cache, fetchImpl));
   }
   const path = join(root, 'exes/synthseg/test/fixtures/small.nii.gz');
   const bytes = await readFile(path);
