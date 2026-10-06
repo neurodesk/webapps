@@ -47,3 +47,15 @@ test('failed download leaves inputs untouched and can be retried', async () => {
   await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
   assert.equal(loaded.length, 1);
 });
+
+test('an example does not replace an image with unsaved manual edits unless the user agrees', async () => {
+  const { app, options, loaded } = await loadAdapter();
+  const files = examples[0].files.map(file => new File(['example'], file.name));
+  let answer = false;
+  app.manualEdits = { confirmDiscard: () => answer };
+  await assert.rejects(options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} }), { name: 'AbortError' });
+  assert.deepEqual(loaded, []);
+  answer = true;
+  await options.onLoad(examples[0], { fetchFiles: async () => files, assertCurrent() {} });
+  assert.equal(loaded.length, 1);
+});

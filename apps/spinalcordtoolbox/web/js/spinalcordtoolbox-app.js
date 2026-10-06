@@ -270,7 +270,7 @@ export class SpinalCordToolboxApp {
       scope: document.querySelector('.app-container'),
       examples,
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
-        if (!this.manualEdits.confirmDiscard('Loading the example')) {
+        if (this.manualEdits && !this.manualEdits.confirmDiscard('Loading the example')) {
           throw new DOMException('Loading the example was cancelled to keep manual edits.', 'AbortError');
         }
         const files = await fetchFiles();
