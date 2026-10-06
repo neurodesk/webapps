@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { createNiftiHeaderFromVolume, createUint8Nifti, decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io';
-import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, splitSeries, velocityScale } from '@neurodesk/carotid-flow';
+import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, phaseEncoding, phaseVelocity, splitSeries } from '@neurodesk/carotid-flow';
 import { stem } from '@neurodesk/carotid-flow/outputs';
 import { tiltedPhantom } from '@neurodesk/carotid-flow/phantom';
 import { flowChartSvg, tickStep } from '../src/chart.js';
@@ -138,9 +138,38 @@ test('raw phase needs the VENC and is scaled by it', () => {
   const found = detectCarotids(raw, { venc: 100 });
   // The phantom stores float32, as NIfTI does, so the round trip is exact to float precision.
   assert.ok(Math.abs(found.left.velocity[5] - 60) < 1e-4);
-  assert.equal(velocityScale([-50, 80], undefined), 1);
+  assert.equal(phaseVelocity(Float32Array.from([-50, 80]), undefined)[1], 80);
   assert.equal(isSignedPhase([0, 3, 900]), false);
   assert.equal(isSignedPhase([-40, 3, 90]), true);
+});
+
+/** Siemens phase as stored before rescaling: 0–4095, zero velocity at 2048, ±VENC at 0 and 4096. */
+function offsetRawPhantom(venc) {
+  const series = velocityPhantom();
+  series.phase = series.phase.map((velocity) => Math.round(2048 + velocity * 2048 / venc));
+  return series;
+}
+
+test('raw 0–4095 phase is velocity once the VENC is given', () => {
+  const raw = offsetRawPhantom(100);
+  assert.equal(phaseEncoding(raw.phase), 'raw-offset');
+  assert.throws(() => detectCarotids(raw), /raw phase \(0–4095\).*VENC/);
+  const found = detectCarotids(raw, { venc: 100 });
+  const reference = detectCarotids(velocityPhantom());
+  assert.equal(found.method, 'velocity');
+  assert.deepEqual(found.left.centroid, reference.left.centroid);
+  assert.deepEqual(found.right.centroid, reference.right.centroid);
+  // 60 cm/s at VENC 100 is stored as round(2048 + 1228.8) = 3277, which decodes to 60.0390625.
+  assert.ok(Math.abs(found.left.velocity[5] - 60) < 0.05);
+  assert.ok(Math.abs(found.left.mean / reference.left.mean - 1) < 0.01);
+});
+
+test('a VENC with an unsigned speed image beyond ±1000 is refused, not guessed', () => {
+  const speed = phantom();
+  speed.phase = speed.phase.map((value) => value * 20);
+  assert.equal(phaseEncoding(speed.phase), 'speed');
+  assert.equal(detectCarotids(speed, { candidatePercentile: 97 }).method, 'variability');
+  assert.throws(() => detectCarotids(speed, { candidatePercentile: 97, venc: 100 }), /speed image/);
 });
 
 test('reads the in-plane axes from the affine', () => {

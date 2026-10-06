@@ -15,7 +15,7 @@
   },
   "venc": {
     "type": "number",
-    "description": "Velocity encoding in cm/s; required for raw ±4096 phase.",
+    "description": "Velocity encoding in cm/s; required for raw ±4096 or 0–4095 phase.",
     "minimum": 1e-06,
     "maximum": 999.999999
   },

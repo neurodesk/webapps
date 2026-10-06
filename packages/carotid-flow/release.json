@@ -9,7 +9,7 @@
     "notes": [
       "Give one series holding the amplitude frames followed by the phase frames,",
       "or the amplitude and phase series as two files, amplitude first.",
-      "Raw phase stored as +-4096 needs --venc. Add --help for every setting.",
+      "Raw phase (+-4096 or 0-4095) needs --venc. Add --help for every setting.",
       "No network connection is required. Input is NIfTI only: convert DICOM with",
       "dcm2niix first, or use the web app. Label editing needs the web app.",
       "",

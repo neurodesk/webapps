@@ -299,7 +299,7 @@ function readSetting(id, low, high) {
   return value;
 }
 
-/** The VENC is optional: only raw ±4096 phase needs it. */
+/** The VENC is optional: only raw ±4096 or 0–4095 phase needs it. */
 function readVenc() {
   if (!$('venc').value.trim()) return undefined;
   return readSetting('venc', 0, 1000);

@@ -15,13 +15,20 @@ voxel spacing; the app refuses a pair that does not.
 
 ## Two methods, chosen by the phase data
 
-The phase series decides (`isSignedPhase`): a real negative lobe means signed velocity.
+The phase series decides (`phaseEncoding`). A real negative lobe means signed velocity or raw
+±4096 phase. An unsigned series is raw 0–4095 phase when its values stay within 0–4095, exceed
+1000 and have a median between 1536 and 2560, since raw phase sits at 2048 wherever nothing
+moves. Any other unsigned series is a speed image.
 
-### Signed velocity: `detectFromVelocity`
+### Velocity: `detectFromVelocity`
 
-Phase already scaled to cm/s (Philips and GE through dcm2niix) is used as is. Raw 12-bit phase
-(±4096, Siemens) needs the VENC, which maps ±4096 to ±VENC; the app asks for it rather than
-guessing.
+Phase already scaled to cm/s (Philips and GE through dcm2niix) is used as is. Raw 12-bit
+Siemens phase needs the VENC: rescaled phase (±4096) maps ±4096 to ±VENC, and unrescaled phase
+(0–4095) maps 0 and 4096 to ±VENC around 2048. The app asks for the VENC rather than guessing.
+A VENC entered for an unsigned series above 1000 that is not centred on 2048 is refused,
+because such a series cannot be told apart from a speed image; leave the VENC empty to analyse
+it as one. Before this check, raw 0–4095 phase went to the variability method and the VENC was
+ignored.
 
 1. The head mask is the port's (below).
 2. Vessels are 8-connected blobs, one direction at a time, of mean velocity above a quarter of
@@ -98,8 +105,8 @@ NIfTI series on a computer without a browser or network. See the "Command line" 
 ## Tests
 
 - `pnpm --filter carotid-flow test`: MATLAB `prctile` values, synthetic neck phantoms for both
-  methods in both orientations and flow directions, raw-phase scaling, error paths and the
-  chart. `CAROTID_FLOW_OPEN_EXAMPLE=<directory holding the two example files>` adds the check
+  methods in both orientations and flow directions, raw ±4096 and 0–4095 phase decoding,
+  error paths and the chart. `CAROTID_FLOW_OPEN_EXAMPLE=<directory holding the two example files>` adds the check
   against PCMCalculator; `CAROTID_FLOW_EXAMPLE=<the lab's unsigned export>` adds the check that
   the port selects the script's vessels (12 and 4 pixels). That export is not public.
 - `pnpm --filter carotid-flow test:e2e`: the hosted example through detection and both

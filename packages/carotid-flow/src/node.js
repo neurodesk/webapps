@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promise
 import { basename, join, resolve } from 'node:path';
 import { operationParametersSchema } from '@neurodesk/webapp-components/automation/parameters';
 import packageJson from '../package.json' with { type: 'json' };
-import { detectCarotids, isRawPhase, isSignedPhase } from './carotid.js';
+import { detectCarotids, rawPhaseRange } from './carotid.js';
 import { curvesTable, labelImages, measurements, variabilityImage } from './outputs.js';
 import PARAMETERS from './parameters.json' with { type: 'json' };
 import { tiltedPhantom } from './phantom.js';
@@ -76,8 +76,9 @@ export async function detect({ inputs, output, parameters = {}, onProgress = () 
   onProgress('Reading the phase-contrast series');
   const files = await Promise.all(inputs.map(inputFile));
   const series = await readSeries(files.length === 1 ? { combined: files[0] } : { amplitude: files[0], phase: files[1] });
-  if (isSignedPhase(series.phase) && isRawPhase(series.phase) && settings.venc === undefined) {
-    throw new Error('This phase series is stored as raw phase (±4096). Give its velocity encoding in cm/s with --venc.');
+  const rawRange = rawPhaseRange(series.phase);
+  if (rawRange && settings.venc === undefined) {
+    throw new Error(`This phase series is stored as raw phase (${rawRange}). Give its velocity encoding in cm/s with --venc.`);
   }
   onProgress('Detecting carotids');
   const found = detectCarotids(series, settings);

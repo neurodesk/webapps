@@ -65,8 +65,10 @@ The settings are the web app's advanced settings and automation parameters:
 `--candidate-percentile`, `--head-percentile`, `--venc`, `--tilt-limit`,
 `--posterior`, `--anterior`, `--lateral`, `--midline` and `--min-separation`.
 They are checked against the same schema as `apps/carotid-flow/automation.json`,
-and `--help` lists their ranges and defaults. Raw phase stored as ±4096 needs
-`--venc` in cm/s; without it the command stops before writing anything.
+and `--help` lists their ranges and defaults. Raw phase stored as ±4096 or 0–4095
+needs `--venc` in cm/s; without it the command stops before writing anything. A `--venc` beside
+an unsigned series that is not centred on 2048 is refused, because it cannot be told apart from
+a speed image.
 
 `OUTPUT_DIR` must be new or empty. Progress and a one-line summary go to
 standard error. An error prints one message and exits with status 1.

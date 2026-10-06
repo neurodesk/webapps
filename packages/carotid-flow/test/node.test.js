@@ -72,6 +72,16 @@ test('raw ±4096 phase without a VENC is refused before anything is written', as
   await assert.rejects(readdir(output), { code: 'ENOENT' });
 });
 
+test('raw 0–4095 phase without a VENC is refused, and decoded to velocity with one', async (t) => {
+  const directory = await workspace(t);
+  const input = join(directory, 'raw.nii');
+  // Unrescaled Siemens phase: zero velocity at 2048, VENC 100 cm/s at 4096.
+  await writeFile(input, combined((value) => Math.round(2048 + (value - 100) * 2048 / 100)));
+  await assert.rejects(detect({ inputs: [input], output: join(directory, 'refused') }), /raw phase \(0–4095\).*--venc/);
+  const result = await detect({ inputs: [input], output: join(directory, 'results'), parameters: { venc: '100' } });
+  assert.equal(result.measurements.method, 'velocity');
+});
+
 test('an amplitude and phase pair on different grids is refused', async (t) => {
   const directory = await workspace(t);
   const series = tiltedPhantom();
