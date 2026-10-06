@@ -97,17 +97,29 @@ Both images keep the input grid and affine.
 ### Accuracy
 
 `validation/cli-check.mjs` runs the command on the app's pinned example
-(MSLesSeg P57, a clinical 2.3 mm FLAIR) and compares it with the web app's
-worker path on ONNX Runtime Web's WebAssembly backend
-(`validation/web-reference.mjs`). The file names and NIfTI headers must be
-identical, the table must be the app's table of the command's mask, and the
-masks must agree at Dice 0.998 or better. That limit is the cross-runtime
-agreement the app's port check measured (`apps/white-matter-lesions/validation/README.md`):
-two ONNX Runtimes round floats differently, and that is the only difference here.
+(MSLesSeg P57, a clinical 2.3 mm FLAIR) with `--folds 1` and `--folds 5`. It
+checks each run in two ways.
+
+- Against the web app's results, recorded in Chromium by the app's end-to-end
+  test and stored in `apps/white-matter-lesions/validation/browser-reference.json`.
+  The mask must be binary and equal to the probability above 0.5. The
+  probability must be finite and within [0, 1]. The lesion count must be within
+  2 of the browser's. The mask voxels, lesion volume and summed probability
+  (in ml) must be within 1 % of the browser's. The browser run shares no
+  process with the check, so a regression in the shared pipeline fails here.
+- With `--folds 1` only, against the web app's worker path on ONNX Runtime Web's
+  WebAssembly backend (`validation/web-reference.mjs`), voxel by voxel. The
+  file names and NIfTI headers must be identical, the table must be the app's
+  table of the command's mask, and the masks must agree at Dice 0.998 or
+  better. That limit is the cross-runtime agreement the app's port check
+  measured (`apps/white-matter-lesions/validation/README.md`): two ONNX
+  Runtimes round floats differently, and that is the only difference here. No
+  probability may differ by more than 0.1.
 
 Measured on Linux x64 with ONNX Runtime 1.29.0 and one fold: Dice 0.99948, with
 13 of 12,614 lesion voxels differing. Both find 90 lesions (31.48 ml against
-31.50 ml), and the largest probability difference is 0.036. Repeated runs on 8
+31.50 ml), and the largest probability difference is 0.036, the same on all three
+release platforms. Repeated runs on 8
 and 3 threads were byte-identical. The packaged run took 65 s on 8 threads with 4.8 GB
 peak memory. Every release must pass this check on its own platform. One scan
 is engineering evidence, not clinical validation.
