@@ -6,6 +6,8 @@ on:
       - '.github/workflows/syncro-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/syncro/**'
       - 'apps/syncro/**'
       - 'test/independent-workflows.test.mjs'
@@ -15,13 +17,15 @@ on:
       - '.github/workflows/syncro-native.yml'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/syncro/**'
       - 'apps/syncro/**'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
     inputs:
-      publish_release:
-        description: Attach both verified portable packages to the existing SYNcro release
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing SYNcro release
         type: boolean
         default: false
 
@@ -41,5 +45,15 @@ jobs:
       package: packages/syncro
       targets: >-
         [{"os": "ubuntu-22.04", "platform": "linux-x64"},
-         {"os": "windows-latest", "platform": "windows-x64"}]
-      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

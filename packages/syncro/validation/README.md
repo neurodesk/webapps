@@ -87,7 +87,7 @@ node packages/syncro/validation/browser-run.mjs \
 
 This uses the real scan, local validated models and a binary lesion fixture, explicitly selects the historically validated SynthStrip + ANTs alternatives, drives the current UI, captures screenshots, and downloads the result ZIP. Extract the ZIP into a new directory and run `compare-complete.py` against that directory. Neural networks run in separate short-lived workers to release their WebAssembly arenas between stages. The app no longer exports intermediate transform files; use the isolated registration checks when deformation-field QC is required.
 
-Install the emitted tarball into a separate npm prefix outside the repository and run its `syncro` executable on the same input/cache. This verifies that bundled imports, runtime assets and template paths do not depend on the workspace.
+Pack `packages/syncro` with `npm pack`, install the tarball into a separate npm prefix outside the repository and run its `syncro` executable on the same input/cache. This verifies that bundled imports, runtime assets and template paths do not depend on the workspace.
 
 ## Shared SynthSR GPU stage (2026-09-09)
 
