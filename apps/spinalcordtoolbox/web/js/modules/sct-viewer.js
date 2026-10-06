@@ -66,12 +66,13 @@ export class SctViewer {
     }
   }
 
-  constructor({ module, handle, nv, niivueOptions = {}, onLocationChange, onStageVisibilityChange, onComparisonActivate, onComparisonLocation, updateOutput }) {
+  constructor({ module, handle, nv, niivueOptions = {}, onLocationChange, onStageVisibilityChange, onStageRemoved, onComparisonActivate, onComparisonLocation, updateOutput }) {
     this.module = module;
     this.handle = handle;
     this.nv = nv;
     this.niivueOptions = niivueOptions;
     this.onStageVisibilityChange = onStageVisibilityChange || (() => {});
+    this.onStageRemoved = onStageRemoved || (() => {});
     this.updateOutput = updateOutput || (() => {});
     this.tracked = new Map();
     this.stageOpacity = new Map();
@@ -141,16 +142,18 @@ export class SctViewer {
         return true;
       }
 
+      // Keep the longest prefix that is already ours and as requested. A
+      // volume FreeBrowse added (for example its Save Drawing) ends the prefix
+      // and is removed with everything above it; the base image survives.
       const shown = nv.volumes.map(volume => target.tracked.get(volume.id) || null);
       let keep = 0;
-      if (shown.every(Boolean)) {
-        while (
-          keep < shown.length
-          && keep < entries.length
-          && shown[keep].file === entries[keep].file
-          && shown[keep].key === entryKey(entries[keep])
-        ) keep += 1;
-      }
+      while (
+        keep < shown.length
+        && keep < entries.length
+        && shown[keep]
+        && shown[keep].file === entries[keep].file
+        && shown[keep].key === entryKey(entries[keep])
+      ) keep += 1;
 
       if (keep === 0) {
         target.tracked.clear();
@@ -216,7 +219,10 @@ export class SctViewer {
     for (const [id, entry] of [...this.tracked]) {
       if (present.has(id)) continue;
       this.tracked.delete(id);
-      if (entry.stage) this.onStageVisibilityChange(entry.stage, false);
+      if (entry.stage) {
+        this.onStageRemoved(entry.stage);
+        this.onStageVisibilityChange(entry.stage, false);
+      }
     }
   }
 

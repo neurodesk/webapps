@@ -53,7 +53,10 @@ to `1.0.0-rc.13`; other apps retain their existing versions.
 `mountViewer(element, options, embed)` in
 `packages/runtime-support/src/freebrowse-viewer/index.js`
 (`@neurodesk/runtime-support/freebrowse-viewer`) returns
-`{ nv, ready, destroy }`. The helper is shared: Spinal Cord Toolbox mounts the
+`{ nv, ready, showDrawingTools, setDrawingPenValue, destroy }`. The two drawing
+helpers open FreeBrowse's Drawing tab and set its Pen Value field for a host
+that puts its own mask on the drawing layer (Spinal Cord Toolbox's manual
+edits). The helper is shared: Spinal Cord Toolbox mounts the
 same viewer, and bundler-less apps receive it as a prebuilt ES module (see
 "Sharing the viewer" below). FreeBrowse owns the React UI and canvas attachment;
 TopoFit owns the source image, reconstruction outputs and selected patch.
@@ -112,7 +115,9 @@ NiiVue 1.0.0-rc.13 tracks one pointer, so a phone could neither zoom nor pan.
 a pinch sets `pan2Dxyzmm[3]` on a slice or `scaleMultiplier` on the render,
 and a two-finger drag is replayed to NiiVue as a pan drag at the midpoint. It
 uses public properties and DOM pointer events only; remove it when NiiVue
-handles multi-touch.
+handles multi-touch. In draw mode the first finger has already started a pen
+stroke when the second lands, so the adapter undoes that stroke (when
+`currentDrawUndoBitmap` moved) and a pinch leaves no dot.
 
 Two design candidates compared the public mount API with the public React
 component. The independent comparison favored mount because React exposes the

@@ -16,6 +16,7 @@ import { ProgressManager } from '@neurodesk/webapp-components/ui';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
 import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import { SctViewer } from './modules/sct-viewer.js';
+import { SctManualEdits } from './app/manual-edits.js';
 import * as Config from './app/config.js';
 import { SessionResultStore, restoreSessionResults, snapshotSessionResults } from './app/session-results.js';
 import { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog } from './app/log-channels.js';
@@ -79,6 +80,11 @@ export class SpinalCordToolboxApp {
     // measure. They outlive a new segmentation run so a cord mask from one
     // task can be combined with TotalSpineSeg discs from another.
     this.morphometrySources = { masks: new Map(), discs: null };
+    // "Stage data changed": every change of a result mask (model output,
+    // manual edit, restore, removal) is announced here; see setStageData().
+    this.stageEvents = new EventTarget();
+    this._stepWaiters = new Map();
+    this._derivedResults = Promise.resolve();
     this.viewerAvailable = false;
     this.viewerUnavailableReason = '';
     this.fallbackPreview = new FallbackNiftiPreview({
@@ -131,11 +137,14 @@ export class SpinalCordToolboxApp {
     this.privacyModal = new ModalManager('privacyModal');
 
     this.setupShellEventListeners();
+    this.manualEdits = new SctManualEdits(this);
+    this.onStageDataChanged(change => this.onStageMaskChanged(change));
 
     // The viewer bundle loads while the rest of the page becomes usable, so a
     // file chosen straight after load is never lost. Render paths await it.
     this.viewerReady = this.setupViewer().then((available) => {
       this.syncViewerModeControls();
+      if (available) this.manualEdits.attachViewer(this.viewer);
       return available;
     });
 
@@ -163,6 +172,7 @@ export class SpinalCordToolboxApp {
           this.updateViewerInfo(data);
         },
         onStageVisibilityChange: (stage, visible) => this.onViewerStageVisibility(stage, visible),
+        onStageRemoved: (stage) => this.manualEdits?.editor?.noteStageRemoved(stage),
         onComparisonActivate: (sessionId) => this.activateComparisonSession(sessionId),
         onComparisonLocation: (sessionId, data) => this.updateComparisonInfo(sessionId, data),
         updateOutput: (msg) => this.updateOutput(msg)
@@ -268,6 +278,9 @@ export class SpinalCordToolboxApp {
       scope: document.querySelector('.app-container'),
       examples,
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
+        if (this.manualEdits && !this.manualEdits.confirmDiscard('Loading the example', { others: this.parkedUnsavedEdits?.() || [] })) {
+          throw new DOMException('Loading the example was cancelled to keep manual edits.', 'AbortError');
+        }
         const files = await fetchFiles();
         assertCurrent();
         this.fileIOController.clearFiles();
@@ -286,6 +299,10 @@ export class SpinalCordToolboxApp {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
+        if (!this.confirmAddingImage()) {
+          e.target.value = '';
+          return;
+        }
         this.fileIOController.handleFiles(e.target.files);
       });
     }
@@ -336,7 +353,11 @@ export class SpinalCordToolboxApp {
     }
 
     const clearResults = document.getElementById('clearResults');
-    if (clearResults) clearResults.addEventListener('click', () => this.clearResults());
+    if (clearResults) {
+      clearResults.addEventListener('click', () => {
+        if (this.manualEdits.confirmDiscard('Clear All')) this.clearResults();
+      });
+    }
 
     window.addEventListener('resize', () => {
       if (!this.isViewerAvailable()) this.fallbackPreview?.redraw?.();
@@ -426,8 +447,10 @@ export class SpinalCordToolboxApp {
   }
 
   // `taskId` is the task that produced the result (its `raw.taskId`), so an
-  // image keeps its colours when another image ran a different task.
-  getOverlayLabelTaskId(stage, taskId = this.selectedTask?.id) {
+  // image keeps its colours when another image ran a different task. A mask
+  // drawn from nothing names its own label set (`labelSetId`).
+  getOverlayLabelTaskId(stage, taskId = this.selectedTask?.id, labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId) {
+    if (labelSetId) return labelSetId;
     if (stage === 'lesion') return 'lesion_sci_t2';
     if (stage === 'spine_step1') return 'totalspineseg';
     if (stage === 'spine_discs') return 'spineDiscs';
@@ -451,6 +474,7 @@ export class SpinalCordToolboxApp {
     zone.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('dragover');
+      if (!this.confirmAddingImage()) return;
       this.fileIOController.handleDropItems(e.dataTransfer.items);
     });
   }
@@ -511,8 +535,11 @@ export class SpinalCordToolboxApp {
       return;
     }
 
+    // Compare shows each image's stages, so an open drawing is applied first.
+    if (mode === 'compare') await this.manualEdits?.settleBeforeSwitch();
     this._viewerMode = mode === 'compare' ? 'compare' : 'single';
     this.syncViewerModeControls();
+    this.manualEdits?.sync();
     await this.renderViewerVolumes();
   }
 
@@ -579,12 +606,13 @@ export class SpinalCordToolboxApp {
       .filter(stage => results?.[stage]?.file)
       .map(stage => {
         const taskId = results[stage].raw?.taskId;
-        const labelTaskId = this.getOverlayLabelTaskId(stage, taskId);
+        const labelSetId = results[stage].labelSetId;
+        const labelTaskId = this.getOverlayLabelTaskId(stage, taskId, labelSetId);
         return {
           file: results[stage].file,
           stage,
           visible: this.isStageVisible(stage),
-          colormapKey: this.getOverlayColormapId(stage, taskId),
+          colormapKey: this.getOverlayColormapId(stage, taskId, labelSetId),
           labelColormap: generateLabelColormap(labelTaskId),
           labelTaskId
         };
@@ -615,6 +643,26 @@ export class SpinalCordToolboxApp {
 
   // Clicking a panel (or its title) makes that image the active one. A run
   // in progress keeps its image: switching would cancel it.
+  // Unsaved manual edits in parked images, as `Stage of image` names.
+  parkedUnsavedEdits() {
+    const names = new Map(this.getInputSessions().map(session => [session.id, session.name]));
+    return [...this.sessionResults.parked].flatMap(([id, snapshot]) => (
+      SctManualEdits.unsavedInSnapshot(snapshot, names.get(id) || id)
+    ));
+  }
+
+  // A new image keeps the others' results, except the least recently used
+  // one when the store is full; ask if that one holds unsaved manual edits.
+  confirmAddingImage() {
+    const store = this.sessionResults;
+    if (!this.manualEdits || store.size < store.limit || !this.inferenceExecutor.getStageOrder().length) return true;
+    const [oldestId, oldest] = [...store.parked][0] || [];
+    if (!oldest) return true;
+    const name = this.getInputSessions().find(session => session.id === oldestId)?.name || oldestId;
+    const others = SctManualEdits.unsavedInSnapshot(oldest, name);
+    return this.manualEdits.confirmDiscard('Loading a new image', { current: false, others });
+  }
+
   activateComparisonSession(sessionId) {
     if (sessionId === this.getActiveSession()?.id) return false;
     if (this.currentRunningStep) {
@@ -667,6 +715,8 @@ export class SpinalCordToolboxApp {
   // ==================== File Handling ====================
 
   async onFileLoaded(file, context = {}) {
+    // An open drawing belongs to the outgoing image: apply it there first.
+    await this.manualEdits?.settleBeforeSwitch();
     const sessionId = context?.session?.id || null;
     const previousId = this._activeSessionId;
     const switching = Boolean(sessionId && previousId && sessionId !== previousId);
@@ -769,6 +819,7 @@ export class SpinalCordToolboxApp {
     this.resetStageVisibility();
     this._lastLocationData = null;
     this.resetMorphometrySources();
+    this.manualEdits?.reset();
 
     if (!keepLogs) {
       this.log?.clear(ANALYSIS);
@@ -829,7 +880,9 @@ export class SpinalCordToolboxApp {
     } finally {
       this.currentRunningStep = null;
       this.abortUICheckpoint = null;
+      this.rejectStepWaiters(new Error(`${abortedStep} cancelled`));
       this.syncMorphometryControls();
+      this.manualEdits?.sync();
     }
   }
 
@@ -888,8 +941,15 @@ export class SpinalCordToolboxApp {
 
   // ==================== Pipeline Step Methods ====================
 
-  async runSegmentation() {
+  // `discardEdits`: the caller (automation) has decided; do not ask.
+  async runSegmentation({ discardEdits = false } = {}) {
     if (this.inferenceExecutor.isRunning()) return;
+    if (discardEdits) {
+      if (this.manualEdits.hasUnsavedEdits()) this.logAnalysis('Manual edits discarded by a new segmentation run', 'warning');
+    } else if (!this.manualEdits.confirmDiscard('A new segmentation run')) {
+      return;
+    }
+    this.manualEdits.reset();
 
     const modelSelect = document.getElementById('modelSelect');
     const selectedTaskId = modelSelect ? modelSelect.value : DEFAULT_TASK_ID;
@@ -1085,6 +1145,8 @@ export class SpinalCordToolboxApp {
   }
 
   async onStepComplete(step) {
+    this._stepWaiters.get(step)?.resolve();
+    this._stepWaiters.delete(step);
     const status = this.inferenceExecutor.getStepStatus(step);
     this.updateStepBadge(step, status);
     this.setStepButtonsEnabled(step, true);
@@ -1110,6 +1172,7 @@ export class SpinalCordToolboxApp {
         break;
     }
     this.syncMorphometryControls();
+    this.manualEdits?.sync();
 
     // Load stage data into viewer for preprocessing steps
     // (stageData is already handled in handleStageData)
@@ -1188,6 +1251,7 @@ export class SpinalCordToolboxApp {
     }
 
     this.registerMorphometrySource(data.stage, data.taskId);
+    if (data.kind !== 'metrics') this.notifyStageDataChanged(data.stage, 'model');
 
     if (this.isOverlayStage(data.stage)) {
       this.setStageVisible(data.stage, this.getDefaultStageVisibility()[data.stage] !== false);
@@ -1276,6 +1340,12 @@ export class SpinalCordToolboxApp {
       const label = document.createElement('span');
       label.className = 'stage-label';
       label.textContent = Config.STAGE_NAMES[stage] || stage;
+      const manualEdit = stage === 'input' ? null : this.inferenceExecutor.getResult(stage)?.manualEdit;
+      if (manualEdit) {
+        label.textContent += manualEdit.kind === 'new' ? ' (drawn)' : ' (edited)';
+        label.title = manualEdit.kind === 'new' ? 'Drawn by hand' : 'Manually edited';
+        row.dataset.manualEdit = manualEdit.kind;
+      }
       row.appendChild(label);
 
       // Download button (not for input — user already has the file)
@@ -1284,12 +1354,22 @@ export class SpinalCordToolboxApp {
         dlBtn.className = 'download-btn';
         dlBtn.title = `Download ${Config.STAGE_NAMES[stage] || stage}`;
         dlBtn.innerHTML = dlSvg;
-        dlBtn.addEventListener('click', () => this.inferenceExecutor.downloadStage(stage));
+        dlBtn.addEventListener('click', () => this.downloadStage(stage));
         row.appendChild(dlBtn);
       }
 
       container.appendChild(row);
     }
+  }
+
+  downloadStage(stage) {
+    const result = this.inferenceExecutor.getResult(stage);
+    if (!this.inferenceExecutor.downloadStage(stage)) return false;
+    if (result?.manualEdit) {
+      result.manualEdit.downloaded = true;
+      this.logAnalysis(`Downloaded ${result.manualEdit.kind === 'new' ? 'hand-drawn' : 'manually edited'} mask: ${result.file.name}`);
+    }
+    return true;
   }
 
   downloadMetricsResult(stage) {
@@ -1491,6 +1571,138 @@ export class SpinalCordToolboxApp {
     if (existing) existing.replaceWith(block);
     else panel.appendChild(block);
     panel.classList.remove('hidden');
+  }
+
+  // ==================== Stage data ====================
+
+  /**
+   * Subscribe to "stage data changed": `listener({ stage, file, source,
+   * previousFile, result })` runs whenever a result mask is produced or
+   * replaced. `source` is `model` (inference output), `edit` (a manual edit
+   * was applied) or `restore` (back to the model's mask, or a drawn mask
+   * removed, when `file` is null). Returns the unsubscribe function.
+   */
+  onStageDataChanged(listener) {
+    const handler = event => listener(event.detail);
+    this.stageEvents.addEventListener('stagedatachanged', handler);
+    return () => this.stageEvents.removeEventListener('stagedatachanged', handler);
+  }
+
+  notifyStageDataChanged(stage, source, previousFile = null) {
+    const result = this.inferenceExecutor.getResult(stage);
+    this.stageEvents.dispatchEvent(new CustomEvent('stagedatachanged', {
+      detail: { stage, source, file: result?.file || null, previousFile, result }
+    }));
+  }
+
+  /**
+   * The one way to replace a stage's mask outside inference. `file` is a
+   * NIfTI on the input's grid. `manualEdit` (provenance) is kept on the
+   * result; null clears it. Updates the viewer, the Results list and every
+   * subscriber of onStageDataChanged().
+   */
+  async setStageData(stage, file, { source = 'edit', manualEdit, labelSetId = null } = {}) {
+    const executor = this.inferenceExecutor;
+    const previous = executor.getResult(stage);
+    const taskId = previous?.raw?.taskId || this.selectedTask?.id || DEFAULT_TASK_ID;
+    executor.results[stage] = {
+      ...(previous || { kind: 'nifti', description: 'Manual mask', provenance: null }),
+      file,
+      raw: { ...(previous?.raw || {}), stage, taskId, kind: 'nifti' },
+      manualEdit: manualEdit === undefined ? previous?.manualEdit || null : manualEdit,
+      labelSetId: labelSetId || previous?.labelSetId || null
+    };
+    if (!executor.stageOrder.includes(stage)) executor.stageOrder.push(stage);
+    this.showResultsSection();
+    this.notifyStageDataChanged(stage, source, previous?.file || null);
+    await this.renderViewerVolumes();
+    this.rebuildResultsList();
+  }
+
+  async removeStageData(stage, { source = 'restore' } = {}) {
+    const previous = this.inferenceExecutor.getResult(stage);
+    if (!previous) return;
+    this.inferenceExecutor.removeResult(stage);
+    this.notifyStageDataChanged(stage, source, previous.file || null);
+    await this.renderViewerVolumes();
+    this.rebuildResultsList();
+  }
+
+  showResultsSection() {
+    const resultsSection = document.getElementById('resultsSection');
+    if (!resultsSection) return;
+    resultsSection.classList.remove('hidden');
+    resultsSection.classList.remove('collapsed');
+  }
+
+  // Keeps everything derived from a mask in step with it. Inference output
+  // arrives with its metrics, so only edits and restores recompute.
+  onStageMaskChanged({ stage, source, result }) {
+    this.manualEdits?.sync();
+    if (source === 'model') return;
+    if (result?.file) {
+      this.registerMorphometrySource(stage, result.raw?.taskId);
+    } else if (stage === 'spine_discs') {
+      this.morphometrySources.discs = null;
+      this.syncMorphometryControls();
+    } else {
+      this.morphometrySources.masks.delete(stage);
+      this.syncMorphometryControls();
+    }
+    this._derivedResults = this._derivedResults
+      .then(() => this.refreshDerivedResults(stage))
+      .catch(error => this.logAnalysis(`Could not update results derived from ${stage}: ${error.message}`, 'error'));
+  }
+
+  // Recomputes lesion metrics after the lesion or cord mask changed, and
+  // remeasures morphometry when its mask was the one that changed. Both go
+  // through the worker routes that measure mask files.
+  async refreshDerivedResults(stage) {
+    const executor = this.inferenceExecutor;
+    if (stage === 'lesion' || stage === 'segmentation') {
+      const lesion = executor.getResult('lesion');
+      if (lesion?.file) {
+        const cord = executor.getResult('segmentation');
+        const lesionText = `${lesion.manualEdit ? 'edited ' : ''}lesion mask`;
+        const cordText = cord?.file ? ` and the ${cord.manualEdit ? 'edited ' : ''}cord mask` : ' (no cord mask)';
+        this.logAnalysis(`Lesion metrics: recomputing from the ${lesionText}${cordText}`);
+        const request = {
+          lesionData: await lesion.file.arrayBuffer(),
+          cordData: cord?.file ? await cord.file.arrayBuffer() : null,
+          imageData: this.inputFile ? await this.inputFile.arrayBuffer() : null,
+          imageName: this.inputFile ? this.inputFile.name.replace(/\.nii(\.gz)?$/i, '') : null,
+          taskId: lesion.raw?.taskId || 'lesion'
+        };
+        await this.runDerivedStep('lesion_metrics', 'Measuring lesions…', () => executor.runLesionMetrics(request));
+      } else if (executor.getResult('lesion_metrics')) {
+        executor.removeResult('lesion_metrics');
+        this.clearMetricsResult('lesion_metrics');
+        this.logAnalysis('Lesion metrics removed: there is no lesion mask');
+      }
+    }
+    const morphometry = executor.getResult('morphometry');
+    const source = this.morphometrySources.masks.get(stage);
+    if (morphometry && source && executor.lastMorphometrySettings?.mask === source.label) {
+      const select = document.getElementById('morphometryMask');
+      if (select) select.value = stage;
+      this.logAnalysis(`Morphometry: remeasuring ${source.label} after its mask changed`);
+      await this.runDerivedStep('morphometry', null, () => this.runMorphometry());
+    }
+  }
+
+  // Starts a worker step and resolves when it completes. runMorphometry()
+  // begins its own status; other steps get `message`.
+  async runDerivedStep(step, message, start) {
+    if (this.inferenceExecutor.isRunning()) throw new Error('another step is running');
+    const done = new Promise((resolve, reject) => this._stepWaiters.set(step, { resolve, reject }));
+    if (message) this.beginAbortableStep(step, message);
+    await start();
+    return done;
+  }
+
+  rejectStepWaiters(error) {
+    for (const waiter of this._stepWaiters.values()) waiter.reject(error);
+    this._stepWaiters.clear();
   }
 
   // ==================== Morphometry ====================
@@ -1697,7 +1909,8 @@ export class SpinalCordToolboxApp {
     return stage === 'segmentation' || stage === 'lesion' || stage === 'spine_step1' || stage === 'spine_discs';
   }
 
-  getOverlayColormapId(stage, taskId = this.selectedTask?.id) {
+  getOverlayColormapId(stage, taskId = this.selectedTask?.id, labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId) {
+    if (labelSetId) return `sct-${labelSetId}`;
     if (stage === 'lesion') return 'sct-lesion';
     if (stage === 'spine_step1') return 'sct-totalspineseg';
     if (stage === 'spine_discs') return 'sct-spine-discs';
@@ -1763,7 +1976,8 @@ export class SpinalCordToolboxApp {
       stackEntries.push({
         file: result?.file,
         stage: overlayStage,
-        visible: this.isStageVisible(overlayStage),
+        // While a stage's mask is on the drawing layer its overlay is hidden.
+        visible: this.isStageVisible(overlayStage) && !this.manualEdits?.isHiding(overlayStage),
         colormapKey: this.getOverlayColormapId(overlayStage, taskId),
         labelColormap: generateLabelColormap(this.getOverlayLabelTaskId(overlayStage, taskId))
       });
@@ -1868,6 +2082,7 @@ export class SpinalCordToolboxApp {
   }
 
   onInferenceError(msg) {
+    this.rejectStepWaiters(new Error(msg || 'Processing failed'));
     this.currentRunningStep = null;
     this.abortUICheckpoint = null;
     this.progress.end(msg ? `Error: ${msg}` : 'Error', { success: false });
@@ -1892,6 +2107,7 @@ export class SpinalCordToolboxApp {
   }
 
   clearResults() {
+    this.manualEdits?.reset();
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetMorphometrySources();
