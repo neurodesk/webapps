@@ -8,7 +8,7 @@ import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-i
 import { bindFileDrop, createInfoDialog, createConsole, createExampleSelector, createViewerToolbar, ProgressManager } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { registerAppAutomation, registerViewer, createNiivueAdapter, runAbortable, summarizeLabels, type OperationContext } from '@neurodesk/webapp-components/automation'
-import { readNifti } from '@neurodesk/webapp-components/file-io'
+import { downloadBlob, readNifti } from '@neurodesk/webapp-components/file-io'
 import { runSegmentation, type SegmentationBackend } from './segmentation'
 import { readImageFiles, runDcm2niix, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
 import { Niimath, type QcTissues } from '@niivue/niimath'
@@ -589,12 +589,8 @@ ovlSlider.addEventListener(
 
 $('rateSave').addEventListener('click', () => {
   if (!sourceFile) return
-  const url = URL.createObjectURL(new Blob([JSON.stringify(readRating(sourceFile.name), null, 2)], { type: 'application/json' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `${sourceFile.name.replace(/\.nii(\.gz)?$/i, '')}_rating.json`
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  downloadBlob(new Blob([JSON.stringify(readRating(sourceFile.name), null, 2)], { type: 'application/json' }),
+    `${sourceFile.name.replace(/\.nii(\.gz)?$/i, '')}_rating.json`)
 }, ac)
 
 // --- Cleanup (HMR / tab close) ---
