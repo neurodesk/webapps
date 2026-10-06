@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/easy-mp2rage-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'exes/synthsr/scripts/ci_macos_release.sh'
@@ -15,6 +16,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/easy-mp2rage-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
       - '.github/workflows/node-cli-portable.yml'
       - 'exes/node-cli/**'
       - 'exes/synthsr/scripts/ci_macos_release.sh'
@@ -37,7 +39,24 @@ permissions:
   contents: read
 
 jobs:
+  wasm-source:
+    name: committed WASM equals a rebuild from source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        run: cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        uses: ./.github/actions/setup-wasm-opt
+      - name: Rebuild and compare
+        run: bash packages/easy-mp2rage/scripts/build-wasm.sh --check
+
   portable:
+    needs: wasm-source
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
@@ -46,7 +65,7 @@ jobs:
       targets: >-
         [{"os": "ubuntu-22.04", "platform": "linux-x64"},
          {"os": "windows-latest", "platform": "windows-x64"},
-         {"os": "macos-14", "platform": "macos-arm64"}]
+         {"os": "macos-15", "platform": "macos-arm64"}]
       publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
       sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
     secrets:

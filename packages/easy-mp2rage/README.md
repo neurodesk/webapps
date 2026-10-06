@@ -47,11 +47,15 @@ node packages/easy-mp2rage/bin/easy-mp2rage.js --help
 ```
 
 After changing `apps/easy-mp2rage/crates/mp2rage-core` or `mp2rage-wasm`,
-rebuild it with Rust, the `wasm32-unknown-unknown` target and wasm-pack 0.13.1,
-then commit `wasm/`:
+rebuild it and commit `wasm/`. The build is reproducible byte for byte with
+Rust 1.98.0 and its `wasm32-unknown-unknown` target, wasm-pack 0.13.1 and binaryen
+`version_117` `wasm-opt` on `PATH`; the script refuses other versions. The
+`wasm-source` job in `easy-mp2rage-native.yml` rebuilds it and fails when any
+committed file differs:
 
 ```bash
 pnpm --filter @neurodesk/easy-mp2rage build:wasm
+bash packages/easy-mp2rage/scripts/build-wasm.sh --check
 ```
 
 ### Commands

@@ -113,7 +113,8 @@ into web/:
     bash tools/stage_core.sh
 
 After changing crates/mp2rage-core or crates/mp2rage-wasm, rebuild it with Rust
-(https://rustup.rs/) and wasm-pack (`cargo install wasm-pack --version 0.13.1`):
+1.98.0 (https://rustup.rs/), wasm-pack 0.13.1 and binaryen version_117 wasm-opt
+(packages/easy-mp2rage/README.md lists why each is pinned):
 
     pnpm --filter @neurodesk/easy-mp2rage build:wasm
 
