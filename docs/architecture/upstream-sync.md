@@ -18,7 +18,7 @@ request opened with `GITHUB_TOKEN` starts no `pull_request` workflows, so CI
 would never run on it.
 
 1. Open <https://github.com/organizations/neurodesk/settings/apps/new>.
-2. Set **GitHub App name** to `neurodesk-upstream-sync` and **Homepage URL** to
+2. Set **GitHub App name** to `neurodesk-webapps-upstream-sync` and **Homepage URL** to
    `https://github.com/neurodesk/webapps`.
 3. Under **Webhook**, clear **Active**.
 4. Under **Repository permissions**, set **Contents** and **Pull requests** to
@@ -33,8 +33,8 @@ would never run on it.
 
    ```sh
    gh variable set UPSTREAM_SYNC_CLIENT_ID --repo neurodesk/webapps --body '<Client ID>'
-   gh secret set UPSTREAM_SYNC_PRIVATE_KEY --repo neurodesk/webapps < ~/Downloads/neurodesk-upstream-sync.*.private-key.pem
-   rm ~/Downloads/neurodesk-upstream-sync.*.private-key.pem
+   gh secret set UPSTREAM_SYNC_PRIVATE_KEY --repo neurodesk/webapps < ~/Downloads/neurodesk-webapps-upstream-sync.*.private-key.pem
+   rm ~/Downloads/neurodesk-webapps-upstream-sync.*.private-key.pem
    ```
 
 To rotate the key, generate a new one on the App's page, run the `gh secret set`
