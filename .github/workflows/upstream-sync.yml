@@ -33,10 +33,6 @@ jobs:
     needs: plan
     if: needs.plan.outputs.apps != '[]'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -45,23 +41,45 @@ jobs:
       group: upstream-sync-${{ matrix.app }}
     env:
       APP: ${{ matrix.app }}
+      BASE: ${{ github.ref_name }}
       BRANCH: upstream/${{ matrix.app }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # An App token, unlike GITHUB_TOKEN, starts CI on the pull requests it opens.
+      # Setup: docs/architecture/upstream-sync.md.
+      - id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UPSTREAM_SYNC_CLIENT_ID }}
+          private-key: ${{ secrets.UPSTREAM_SYNC_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Commit as the App
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          name="$SLUG[bot]"
+          git config user.name "$name"
+          git config user.email "$(gh api "/users/$name" --jq .id)+$name@users.noreply.github.com"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - name: Leave a branch with manual fixes alone
         id: guard
+        env:
+          BOT: ${{ steps.bot.outputs.name }}
         run: |
           if git rev-parse -q --verify "origin/$BRANCH" >/dev/null \
-            && git log --format=%an "origin/main..origin/$BRANCH" | grep -qv '^github-actions\[bot\]$'; then
+            && git log --format=%an "origin/$BASE..origin/$BRANCH" | grep -qvxF "$BOT"; then
             echo "::notice::$BRANCH has commits from a person; merge or delete it to resume syncing $APP."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
@@ -82,10 +100,9 @@ jobs:
         if: steps.merge.outputs.commits > 0
         env:
           CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           TARGET: ${{ steps.merge.outputs.target }}
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -B "$BRANCH"
           git add -A
           git commit -qm "chore($APP): merge upstream at $TARGET"
@@ -99,10 +116,8 @@ jobs:
           if [ -z "$pr" ]; then
             draft=()
             if [ "$CONFLICTS" -gt 0 ]; then draft=(--draft); fi
-            gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md" "${draft[@]}"
+            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md" "${draft[@]}"
           else
             gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/body.md"
             if [ "$CONFLICTS" -gt 0 ]; then gh pr ready "$pr" --undo || true; fi
           fi
-          # Pull requests opened with GITHUB_TOKEN do not start pull_request workflows.
-          gh workflow run ci.yml --ref "$BRANCH" -f agentic_apps="$APP"
