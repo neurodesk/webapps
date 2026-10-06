@@ -95,16 +95,18 @@ export function drawingColormapName(labelSetId) {
  * - `onAdopt({ action, stage })`: FreeBrowse opened a drawing layer itself
  *   (Create empty drawing layer, or Edit as drawing on stage `stage`); return
  *   a begin() request to take it over, or null to leave it alone.
- * - `onClosedByViewer(native)`: FreeBrowse closed the layer during a session
+ * - `onAdopted(request)`: the adopted layer now holds the stage's mask.
+ * - `onClosedByViewer(native, stage)`: FreeBrowse closed the layer during a session
  *   (its Save Drawing); `native` is the mask as it was.
  * - `onPenValue(value)`: the pen value changed in FreeBrowse.
  */
 export class MaskEditor {
-  constructor({ nv, showDrawingTools, setPenField, onAdopt, onClosedByViewer, onPenValue } = {}) {
+  constructor({ nv, showDrawingTools, setPenField, onAdopt, onAdopted, onClosedByViewer, onPenValue } = {}) {
     this.nv = nv;
     this.showDrawingTools = showDrawingTools || (async () => false);
     this.setPenField = setPenField || (() => false);
     this.onAdopt = onAdopt || (() => null);
+    this.onAdopted = onAdopted || (() => {});
     this.onClosedByViewer = onClosedByViewer || (() => {});
     this.onPenValue = onPenValue || (() => {});
     this.session = null;
@@ -164,8 +166,7 @@ export class MaskEditor {
     } finally {
       this.ownChange = false;
     }
-    this.pendingLabel = label;
-    this.setPenField(label);
+    this.pendingLabel = this.setPenField(label) ? null : label;
     await this.showDrawingTools();
     return this.session;
   }
@@ -214,7 +215,14 @@ export class MaskEditor {
   setLabel(value) {
     if (!this.session) return;
     this.session.label = value;
-    if (this.nv.drawPenValue !== 0) this.nv.drawPenValue = value;
+    if (this.nv.drawPenValue !== 0) {
+      this.ownChange = true;
+      try {
+        this.nv.drawPenValue = value;
+      } finally {
+        this.ownChange = false;
+      }
+    }
     // FreeBrowse re-applies its own pen value when a tool is chosen; its field
     // only exists while the pen is selected.
     this.pendingLabel = this.setPenField(value) ? null : value;
@@ -246,9 +254,11 @@ export class MaskEditor {
     const removed = this.lastRemovedStage;
     const stage = action === 'load' && removed && Date.now() - removed.at < 10000 ? removed.stage : null;
     this.lastRemovedStage = null;
-    void Promise.resolve(this.onAdopt({ action, stage })).then(request => {
-      if (request && this.nv.drawingVolume && !this.session) return this.begin(request);
-      return null;
-    });
+    this.adoption = Promise.resolve(this.onAdopt({ action, stage })).then(async request => {
+      if (!request || !this.nv.drawingVolume || this.session) return null;
+      await this.begin(request);
+      this.onAdopted(request);
+      return request;
+    }).catch(() => null);
   }
 }

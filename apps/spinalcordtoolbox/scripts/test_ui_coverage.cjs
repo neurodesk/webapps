@@ -20,7 +20,8 @@ const controllerSources = [
   'web/js/controllers/SctInputSessions.js',
   'web/js/controllers/SctPipeline.js',
   'web/js/modules/fallback-nifti-preview.js',
-  'web/js/modules/sct-viewer.js'
+  'web/js/modules/sct-viewer.js',
+  'web/js/app/manual-edits.js'
 ].map(file => fs.readFileSync(path.join(ROOT, file), 'utf8')).join('\n');
 const viewerJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/sct-viewer.js'), 'utf8');
 const sharedUiSources = [
@@ -35,6 +36,8 @@ const lesionAnalysisTest = fs.readFileSync(path.join(ROOT, 'scripts/test_lesion_
 const batchTest = fs.readFileSync(path.join(ROOT, 'scripts/test_batch_processing_cases.cjs'), 'utf8');
 const workerTest = fs.readFileSync(path.join(ROOT, 'scripts/test_inference_worker_e2e.cjs'), 'utf8');
 const morphometryE2e = fs.readFileSync(path.join(ROOT, 'e2e/morphometry.spec.js'), 'utf8');
+const manualEditsE2e = fs.readFileSync(path.join(ROOT, 'e2e/manual-edits.spec.js'), 'utf8');
+const manualEditsTest = fs.readFileSync(path.join(ROOT, 'scripts/test_manual_edits.mjs'), 'utf8');
 
 const htmlIds = new Set([...indexHtml.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 const domSource = `${appJs}\n${controllerSources}\n${sharedUiSources}`;
@@ -59,6 +62,12 @@ const UI_COVERAGE = Object.freeze([
   { id: 'morphometryLevels', behavior: 'restricts level reports to chosen vertebral levels and reports bad input on the field', coveredBy: ['morphometry-e2e', 'static-dom'] },
   { id: 'morphometryAngleCorrection', behavior: 'turns centerline angle correction on or off', coveredBy: ['static-dom'] },
   { id: 'runMorphometry', behavior: 'runs sct_process_segmentation on the chosen mask in the worker', coveredBy: ['morphometry-e2e', 'batch', 'static-dom'] },
+  { id: 'editStageSelect', behavior: 'chooses the result stage to edit, or a new cord or lesion mask', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
+  { id: 'editLabelSelect', behavior: 'chooses by name the label the pen paints', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
+  { id: 'editStart', behavior: 'puts the chosen mask on the drawing layer and opens the Drawing tab', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
+  { id: 'editApply', behavior: 'makes the drawing the stage data: download, overlay and derived metrics', coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
+  { id: 'editDiscard', behavior: 'closes the drawing layer without keeping the edit', coveredBy: ['manual-edits-e2e', 'static-dom'] },
+  { id: 'editRevert', behavior: "restores the model's mask or removes a drawn mask", coveredBy: ['manual-edits-e2e', 'manual-edits', 'static-dom'] },
   { id: 'resultsSection', behavior: 'shows available result stages', coveredBy: ['batch', 'static-dom'] },
   { id: 'screenshotViewer', behavior: 'exports viewer screenshot', coveredBy: ['viewer', 'batch', 'static-dom'] },
   { id: 'freebrowseViewer', behavior: 'hosts the FreeBrowse viewer: layout, zoom/pan, window, opacity, colormap, drawing', coveredBy: ['viewer', 'static-dom'] },
@@ -79,6 +88,8 @@ const TEST_SOURCES = {
   batch: batchTest,
   'lesion-analysis': lesionAnalysisTest,
   'morphometry-e2e': morphometryE2e,
+  'manual-edits-e2e': manualEditsE2e,
+  'manual-edits': manualEditsTest,
   viewer: viewerTest,
   worker: workerTest,
   'static-dom': domSource
@@ -94,6 +105,9 @@ for (const item of UI_COVERAGE) {
   assert.ok(item.behavior && item.coveredBy.length > 0, `${item.id} has coverage metadata`);
   for (const coverage of item.coveredBy) {
     assert.ok(TEST_SOURCES[coverage], `${item.id} references known coverage source ${coverage}`);
+    if (coverage === 'manual-edits-e2e') {
+      assert.ok(manualEditsE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/manual-edits.spec.js`);
+    }
     if (coverage === 'morphometry-e2e') {
       assert.ok(morphometryE2e.includes(`#${item.id}`), `${item.id} is exercised by e2e/morphometry.spec.js`);
     }
@@ -141,6 +155,19 @@ assert.ok(!indexHtml.includes('id="abortInferenceBtn"'), 'the footer cancel is t
 assert.equal((indexHtml.match(/class="btn btn-primary/g) || []).length, 1, 'the sidebar has one primary action');
 assert.match(indexHtml, /<button class="btn btn-secondary" id="runMorphometry" disabled>/, 'Measure is a secondary action, disabled until a mask exists');
 assert.ok(/id="morphometrySection" data-disclosure/.test(indexHtml) && /class="[^"]*step-disabled collapsed"[^>]*id="morphometrySection"/.test(indexHtml), 'Morphometry starts collapsed and disabled');
+// Manual edits: SCT adds stage choice, label names, Apply/Discard/Restore; the
+// pen, erase, fill and undo are FreeBrowse's Drawing tab.
+const manualEditsJs = fs.readFileSync(path.join(ROOT, 'web/js/app/manual-edits.js'), 'utf8');
+assert.ok(/class="[^"]*step-disabled collapsed"[^>]*id="editSection"/.test(indexHtml), 'Edit masks starts collapsed and disabled');
+for (const id of ['editStart', 'editApply', 'editDiscard', 'editRevert']) {
+  assert.match(indexHtml, new RegExp(`<button class="btn btn-secondary" id="${id}"`), `${id} is a secondary action`);
+}
+assert.ok(!/id="[^"]*(pen|eraser|undo|brush)[^"]*"/i.test(indexHtml), 'no second drawing toolbar: pen, erase, fill and undo stay in FreeBrowse');
+assert.ok(manualEditsJs.includes('this.app.setStageData(') && manualEditsJs.includes('this.app.removeStageData('), 'applied edits change stage data only through setStageData/removeStageData');
+assert.equal((appJs.match(/'stagedatachanged'/g) || []).length, 3, 'stage data changes are one event: dispatch, subscribe, unsubscribe');
+assert.ok(appJs.includes("this.notifyStageDataChanged(data.stage, 'model')"), 'model output announces its stage data too');
+assert.ok(appJs.includes('!this.manualEdits?.isHiding(overlayStage)'), 'the stage on the drawing layer is hidden as an overlay');
+assert.ok(!/\.(loadVolumes|addVolume|removeVolume)\(/.test(manualEditsJs), 'the edit controller never changes the NiiVue volume list');
 assert.ok(appJs.includes("data-metrics-stage") && appJs.includes('renderAllMetricsResults'), 'every metrics stage renders in its own block of the Results section');
 assert.ok(!/morphometry[^\n]*(statusText|sidebar-status)/i.test(indexHtml), 'morphometry reports progress only through the status footer');
 assert.ok(indexHtml.includes('id="taskInfoTooltip"') && appJs.includes("getElementById('taskInfoTooltip')"), 'task description lives in the SCT Task info tooltip');
