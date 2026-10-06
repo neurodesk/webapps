@@ -1,22 +1,23 @@
-// Write published native releases into registry/standalone.json.
+// Write released native archives into registry/standalone.json by hand; CI does the same in
+// .github/workflows/standalone-catalog.yml. Needs the release tags locally (git fetch --tags).
 // Usage: node scripts/desktop/import-native-releases.mjs [app@VERSION ...]
 // With no arguments, every command-line entry is refreshed from the release it already names.
-import { readFile, writeFile } from 'node:fs/promises';
-import { portableSpecs } from '../lib/native-releases.mjs';
-import { catalogReleases, importReleases, parseReleases } from '../lib/standalone-import.mjs';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { catalogReleases, parseReleases } from '../lib/standalone-import.mjs';
 
-const path = new URL('../../registry/standalone.json', import.meta.url);
-const catalog = JSON.parse(await readFile(path, 'utf8'));
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const catalog = JSON.parse(await readFile(join(root, 'registry/standalone.json'), 'utf8'));
 const releases = process.argv.length > 2 ? parseReleases(process.argv.slice(2)) : catalogReleases(catalog);
-const headers = { accept: 'application/vnd.github+json' };
-if (process.env.GH_TOKEN) headers.authorization = `Bearer ${process.env.GH_TOKEN}`;
-
-async function fetchRelease(tag) {
-  const response = await fetch(`https://api.github.com/repos/neurodesk/webapps/releases/tags/${tag}`, { headers });
-  if (!response.ok) throw new Error(`${tag}: HTTP ${response.status}`);
-  return response.json();
+const directory = await mkdtemp(join(tmpdir(), 'catalog-update-'));
+try {
+  const update = join(directory, 'update.json');
+  const names = releases.map(({ id, version }) => `${id}@${version}`);
+  execFileSync(process.execPath, [join(root, 'scripts/catalog-update.mjs'), '--out', update, ...names], { stdio: 'inherit' });
+  execFileSync(process.execPath, [join(root, 'scripts/apply-catalog-update.mjs'), update], { stdio: 'inherit' });
+} finally {
+  await rm(directory, { recursive: true, force: true });
 }
-
-await importReleases(catalog, releases, { fetchRelease, specs: await portableSpecs() });
-for (const { id, version } of releases) console.log(`${id}: ${catalog.apps[id].downloads.length} downloads from ${id}-v${version}`);
-await writeFile(path, `${JSON.stringify(catalog, null, 2)}\n`);

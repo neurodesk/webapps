@@ -1,20 +1,20 @@
 name: standalone-catalog
 
-# A native release job announces its verified archives here; this run writes them into
-# registry/standalone.json on main and redeploys the site so each app's Standalone dialog lists them.
+# Writes released, verified native archives into registry/standalone.json on main and redeploys the
+# site, so each app's Standalone dialog lists them. A native release job announces its archives with a
+# repository_dispatch; publishing a draft or prerelease by hand announces it through the release event.
+# Runs are not grouped: each one re-applies its own update to the latest main, so none can be dropped.
 on:
   repository_dispatch:
     types: [standalone-catalog]
+  release:
+    types: [released]
   workflow_dispatch:
     inputs:
       releases:
-        description: Comma-separated app@VERSION releases whose archives are already attached
+        description: Space-separated app@VERSION releases whose verified archives are attached
         type: string
         required: true
-
-concurrency:
-  group: standalone-catalog
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -23,50 +23,95 @@ env:
   ONNXRUNTIME_NODE_INSTALL: skip
 
 jobs:
-  publish:
+  compute:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: write
-      actions: write
-    env:
-      RELEASES: ${{ github.event.client_payload.releases || inputs.releases }}
+    outputs:
+      changed: ${{ steps.update.outputs.changed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22.22.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Import the releases into the catalog
+      - name: Compute the catalog update from the release tags
+        id: update
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          DISPATCHED: ${{ github.event.client_payload.releases }}
+          REQUESTED: ${{ inputs.releases }}
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          IFS=',' read -ra releases <<< "$RELEASES"
-          node scripts/desktop/import-native-releases.mjs "${releases[@]}"
+          case "$EVENT" in
+            release) node scripts/catalog-update.mjs --out update.json --tag "$TAG" ;;
+            repository_dispatch) node scripts/catalog-update.mjs --out update.json $DISPATCHED ;;
+            *) node scripts/catalog-update.mjs --out update.json $REQUESTED ;;
+          esac
+          echo "changed=$(node -p "Object.keys(require('./update.json')).length > 0")" >> "$GITHUB_OUTPUT"
+      - name: Validate the updated catalog
+        run: |
+          node scripts/apply-catalog-update.mjs update.json
           node --test test/standalone.test.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: catalog-update
+          path: update.json
+          retention-days: 7
+
+  publish:
+    needs: compute
+    if: needs.compute.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: catalog-update
+          path: ${{ runner.temp }}/catalog
+      # No dependencies run in this job; the token is used only for the push itself.
       - name: Commit the catalog to main
-        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPDATE: ${{ runner.temp }}/catalog/update.json
         run: |
-          if git diff --quiet registry/standalone.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore(standalone): publish ${RELEASES//,/, } downloads" registry/standalone.json
-          for attempt in 1 2 3; do
-            git push origin HEAD:main && break
-            git pull --rebase origin main
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          releases=$(node -p "Object.entries(require(process.env.UPDATE)).map(([id, d]) => id + ' ' + d[0].version).join(', ')")
+          for attempt in 1 2 3 4 5; do
+            git fetch --quiet "$remote" main
+            git reset --quiet --hard FETCH_HEAD
+            node scripts/apply-catalog-update.mjs "$UPDATE"
+            if git diff --quiet registry/standalone.json; then
+              echo "main already lists ${releases}"
+              exit 0
+            fi
+            git commit --quiet -m "chore(standalone): publish ${releases} downloads" registry/standalone.json
+            if git push --quiet "$remote" HEAD:main; then
+              exit 0
+            fi
+            sleep $((attempt * 5))
           done
-          git diff --quiet origin/main HEAD
-          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "could not push the catalog after 5 attempts" >&2
+          exit 1
       - name: Redeploy the site
-        if: steps.commit.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run deploy-pages.yml --ref main

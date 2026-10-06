@@ -107,4 +107,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE: ${{ steps.target.outputs.release }}
-        run: gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true ]; then
+            echo "::notice::$RELEASE_TAG is a draft or prerelease; publishing it adds its downloads to the Standalone catalog"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
+          fi

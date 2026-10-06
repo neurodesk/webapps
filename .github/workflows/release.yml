@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: neurodesk-webapps-release
@@ -132,6 +131,9 @@ jobs:
     needs: [app-plan, verify]
     if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}

@@ -66,7 +66,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Validate the app catalog and generated plans
-        run: pnpm test:registry && node --test test/app-plan.test.mjs test/independent-workflows.test.mjs test/upstream-sync.test.mjs
+        run: pnpm test:registry && node --test test/app-plan.test.mjs test/independent-workflows.test.mjs test/upstream-sync.test.mjs test/standalone-release-automation.test.mjs
       - name: Validate date releases and app scaffolding
         run: node --test test/app-versions.test.mjs test/new-app.test.mjs test/app-examples.test.mjs test/disconnectome-assets.test.mjs test/automation-catalog.test.mjs
       - name: Enforce the design system and workspace contract
