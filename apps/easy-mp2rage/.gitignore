@@ -27,6 +27,8 @@ testdata/
 *_defaced*/
 *.nii
 *.nii.gz
+# synthetic phantom outputs of the Python pipeline (tools/gen_cli_golden.py)
+!/tools/golden/cli/*/*.nii.gz
 *.IMA
 *.ima
 *.dcm

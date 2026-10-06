@@ -176,7 +176,7 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 ## easy-mp2rage
 
 - The WASM core in `packages/easy-mp2rage/wasm/` is committed. The web app stages it (`tools/stage_core.sh`) and the `easy-mp2rage` command line loads it, so both run one binary. After changing `crates/mp2rage-core` or `crates/mp2rage-wasm`, run `pnpm --filter @neurodesk/easy-mp2rage build:wasm` (Rust 1.98.0, wasm-pack 0.13.1, binaryen `version_117` wasm-opt) and commit the result. The `wasm-source` job in `easy-mp2rage-native.yml` rebuilds it from source and fails when the committed bytes differ; a toolchain bump means rebuilding and committing in the same change.
-- `packages/easy-mp2rage/validation/cli-check.mjs` holds the command line to the Python golden phantom and to the web worker's WASM calls on the pinned example.
+- `packages/easy-mp2rage/validation/cli-check.mjs` holds every command-line output, for each option, to the Python pipeline's files in `apps/easy-mp2rage/tools/golden/cli/` and to the web worker's WASM calls. After changing the Python pipeline or adding an option, rerun `tools/gen_cli_golden.py` and add a case whose output the option changes.
 
 ## lcmodel
 

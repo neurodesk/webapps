@@ -124,11 +124,30 @@ SA2RAGE acquisition values, the B1 map units, the reference angle of a tfl map,
 
 ### Accuracy
 
-`validation/cli-check.mjs` is the release gate. It runs a command line on the
-Python golden phantom, where the SA2RAGE and tfl B1 T1 maps must be within
-0.1 ms of `tools/golden` (the tolerance of `web/test/e2e_node.mjs`) and the
-denoised UNI must match exactly. It then runs the web app's pinned 7 T example
-and requires every output to equal the web worker's WASM calls voxel for voxel.
+`validation/cli-check.mjs` is the release gate. Its references come from the
+Python pipeline in `apps/easy-mp2rage/mp2rage_t1`, not from the WASM core the
+command line runs. `tools/gen_cli_golden.py` runs that pipeline on the golden
+phantom once per command-line option (SA2RAGE and tfl B1 sources, reference
+angles 80, 60 and 40, `--extend-fov`, `--fallback-uncorrected`) and keeps every
+file it writes in `tools/golden/cli/`. For each case the check requires:
+
+- every output file on the phantom's 24x20x18 grid and affine, with one value
+  per voxel;
+- T1 maps within 0.1 ms (the tolerance of `web/test/e2e_node.mjs`), B1 maps
+  within 1e-4 and the B1-corrected UNI within 1e-2 of the Python files;
+- each option's Python output to differ from the run without it, so a command
+  line that ignores the option fails;
+- `parameters.json` to record the options;
+- every output to equal the web worker's WASM calls voxel for voxel.
+
+The denoised UNI must equal the Python robust combination exactly at
+regularization 6 and 2. The pinned 7 T example, with default and non-default
+options, must equal the web worker's WASM calls voxel for voxel on UNI's grid.
+Measured worst differences from Python are 2.4e-4 ms (T1) and 1.2e-7 (B1).
+
+The phantom has no input without INV2: the Python pipeline then masks
+`|UNI - median(UNI)|`, while the web app and the command line mask UNI itself,
+so the two disagree there.
 
 ```bash
 node packages/easy-mp2rage/validation/cli-check.mjs
