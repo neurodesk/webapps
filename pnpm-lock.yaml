@@ -528,6 +528,9 @@ importers:
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
+      '@neurodesk/fireants':
+        specifier: workspace:*
+        version: link:../../packages/fireants
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -967,6 +970,12 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/fireants:
+    dependencies:
+      '@fireants/fireants':
+        specifier: 0.1.20260913
+        version: 0.1.20260913
 
   packages/greedy: {}
 

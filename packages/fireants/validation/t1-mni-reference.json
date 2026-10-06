@@ -1,0 +1,221 @@
+{
+  "example": "t1-mni",
+  "inputs": {
+    "t1_brain.nii.gz": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+    "MNI152_T1_1mm_brain.nii.gz": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212"
+  },
+  "engine": "@fireants/fireants 0.1.20260913",
+  "threads": 4,
+  "cases": {
+    "greedy": {
+      "inProcess": {
+        "path": "register() in-process with worker: false, otherwise as apps/fireants/src/main.js calls it",
+        "threads": 4,
+        "seconds": 1776,
+        "stages": [
+          "Moments: 1.8s (NCC -0.7516)",
+          "Rigid: 692.1s (NCC -0.7170)",
+          "Affine: 942.0s (NCC -0.6884)",
+          "Greedy: 136.9s (NCC -0.8586)"
+        ],
+        "finalNcc": -0.8586,
+        "geometry": {
+          "dims": [
+            182,
+            218,
+            182
+          ],
+          "pixdim": [
+            -1,
+            1,
+            1,
+            1
+          ],
+          "qformCode": 4,
+          "sformCode": 4,
+          "quatern": [
+            0,
+            1,
+            0,
+            90,
+            -126,
+            -72
+          ],
+          "srow": [
+            -1,
+            0,
+            0,
+            90,
+            0,
+            1,
+            0,
+            -126,
+            0,
+            0,
+            1,
+            -72
+          ]
+        },
+        "datatype": 16,
+        "voxelSha256": "05e38ea61ef41b3100c079c83d37b68e336108fbf649618c9aa21fa134d69e98",
+        "mean": 55.329148417383706,
+        "std": 103.58842079610244,
+        "fixedCorrelation": 0.7189889445717167
+      },
+      "browser": {
+        "path": "apps/fireants/e2e/reference.spec.js: the app's register automation, registration worker, built assets",
+        "app": "fireants 0.2.20261004",
+        "browser": "Chromium 153.0.8010.12",
+        "threads": 4,
+        "seconds": 1990,
+        "geometry": {
+          "dims": [
+            182,
+            218,
+            182
+          ],
+          "pixdim": [
+            -1,
+            1,
+            1,
+            1
+          ],
+          "qformCode": 4,
+          "sformCode": 4,
+          "quatern": [
+            0,
+            1,
+            0,
+            90,
+            -126,
+            -72
+          ],
+          "srow": [
+            -1,
+            0,
+            0,
+            90,
+            0,
+            1,
+            0,
+            -126,
+            0,
+            0,
+            1,
+            -72
+          ]
+        },
+        "datatype": 16,
+        "voxelSha256": "05e38ea61ef41b3100c079c83d37b68e336108fbf649618c9aa21fa134d69e98",
+        "mean": 55.329148417383706,
+        "std": 103.58842079610244,
+        "fixedCorrelation": 0.7189889445717167
+      }
+    },
+    "syn": {
+      "inProcess": {
+        "path": "register() in-process with worker: false, otherwise as apps/fireants/src/main.js calls it",
+        "threads": 4,
+        "seconds": 2175,
+        "stages": [
+          "Moments: 2.7s (NCC -0.7516)",
+          "Rigid: 799.1s (NCC -0.7170)",
+          "Affine: 1047.6s (NCC -0.6884)",
+          "SyN: 323.9s (NCC -0.8251)"
+        ],
+        "finalNcc": -0.8251,
+        "geometry": {
+          "dims": [
+            182,
+            218,
+            182
+          ],
+          "pixdim": [
+            -1,
+            1,
+            1,
+            1
+          ],
+          "qformCode": 4,
+          "sformCode": 4,
+          "quatern": [
+            0,
+            1,
+            0,
+            90,
+            -126,
+            -72
+          ],
+          "srow": [
+            -1,
+            0,
+            0,
+            90,
+            0,
+            1,
+            0,
+            -126,
+            0,
+            0,
+            1,
+            -72
+          ]
+        },
+        "datatype": 16,
+        "voxelSha256": "f6ce6d1c542784a6b900e30cbc81be59a1e656c45f11f5ae6ce4d069aa9ec58e",
+        "mean": 56.239140532627644,
+        "std": 103.57968610236715,
+        "fixedCorrelation": 0.6833412765237638
+      },
+      "browser": {
+        "path": "apps/fireants/e2e/reference.spec.js: the app's register automation, registration worker, built assets",
+        "app": "fireants 0.2.20261004",
+        "browser": "Chromium 153.0.8010.12",
+        "threads": 4,
+        "seconds": 2118,
+        "geometry": {
+          "dims": [
+            182,
+            218,
+            182
+          ],
+          "pixdim": [
+            -1,
+            1,
+            1,
+            1
+          ],
+          "qformCode": 4,
+          "sformCode": 4,
+          "quatern": [
+            0,
+            1,
+            0,
+            90,
+            -126,
+            -72
+          ],
+          "srow": [
+            -1,
+            0,
+            0,
+            90,
+            0,
+            1,
+            0,
+            -126,
+            0,
+            0,
+            1,
+            -72
+          ]
+        },
+        "datatype": 16,
+        "voxelSha256": "f6ce6d1c542784a6b900e30cbc81be59a1e656c45f11f5ae6ce4d069aa9ec58e",
+        "mean": 56.239140532627644,
+        "std": 103.57968610236715,
+        "fixedCorrelation": 0.6833412765237638
+      }
+    }
+  }
+}
