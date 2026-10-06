@@ -263,6 +263,20 @@ test('every app shows status in the shared footer and keeps a collapsed technica
   assert.deepEqual(failures, []);
 });
 
+test('console header actions sit in the shared, spaced action group', async () => {
+  const failures = [];
+  for (const app of registry.apps) {
+    for (const source of await appSources(app, ['.html'])) {
+      const { document } = new JSDOM(source.text).window;
+      for (const button of document.querySelectorAll('[class*="console-header"] button:not([data-disclosure-toggle])')) {
+        const grouped = button.matches('.nd-console-clear') && button.parentElement.matches('.nd-console-actions');
+        if (!grouped) failures.push(`${source.path}: put console button "${button.textContent.trim()}" in .nd-console-actions as .nd-console-clear`);
+      }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
 test('no app shows a start page, landing overlay or welcome modal before the workspace', async () => {
   const failures = [];
   for (const app of registry.apps) {
