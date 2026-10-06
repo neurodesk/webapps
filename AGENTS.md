@@ -212,6 +212,22 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - Uses the registry `@niivue/niivue` with no patch. Everything the old rc.11 patch provided is upstream API as of `1.0.0-rc.14` ([niivue/mono#160](https://github.com/niivue/mono/issues/160)); see `docs/architecture/zarro-niivue-streaming-integration.md` for the mapping. Do not reintroduce `patchedDependencies` or reach into NiiVue internals; ask upstream for an API instead.
 - `src/cursor_zoom.ts` stays until NiiVue exports its wheel-zoom anchor helpers or a configurable wheel step, because the Scroll zoom speed setting needs a continuous zoom. `src/nvslide_measurement.ts` stays until NVSlide scalar tiles land upstream (niivue/mono#159).
 
+## Upstream apps (qsmbly, seedseg, dicompare)
+
+- These apps are copies of Ashley Stewart's repositories, which stay the source. `source:` in
+  `registry/apps.yml` pins the upstream commit each copy last merged; `apps/<id>/upstream.json`
+  lists upstream paths not imported, path and identifier rewrites, and the adaptations to keep.
+- `.github/workflows/upstream-sync.yml` runs `scripts/sync-upstream.mjs` weekly and opens one PR per
+  app on `upstream/<id>`: a three-way merge from the pinned commit, monorepo date versions kept,
+  conflict markers left in a draft PR. Resolve conflicts on that branch; once a person has pushed
+  to it the workflow stops overwriting it until it is merged or deleted. It pushes with the
+  `neurodesk-webapps-upstream-sync` GitHub App so CI runs on its PRs ([setup](docs/architecture/upstream-sync.md)).
+- Upstream files the monorepo deleted (replaced by shared code) stay deleted; their upstream
+  changes are listed in the PR, not applied. Port anything relevant to the shared code by hand.
+- The standalone bundle serves the dicompare worker, controller and the QSM/SeedSeg schemas from
+  `apps/dicompare/public`, not from dicompare.neurodesk.org (`path` entries in
+  `registry/offline-assets.sources.json`).
+
 ## Native executables (exes/)
 
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`

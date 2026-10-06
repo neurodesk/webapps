@@ -232,27 +232,6 @@
       "kind": "python-runtime",
       "dependencies": []
     },
-    "https://dicompare.neurodesk.org/embed/DicompareController.js": {
-      "sha256": "990ceeb5b264dca46ecbc37923ff6986d2beac560855ce303900a9dd64a55a96",
-      "bytes": 12111,
-      "contentType": "application/javascript; charset=utf-8",
-      "kind": "runtime",
-      "dependencies": []
-    },
-    "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json": {
-      "sha256": "6b272556f51e775ee74bd3ab4ec4277b65d10dbf56328515bac52c62c81779c3",
-      "bytes": 29976,
-      "contentType": "application/json; charset=utf-8",
-      "kind": "schema",
-      "dependencies": []
-    },
-    "https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json": {
-      "sha256": "e1d248bdc8abe9f4b2b15d9510c1a57553391cfd4c24364ac4e0f968344e09fb",
-      "bytes": 10232,
-      "contentType": "application/json; charset=utf-8",
-      "kind": "schema",
-      "dependencies": []
-    },
     "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4": {
       "sha256": "26f6d74ccd6e7fa34526a4a9f17fbfcce305b7ccdbee6ce7f4ed74dda8622b86",
       "bytes": 381,

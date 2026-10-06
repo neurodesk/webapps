@@ -8,15 +8,14 @@ A complete **Quantitative Susceptibility Mapping (QSM)** pipeline that runs enti
 
 [ACCESS QSMbly HERE](https://qsmbly.neurodesk.org/)
 
-This application integrates [Ashley Stewart's upstream QSMbly](upstream.json)
-at commit `6e01b15b43b615639881f35e6b1f7dbc214e0864`. See [upstream.json](upstream.json)
-for the pinned dependencies and monorepo adaptations. The shared shell, example
+This application integrates [Ashley Stewart's upstream QSMbly](https://github.com/astewartau/qsmbly)
+at the commit pinned by `source:` in `registry/apps.yml`. The shared shell, example
 catalog, worker channels and release tooling belong to this repository.
 
-To prepare a future sync, clone upstream on the storage volume and run
-`python3 scripts/merge-qsmbly-upstream.py <clone> --base <last-imported-commit> --target <new-commit>`
-from the repository root. Review the candidate merges under `$TMPDIR/qsmbly-upstream-merge`
-before applying them. The script does not change checkout files.
+The weekly `upstream sync` workflow merges new upstream commits into a pull request.
+[upstream.json](upstream.json) lists the upstream files this app does not import and
+the adaptations to keep when resolving conflicts. To run it locally, use
+`node scripts/sync-upstream.mjs --app qsmbly`.
 
 ## Features
 
