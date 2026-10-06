@@ -82,7 +82,7 @@ jobs:
           BOT: ${{ steps.bot.outputs.name }}
         run: |
           if git rev-parse -q --verify "origin/$BRANCH" >/dev/null \
-            && git log --format=%an "origin/$BASE..origin/$BRANCH" | grep -qvxF "$BOT"; then
+            && git log --format='%an%n%cn' "origin/$BASE..origin/$BRANCH" | grep -qvxF "$BOT"; then
             echo "::notice::$BRANCH has commits from a person; merge or delete it to resume syncing $APP."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           fi

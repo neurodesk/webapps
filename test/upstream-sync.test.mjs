@@ -4,10 +4,46 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import YAML from 'yaml';
 import { PACKAGE_VERSION_SITE, mergeUpstream } from '../scripts/lib/upstream-sync.mjs';
 
 const pkg = (version, dependencies) => `${JSON.stringify({ name: 'demo', version, dependencies }, null, 2)}\n`;
 const lines = (...items) => `${items.join('\n')}\n`;
+
+test('the workflow preserves human amendments to commits authored by the bot', () => {
+  const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-guard-test-'));
+  try {
+    const repo = join(root, 'repo');
+    execFileSync('git', ['init', '-q', repo]);
+    const base = commit(repo, { 'source.js': lines('base') });
+    const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+    git('update-ref', 'refs/remotes/origin/main', base);
+    write(repo, { 'source.js': lines('upstream change') });
+    git('add', '-A');
+    git('-c', 'user.name=sync[bot]', '-c', 'user.email=bot@example.test', 'commit', '-qm', 'sync');
+    git('update-ref', 'refs/remotes/origin/upstream/browserqc', git('rev-parse', 'HEAD'));
+    const workflow = YAML.parse(readFileSync(new URL('../.github/workflows/upstream-sync.yml', import.meta.url), 'utf8'));
+    const guard = workflow.jobs.sync.steps.find(step => step.id === 'guard').run;
+    const output = join(root, 'output');
+    const runGuard = () => {
+      writeFileSync(output, '');
+      execFileSync('bash', ['-c', guard], {
+        cwd: repo,
+        env: { ...process.env, BOT: 'sync[bot]', BASE: 'main', BRANCH: 'upstream/browserqc', GITHUB_OUTPUT: output },
+      });
+      return readFileSync(output, 'utf8');
+    };
+    assert.equal(runGuard(), '');
+    write(repo, { 'source.js': lines('human conflict resolution') });
+    git('add', '-A');
+    git('-c', 'user.name=maintainer', '-c', 'user.email=human@example.test', 'commit', '--amend', '--no-edit');
+    git('update-ref', 'refs/remotes/origin/upstream/browserqc', git('rev-parse', 'HEAD'));
+    assert.equal(git('log', '-1', '--format=%an'), 'sync[bot]');
+    assert.match(runGuard(), /skip=true/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function write(root, files) {
   for (const [path, content] of Object.entries(files)) {
