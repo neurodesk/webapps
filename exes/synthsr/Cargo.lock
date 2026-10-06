@@ -387,6 +387,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neurodesk-native-publish"
+version = "0.1.0"
+
+[[package]]
 name = "neurodesk-nifti"
 version = "0.1.0"
 
@@ -738,10 +742,11 @@ dependencies = [
 
 [[package]]
 name = "synthsr"
-version = "0.6.20261004"
+version = "0.6.20261005"
 dependencies = [
  "flate2",
  "metal",
+ "neurodesk-native-publish",
  "neurodesk-nifti",
  "ort",
  "serde_json",
