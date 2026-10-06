@@ -33,6 +33,9 @@ const PUBLISHED_REFERENCE_SHA256 = {
 const SURFACES = ['white', 'mid.white', 'pial', 'registration'].flatMap((surface) => ['lh', 'rh'].map((hemisphere) => `${hemisphere}.${surface}`));
 const OUTPUTS = [...SURFACES, 'topofit_qc.nii', 'topofit_manifest.json'].sort();
 const QC_LABELS = { white: 4095, pial: 3500 };
+// OpenRecon's published QC image marks each vertex's voxel. The command line draws its default overlay
+// one in-plane voxel thicker, with white painted over pial.
+const QC_THICKNESS = 1;
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const failures = [];
@@ -109,6 +112,32 @@ function dilateOneVoxel(mask, [, nx, ny, nz]) {
   return output;
 }
 
+function dilateInPlane(mask, [, nx, ny]) {
+  const output = mask.slice();
+  for (let i = 0; i < mask.length; i += 1) {
+    if (!mask[i]) continue;
+    const x = i % nx;
+    const y = Math.floor(i / nx) % ny;
+    if (x > 0) output[i - 1] = 1;
+    if (x < nx - 1) output[i + 1] = 1;
+    if (y > 0) output[i - nx] = 1;
+    if (y < ny - 1) output[i + nx] = 1;
+  }
+  return output;
+}
+
+// Redraws OpenRecon's labels at the command line's overlay thickness. A pial voxel that white covered
+// in the reference only has white or already-white neighbours after dilation, so nothing is lost.
+function thickenLabels(reference, dims) {
+  let white = reference.data.map((value) => value === QC_LABELS.white);
+  let pial = reference.data.map((value) => value === QC_LABELS.pial);
+  for (let pass = 0; pass < QC_THICKNESS; pass += 1) {
+    white = dilateInPlane(white, dims);
+    pial = dilateInPlane(pial, dims);
+  }
+  return { white, pial: pial.map((value, i) => value & !white[i]) };
+}
+
 // compare.py symmetric_coverage: the smaller fraction of either mask within one voxel of the other.
 function symmetricCoverage(left, right, dims) {
   const count = (mask) => mask.reduce((total, value) => total + value, 0);
@@ -121,9 +150,10 @@ function symmetricCoverage(left, right, dims) {
 function compareQc(qc, reference, source) {
   check(JSON.stringify(qc.grid) === JSON.stringify(source.grid), `topofit_qc.nii grid equals the input's (dims ${qc.grid.dims.slice(1).join('x')}, sform ${qc.grid.srow.join(' ')})`);
   if (JSON.stringify(reference.grid) !== JSON.stringify(qc.grid)) return;
+  const expected = thickenLabels(reference, qc.grid.dims);
   for (const [name, label] of Object.entries(QC_LABELS)) {
-    const coverage = symmetricCoverage(qc.data.map((value) => value === label), reference.data.map((value) => value === label), qc.grid.dims);
-    check(coverage >= report.thresholds.qcWithinOneVoxel, `topofit_qc.nii ${name} within one voxel of OpenRecon ${coverage.toPrecision(4)} >= ${report.thresholds.qcWithinOneVoxel}`);
+    const coverage = symmetricCoverage(qc.data.map((value) => value === label), expected[name], qc.grid.dims);
+    check(coverage >= report.thresholds.qcWithinOneVoxel, `topofit_qc.nii ${name} within one voxel of OpenRecon drawn at thickness ${QC_THICKNESS} ${coverage.toPrecision(4)} >= ${report.thresholds.qcWithinOneVoxel}`);
   }
 }
 

@@ -60,7 +60,11 @@ match the midpoint of OpenRecon's white and pial surfaces within the surface
 thresholds. `topofit_qc.nii` must keep the input's dimensions, voxel sizes,
 qform and sform. Its white and pial labels must each have one-voxel symmetric
 coverage of OpenRecon's `topofit_qc.nii.gz` labels of at least
-`qcWithinOneVoxel`, computed as `compare.py` does. The check prints one line
+`qcWithinOneVoxel`, computed as `compare.py` does. OpenRecon's published QC
+marks one voxel per vertex, while the command draws its default overlay one
+in-plane voxel thicker, so the check dilates OpenRecon's labels the same way
+first. Drawn from OpenRecon's own surfaces, the package's QC then differs from
+that redrawing in one voxel. The check prints one line
 per metric. `--outputs <directory>` checks an existing output directory
 without running the command.
 The published reference files are the 2026-09-11 capture. The report's
