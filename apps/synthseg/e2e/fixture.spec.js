@@ -87,7 +87,8 @@ async function checkCase(page, { input, reference, mode, limit }) {
   await page.locator('#mode').selectOption(mode);
   await page.locator('#processButton').click();
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', /succeeded|failed/, { timeout: 1700000 });
-  expect(await page.locator('#statusText').textContent()).toContain('Labels ready');
+  // The state flips when the run succeeds; the text follows once the viewer has the labels.
+  await expect(page.locator('#statusText')).toContainText('Labels ready', { timeout: 120000 });
   const download = await Promise.all([page.waitForEvent('download'), page.locator('#saveBtn').click()]).then(([value]) => value);
   const reportDownload = await Promise.all([page.waitForEvent('download'), page.locator('#reportBtn').click()]).then(([value]) => value);
   const producedBytes = readFileSync(await download.path());
