@@ -71,6 +71,19 @@ test('a registration writes only the gzipped registered image on the fixed grid'
   assert.deepEqual([42, 44, 46].map((offset) => image.readInt16LE(offset)), [24, 24, 24]);
 });
 
+test('--transform syn runs the SyN preset, not Greedy', async (t) => {
+  const { root, moving, fixed } = await workspace(t);
+  const images = {};
+  for (const transform of ['greedy', 'syn']) {
+    const output = join(root, transform);
+    const result = run([moving, fixed, output, '--transform', transform, '--threads', '2']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, new RegExp(`^${transform} registration on 2 CPU threads`, 'm'));
+    images[transform] = gunzipSync(await readFile(join(output, 'moving_T1w_registered.nii.gz')));
+  }
+  assert.notDeepEqual(images.syn.subarray(352), images.greedy.subarray(352));
+});
+
 test('a non-empty output directory is refused and left untouched', async (t) => {
   const { root, moving, fixed } = await workspace(t);
   const output = join(root, 'results');
@@ -101,7 +114,9 @@ test('only the automation presets, positive thread counts and CPU execution are 
 test('help states that brain extraction and WebGPU are not included', () => {
   const result = run(['--help']);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /MindGrab brain extraction is not\s+included/);
+  assert.match(result.stdout, /Brain extraction is not included/);
+  assert.match(result.stdout, /issues\/162/);
+  assert.match(result.stdout, /SynthStrip/);
   assert.match(result.stdout, /CPU only/);
 });
 
