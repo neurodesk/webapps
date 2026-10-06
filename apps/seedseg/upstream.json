@@ -1,0 +1,13 @@
+{
+  "branch": "main",
+  "ignore": [
+    ".github/**",
+    ".gitignore",
+    "CLAUDE.md",
+    "scripts/**"
+  ],
+  "integration": [
+    "Keep the shared shell, DICOM import, viewer, progress and dialogs that replace upstream's controllers and UI modules.",
+    "Keep model weights on the shared downloader with pinned hashes."
+  ]
+}
