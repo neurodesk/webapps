@@ -145,8 +145,10 @@ test("each label model segments with its own colormap", async ({ page }) => {
   for (const model of ["16chan18cls", "mindmap", "mindsnap"]) {
     await page.locator("#modelSelect").selectOption(model);
     await page.locator("#segmentButton").click();
-    await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
-    await expect(page.locator("#meshButton")).toBeEnabled();
+    // The previous model's "Segmentation complete" is still showing; the click disables
+    // Create mesh at once, and it comes back only when this model has finished.
+    await expect(page.locator("#meshButton")).toBeEnabled({ timeout: 300_000 });
+    await expect(status).toHaveText(/^Segmentation complete/);
   }
 });
 
