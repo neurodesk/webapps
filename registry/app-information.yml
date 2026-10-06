@@ -587,7 +587,7 @@ apps:
 
   browserqc:
     packages:
-      - { name: brainchop (TensorFlow.js), url: https://github.com/neuroneural/brainchop, role: deep-learning tissue segmentation on the GPU }
+      - { name: MindGrab (brainchop C11/WebAssembly), url: https://github.com/neuroneural/brainchop, role: brain mask, label segmentation and tissue fractions }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: MRIQC-style image-quality metrics }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
@@ -604,10 +604,6 @@ apps:
         title: niimath
         reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."
         doi: 10.52294/001c.94384
-      - group: Deep learning framework
-        title: TensorFlow.js
-        reference: "Smilkov D, Thorat N, Assogba Y, et al. TensorFlow.js: machine learning for the web and beyond. arXiv. 2019."
-        url: https://arxiv.org/abs/1901.05350
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
