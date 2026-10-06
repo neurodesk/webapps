@@ -16,15 +16,35 @@ export function outputFiles(task, mode) {
   ];
 }
 
-export function parametersRecord({ software, note, task, mode, mp2rage, sa2rage, b1MapType, regularization }) {
+// Every setting that changes a result is recorded, so parameters.json reproduces the run.
+export function parametersRecord({
+  software,
+  note,
+  task,
+  mode,
+  mp2rage,
+  sa2rage,
+  b1MapType,
+  referenceAngle,
+  extendFov,
+  fallbackUncorrected,
+  maskSource,
+  regularization,
+}) {
+  const denoise = task === 'denoise';
+  const b1map = !denoise && mode === 'b1map';
   return {
     software,
     task,
-    mode: task === 'denoise' ? undefined : mode,
-    mp2rage: task === 'denoise' ? undefined : mp2rage,
-    sa2rage: mode === 'sa2rage' ? sa2rage : undefined,
-    b1_map_type: mode === 'b1map' ? b1MapType : undefined,
-    regularization: task === 'denoise' ? regularization : undefined,
+    mode: denoise ? undefined : mode,
+    mp2rage: denoise ? undefined : mp2rage,
+    sa2rage: !denoise && mode === 'sa2rage' ? sa2rage : undefined,
+    b1_map_type: b1map ? b1MapType : undefined,
+    b1_reference_angle_deg: b1map && b1MapType === 'tfl' ? referenceAngle : undefined,
+    extend_fov: b1map ? extendFov : undefined,
+    fallback_uncorrected: task === 't1' ? fallbackUncorrected : undefined,
+    mask_source: denoise ? undefined : maskSource,
+    regularization: denoise ? regularization : undefined,
     note,
   };
 }

@@ -117,6 +117,11 @@ The files have the web app's download names:
 | `correct` with `--sa2rage` | as above, with `B1map_from_SA2RAGE.nii.gz` |
 | `denoise` | `UNI_denoised.nii.gz`, `parameters.json` |
 
+`parameters.json` records every setting that changes a result: the MP2RAGE and
+SA2RAGE acquisition values, the B1 map units, the reference angle of a tfl map,
+`extend_fov`, `fallback_uncorrected`, `mask_source` (`INV2`, or `UNI` without
+`--inv2`) and the denoising `regularization`. The web app writes the same record.
+
 ### Accuracy
 
 `validation/cli-check.mjs` is the release gate. It runs a command line on the

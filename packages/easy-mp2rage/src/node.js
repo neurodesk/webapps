@@ -154,7 +154,15 @@ export async function correct({
     );
   }
   const volumes = { t1: result.t1, b1: result.b1, t1u: result.t1_uncorr, unic: result.uni_corr };
-  const parameters = { mp2rage: [...mp2rage], sa2rage: sa2rageParameters, b1MapType: b1Type };
+  const parameters = {
+    mp2rage: [...mp2rage],
+    sa2rage: sa2rageParameters,
+    b1MapType: b1Type,
+    referenceAngle,
+    extendFov,
+    fallbackUncorrected,
+    maskSource: inv2Volume ? 'INV2' : 'UNI',
+  };
   return writeOutputs({ output: destination, task: 't1', mode, uni: uniVolume, volumes, parameters });
 }
 

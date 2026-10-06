@@ -753,6 +753,17 @@ async function runSelectedTask() {
   setProgress(5);
   const t0 = performance.now();
   const dims = uni.dims.slice(0, 3);
+  // Read once, so the run and its parameters.json record the same values.
+  const settings = {
+    mp2rage: mpParams(),
+    sa2rage: saParams(),
+    b1MapType: $("#b1_type").value,
+    referenceAngle: num("#b1_refangle"),
+    extendFov: $("#extendFov") ? $("#extendFov").checked : true,
+    fallbackUncorrected: $("#fallbackUncorr") ? $("#fallbackUncorr").checked : false,
+    maskSource: inv2 ? "INV2" : "UNI",
+    regularization: num("#reg"),
+  };
   if ($("#verbose")?.checked) {
     const roles = state.files
       .filter((f) => f.role !== "(ignore)")
@@ -784,7 +795,7 @@ async function runSelectedTask() {
   }
   const w = freshWorker();
   w.onmessage = (e) => {
-    onResult(e.data, uni, task, mode, t0).catch(error => stopProcessing(undefined, error));
+    onResult(e.data, uni, task, mode, t0, settings).catch(error => stopProcessing(undefined, error));
   };
   // Copy every array we post. postMessage transfers *detach* the source buffer,
   // which would empty state.files and crash the next run. Copies keep the loaded
@@ -809,7 +820,7 @@ async function runSelectedTask() {
       inv1: inv1Copy,
       inv2: inv2Copy,
       dims: Uint32Array.from(dims),
-      reg: num("#reg"),
+      reg: settings.regularization,
     };
     setProgress(15);
     try {
@@ -829,25 +840,25 @@ async function runSelectedTask() {
     inv2: inv2Copy,
     dims: Uint32Array.from(dims),
     uniAff: uni.affine,
-    mp: Float64Array.from(mpParams()),
+    mp: Float64Array.from(settings.mp2rage),
   };
-  msg.fallback = $("#fallbackUncorr") ? $("#fallbackUncorr").checked : false;
+  msg.fallback = settings.fallbackUncorrected;
   const transfer = [uniCopy.buffer, inv2Copy.buffer];
   if (mode === "sa2rage") {
     const saCopy = sa.data.slice();
     msg.sa = saCopy;
     msg.saDims = Uint32Array.from(sa.dims.slice(0, 3));
     msg.saAff = sa.affine;
-    msg.saP = Float64Array.from(saParams());
+    msg.saP = Float64Array.from(settings.sa2rage);
     transfer.push(saCopy.buffer);
   } else {
     const b1Copy = b1.data.slice();
     msg.b1 = b1Copy;
     msg.b1Dims = Uint32Array.from(b1.dims.slice(0, 3));
     msg.b1Aff = b1.affine;
-    msg.kind = B1_MAP_KINDS[$("#b1_type").value];
-    msg.refAngle = num("#b1_refangle");
-    msg.extendFov = $("#extendFov") ? $("#extendFov").checked : true;
+    msg.kind = B1_MAP_KINDS[settings.b1MapType];
+    msg.refAngle = settings.referenceAngle;
+    msg.extendFov = settings.extendFov;
     transfer.push(b1Copy.buffer);
   }
   setProgress(15);
@@ -878,7 +889,7 @@ function setupViews(list) {
   sel.value = list[0][0];
 }
 
-async function onResult(res, uni, task, mode, t0) {
+async function onResult(res, uni, task, mode, t0, settings) {
   if (!running) return; // stale message from a stopped/replaced worker
   if (res.type === "log") {
     if ($("#verbose")?.checked) log("  · " + res.message);
@@ -993,7 +1004,7 @@ async function onResult(res, uni, task, mode, t0) {
   setProgress(100);
   lastViews = views;
   setupViews(views);
-  await buildDownloads(task, mode, uni);
+  await buildDownloads(task, mode, uni, settings);
   resetPlanes(dims, aff); // axial ~2/3 up, coronal/sagittal mid
   setViewerVisible(true);
   showView($("#viewSel").value);
@@ -1009,7 +1020,7 @@ async function onResult(res, uni, task, mode, t0) {
 }
 
 // ---- downloads -------------------------------------------------------------
-async function buildDownloads(task, mode, uni) {
+async function buildDownloads(task, mode, uni, settings) {
   const dd = $("#downloads");
   derivedFiles = [];
   revokeDownloadUrls();
@@ -1091,10 +1102,7 @@ async function buildDownloads(task, mode, uni) {
     note: "Computed entirely in-browser; no data uploaded.",
     task,
     mode,
-    mp2rage: mpParams(),
-    sa2rage: saParams(),
-    b1MapType: $("#b1_type").value,
-    regularization: num("#reg"),
+    ...settings,
   });
   const provBytes = new TextEncoder().encode(JSON.stringify(prov, null, 2));
   derivedFiles.push({ role: "parameters", file: new File([provBytes], "parameters.json", { type: "application/json" }) });

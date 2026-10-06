@@ -69,6 +69,34 @@ test('SA2RAGE correction writes the web download files and matches the Python go
   assert.deepEqual(parameters.mp2rage, MP2RAGE.split(',').map(Number));
 });
 
+test('parameters.json records every setting that changes the result', async (t) => {
+  const root = await workspace(t);
+  const parameters = async (args) => {
+    const output = join(root, `run-${args.join('-').replace(/[^\w]+/g, '_').slice(-60)}`);
+    const result = run([...args, output]);
+    assert.equal(result.status, 0, result.stderr);
+    return JSON.parse(await readFile(join(output, 'parameters.json'), 'utf8'));
+  };
+  const b1Args = ['correct', '--uni', UNI, '--b1', B1, '--b1-type', 'tfl', '--mp2rage', MP2RAGE];
+  const changed = await parameters([...b1Args, '--inv2', INV2, '--reference-angle', '60', '--extend-fov', '--fallback-uncorrected']);
+  assert.equal(changed.b1_reference_angle_deg, 60);
+  assert.equal(changed.extend_fov, true);
+  assert.equal(changed.fallback_uncorrected, true);
+  assert.equal(changed.mask_source, 'INV2');
+  const defaults = await parameters(b1Args);
+  assert.equal(defaults.b1_reference_angle_deg, 80);
+  assert.equal(defaults.extend_fov, false);
+  assert.equal(defaults.fallback_uncorrected, false);
+  assert.equal(defaults.mask_source, 'UNI');
+  const relative = await parameters(['correct', '--uni', UNI, '--b1', B1, '--b1-type', 'relative', '--mp2rage', MP2RAGE]);
+  assert.equal(Object.hasOwn(relative, 'b1_reference_angle_deg'), false, 'a relative map ignores the reference angle');
+  const sa2rage = await parameters(['correct', '--uni', UNI, '--inv2', INV2, '--sa2rage', SA, '--sa2rage-params', SA2RAGE, '--mp2rage', MP2RAGE, '--fallback-uncorrected']);
+  assert.equal(sa2rage.fallback_uncorrected, true);
+  assert.equal(Object.hasOwn(sa2rage, 'extend_fov'), false, 'SA2RAGE has no FOV extension');
+  const denoise = await parameters(['denoise', '--uni', UNI, '--inv1', INV2, '--inv2', INV2, '--regularization', '2.5']);
+  assert.equal(denoise.regularization, 2.5);
+});
+
 test('a non-empty output directory is refused and left untouched', async (t) => {
   const output = join(await workspace(t), 'results');
   await mkdir(output);
