@@ -105,7 +105,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
   assert.deepEqual(shared.jobs.release.needs,['portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');
-  assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-14' || 'ubuntu-latest' }}");
+  assert.equal(shared.jobs.release['runs-on'],"${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}");
   const signing=['APPLEID','APPLEIDPASS','APPLE_TEAM_ID','CSC_LINK','CSC_KEY_PASSWORD','CSC_INSTALLER_LINK','CSC_INSTALLER_KEY_PASSWORD'];
   assert.deepEqual(Object.keys(shared.on.workflow_call.secrets),signing);
   assert.ok(!JSON.stringify(shared.jobs.portable).includes('secrets.'));
@@ -130,7 +130,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.match(steps[target].run,/tagPrefix/);
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
-  const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest','macos-arm64':'macos-14'};
+  const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest','macos-arm64':'macos-15'};
   for(const [name,packageDir] of [['syncro-native','packages/syncro'],['topofit-native','packages/topofit']]) {
     const flow=await workflow(name);
     assert.deepEqual(flow.permissions,{contents:'read'},name);

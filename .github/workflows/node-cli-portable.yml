@@ -103,7 +103,7 @@ jobs:
   release:
     if: inputs.publish_release
     needs: [portable]
-    runs-on: ${{ inputs.sign_release && 'macos-14' || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.sign_release && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 90
     permissions:
       contents: write
