@@ -240,6 +240,49 @@ test('Apply makes the drawing the stage data: edited name, provenance, analysis 
   assert.equal(again.manualEdit.downloaded, true);
 });
 
+test('Edit stays disabled until Apply has shown the edited stack, and Apply never cancels itself', async () => {
+  const { app, nv, viewer } = makeApp();
+  await deliverResults(app);
+  await openEditor(app, 'Lesion');
+  nv.paint(0, 1);
+  let release;
+  let reloading = false;
+  const pending = new Promise(resolve => { release = resolve; });
+  const showVolumes = viewer.showVolumes;
+  viewer.showVolumes = async (entries) => {
+    reloading = true;
+    await pending;
+    await showVolumes(entries);
+  };
+  let cancelled = false;
+  editor().addEventListener('nd-mask-edit-cancel', () => { cancelled = true; });
+  const applying = editor().apply();
+  try {
+    await until(() => reloading);
+    assert.equal(editor().session.state, 'applying');
+    assert.ok(rows().slice(1).every(row => row.edit.disabled), 'Edit stays disabled while the edited stack loads');
+  } finally {
+    release();
+  }
+  assert.ok(await applying instanceof File);
+  await until(() => viewer.locks.at(-1) === false);
+  assert.equal(cancelled, false, 'the render Apply triggers does not cancel the session');
+  assert.ok(rows().slice(1).every(row => !row.edit.disabled), 'Edit is enabled after Apply finishes');
+});
+
+test('a viewer render during a session keeps it open with the edited stage hidden', async () => {
+  const { app, viewer } = makeApp();
+  await deliverResults(app);
+  await openEditor(app, 'Lesion');
+  await app.toggleStageVisibility('segmentation', false);
+  await app.toggleStageVisibility('lesion', true);
+  assert.equal(editor().session.state, 'editing');
+  const stack = viewer.stacks.at(-1);
+  assert.equal(stack.find(entry => entry.stage === 'segmentation').visible, false);
+  assert.equal(stack.find(entry => entry.stage === 'lesion').visible, false, 'the drawing, not the overlay, shows the edited stage');
+  await editor().cancel();
+});
+
 test('Apply without a changed voxel leaves the result unmarked', async () => {
   const { app, nv, viewer, lines } = makeApp();
   await deliverResults(app);
