@@ -142,7 +142,7 @@ export class MaskEditor {
    * mask) into the drawing layer over background volume 0.
    * `labelColormap` is the stage's NiiVue label colormap.
    */
-  async begin({ stage, native = null, labelSetId, labelColormap, label = 1, opacity = 0.7 }) {
+  async begin({ stage, native = null, labelSetId, labelColormap, label = 1, opacity = 0.7, keepTool = false }) {
     const nv = this.nv;
     if (this.session) this.discard();
     const geometry = drawingGeometry(nv.volumes[0]);
@@ -159,14 +159,15 @@ export class MaskEditor {
       nv.drawOpacity = opacity;
       nv.drawIsFillOverwriting = true;
       nv.drawPenValue = label;
-      // FreeBrowse starts with no tool selected; the user picks Pen there.
-      nv.drawIsEnabled = false;
+      // A layer SCT opens starts with no tool, as FreeBrowse's own Create does;
+      // the user picks Pen there. An adopted layer keeps FreeBrowse's tool.
+      if (!keepTool) nv.drawIsEnabled = false;
       this.session = { stage, geometry, volume, original: bitmap.slice(), label };
       nv.refreshDrawing();
     } finally {
       this.ownChange = false;
     }
-    this.pendingLabel = this.setPenField(label) ? null : label;
+    this.pushPenField(label);
     await this.showDrawingTools();
     return this.session;
   }
@@ -223,17 +224,42 @@ export class MaskEditor {
         this.ownChange = false;
       }
     }
-    // FreeBrowse re-applies its own pen value when a tool is chosen; its field
-    // only exists while the pen is selected.
-    this.pendingLabel = this.setPenField(value) ? null : value;
+    this.pushPenField(value);
+  }
+
+  // FreeBrowse keeps its own pen value and re-applies it whenever a tool is
+  // chosen; its field only exists while the pen is selected. Until the field
+  // has taken `value`, a stale pen value from FreeBrowse is replaced.
+  pushPenField(value) {
+    this.pendingLabel = value;
+    if (this.setPenField(value)) this.pendingLabel = null;
+  }
+
+  retryPenField() {
+    let frames = 0;
+    const attempt = () => {
+      if (this.pendingLabel === null || !this.session) return;
+      if (this.setPenField(this.pendingLabel)) {
+        this.pendingLabel = null;
+      } else if (frames < 30) {
+        frames += 1;
+        (globalThis.requestAnimationFrame || (callback => setTimeout(callback, 16)))(attempt);
+      }
+    };
+    attempt();
   }
 
   handlePenValue(value) {
     if (!this.session || this.ownChange || !Number.isFinite(value) || value === 0) return;
     if (this.pendingLabel !== null && value !== this.pendingLabel) {
-      const label = this.pendingLabel;
-      this.nv.drawPenValue = label;
-      if (this.setPenField(label)) this.pendingLabel = null;
+      this.ownChange = true;
+      try {
+        this.nv.drawPenValue = this.pendingLabel;
+      } finally {
+        this.ownChange = false;
+      }
+      // The field appears once FreeBrowse renders the pen controls.
+      this.retryPenField();
       return;
     }
     this.pendingLabel = null;
@@ -256,7 +282,7 @@ export class MaskEditor {
     this.lastRemovedStage = null;
     this.adoption = Promise.resolve(this.onAdopt({ action, stage })).then(async request => {
       if (!request || !this.nv.drawingVolume || this.session) return null;
-      await this.begin(request);
+      await this.begin({ ...request, keepTool: true });
       this.onAdopted(request);
       return request;
     }).catch(() => null);

@@ -273,6 +273,12 @@ export class SctManualEdits {
     } else {
       for (const value of native) if (value) changed += 1;
     }
+    if (changed === 0) {
+      this.app.logAnalysis(`Manual edit: no voxels changed in ${STAGE_NAMES[stage] || stage}; the result is unchanged`);
+      await this.app.renderViewerVolumes();
+      this.sync();
+      return false;
+    }
     const kind = original ? 'edited' : 'new';
     const name = original
       ? editedFileName(original.file.name)
@@ -288,6 +294,7 @@ export class SctManualEdits {
     const counts = [...labelCounts(native)].map(([label, count]) => `${label}: ${count}`).join(', ') || 'empty';
     this.app.logAnalysis(`Manual edit applied to ${STAGE_NAMES[stage] || stage}: ${changed} voxels changed; voxels per label ${counts}; saved as ${name}`);
     this.sync();
+    return true;
   }
 
   /** Back to the model's mask, or remove a mask drawn from nothing. */

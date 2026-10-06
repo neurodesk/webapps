@@ -161,7 +161,8 @@ const cordColormap = { R: [0, 68], G: [0, 128], B: [0, 255], A: [0, 255], I: [0,
 {
   const nv = new FakeNiiVue();
   const penField = [];
-  const editor = new MaskEditor({ nv, setPenField: value => { penField.push(value); return false; } });
+  let fieldShown = false;
+  const editor = new MaskEditor({ nv, setPenField: value => { penField.push(value); return fieldShown; } });
   const session = await editor.begin({ stage: 'segmentation', native: modelVoxels, labelSetId: 'spinalcord', labelColormap: cordColormap, label: 1, opacity: 0.4 });
   assert.equal(editor.stage, 'segmentation');
   assert.deepEqual(nv.drawingVolume.img, nativeToDrawing(modelVoxels, drawingGeometry(PERMUTED)), 'the drawing holds the stage, in RAS order');
@@ -187,8 +188,11 @@ const cordColormap = { R: [0, 68], G: [0, 128], B: [0, 255], A: [0, 255], I: [0,
   // Label choice: FreeBrowse field absent, so the next pen value it applies is replaced.
   editor.setLabel(2);
   assert.equal(nv.drawPenValue, 2);
+  fieldShown = true;
   nv.drawPenValue = 1;
   assert.equal(nv.drawPenValue, 2, "FreeBrowse's stale pen value is replaced by the chosen label");
+  await new Promise(resolve => setTimeout(resolve, 50));
+  assert.equal(penField.at(-1), 2, "and FreeBrowse's Pen Value field is set once it is shown");
   const shown = [];
   editor.onPenValue = value => shown.push(value);
   nv.drawPenValue = 3;
@@ -398,6 +402,12 @@ function fakeApp() {
   assert.equal(restored.file.name, 'spinalcord_segmentation.nii');
   assert.equal(restored.manualEdit, null);
   assert.equal(edits.hasUnsavedEdits(), false);
+
+  // Applying without a change leaves the result as it is.
+  await edits.start();
+  assert.equal(await edits.apply(), true);
+  assert.equal(app.inferenceExecutor.getResult('segmentation').manualEdit, null, 'nothing changed, nothing marked edited');
+  assert.ok(app.lines.some(([, line]) => /no voxels changed in SCT Segmentation/.test(line)));
 
   // A new lesion mask drawn from nothing becomes the lesion stage, and can be removed.
   document.getElementById('editStageSelect').value = 'new:lesion';
