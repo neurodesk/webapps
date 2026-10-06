@@ -1,0 +1,16 @@
+{
+  "example": "ms-flair",
+  "recorded": {
+    "1": "2026-10-06, e2e/app.spec.js in Chromium 153 (Playwright 1.63), ONNX Runtime Web 1.29.0 WebAssembly, 8 threads",
+    "5": "pending"
+  },
+  "tolerance": {
+    "basis": "The native command line and this browser run differed by 13 of 12,623 mask voxels (0.1 %) and by no lesions on linux-x64, windows-x64 and macos-arm64 (PR #158). The bounds allow ten times the voxel difference and two lesions that a few boundary voxels can split or merge.",
+    "lesions": 2,
+    "relative": 0.01
+  },
+  "folds": {
+    "1": { "lesions": 90, "totalMl": 31.5, "maskVoxels": 12623, "probabilityMl": 32.13 },
+    "5": { "lesions": 77, "totalMl": 29.6, "maskVoxels": 0, "probabilityMl": 0 }
+  }
+}

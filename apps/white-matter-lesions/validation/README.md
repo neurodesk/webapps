@@ -87,6 +87,8 @@ replace those measurements.
 - The shipped example (MSLesSeg P57, clinical 2.3 mm FLAIR) runs in the built app on eight
   WebAssembly threads in 3 minutes with one fold (90 lesions, 31.5 ml) and 10 minutes with the
   ensemble (77 lesions, 29.6 ml). The expert mask for that patient, in MNI space, holds 42.1 ml.
+  `browser-reference.json` pins these results; the end-to-end test re-measures them in Chromium,
+  and the `flames` command line's release check must reproduce them.
 
 ## Reproduce
 
