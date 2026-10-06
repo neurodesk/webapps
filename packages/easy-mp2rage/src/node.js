@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { sameVoxelGrid } from '@neurodesk/webapp-components/file-io/nifti';
 import packageJson from '../package.json' with { type: 'json' };
 import { initSync, denoise_uni, t1map_b1, t1map_sa2rage, version } from '../wasm/mp2rage_wasm.js';
-import { readNifti, writeNiftiGz } from './nifti.js';
+import { readNifti, voxelGrid, writeNiftiGz } from './nifti.js';
 import { B1_MAP_KINDS, outputFiles, parametersRecord } from './outputs.js';
 
 export const MP2RAGE_PARAMETERS = ['TR', 'TI1', 'TI2', 'FA1', 'FA2', 'NZ1', 'NZ2', 'TRFLASH', 'inversion efficiency'];
@@ -63,11 +64,12 @@ async function readVolume(path, role) {
 }
 
 const grid = (volume) => volume.dims.slice(0, 3);
-const sameGrid = (a, b) => grid(a).every((size, axis) => size === grid(b)[axis]);
 
+// The core combines these images voxel for voxel, so their dimensions and affines must agree;
+// sameVoxelGrid allows 1e-5 in each affine coefficient for float32 header rounding.
 function assertSameGrid(uni, other, role) {
-  if (!sameGrid(uni, other)) {
-    throw new Error(`${role} (${grid(other).join('x')}) and UNI (${grid(uni).join('x')}) have different dimensions. They must be on the same grid.`);
+  if (!sameVoxelGrid(voxelGrid(uni), voxelGrid(other))) {
+    throw new Error(`${role} (${grid(other).join('x')}) and UNI (${grid(uni).join('x')}) are not on the same voxel grid. Dimensions, voxel size, orientation and origin must all match.`);
   }
 }
 

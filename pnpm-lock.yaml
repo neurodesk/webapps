@@ -950,7 +950,11 @@ importers:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
 
-  packages/easy-mp2rage: {}
+  packages/easy-mp2rage:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/greedy: {}
 

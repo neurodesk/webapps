@@ -10,7 +10,8 @@ import {
 // with a self-contained canvas viewer, and offers client-side downloads. Your
 // images/results never leave the tab (the hosted page loads GA4, which sees
 // anonymous page views only).
-import { readNifti, writeNiftiF32, writeNiftiGz } from "../vendor/easy-mp2rage/src/nifti.js";
+import { readNifti, voxelGrid, writeNiftiF32, writeNiftiGz } from "../vendor/easy-mp2rage/src/nifti.js";
+import { sameVoxelGrid } from "../vendor/webapp-components/src/file-io/NiftiUtils.js";
 import { B1_MAP_KINDS, outputFiles, parametersRecord } from "../vendor/easy-mp2rage/src/outputs.js";
 import { zipStore } from "./zip.js";
 import { indexBids } from "./bids.js";
@@ -677,10 +678,7 @@ $("#resetAll").onclick = resetAll;
 function validateBeforeRun(sel) {
   const { uni, inv1, inv2, sa, mode, task } = sel;
   const d3 = (f) => f.dims.slice(0, 3).join("×");
-  const sameGrid = (a, b) =>
-    a.dims[0] === b.dims[0] &&
-    a.dims[1] === b.dims[1] &&
-    a.dims[2] === b.dims[2];
+  const sameGrid = (a, b) => sameVoxelGrid(voxelGrid(a), voxelGrid(b));
   for (const [nm, f] of [
     ["INV2", inv2],
     ["INV1", task === "denoise" ? inv1 : null],
@@ -688,7 +686,7 @@ function validateBeforeRun(sel) {
     if (f && !sameGrid(uni, f))
       return `${nm} (${d3(f)}) and UNI (${d3(
         uni
-      )}) have different dimensions. They must be on the same grid.`;
+      )}) are not on the same voxel grid. Dimensions, voxel size, orientation and origin must all match.`;
   }
   if (mode === "sa2rage" && sa && (sa.dims[3] || 1) < 2)
     return `SA2RAGE must be a 2-volume (S1,S2) image, this one is ${sa.dims

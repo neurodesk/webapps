@@ -7,6 +7,9 @@
   "engines": {
     "node": ">=22"
   },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
   "bin": {
     "easy-mp2rage": "./bin/easy-mp2rage.js"
   },

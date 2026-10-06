@@ -97,6 +97,12 @@ The options are the parameters of the `correct` and `denoise` operations in
 `--sa2rage-params`, because the automation contract uses the name `sa2rage` for
 both. Without `--inv2`, `correct` masks with UNI, as the web app does.
 
+INV1 and INV2 are combined with UNI voxel for voxel, so both commands refuse them
+unless they share UNI's voxel grid: the same dimensions and an affine that
+differs by at most 1e-5 in each coefficient (the shared `sameVoxelGrid` check,
+which allows float32 header rounding). The B1 map and SA2RAGE image may be on
+any grid; they are resampled to UNI through their affines.
+
 Inputs are NIfTI. Convert DICOM with dcm2niix first, or use the web app, which
 also reads acquisition values from DICOM headers and BIDS sidecars and runs BIDS
 batches. The output directory must be new or empty.

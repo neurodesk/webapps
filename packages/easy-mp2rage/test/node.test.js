@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import automation from '../../../apps/easy-mp2rage/automation.json' with { type: 'json' };
-import { readNifti } from '../src/nifti.js';
+import { readNifti, writeNiftiF32 } from '../src/nifti.js';
 import { outputFiles } from '../src/outputs.js';
 
 const cli = fileURLToPath(new URL('../bin/easy-mp2rage.js', import.meta.url));
@@ -99,11 +99,66 @@ test('correction requires exactly one B1 source with declared units and a full a
   await assert.rejects(readdir(output), { code: 'ENOENT' });
 });
 
+async function readVolume(path) {
+  const bytes = await readFile(path);
+  return readNifti(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+}
+
+// INV2 with UNI's dimensions and voxels but a changed affine.
+async function regriddedInv2(root, name, change) {
+  const inv2 = await readVolume(INV2);
+  const affine = Float32Array.from(inv2.affine);
+  change(affine);
+  const path = join(root, `${name}.nii`);
+  await writeFile(path, Buffer.from(writeNiftiF32(inv2.data, inv2.dims.slice(0, 3), affine)));
+  return path;
+}
+
 test('denoising refuses inversion images on a different grid', async (t) => {
   const output = join(await workspace(t), 'results');
   const result = run(['denoise', '--uni', UNI, '--inv1', B1, '--inv2', INV2, output]);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /INV1 \(9x8x7\) and UNI \(24x20x18\) have different dimensions/);
+  assert.match(result.stderr, /INV1 \(9x8x7\) and UNI \(24x20x18\) are not on the same voxel grid/);
+});
+
+test('inversion images with UNI\'s dimensions but another orientation, spacing or origin are refused', async (t) => {
+  const root = await workspace(t);
+  const grids = {
+    'left-right flip': (affine) => {
+      affine[0] = -affine[0];
+      affine[3] = -affine[3];
+    },
+    '2.1 mm voxels': (affine) => {
+      affine[5] = 2.1;
+    },
+    'origin shifted 1 mm': (affine) => {
+      affine[11] += 1;
+    },
+  };
+  for (const [name, change] of Object.entries(grids)) {
+    const inv2 = await regriddedInv2(root, name, change);
+    const output = join(root, `results-${name}`);
+    const commands = [
+      ['correct', '--uni', UNI, '--inv2', inv2, '--sa2rage', SA, '--sa2rage-params', SA2RAGE, '--mp2rage', MP2RAGE, output],
+      ['denoise', '--uni', UNI, '--inv1', INV2, '--inv2', inv2, output],
+    ];
+    for (const args of commands) {
+      const result = run(args);
+      assert.equal(result.status, 1, `${args[0]} accepted INV2 with a ${name}`);
+      assert.match(result.stderr, /INV2 \(24x20x18\) and UNI \(24x20x18\) are not on the same voxel grid/);
+      await assert.rejects(readdir(output), { code: 'ENOENT' });
+    }
+  }
+});
+
+test('an affine within float32 rounding of UNI\'s is the same grid', async (t) => {
+  const root = await workspace(t);
+  const inv2 = await regriddedInv2(root, 'rounded', (affine) => {
+    affine[3] += 2e-6;
+  });
+  const output = join(root, 'results');
+  const result = run(['denoise', '--uni', UNI, '--inv1', INV2, '--inv2', inv2, output]);
+  assert.equal(result.status, 0, result.stderr);
 });
 
 test('each command rejects the other command\'s options', async (t) => {

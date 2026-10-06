@@ -40,6 +40,18 @@ function qformAffine(dv) {
   ]);
 }
 
+/**
+ * A volume's spatial grid in the header shape `sameVoxelGrid` from @neurodesk/webapp-components
+ * compares: NIfTI dims (dims[0] is the rank) and the affine as four rows.
+ */
+export function voxelGrid(volume) {
+  const affine = Array.from(volume.affine);
+  return {
+    dims: [3, ...Array.from(volume.dims).slice(0, 3)],
+    affine: [0, 4, 8, 12].map((start) => affine.slice(start, start + 4)),
+  };
+}
+
 /** Parse a NIfTI-1 file (ArrayBuffer). Returns {data:Float32Array, dims:[..], affine:Float32Array(16)}. */
 export async function readNifti(arrayBuffer) {
   const buf = await gunzipIfNeeded(arrayBuffer);
