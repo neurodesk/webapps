@@ -1053,7 +1053,9 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/embed/dicompare-worker.js",
-        "kind": "runtime"
+        "path": "apps/dicompare/public/embed/dicompare-worker.js",
+        "contentType": "text/javascript",
+        "kind": "built-runtime"
       },
       {
         "url": "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",

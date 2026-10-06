@@ -1,8 +1,7 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { fileHash } from '../../packages/desktop/src/bundle.js';
 
-export async function stagePython({ destination, apps, sources, lock, cache, root, assets }) {
+export async function stagePython({ destination, apps, sources, lock, cache }) {
   if (!apps.some(app => ['dicompare', 'seedseg', 'qsmbly'].includes(app.id))) return;
   const directory = join(destination, 'site/_offline/python');
   await mkdir(join(directory, 'wheels'), { recursive: true });
@@ -14,14 +13,4 @@ export async function stagePython({ destination, apps, sources, lock, cache, roo
     await cp(join(cache, asset.sha256), path);
   }
   await writeFile(join(destination, 'site/_offline/python.json'), `${JSON.stringify(sources.python, null, 2)}\n`);
-  // Embedded consumers request this public URL. Ship the worker built from this
-  // checkout so it selects the same offline Python installation as dicompare.
-  const url = 'https://dicompare.neurodesk.org/embed/dicompare-worker.js';
-  if (assets[url]) {
-    const worker = join(root, 'apps/dicompare/public/embed/dicompare-worker.js');
-    const sha256 = await fileHash(worker);
-    const bytes = (await readFile(worker)).length;
-    await cp(worker, join(destination, 'assets', sha256));
-    assets[url] = { path: `assets/${sha256}`, sha256, bytes, kind: 'built-runtime', contentType: 'text/javascript' };
-  }
 }

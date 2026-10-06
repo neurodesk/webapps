@@ -1,10 +1,10 @@
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { loadAppsRegistry, repoRoot } from '../lib/apps-registry.mjs';
 import { loadStandalone } from '../lib/standalone.mjs';
 import { renderLandingPage } from '../lib/landing-page.mjs';
 import { stagePython } from './stage-python.mjs';
-import { verifyBundle, inventoryFiles } from '../../packages/desktop/src/bundle.js';
+import { fileHash, verifyBundle, inventoryFiles } from '../../packages/desktop/src/bundle.js';
 
 const argument = name => {
   const index = process.argv.indexOf(name);
@@ -27,8 +27,17 @@ await cp(join(repoRoot, 'packages/desktop/STANDALONE.md'), join(destination, 'ST
 await cp(join(repoRoot, 'packages/desktop/AUTOMATION.md'), join(destination, 'AUTOMATION.md'));
 await cp(join(repoRoot, 'packages/desktop/jobs'), join(destination, 'jobs'), { recursive: true });
 const assets = {};
+const built = new Map(Object.values(sources.apps).flat().filter(source => source.path).map(source => [source.url, source]));
 const add = async url => {
   if (assets[url]) return;
+  const source = built.get(url);
+  if (source) {
+    const path = join(repoRoot, source.path);
+    const sha256 = await fileHash(path);
+    await cp(path, join(destination, 'assets', sha256));
+    assets[url] = { path: `assets/${sha256}`, sha256, bytes: (await stat(path)).size, kind: source.kind, contentType: source.contentType };
+    return;
+  }
   const asset = lock.assets[url];
   if (!asset) throw new Error(`Missing offline lock entry: ${url}`);
   assets[url] = { ...asset, path: `assets/${asset.sha256}` };
@@ -47,7 +56,7 @@ for (const entry of await readdir(join(repoRoot, 'dist'), { withFileTypes: true 
   }
 }
 await writeFile(join(destination, 'site/index.html'), renderLandingPage({ ...registry, apps }));
-await stagePython({ destination, apps, sources, lock, cache, root: repoRoot, assets });
+await stagePython({ destination, apps, sources, lock, cache });
 // Offline builds contain no analytics bootstrap or remote update checks.
 async function disableAnalytics(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
