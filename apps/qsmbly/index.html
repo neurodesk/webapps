@@ -131,7 +131,11 @@
         <div class="file-upload-group">
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="unifiedDrop">
+<<<<<<< monorepo
               <input type="file" data-neurodesk-input="image" id="unifiedFiles" multiple disabled>
+=======
+              <input type="file" id="unifiedFiles" accept=".nii,.nii.gz,.gz,application/gzip,.json,.dcm" multiple>
+>>>>>>> upstream
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
@@ -254,7 +258,11 @@
           </div>
           <div class="upload-group compact">
             <div class="file-upload-zone file-drop compact" id="maskDrop">
+<<<<<<< monorepo
               <input type="file" data-neurodesk-input="image" id="maskFiles" multiple disabled>
+=======
+              <input type="file" id="maskFiles" accept=".nii,.nii.gz,.gz,application/gzip">
+>>>>>>> upstream
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
@@ -263,6 +271,23 @@
               <p class="upload-text file-drop-label"><span>Drop or click</span></p>
             </div>
             <div class="file-list" id="maskList"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="repairMaskAlignment" disabled>Repair mask alignment</button>
+          <p id="maskUploadStatus" class="mask-alignment-status" role="status" aria-live="polite" hidden></p>
+          <div id="maskAlignmentPanel" class="mask-alignment-panel" hidden>
+            <p>Preview the mask on the input image. Flip voxel axes if needed, then inspect all slices before applying.</p>
+            <p>This replaces the mask's orientation and origin with the image's. It cannot correct different anatomy, cropping, or a shifted mask.</p>
+            <div class="mask-alignment-axes">
+              <label><input type="checkbox" id="maskFlipX"> Flip X</label>
+              <label><input type="checkbox" id="maskFlipY"> Flip Y</label>
+              <label><input type="checkbox" id="maskFlipZ"> Flip Z</label>
+            </div>
+            <p class="mask-alignment-status" id="maskAlignmentStatus" role="status" aria-live="polite"></p>
+            <div class="mask-alignment-actions">
+              <button class="btn btn-secondary btn-sm" id="previewMaskAlignment">Preview alignment</button>
+              <button class="btn btn-primary btn-sm" id="applyMaskAlignment" disabled>Apply alignment</button>
+              <button class="btn btn-secondary btn-sm" id="cancelMaskAlignment">Cancel</button>
+            </div>
           </div>
         </div>
 
@@ -288,6 +313,14 @@
               <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
             </svg>
             HD-BET
+          </button>
+          <button class="btn btn-secondary btn-sm" id="runMouseBet" title="Mouse brain extraction with RS2-Net, a deep-learning model trained on rodent MRI (voxel-scaled BET is available as a fallback)" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <ellipse cx="12" cy="14" rx="7" ry="6"/>
+              <circle cx="6" cy="6" r="3"/>
+              <circle cx="18" cy="6" r="3"/>
+            </svg>
+            Mouse
           </button>
         </div>
 
@@ -1138,6 +1171,11 @@
 
           <!-- Linear Fit Settings -->
           <div id="linear_fit_settings" class="method-settings" style="display: none;">
+            <div class="param-group">
+              <label class="param-label" for="linear_fit_reliability_percentile">Reliability threshold (percentile)</label>
+              <input type="number" id="linear_fit_reliability_percentile" value="90" min="0" max="100" step="5">
+              <div class="param-hint">Voxels whose echo-fit residual lands above this percentile are flagged unreliable and excluded. Set to 0 to keep every voxel.</div>
+            </div>
           </div>
         </div>
 
@@ -1757,12 +1795,23 @@
   <div class="modal-overlay" id="betSettingsModal">
     <div class="modal">
       <div class="modal-header">
-        <h3>BET Settings</h3>
+        <h3 id="betSettingsTitle">BET Settings</h3>
         <button class="modal-close" id="closeBetSettings">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-section">
           <h4>Brain Extraction Parameters</h4>
+          <p class="modal-note" id="mouseBetNote" style="display: none;">
+            BET's surface model is tuned for the human brain in millimetres, so on a mouse brain its
+            search distances span the whole head. Mouse BET multiplies the voxel sizes by the scale
+            factor below before running BET, which brings the brain to roughly human size; the mask
+            comes back on the original grid.
+          </p>
+          <div class="param-group" id="betVoxelScaleGroup" style="display: none;">
+            <label class="param-label" for="betVoxelScale">Voxel Size Scale Factor</label>
+            <div class="param-hint">Multiplier applied to the voxel sizes for BET (10 for mouse and rat)</div>
+            <input type="number" id="betVoxelScale" value="10" min="1" max="50" step="1">
+          </div>
           <div class="param-group">
             <label class="param-label" for="betFractionalIntensity">Fractional Intensity</label>
             <div class="param-hint">Smaller values give larger brain estimate (0.0-1.0)</div>
@@ -1793,6 +1842,7 @@
     </div>
   </div>
 
+<<<<<<< monorepo
   <template id="hdBetSettingsTemplate">
     <p class="nd-hint" id="hdBetWeightsNote" hidden>First use downloads 123 MB of model weights under CC-BY-NC-4.0, then caches them in your browser.</p>
     <div class="nd-field">
@@ -1803,6 +1853,132 @@
         <option value="1">1.0 (fastest, seams possible)</option>
       </select>
       <p class="nd-hint">Smaller steps overlap more patches to reduce seams.</p>
+=======
+  <!-- Mouse Brain Extraction Modal -->
+  <div class="modal-overlay" id="mouseBrainModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Mouse Brain Extraction</h3>
+        <button class="modal-close" id="closeMouseBrain">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <p class="modal-note">
+            <strong>RS2-Net</strong> is a deep-learning brain extractor trained on 1,142 rat and mouse
+            MRIs from 89 centres. It handles thick slices and the thin rodent skull, where BET leaks
+            into the surrounding muscle. A mouse head usually fits in a single patch, which takes
+            <strong>one to two minutes</strong>; <strong>Stop</strong> cancels it at any point.
+          </p>
+          <p class="modal-note">
+            First run downloads <strong>63 MB</strong> of model weights (GPL-3.0). They are cached in
+            your browser afterwards.
+          </p>
+
+          <h4>Inference Parameters</h4>
+
+          <div class="param-group">
+            <label class="param-label">
+              <input type="checkbox" id="rs2NetTta"> Mirroring augmentation (TTA)
+            </label>
+            <div class="param-hint">
+              Averages the network over 8 mirrored versions of every patch: <strong>8&times; the
+              runtime</strong>, and on in-vivo mouse data the mask barely changes (Dice 0.99).
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Patch Size</label>
+            <div class="param-hint">
+              Fixed at 128&times;96&times;128 (~2.7 GB peak). RS2-Net's native 128&times;128&times;160
+              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; the two agree at
+              Dice 0.99 on mouse data. Larger volumes are covered by overlapping patches.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Fallback</label>
+            <div class="param-hint">
+              <strong>Scaled BET</strong> runs BET on voxel sizes multiplied by 10, so its human-tuned
+              surface model fits the mouse brain. It is instant and needs no download, but on
+              thick-slice data it tends to leak into the skull base.
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="runMouseScaledBet">Scaled BET&hellip;</button>
+        <button class="btn btn-primary" id="runRs2Net">Run RS2-Net</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HD-BET Settings Modal -->
+  <div class="modal-overlay" id="hdBetSettingsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>HD-BET Settings</h3>
+        <button class="modal-close" id="closeHdBetSettings">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-section">
+          <p class="modal-note">
+            HD-BET runs a 30-million-parameter neural network over every overlapping patch of the
+            volume. It is the most accurate option here, and by far the slowest &mdash; expect
+            <strong>several minutes</strong>. Progress is reported per patch, and
+            <strong>Stop</strong> cancels it at any point.
+          </p>
+          <p class="modal-note" id="hdBetWeightsNote" style="display: none;">
+            First run downloads <strong>123 MB</strong> of model weights (CC-BY-NC-4.0). They are
+            cached in your browser afterwards.
+          </p>
+
+          <h4>Inference Parameters</h4>
+
+          <div class="param-group">
+            <label class="param-label" for="hdBetTileStep">Patch Step</label>
+            <div class="param-hint">
+              How far the sliding window moves each time, as a fraction of the patch. Smaller
+              steps blend patch seams better; larger steps mean fewer patches and a shorter run.
+              0.5 is HD-BET's own default.
+            </div>
+            <select id="hdBetTileStep">
+              <option value="0.5">0.5 — best quality (default)</option>
+              <option value="0.75">0.75 — faster</option>
+              <option value="1">1.0 — fastest, patches abut, seams possible</option>
+            </select>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">
+              <input type="checkbox" id="hdBetTta"> Mirroring augmentation (TTA)
+            </label>
+            <div class="param-hint">
+              Averages the network over 8 mirrored versions of every patch. Roughly
+              <strong>8&times; the runtime</strong> for a marginal gain — off in HD-BET's own QSM-CI
+              configuration, and rarely worth it here.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Patch Size</label>
+            <div class="param-hint">
+              Fixed at 128&times;128&times;64 (~1.9 GB peak). HD-BET's native 192&times;192&times;96
+              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; smaller patches
+              start labelling tissue deep inside the brain as background.
+            </div>
+          </div>
+
+          <div class="param-group">
+            <label class="param-label">Estimated Work</label>
+            <div class="param-hint" id="hdBetEstimate">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="resetHdBetSettings">Reset Defaults</button>
+        <button class="btn btn-primary" id="runHdBetWithSettings">Run HD-BET</button>
+      </div>
+>>>>>>> upstream
     </div>
     <label class="nd-check" title="Averages eight mirrored predictions per patch and takes roughly eight times longer."><input type="checkbox" id="hdBetTta"> Mirroring augmentation</label>
     <p class="nd-hint">Patch size is fixed at 128 × 128 × 64 to fit browser memory.</p>
@@ -1997,6 +2173,12 @@
             <p>Smith, S.M. (2002). "Fast robust automated brain extraction." <em>Human Brain Mapping</em>, 17(3):143-155.</p>
             <a href="https://doi.org/10.1002/hbm.10062" target="_blank" rel="noopener">DOI: 10.1002/hbm.10062</a>
           </div>
+          <div class="citation-item">
+            <strong>RS2-Net (rodent brain extraction)</strong>
+            <span class="citation-ref">Code: <a href="https://github.com/VitoLin21/Rodent-Skull-Stripping" target="_blank" rel="noopener">Rodent-Skull-Stripping</a></span>
+            <p>Lin, Y., Ding, Y., Chang, S., Ge, X., Sui, X., Jiang, Y. (2024). "RS2-Net: An end-to-end deep learning framework for rodent skull stripping in multi-center brain MRI." <em>NeuroImage</em>, 298:120769.</p>
+            <a href="https://doi.org/10.1016/j.neuroimage.2024.120769" target="_blank" rel="noopener">DOI: 10.1016/j.neuroimage.2024.120769</a>
+          </div>
         </div>
 
         <div class="citation-section">
@@ -2190,6 +2372,9 @@
           <p class="citations-intro" style="margin-bottom: var(--nd-space-sm);">The following repositories were used as references:</p>
           <div class="ref-list">
             <a href="https://github.com/Bostrix/FSL-BET2" target="_blank" rel="noopener">FSL-BET2</a> - BET brain extraction
+          </div>
+          <div class="ref-list">
+            <a href="https://github.com/VitoLin21/Rodent-Skull-Stripping" target="_blank" rel="noopener">Rodent-Skull-Stripping</a> - RS2-Net rodent brain extraction
           </div>
           <div class="ref-list">
             <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener">MriResearchTools.jl</a> - ROMEO, MCPC-3D-S, Bias correction

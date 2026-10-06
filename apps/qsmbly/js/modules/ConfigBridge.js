@@ -6,6 +6,17 @@
  */
 
 /**
+ * A [f64; 3] the config can carry, or null if any element is missing/non-finite.
+ * JSON.stringify writes NaN — and anything the null-dropping replacer removes — as
+ * `null` when it sits inside an array, and serde rejects null for a fixed-size f64
+ * array ("invalid type: null, expected f64"). A scalar can simply be omitted so
+ * qsmxt-config's default applies; an array element cannot, so drop the whole key.
+ */
+function finiteTriple(arr) {
+  return Array.isArray(arr) && arr.length === 3 && arr.every(Number.isFinite) ? arr : null;
+}
+
+/**
  * Build a qsmxt-config PipelineConfig object from qsmbly pipeline settings.
  * The returned object is JSON.stringify'd and handed to the WASM serializers; the
  * mask is passed separately as a CLI-style string (see maskSectionString).
@@ -29,11 +40,16 @@ export function buildConfig(settings, options = {}) {
     },
     field_mapping: {
       phase_offset_removal: settings.phase_offset_method !== 'none',
-      phase_offset_sigma: settings.mcpc3ds?.sigma || [4, 4, 4],
+      phase_offset_sigma: finiteTriple(settings.mcpc3ds?.sigma) || [4, 4, 4],
       bipolar_correction: !!settings.bipolar_correction,
       unwrapping_algorithm: settings.unwrapping_algorithm || 'romeo',
       b0_estimation: (settings.b0_estimation || 'weighted_avg').replace(/_/g, '-'),
       b0_weight_type: (settings.b0_weight_type || 'phase_snr').replace(/_/g, '-'),
+      // qsmxt-config's LinearFitConfig carries only the reliability percentile; its bridge
+      // pins qsm-core's estimate_offset to the default, so the UI does not offer it.
+      linear_fit: {
+        reliability_threshold_percentile: settings.linearFit?.reliability_threshold_percentile,
+      },
       romeo: {
         individual: settings.romeo?.individual ?? true,
         correct_global: settings.romeo?.correct_global ?? true,
@@ -126,7 +142,9 @@ export function buildConfig(settings, options = {}) {
   if (settings.swi) config.swi = {
     // scaling uses snake_case in the UI (e.g. negative_tanh) but qsmxt-config expects
     // kebab-case (negative-tanh), same as b0_estimation/b0_weight_type above.
-    hp_sigma: settings.swi.hp_sigma, scaling: (settings.swi.scaling || 'tanh').replace(/_/g, '-'),
+    // hp_sigma is omitted entirely unless it is a usable triple (see finiteTriple).
+    ...(finiteTriple(settings.swi.hp_sigma) ? { hp_sigma: settings.swi.hp_sigma } : {}),
+    scaling: (settings.swi.scaling || 'tanh').replace(/_/g, '-'),
     strength: settings.swi.strength, mip_window: settings.swi.mip_window,
   };
 
