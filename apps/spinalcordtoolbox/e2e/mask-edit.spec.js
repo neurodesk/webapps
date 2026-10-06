@@ -93,6 +93,12 @@ async function startEditing(page, label) {
   await expect(editorRow(page)).toBeVisible();
 }
 
+// A one-voxel brush, so every stroke lands on known voxels.
+async function thinBrush(page) {
+  await editorRow(page).locator('input[type="range"]').fill('1');
+  await poll(() => page.evaluate(() => app.nv.drawPenSize)).toBe(1);
+}
+
 async function apply(page) {
   await editorButton(page, 'Apply').click();
   await poll(() => page.evaluate(() => app.manualEdits.isEditing())).toBe(false);
@@ -253,6 +259,7 @@ test('draw, erase and fill on the canvas with the shared toolbar, with undo, lab
   await expect(editorRow(page)).toContainText('Editing SCT Segmentation');
   await expect(editorButton(page, 'Draw')).toHaveAttribute('aria-pressed', 'true');
   await rememberOpenedDrawing(page);
+  await thinBrush(page);
   const at = await axialView(page);
   await stroke(page, [at(1, 4), at(1, 12)]);
   await poll(() => drawnVoxels(page)).toBeGreaterThan(0);
@@ -282,6 +289,7 @@ test('draw, erase and fill on the canvas with the shared toolbar, with undo, lab
   // Erase: a stroke across the cord at x = 6 (native k = 6), then a second
   // stroke elsewhere must not bring the erased voxels back.
   await startEditing(page, 'SCT Segmentation (edited)');
+  await thinBrush(page);
   await editorButton(page, 'Erase').click();
   await stroke(page, [at(6, 10), at(6, 30)]);
   await editorButton(page, 'Draw').click();
@@ -297,6 +305,7 @@ test('draw, erase and fill on the canvas with the shared toolbar, with undo, lab
 
   // Fill: a closed outline on background (x 9..11, y 2..10) fills its inside.
   await startEditing(page, 'SCT Segmentation (edited)');
+  await thinBrush(page);
   await editorButton(page, 'Fill').click();
   await stroke(page, [at(9, 2), at(11, 2), at(11, 10), at(9, 10), at(9, 2)]);
   await apply(page);
@@ -316,6 +325,7 @@ test('the Label select paints a named label in a multi-label stage; Cancel keeps
   await startEditing(page, 'TotalSpineSeg Labels');
   await editorRow(page).getByRole('combobox').selectOption({ label: '63 — C2-C3 disc' });
   await rememberOpenedDrawing(page);
+  await thinBrush(page);
   const at = await axialView(page);
   await stroke(page, [at(1, 4), at(1, 12)]);
   await poll(() => drawnVoxels(page)).toBeGreaterThan(0);
@@ -346,6 +356,7 @@ test('an edit belongs to its image: it survives switching images, shows in Compa
   await deliverStage(page, 'segmentation', 'spinalcord', stageFile(model));
   await startEditing(page, 'SCT Segmentation');
   await rememberOpenedDrawing(page);
+  await thinBrush(page);
   const at = await axialView(page);
   await stroke(page, [at(1, 4), at(1, 6)]);
   await poll(() => drawnVoxels(page)).toBeGreaterThan(0);
