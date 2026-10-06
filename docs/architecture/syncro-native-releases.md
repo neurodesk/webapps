@@ -24,16 +24,18 @@ download includes the checksum-pinned models and runs offline from first use.
 
 ## Ownership
 
-- `packages/syncro` owns the CLI, scientific pipeline, model cache, and a small
-  public catalog of target names, artifact names, URLs, and user commands.
+- `packages/syncro` owns the CLI, scientific pipeline, model cache, and
+  `release.json`, the target names and run command the packager reads.
 - `exes/node-cli` owns the launcher, private-runtime acquisition, dependency
   pruning, archive layout, checksums, manifests, and extracted-archive checks.
   It is shared with TopoFit and reads `packages/syncro/release.json`.
 - `.github/workflows/syncro-native.yml` calls the shared
   `node-cli-portable.yml` workflow, which owns target runners and release
   permissions. Build jobs are read-only; only the final publisher may write.
-- `apps/syncro` renders the package-owned release catalog through the shell's
-  Standalone action. It does not know archive internals.
+- The shell's Standalone action renders SYNcro's downloads from
+  `registry/standalone.json`, into which the standalone catalog automation
+  imports each signed, verified release. `apps/syncro` has no download dialog
+  of its own.
 
 The version in `packages/syncro/package.json` is authoritative. Repository
 tests require `apps/syncro/package.json` to agree with it because the generic
@@ -97,11 +99,9 @@ archive; native publication is an idempotent follow-up.
 
 ## User interface
 
-The Standalone dialog leads with macOS, Windows and Linux cards containing the
-release download, checksum, extraction or `installer` command, self-check, and
-shortest working run command. It states that the models are included. The current npm package
-and HPC/cache guidance remain in a collapsed secondary section. Native archives
-stay on GitHub Releases and do not increase the web bundle.
+The bar's Standalone action lists the release downloads with their checksums
+and the extraction or `installer` command from the shared catalog. Native
+archives stay on GitHub Releases and do not increase the web bundle.
 
 ## Accepted tradeoffs
 

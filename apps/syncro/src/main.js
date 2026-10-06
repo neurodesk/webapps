@@ -9,7 +9,6 @@ import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neu
 import { readVolume } from '@neurodesk/synthsr';
 import { zip } from 'fflate';
 import { templateAsset } from '../../../packages/syncro/src/assets.js';
-import { configureNativeDownloads } from './native-release.js';
 import './styles.css';
 
 mountImagingWorkspace({
@@ -19,13 +18,12 @@ mountImagingWorkspace({
   title: 'SYNcro',
   subtitle: 'Normalize brain scans and aligned lesion maps to MNI space',
   mark: 'S',
-  controlsContract: { about: '#aboutBtn', privacy: '#privacyBtn', standalone: '#standaloneBtn' },
+  controlsContract: { about: '#aboutBtn', privacy: '#privacyBtn' },
 });
 
 const $ = (id) => document.getElementById(id);
 const base = new URL(import.meta.env.BASE_URL, location.href);
 const viewerRegion = $('viewer');
-configureNativeDownloads($('standaloneContent').content);
 
 let viewer;
 let maskEditor;
@@ -83,30 +81,7 @@ bindInfoTooltips(document);
 
 const info = createInfoDialog({ id: 'info', titleId: 'infoTitle', bodyId: 'infoBody' });
 $('aboutBtn').onclick = () => info.open('About SYNcro', $('aboutContent'));
-$('standaloneBtn').onclick = () => {
-  info.open('Standalone', $('standaloneContent'), { wide: true });
-  for (const node of info.body.querySelectorAll('code, a#packageLink')) {
-    node.textContent = node.textContent.replaceAll('__PACKAGE_VERSION__', __SYNCRO_PACKAGE_VERSION__);
-    if (node.href !== undefined) node.setAttribute('href', node.getAttribute('href').replaceAll('__PACKAGE_VERSION__', __SYNCRO_PACKAGE_VERSION__));
-  }
-};
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
-info.body.addEventListener('click', async (event) => {
-  const button = event.target.closest('[data-copy-target]');
-  if (!button) return;
-  const text = info.body.querySelector(`#${button.dataset.copyTarget}`)?.textContent ?? '';
-  try {
-    await navigator.clipboard.writeText(text);
-    button.textContent = 'Copied';
-    const live = info.body.querySelector('#copyStatus');
-    if (live) live.textContent = 'Copied to clipboard';
-  } catch {
-    setStatus('Could not copy automatically. Select the text and copy it manually.');
-  }
-  setTimeout(() => {
-    button.textContent = 'Copy';
-  }, 1200);
-});
 
 const fileFields = {
   primary: createFileField({ id: 'input', rootId: 'dropZone', text: 'Drop primary NIfTI or DICOM files', label: 'Choose the required primary scan' }),

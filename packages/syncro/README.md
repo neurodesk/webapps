@@ -4,7 +4,7 @@ Normalize a primary NIfTI scan to the MNI152 1 mm brain template. The shared bro
 
 ## Portable macOS, Windows and Linux builds
 
-Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the webapp's **Standalone** dialog. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
+Download the macOS installer, the Windows x64 archive or the Linux x64 archive from the **Standalone** action in the webapp's bar. Each contains `syncro` or `syncro.exe`, a private Node runtime, native ONNX Runtime, the ANTs WebAssembly kernel, the MNI template, and the checksum-pinned SynthSR and SynthStrip models. You do not need to install Node.js, Python, FreeSurfer, or a display server.
 
 On Linux, download, verify, extract, and check the current release:
 
@@ -83,7 +83,7 @@ create duplicate output names. Non-CT scalar reslices use a zero background;
 
 ## Development and validation
 
-`pnpm --filter @neurodesk/syncro build` produces the self-contained package bundle. Building `apps/syncro` also packs it into `apps/syncro/dist/downloads/`. The shared `runSyncro` API injects inference, registration and progress adapters; Node's `normalize` API accepts filesystem paths.
+`pnpm --filter @neurodesk/syncro build` produces the self-contained package bundle. The shared `runSyncro` API injects inference, registration and progress adapters; Node's `normalize` API accepts filesystem paths.
 
 See [validation/README.md](validation/README.md) for the real OpenNeuro scan, pinned Neurodesk container, exact stage comparisons, end-to-end differences and reproduction commands. Current evidence covers one real T1 scan and synthetic annotation fixtures, not clinical validation or broad modality/pathology coverage. Review the acquired image, brain mask and MNI alignment before using results.
 
