@@ -216,7 +216,7 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   app on `upstream/<id>`: a three-way merge from the pinned commit, monorepo date versions kept,
   conflict markers left in a draft PR. Resolve conflicts on that branch; once a person has pushed
   to it the workflow stops overwriting it until it is merged or deleted. It pushes with the
-  `neurodesk-upstream-sync` GitHub App so CI runs on its PRs ([setup](docs/architecture/upstream-sync.md)).
+  `neurodesk-webapps-upstream-sync` GitHub App so CI runs on its PRs ([setup](docs/architecture/upstream-sync.md)).
 - Upstream files the monorepo deleted (replaced by shared code) stay deleted; their upstream
   changes are listed in the PR, not applied. Port anything relevant to the shared code by hand.
 - The standalone bundle serves the dicompare worker, controller and the QSM/SeedSeg schemas from
