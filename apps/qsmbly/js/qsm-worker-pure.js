@@ -10,6 +10,7 @@ import { scalePhase, ppmFieldToPhase } from './worker/utils/PhaseUtils.js';
 import { createThresholdMask } from './worker/utils/MaskUtils.js';
 import { boxFilter3D, boxFilter3dSeparable } from './worker/utils/FilterUtils.js';
 import { buildConfigJson } from './modules/ConfigBridge.js';
+import { scaleVoxelSize } from './modules/mask/RodentMask.js';
 import * as QSMConfig from './app/config.js';
 import { createWorkerEmitter, installWorkerRouter } from '../vendor/webapp-components/src/worker/index.js';
 import { parseRegistry, fetchModelWeights, loadDlWasm } from './modules/ModelWeights.js';
@@ -349,12 +350,15 @@ function computeSWI(pipelineSettings, unwrappedPhase, magnitude, mask, dims, vox
   // Minimum intensity projection
   const mip_window = swiSettings.mip_window || 0;
   if (mip_window > 0 && mip_window <= nz) {
-    const mipResult = new Float64Array(wasmModule.create_mip_wasm(
-      swiResult, nx, ny, nz, mip_window
-    ));
-    const mipNz = nz - mip_window + 1;
-    sendStageData('mip', mipResult, [nx, ny, mipNz], voxelSize, affine, 'SWI mIP');
-    postLog(`mIP complete (window=${mip_window}, output nz=${mipNz})`);
+    // Each mIP slice stands for a slab, so the projection carries its own grid and affine
+    // (origin shifted (window - 1) / 2 slices) rather than reusing the source ones.
+    const mip = wasmModule.create_mip_wasm(
+      swiResult, nx, ny, nz, affine, mip_window
+    );
+    const mipResult = new Float64Array(mip.data);
+    const mipDims = Array.from(mip.dims);
+    sendStageData('mip', mipResult, mipDims, voxelSize, Array.from(mip.affine), 'SWI mIP');
+    postLog(`mIP complete (window=${mip_window}, output nz=${mipDims[2]})`);
   }
 }
 
@@ -686,7 +690,6 @@ async function runTgvPipeline(data) {
   const b0_estimation = pipelineSettings?.b0_estimation || 'weighted_avg';
   const mcpc3dsSettings = pipelineSettings?.mcpc3ds || { sigma: [10, 10, 5] };
   const b0_weight_type = pipelineSettings?.b0_weight_type || 'phase_snr';
-  const linearFitSettings = pipelineSettings?.linearFit || { estimate_offset: true };
   const romeoSettings = pipelineSettings?.romeo || {
     phase_gradient_coherence: true,
     mag_coherence: true,
@@ -1435,6 +1438,82 @@ async function runHdBet(data) {
   }
 }
 
+/** RS2-Net deep-learning rodent brain extraction (magnitude -> brain mask).
+ *
+ *  A mask *generator*, like HD-BET: the result replaces the mask and refinements follow through
+ *  `applyMaskOps`. Lives in the DL bundle, so this downloads the 63 MB weights (IndexedDB-cached
+ *  after the first run) and boots that bundle's rayon pool. */
+async function runRs2Net(data) {
+  const { magnitude, dims, voxelSize, tileStep, tta } = data;
+  try {
+    const [nx, ny, nz] = dims;
+    const [vsx, vsy, vsz] = voxelSize;
+
+    const model = dlRegistry['rs2-net'];
+    if (!model) throw new Error('rs2-net is not in the model registry');
+
+    self.postMessage({ type: 'rs2NetProgress', value: 0.05, text: 'Fetching RS2-Net weights...' });
+    let weights;
+    try {
+      weights = await downloadWeights(model);
+    } catch (e) {
+      // qsm-core lists RS2-Net as Pending until rs2-net.onnx is on the weight mirror; say so
+      // rather than surfacing a bare 404.
+      if (!model.available) {
+        throw new Error(`${e.message || e} — the RS2-Net weights are not hosted on the model mirror yet`);
+      }
+      throw e;
+    }
+
+    self.postMessage({ type: 'rs2NetProgress', value: 0.15, text: 'Loading inference bundle...' });
+    const dl = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
+    // Same pool bound as HD-BET (see runHdBet): the DL bundle has one pool for every model.
+    await initRayon(dl, 'dl', 4);
+
+    self.postMessage({
+      type: 'rs2NetLog',
+      message: `Running RS2-Net on ${nx}x${ny}x${nz} @ ${vsx.toFixed(3)}x${vsy.toFixed(3)}x${vsz.toFixed(3)}mm `
+             + `(step ${tileStep ?? 0.5}${tta ? ', mirroring TTA' : ''}). A mouse head usually fits in `
+             + `one 128x96x128 patch; each patch takes a minute or two — progress below.`,
+    });
+
+    const startedAt = performance.now();
+    const onProgress = (done, total) => {
+      const frac = total ? done / total : 0;
+      let eta = '';
+      if (done > 0 && done < total) {
+        const secsLeft = ((performance.now() - startedAt) / done) * (total - done) / 1000;
+        eta = secsLeft < 60
+          ? ` — ${Math.ceil(secsLeft)}s left`
+          : ` — ~${Math.round(secsLeft / 60)} min left`;
+      }
+      self.postMessage({
+        type: 'rs2NetProgress',
+        value: 0.2 + frac * 0.75,
+        text: `RS2-Net patch ${done}/${total}${eta}`,
+      });
+    };
+
+    const maskData = dl.rs2_net_wasm(
+      new Float64Array(magnitude), nx, ny, nz, vsx, vsy, vsz,
+      weights[0], tileStep ?? 0.5, !!tta, onProgress,
+    );
+
+    let count = 0;
+    for (let i = 0; i < maskData.length; i++) if (maskData[i]) count++;
+    const mm3 = count * vsx * vsy * vsz;
+    self.postMessage({
+      type: 'rs2NetLog',
+      message: `RS2-Net mask: ${count}/${maskData.length} voxels (${(100 * count / maskData.length).toFixed(1)}%, `
+             + `${mm3.toFixed(0)} mm³ — an adult mouse brain is ~450-500 mm³)`,
+    });
+    self.postMessage({ type: 'rs2NetProgress', value: 1.0, text: 'Complete' });
+    self.postMessage({ type: 'rs2NetComplete', maskData }, [maskData.buffer]);
+  } catch (error) {
+    self.postMessage({ type: 'rs2NetError', message: error.message || String(error) });
+  }
+}
+
 async function runApplyMaskOps(data) {
   const { mask, ops, inputData, magnitude, dims, voxelSize } = data;
   try {
@@ -1453,7 +1532,7 @@ async function runApplyMaskOps(data) {
 }
 
 async function runBET(data) {
-  const { magnitudeBuffer, fractionalIntensity, smoothnessFactor, gradientThreshold, iterations, subdivisions } = data;
+  const { magnitudeBuffer, fractionalIntensity, smoothnessFactor, gradientThreshold, iterations, subdivisions, voxelScale } = data;
   const betIterations = iterations || 1000;
   const betSubdivisions = subdivisions || 4;
   const betSmoothness = smoothnessFactor ?? 1.0;  // FSL default
@@ -1470,9 +1549,14 @@ async function runBET(data) {
     const voxelSize = Array.from(magResult.voxelSize);
 
     const [nx, ny, nz] = dims;
-    const [vsx, vsy, vsz] = voxelSize;
+    postBETLog(`Image: ${nx}x${ny}x${nz}, voxel: ${voxelSize.map(v => v.toFixed(2)).join('x')}mm`);
 
-    postBETLog(`Image: ${nx}x${ny}x${nz}, voxel: ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+    // Mouse BET: BET's search distances and curvature limits are fixed in mm for a human brain,
+    // so run it on voxel sizes scaled up to human dimensions. The mask grid is unchanged.
+    const [vsx, vsy, vsz] = scaleVoxelSize(voxelSize, voxelScale);
+    if (voxelScale && voxelScale !== 1) {
+      postBETLog(`Mouse BET: voxel sizes scaled x${voxelScale} to ${vsx.toFixed(2)}x${vsy.toFixed(2)}x${vsz.toFixed(2)}mm`);
+    }
 
     // TEST: Create a simple sphere mask to verify data transfer works
     const TEST_SPHERE = false;  // Set to true to test with sphere instead of BET
@@ -2864,6 +2948,9 @@ installWorkerRouter({
 
       case 'hdBet':
         await runHdBet(data);
+        break;
+      case 'rs2Net':
+        await runRs2Net(data);
         break;
       case 'applyMaskOps':
         await runApplyMaskOps(data);

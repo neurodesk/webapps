@@ -112,3 +112,69 @@ describe('buildConfigJson background-removal parameters', () => {
     expect(bg.ismv).toEqual({ tol: 1e-5 });
   });
 });
+
+describe('buildConfigJson fixed-size f64 arrays', () => {
+  // A null inside [f64; 3] is fatal: serde has no default to fall back to for one
+  // element, so the whole config is rejected ("invalid type: null, expected f64")
+  // and every pipeline run fails. Unlike a scalar, the element cannot be omitted —
+  // the key has to go.
+  test('falls back to the default sigma when an input is blank', () => {
+    const fm = JSON.parse(buildConfigJson(
+      settingsFixture({ mcpc3ds: { sigma: [NaN, NaN, NaN] } }),
+    )).field_mapping;
+
+    expect(fm.phase_offset_sigma).toEqual([4, 4, 4]);
+  });
+
+  test('keeps a user-set sigma', () => {
+    const fm = JSON.parse(buildConfigJson(
+      settingsFixture({ mcpc3ds: { sigma: [10, 10, 10] } }),
+    )).field_mapping;
+
+    expect(fm.phase_offset_sigma).toEqual([10, 10, 10]);
+  });
+
+  test('omits an unusable SWI hp_sigma instead of sending nulls', () => {
+    const swi = JSON.parse(buildConfigJson(
+      settingsFixture({ swi: { hp_sigma: [NaN, NaN, NaN], scaling: 'tanh', strength: 4, mip_window: 7 } }),
+    )).swi;
+
+    expect(swi).toEqual({ scaling: 'tanh', strength: 4, mip_window: 7 });
+  });
+
+  test('carries a usable SWI hp_sigma', () => {
+    const swi = JSON.parse(buildConfigJson(
+      settingsFixture({ swi: { hp_sigma: [4, 4, 0], scaling: 'negative_tanh', strength: 4, mip_window: 7 } }),
+    )).swi;
+
+    expect(swi.hp_sigma).toEqual([4, 4, 0]);
+    expect(swi.scaling).toBe('negative-tanh');
+  });
+});
+
+describe('buildConfigJson linear-fit parameters', () => {
+  test('carries the reliability percentile the user set', () => {
+    const fm = JSON.parse(buildConfigJson(
+      settingsFixture({ b0_estimation: 'linear_fit', linearFit: { reliability_threshold_percentile: 75 } }),
+    )).field_mapping;
+
+    expect(fm.b0_estimation).toBe('linear-fit');
+    expect(fm.linear_fit).toEqual({ reliability_threshold_percentile: 75 });
+  });
+
+  test('keeps 0 (reliability masking disabled) rather than treating it as unset', () => {
+    const fm = JSON.parse(buildConfigJson(
+      settingsFixture({ linearFit: { reliability_threshold_percentile: 0 } }),
+    )).field_mapping;
+
+    expect(fm.linear_fit).toEqual({ reliability_threshold_percentile: 0 });
+  });
+
+  test('omits a blank percentile so qsmxt-config supplies its default', () => {
+    const fm = JSON.parse(buildConfigJson(
+      settingsFixture({ linearFit: { reliability_threshold_percentile: NaN } }),
+    )).field_mapping;
+
+    expect(fm.linear_fit).toEqual({});
+  });
+});

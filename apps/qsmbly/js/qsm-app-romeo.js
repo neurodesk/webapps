@@ -1,10 +1,19 @@
+<<<<<<< monorepo
 import { createExampleSelector, bindSectionDisclosures, ConsoleOutput, createInfoDialog } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
+=======
+import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
+>>>>>>> upstream
 // Import extracted utility modules
 import { createThresholdMask } from '@neurodesk/webapp-components/volume';
 import { registerQsmAutomation } from './automation.js';
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
+<<<<<<< monorepo
+=======
+import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
+import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
+>>>>>>> upstream
 import {
   parseNiftiHeader,
   isGzipped,
@@ -94,6 +103,10 @@ class QSMApp {
 
     // BET settings from config
     this.betSettings = { ...cfg.BET_DEFAULTS };
+    // Mouse BET: the same BET, run on voxel sizes scaled up to human brain dimensions
+    this.mouseBetSettings = { ...MOUSE_BET_DEFAULTS };
+    this.betMode = 'human';     // which settings the shared BET modal is editing
+    this.maskVoxelScale = 1;    // voxel scale the current BET mask was generated with
 
     // Mask preparation settings from config
     this.maskPrepSettings = { ...cfg.MASK_PREP_DEFAULTS, prepared: false };
@@ -112,6 +125,7 @@ class QSMApp {
     // Modal managers (initialized in init() after DOM ready)
     this.betModal = null;
     this.hdBetModal = null;
+    this.mouseBrainModal = null;
     this.aboutModal = null;
     this.citationsModal = null;
     this.privacyModal = null;
@@ -149,7 +163,7 @@ class QSMApp {
     // Initialize FileIOController first (other controllers depend on it)
     this.fileIOController = new QsmInputSet({
       updateOutput: (msg) => this.updateOutput(msg),
-      onFilesChanged: () => this._onBucketsChanged(),
+      onFilesChanged: (type) => this._onBucketsChanged(type),
       onMagnitudeFilesChanged: (files) => this._onMagnitudeFilesChanged(files),
       onPhaseFilesChanged: (files) => this._onPhaseFilesChanged(files)
     });
@@ -228,6 +242,11 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
+<<<<<<< monorepo
+=======
+    this.hdBetModal = new ModalManager('hdBetSettingsModal');
+    this.mouseBrainModal = new ModalManager('mouseBrainModal');
+>>>>>>> upstream
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -514,6 +533,7 @@ class QSMApp {
     document.getElementById('maskFiles')?.addEventListener('change', async (e) => {
       await this.fileIOController.handleMaskInput(e);
       this.updateMaskSectionState();
+      await this.loadCustomMaskFile();
       this.updateEchoInfo();
     });
 
@@ -525,6 +545,17 @@ class QSMApp {
 
     // Preview buttons (mask only - magnitude/phase/fieldmap previews now in triage)
     document.getElementById('vis_mask')?.addEventListener('click', () => this.visualizeMaskFile());
+    document.getElementById('repairMaskAlignment')?.addEventListener('click', () => this.startMaskAlignmentRepair());
+    document.getElementById('previewMaskAlignment')?.addEventListener('click', () => this.previewMaskAlignmentRepair());
+    document.getElementById('applyMaskAlignment')?.addEventListener('click', () => this.applyMaskAlignmentRepair());
+    document.getElementById('cancelMaskAlignment')?.addEventListener('click', () => this.cancelMaskAlignmentRepair());
+    for (const axis of ['X', 'Y', 'Z']) {
+      document.getElementById(`maskFlip${axis}`)?.addEventListener('change', () => {
+        this.maskAlignmentSession?.invalidate();
+        document.getElementById('applyMaskAlignment').disabled = true;
+        document.getElementById('maskAlignmentStatus').textContent = 'Selection changed. Preview it before applying.';
+      });
+    }
 
     // Sidebar pipeline dropdowns
     this.setupSidebarDropdownListeners();
@@ -583,12 +614,21 @@ class QSMApp {
     document.getElementById('runBET')?.addEventListener('click', () => this.openBetSettingsModal());
 
     document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
+    // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
+    document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
+    document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
+    document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
+    document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
+      this.mouseBrainModal?.close();
+      this.openBetSettingsModal('mouse');
+    });
 
     // Auto threshold button (Otsu)
     document.getElementById('autoThreshold')?.addEventListener('click', () => this.autoDetectThreshold());
 
     // Mask Input Preparation
-    document.getElementById('maskInputSource')?.addEventListener('change', (e) => {
+    document.getElementById('maskInputSource')?.addEventListener('change', async (e) => {
+      this.resetMaskAlignmentRepair();
       const isCustom = e.target.value === 'custom';
       this.maskPrepSettings.source = e.target.value;
       this.maskPrepSettings.prepared = false;
@@ -608,6 +648,12 @@ class QSMApp {
       }
 
       this.updateMaskSectionState();
+
+      // Switching to custom with a file already uploaded should adopt it, not wait for a re-upload.
+      if (isCustom && this.fileIOController.hasMask() && !this.currentMaskData) {
+        await this.loadCustomMaskFile();
+      }
+      this.updateEchoInfo();
     });
 
     document.getElementById('applyBiasCorrection')?.addEventListener('change', (e) => {
@@ -646,19 +692,10 @@ class QSMApp {
     });
 
     document.getElementById('runSWI')?.addEventListener('click', () => {
-      // Sync sidebar SWI settings to pipeline settings before running
-      const scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
-      const strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      const mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      const hp_sigmaX = parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4;
-      const hp_sigmaY = parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4;
-      const hp_sigmaZ = parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0;
-      if (this.pipelineSettings.swi) {
-        this.pipelineSettings.swi.scaling = scaling;
-        this.pipelineSettings.swi.strength = strength;
-        this.pipelineSettings.swi.mip_window = mip_window;
-        this.pipelineSettings.swi.hp_sigma = [hp_sigmaX, hp_sigmaY, hp_sigmaZ];
-      }
+      // Sync the SWI modal's settings before running. The settings controller reads the
+      // same controls and defaults each field individually, so a deliberate 0 survives
+      // (a `|| 4` fallback would quietly turn it into 4).
+      this._syncSwiSettings();
       this.runSWI();
     });
     document.getElementById('runT2starR2star')?.addEventListener('click', () => this.runT2starR2star());
@@ -813,6 +850,12 @@ class QSMApp {
   // Passthrough for backward compatibility (HTML onclick uses app.removeFile)
   removeFile(type, index) {
     this.fileIOController.removeFile(type, index);
+
+    // Removing the uploaded mask has to drop the mask it produced, or the overlay and the run
+    // button keep reporting a mask that is no longer there.
+    if (type === 'mask' && !this.fileIOController.hasMask() && this.maskPrepSettings.source === 'custom') {
+      this.clearMask();
+    }
   }
 
   // ==================== Unified File Input ====================
@@ -959,7 +1002,7 @@ class QSMApp {
 
     // Route NIfTI/JSON files to auto-categorized buckets
     if (niftiJsonFiles.length > 0) {
-      this.fileIOController.addFiles(niftiJsonFiles);
+      await this.fileIOController.addFiles(niftiJsonFiles);
 
       // Process JSON sidecars
       const jsonFiles = niftiJsonFiles.filter(f => f.name.toLowerCase().endsWith('.json'));
@@ -1008,7 +1051,9 @@ class QSMApp {
    * Central state handler — called whenever bucket contents change.
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
-  _onBucketsChanged() {
+  _onBucketsChanged(changeType) {
+    if (this.maskAlignmentActive && (this.maskAlignmentSession?.reference !== this.getMaskReferenceFile()
+        || this.maskAlignmentSession?.file !== this.fileIOController.getMaskFile())) this.resetMaskAlignmentRepair();
     // Render file triage UI
     this._renderFileTriage();
 
@@ -1030,6 +1075,12 @@ class QSMApp {
 
     // Update run button state
     this.updateEchoInfo();
+
+    // A mask uploaded before the images is dropped when the magnitude files change, and the
+    // grid it has to be validated against only exists once they are loaded — so adopt it here.
+    if (changeType !== 'mask' && !this.maskAlignmentActive && this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask() && !this.currentMaskData) {
+      this.loadCustomMaskFile().then(() => this.updateEchoInfo());
+    }
 
     // Update drop zone label
     const hasFiles = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
@@ -1738,6 +1789,13 @@ class QSMApp {
     const hasMaskFile = this.fileIOController.hasMask();
     const hasPrepared = this.maskPrepSettings.prepared;
     const isCustom = this.maskPrepSettings.source === 'custom';
+    const uploadStatus = document.getElementById('maskUploadStatus');
+    if (uploadStatus) {
+      uploadStatus.hidden = !hasMaskFile;
+      uploadStatus.textContent = hasMaskFile ? (this.maskUploadMessage || 'Checking uploaded mask...') : '';
+    }
+    const repairButton = document.getElementById('repairMaskAlignment');
+    if (repairButton) repairButton.disabled = !hasMaskFile || !this.getMaskReferenceFile() || this.pipelineRunning || !!this.maskAlignmentActive;
 
     const generateButtons = document.getElementById('maskGenerateButtons');
     const thresholdModeButtons = document.getElementById('thresholdModeButtons');
@@ -1752,6 +1810,9 @@ class QSMApp {
       if (maskOps) maskOps.style.display = 'none';
       const maskFileNote = document.getElementById('maskFileUploadedNote');
       if (maskFileNote) maskFileNote.style.display = 'none';
+      // The preview button starts disabled in the markup and nothing else enables it.
+      const visMask = document.getElementById('vis_mask');
+      if (visMask) visMask.disabled = !hasMaskFile;
       return;
     }
 
@@ -1764,6 +1825,7 @@ class QSMApp {
       document.getElementById('previewMask')?.setAttribute('disabled', '');
       document.getElementById('runBET')?.setAttribute('disabled', '');
       document.getElementById('runHdBet')?.setAttribute('disabled', '');
+      document.getElementById('runMouseBet')?.setAttribute('disabled', '');
       document.getElementById('maskThreshold')?.setAttribute('disabled', '');
       if (maskOps) maskOps.style.display = 'none';
       // Show info note
@@ -1784,6 +1846,7 @@ class QSMApp {
         document.getElementById('previewMask')?.removeAttribute('disabled');
         document.getElementById('runBET')?.removeAttribute('disabled');
         document.getElementById('runHdBet')?.removeAttribute('disabled');
+        document.getElementById('runMouseBet')?.removeAttribute('disabled');
       }
     }
   }
@@ -1845,7 +1908,13 @@ class QSMApp {
     const file = this.fileIOController.getMaskFile();
     if (!file) return;
 
-    await this.loadAndVisualizeFile(file, 'Mask');
+    if (!this.currentMaskData) {
+      await this.loadCustomMaskFile();
+      return;
+    }
+    const reference = this.getMaskReferenceFile();
+    if (reference) await this.loadAndVisualizeFile(reference, 'Mask reference image');
+    await this.displayCurrentMask();
     this.hideEchoNavigation();
   }
 
@@ -1871,9 +1940,8 @@ class QSMApp {
         const hasFieldStrength = !needsFieldStrength || (this.fileIOController.getFieldStrength() > 0);
         // Mask can come from: UI editing, mask file upload, or magnitude (for threshold generation)
         const hasMaskSource = this.currentMaskData !== null
-          || this.fileIOController.hasMask()
-          || this.fileIOController.hasFieldMapMagnitude()
-          || this.preparedMagnitudeData !== null;
+          || (this.maskPrepSettings.source !== 'custom'
+            && (this.fileIOController.hasFieldMapMagnitude() || this.preparedMagnitudeData !== null));
         // QSMART and MEDI require magnitude
         const dipoleMethod = this.pipelineSettings?.dipole_inversion || 'rts';
         const needsMagnitude = combined_method === 'qsmart' || dipoleMethod === 'medi';
@@ -1887,7 +1955,7 @@ class QSMApp {
 
     const runButton = document.getElementById('runPipelineSidebar');
     if (runButton) {
-      runButton.disabled = !canRun || this.pipelineRunning;
+      runButton.disabled = !canRun || this.pipelineRunning || !!this.maskAlignmentActive;
     }
   }
 
@@ -1981,6 +2049,10 @@ class QSMApp {
     // HD-BET button (same preconditions as BET: it needs the magnitude image)
     const hdBetBtn = document.getElementById('runHdBet');
     if (hdBetBtn) hdBetBtn.disabled = !canGenerate;
+
+    // Mouse BET button (BET with scaled voxel sizes, same preconditions)
+    const mouseBetBtn = document.getElementById('runMouseBet');
+    if (mouseBetBtn) mouseBetBtn.disabled = !canGenerate;
 
     // Threshold slider and auto-threshold button:
     // Only enabled when Threshold method is active (not BET)
@@ -2231,14 +2303,24 @@ class QSMApp {
    * resets the op history (as BET and Threshold do). Delegates to MaskController.
    */
   async runHdBetMask(options) {
+    return this.runDlMaskGenerator((mc) => mc.runHdBetMask(options));
+  }
+
+  /** RS2-Net rodent brain extraction — a mask generator, like HD-BET. Delegates to MaskController. */
+  async runRs2NetMask(options) {
+    return this.runDlMaskGenerator((mc) => mc.runRs2NetMask(options));
+  }
+
+  /** Run a deep-learning mask generator on the controller and adopt its mask. */
+  async runDlMaskGenerator(run) {
     this.maskController.maskDims = this.maskDims || this.maskController.maskDims;
     this.maskController.voxelSize = this.voxelSize || this.maskController.voxelSize;
 
-    const ok = await this.maskController.runHdBetMask(options);
+    const ok = await run(this.maskController);
     if (ok) {
       this.currentMaskData = this.maskController.currentMaskData;
       this.originalMaskData = this.maskController.originalMaskData;
-      // HD-BET derives the geometry itself from the prepared header, so publish it here too —
+      // The DL generators derive the geometry from the prepared header, so publish it here too —
       // the refinements that follow read it from this side.
       this.maskDims = this.maskController.maskDims;
       this.voxelSize = this.maskController.voxelSize;
@@ -2255,8 +2337,206 @@ class QSMApp {
     return ok;
   }
 
+  /**
+   * Load the uploaded custom mask and adopt it as the current mask.
+   *
+   * "Custom mask" is the fourth mask generator, alongside Threshold, BET and HD-BET, and needs
+   * the same post-generation wiring: without it the file is listed but never parsed, so no
+   * overlay appears, no `customMaskBuffer` reaches the worker, and Start QSM stays disabled.
+   */
+  getMaskReferenceFile() {
+    return this.fileIOController.buckets.totalField[0]?.file
+      || this.fileIOController.buckets.localField[0]?.file
+      || this.fileIOController.buckets.magnitude[0]?.file
+      || this.fileIOController.buckets.phase[0]?.file || null;
+  }
+
+  resetMaskAlignmentRepair() {
+    this.maskAlignmentRevision = (this.maskAlignmentRevision || 0) + 1;
+    this.maskAlignmentActive = false;
+    this.maskAlignmentSession = null;
+    const panel = document.getElementById('maskAlignmentPanel');
+    if (panel) panel.hidden = true;
+  }
+
+  setMaskAlignmentBusy(busy) {
+    for (const id of ['maskFlipX', 'maskFlipY', 'maskFlipZ', 'previewMaskAlignment', 'cancelMaskAlignment']) {
+      document.getElementById(id).disabled = busy;
+    }
+    document.getElementById('applyMaskAlignment').disabled = busy || !this.maskAlignmentSession?.candidate;
+  }
+
+  async startMaskAlignmentRepair() {
+    if (this.pipelineRunning || this.maskAlignmentActive) return;
+    const file = this.fileIOController.getMaskFile();
+    const reference = this.getMaskReferenceFile();
+    if (!file || !reference) return;
+    this.resetMaskAlignmentRepair();
+    const revision = this.maskAlignmentRevision;
+    this.maskAlignmentActive = true;
+    document.getElementById('maskAlignmentPanel').hidden = false;
+    for (const axis of ['X', 'Y', 'Z']) document.getElementById(`maskFlip${axis}`).checked = false;
+    const status = document.getElementById('maskAlignmentStatus');
+    status.textContent = 'Loading mask and reference image...';
+    this.setMaskAlignmentBusy(true);
+    this.updateMaskSectionState();
+    this.updateEchoInfo();
+    try {
+      const maskHeader = await this.maskController.readNiftiHeader(file);
+      const referenceHeader = await this.maskController.readNiftiHeader(reference);
+      const raw = await this.maskController.readNiftiData(file);
+      if (revision !== this.maskAlignmentRevision) return;
+      this.maskAlignmentSession = new MaskAlignmentSession(file, reference, raw, maskHeader, referenceHeader);
+      await this.previewMaskAlignmentRepair();
+    } catch (error) {
+      if (revision === this.maskAlignmentRevision) status.textContent = error.message;
+    } finally {
+      if (revision === this.maskAlignmentRevision) this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async previewMaskAlignmentRepair() {
+    const session = this.maskAlignmentSession;
+    if (!session) return;
+    const revision = this.maskAlignmentRevision;
+    const status = document.getElementById('maskAlignmentStatus');
+    this.setMaskAlignmentBusy(true);
+    session.invalidate();
+    try {
+      if (session.file !== this.fileIOController.getMaskFile() || session.reference !== this.getMaskReferenceFile()) {
+        throw new Error('Inputs changed. Cancel and start alignment repair again.');
+      }
+      const flips = ['X', 'Y', 'Z'].map(axis => document.getElementById(`maskFlip${axis}`).checked);
+      const candidate = session.preview(flips);
+      await this.loadAndVisualizeFile(session.reference, 'Mask alignment reference');
+      if (revision !== this.maskAlignmentRevision) return;
+      await this.maskController.displayCurrentMask(candidate.data, candidate.header);
+      if (revision !== this.maskAlignmentRevision) return;
+      this.hideEchoNavigation();
+      this.updateDataUnits(null);
+      const axes = ['X', 'Y', 'Z'].filter((_, i) => flips[i]).join(', ');
+      status.textContent = `Preview only: ${axes ? `flip ${axes}` : 'replace header without flips'}. `
+        + `${candidate.count} mask voxels. Inspect the red overlay in all three planes and across slices. Apply only when aligned.`;
+    } catch (error) {
+      session.invalidate();
+      if (revision === this.maskAlignmentRevision) status.textContent = error.message;
+    } finally {
+      if (revision === this.maskAlignmentRevision) this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async applyMaskAlignmentRepair() {
+    const session = this.maskAlignmentSession;
+    if (!session?.candidate) return;
+    this.setMaskAlignmentBusy(true);
+    try {
+      const aligned = session.accept(this.fileIOController.getMaskFile(), this.getMaskReferenceFile());
+      this.resetMaskAlignmentRepair();
+      this.fileIOController.maskFile = [{ file: aligned, name: aligned.name }];
+      this.fileIOController.updateFileList('mask', this.fileIOController.maskFile);
+      if (await this.loadCustomMaskFile()) {
+        this.updateOutput(`Applied mask alignment: ${aligned.name}. The original file was not changed.`);
+      }
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
+    } catch (error) {
+      document.getElementById('maskAlignmentStatus').textContent = error.message;
+      this.setMaskAlignmentBusy(false);
+    }
+  }
+
+  async cancelMaskAlignmentRepair() {
+    const reference = this.getMaskReferenceFile();
+    this.resetMaskAlignmentRepair();
+    try {
+      if (reference) await this.loadAndVisualizeFile(reference, 'Mask reference image');
+      if (this.currentMaskData) await this.displayCurrentMask();
+    } finally {
+      this.updateMaskSectionState();
+      this.updateEchoInfo();
+    }
+  }
+
+  async loadCustomMaskFile() {
+    this.resetMaskAlignmentRepair();
+    const file = this.fileIOController.getMaskFile();
+    if (!file) return false;
+    this.maskUploadMessage = 'Checking uploaded mask...';
+    this.updateMaskSectionState();
+
+    // The mask has to sit on the grid the pipeline runs on, so validate it against that image.
+    const headerSource = this.getMaskReferenceFile();
+
+    // Give the overlay a base volume to sit on when nothing has been displayed yet.
+    if (this.nv.volumes.length === 0 && this.fileIOController.buckets.magnitude.length > 0) {
+      await this.visualizeMagnitude();
+    }
+
+    this.maskController.magnitudeFileBytes = this.magnitudeFileBytes || this.maskController.magnitudeFileBytes;
+    // A replacement must not leave a previously accepted mask available to the pipeline.
+    this.currentMaskData = null;
+    this.originalMaskData = null;
+    this.updateEchoInfo();
+
+    let result;
+    try {
+      result = await this.maskController.loadMaskFromFile(file, headerSource);
+    } catch (error) {
+      console.error('Custom mask load failed:', error);
+      result = { ok: false, message: `Could not read ${file.name}: ${error.message}` };
+    }
+
+    if (!result.ok) {
+      this.maskUploadMessage = `Mask not accepted for processing. ${result.message} Its header may place the overlay outside the visible brain image.`;
+      this.updateOutput(result.message);
+      if (result.alignmentMismatch && headerSource) {
+        this.maskUploadMessage = 'Alignment required. The repair preview uses the image header; it is not an accepted mask. Inspect the overlay, choose flips if needed, then Apply alignment.';
+        this.updateMaskSectionState();
+        await this.startMaskAlignmentRepair();
+        return false;
+      }
+      if (headerSource) {
+        try {
+          await this.maskController.previewUploadedMask(file, () =>
+            this.loadAndVisualizeFile(headerSource, 'Mask reference image'));
+          this.hideEchoNavigation();
+          this.updateOutput('Preview only: using the uploaded mask\'s original coordinates, which may put it outside the visible brain image. Use Repair mask alignment to inspect a candidate on the image grid.');
+        } catch (error) {
+          this.updateOutput(`Could not preview mask: ${error.message}`);
+        }
+      }
+      this.updateMaskSectionState();
+      return false;
+    }
+
+    this.currentMaskData = this.maskController.currentMaskData;
+    this.originalMaskData = this.maskController.originalMaskData;
+    this.maskDims = this.maskController.maskDims;
+    this.voxelSize = this.maskController.voxelSize;
+    this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
+    this.applyVoxelDefaults();
+    this.maskUploadMessage = 'Mask loaded for processing and displayed over the brain image.';
+
+    // Always restore the anatomy after decoding the mask, including compressed uploads.
+    if (headerSource) await this.loadAndVisualizeFile(headerSource, 'Mask reference image');
+    await this.displayCurrentMask();
+    this.hideEchoNavigation();
+
+    // An uploaded mask is used as given, so the op history starts empty rather than naming a
+    // generator — the methods prose reports it as a supplied mask.
+    this.maskOpsHistory = [];
+
+    this.showStageButtons();
+    this.addStageButton('mask', 'Brain Mask');
+    this.updateMaskSectionState();
+    this.updateEchoInfo();
+    this.updateOutput(result.message);
+    return true;
+  }
+
   // Clear mask completely - delegates to MaskController
   async clearMask() {
+    this.resetMaskAlignmentRepair();
     await this.maskController.clearMask();
 
     // Sync state
@@ -2330,6 +2610,7 @@ class QSMApp {
     return createMaskNifti(maskData, this.magnitudeFileBytes);
   }
 
+<<<<<<< monorepo
   async generateRobustMask() {
     document.getElementById('thresholdModeButtons').style.display = 'none';
     await this.previewMask();
@@ -2347,6 +2628,15 @@ class QSMApp {
   }
 
   async runRomeoQSM(options = {}) {
+=======
+  async runRomeoQSM() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
+>>>>>>> upstream
     const mode = this.fileIOController.getInputMode();
 
     if (mode === 'raw') {
@@ -2414,7 +2704,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       // Determine which stages can be skipped based on settings changes
@@ -2514,7 +2804,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       // Preview the field map
@@ -2595,7 +2885,7 @@ class QSMApp {
       if (this.currentMaskData && this.magnitudeFileBytes) {
         const maskNifti = this.createMaskNifti(this.currentMaskData);
         customMaskBuffer = maskNifti;
-        this.updateOutput("Using edited mask");
+        this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
 
       if (!maskBuffer && !customMaskBuffer && combined_method === 'none') {
@@ -2875,6 +3165,11 @@ class QSMApp {
 
       // Handle mask (local data, not from pipeline)
       if (stage === 'mask') {
+        if (this.maskPrepSettings.source === 'custom' && this.fileIOController.hasMask()) {
+          await this.visualizeMaskFile();
+          this.updateDataUnits(null);
+          return;
+        }
         if (this.currentMaskData || this.maskController.currentMaskData) {
           if (!this.currentMaskData) {
             this.currentMaskData = this.maskController.currentMaskData;
@@ -3092,10 +3387,12 @@ class QSMApp {
    * Run BET brain extraction
    * Delegates to MaskController
    */
-  async runBET() {
-    // Track BET as mask generator
-    const fi = this.betSettings?.fractionalIntensity ?? 0.5;
+  async runBET(betSettings = this.betSettings) {
+    // Track BET as mask generator. The qsmxt op has no voxel scaling, so Mouse BET records the
+    // same `bet:<fi>` and the scale is noted separately (see showCommandPreview).
+    const fi = betSettings?.fractionalIntensity ?? 0.5;
     this.maskOpsHistory = [`bet:${fi}`];
+    this.maskVoxelScale = betSettings?.voxelScale || 1;
 
     // Disable threshold slider since user chose BET-based masking
     this.setThresholdSliderEnabled(false);
@@ -3113,7 +3410,7 @@ class QSMApp {
 
     await this.maskController.runBET({
       magnitudeFiles: magnitudeFilesForBET,
-      betSettings: this.betSettings,
+      betSettings,
       createNiftiHeaderFromVolume: (vol) => this.createNiftiHeaderFromVolume(vol),
       onComplete: async () => {
         // Sync state from controller
@@ -3126,7 +3423,7 @@ class QSMApp {
         this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
 
         // Apply post-BET erosions
-        const erosions = this.betSettings.erosions || 0;
+        const erosions = betSettings.erosions || 0;
         if (erosions > 0) {
           this.updateOutput(`Applying ${erosions} erosion step(s)...`);
           await this.erodeMask3D(erosions);
@@ -3246,6 +3543,12 @@ class QSMApp {
   }
 
   async runSWI() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
       this.updateOutput("SWI requires raw magnitude + phase data");
@@ -3305,6 +3608,12 @@ class QSMApp {
   }
 
   async runT2starR2star() {
+    if (this.maskAlignmentActive) {
+      this.updateOutput('Apply or cancel the mask alignment preview before running.');
+      return;
+    }
+    if (this.fileIOController.hasMask() && !this.currentMaskData
+        && !(await this.loadCustomMaskFile())) return;
     const mode = this.fileIOController.getInputMode();
     if (mode !== 'raw') {
       this.updateOutput("T2*/R2* requires raw magnitude data (current mode: " + mode + ")");
@@ -3448,7 +3757,37 @@ class QSMApp {
     }
   }
 
-  openBetSettingsModal() {
+  openMouseBrainModal() {
+    if (!this.maskPrepSettings.prepared) {
+      this.updateOutput('Prepare the mask input first — mouse brain extraction needs the magnitude image.');
+      return;
+    }
+    document.getElementById('rs2NetTta').checked = !!this.rs2NetSettings?.tta;
+    this.mouseBrainModal?.open();
+  }
+
+  async runRs2NetWithSettings() {
+    this.rs2NetSettings = { tta: !!document.getElementById('rs2NetTta').checked };
+    this.mouseBrainModal?.close();
+
+    this.updateOutput('Starting RS2-Net mouse brain extraction...');
+    if (await this.runRs2NetMask(this.rs2NetSettings)) {
+      // qsmxt has no RS2-Net op, so — like an uploaded mask — the history starts empty and the
+      // command preview flags the mask as made here. `dlMaskGenerator` is only honoured while
+      // this exact history array is current: every generator assigns a fresh one, refinements
+      // push onto it.
+      this.maskOpsHistory = [];
+      this.dlMaskGenerator = { id: 'rs2-net', history: this.maskOpsHistory };
+      await this.displayCurrentMask();
+      this.updateOutput('RS2-Net mask created');
+    }
+  }
+
+  /**
+   * Open the BET settings modal. `mode` is 'human' (plain BET) or 'mouse' (BET on voxel sizes
+   * scaled up to human brain dimensions); each mode keeps its own settings.
+   */
+  openBetSettingsModal(mode = 'human') {
     const hasMag = this.fileIOController.buckets.magnitude.length > 0;
 
     if (!hasMag) {
@@ -3456,52 +3795,76 @@ class QSMApp {
       return;
     }
 
-    // Populate form with current settings
-    document.getElementById('betFractionalIntensity').value = this.betSettings.fractionalIntensity;
-    document.getElementById('betFractionalIntensityValue').textContent = this.betSettings.fractionalIntensity;
-    document.getElementById('betIterations').value = this.betSettings.iterations;
-    document.getElementById('betSubdivisions').value = this.betSettings.subdivisions;
-    document.getElementById('betErosions').value = this.betSettings.erosions ?? 2;
+    this.betMode = mode;
+    const isMouse = mode === 'mouse';
+    const settings = isMouse ? this.mouseBetSettings : this.betSettings;
+
+    document.getElementById('betSettingsTitle').textContent = isMouse ? 'Mouse BET Settings' : 'BET Settings';
+    document.getElementById('runBetWithSettings').textContent = isMouse ? 'Run Mouse BET' : 'Run BET';
+    document.getElementById('mouseBetNote').style.display = isMouse ? '' : 'none';
+    document.getElementById('betVoxelScaleGroup').style.display = isMouse ? '' : 'none';
+    this.populateBetForm(settings);
+
+    // BET's defaults assume a human-sized head; point out the mismatch either way.
+    const mc = this.maskController;
+    if (!mc.magnitudeFileBytes) mc.magnitudeFileBytes = this.magnitudeFileBytes;
+    if (mc.ensureGeometry?.()) {
+      const rodent = looksLikeRodentFov(mc.maskDims, mc.voxelSize);
+      const fov = fieldOfViewMm(mc.maskDims, mc.voxelSize).map(v => v.toFixed(0)).join('x');
+      if (rodent && !isMouse) {
+        this.updateOutput(`The field of view (${fov} mm) is too small for a human head — for rodent data use Mouse BET instead.`);
+      } else if (!rodent && isMouse) {
+        this.updateOutput(`The field of view (${fov} mm) looks human-sized — Mouse BET is meant for rodent data. Check the voxel sizes in the header.`);
+      }
+    }
 
     this.betModal?.open();
   }
 
+  populateBetForm(settings) {
+    document.getElementById('betFractionalIntensity').value = settings.fractionalIntensity;
+    document.getElementById('betFractionalIntensityValue').textContent = settings.fractionalIntensity;
+    document.getElementById('betIterations').value = settings.iterations;
+    document.getElementById('betSubdivisions').value = settings.subdivisions;
+    document.getElementById('betErosions').value = settings.erosions ?? 2;
+    document.getElementById('betVoxelScale').value = settings.voxelScale ?? 1;
+  }
+
   resetBetSettings() {
-    // Reset to defaults
-    document.getElementById('betFractionalIntensity').value = 0.5;
-    document.getElementById('betFractionalIntensityValue').textContent = '0.5';
-    document.getElementById('betIterations').value = 1000;
-    document.getElementById('betSubdivisions').value = 4;
-    document.getElementById('betErosions').value = 2;
+    this.populateBetForm(this.betMode === 'mouse' ? MOUSE_BET_DEFAULTS : QSMConfig.BET_DEFAULTS);
   }
 
   runBetWithSettings() {
     // Save settings from form
-    this.betSettings = {
+    const settings = {
       fractionalIntensity: parseFloat(document.getElementById('betFractionalIntensity').value),
       iterations: parseInt(document.getElementById('betIterations').value),
       subdivisions: parseInt(document.getElementById('betSubdivisions').value),
       erosions: parseInt(document.getElementById('betErosions').value) || 0
     };
+    if (this.betMode === 'mouse') {
+      const scale = parseFloat(document.getElementById('betVoxelScale').value);
+      settings.voxelScale = scale > 0 ? scale : MOUSE_BET_DEFAULTS.voxelScale;
+      this.mouseBetSettings = settings;
+    } else {
+      this.betSettings = settings;
+    }
 
     this.betModal?.close();
-    this.runBET();
+    this.runBET(settings);
   }
 
   // --- Command Preview ---
 
+  /** Pull the SWI modal's controls into pipelineSettings (the modal owns them). */
+  _syncSwiSettings() {
+    const swi = this.pipelineSettingsController?.swiSettings();
+    if (swi) this.pipelineSettings.swi = swi;
+  }
+
   showCommandPreview() {
     // Sync sidebar SWI settings to pipeline settings before generating command
-    if (this.pipelineSettings.swi) {
-      this.pipelineSettings.swi.scaling = document.getElementById('sidebarSwiScaling')?.value || 'tanh';
-      this.pipelineSettings.swi.strength = parseFloat(document.getElementById('sidebarSwiStrength')?.value) || 4;
-      this.pipelineSettings.swi.mip_window = parseInt(document.getElementById('sidebarSwiMipWindow')?.value) || 7;
-      this.pipelineSettings.swi.hp_sigma = [
-        parseFloat(document.getElementById('sidebarSwiHpSigmaX')?.value) || 4,
-        parseFloat(document.getElementById('sidebarSwiHpSigmaY')?.value) || 4,
-        parseFloat(document.getElementById('sidebarSwiHpSigmaZ')?.value) || 0,
-      ];
-    }
+    this._syncSwiSettings();
     const configJson = buildConfigJson(this.pipelineSettings, {
       doSwi: !!this.results?.swi?.file,
       doT2star: !!this.results?.t2star?.file,
@@ -3523,6 +3886,7 @@ class QSMApp {
     if (!this.pipelineExecutor?.isReady()) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
+<<<<<<< monorepo
     const unsubscribe = this.pipelineExecutor.subscribe((message) => {
       if (message.type === 'commandResult') {
         if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : message.result;
@@ -3532,6 +3896,33 @@ class QSMApp {
           if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
         } else {
           const raw = message.result;
+=======
+    // Mouse BET's voxel scaling has no qsmxt equivalent: flag it in the command, and describe it
+    // in the methods text.
+    const scaled = this.maskOpsHistory[0]?.startsWith('bet:') && this.maskVoxelScale !== 1;
+    const rs2 = this.dlMaskGenerator?.id === 'rs2-net' && this.dlMaskGenerator.history === this.maskOpsHistory;
+    let scaleNote = '';
+    let scaleComment = '';
+    if (scaled) {
+      scaleNote = voxelScaleMethodsNote(this.maskVoxelScale);
+      scaleComment = `# Note: the mask was made with Mouse BET (voxel sizes x${this.maskVoxelScale}), which qsmxt\n`
+        + `# cannot reproduce; scale the header voxel sizes (e.g. fslchpixdim) or pass the mask instead.\n`;
+    } else if (rs2) {
+      scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
+        + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
+    }
+    const handler = (e) => {
+      if (e.data.type === 'commandResult') {
+        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
+      } else if (e.data.type === 'methodsResult') {
+        if (e.data.error) {
+          if (methodsRaw) methodsRaw.textContent = `ERROR: ${e.data.error}`;
+          if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
+        } else {
+          const raw = rs2
+            ? replaceMaskingSentence(e.data.result, RS2_NET_METHODS.sentence, RS2_NET_METHODS.reference)
+            : insertBetMethodsNote(e.data.result, scaleNote);
+>>>>>>> upstream
           if (methodsRaw) methodsRaw.textContent = raw;
           if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
         }
