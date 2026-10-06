@@ -1,5 +1,35 @@
 # @neurodesk/webapp-components
 
+## 0.10.1
+
+### Patch Changes
+
+- Add SCT cord morphometry and standalone lesion analysis for uploaded, generated or manually edited masks, without an anatomy image. Analysis runs in the browser by default, executing the pinned, unchanged SCT 7.3 Python in a Pyodide worker, or optionally on a paired Neurodesk compute server in the pinned SCT Docker image. Both keep SCT's CSV, XLSX, pickle and labeled NIfTI outputs and show where results were computed, because WebAssembly floating-point results can differ from native SCT. Server jobs can be recovered, cancelled and deleted; browser runs cancel by terminating their worker. Automatic browser lesion metrics stay labelled approximate. Shared compute connections support selected tools and explicit HTTPS reverse-proxy addresses.
+
+## 0.10.0
+
+### Minor Changes
+
+- ec85a09: Add a shared editor for correcting masks and label maps in the viewer. The `nd-mask-editor` element (`createMaskEditor`) is a second viewer toolbar row with Draw, Erase and Fill tools, a Label select for label maps, brush size, Undo, Apply and Cancel. It edits through NiiVue's drawing layer in both the 0.x and 1.0 generations (`createDrawingAdapter` in `@neurodesk/webapp-components/viewer`). Apply returns the result on its own grid as a uint8 NIfTI with the result's name. `createResultList` shows an Edit button for results marked `editable` and labels edited results. On NiiVue 1.0 rc.11 to rc.14 the adapter corrects a NiiVue load error that put masks on the wrong voxels of images with permuted axes, such as sagittal acquisitions.
+
+  Cancellation waits for pending editor work and prevents a cancelled export from applying to a replacement result. Removing the editor releases its drawing session and keyboard listener. Editing rejects masks whose voxel dimensions or affine differ from the displayed image, and exports preserve the source mask's header and extensions.
+
+### Patch Changes
+
+- 0204fe1: Style the `.nd-edit-btn` result action wherever it appears. Apps that build their own result rows, rather than using `createResultList`, now get the same Edit button as the shared list.
+
+## 0.9.0
+
+### Minor Changes
+
+- Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
+
+## 0.8.0
+
+### Minor Changes
+
+- Share operation parameter schemas across browser and desktop automation. Both callers now use the same defaults, enum values, bounds, recursive arrays, decimal multiples and safe integer rules. Preserve MCP parameter metadata and bundle the validator for native ESM development, standalone releases and the composite catalog.
+
 ## 0.7.0
 
 ### Minor Changes

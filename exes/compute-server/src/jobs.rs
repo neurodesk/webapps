@@ -663,15 +663,15 @@ impl JobStore {
             position: 0,
         });
         let paths = self.runner.paths(&job.dir);
-        let argv = job.tool.argv(&job.validated, &paths);
         let started = Started {
-            request: RunRequest {
-                job_id: job.id.clone(),
-                job_dir: job.dir.clone(),
-                argv,
-                job: job.validated.clone(),
-                cpu: self.cpu,
-            },
+            request: RunRequest::new(
+                job.tool.as_ref(),
+                job.id.clone(),
+                job.dir.clone(),
+                job.validated.clone(),
+                &paths,
+                self.cpu,
+            ),
             cancel: job.cancel.clone(),
         };
         // Queue positions of the remaining jobs changed.
@@ -762,7 +762,7 @@ impl JobStore {
             Ok(RunOutcome::Exited(0)) => {
                 let mut outputs = Vec::new();
                 let mut missing = None;
-                for spec in job.tool.outputs() {
+                for spec in job.tool.outputs(&job.validated) {
                     let path = out_dir.join(spec.name);
                     match std::fs::metadata(&path) {
                         Ok(metadata) if metadata.is_file() => {
@@ -935,7 +935,7 @@ mod tests {
                 ValidatedJob {
                     tool: "nesvor".into(),
                     command: "reconstruct".into(),
-                    stacks: vec![],
+                    inputs: crate::tools::JobInputs::Nesvor { stacks: vec![] },
                     options: serde_json::Map::new(),
                     warnings: vec![],
                 },

@@ -291,8 +291,8 @@
         </div>
       </div>
 
-      <p>Spinal Cord Toolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows. It also measures cord morphometry and lesions with ports of SCT 7.3 <code>sct_process_segmentation</code> and <code>sct_analyze_lesion</code>, checked number by number against SCT; the atlas, PMJ and image-based options of those tools are not included.</p>
-      <p>All image computation runs locally in your browser using ONNX Runtime Web. Patient image data is not uploaded to any server.</p>
+      <p>Spinal Cord Toolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows.</p>
+      <p>Segmentation runs locally using ONNX Runtime Web. Morphometry and lesion analysis run SCT Python in your browser, or the pinned SCT CLI on your chosen compute server. Uploaded masks and generated masks can be analyzed without an anatomy image.</p>
       <p>Long runs can continue if this site is allowed to stay active in your browser.</p>
 
       <h4>Version</h4>
@@ -319,24 +319,25 @@
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
         <div>
-          <strong>Your data never leaves your device.</strong>
-          <p>Spinal Cord Toolbox runs entirely in your web browser using WebAssembly and ONNX Runtime. All processing occurs locally on your machine.</p>
+          <strong>You choose where analysis runs.</strong>
+          <p>Segmentation and browser SCT analysis keep your images and masks on this device. Selecting compute-server execution sends chosen masks only after you press Run analysis.</p>
         </div>
       </div>
 
       <h4>What this means</h4>
       <ul class="privacy-list">
-        <li>No patient image data, metadata, masks, segmentations, or outputs are uploaded to any server or cloud service</li>
-        <li>No internet connection is required after the page loads</li>
-        <li>Sensitive patient data remains on your computer at all times</li>
-        <li>There is no need to anonymise or de-identify your data before use</li>
+        <li>Browser execution does not upload patient images. Compute-server execution uploads selected masks, including their NIfTI headers, to your chosen server.</li>
+        <li>Browser analysis requires no compute-server connection. Native analysis requires your server.</li>
+        <li>The compute server retains masks, results and logs until its retention period expires or you delete the job.</li>
+        <li>Use a server and network suitable for your data. Previous analysis jobs lets you download results and delete server files.</li>
       </ul>
 
       <h4>How it works</h4>
-      <p>Spinal Cord Toolbox uses ONNX Runtime Web to run browser-compatible deep learning models directly in the browser via WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without patient-data network transfer.</p>
+      <p>Spinal Cord Toolbox uses ONNX Runtime Web to run browser-compatible deep learning models directly in the browser via WebAssembly. Local segmentation reads NIfTI or DICOM images into browser memory. Browser SCT analysis runs Python in an isolated WebAssembly worker with local masks and exports. Native analysis uploads the selected NIfTI masks unchanged, runs the pinned SCT container, and downloads its original CSV or XLSX, pickle and labeled NIfTI artifacts.</p>
 
       <h4>Third-party services</h4>
       <p>The Neurodesk hosting layer records page views only, unless your browser sends Do Not Track or Global Privacy Control. It does not send custom events, patient image data, DICOM metadata, filenames, voxel values, masks, segmentations, screenshots, free-text patient-derived logs, or downloaded outputs to Google Analytics.</p>
+      <p>Browser SCT analysis downloads the pinned Pyodide Python runtime and scientific libraries from jsDelivr (cdn.jsdelivr.net) when it runs. These requests fetch fixed files and carry no images, masks, filenames or results.</p>
     </div>
   </div>
 </div>

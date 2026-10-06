@@ -2,6 +2,8 @@
 #![allow(clippy::needless_range_loop, clippy::manual_clamp)]
 // Minimal NIfTI-1 scalar volume I/O (from exes/synthsr). Reads to f64 like nibabel get_fdata,
 // averages 4D channels like SynthSeg's preprocess(), writes int32 label maps.
+use neurodesk_nifti::affine::inverse3;
+use neurodesk_nifti::Nifti1Header;
 use std::io::Read;
 
 pub type Affine = [[f64; 4]; 3];
@@ -42,25 +44,9 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
     if buf.len() < 352 || &buf[344..347] != b"n+1" {
         return Err("Choose a NIfTI image (.nii or .nii.gz).".into());
     }
-    let le = i32::from_le_bytes(buf[0..4].try_into().unwrap()) == 348;
-    let i16at = |o: usize| {
-        let b = [buf[o], buf[o + 1]];
-        if le {
-            i16::from_le_bytes(b)
-        } else {
-            i16::from_be_bytes(b)
-        }
-    };
-    let f32at = |o: usize| {
-        let b: [u8; 4] = buf[o..o + 4].try_into().unwrap();
-        if le {
-            f32::from_le_bytes(b)
-        } else {
-            f32::from_be_bytes(b)
-        }
-    };
-    let ndim = i16at(40) as usize;
-    let dim: Vec<i16> = (0..8).map(|a| i16at(40 + 2 * a)).collect();
+    let header = Nifti1Header::decode(buf[..348].try_into().unwrap());
+    let ndim = header.dim[0] as usize;
+    let dim = header.dim;
     if ndim < 3 || (5..=ndim.min(7)).any(|a| dim[a] > 1) {
         return Err("SynthSeg needs a 3D image (or 4D multichannel).".into());
     }
@@ -73,32 +59,8 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
     if product(&dims).saturating_mul(channels) > 256 * 1024 * 1024 {
         return Err("Unsupported image dimensions.".into());
     }
-    let datatype = i16at(70);
-    macro_rules! decoder {
-        ($t:ty) => {
-            if le {
-                |c: &[u8]| <$t>::from_le_bytes(c.try_into().unwrap()) as f64
-            } else {
-                |c: &[u8]| <$t>::from_be_bytes(c.try_into().unwrap()) as f64
-            }
-        };
-    }
-    let (width, decode): (usize, fn(&[u8]) -> f64) = match datatype {
-        2 => (1, |c| c[0] as f64),
-        256 => (1, |c| c[0] as i8 as f64),
-        4 => (2, decoder!(i16)),
-        512 => (2, decoder!(u16)),
-        8 => (4, decoder!(i32)),
-        768 => (4, decoder!(u32)),
-        16 => (4, decoder!(f32)),
-        64 => (8, decoder!(f64)),
-        _ => {
-            return Err(format!(
-                "Unsupported NIfTI datatype {datatype}. Use a scalar intensity image."
-            ))
-        }
-    };
-    let offset = f32at(108);
+    let (width, decode) = header.scalar_decoder()?;
+    let offset = header.vox_offset;
     if !(352.0..=buf.len() as f32).contains(&offset) {
         return Err("Invalid NIfTI vox_offset.".into());
     }
@@ -107,7 +69,7 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
         .get(offset as usize..offset as usize + n * channels * width)
         .ok_or("The NIfTI voxel data is truncated.")?;
     // nibabel: a zero or non-finite slope/intercept means "unscaled".
-    let (slope, inter) = (f32at(112) as f64, f32at(116) as f64);
+    let (slope, inter) = (header.scl_slope as f64, header.scl_inter as f64);
     let (slope, inter) = if slope != 0.0 && slope.is_finite() && inter.is_finite() {
         (slope, inter)
     } else {
@@ -122,17 +84,21 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
         data[i % n] += v / channels as f64;
     }
     // nibabel: sform when sform_code > 0, else qform when qform_code > 0, else pixdim.
-    let pixdim: Vec<f64> = (0..4).map(|a| f32at(76 + 4 * a) as f64).collect();
-    let (qcode, scode) = (i16at(252), i16at(254));
+    let pixdim: Vec<f64> = header.pixdim[..4].iter().map(|&v| v as f64).collect();
+    let (qcode, scode) = (header.qform_code, header.sform_code);
     let mut affine = [[0.0f64; 4]; 3];
     if scode > 0 {
         for r in 0..3 {
             for k in 0..4 {
-                affine[r][k] = f32at(280 + (r * 4 + k) * 4) as f64;
+                affine[r][k] = header.srow[r][k] as f64;
             }
         }
     } else if qcode > 0 {
-        let (b, c, d) = (f32at(256) as f64, f32at(260) as f64, f32at(264) as f64);
+        let (b, c, d) = (
+            header.quaternion[0] as f64,
+            header.quaternion[1] as f64,
+            header.quaternion[2] as f64,
+        );
         let a = (1.0 - (b * b + c * c + d * d)).max(0.0).sqrt();
         let qfac = if pixdim[0] < 0.0 { -1.0 } else { 1.0 };
         let rot = [
@@ -156,7 +122,7 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
             for k in 0..3 {
                 affine[r][k] = rot[r][k] * pixdim[k + 1] * if k == 2 { qfac } else { 1.0 };
             }
-            affine[r][3] = f32at(268 + 4 * r) as f64;
+            affine[r][3] = header.qoffset[r] as f64;
         }
     } else {
         // nibabel fallback: shape_zoom_affine with x flipped, origin at the volume centre.
@@ -169,14 +135,18 @@ pub fn read(bytes: &[u8]) -> Result<Volume<f64>, String> {
     if affine.iter().flatten().any(|v| !v.is_finite()) {
         return Err("Invalid NIfTI affine.".into());
     }
-    crate::volume::inverse3(&affine)?;
+    inverse3(&affine)?;
     Ok(Volume {
         data,
         dims,
         pixdim: [pixdim[1].abs(), pixdim[2].abs(), pixdim[3].abs()],
         affine,
         codes: [qcode, scode],
-        units: if buf[123] == 0 { 2 } else { buf[123] }, // nibabel writes mm when the input has no units
+        units: if header.xyzt_units == 0 {
+            2
+        } else {
+            header.xyzt_units
+        }, // nibabel writes mm when the input has no units
     })
 }
 

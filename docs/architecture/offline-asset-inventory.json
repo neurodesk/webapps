@@ -856,7 +856,7 @@
           "verification": "source reference; production bundling may rewrite it"
         },
         {
-          "url": "https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js",
+          "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
           "kind": "runtime-cdn",
           "sources": [
             "apps/seedseg/web/index.html"

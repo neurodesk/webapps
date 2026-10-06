@@ -1,5 +1,48 @@
 # synthseg
 
+## 0.5.20261005
+
+### Patch Changes
+
+- Share native result publication between SynthSR and SynthSeg. Clean up newly created temporary files after failed writes while preserving each caller’s publication order and overwrite policy. Keep native path bytes when naming sibling temporaries.
+- Updated dependencies
+  - @neurodesk/synthseg@0.5.20261005
+
+## 0.5.20261004
+
+### Patch Changes
+
+- Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
+  including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+- Updated dependencies
+  - @neurodesk/synthseg@0.5.20261004
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/synthseg@0.5.20261004
+- c164941: Correct the FreeSurfer labels in the viewer before downloading them. Edit on the result row opens the shared mask editor with a Label select that names each FreeSurfer structure, such as `17 — Left-Hippocampus`. Apply marks the row as edited, and Download then saves the edited labels as a uint8 NIfTI on SynthSeg's grid. The JSON report keeps the pipeline's labels and volumes. When the input image is not on SynthSeg's 1 mm grid, the editor shows the input resampled to that grid and the status bar says so. The overlay opacity slider no longer throws. It called `setOpacity`, which NiiVue 1.0 does not have, and now uses `setVolume`.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/synthseg@0.5.20261004
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/synthseg@0.5.20261004
+- Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/synthseg@0.5.20261004
+
+## 0.5.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/synthseg@0.5.20261003
+
 ## 0.5.20260930
 
 ### Patch Changes
@@ -8,7 +51,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/synthseg@0.5.20260930
-
 
 ### Patch Changes
 

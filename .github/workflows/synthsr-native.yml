@@ -5,6 +5,9 @@ on:
     paths:
       - '.github/workflows/synthsr-native.yml'
       - 'exes/synthsr/**'
+      - 'exes/nifti/**'
+      - 'exes/native-publish/**'
+      - 'test-utils/native-nifti/**'
       - 'packages/synthsr/**'
       - 'apps/synthsr/**'
       - 'test/independent-workflows.test.mjs'
@@ -13,6 +16,9 @@ on:
     paths:
       - '.github/workflows/synthsr-native.yml'
       - 'exes/synthsr/**'
+      - 'exes/nifti/**'
+      - 'exes/native-publish/**'
+      - 'test-utils/native-nifti/**'
       - 'packages/synthsr/**'
       - 'apps/synthsr/**'
       - 'test/independent-workflows.test.mjs'

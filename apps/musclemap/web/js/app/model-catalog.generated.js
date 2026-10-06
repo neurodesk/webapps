@@ -1,5 +1,5 @@
-export const APP_VERSION = "1.4.20260930";
-export const TARGET_APP_VERSION = "1.4.20260930";
+export const APP_VERSION = "1.4.20261004";
+export const TARGET_APP_VERSION = "1.4.20261004";
 export const MODEL_BASE_URL = "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap";
 export const UPSTREAM_REVISION = "6e1e1eb6732337c13cab53bd5cc800c69024774f";
 export const MODEL_RELEASES = [
@@ -46,6 +46,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -59,12 +63,12 @@ export const MODEL_RELEASES = [
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-wholebody.onnx",
-      "bytes": 26888722,
-      "sha256": "3bff6e22e54d3d7399247d5e71d6423c91bb636d86ab21e0dd929524afbc2bc7",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-wholebody-v1.3-fp32.onnx",
+      "bytes": 54458661,
+      "sha256": "f29a492f85e2f68b627b7b43da35759b5e56081e6a1b165c1b03ccbb8ad6dff1",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-wholebody-v1.3-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {
@@ -1025,6 +1029,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.9,
       "normalization": "nonzero-zscore"
@@ -2156,6 +2164,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2164,17 +2176,17 @@ export const MODEL_RELEASES = [
       "record": "19631081",
       "doi": "10.5281/zenodo.19631081",
       "configSha256": "9f284550378bf7837a98c03c717b21d8b941cec8ae8adf6a95485ea6568a68f4",
-      "checkpointSha256": null,
+      "checkpointSha256": "75043856e3bdb52640558dcd0c071130f2bf1a59199eccb37c8efd614041f5c9",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-abdomen.onnx",
-      "bytes": 38999828,
-      "sha256": "f2e64dd67104422f94c29382136aa438835aaea7aadc91a917178732cfc15d41",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-abdomen-v0.0-fp32.onnx",
+      "bytes": 103996488,
+      "sha256": "75810a91be42e64efbd468f1b8d6cfd2c233fd7748c443eeb91c4846fc893901",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-abdomen-v0.0-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {
@@ -2316,6 +2328,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2324,17 +2340,17 @@ export const MODEL_RELEASES = [
       "record": "19633115",
       "doi": "10.5281/zenodo.19633115",
       "configSha256": "91958f6696386de138c83c8dd57817b229cc37490f9c9551e318e1196ce4bf42",
-      "checkpointSha256": null,
+      "checkpointSha256": "296b76dde687f468c4407902af7e9452bc66b8513747cf0ae1935257c4a200b1",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-forearm.onnx",
-      "bytes": 26364376,
-      "sha256": "48517f2aadc19183025dfe1a1952c24ae79d9a33fa5dd8154b46cf47fd87d3dd",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-forearm-v0.0-fp32.onnx",
+      "bytes": 53665289,
+      "sha256": "a26c0547fd70eea60025b7cb77084f392725a22e6baf6c748f3d7dc066d44d8f",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-forearm-v0.0-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {
@@ -2449,6 +2465,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2457,17 +2477,17 @@ export const MODEL_RELEASES = [
       "record": "19633057",
       "doi": "10.5281/zenodo.19633057",
       "configSha256": "d62a6810ee056fb7cb239cac5cfdec981330756bc99fe9d162a7b7f9f50fbd8c",
-      "checkpointSha256": null,
+      "checkpointSha256": "df8fab838fd5a08fa85a4a8d22735670ab6e771c4c73f359aec59f29dbd5e073",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-leg.onnx",
-      "bytes": 39028867,
-      "sha256": "3ad1c902998849ea66942863d157e1f8e608fb2c9d6b3230ee56de0e0840bcb4",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-leg-v0.0-fp32.onnx",
+      "bytes": 104029416,
+      "sha256": "ced5b7f5654ffdaf44774d98de1bc9b0bfdf022c04d815a97dc28c079015e6e0",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-leg-v0.0-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {
@@ -2663,6 +2683,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2671,17 +2695,17 @@ export const MODEL_RELEASES = [
       "record": "19632902",
       "doi": "10.5281/zenodo.19632902",
       "configSha256": "78d225099a67b8c225cc8f35b4bd1137e861a4db84a91924b4ca74b457070a89",
-      "checkpointSha256": null,
+      "checkpointSha256": "3270f43cadab80924ab6838b861da2079213c8114711e40c5f29f1bf3622f8d2",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-pelvis.onnx",
-      "bytes": 39023986,
-      "sha256": "34babe3b30a587dc4f67f44da44a6f89f7f66dcd2d128351ecf9356cbc0c32e4",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-pelvis-v0.0-fp32.onnx",
+      "bytes": 104023748,
+      "sha256": "fd405e107fbbe1248fe5953f1de92873c20108f524d97bcbe93246cd5019cf18",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-pelvis-v0.0-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {
@@ -2868,6 +2892,10 @@ export const MODEL_RELEASES = [
         -1
       ],
       "cropForegroundMargin": 20,
+      "spatialPad": [
+        256,
+        256
+      ],
       "padding": "end",
       "overlapDefault": 0.5,
       "normalization": "nonzero-zscore"
@@ -2876,17 +2904,17 @@ export const MODEL_RELEASES = [
       "record": "19633000",
       "doi": "10.5281/zenodo.19633000",
       "configSha256": "9d123314d744d21a0c6b8727479771c5fba43a564613bee3d72ec59de1c73025",
-      "checkpointSha256": null,
+      "checkpointSha256": "9681dec292ec483cc4a9834c8712d97b840663a43bfe390f369b5e84fb94da1a",
       "upstreamRevision": "6e1e1eb6732337c13cab53bd5cc800c69024774f",
       "license": "MIT"
     },
     "asset": {
-      "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
-      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/musclemap/musclemap-thigh.onnx",
-      "bytes": 39099153,
-      "sha256": "2d1a607adfa0758516069e039717079a2340811e3d3c70a7e9621aa1564399f2",
-      "precision": "q8",
-      "validationReport": "legacy-provenance-not-recorded",
+      "revision": "09599eb2e065662debc491435eadc56b3bb6da11",
+      "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-thigh-v0.0-fp32.onnx",
+      "bytes": 104116334,
+      "sha256": "43a416a50578ef6efd8aa1ba46b06808157d4377019e6cf4ecfdf7fa9279d805",
+      "precision": "fp32",
+      "validationReport": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-thigh-v0.0-fp32-evidence.json",
       "parts": null
     },
     "labelSpace": {

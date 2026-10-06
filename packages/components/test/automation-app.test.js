@@ -88,7 +88,12 @@ test('validates names, parameters and registration before scientific work', asyn
   let calls = 0;
   const f = fixture(t, async () => { calls++; return result(); });
   await assert.rejects(f.dispatch('start', { parameters: { threshold: 2 } }), /maximum/);
-  await assert.rejects(f.dispatch('start', { parameters: { surprise: true } }), /Unknown parameter/);
+  await assert.rejects(f.dispatch('start', { parameters: { surprise: true } }), error => {
+    assert.equal(error.issues[0].code, 'unrecognized_keys');
+    assert.deepEqual(error.issues[0].keys, ['surprise']);
+    assert.deepEqual(error.issues[0].path, []);
+    return true;
+  });
   await assert.rejects(f.dispatch('start', { inputs: { surprise: [] } }), /Unknown input/);
   await assert.rejects(f.dispatch('anything'), /Unknown automation/);
   assert.equal(calls, 0);

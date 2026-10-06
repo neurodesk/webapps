@@ -9,6 +9,22 @@ source of truth for exact upstream commits, licences, maintainers, support statu
 public paths, catalog categories and search keywords, app shells, CI toolchains,
 release eligibility, and scientific assets.
 
+## Contributing after the webapp migration
+
+Submit all new webapp code and pull requests to this repository. Report webapp bugs
+and request features in [this issue tracker](https://github.com/neurodesk/webapps/issues).
+The former standalone repositories preserve historical source and instructions.
+Use this README's development and deployment instructions for current work.
+
+The following standalone webapps now live here:
+
+| Former repository | Current source |
+| --- | --- |
+| [spinalcordtoolbox-webapp](https://github.com/neurodesk/spinalcordtoolbox-webapp) | [`apps/spinalcordtoolbox`](apps/spinalcordtoolbox) |
+| [calmar-webapp](https://github.com/neurodesk/calmar-webapp) | [`apps/calmar`](apps/calmar) |
+| [musclemap-webapp](https://github.com/neurodesk/musclemap-webapp) | [`apps/musclemap`](apps/musclemap) |
+| [vesselboost-webapp](https://github.com/neurodesk/vesselboost-webapp) | [`apps/vesselboost`](apps/vesselboost) |
+
 ## Architecture
 
 - `apps/*` keeps app-specific scientific workers, workflows, and interfaces local.

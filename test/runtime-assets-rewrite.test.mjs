@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { pathToFileURL } from 'node:url';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { assembleRuntimeAssetStore } from '../scripts/lib/runtime-assets.mjs';
+
+async function prepareParameterRuntimeFixture(repoRoot) {
+  await cp(new URL('../packages/components/src/automation/parameters.js', import.meta.url), join(repoRoot, 'packages/components/src/automation/parameters.js'), { recursive: true });
+  await symlink(new URL('../packages/components/node_modules', import.meta.url).pathname, join(repoRoot, 'packages/components/node_modules'), 'dir');
+}
 
 test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'runtime-assets-rewrite-'));
@@ -23,6 +29,7 @@ test('composite rewrite gives ONNX Runtime an absolute WASM base URL', async (t)
     { name: 'ort.min.js', sourceApp: 'calmar' },
   ];
 
+  await prepareParameterRuntimeFixture(repoRoot);
   await mkdir(join(repoRoot, 'runtime-assets'), { recursive: true });
   await mkdir(join(repoRoot, 'packages', 'components', 'src'), { recursive: true });
   await writeFile(join(repoRoot, 'packages', 'components', 'src', 'index.js'), '');
@@ -111,6 +118,7 @@ test('composite rewrite preserves vendored component file suffixes before removi
   const repoRoot = join(root, 'repo');
   const siteDist = join(root, 'site');
   const appDist = join(siteDist, 'calmar');
+  await prepareParameterRuntimeFixture(repoRoot);
   await mkdir(join(repoRoot, 'runtime-assets'), { recursive: true });
   await mkdir(join(repoRoot, 'packages', 'components', 'src', 'styles'), { recursive: true });
   await mkdir(join(appDist, 'js'), { recursive: true });
@@ -135,6 +143,14 @@ test('composite rewrite preserves vendored component file suffixes before removi
     siteDist,
     registry: { apps: [{ id: 'calmar', path: 'calmar' }] },
   });
+
+  const parametersPath = join(siteDist, '_runtime/webapp-components/0.1.2/src/automation/parameters.js');
+  const { operationParametersSchema } = await import(pathToFileURL(parametersPath));
+  const schema = operationParametersSchema({ threshold: { type: 'number', multipleOf: 0.01, default: 0.15 } });
+  assert.deepEqual(schema.parse(undefined), { threshold: 0.15 });
+  assert.deepEqual(schema.parse({ threshold: undefined }), { threshold: 0.15 });
+  assert.equal(schema.safeParse({ threshold: 0.150000000001 }).success, false);
+  assert.equal(schema.safeParse({ invented: undefined }).success, false);
 
   const html = await readFile(join(appDist, 'index.html'), 'utf8');
   const worker = await readFile(join(appDist, 'js', 'worker.js'), 'utf8');

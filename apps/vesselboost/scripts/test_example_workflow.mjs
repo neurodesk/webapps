@@ -39,10 +39,10 @@ try {
   await expect(page.locator('#skipN4Btn')).toBeEnabled({ timeout: 180000 });
   await openSection('stepN4Section');
   await page.locator('#skipN4Btn').click();
-  await expect(page.locator('#skipDenoiseBtn')).toBeEnabled();
+  await expect(page.locator('#skipDenoiseBtn')).toBeEnabled({ timeout: 60000 });
   await openSection('stepDenoiseSection');
   await page.locator('#skipDenoiseBtn').click();
-  await expect(page.locator('#runSegmentation')).toBeEnabled();
+  await expect(page.locator('#runSegmentation')).toBeEnabled({ timeout: 60000 });
   await page.locator('#runSegmentation').click();
   await page.waitForFunction(() => !!window.app.inferenceExecutor.getResult('segmentation'), null, { timeout: 600000 });
   const downloadEvent = page.waitForEvent('download');

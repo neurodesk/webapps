@@ -60,10 +60,11 @@ impact:
 | Equal columns | `<div class="nd-row">…</div>` | |
 | Scan picker | `<label class="nd-file"><input type="file" data-neurodesk-input="image" multiple><svg…/><span>Drop NIfTI or DICOM files or folder</span></label>` + `<p class="nd-file-info">` | `createFileField()`, `bindFileDrop()` |
 | Buttons | `.nd-btn.nd-btn-primary` (one per workspace), `.nd-btn.nd-btn-secondary`, `.nd-btn-sm`, `.nd-btn-icon`, `.nd-btn-danger` | |
-| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-download-btn">Download</button></div>` | `createResultList` |
+| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-edit-btn">Edit</button><button class="nd-download-btn">Download</button></div>` | `createResultList` (Edit only for `editable: true` results) |
 | Message | `<p class="nd-message error|warning|success|info">` | |
 | Help icon | `<span class="nd-info-icon" tabindex="0" aria-label="…">i<span class="nd-info-tooltip">…</span></span>` | `bindInfoTooltips()`, `renderInfoIcon()` |
 | Viewer toolbar | `.nd-viewer-toolbar > .nd-view-tabs > .nd-view-tab` (layout) + `.nd-viewer-actions` (opacity, colormap, window) | `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` |
+| Mask editing | `.nd-mask-editor` (second toolbar row under the viewer toolbar) `> .nd-viewer-label + .nd-tool-group > .nd-tool-btn[aria-pressed]`, a Label `select`, `.nd-brush-control`, Undo/Apply/Cancel `.nd-btn-sm`; `.nd-edit-btn` in result rows | `createMaskEditor({ nv, onApply, onCancel, labelNames })`, `createResultList({ onEdit })`; see [mask editing](mask-editing.md) |
 | Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, then `.nd-viewer-info` | |
 | Image comparison | `.nd-compare-grid[data-count] > .nd-compare-panel[aria-current] > button.nd-compare-title[aria-pressed] + canvas`, over the viewer wrapper; two columns, the active panel outlined | |
 | Technical log | `.nd-console-container[data-disclosure].collapsed` with header, Copy, Clear | `createConsole()` |

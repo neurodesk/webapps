@@ -49,10 +49,10 @@ test('runs metrics only and restores OpenRecon labels from an uploaded NIfTI', a
   await expect(page.locator('#consoleOutput')).toContainText(
     'Detected OpenRecon int12 labels for musclemap-wholebody-v1.4; restored official MuscleMap label mapping.'
   );
-  await expect.poll(() => page.evaluate(() => window.app.uploadedNormalizedFiles.size)).toBe(1);
-
+  await expect.poll(() => page.evaluate(() => window.app.getUploadedSegmentationSources()[0].labelEncoding)).toBe('sparse');
+  await expect(page.locator('.segmentation-result-row .nd-edit-btn')).toHaveCount(0);
   const normalizedLabels = await page.evaluate(async () => {
-    const [file] = window.app.uploadedNormalizedFiles.values();
+    const [{ file }] = window.app.getUploadedSegmentationSources();
     const data = await file.arrayBuffer();
     const view = new DataView(data);
     const offset = Math.ceil(view.getFloat32(108, true));

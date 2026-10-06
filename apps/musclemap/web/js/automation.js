@@ -32,14 +32,11 @@ export function registerMuscleMapAutomation(app) {
             overlapSelect: parameters.overlap,
             chunkSizeSelect: parameters.chunkSize,
             sourceChunkSizeSelect: parameters.sourceChunkSize,
-            ...(parameters.sliceThickness !== undefined && { sliceThickness: parameters.sliceThickness }),
           };
           for (const [id, value] of Object.entries(fields)) document.getElementById(id).value = String(value);
           document.getElementById('webgpuToggle').checked = parameters.useWebGPU;
-          document.getElementById('lowResToggle').checked = parameters.lowResolution;
           document.getElementById('imfToggle').checked = false;
           app.updateAboutModel();
-          app.syncInferenceCompatibilityControls();
           app.syncImfControls();
           const segmentations = await app.runSegmentation({ throwOnError: true, signal });
           if (!segmentations?.length) throw new Error('MuscleMap did not return completed segmentations.');

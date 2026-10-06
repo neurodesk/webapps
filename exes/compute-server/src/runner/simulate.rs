@@ -66,6 +66,43 @@ async fn simulate(
         format!("simulated run of: {}", shell_join(&request.argv)),
     );
 
+    if let crate::tools::JobInputs::Sct { analysis } = &request.job.inputs {
+        tokio::select! {
+            _ = tokio::time::sleep(STAGE_DELAY * 8) => {},
+            _ = cancel.cancelled() => return Ok(RunOutcome::Cancelled),
+        }
+        log(
+            "WARNING",
+            "SIMULATED SCT artifacts; no scientific analysis was performed".into(),
+        );
+        let out = request.job_dir.join("out");
+        match analysis {
+            crate::tools::sct::AnalysisInputs::ProcessSegmentation { .. } => {
+                std::fs::write(
+                    out.join("morphometry.csv"),
+                    "Simulated,MEAN(area)\ntrue,0\n",
+                )?;
+            }
+            crate::tools::sct::AnalysisInputs::AnalyzeLesion { lesion, .. } => {
+                std::fs::write(
+                    out.join("lesion_analysis.xlsx"),
+                    "SIMULATED SCT spreadsheet placeholder\n",
+                )?;
+                std::fs::write(
+                    out.join("lesion_analysis.pkl"),
+                    "SIMULATED SCT pickle placeholder\n",
+                )?;
+                let name = if lesion.ends_with(".gz") {
+                    "lesion_label.nii.gz"
+                } else {
+                    "lesion_label.nii"
+                };
+                std::fs::copy(request.job_dir.join("in").join(lesion), out.join(name))?;
+            }
+        }
+        return Ok(RunOutcome::Exited(0));
+    }
+
     let iterations = request
         .job
         .options
@@ -91,7 +128,7 @@ async fn simulate(
     let in_dir = request.job_dir.join("in");
     let stack_paths: Vec<PathBuf> = request
         .job
-        .stacks
+        .stacks()
         .iter()
         .map(|stack| in_dir.join(&stack.file_name))
         .collect();
@@ -187,7 +224,7 @@ async fn simulate(
     let out_dir = request.job_dir.join("out");
     let result = json!({
         "simulated": true,
-        "stacks": request.job.stacks.len(),
+        "stacks": request.job.stacks().len(),
         "options": request.job.options,
     });
     let written = tokio::task::spawn_blocking(move || {

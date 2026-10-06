@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/topofit",
-  "version": "0.12.20260930",
+  "version": "0.12.20261005",
   "description": "BrainNet TopoFit cortical surface reconstruction for browsers",
   "type": "module",
   "license": "GPL-3.0-only",
@@ -25,6 +25,7 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:validation": "python3 -m unittest discover -s test -p '*_test.py'",
     "lint": "node --check src/*.js"
   },
   "dependencies": {

@@ -8,12 +8,12 @@ import {
   createConsole,
   createExampleSelector,
   createInfoDialog,
+  createMaskEditor,
   createResultList,
   createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
 import {
   createFloat32Nifti,
-  createUint8Nifti,
   decodeNiftiBuffer,
   downloadBlob,
   downloadFile,
@@ -25,6 +25,7 @@ import { registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-co
 import { curvesCsv, detectCarotids, meanFrames, splitSeries } from './carotid.js';
 import { flowChartSvg } from './chart.js';
 import { APP, assignSeries, stem } from './config.js';
+import { labelFiles, niftiFile, resultRows, withEditedLabels } from './outputs.js';
 import examples from '../examples.json';
 import './styles.css';
 
@@ -64,11 +65,38 @@ function colormapMiddle(name) {
   const low = high - 1;
   const mix = (position - map.I[low]) / (map.I[high] - map.I[low]);
   const channel = (values) => Math.round(values[low] + (values[high] - values[low]) * mix);
-  return `rgb(${channel(map.R)} ${channel(map.G)} ${channel(map.B)})`;
+  return [channel(map.R), channel(map.G), channel(map.B)];
 }
-for (const side of Object.values(SIDES)) side.color = colormapMiddle(side.colormap);
+for (const side of Object.values(SIDES)) {
+  side.rgb = colormapMiddle(side.colormap);
+  side.color = `rgb(${side.rgb.join(' ')})`;
+}
 
 const viewer = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] });
+// The label map and its drawing take each side's overlay colour: 1 is left, 2 is right.
+const LABEL_COLORMAP = viewer.addColormap('carotidLabels', {
+  R: [0, SIDES.left.rgb[0], SIDES.right.rgb[0]],
+  G: [0, SIDES.left.rgb[1], SIDES.right.rgb[1]],
+  B: [0, SIDES.left.rgb[2], SIDES.right.rgb[2]],
+  A: [0, 255, 255],
+  I: [0, 1, 2],
+});
+const editor = createMaskEditor({
+  nv: viewer,
+  labelNames: { 1: 'Left carotid', 2: 'Right carotid' },
+  onApply: applyLabelEdit,
+  onCancel: () => {
+    results.setEditingEnabled(editor.session.state === 'idle');
+    // A load or run that cancelled the session redraws the viewer itself.
+    if (busy) return;
+    status('Edits discarded');
+    return showImages().catch((error) => status(error.message, true));
+  },
+  onError: (_stage, error) => status(error instanceof Error ? error.message : String(error), true),
+});
+toolbar.after(editor);
+editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(true));
+editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
 let ready = false;
 let busy = false;
 let loading = null;
@@ -145,14 +173,14 @@ async function readSeries(chosen) {
   };
 }
 
-function niftiFile(buffer, name) {
-  return new File([buffer], name, { type: 'application/octet-stream' });
+function baseImage(state) {
+  return state.result && state.background === 'variability' ? state.result.files.variability : state.series.amplitudeFile;
 }
 
 /** The chosen background under both carotids. Takes state explicitly so a failed load can
  *  redraw the previous inputs. */
 async function showImages(state = { series, result, background }) {
-  const base = state.result && state.background === 'variability' ? state.result.files.variability : state.series.amplitudeFile;
+  const base = baseImage(state);
   const volumes = [{ url: base, name: base.name }];
   if (state.result) {
     for (const side of ['left', 'right']) {
@@ -196,6 +224,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {}, label, chose
     controller.signal.throwIfAborted();
     assertCurrent();
     try {
+      await editor.cancel();
       await showImages({ series: next, result: null, background: 'mask' });
       controller.signal.throwIfAborted();
       assertCurrent();
@@ -253,16 +282,47 @@ $('exampleControl').replaceWith(exampleControl);
 const results = createResultList({
   element: $('resultList'),
   onView: (stage) => {
-    if (!result || busy) return;
+    if (!result || busy || editor.session.state !== 'idle') return;
     background = stage;
     void showImages().catch((error) => status(error.message, true));
   },
   onDownload: (_stage, entry) => downloadFile(entry.file),
+  onEdit: () => { void editLabels(); },
 });
+
+async function editLabels() {
+  if (!result || busy) return;
+  results.setEditingEnabled(false);
+  const base = baseImage({ series, result, background });
+  const mask = result.files.mask;
+  try {
+    await viewer.loadVolumes([
+      { url: base, name: base.name },
+      { url: mask, name: mask.name, colormap: LABEL_COLORMAP, calMin: 0, calMax: 2, opacity: overlayOpacity, isColorbarVisible: false },
+    ]);
+    const opened = await editor.start({ stage: 'mask', file: mask, label: 'Carotid labels', overlayIndex: 1, colormap: LABEL_COLORMAP });
+    if (!opened) results.setEditingEnabled(editor.session.state === 'idle');
+  } catch (error) {
+    results.setEditingEnabled(editor.session.state === 'idle');
+    status(error instanceof Error ? error.message : String(error), true);
+    await showImages().catch(() => {});
+  }
+}
+
+async function applyLabelEdit(_stage, file, { original }) {
+  results.setEditingEnabled(editor.session.state === 'idle');
+  const edited = result;
+  const labels = (await readVolume(file)).data;
+  if (result !== edited) return;
+  result = withEditedLabels(result, file, labels, original);
+  results.render(resultRows(result));
+  await showImages();
+  status('Carotid labels edited · curves and metrics keep the detected vessels');
+}
 
 toolbar.addEventListener('nd-overlay-change', ({ detail }) => {
   overlayOpacity = detail.value;
-  if (!result) return;
+  if (!result || editor.session.state !== 'idle') return;
   for (const index of [1, 2]) void viewer.setVolume(index, { opacity: overlayOpacity });
 });
 
@@ -347,10 +407,7 @@ function renderOutputs() {
     return row;
   }));
   $('metricsTable').hidden = false;
-  results.render({
-    mask: { description: 'Carotid labels', file: result.files.mask },
-    variability: { description: result.found.method === 'velocity' ? 'Velocity temporal SD' : 'Phase temporal SD', file: result.files.variability },
-  });
+  results.render(resultRows(result));
 }
 
 async function runDetection({ options: explicitOptions, signal, throwOnError = false } = {}) {
@@ -375,6 +432,7 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
     return;
   }
   setBusy(true);
+  await editor.cancel();
   clearOutputs();
   progress.begin('Detecting carotids…', { cancellable: false });
   status('Detecting carotids…');
@@ -384,16 +442,12 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
     await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
     signal?.throwIfAborted();
     const found = detectCarotids(source, options);
-    const base = stem(source.name);
-    const perSide = (value) => found.mask.map((label) => (label === value ? 1 : 0));
     result = {
       found,
       source,
       files: {
-        mask: niftiFile(createUint8Nifti(found.mask, source.headerBytes), `${base}_carotid_labels.nii`),
-        variability: niftiFile(createFloat32Nifti(found.variability, source.headerBytes), `${base}_phase_sd.nii`),
-        left: niftiFile(createUint8Nifti(perSide(1), source.headerBytes), `${base}_carotid_left.nii`),
-        right: niftiFile(createUint8Nifti(perSide(2), source.headerBytes), `${base}_carotid_right.nii`),
+        ...labelFiles(found.mask, source),
+        variability: niftiFile(createFloat32Nifti(found.variability, source.headerBytes), `${stem(source.name)}_phase_sd.nii`),
       },
     };
     background = 'mask';

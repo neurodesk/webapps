@@ -39,7 +39,8 @@ export function defineComputeConnection(view = globalThis.window) {
       if (this.#address) this.#sync();
     }
 
-    configure({ createClient, autodetect, fetch } = {}) {
+    configure({ createClient, autodetect, fetch, tool } = {}) {
+      if (tool !== undefined) this.setAttribute('tool', tool);
       if (createClient) this.#createClient = createClient;
       if (autodetect !== undefined) this.#autodetect = Boolean(autodetect);
       if (fetch) this.#fetch = fetch;
@@ -176,7 +177,7 @@ export function defineComputeConnection(view = globalThis.window) {
       this.#persist();
       this.#client = null;
       this.#info = null;
-      this.#set('idle', 'Not connected. Reconstruction runs on the compute server you name here.');
+      this.#set('idle', 'Not connected. Processing runs on the compute server you name here.');
       try {
         await client?.disconnect();
       } catch (error) {
@@ -189,13 +190,15 @@ export function defineComputeConnection(view = globalThis.window) {
     }
 
     #describe(info) {
-      const tool = info.tools?.[0];
+      const selected = this.getAttribute('tool');
+      const tool = selected ? info.tools?.find(item => item.id === selected) : info.tools?.[0];
       const gpu = info.gpu?.available ? (info.gpu.name || 'GPU available') : 'no GPU visible';
       const parts = [`Connected to ${new URL(this.#client.baseUrl).host}`];
+      if (selected && !tool) parts.push(`${selected} unavailable`);
       if (tool) parts.push(`${tool.id} ${tool.version}`);
       parts.push(`${info.runner || 'unknown runner'}, ${gpu}`);
       const text = parts.join(' · ');
-      return info.simulated ? `${text}. Simulated mode: results are placeholders, not reconstructions.` : text;
+      return info.simulated ? `${text}. Simulated mode: results are placeholders, not scientific results.` : text;
     }
 
     #restore() {
@@ -322,7 +325,7 @@ export function defineComputeConnection(view = globalThis.window) {
       this.#message = doc.createElement('p');
       this.#message.className = 'nd-message';
       this.#message.setAttribute('role', 'status');
-      this.#message.textContent = 'Not connected. Reconstruction runs on the compute server you name here.';
+      this.#message.textContent = 'Not connected. Processing runs on the compute server you name here.';
       this.#detail = doc.createElement('p');
       this.#detail.className = 'nd-hint';
       this.#detail.hidden = true;

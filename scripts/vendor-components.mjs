@@ -13,6 +13,7 @@ import { cp, rm, access, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { basename, dirname, join } from "node:path";
 import { publishAppContract } from './lib/app-automation.mjs';
+import { stageOperationParameters } from './lib/operation-parameters-runtime.mjs';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const appDir = process.cwd();
@@ -31,6 +32,7 @@ try {
 
 await rm(join(appDir, destRoot, "vendor"), { recursive: true, force: true });
 await cp(src, dest, { recursive: true });
+await stageOperationParameters({ repoRoot, componentsSrc: dest });
 const appPackage = JSON.parse(await readFile(join(appDir, 'package.json'), 'utf8'));
 await publishAppContract({ app: { id: basename(appDir) }, version: appPackage.version, distDir: join(appDir, destRoot, 'vendor') });
 if (destRoot !== '.') await cp(join(appDir, 'examples.json'), join(appDir, destRoot, 'examples.json'));

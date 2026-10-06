@@ -2,7 +2,7 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: "lcmodel",
-  version: "0.3.20261002",
+  version: "0.5.20261003",
 });
 
 /**
@@ -20,6 +20,9 @@ export function basisLibrary(manifest) {
       sequence: set.sequence,
       hzpppm: set.hzpppm,
       teMs: set.teMs,
+      shapedPulses: set.pulses === "shaped",
+      coEditedMM: set.coEditedMM === true,
+      mmSuppressed: set.mmSuppressed === true,
       library: { url: manifest.base_url + set.file, bytes: asset.bytes, sha256: asset.sha256, label: set.label },
     };
   });

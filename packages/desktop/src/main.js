@@ -12,6 +12,7 @@ import { generateJob, operationFor } from './contracts.js';
 import { runNativeSynthseg } from './native.js';
 import { browserDispatcher, runBrowserOperation } from './browser-automation.js';
 import { createSourceGrants } from './source-grants.js';
+import { completeBrowserArtifacts } from './artifact-completion.js';
 
 const root = process.env.NEURODESK_BUNDLE || (app.isPackaged ? join(process.resourcesPath, 'offline') : resolve('resources'));
 if (process.env.NEURODESK_USER_DATA) app.setPath('userData', process.env.NEURODESK_USER_DATA);
@@ -47,6 +48,7 @@ try {
   const offlineSession = session.fromPartition('offline');
   const sourceGrants = createSourceGrants();
   const blockedByWindow = new Map();
+  let unattributedBlockedRequests = 0;
   const downloads = [];
   if (process.env.NEURODESK_DOWNLOADS && !mcpMode) {
     const downloadDirectory = resolve(process.env.NEURODESK_DOWNLOADS);
@@ -62,8 +64,10 @@ try {
   }
   app.userAgentFallback += ' NeurodeskOffline/1';
   await mkdir(app.getPath('userData'), { recursive: true });
-  const blocked = async url => {
+  const blocked = async (url, contentsId) => {
     blockedRequests.push(url);
+    if (contentsId > 0) blockedByWindow.set(contentsId, (blockedByWindow.get(contentsId) ?? 0) + 1);
+    else unattributedBlockedRequests++;
     console.error(`OFFLINE_MISSING ${url}`);
     await appendFile(join(app.getPath('userData'), 'offline-missing.jsonl'), `${JSON.stringify({ url })}\n`);
   };
@@ -78,8 +82,7 @@ try {
     const internalRequest = ['data:', 'blob:', 'devtools:'].includes(url.protocol);
     const inputRequest = ['GET', 'HEAD'].includes(details.method) && sourceGrants.permits(details.webContentsId, details.url);
     if (!localRequest && !bundledRequest && !internalRequest && !inputRequest && !computeRequest(url)) {
-      blockedByWindow.set(details.webContentsId, (blockedByWindow.get(details.webContentsId) ?? 0) + 1);
-      void blocked(details.url);
+      void blocked(details.url, details.webContentsId);
       callback({ cancel: true });
     } else callback({});
   });
@@ -118,11 +121,13 @@ try {
     });
     return target;
   };
-  const executeBrowser = async ({ contract, operation, request, outputDirectory, signal, onProgress }) => {
+  const executeBrowser = async ({ contract, operation, request, outputDirectory, signal, onProgress, acceptBrowserOutcome }) => {
     const target = createWindow();
     const contentsId = target.webContents.id;
+    const unattributedAtStart = unattributedBlockedRequests;
     const mounts = [];
     const windowClosed = new AbortController();
+    const completionSignal = AbortSignal.any([signal, windowClosed.signal]);
     let retained = false;
     const close = () => {
       sourceGrants.remove(contentsId);
@@ -143,29 +148,44 @@ try {
       const selected = bundle.apps.find(entry => entry.id === contract.app);
       await target.loadURL(`${local.origin}/${selected.path}/`);
       if (request.retainViewer) target.showInactive();
-      const report = contract.schemaVersion === 2
-        ? await runBrowserOperation(target.webContents, { contract, operation, request, outputDirectory, signal, onProgress,
-          async mountDirectory(directory) {
-            const url = await local.mountDirectory(directory);
-            mounts.push(url);
-            return url;
-          },
-        })
-        : await runJob(target.webContents, generateJob(contract, request), outputDirectory, { signal, onProgress });
-      if (blockedByWindow.get(contentsId)) throw new Error('The run requested assets absent from the offline package');
-      signal.throwIfAborted();
-      if (!request.retainViewer) return report;
-      const dispatch = browserDispatcher(target.webContents, { signal });
-      if (!(await dispatch.call('viewers.list')).length) throw new Error('The app did not register a viewer to retain');
-      retained = true;
-      return { report, session: {
-        close,
-        closedSignal: windowClosed.signal,
-        command(command, args, { signal: commandSignal }) {
+      const outcome = await completeBrowserArtifacts(target.webContents, {
+        outputDirectory,
+        signal: completionSignal,
+        assertHostHealthy() {
           if (target.isDestroyed()) throw new Error('Viewer window is closed');
-          return browserDispatcher(target.webContents, { signal: commandSignal }).call(command, args);
+          if (blockedByWindow.get(contentsId) || unattributedBlockedRequests > unattributedAtStart) {
+            throw new Error('The run requested assets absent from the offline package');
+          }
         },
-      } };
+      }, async artifacts => {
+        const report = contract.schemaVersion === 2
+          ? await runBrowserOperation(target.webContents, { contract, operation, request, artifacts, signal: completionSignal, onProgress,
+            async mountDirectory(directory) {
+              const url = await local.mountDirectory(directory);
+              mounts.push(url);
+              return url;
+            },
+          })
+          : await runJob(target.webContents, generateJob(contract, request), { artifacts, signal: completionSignal, onProgress });
+        let session;
+        if (request.retainViewer) {
+          const dispatch = browserDispatcher(target.webContents, { signal: completionSignal });
+          if (!(await dispatch.call('viewers.list')).length) throw new Error('The app did not register a viewer to retain');
+          session = {
+            close,
+            closedSignal: windowClosed.signal,
+            command(command, args, { signal: commandSignal }) {
+              if (target.isDestroyed()) throw new Error('Viewer window is closed');
+              return browserDispatcher(target.webContents, { signal: commandSignal }).call(command, args);
+            },
+          };
+        }
+        const candidate = { report, ...(session && { session }) };
+        await acceptBrowserOutcome(candidate);
+        return candidate;
+      });
+      retained = Boolean(outcome.session);
+      return retained ? outcome : outcome.report;
     } finally {
       signal.removeEventListener('abort', close);
       if (!retained) close();
@@ -226,15 +246,25 @@ try {
   // Exposed only to the main process, used by packaged-artifact verification.
   globalThis.neurodeskOffline = { root, origin: local.origin, apps: bundle.apps, blockedRequests, downloads, mountDirectory: local.mountDirectory };
   if (job) {
-    const result = job.schemaVersion === 2
+    const windowClosed = new AbortController();
+    window.once('closed', () => windowClosed.abort());
+    const signal = AbortSignal.any([windowClosed.signal,
+      AbortSignal.timeout(job.schemaVersion === 2 ? job.request.timeoutMs : job.timeoutMs ?? 900000)]);
+    const { report } = await completeBrowserArtifacts(window.webContents, {
+      outputDirectory: argument('--output') || resolve('results'),
+      signal,
+      assertHostHealthy() {
+        if (window.isDestroyed()) throw new Error('Job window is closed');
+        if (blockedRequests.length) throw new Error(`The job requested ${blockedRequests.length} assets absent from the offline package`);
+      },
+    }, async artifacts => ({ report: job.schemaVersion === 2
       ? await runBrowserOperation(window.webContents, { contract: job.automation.contract,
         operation: operationFor(job.automation.contract, job.request.operation), request: job.request,
-        outputDirectory: argument('--output') || resolve('results'),
-        signal: AbortSignal.timeout(job.request.timeoutMs), mountDirectory: local.mountDirectory,
+        artifacts, signal, mountDirectory: local.mountDirectory,
       })
-      : await runJob(window.webContents, job, argument('--output') || resolve('results'));
-    if (blockedRequests.length) throw new Error(`The job requested ${blockedRequests.length} assets absent from the offline package`);
-    console.log(JSON.stringify(result));
+      : await runJob(window.webContents, job, { artifacts, signal }),
+    }));
+    console.log(JSON.stringify(report));
     app.quit();
   }
 } catch (error) {

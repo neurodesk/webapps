@@ -14,7 +14,7 @@ const lockPath = join(repoRoot, 'registry/offline-assets.lock.json');
 const sources = JSON.parse(await readFile(sourcesPath));
 const lock = JSON.parse(await readFile(lockPath));
 const manifests = [];
-const assets = new Map();
+const assets = [];
 for (const app of (await loadAppsRegistry()).apps) {
   const path = join(repoRoot, 'apps', app.id, 'examples.json');
   const examples = JSON.parse(await readFile(path));
@@ -22,12 +22,12 @@ for (const app of (await loadAppsRegistry()).apps) {
   for (const example of examples) {
     for (const file of example.files) {
       if (!file.url.startsWith('https://')) throw new Error(`${app.id}: examples require HTTPS`);
-      assets.set(file.url, { ...file, app: app.id, kind: 'example' });
+      assets.push({ ...file, app: app.id, kind: 'example' });
     }
   }
 }
-for (const asset of await modelManifestAssets()) assets.set(asset.url, { ...asset, kind: 'model' });
-const pending = [...assets.values()];
+for (const asset of await modelManifestAssets()) assets.push({ ...asset, kind: 'model' });
+const pending = [...new Map(assets.map(file => [file.url, file])).values()];
 await Promise.all(Array.from({ length: 4 }, async () => {
   while (pending.length) {
     const file = pending.shift();
@@ -51,10 +51,12 @@ await Promise.all(Array.from({ length: 4 }, async () => {
       lock.assets[file.url] = asset;
       console.log(`Locked ${file.name}: ${bytes.length} bytes`);
     }
-    if (file.sha256 && file.sha256 !== asset.sha256) throw new Error(`Checksum mismatch: ${file.url}`);
   }
 }));
-for (const file of assets.values()) {
+for (const file of assets) {
+  if (file.sha256 && file.sha256 !== lock.assets[file.url].sha256) throw new Error(`Checksum mismatch: ${file.url}`);
+}
+for (const file of assets) {
   const asset = lock.assets[file.url];
   const entry = sources.apps[file.app].find(item => item.url === file.url);
   if (entry) Object.assign(entry, { sha256: asset.sha256, bytes: asset.bytes });

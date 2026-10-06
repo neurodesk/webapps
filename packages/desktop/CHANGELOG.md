@@ -1,5 +1,51 @@
 # @neurodesk/desktop
 
+## 0.24.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+
+## 0.23.20261004
+
+### Patch Changes
+
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+
+## 0.22.20261004
+
+### Patch Changes
+
+- Verify SYNcro with its packaged pinned T1 and explicit WASM SynthSR, SynthStrip, and Greedy backends.
+
+## 0.21.20261004
+
+### Minor Changes
+
+- Generate NeuroFlow 0.1.1 qualifiers and scalar single-file bindings against the merged upstream schema. Resolve verified app coordinate references, reject invalid qualifier inheritance, and validate NIfTI encoding before legacy and schema-version-2 runs.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 0.20.20261003
+
+### Patch Changes
+
+- Share operation parameter schemas across browser and desktop automation. Both callers now use the same defaults, enum values, bounds, recursive arrays, decimal multiples and safe integer rules. Preserve MCP parameter metadata and bundle the validator for native ESM development, standalone releases and the composite catalog.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
+## 0.19.20261003
+
+### Patch Changes
+
+- Share browser download tracking, validation ordering and completion-report publication across selector jobs and typed operations. Publish completion only after offline and retained-viewer checks pass, hide pending viewers, and preserve CLI artifact retention and MCP failure cleanup.
+
 ## 0.19.20260930
 
 ### Minor Changes

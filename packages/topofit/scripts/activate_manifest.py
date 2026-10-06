@@ -4,9 +4,11 @@
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 
-from huggingface_hub import hf_hub_download
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
+from thresholds import SURFACES, THRESHOLDS, within_thresholds
 
 
 def sha256(path):
@@ -18,22 +20,24 @@ def sha256(path):
 
 
 def validate_evidence(assets, release, conversion_sha):
-    statuses = {"controlled": "passed", "end-to-end": "measured-difference"}
-    surface_names = ("lh.white", "rh.white", "lh.pial", "rh.pial", "lh.registration", "rh.registration")
-    for mode, status in statuses.items():
+    for mode in ("controlled", "end-to-end"):
         result = json.loads((assets / "validation" / "reports" / f"ds000001-{mode}.json").read_text())
         assert result["release"] == release
         assert result["conversionReportSha256"] == conversion_sha
-        assert result["status"] == status
+        assert result["status"] == "passed"
+        assert result["thresholds"] == THRESHOLDS
+        assert within_thresholds(result), f"{mode} exceeds the release thresholds"
         browser = assets / "validation" / "browser" / mode
         provenance = json.loads((browser / "topofit_manifest.json").read_text())
         assert provenance["runtime"]["release"] == release
-        for name in surface_names:
+        for name in SURFACES:
             assert result["surfaces"][name]["browser_sha256"] == sha256(browser / name)
         assert result["qc"]["browser_sha256"] == sha256(browser / "topofit_qc.nii")
 
 
 def verify_public_release(records, directory, repository, revision, path):
+    from huggingface_hub import hf_hub_download
+
     required = {record["filename"] for record in records}
     required.update({
         "conversion-report.json",

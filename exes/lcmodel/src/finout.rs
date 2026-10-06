@@ -1051,13 +1051,10 @@ mod tests {
         assert_eq!(got[4], "   2 lines in following table of input changes:");
     }
 
-    /// The numeric blocks of the native out.coord, parsed and rewritten.
+    /// The numeric blocks of the gfortran build's .COORD on LCModel's test case, parsed and rewritten.
     #[test]
     fn coord_number_blocks_roundtrip() {
-        let text = match std::fs::read_to_string("/home/ubuntu/src/mrs/lcm-test/out.coord") {
-            Ok(t) => t,
-            Err(_) => return,
-        };
+        let text = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/test_lcm/native.coord")).unwrap();
         let lines: Vec<&str> = text.lines().collect();
         let start = lines.iter().position(|l| l.contains("points on ppm-axis")).unwrap();
         let ny: usize = lines[start].split_whitespace().next().unwrap().parse().unwrap();

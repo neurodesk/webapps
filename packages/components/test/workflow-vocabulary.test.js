@@ -186,9 +186,9 @@ test('imaging workspace provides a session comparison grid with a marked active 
   assert.match(css, /@media \(pointer: coarse\) \{ \.nd-compare-title \{ min-height: 44px; \} \}/);
 });
 
-test('result labels wrap when visibility and View controls share a row', async () => {
+test('result labels wrap when visibility and View controls, or an Edit button, share a row', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
-  assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);
+  assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label,\s*\.nd-volume-toggle:has\(\.nd-edit-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);
 });
 
 
@@ -265,4 +265,11 @@ test('embedded FreeBrowse keeps one app bar and fits narrow viewers', async () =
   assert.match(css, /\.nd-freebrowse \.freebrowse-root > header h1,[\s\S]*?display: none !important/);
   assert.match(css, /@container nd-freebrowse \(max-width: 700px\)/);
   assert.match(css, /\.nd-freebrowse button\s*\{[^}]*min-height: 44px/);
+});
+
+
+test('small buttons and viewer checkbox labels reserve touch targets without a toolbar ancestor', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const touchRules = css.slice(css.indexOf('@media (pointer: coarse), (max-width: 780px)'));
+  assert.match(touchRules, /\.nd-btn-sm,\s*\.nd-viewer-checkbox\s*\{[^}]*min-width: 44px;[^}]*min-height: 44px;/);
 });

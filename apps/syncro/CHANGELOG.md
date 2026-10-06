@@ -1,5 +1,63 @@
 # syncro
 
+## 0.5.20261005
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261005
+  - @neurodesk/brain-extraction@0.1.20
+
+## 0.5.20261004
+
+### Minor Changes
+
+- 257192b: Stream SynthSR and SynthStrip CPU inference by operator to avoid oversized browser allocations while preserving the pinned models. Reject normalization with less than one percent positive brain support in the MNI template before exposing downloads. Add numerical parity, allocation, failure recovery, and cropped-head regressions.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/brain-extraction@0.1.19
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/greedy@0.4.20261004
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/brain-extraction@0.1.18
+- 979d2e9: Correct the normalized lesion in the viewer before downloading it. When a run includes a lesion map, Results offers Edit lesion, which opens the shared mask editor on the normalized primary scan with the normalized lesion as the drawing. Apply replaces the lesion in the result archive with the edited uint8 NIfTI under the same name and labels the viewer `(edited)`; Cancel discards the strokes. A new run, new input or removed input closes an open edit. Automation results stay as the pipeline computed them.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/greedy@0.4.20261004
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/brain-extraction@0.1.17
+- Updated dependencies [257192b]
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/synthstrip@0.1.1
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/brain-extraction@0.1.16
+  - @neurodesk/greedy@0.4.20261004
+
+## 0.4.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/greedy@0.4.20261004
+  - @neurodesk/synthsr@0.5.20261004
+  - @neurodesk/brain-extraction@0.1.15
+
+## 0.4.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/greedy@0.4.20261003
+  - @neurodesk/synthsr@0.5.20261003
+  - @neurodesk/brain-extraction@0.1.14
+
 ## 0.4.20260930
 
 ### Patch Changes
@@ -10,7 +68,6 @@
   - @neurodesk/greedy@0.4.20260930
   - @neurodesk/synthsr@0.5.20260930
   - @neurodesk/brain-extraction@0.1.13
-
 
 ### Patch Changes
 

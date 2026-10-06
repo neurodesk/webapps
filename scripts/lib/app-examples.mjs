@@ -6,6 +6,7 @@ export function exampleAssets(examples) {
   return examples.flatMap(example => example.files);
 }
 
+/** @returns {Promise<import('../../packages/components/src/elements/example-selector.js').AppExample[]>} */
 export async function loadAppExamples(app, root = repoRoot) {
   let examples;
   try {

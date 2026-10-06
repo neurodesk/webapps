@@ -15,12 +15,13 @@ const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]']);
 /**
  * Turn what a user typed into an origin. Accepts `host`, `host:port`,
  * `https://host:port/`, and strips any `/api/v1` suffix. A bare host gets
- * `https://`, loopback hosts get `http://`, and the default port is 8765.
+ * `https://`, loopback hosts get `http://`, and schemeless addresses default to port 8765.
  */
 export function normalizeBaseUrl(input) {
   const text = String(input ?? '').trim();
   if (!text) throw new ComputeError('invalid-address', 'Enter the address of a compute server');
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `${LOOPBACK.has(text.split(':')[0]) ? 'http' : 'https'}://${text}`;
+  const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(text);
+  const withScheme = hasScheme ? text : `${LOOPBACK.has(text.split(':')[0]) ? 'http' : 'https'}://${text}`;
   let url;
   try {
     url = new URL(withScheme);
@@ -28,7 +29,7 @@ export function normalizeBaseUrl(input) {
     throw new ComputeError('invalid-address', `"${text}" is not a valid server address`);
   }
   if (!['http:', 'https:'].includes(url.protocol)) throw new ComputeError('invalid-address', 'The server address must start with http:// or https://');
-  if (!url.port && !/^[a-z][a-z0-9+.-]*:\/\/[^/]+:\d+/i.test(withScheme)) url.port = '8765';
+  if (!hasScheme && !url.port && !/:\d+(?:\/|$)/.test(text)) url.port = '8765';
   const path = url.pathname.replace(/\/api\/v1\/?$/, '').replace(/\/+$/, '');
   return `${url.protocol}//${url.host}${path}`;
 }

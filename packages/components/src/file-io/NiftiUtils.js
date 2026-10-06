@@ -1,3 +1,15 @@
+/** Compare native voxel grids, allowing 1e-5 rounding error in each affine coefficient. */
+export function sameVoxelGrid(left, right) {
+  if (![left, right].every(header =>
+    header?.dims?.length >= 4
+    && [1, 2, 3].every(axis => Number.isInteger(header.dims[axis]) && header.dims[axis] > 0)
+    && header.affine?.length === 4
+    && Array.from(header.affine).every(row => row?.length === 4 && Array.from(row).every(Number.isFinite))
+  )) return false;
+  return [1, 2, 3].every(axis => left.dims[axis] === right.dims[axis])
+    && left.affine.every((row, r) => row.every((value, c) => Math.abs(value - right.affine[r][c]) <= 1e-5));
+}
+
 export function parseNiftiHeader(headerBuffer) {
   const view = headerBuffer instanceof DataView ? headerBuffer : new DataView(toArrayBuffer(headerBuffer));
   const dims = [];

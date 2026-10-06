@@ -33,7 +33,10 @@ function export_readers(fida, data, outdir, only)
     d = dir(fullfile(data, extra{e, 1}, extra{e, 2}));
     for k = 1:numel(d)
       % case name: kind + file name with every non-alphanumeric as '_'
-      cases(end+1, :) = {[extra{e, 3} '_' regexprep(d(k).name, '[^A-Za-z0-9]', '_')], extra{e, 3}, fullfile(extra{e, 1}, d(k).name)};
+      % (twix: the name without .dat, as tests/twix.rs expects)
+      stem = d(k).name;
+      if strcmp(extra{e, 3}, 'twix'), stem = stem(1:end-4); end
+      cases(end+1, :) = {[extra{e, 3} '_' regexprep(stem, '[^A-Za-z0-9]', '_')], extra{e, 3}, fullfile(extra{e, 1}, d(k).name)};
     end
   end
   for k = 1:size(cases, 1)

@@ -12,6 +12,60 @@ statistics 1.8.2).
   MATLAB's `contains`.
 * `export_fida.m` writes a FID-A structure as `name.json` + `name.bin` for the tests.
 
+## References in CI
+
+The tests read FID-A's outputs and the example inputs from one directory,
+`FIDA_TEST_DATA`. A pinned copy lives on Hugging Face (`neurodeskorg/webapps`,
+`lcmodel/fida-reference/`), listed with sha256 and size in
+`reference.manifest.json`:
+
+```
+python3 exes/fida/validation/fetch_reference.py $TMPDIR/fida-reference
+D=$TMPDIR/fida-reference
+FIDA_TEST_DATA=$D FIDA_EXAMPLES=$D PHILIPS_MEGA=$D/Philips-MEGA LCMODEL_BASIS_DIR=$D/basis \
+  FIDA_REQUIRE_REFERENCE=1 cargo test --release   # in exes/fida and packages/lcmodel/wasm
+```
+
+`FIDA_REQUIRE_REFERENCE=1` turns every "skipping" into a failure;
+`.github/workflows/lcmodel-native.yml` (job `fida-reference`) sets it, so CI
+cannot pass by not finding the data. Without it a missing file is a notice.
+
+The directory holds:
+
+* `ref/`, `ref_vfix/`: `export_readers.m` with the Octave copy and with the
+  `version` fix (below); `FAILED` lists the cases FID-A errors on.
+* `ops/`: the exports of `ref_pipelines.m`, `ref_geauto.m`, `ref_ops.m`,
+  `ref_mega.m` and `ref_mega_philips.m`, only the files a test reads (803 of
+  921 MB; FID-A's other intermediate steps are left out).
+* Inputs: the GE PRESS P-file, the Siemens SPECIAL and MEGA-PRESS twix files,
+  Osprey's Philips MEGA-PRESS example (`Philips-MEGA/`) and two basis sets
+  come from `lcmodel/examples/` and `lcmodel/basis/`. The twix files there are
+  de-identified (patient name, ID and birth date overwritten), so the
+  references for every twix-derived file were exported from those copies, not
+  FID-A's originals: `SiemensSeq/` and `SiemensVD/` are rebuilt by the fetch
+  script with `twix_rename_seq.py` and `twix_vb_to_vd.py` (and checked against
+  their sha256), and `NIfTI-MRS/twix_*` were converted with spec2nii 0.8.15
+  from the de-identified twix. FID-A's MEGA-PRESS water file is byte-identical
+  to the SPECIAL one and is a copy of it. The rest (`GE/sample02_megapress`,
+  `Bruker/`, `Philips/`, `LCModel/`, `RDA/`, the GE and Philips NIfTI-MRS)
+  carries no patient identifiers and ships unchanged.
+
+Archives are `inputs.tar.zst` (123 MB), `ref.tar.zst` (111 MB) and
+`ops.tar.zst` (302 MB), zstd `--long=31`; unpacked, the directory is 2.3 GB.
+A file identical to another (e.g. `ops/special/raw.bin` and
+`ref/twix_special.bin`) is stored once and listed under `copies`.
+
+To publish new references, regenerate them (below), collect only the files
+the tests open into one directory in this layout, then
+
+```
+python3 exes/fida/validation/pack_reference.py <dir> $TMPDIR/fida-pack
+hf upload neurodeskorg/webapps $TMPDIR/fida-pack lcmodel/fida-reference --repo-type dataset
+```
+
+and replace the `PENDING` revision in the manifest with the commit `hf`
+prints. Update `lcmodel/README.md` on Hugging Face if the contents change.
+
 ## Processing (src/ops)
 
 ### Octave set-up
@@ -47,6 +101,8 @@ export FIDA_TEST_DATA=$TMPDIR/fida/testdata      # receives ops/...
 cd exes/fida/validation
 octave-cli ref_pipelines.m                        # ops/ge_press, ops/special, ops/special_single (~1.5 GB)
 FIDA_OCT=<copy with the op_removeWater fix> octave-cli ref_ops.m   # ops/single_ops
+octave-cli ref_mega.m                               # ops/siemens_mega
+PHILIPS_MEGA=<dir> octave-cli ref_mega_philips.m   # ops/philips_mega (Osprey's sdat/MEGA/sub-01)
 cd .. && FIDA_TEST_DATA=... cargo test --release
 ```
 
@@ -122,6 +178,22 @@ SPECIAL (tests/ref_special.rs, double-precision reference):
 | pipeline: unprocessed metabolite / water | 9.5e-10 / 1.1e-11 |
 | SNR (650.3), NAA linewidth (4.26 Hz), water linewidth (5.80 Hz) | 2.5e-8 relative, 2e-10 Hz, 7e-11 Hz |
 
+MEGA-PRESS (tests/ref_mega.rs, `megapressproc_det.m`):
+
+| quantity | Siemens (FID-A, 32 coils) | Philips (Osprey, SDAT) |
+| --- | --- | --- |
+| reader input | twix, exact | `split_alternate` + `drop_empty_transients` vs `io_loadspec_sdat(..., 2)`, exact |
+| pipeline: cumulative drift | 9.8e-8 Hz, 2.4e-6 deg | 8.9e-5 Hz in one transient, the other 293 <= 2.2e-6 Hz; 5.1e-5 deg |
+| pipeline: difference / sum / subspectra / water | 2.4e-9 / 4.1e-10 / 6.1e-10 / 7.5e-10 | 1.7e-6 / 2.2e-7 / 2.3e-7 / 2.8e-12 |
+
+The Philips data are single-channel and noisier per transient; one edit-ON
+transient's fit stops 8.9e-5 Hz from FID-A's, and that transient's phase error,
+averaged over 147, is the 1.7e-6 of the difference spectrum. The Philips test
+gates at 1e-4 Hz and 1e-5 relative; the Siemens gates are unchanged. The test
+also scrambles the Philips subspectra into every other storage layout (edit-ON
+first, not inverted, both) and checks that the classification restores the
+same input.
+
 Individual ops (tests/ref_ops.rs): all shape and arithmetic ops, coil modes
 (`'h'` exact, `'gls'` weights 9.4e-10, fids 3.2e-11), op_combineRcvrs,
 op_rmworstaverage, op_takesubspec, op_combinesubspecs, op_fourStepCombine,
@@ -149,5 +221,16 @@ the corrections are ~0) rounding decides the last step.
   that subspace); `model.fids` is the FID whose spectrum is FID-A's
   `model.specs` (FID-A stores the conjugated row there). They require a single
   spectrum (FID-A silently uses the first FID).
+* GE and Philips MEGA-PRESS: FID-A's readers split alternate transients into
+  subspectra only when told to (`subspecs = 2`), and `run_megapressproc_auto`
+  assumes the Siemens layout (edit-OFF first, the two stored phase-inverted).
+  `src/ops/editing.rs` decides from the data instead, as Osprey's
+  `osp_onOffClassifyMEGA` does: NAA/Cr differing between alternate transients
+  marks editing, the larger NAA is edit-OFF, and anti-correlated creatine marks
+  inversion; it then brings the data to FID-A's layout. Empty transients (a
+  Philips water reference padded with zero rows) are dropped before averaging.
+  FID-A's own GE MEGA-PRESS sample (`P21504.7`) stores 8-transient sums whose
+  edit states cancel (alternate frames agree to 0.4 %, in FID-A as in the port),
+  so it is not detected as edited, and `run_megapressproc_GEauto` is not ported.
 * Where FID-A asks the user (already left-shifted or zero-filled data, which
   subspectrum to phase), the port proceeds or takes an argument.

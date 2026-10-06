@@ -1,4 +1,4 @@
-import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, createMaskEditor, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
 /**
@@ -10,6 +10,7 @@ bindSectionDisclosures(document);
 
 import { registerSctAutomation } from './automation.js';
 import { SctInputSessions } from './controllers/SctInputSessions.js';
+import { SctAnalysis } from './controllers/SctAnalysis.js';
 import { SctPipeline } from './controllers/SctPipeline.js';
 import { defineConsole } from '@neurodesk/webapp-components/ui';
 import { ProgressManager } from '@neurodesk/webapp-components/ui';
@@ -21,7 +22,7 @@ import * as Config from './app/config.js';
 import { SessionResultStore, restoreSessionResults, snapshotSessionResults } from './app/session-results.js';
 import { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog } from './app/log-channels.js';
 import { generateLabelColormap, getLabelName } from './app/labels.js';
-import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
+import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getTaskLabels, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
 import './modules/sct-processing.js';
 import './modules/sct-centerline.js';
 import './modules/sct-morphometry.js';
@@ -136,6 +137,13 @@ export class SpinalCordToolboxApp {
     this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
 
+    this.analysis = new SctAnalysis({
+      before: document.getElementById('resultsSection'),
+      progress: this.progress,
+      log: message => this.updateOutput(message),
+      canRun: () => !this.inferenceExecutor.isRunning()
+    });
+
     this.setupShellEventListeners();
     this.manualEdits = new SctManualEdits(this);
     this.onStageDataChanged(change => this.onStageMaskChanged(change));
@@ -147,6 +155,7 @@ export class SpinalCordToolboxApp {
       if (available) this.manualEdits.attachViewer(this.viewer);
       return available;
     });
+    this._editStage = null;
 
     this.setupEventListeners();
     await this.setupExamples();
@@ -327,7 +336,7 @@ export class SpinalCordToolboxApp {
     this.syncMorphometryControls();
 
     const cancelBtn = document.getElementById('cancelButton');
-    if (cancelBtn) cancelBtn.addEventListener('click', () => this.abortCurrentStep());
+    if (cancelBtn) cancelBtn.addEventListener('click', () => this.analysis?.busy ? this.analysis.cancel() : this.abortCurrentStep());
 
     document.querySelectorAll('[data-viewer-mode]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -943,7 +952,7 @@ export class SpinalCordToolboxApp {
 
   // `discardEdits`: the caller (automation) has decided; do not ask.
   async runSegmentation({ discardEdits = false } = {}) {
-    if (this.inferenceExecutor.isRunning()) return;
+    if (this.inferenceExecutor.isRunning() || this.analysis?.busy) return;
     if (discardEdits) {
       if (this.manualEdits.hasUnsavedEdits()) this.logAnalysis('Manual edits discarded by a new segmentation run', 'warning');
     } else if (!this.manualEdits.confirmDiscard('A new segmentation run')) {
@@ -1002,11 +1011,13 @@ export class SpinalCordToolboxApp {
       testTimeAugmentation,
       patchSize: effectivePatchSize,
     })) this.logAnalysis(line);
+    this._analysisTaskId = selectedTask.id;
     this.beginAbortableStep('inference');
     this.syncMorphometryControls();
 
     // Clear previous results so a stale overlay is not auto-rendered on the
     // new run.
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetStageVisibility();
@@ -1086,6 +1097,7 @@ export class SpinalCordToolboxApp {
   }
 
   async resetAllSteps() {
+    await this.cancelMaskEdit();
     // Reset worker state
     if (this.inferenceExecutor.isReady()) {
       await this.inferenceExecutor.resetWorkerState();
@@ -1102,6 +1114,7 @@ export class SpinalCordToolboxApp {
     }
 
     // Reset results
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetStageVisibility();
@@ -1244,6 +1257,7 @@ export class SpinalCordToolboxApp {
   // ==================== Results ====================
 
   async handleStageData(data) {
+    if (data.stage === 'segmentation' || data.stage === 'lesion') this.syncAnalysisMasks();
     const resultsSection = document.getElementById('resultsSection');
     if (resultsSection) {
       resultsSection.classList.remove('hidden');
@@ -1339,14 +1353,26 @@ export class SpinalCordToolboxApp {
 
       const label = document.createElement('span');
       label.className = 'stage-label';
+      const result = stage === 'input' ? null : this.inferenceExecutor.getResult(stage);
       label.textContent = Config.STAGE_NAMES[stage] || stage;
-      const manualEdit = stage === 'input' ? null : this.inferenceExecutor.getResult(stage)?.manualEdit;
+      const manualEdit = result?.manualEdit;
       if (manualEdit) {
         label.textContent += manualEdit.kind === 'new' ? ' (drawn)' : ' (edited)';
         label.title = manualEdit.kind === 'new' ? 'Drawn by hand' : 'Manually edited';
         row.dataset.manualEdit = manualEdit.kind;
       }
       row.appendChild(label);
+
+      if (this.maskEditor && result?.editable) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'nd-edit-btn';
+        editBtn.type = 'button';
+        editBtn.title = 'Edit in the viewer';
+        editBtn.textContent = 'Edit';
+        editBtn.disabled = this._editStage != null || this.maskEditor.session.state !== 'idle';
+        editBtn.addEventListener('click', () => void this.editStage(stage));
+        row.appendChild(editBtn);
+      }
 
       // Download button (not for input — user already has the file)
       if (stage !== 'input') {
@@ -1370,6 +1396,109 @@ export class SpinalCordToolboxApp {
       this.logAnalysis(`Downloaded ${result.manualEdit.kind === 'new' ? 'hand-drawn' : 'manually edited'} mask: ${result.file.name}`);
     }
     return true;
+  }
+
+  // ==================== Mask Editing ====================
+
+  setupMaskEditor() {
+    this.maskEditor = createMaskEditor({ nv: this.nv });
+    this.maskEditor.addEventListener('nd-mask-edit-start', ({ detail }) => {
+      this.setStatusError(false);
+      this.progress.reset(detail.message);
+    });
+    this.maskEditor.addEventListener('nd-mask-edit-end', () => this.setEditStage(null));
+    document.querySelector('main.app-main > .viewer-toolbar').after(this.maskEditor);
+  }
+
+  getStageLabelNames(stage) {
+    const names = {};
+    for (const label of getTaskLabels(this.getOverlayLabelTaskId(stage))) {
+      if (label.index > 0) names[label.index] = label.name;
+    }
+    return names;
+  }
+
+  async editStage(stage) {
+    const result = this.inferenceExecutor.getResult(stage);
+    if (!result?.editable || !this.maskEditor || this._editStage != null) return;
+    this.setEditStage(stage);
+    try {
+      if (this.isCompareMode()) await this.setViewerMode('single');
+      this.currentResultTab = 'input';
+      this.setStageVisible('input', true);
+      this.setStageVisible(stage, true);
+      const inputVisibilityToggle = document.getElementById('inputVisibilityToggle');
+      if (inputVisibilityToggle) inputVisibilityToggle.checked = true;
+      await this.renderViewerVolumes();
+      this.syncResultViewButtons();
+      if (this.inferenceExecutor.getResult(stage) !== result) {
+        this.setEditStage(null);
+        return;
+      }
+      this.maskEditor.configure({
+        nv: this.nv,
+        labelNames: this.getStageLabelNames(stage),
+        onApply: (editedStage, file, { original }) => this.applyMaskEdit(editedStage, file, original),
+        onCancel: () => this.endMaskEdit(),
+        onError: (_stage, error) => this.reportMaskEditError(error),
+      });
+      const started = await this.maskEditor.start({
+        stage,
+        file: result.file,
+        label: Config.STAGE_NAMES[stage] || stage,
+        overlayIndex: 1 + this.getVisibleOverlayStages().indexOf(stage),
+      });
+      if (!started) this.setEditStage(null);
+    } catch (error) {
+      this.setEditStage(null);
+      this.reportMaskEditError(error);
+    }
+  }
+
+  async applyMaskEdit(stage, file, original) {
+    const result = this.inferenceExecutor.getResult(stage);
+    result.original ??= original;
+    result.file = file;
+    result.edited = true;
+    this.syncAnalysisMasks();
+    this.updateOutput(`Applied manual edits to ${Config.STAGE_NAMES[stage] || stage}`);
+    this.endMaskEdit();
+    this.rebuildResultsList();
+    await this._renderViewerVolumesNow();
+  }
+
+  // Only whole-cord segmentations are valid cord masks for native SCT analysis.
+  syncAnalysisMasks() {
+    const generated = {};
+    const cord = this.inferenceExecutor.getResult('segmentation')?.file;
+    const lesion = this.inferenceExecutor.getResult('lesion')?.file;
+    if (cord && ['spinalcord', 'lesion_sci_t2'].includes(this._analysisTaskId)) generated.cord = cord;
+    if (lesion) generated.lesion = lesion;
+    this.analysis?.setGenerated(generated);
+  }
+
+  endMaskEdit() {
+    this.setEditStage(null);
+    this.setStatusError(false);
+    this.progress.reset('Ready');
+  }
+
+  async cancelMaskEdit() {
+    await this.maskEditor?.cancel();
+  }
+
+  setEditStage(stage) {
+    this._editStage = stage;
+    document.querySelectorAll('#stageButtons .nd-edit-btn').forEach(btn => {
+      btn.disabled = stage != null || Boolean(this.maskEditor && this.maskEditor.session.state !== 'idle');
+    });
+  }
+
+  reportMaskEditError(error) {
+    const message = error?.message || String(error);
+    this.updateOutput(`Mask editing failed: ${message}`);
+    this.progress.end(`Error: ${message}`, { success: false });
+    this.setStatusError(true);
   }
 
   downloadMetricsResult(stage) {
@@ -2106,8 +2235,9 @@ export class SpinalCordToolboxApp {
     this.resetStageVisibility();
   }
 
-  clearResults() {
+  async clearResults() {
     this.manualEdits?.reset();
+    this.analysis?.setGenerated({});
     this.inferenceExecutor.clearResults();
     this.disableAllResultTabs();
     this.resetMorphometrySources();

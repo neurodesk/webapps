@@ -1,5 +1,56 @@
 # synthsr
 
+## 0.6.20261005
+
+### Patch Changes
+
+- Share native result publication between SynthSR and SynthSeg. Clean up newly created temporary files after failed writes while preserving each caller’s publication order and overwrite policy. Keep native path bytes when naming sibling temporaries.
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261005
+
+## 0.6.20261004
+
+### Minor Changes
+
+- 257192b: Stream SynthSR and SynthStrip CPU inference by operator to avoid oversized browser allocations while preserving the pinned models. Reject normalization with less than one percent positive brain support in the MNI template before exposing downloads. Add numerical parity, allocation, failure recovery, and cropped-head regressions.
+
+### Patch Changes
+
+- Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
+  including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261004
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/synthsr@0.6.20261004
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/synthsr@0.6.20261004
+- Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
+  SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
+  scaling and geometry rules.
+- Updated dependencies [257192b]
+  - @neurodesk/synthsr@0.6.20261004
+  - @neurodesk/runtime-support@0.1.3
+
+## 0.5.20261004
+
+### Patch Changes
+
+- Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/synthsr@0.5.20261004
+
+## 0.5.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/synthsr@0.5.20261003
+
 ## 0.5.20260930
 
 ### Patch Changes
@@ -8,7 +59,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/synthsr@0.5.20260930
-
 
 ### Patch Changes
 

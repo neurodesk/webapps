@@ -3,10 +3,11 @@ import { tiltedPhantom } from './tilted-phantom.js';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io';
+import { createNiftiHeaderFromVolume, createUint8Nifti, decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io';
 import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, splitSeries, velocityScale } from '../src/carotid.js';
 import { flowChartSvg, tickStep } from '../src/chart.js';
 import { APP, assignSeries, stem } from '../src/config.js';
+import { labelFiles, niftiFile, resultRows, withEditedLabels } from '../src/outputs.js';
 
 test('app id is lowercase kebab-case and the config is frozen', () => {
   assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
@@ -181,6 +182,29 @@ test('summarises and exports the curves', () => {
   assert.equal(csv, 'frame,left_carotid,right_carotid\n1,1.0000,3.0000\n2,2.0000,4.5000\n');
   const flow = curvesCsv({ method: 'velocity', left: { curve: [30], velocity: [20] }, right: { curve: [60], velocity: [40] } });
   assert.equal(flow, 'frame,left_velocity_cm_s,left_flow_ml_min,right_velocity_cm_s,right_flow_ml_min\n1,20.0000,30.0000,40.0000,60.0000\n');
+});
+
+test('an edited label map replaces the download and both side masks', async () => {
+  const headerBytes = createNiftiHeaderFromVolume({ dims: [3, 2, 1], hdr: { affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] } });
+  const source = { name: 'neck.nii.gz', headerBytes };
+  const voxels = async (file) => Array.from(readNiftiFrames(await decodeNiftiBuffer(await file.arrayBuffer())).data);
+  const variability = new File([], 'neck_phase_sd.nii');
+  const result = { found: { method: 'velocity' }, source, files: { ...labelFiles(Uint8Array.from([0, 1, 1, 0, 2, 0]), source), variability } };
+  const rows = resultRows(result);
+  assert.deepEqual([rows.mask.editable, rows.mask.edited, rows.variability.editable], [true, false, undefined]);
+  assert.deepEqual(await voxels(result.files.left), [0, 1, 1, 0, 0, 0]);
+
+  const labels = Uint8Array.from([0, 1, 0, 2, 2, 0]);
+  const file = niftiFile(createUint8Nifti(labels, headerBytes), result.files.mask.name);
+  const edited = withEditedLabels(result, file, labels, result.files.mask);
+  assert.equal(resultRows(edited).mask.file, file);
+  assert.equal(resultRows(edited).mask.edited, true);
+  assert.equal(edited.originalMask, result.files.mask);
+  assert.equal(edited.files.variability, variability);
+  assert.deepEqual(await voxels(edited.files.left), [0, 1, 0, 0, 0, 0]);
+  assert.deepEqual(await voxels(edited.files.right), [0, 0, 0, 1, 1, 0]);
+  assert.equal(edited.files.right.name, 'neck_carotid_right.nii');
+  assert.equal(withEditedLabels(edited, file, labels, file).originalMask, result.files.mask);
 });
 
 test('draws one polyline per carotid on round axes', () => {

@@ -18,7 +18,7 @@ fn case(name: &str, rel: &str) {
     let Some(dir) = data_dir(name) else { return };
     let files = scan(&dir.join(rel));
     if files.is_empty() {
-        eprintln!("skipping: {rel} not found");
+        skip(&format!("{rel} not found"));
         return;
     }
     let Some(r) = reference(&dir, name) else { return };

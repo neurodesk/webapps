@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.7.0",
+  "version": "0.10.1",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",
@@ -34,6 +34,7 @@
     "./inference": "./src/inference/index.js",
     "./pipeline": "./src/pipeline/index.js",
     "./automation": "./src/automation/index.js",
+    "./automation/parameters": "./src/automation/parameters.js",
     "./automation/freesurfer-lut": "./src/automation/freesurfer-lut.json",
     "./volume": "./src/volume/index.js",
     "./worker": "./src/worker/index.js",
@@ -62,6 +63,10 @@
       "types": "./src/elements/viewer-toolbar.d.ts",
       "default": "./src/elements/viewer-toolbar.js"
     },
+    "./elements/mask-editor": {
+      "types": "./src/elements/mask-editor.d.ts",
+      "default": "./src/elements/mask-editor.js"
+    },
     "./elements/example-selector": {
       "types": "./src/elements/example-selector.d.ts",
       "default": "./src/elements/example-selector.js"
@@ -87,5 +92,8 @@
   },
   "engines": {
     "node": ">=22"
+  },
+  "dependencies": {
+    "zod": "^4.6.5"
   }
 }

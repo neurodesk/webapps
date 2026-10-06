@@ -6,7 +6,7 @@ export function createViewerSessions({ maximum = 4, timeoutMs = 30000 } = {}) {
   const sessions = new Map();
   const lookup = id => {
     const session = sessions.get(id);
-    if (!session || session.closed) throw new Error(`Unknown or closed viewer session: ${id}`);
+    if (!session || session.closed || !session.isReady()) throw new Error(`Unknown or closed viewer session: ${id}`);
     return session;
   };
   const snapshot = session => ({ id: session.id, runId: session.runId, app: session.app, createdAt: session.createdAt });
@@ -26,16 +26,16 @@ export function createViewerSessions({ maximum = 4, timeoutMs = 30000 } = {}) {
     assertCapacity() {
       if (sessions.size >= maximum) throw new Error(`Viewer session limit reached (${maximum}); close a session before retaining another viewer`);
     },
-    add({ app, runId, adapter }) {
+    add({ app, runId, adapter, isReady = () => true }) {
       this.assertCapacity();
       if (adapter.closedSignal?.aborted) throw new Error('Viewer window is closed');
-      const session = { id: randomUUID(), app, runId, adapter, createdAt: new Date().toISOString(),
+      const session = { id: randomUUID(), app, runId, adapter, isReady, createdAt: new Date().toISOString(),
         controller: new AbortController(), queue: Promise.resolve(), closed: false };
       sessions.set(session.id, session);
       adapter.closedSignal?.addEventListener('abort', () => release(session), { once: true, signal: session.controller.signal });
       return snapshot(session);
     },
-    list: () => [...sessions.values()].map(snapshot),
+    list: () => [...sessions.values()].filter(session => session.isReady()).map(snapshot),
     command(id, command, args = {}) {
       if (!commands.has(command)) throw new Error(`Unsupported viewer command: ${command}`);
       const session = lookup(id);

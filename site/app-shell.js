@@ -427,6 +427,16 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     });
   }
 
+  // Titles differ in length, so no breakpoint fits every app: drop action labels only when the title and version would clip.
+  function fitBars() {
+    document.querySelectorAll('.nd-app-bar').forEach((bar) => {
+      const identity = bar.querySelector('.nd-app-bar__identity');
+      if (!identity) return;
+      bar.classList.remove('nd-app-bar--compact');
+      if (identity.scrollWidth > identity.clientWidth + 1) bar.classList.add('nd-app-bar--compact');
+    });
+  }
+
   let scheduled = false;
   function refresh() {
     if (scheduled) return;
@@ -436,12 +446,15 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       installBars();
       syncOptionalActions();
       syncScientificVersion();
+      fitBars();
     });
   }
 
   installBars();
   syncOptionalActions();
   syncScientificVersion();
+  fitBars();
+  window.addEventListener('resize', refresh);
   new MutationObserver(refresh).observe(document.body, {
     childList: true,
     subtree: true,

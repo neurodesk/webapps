@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/syncro",
-  "version": "0.4.20260930",
+  "version": "0.5.20261005",
   "type": "module",
   "description": "SYNcro spatial normalization for browsers and standalone computers",
   "license": "Apache-2.0",

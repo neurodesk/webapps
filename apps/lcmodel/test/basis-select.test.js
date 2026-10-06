@@ -71,3 +71,38 @@ test("unedited data never get the difference basis", () => {
   assert.equal(r.usable, false);
   assert.notEqual(recommendBasis({ hzpppm: 127.7, teMs: 68, sequence: "PRESS" }, lib).basis.id, "megapress-3t-te68-diff");
 });
+
+test("a user basis that names no sequence is usable for edited data, with a warning", () => {
+  const a = assessBasis({ hzpppm: 127.75, teMs: 68, sequence: "MEGA-PRESS" }, { id: "custom", hzpppm: 127.73, teMs: 68, sequence: null });
+  assert.equal(a.usable, true);
+  assert.equal(a.level, "warning");
+  const b = assessBasis({ hzpppm: 127.75, teMs: 68, sequence: "MEGA-PRESS" }, { id: "custom", hzpppm: 127.73, teMs: 68, sequence: "PRESS" });
+  assert.equal(b.usable, false);
+});
+
+test("a shaped-pulse set ranks above the ideal set with the same parameters", () => {
+  const sets = [
+    { id: "slaser-3t-te30", hzpppm: 127.73, teMs: 30, sequence: "sLASER" },
+    { id: "slaser-3t-te30-shaped", hzpppm: 127.73, teMs: 30, sequence: "sLASER", shapedPulses: true },
+    { id: "slaser-3t-te35", hzpppm: 127.73, teMs: 35, sequence: "sLASER" },
+  ];
+  const ranked = rankBases({ hzpppm: 123.25, teMs: 30, sequence: "svs_slaser" }, sets);
+  assert.deepEqual(ranked.map((r) => r.basis.id), ["slaser-3t-te30-shaped", "slaser-3t-te30", "slaser-3t-te35"]);
+  assert.equal(ranked[0].level, "match");
+  // A closer echo time still beats pulse shapes.
+  assert.equal(recommendBasis({ hzpppm: 123.25, teMs: 35, sequence: "svs_slaser" }, sets).basis.id, "slaser-3t-te35");
+});
+
+test("MEGA-PRESS data get the standard difference set; the MM-suppressed one is a warned choice", () => {
+  const sets = [
+    { id: "megapress-3t-te68-diff", hzpppm: 127.73, teMs: 68, sequence: "MEGA-PRESS", coEditedMM: true },
+    { id: "megapress-3t-te80-diff", hzpppm: 127.73, teMs: 80, sequence: "MEGA-PRESS", coEditedMM: true },
+    { id: "megapress-3t-te80-mmsup-diff", hzpppm: 127.73, teMs: 80, sequence: "MEGA-PRESS", mmSuppressed: true },
+  ];
+  const ranked = rankBases({ hzpppm: 123.25, teMs: 80, sequence: "megapress" }, sets);
+  assert.deepEqual(ranked.map((r) => r.basis.id), ["megapress-3t-te80-diff", "megapress-3t-te80-mmsup-diff", "megapress-3t-te68-diff"]);
+  assert.equal(ranked[0].level, "match");
+  assert.equal(ranked[1].level, "warning");
+  assert.match(ranked[1].notes.map((n) => n.text).join(" "), /edit-OFF at 1\.5 ppm/);
+  assert.equal(recommendBasis({ hzpppm: 123.25, teMs: 68, sequence: "megapress" }, sets).basis.id, "megapress-3t-te68-diff");
+});

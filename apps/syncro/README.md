@@ -48,6 +48,9 @@ SYNcro uses one NiiVue instance. The `Image shown` menu switches between input
 scans and generated scalar images. Lesion maps are deliberately omitted from the
 menu: the native lesion overlays the primary or pathological input that owns its
 grid, and the normalized lesion overlays every MNI-space output at 50% opacity.
+`Edit lesion` in Results opens the shared mask editor on the normalized lesion
+over the normalized primary scan. Apply replaces `w<lesion>` in the result archive
+with the edited uint8 NIfTI; automation results keep the computed lesion.
 
 ## Local development
 

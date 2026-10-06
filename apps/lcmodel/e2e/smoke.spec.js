@@ -10,7 +10,7 @@ test("app boots on the workspace", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.locator("#runButton")).toBeDisabled();
-  await expect(page.locator("#basisSelect option")).toHaveCount(17);
+  await expect(page.locator("#basisSelect option")).toHaveCount(25);
 });
 
 test("shared app bar owns information actions and theme", async ({ page }) => {
@@ -37,6 +37,10 @@ async function selectExample(page, id) {
   await expect(page.locator("#runButton")).toBeEnabled();
 }
 
+// A row of the concentration table, by LCModel's metabolite name.
+const resultRow = (page, name) => page.locator(`#concBody tr[data-metabolite="${name}"]`);
+const cell = async (page, name, column) => (await resultRow(page, name).locator("td").nth(column).textContent()).trim();
+
 async function concentration(page, name) {
   const row = page.locator("#concBody tr").filter({ has: page.locator("td:first-child", { hasText: new RegExp(`^${name.replace(/[+]/g, "\\+")}$`) }) });
   return (await row.locator("td").nth(1).textContent()).trim();
@@ -48,6 +52,10 @@ test("the synthetic LCModel test case reproduces LCModel's native table", async 
   await selectExample(page, "lcmodel-test");
   await expect(page.locator("#basisSelect")).toHaveValue("custom");
   await expect(page.locator("#hzpppmInput")).toHaveValue("127.786142");
+  // The test case's control file leaves LCModel's own line-broadening prior.
+  await page.locator("#fitSettings > summary").click();
+  await expect(page.locator("#lineBroadening")).toHaveValue("widened");
+  await page.locator("#lineBroadening").selectOption("lcmodel");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 150000 });
   // Native gfortran LCModel on the same files (exes/lcmodel/tests/data/test_lcm/native.table).
@@ -62,6 +70,11 @@ test("the synthetic LCModel test case reproduces LCModel's native table", async 
   const csv = readFileSync(await (await download).path(), "utf8");
   expect(csv.split("\n")[0]).toBe("Metabolite,Concentration,SD (%),/Cr+PCr");
   expect(csv).toContain("\nNAA,0.00000191,5,1.047\n");
+  // The app's default, the widened prior, moves the same fit: NAA+NAAG 2.46e-6.
+  await page.locator("#lineBroadening").selectOption("widened");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 150000 });
+  expect(await concentration(page, "NAA+NAAG")).toBe("2.46e-6");
 });
 
 test("the GE PRESS phantom goes through FID-A and the recommended basis set", async ({ page }) => {
@@ -70,7 +83,7 @@ test("the GE PRESS phantom goes through FID-A and the recommended basis set", as
   await selectExample(page, "ge-press-phantom");
   await expect(page.locator("#datasetSummary")).toContainText("TE 35 ms");
   await expect(page.locator("#datasetSummary")).toContainText("with water");
-  await expect(page.locator("#basisSelect")).toHaveValue("press-3t-te35");
+  await expect(page.locator("#basisSelect")).toHaveValue("press-3t-te35-shaped");
   await expect(page.locator("#basisAdvice")).toHaveClass(/success/);
   await expect(page.locator("#waterScaling")).toBeChecked();
   await page.locator("#runButton").click();
@@ -107,21 +120,96 @@ test("the Siemens MEGA-PRESS example fits GABA on the difference spectrum (86 MB
   await expect(page.locator("#datasetSummary")).toContainText("MEGA-PRESS");
   await expect(page.locator("#basisSelect")).toHaveValue("megapress-3t-te68-diff");
   await expect(page.locator("#basisAdvice")).toHaveClass(/success/);
-  await expect(page.locator("#ppmEnd")).toHaveValue("1.95");
+  await expect(page.locator("#ppmEnd")).toHaveValue("0.5");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 600000 });
   await expect(page.locator("#ratioHeader")).toHaveText("/NAA+NAAG");
-  const gaba = page.locator("#concBody tr").filter({ has: page.locator("td:first-child", { hasText: /^GABA$/ }) });
-  const sd = Number((await gaba.locator("td").nth(2).textContent()).replace("%", ""));
-  expect(sd).toBeLessThan(20);
-  const ratio = Number(await gaba.locator("td").nth(3).textContent());
-  expect(ratio).toBeGreaterThan(0.05);
-  expect(ratio).toBeLessThan(0.4);
+  // GABA 0.075, MM3co 0.216, GABA+ 0.291 (packages/lcmodel/wasm session tests).
+  await expect(page.locator("#concBody tr").first()).toHaveAttribute("data-metabolite", "GABA+MM3co");
+  expect(Number(await cell(page, "GABA+MM3co", 3))).toBeCloseTo(0.291, 2);
+  expect(Number(await cell(page, "GABA", 3))).toBeCloseTo(0.075, 2);
+  expect(Number((await cell(page, "GABA", 2)).replace("%", ""))).toBeLessThan(20);
+  // 1.95-1.2 ppm is left out of the fit: shaded, with the data drawn through it.
+  await expect(page.locator("#plot .lcm-gap")).toHaveCount(1);
+  await expect(page.locator("#plot polyline.lcm-data")).toHaveCount(1);
+  await expect(page.locator("#plot polyline.lcm-fit")).toHaveCount(2);
+  await expect(page.locator("#plotLabel")).toContainText("shaded: not fitted");
+  await page.screenshot({ path: test.info().outputPath("siemens-megapress-fit.png") });
+  await page.locator(".nd-view-tab:has-text('Metabolites')").click();
+  await expect(page.locator("#plot .lcm-gap")).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath("siemens-megapress-metabolites.png") });
   await page.locator(".nd-view-tab:has-text('Preprocessing')").click();
   await expect(page.locator("#plotLabel")).toContainText("edit-OFF");
   const download = page.waitForEvent("download");
   await page.locator("#resultList .nd-volume-toggle").filter({ hasText: "Edit-OFF" }).getByRole("button", { name: "Download" }).click();
   expect(readFileSync(await (await download).path(), "utf8")).toContain("$NMID");
+});
+
+test("the Philips MEGA-PRESS example is detected as edited and fits GABA", async ({ page }) => {
+  test.setTimeout(300000);
+  await page.goto("/");
+  await selectExample(page, "philips-megapress");
+  // SDAT does not record editing; alternate transients show it.
+  await expect(page.locator("#editedField")).toBeVisible();
+  await expect(page.locator("#editedToggle")).toBeChecked();
+  await expect(page.locator("#datasetSummary")).toContainText("MEGA-PRESS");
+  await expect(page.locator("#datasetSummary")).toContainText("160 averages");
+  await expect(page.locator("#basisSelect")).toHaveValue("megapress-3t-te68-diff");
+  await expect(page.locator("#ppmEnd")).toHaveValue("0.5");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 240000 });
+  await expect(page.locator("#ratioHeader")).toHaveText("/NAA+NAAG");
+  // Default: the co-edited MM model. GABA+ leads; GABA and MM3co are flagged.
+  await expect(page.locator("#mmModelField")).not.toHaveAttribute("hidden");
+  await expect(page.locator("#mmModel")).toHaveValue("co-edited");
+  await expect(page.locator("#concBody tr").first()).toHaveAttribute("data-metabolite", "GABA+MM3co");
+  // The browser fit also scales to water with eddy-current correction, so its
+  // numbers differ slightly from the session tests (0.293, 0.102, 0.191).
+  expect(Number(await cell(page, "GABA+MM3co", 3))).toBeCloseTo(0.286, 2);
+  expect(Number(await cell(page, "GABA", 3))).toBeCloseTo(0.091, 2);
+  expect(Number(await cell(page, "MM3co", 3))).toBeCloseTo(0.195, 2);
+  await expect(resultRow(page, "GABA").locator(".nd-info-icon")).toHaveCount(1);
+  await expect(resultRow(page, "MM3co").locator(".nd-info-icon")).toHaveCount(1);
+  await expect(page.locator("#modelNote")).toBeVisible();
+  const csvDownload = page.waitForEvent("download");
+  await page.locator("#resultList .nd-volume-toggle").filter({ hasText: "Concentrations" }).getByRole("button", { name: "Download" }).click();
+  const csv = readFileSync(await (await csvDownload).path(), "utf8").split("\n");
+  expect(csv[0]).toBe("Metabolite,Concentration,SD (%),/NAA+NAAG,Note");
+  expect(csv[1]).toMatch(/^GABA\+MM3co,.*primary result$/);
+  // The previous analysis: LCModel's mega-press-3 to 1.95 ppm, GABA is GABA+.
+  await page.locator("#fitSettings > summary").click();
+  await page.locator("#mmModel").selectOption("none");
+  await expect(page.locator("#ppmEnd")).toHaveValue("1.95");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Fit done", { timeout: 240000 });
+  // 0.241 in the session tests, without water scaling and ECC.
+  expect(Number(await cell(page, "GABA", 3))).toBeCloseTo(0.236, 2);
+  await expect(resultRow(page, "MM3co")).toHaveCount(0);
+  await expect(page.locator("#modelNote")).toBeHidden();
+  // A typed range survives switching back.
+  await page.locator("#ppmEnd").fill("0.7");
+  await page.locator("#mmModel").selectOption("co-edited");
+  await expect(page.locator("#ppmEnd")).toHaveValue("0.7");
+  await page.locator("#ppmEnd").fill("0.5");
+  // Overriding the detection treats the transients as one unedited series.
+  await page.locator("#editedToggle").uncheck();
+  await expect(page.locator("#datasetSummary")).not.toContainText("MEGA-PRESS");
+  await expect(page.locator("#basisSelect")).not.toHaveValue("megapress-3t-te68-diff");
+  await expect(page.locator("#ppmEnd")).toHaveValue("0.2");
+  await expect(page.locator("#concTable")).toBeHidden();
+});
+
+test("an uploaded .BASIS file becomes the selected basis set", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator("#basisDrop")).toBeVisible();
+  const basis = byId["lcmodel-test"].files.find((f) => f.name === "3t.basis");
+  const response = await request.get(basis.url);
+  await page.locator("#basisInput").setInputFiles({ name: "my.basis", mimeType: "text/plain", buffer: await response.body() });
+  await expect(page.locator("#basisSelect")).toHaveValue("custom");
+  await expect(page.locator("#basisSelect option:checked")).toHaveText("Your basis set: my.basis");
+  await expect(page.locator("#basisInfo")).toContainText("my.basis");
+  await page.locator("#basisSelect").selectOption("press-3t-te30");
+  await expect(page.locator("#basisInfo")).toBeHidden();
 });
 
 test("a failed download can retry the same example", async ({ page }) => {

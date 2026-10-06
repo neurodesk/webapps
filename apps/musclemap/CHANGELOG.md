@@ -1,5 +1,26 @@
 # musclemap
 
+## 1.4.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- e6baa09: Correct a segmentation in the viewer before downloading it. Generated, consolidated and uploaded label maps whose display copy shares their voxel grid show Edit in the Results list, which opens the shared mask editor with the muscle names in its Label select. Apply replaces the result, labels it `(edited)`, reloads the overlay and makes Download return the edited uint8 class-index map under the same file name; Calculate Metrics then reads the edited labels. A new run, new input, consolidation or Clear All closes an open edit without applying it.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage with MONAI float64 decoding. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons, prevent stale passing reports, and use portable CI scratch directories. Document the isolated inference-runtime boundary differences.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 1.4.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 1.4.20260930
 
 ### Patch Changes
@@ -7,7 +28,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

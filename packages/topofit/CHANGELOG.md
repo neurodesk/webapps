@@ -1,5 +1,27 @@
 # @neurodesk/topofit
 
+## 0.12.20261005
+
+## 0.12.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Restore upstream-compatible cubic preprocessing for cortical reconstruction. Preserve oblique rotation and shear, bypass identity 1 mm grids, and require passing numerical evidence when activating model releases. The production comparison improves mean anatomical vertex distance from 0.795–1.564 mm to 0.046–0.068 mm, below the 0.25 mm gate.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 0.12.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.12.20260930
 
 ### Patch Changes
@@ -7,7 +29,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

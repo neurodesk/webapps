@@ -172,3 +172,19 @@ export function buildResultVolumeStack({
 
   return entries;
 }
+
+export function buildEditVolumeStack({ stage, sourceFile = null, segmentationOpacity = 0.5, ...options }) {
+  const visibility = { ...options.visibility, [stage]: true };
+  const { stage: baseStage } = chooseResultBaseStage({ ...options, visibility });
+  if (baseStage) {
+    visibility[baseStage] = true;
+    const stack = buildResultVolumeStack({ ...options, visibility, preferredBaseStage: baseStage, segmentationOpacity });
+    return { visibility, baseStage, stack };
+  }
+  const display = getResultDisplay(stage);
+  const stack = [
+    { file: sourceFile, stage: 'input', colormap: 'gray', opacity: 1, visible: true, scalar: true },
+    { file: stageFile(options.results, stage), stage, colormap: display.colormap, opacity: opacityForStage(display, segmentationOpacity), visible: true, scalar: false, labelMask: false }
+  ];
+  return { visibility, baseStage: 'input', stack };
+}
