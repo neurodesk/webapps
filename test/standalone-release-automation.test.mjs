@@ -31,8 +31,14 @@ function verifiedRelease(names, tag = 'tool-v0.2.20261006') {
   return { tag_name: tag, draft: false, prerelease: false, assets: names.flatMap((name) => [asset(name), asset(`${name}.validation.txt`, 'b')]) };
 }
 
-function update(catalog, release, natives = portable, value = 'tool@0.2.20261006') {
-  return catalogUpdate(catalog, parseReleases([value]), { fetchRelease: async () => release, nativeAt: () => natives });
+// A receipt as exes/node-cli writes it: "PASS <target>" and the archive's digest.
+function passingReceipt(url) {
+  const platform = /-(linux-x64|windows-x64|macos-arm64)\./.exec(url)[1];
+  return `PASS ${platform}\narchive_sha256=${'a'.repeat(64)}\n`;
+}
+
+function update(catalog, release, natives = portable, value = 'tool@0.2.20261006', fetchText = async (url) => passingReceipt(url)) {
+  return catalogUpdate(catalog, parseReleases([value]), { fetchRelease: async () => release, fetchText, nativeAt: () => natives });
 }
 
 test('a verified portable release becomes one download per target with its install commands', async () => {
@@ -60,6 +66,26 @@ test('incomplete, unverified, draft or prerelease releases never reach the catal
   assert.throws(() => parseReleases(['tool@latest']), /app@MAJOR\.MINOR\.YYYYMMDD/);
 });
 
+test('a receipt must pass the exact bytes released, and the catalog never moves to an older release', async () => {
+  const catalog = { apps: { tool: { downloads: [] } } };
+  const release = verifiedRelease(archives);
+  await assert.rejects(update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace('a'.repeat(64), 'c'.repeat(64))), /validated different bytes/);
+  await assert.rejects(update(catalog, release, portable, undefined, async () => ''), /does not pass these exact bytes/);
+  await assert.rejects(update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace('PASS', 'FAIL')), /does not pass these exact bytes/);
+  const rust = nativeReleases(new Map());
+  const names = ['synthseg-0.2.20260910-macos-arm64.pkg'];
+  const rustRelease = verifiedRelease(names, 'synthseg-v0.2.20260910');
+  await assert.rejects(update({ apps: { synthseg: { downloads: [] } } }, rustRelease, rust, 'synthseg@0.2.20260910', async () => ' \n'), /receipt is empty/);
+  await assert.rejects(update({ apps: { synthseg: { downloads: [] } } }, rustRelease, rust, 'synthseg@0.2.20260910', async () => `sha256: ${'c'.repeat(64)}\n`), /validated different bytes/);
+  assert.ok(await update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace(/\n/g, '\r\n')), 'Windows line endings are the same receipt');
+  const newer = await update(catalog, release);
+  applyCatalogUpdate(catalog, newer);
+  const older = structuredClone(newer);
+  for (const download of older.tool) download.version = '0.1.20261001';
+  applyCatalogUpdate(catalog, older);
+  assert.ok(catalog.apps.tool.downloads.every((download) => download.version === '0.2.20261006'), 'a slow run for an older release keeps the newer entry');
+});
+
 test('Rust tools need every target and a receipt per archive, and keep their embedded-model note', async () => {
   const rust = nativeReleases(new Map());
   const catalog = { apps: { synthsr: { downloads: [{ kind: 'cli', platform: 'linux-x64', version: '0.3.20260910', modelsIncluded: true }] } } };
@@ -68,7 +94,7 @@ test('Rust tools need every target and a receipt per archive, and keep their emb
   await assert.rejects(update(catalog, verifiedRelease(names.slice(0, 1), 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910'), /lacks/);
   const bare = { tag_name: 'synthsr-v0.3.20260910', draft: false, prerelease: false, assets: names.map((name) => asset(name)) };
   await assert.rejects(update(catalog, bare, rust, 'synthsr@0.3.20260910'), /no validation receipt/);
-  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910'));
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910', async () => 'packaged CPU inference: ok\n'));
   assert.ok(catalog.apps.synthsr.downloads.every((download) => download.modelsIncluded && !download.command));
 });
 

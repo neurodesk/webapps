@@ -20,6 +20,12 @@ async function fetchRelease(tag) {
   return response.json();
 }
 
+async function fetchText(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  return response.text();
+}
+
 const nativeAt = (tag) => nativeReleases(portableSpecsAt(`refs/tags/${tag}`));
 let releases = parseReleases(positionals);
 if (values.tag) {
@@ -33,6 +39,6 @@ if (values.tag) {
     releases = [release];
   }
 }
-const update = await catalogUpdate(catalog, releases, { fetchRelease, nativeAt });
+const update = await catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt });
 for (const [id, downloads] of Object.entries(update)) console.log(`${id}: ${downloads.length} verified downloads`);
 await writeFile(values.out, `${JSON.stringify(update, null, 2)}\n`);
