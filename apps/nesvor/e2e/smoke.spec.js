@@ -238,7 +238,8 @@ test('remote run locks patient inputs and a reload can recover the owned job', a
   await page.locator('#previousJobs').evaluate(element => { element.open = true; });
   await expect(page.locator('#previousJob option')).toHaveCount(1);
   await page.locator('#resumeJob').click();
-  await expect(page.locator('#statusText')).toContainText('Simulated result ready');
+  // The simulated job runs its remaining stages in real time; slow runners need more than 5 s.
+  await expect(page.locator('#statusText')).toContainText('Simulated result ready', { timeout: 30000 });
   expect((await download(page, 0)).filename).toMatch(/^job-[a-f0-9]+_nesvor\.nii\.gz$/);
 });
 
