@@ -19,6 +19,7 @@ const [app, cacheArgument] = process.argv.slice(2);
 const cache = resolve(cacheArgument ?? join(process.env.TMPDIR ?? root, 'neurodesk-gpu-test-data'));
 
 // Progress goes to stderr so stdout stays a clean KEY=VALUE list.
+console.log = console.error;
 const run = (command, args) => execFileSync(command, args, { cwd: root, stdio: ['ignore', process.stderr, 'inherit'] });
 const exampleFile = async (...args) => (await fetchPinnedExample(...args, cache)).map(({ path }) => path);
 
@@ -65,4 +66,4 @@ if (!provision[app]) {
   console.error(`Usage: gpu-test-data.mjs <${Object.keys(provision).join('|')}> [cache-directory]`);
   process.exit(2);
 }
-for (const [key, value] of Object.entries(await provision[app]())) console.log(`${key}=${value}`);
+for (const [key, value] of Object.entries(await provision[app]())) process.stdout.write(`${key}=${value}\n`);
