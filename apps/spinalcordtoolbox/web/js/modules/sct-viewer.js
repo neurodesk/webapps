@@ -306,6 +306,9 @@ export class SctViewer {
     nv.sliceType = this.compareSliceType;
     nv.showRender = this.nv.showRender;
     nv.secondaryDragMode = this.nv.secondaryDragMode;
+    // A label legend takes a third of a half-width panel; the info bar under
+    // the viewer names the label at the crosshair instead.
+    nv.isLegendVisible = false;
     nv.addEventListener('locationChange', event => this.onComparisonLocation(panel.id, event.detail));
     // Pointer users pick a panel by working in it, keyboard users by its title.
     element.addEventListener('pointerdown', () => this.onComparisonActivate(panel.id));

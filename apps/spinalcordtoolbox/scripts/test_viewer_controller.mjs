@@ -407,6 +407,7 @@ await assert.rejects(
     assert.deepEqual(created[1].callsNamed('addVolume'), [], 'a session without results shows only its image');
     assert.equal(created[1].sliceType, SLICE_TYPE.SAGITTAL, 'panels start in the main viewer layout');
     assert.equal(created[1].secondaryDragMode, DRAG_MODE.pan, 'panels follow the main viewer drag mode, so zoom works alike');
+    assert.equal(created[1].isLegendVisible, false, 'panels leave the label legend to the info bar');
     assert.equal(nv.callsNamed('loadVolumes').length, 0, 'comparison never touches the main viewer stack');
 
     // Linked by default through NiiVue's own sync, crosshair and all.
