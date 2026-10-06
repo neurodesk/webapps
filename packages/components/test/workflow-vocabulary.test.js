@@ -177,6 +177,15 @@ test('imaging workspace provides a reusable three-panel viewer layout', async ()
   assert.match(css, /orientation: landscape\) \{\s*\.nd-imaging-viewer:has\([^)]*\) \.nd-viewer-canvas-wrapper \{ height: calc\(100vw \/ 3\); \}/);
 });
 
+test('imaging workspace provides a session comparison grid with a marked active panel', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-compare-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.nd-compare-grid\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.nd-compare-panel\[aria-current="true"\]::after \{ border-color: var\(--nd-color-primary\); \}/);
+  assert.match(css, /\.nd-compare-title\[aria-pressed="true"\]/);
+  assert.match(css, /@media \(pointer: coarse\) \{ \.nd-compare-title \{ min-height: 44px; \} \}/);
+});
+
 test('result labels wrap when visibility and View controls share a row', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);

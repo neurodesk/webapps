@@ -24,7 +24,7 @@
     "test:fixtures": "node scripts/test_fixture_parity_outputs.cjs",
     "test:fixtures:download": "node scripts/huggingface-fixtures.cjs",
     "test:fixtures:generate": "node scripts/run_browser_fixture_outputs.cjs",
-    "test:controllers": "node --no-warnings scripts/test_file_io_controller.mjs && node --no-warnings scripts/test_dicom_controller.mjs && node --no-warnings scripts/test_inference_executor.mjs",
+    "test:controllers": "node --no-warnings scripts/test_file_io_controller.mjs && node --no-warnings scripts/test_dicom_controller.mjs && node --no-warnings scripts/test_inference_executor.mjs && node --no-warnings scripts/test_session_results.mjs",
     "test:ui:modules": "node --no-warnings scripts/test_ui_modules.mjs && node --no-warnings scripts/test_fallback_nifti_preview.mjs",
     "test:inference:e2e": "node scripts/test_inference_worker_e2e.cjs",
     "test:worker:protocol": "node scripts/test_inference_worker_protocol.cjs",

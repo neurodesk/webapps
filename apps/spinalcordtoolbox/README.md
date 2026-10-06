@@ -24,6 +24,7 @@ bash run.sh
 - **SCT stable task inventory** for spinal cord MRI segmentation workflows
 - **Manifest-driven model provenance** with supported, unvalidated, unsupported, and retired task states
 - **DICOM and NIfTI** input support
+- **Several images of one patient**: load sessions side by side in Compare, each with its own results
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
 - **Spine labels from TotalSpineSeg**: vertebrae, discs and disc points come from the `TotalSpineSeg` task; `sct_label_vertebrae` is not ported
 - **Morphometry** (`sct_process_segmentation`): cross-sectional area, AP and RL diameter, eccentricity, orientation, solidity, cord angles and length of any mask of the session, per slice, per vertebral level or aggregated, as a CSV in SCT's column layout
@@ -69,6 +70,8 @@ The viewer is [FreeBrowse](https://github.com/freesurfer/freebrowse) around NiiV
 - **Zoom and pan**: choose **pan/zoom** beside "Right drag" in the viewer toolbar, then scroll to zoom and right-drag to pan. On a touch screen, pinch to zoom and drag with two fingers to pan, in any mode. In the 3D render the wheel always zooms. The ⟲ button resets view and contrast.
 - **Layers**: the sidebar button opens the Volumes tab with visibility, opacity, intensity window and colormap for every layer, and Download for the current images. The Results eye buttons in the left sidebar toggle the same layers.
 - **SCT's own toolbar** keeps only what FreeBrowse lacks: Single/Compare for multiple loaded images, and the PNG screenshot.
+- **Compare** shows every loaded image side by side (up to four), for example a scan before and after surgery. Each panel is labelled with its file and shows that image's own results; the active image, the one Run and the Results list act on, is outlined and marked "active". Click a panel, or its title with the keyboard, to make it active. The layout menu applies to all panels. **Link views** (on by default) keeps slice, zoom, pan and crosshair in step by world (scanner mm) position, so scans of different size or orientation line up as far as their headers agree; follow-up scans are usually not registered, so turn it off to navigate each panel on its own.
+- **Results per image**: running a task on one image keeps the results of the others. Results are kept for the active image and the three most recently used others; older ones are released, with a note in the Analysis log.
 - Without WebGL2 the app shows a 2D axial preview instead; segmentation, results and downloads still work.
 
 ## Pipeline
