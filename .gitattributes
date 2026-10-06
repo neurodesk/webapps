@@ -9,3 +9,6 @@ apps/spinalcordtoolbox/.specify/** whitespace=-trailing-space,-blank-at-eof
 apps/spinalcordtoolbox/specs/** whitespace=-trailing-space,-blank-at-eof
 
 test-utils/native-nifti/tests/snapshots/*.txt text eol=lf
+
+# Byte-exact native nii2tvx tables: a CRLF checkout on Windows would break every comparison.
+exes/nii2tvx/test/*.tsv -text
