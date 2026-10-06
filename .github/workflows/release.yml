@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: neurodesk-webapps-release
@@ -159,3 +160,10 @@ jobs:
               --generate-notes \
               "$ARCHIVE"
           fi
+      - name: Start the signed native build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP: ${{ matrix.app }}
+        run: |
+          VERSION="$(node -p "require('./apps/${APP}/package.json').version")"
+          node scripts/dispatch-native-release.mjs "$APP" "${APP}-v${VERSION}"

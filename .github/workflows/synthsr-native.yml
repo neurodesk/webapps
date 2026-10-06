@@ -133,6 +133,7 @@ jobs:
           test "$(gh release view "$tag" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release=synthsr@$version" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: synthsr-*-x64-archive
@@ -171,3 +172,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.target.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" exes/synthsr/dist/*.pkg exes/synthsr/dist/*.sha256 exes/synthsr/dist/*.validation.txt exes/synthsr/dist/portable/* --clobber
+      - name: Publish to the Standalone catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ steps.target.outputs.release }}
+        run: gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
