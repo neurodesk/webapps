@@ -253,25 +253,7 @@ test.describe('FreeBrowse viewer', () => {
     // The mount handle and NiiVue instance are reachable for later integrations.
     expect(await page.evaluate(() => app.viewerMount.nv === app.nv && app.viewer.nv === app.nv && typeof app.viewerMount.destroy === 'function')).toBe(true);
   });
-
-  test('Compare shows each loaded session on its own canvas and returns to the single view', async ({ page }) => {
-    await openApp(page);
-    await expect(page.locator('#compareViewButton')).toBeDisabled();
-    await loadInput(page, 'first.nii');
-    await loadInput(page, 'second.nii');
-    await expect(page.locator('#compareViewButton')).toBeEnabled();
-    await page.locator('#compareViewButton').click();
-    await expect(page.locator('#comparisonGrid .comparison-panel')).toHaveCount(2);
-    await expect(page.locator('#comparisonGrid .comparison-panel.active .comparison-label')).toHaveText('second.nii');
-    await poll(() => page.evaluate(() => [...app.viewer.compareViewers.values()].map(entry => entry.nv.volumes[0]?.name))).toEqual(['first.nii', 'second.nii']);
-    await expect(page.locator('#freebrowseViewer')).toBeHidden();
-    await expect(page.locator('#viewerInfoPrimary')).toHaveText('Comparison: 2 images');
-
-    await page.locator('#singleViewButton').click();
-    await expect(page.locator('#comparisonGrid .comparison-panel')).toHaveCount(0);
-    await expect(page.locator('#freebrowseViewer')).toBeVisible();
-    expect(await page.evaluate(() => app.nv.volumes.map(volume => volume.name))).toEqual(['second.nii']);
-  });
+  // Compare (several images side by side) is covered in compare.spec.js.
 });
 
 test.describe('FreeBrowse viewer on a touch screen', () => {

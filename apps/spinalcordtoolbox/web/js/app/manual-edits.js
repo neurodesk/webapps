@@ -252,6 +252,25 @@ export class SctManualEdits {
     this.sync();
   }
 
+  /**
+   * Before the active image changes (another image, Compare): a drawing with
+   * changes is applied to its own image's stage, an unchanged one is closed.
+   * Concurrent callers share one apply, so results are parked only after it.
+   */
+  settleBeforeSwitch() {
+    if (this.switching) return this.switching;
+    if (!this.isEditing()) return Promise.resolve();
+    if (!this.editor.isDirty()) {
+      this.reset();
+      return Promise.resolve();
+    }
+    this.app.logAnalysis(`Manual edit applied to ${STAGE_NAMES[this.editingStage] || this.editingStage} before switching images`);
+    this.switching = this.apply().finally(() => {
+      this.switching = null;
+    });
+    return this.switching;
+  }
+
   /** Closes a session without asking, for a new file or a cleared session. */
   reset() {
     if (this.isEditing()) this.editor.discard();
@@ -364,21 +383,29 @@ export class SctManualEdits {
     return this.unsavedStages().length > 0;
   }
 
+  /** `Image: stage` for every unsaved edit in a parked image's `snapshot`. */
+  static unsavedInSnapshot(snapshot, imageName) {
+    return Object.entries(snapshot?.results || {})
+      .filter(([, result]) => result?.manualEdit && !result.manualEdit.downloaded)
+      .map(([stage]) => `${STAGE_NAMES[stage] || stage} of ${imageName}`);
+  }
+
   /**
-   * Asks before `action` drops edits that were not applied or not downloaded.
+   * Asks before `action` drops edits that were not applied or not downloaded:
+   * the active image's (unless `current` is false) and the `others` named.
    * Returns true when the action may go ahead.
    */
-  confirmDiscard(action) {
-    const stages = this.unsavedStages();
-    if (!stages.length) return true;
-    const names = stages.map(stage => STAGE_NAMES[stage] || stage).join(', ');
+  confirmDiscard(action, { current = true, others = [] } = {}) {
+    const stages = current ? this.unsavedStages() : [];
+    if (!stages.length && !others.length) return true;
+    const names = [...stages.map(stage => STAGE_NAMES[stage] || stage), ...others].join(', ');
     const ok = globalThis.confirm?.(`${action} discards your manual edits to ${names}, which you have not downloaded. Continue?`) ?? false;
     if (!ok) {
       this.app.logAnalysis(`Kept manual edits to ${names}: ${action.toLowerCase()} was cancelled`, 'warning');
       return false;
     }
     this.app.logAnalysis(`Manual edits to ${names} discarded: ${action.toLowerCase()}`, 'warning');
-    if (this.isEditing()) this.editor.discard();
+    if (current && this.isEditing()) this.editor.discard();
     return true;
   }
 }

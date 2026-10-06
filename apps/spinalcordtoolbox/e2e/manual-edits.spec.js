@@ -379,16 +379,17 @@ test('the pen paints the label chosen by name in a multi-label stage', async ({ 
   expect(kept.bytes.equals(bytes)).toBe(true);
 });
 
-test('unsaved edits are not dropped by a new run or a new file without asking', async ({ page }) => {
+test('an edit belongs to its image: it survives switching images, shows in Compare and is not dropped unasked', async ({ page }) => {
   await openApp(page);
   await loadInput(page);
-  await deliverStage(page, 'segmentation', 'spinalcord', stageFile(maskVolume(() => 1)));
+  const model = maskVolume(() => 1);
+  await deliverStage(page, 'segmentation', 'spinalcord', stageFile(model));
   await startEditing(page, 'segmentation');
   await page.evaluate(() => {
     app.nv.drawingVolume.img[0] = 1;
   });
 
-  // Dismissed: nothing runs, the drawing stays.
+  // A new run on this image would replace its results: dismissed, nothing runs, the drawing stays.
   const messages = [];
   page.once('dialog', dialog => {
     messages.push(dialog.message());
@@ -400,21 +401,48 @@ test('unsaved edits are not dropped by a new run or a new file without asking', 
   expect(await page.evaluate(() => app.manualEdits.isEditing())).toBe(true);
   expect(await page.evaluate(() => app.inferenceExecutor.isRunning())).toBe(false);
 
-  // Applied but not downloaded still counts; downloading saves it.
-  await page.locator('#editApply').click();
-  await expect(page.locator('#stageButtons')).toContainText('(edited)');
+  // A second image: the open drawing is applied to the first image, which keeps its results.
+  await loadInput(page, inputVolume(), 'other.nii');
+  expect(messages).toHaveLength(1);
+  expect(await page.evaluate(() => app.manualEdits.isEditing())).toBe(false);
+  await expect(page.locator('#stageButtons')).not.toContainText('SCT Segmentation');
+  const firstId = await page.evaluate(() => app.getInputSessions().find(session => session.name === 'sub-01_T2w.nii').id);
+
+  // Compare draws the first image's edited stage in its panel.
+  await page.locator('#compareViewButton').click();
+  await poll(() => page.evaluate(() => app.getComparisonPanels().map(panel => panel.entries.map(entry => entry.file.name)))).toEqual([
+    ['sub-01_T2w.nii', 'spinalcord_segmentation_edited.nii'],
+    ['other.nii'],
+  ]);
+  await page.locator('#singleViewButton').click();
+
+  // Back on the first image the edit, its mark and Restore are all there.
+  await page.evaluate(id => app.fileIOController.activateSession(id), firstId);
+  await poll(() => page.evaluate(() => app.nv.volumes.map(volume => volume.name))).toEqual(['sub-01_T2w.nii', 'spinalcord_segmentation_edited.nii']);
+  await expect(page.locator('#stageButtons')).toContainText('SCT Segmentation (edited)');
+  await openEditSection(page);
+  await page.locator('#editStageSelect').selectOption('segmentation');
+  await expect(page.locator('#editRevert')).toBeVisible();
+  const { bytes } = await downloadStage(page, 'SCT Segmentation (edited)');
+  // RAS voxel 0 is native (39, 31, 0).
+  expect(changes(model, voxelsOf(bytes))).toEqual([{ i: 39, j: 31, k: 0, from: 0, to: 1 }]);
+
+  // Not downloaded edits elsewhere: an example replaces every image, so it asks.
+  await page.evaluate(id => app.fileIOController.activateSession(id), await page.evaluate(() => app.getInputSessions().find(session => session.name === 'other.nii').id));
+  await poll(() => page.evaluate(() => app.inputFile?.name)).toBe('other.nii');
+  await page.evaluate(() => {
+    const parked = [...app.sessionResults.parked.values()][0];
+    parked.results.segmentation.manualEdit.downloaded = false;
+  });
   page.once('dialog', dialog => {
     messages.push(dialog.message());
     void dialog.dismiss();
   });
-  await page.locator('#fileInput').setInputFiles({ name: 'other.nii', mimeType: 'application/octet-stream', buffer: inputVolume() });
+  const example = await page.locator('select[data-neurodesk-example] option').nth(1).getAttribute('value');
+  await page.locator('select[data-neurodesk-example]').selectOption(example);
   await poll(() => messages.length).toBe(2);
-  expect(await page.evaluate(() => app.inputFile.name)).toBe('sub-01_T2w.nii');
-  await downloadStage(page, 'SCT Segmentation (edited)');
-
-  // Saved: a new file loads without a question.
-  await loadInput(page, inputVolume(), 'other.nii');
-  expect(messages).toHaveLength(2);
+  expect(messages[1]).toMatch(/Loading the example discards your manual edits to SCT Segmentation of sub-01_T2w.nii/);
+  expect(await page.evaluate(() => app.getInputSessions().length)).toBe(2);
 });
 
 test.describe('on a touch screen', () => {

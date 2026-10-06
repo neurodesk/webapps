@@ -18,6 +18,7 @@ import { FallbackNiftiPreview } from './modules/fallback-nifti-preview.js';
 import { SctViewer } from './modules/sct-viewer.js';
 import { SctManualEdits } from './app/manual-edits.js';
 import * as Config from './app/config.js';
+import { SessionResultStore, restoreSessionResults, snapshotSessionResults } from './app/session-results.js';
 import { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog } from './app/log-channels.js';
 import { generateLabelColormap, getLabelName } from './app/labels.js';
 import { DEFAULT_TASK_ID, SCT_TASKS, getDefaultTask, getPrimaryModelAsset, getTaskById, getModelCacheKey, getTaskModelUrl, isTaskRunnable } from './app/sct-tasks.js';
@@ -69,6 +70,11 @@ export class SpinalCordToolboxApp {
     this._lastLocationData = null;
     this._viewerMode = 'single';
     this._activeSessionId = null;
+    // Per-session results (app/session-results.js). The executor holds the
+    // results of `_resultsSessionId`; every other image's are parked here.
+    this.sessionResults = new SessionResultStore();
+    this._resultsSessionId = null;
+    this._comparisonPanels = [];
     this.selectedTask = getDefaultTask();
     // Masks and disc labels of the current image that morphometry can
     // measure. They outlive a new segmentation run so a cord mask from one
@@ -167,6 +173,8 @@ export class SpinalCordToolboxApp {
         },
         onStageVisibilityChange: (stage, visible) => this.onViewerStageVisibility(stage, visible),
         onStageRemoved: (stage) => this.manualEdits?.editor?.noteStageRemoved(stage),
+        onComparisonActivate: (sessionId) => this.activateComparisonSession(sessionId),
+        onComparisonLocation: (sessionId, data) => this.updateComparisonInfo(sessionId, data),
         updateOutput: (msg) => this.updateOutput(msg)
       });
       this.viewerMount = this.viewer.handle;
@@ -270,7 +278,7 @@ export class SpinalCordToolboxApp {
       scope: document.querySelector('.app-container'),
       examples,
       onLoad: async (example, { fetchFiles, assertCurrent }) => {
-        if (this.manualEdits && !this.manualEdits.confirmDiscard('Loading the example')) {
+        if (this.manualEdits && !this.manualEdits.confirmDiscard('Loading the example', { others: this.parkedUnsavedEdits?.() || [] })) {
           throw new DOMException('Loading the example was cancelled to keep manual edits.', 'AbortError');
         }
         const files = await fetchFiles();
@@ -291,7 +299,7 @@ export class SpinalCordToolboxApp {
     const fileInput = document.getElementById('fileInput');
     if (fileInput) {
       fileInput.addEventListener('change', (e) => {
-        if (!this.manualEdits.confirmDiscard('Loading a new image')) {
+        if (!this.confirmAddingImage()) {
           e.target.value = '';
           return;
         }
@@ -326,6 +334,18 @@ export class SpinalCordToolboxApp {
         void this.setViewerMode(btn.dataset.viewerMode);
       });
     });
+
+    const compareLayout = document.getElementById('compareLayoutSelect');
+    if (compareLayout) {
+      compareLayout.addEventListener('change', () => {
+        this.viewer?.setComparisonSliceType(Number(compareLayout.value));
+      });
+    }
+
+    const compareLink = document.getElementById('compareLinkButton');
+    if (compareLink) {
+      compareLink.addEventListener('click', () => this.setComparisonLinked(!this.viewer?.isComparisonLinked()));
+    }
 
     const screenshotBtn = document.getElementById('screenshotViewer');
     if (screenshotBtn) {
@@ -426,15 +446,16 @@ export class SpinalCordToolboxApp {
     return `sct-${this.selectedTask?.id || DEFAULT_TASK_ID}`;
   }
 
-  getOverlayLabelTaskId(stage) {
-    // A mask drawn from nothing names its own label set.
-    const labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId;
+  // `taskId` is the task that produced the result (its `raw.taskId`), so an
+  // image keeps its colours when another image ran a different task. A mask
+  // drawn from nothing names its own label set (`labelSetId`).
+  getOverlayLabelTaskId(stage, taskId = this.selectedTask?.id, labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId) {
     if (labelSetId) return labelSetId;
     if (stage === 'lesion') return 'lesion_sci_t2';
     if (stage === 'spine_step1') return 'totalspineseg';
     if (stage === 'spine_discs') return 'spineDiscs';
-    if (stage === 'segmentation' && this.selectedTask?.id === 'lesion_sci_t2') return 'spinalcord';
-    return this.selectedTask?.id || DEFAULT_TASK_ID;
+    if (stage === 'segmentation' && taskId === 'lesion_sci_t2') return 'spinalcord';
+    return taskId || DEFAULT_TASK_ID;
   }
 
   setupDropZone() {
@@ -453,7 +474,7 @@ export class SpinalCordToolboxApp {
     zone.addEventListener('drop', (e) => {
       e.preventDefault();
       zone.classList.remove('dragover');
-      if (!this.manualEdits.confirmDiscard('Loading a new image')) return;
+      if (!this.confirmAddingImage()) return;
       this.fileIOController.handleDropItems(e.dataTransfer.items);
     });
   }
@@ -492,11 +513,10 @@ export class SpinalCordToolboxApp {
   }
 
   onInputSessionsChanged() {
-    const wasCompareMode = this.isCompareMode();
+    // A removed image takes its parked results with it.
+    this.sessionResults.retain(this.getInputSessions().map(session => session.id));
     this.syncViewerModeControls();
-    if (wasCompareMode && !this.isCompareMode() && this.inputFile) {
-      void this.renderViewerVolumes();
-    }
+    if (this.isCompareMode() || this.inputFile) void this.renderViewerVolumes();
   }
 
   canCompareSessions() {
@@ -508,23 +528,19 @@ export class SpinalCordToolboxApp {
   }
 
   async setViewerMode(mode) {
-    const nextMode = mode === 'compare' ? 'compare' : 'single';
-    if (nextMode === 'compare' && !this.canCompareSessions()) {
+    if (mode === 'compare' && !this.canCompareSessions()) {
       this._viewerMode = 'single';
       this.syncViewerModeControls();
       this.logAnalysis('Load at least two images before using Compare view', 'warning');
       return;
     }
 
-    this._viewerMode = nextMode;
+    // Compare shows each image's stages, so an open drawing is applied first.
+    if (mode === 'compare') await this.manualEdits?.settleBeforeSwitch();
+    this._viewerMode = mode === 'compare' ? 'compare' : 'single';
     this.syncViewerModeControls();
-
-    if (this.isCompareMode()) {
-      await this.renderComparisonView();
-    } else {
-      this.viewer?.clearComparison(document.getElementById('comparisonGrid'));
-      await this.renderViewerVolumes();
-    }
+    this.manualEdits?.sync();
+    await this.renderViewerVolumes();
   }
 
   syncViewerModeControls() {
@@ -539,8 +555,23 @@ export class SpinalCordToolboxApp {
       compareButton.classList.toggle('active', this.isCompareMode());
       compareButton.disabled = !this.canCompareSessions();
       compareButton.title = this.canCompareSessions()
-        ? 'Compare loaded image sessions'
-        : 'Load at least two images to compare sessions';
+        ? 'Show the loaded images side by side'
+        : 'Load at least two images to compare them';
+    }
+
+    // Layout and linking apply to the comparison panels only; FreeBrowse
+    // keeps its own controls for the single view.
+    const layoutSelect = document.getElementById('compareLayoutSelect');
+    if (layoutSelect) {
+      layoutSelect.hidden = !this.isCompareMode();
+      if (this.viewer) layoutSelect.value = String(this.viewer.getComparisonSliceType());
+    }
+    const linkButton = document.getElementById('compareLinkButton');
+    if (linkButton) {
+      linkButton.hidden = !this.isCompareMode();
+      const linked = this.viewer?.isComparisonLinked() ?? true;
+      linkButton.classList.toggle('active', linked);
+      linkButton.setAttribute('aria-pressed', String(linked));
     }
 
     const wrapper = document.querySelector('.viewer-canvas-wrapper');
@@ -550,32 +581,126 @@ export class SpinalCordToolboxApp {
     if (comparisonGrid) comparisonGrid.hidden = !this.isCompareMode();
   }
 
+  // One panel per loaded image: its input, then its own label masks, with the
+  // Results eye state and label colours of the single view.
+  getComparisonPanels() {
+    return this.getInputSessions().map(session => ({
+      id: session.id,
+      name: session.name,
+      entries: [
+        { file: session.file, stage: 'input', visible: this.isStageVisible('input') },
+        ...this.getOverlayEntries(this.getSessionResults(session.id))
+      ]
+    }));
+  }
+
+  // The results of one image: the executor's for the image that owns them,
+  // the parked snapshot for any other.
+  getSessionResults(sessionId) {
+    if (sessionId && sessionId === this._resultsSessionId) return this.inferenceExecutor.getResults();
+    return this.sessionResults.peek(sessionId)?.results || {};
+  }
+
+  getOverlayEntries(results) {
+    return ['segmentation', 'lesion', 'spine_step1', 'spine_discs']
+      .filter(stage => results?.[stage]?.file)
+      .map(stage => {
+        const taskId = results[stage].raw?.taskId;
+        const labelSetId = results[stage].labelSetId;
+        const labelTaskId = this.getOverlayLabelTaskId(stage, taskId, labelSetId);
+        return {
+          file: results[stage].file,
+          stage,
+          visible: this.isStageVisible(stage),
+          colormapKey: this.getOverlayColormapId(stage, taskId, labelSetId),
+          labelColormap: generateLabelColormap(labelTaskId),
+          labelTaskId
+        };
+      });
+  }
+
   async renderComparisonView() {
-    if (!this.isCompareMode()) return false;
-    if (!this.canCompareSessions()) {
-      await this.setViewerMode('single');
-      return false;
-    }
-
-    const sessions = this.getInputSessions();
-    const activeSession = this.getActiveSession();
-    const rendered = await this.viewer.showComparison(sessions, {
+    const panels = this.getComparisonPanels();
+    this._comparisonPanels = panels;
+    const rendered = await this.viewer.showComparison(panels, {
       container: document.getElementById('comparisonGrid'),
-      activeSessionId: activeSession?.id || this._activeSessionId,
-      maxSessions: 4
+      activeSessionId: this.getActiveSession()?.id || this._activeSessionId
     });
-
+    this.syncViewerModeControls();
     if (rendered) {
-      const shown = Math.min(sessions.length, 4);
-      const suffix = sessions.length > shown ? ` (${shown} shown)` : '';
-      this.updateViewerInfo({ string: `Comparison: ${sessions.length} images${suffix}` });
+      const shown = this.viewer.getComparisonViewerCount();
+      const suffix = panels.length > shown ? ` (${shown} shown)` : '';
+      this.updateViewerInfo({ string: `Comparison: ${panels.length} images${suffix}` });
     }
     return rendered;
+  }
+
+  setComparisonLinked(linked) {
+    if (!this.viewer) return;
+    this.viewer.setComparisonLinked(linked);
+    this.syncViewerModeControls();
+  }
+
+  // Clicking a panel (or its title) makes that image the active one. A run
+  // in progress keeps its image: switching would cancel it.
+  // Unsaved manual edits in parked images, as `Stage of image` names.
+  parkedUnsavedEdits() {
+    const names = new Map(this.getInputSessions().map(session => [session.id, session.name]));
+    return [...this.sessionResults.parked].flatMap(([id, snapshot]) => (
+      SctManualEdits.unsavedInSnapshot(snapshot, names.get(id) || id)
+    ));
+  }
+
+  // A new image keeps the others' results, except the least recently used
+  // one when the store is full; ask if that one holds unsaved manual edits.
+  confirmAddingImage() {
+    const store = this.sessionResults;
+    if (!this.manualEdits || store.size < store.limit || !this.inferenceExecutor.getStageOrder().length) return true;
+    const [oldestId, oldest] = [...store.parked][0] || [];
+    if (!oldest) return true;
+    const name = this.getInputSessions().find(session => session.id === oldestId)?.name || oldestId;
+    const others = SctManualEdits.unsavedInSnapshot(oldest, name);
+    return this.manualEdits.confirmDiscard('Loading a new image', { current: false, others });
+  }
+
+  activateComparisonSession(sessionId) {
+    if (sessionId === this.getActiveSession()?.id) return false;
+    if (this.currentRunningStep) {
+      this.logAnalysis('Finish or cancel the current run before switching images', 'warning');
+      return false;
+    }
+    return this.fileIOController.activateSession(sessionId);
+  }
+
+  // Linked panels all report a location; the active panel's is shown.
+  updateComparisonInfo(sessionId, data) {
+    if (!this.isCompareMode() || sessionId !== this.getActiveSession()?.id) return;
+    const panel = this._comparisonPanels.find(item => item.id === sessionId);
+    if (!panel) return;
+    const primaryEl = document.getElementById('viewerInfoPrimary');
+    if (primaryEl) primaryEl.textContent = `${panel.name}: ${data?.string || ''}`;
+    const labelEl = document.getElementById('viewerInfoLabel');
+    if (!labelEl) return;
+    labelEl.textContent = '';
+    for (let index = panel.entries.length - 1; index > 0; index -= 1) {
+      const entry = panel.entries[index];
+      const value = Math.round(data?.values?.[index]?.value);
+      if (!entry.visible || !(value > 0)) continue;
+      labelEl.textContent = getLabelName(value, entry.labelTaskId);
+      return;
+    }
   }
 
   async saveScreenshot() {
     if (!this.isViewerAvailable()) {
       this.updateOutput('Image preview unavailable');
+      return;
+    }
+    if (this.isCompareMode()) {
+      const session = this.getActiveSession();
+      const filename = `${(session?.name || 'comparison').replace(/\.(nii|nii\.gz)$/i, '')}_compare_screenshot.png`;
+      await this.viewer.saveComparisonScreenshot(session?.id, filename);
+      this.logAnalysis(`Screenshot saved: ${filename}`);
       return;
     }
     let filename = 'spinalcordtoolbox_screenshot.png';
@@ -590,10 +715,26 @@ export class SpinalCordToolboxApp {
   // ==================== File Handling ====================
 
   async onFileLoaded(file, context = {}) {
-    await this.resetForNewFile();
+    // An open drawing belongs to the outgoing image: apply it there first.
+    await this.manualEdits?.settleBeforeSwitch();
+    const sessionId = context?.session?.id || null;
+    const previousId = this._activeSessionId;
+    const switching = Boolean(sessionId && previousId && sessionId !== previousId);
+    const overlayVisibility = { ...this._stageVisibility };
+    // Synchronously, before any await: the outgoing image's results are
+    // parked, so a quick second switch can neither lose nor misfile them.
+    this.parkSessionResults(previousId);
+    this._activeSessionId = sessionId;
+
+    await this.resetForNewFile({ keepLogs: switching });
+    // A later activation replaced this one while the worker was resetting.
+    if (this._activeSessionId !== sessionId) return;
     this.inputFile = file;
-    this._activeSessionId = context?.session?.id || null;
+    // Results eye state is a view setting and survives a switch of image.
+    if (switching) this._stageVisibility = overlayVisibility;
     this.setStageVisible('input', true);
+    this.restoreSessionResults(sessionId);
+    if (switching) this.logAnalysis(`Active image: ${context.session.name}`);
     this.syncViewerModeControls();
     // Display and worker loading run side by side: a slow or missing viewer
     // never delays segmentation.
@@ -606,16 +747,66 @@ export class SpinalCordToolboxApp {
     await rendered;
   }
 
+  // Move the executor's results to the store under `sessionId`, if that
+  // image owns them and is still loaded.
+  parkSessionResults(sessionId) {
+    const owned = Boolean(sessionId) && this._resultsSessionId === sessionId;
+    this._resultsSessionId = null;
+    if (!owned) return;
+    const session = this.getInputSessions().find(item => item.id === sessionId);
+    if (!session) return;
+    if (this.currentRunningStep === 'inference') {
+      this.sessionResults.drop(sessionId);
+      this.logAnalysis(`Segmentation of ${session.name} cancelled; run it again on that image`, 'warning');
+      return;
+    }
+    const snapshot = snapshotSessionResults(this.inferenceExecutor, {
+      morphometryMasks: [...this.morphometrySources.masks],
+      morphometryDiscs: this.morphometrySources.discs
+    });
+    const released = this.sessionResults.park(sessionId, snapshot);
+    for (const id of released) {
+      const name = this.getInputSessions().find(item => item.id === id)?.name || id;
+      this.logAnalysis(`Results of ${name} released to limit memory; run the task again to restore them`, 'warning');
+    }
+  }
+
+  // Hand `sessionId`'s parked results back to the executor and the Results,
+  // metrics and morphometry controls. The executor's results now belong to it.
+  restoreSessionResults(sessionId) {
+    this._resultsSessionId = sessionId;
+    const snapshot = sessionId ? this.sessionResults.unpark(sessionId) : null;
+    if (!snapshot) return false;
+    restoreSessionResults(this.inferenceExecutor, snapshot);
+    this.morphometrySources = {
+      masks: new Map(snapshot.morphometryMasks || []),
+      discs: snapshot.morphometryDiscs || null
+    };
+    for (const [step, status] of Object.entries(snapshot.stepStatus || {})) this.updateStepBadge(step, status);
+    const resultsSection = document.getElementById('resultsSection');
+    if (resultsSection) {
+      resultsSection.classList.remove('hidden');
+      resultsSection.classList.remove('collapsed');
+    }
+    this.rebuildResultsList();
+    this.renderAllMetricsResults();
+    this.syncMorphometryControls();
+    return true;
+  }
+
   async onFilesCleared() {
     this._viewerMode = 'single';
     this._activeSessionId = null;
+    this._resultsSessionId = null;
+    this.sessionResults.clear();
     this.viewer?.clearComparison(document.getElementById('comparisonGrid'));
     await this.resetForNewFile();
     this.syncViewerModeControls();
     await this.renderViewerVolumes();
   }
 
-  async resetForNewFile() {
+  // `keepLogs`: switching between loaded images keeps one running log.
+  async resetForNewFile({ keepLogs = false } = {}) {
     if (this.inferenceExecutor.isRunning()) {
       this.inferenceExecutor.cancel();
     }
@@ -630,8 +821,10 @@ export class SpinalCordToolboxApp {
     this.resetMorphometrySources();
     this.manualEdits?.reset();
 
-    this.log?.clear(ANALYSIS);
-    this.log?.clear(TECHNICAL);
+    if (!keepLogs) {
+      this.log?.clear(ANALYSIS);
+      this.log?.clear(TECHNICAL);
+    }
     this.resetStatusDisplay();
     this.resetProcessingInputs();
     this.resetViewerControls();
@@ -1716,14 +1909,13 @@ export class SpinalCordToolboxApp {
     return stage === 'segmentation' || stage === 'lesion' || stage === 'spine_step1' || stage === 'spine_discs';
   }
 
-  getOverlayColormapId(stage) {
-    const labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId;
+  getOverlayColormapId(stage, taskId = this.selectedTask?.id, labelSetId = this.inferenceExecutor?.getResult(stage)?.labelSetId) {
     if (labelSetId) return `sct-${labelSetId}`;
     if (stage === 'lesion') return 'sct-lesion';
     if (stage === 'spine_step1') return 'sct-totalspineseg';
     if (stage === 'spine_discs') return 'sct-spine-discs';
-    if (stage === 'segmentation' && this.selectedTask?.id === 'lesion_sci_t2') return 'sct-spinalcord';
-    return this.getSelectedColormapId();
+    if (stage === 'segmentation' && taskId === 'lesion_sci_t2') return 'sct-spinalcord';
+    return `sct-${taskId || DEFAULT_TASK_ID}`;
   }
 
   getDefaultStageVisibility() {
@@ -1779,28 +1971,36 @@ export class SpinalCordToolboxApp {
       visible: this.isStageVisible('input')
     }];
     for (const overlayStage of this.getOverlayStagesWithResults()) {
+      const result = this.inferenceExecutor.getResult(overlayStage);
+      const taskId = result?.raw?.taskId;
       stackEntries.push({
-        file: this.inferenceExecutor.getResult(overlayStage)?.file,
+        file: result?.file,
         stage: overlayStage,
         // While a stage's mask is on the drawing layer its overlay is hidden.
         visible: this.isStageVisible(overlayStage) && !this.manualEdits?.isHiding(overlayStage),
-        colormapKey: this.getOverlayColormapId(overlayStage),
-        labelColormap: generateLabelColormap(this.getOverlayLabelTaskId(overlayStage))
+        colormapKey: this.getOverlayColormapId(overlayStage, taskId),
+        labelColormap: generateLabelColormap(this.getOverlayLabelTaskId(overlayStage, taskId))
       });
     }
     return stackEntries.filter(entry => entry.file);
   }
 
+  // Single and Compare share one queue, so a mode switch never interleaves
+  // with a result update.
   async renderViewerVolumes() {
     await this.viewerReady;
-    if (this.isCompareMode()) return this.renderComparisonView();
     if (!this.isViewerAvailable()) return this.renderFallbackPreview();
     this._renderViewerRequested = true;
     this._renderViewerPromise = this._renderViewerPromise.then(async () => {
       if (!this._renderViewerRequested) return;
       this._renderViewerRequested = false;
+      if (this.isCompareMode()) {
+        await this.renderComparisonView();
+        return;
+      }
+      this.viewer.clearComparison(document.getElementById('comparisonGrid'));
       await this._renderViewerVolumesNow();
-    });
+    }).catch(error => this.updateOutput(`Viewer update failed: ${error.message}`, 'error'));
     return this._renderViewerPromise;
   }
 
@@ -1845,21 +2045,17 @@ export class SpinalCordToolboxApp {
     });
   }
 
+  // In Compare, a Results eye applies to that stage in every panel, so the
+  // images are compared like with like.
   async toggleInputVisibility(visible) {
-    if (this.isCompareMode()) {
-      await this.setViewerMode('single');
-    }
     this.setStageVisible('input', visible);
     if (!this.isViewerAvailable()) return;
     await this.renderViewerVolumes();
     this.rebuildResultsList();
-    this.updateViewerInfo(this._lastLocationData);
+    if (!this.isCompareMode()) this.updateViewerInfo(this._lastLocationData);
   }
 
   async toggleStageVisibility(stage, visible) {
-    if (this.isCompareMode()) {
-      await this.setViewerMode('single');
-    }
     this.setStageVisible(stage, visible);
     if (!this.isViewerAvailable()) {
       this.syncResultViewButtons();
@@ -1867,7 +2063,7 @@ export class SpinalCordToolboxApp {
     }
     await this.renderViewerVolumes();
     this.syncResultViewButtons();
-    this.updateViewerInfo(this._lastLocationData);
+    if (!this.isCompareMode()) this.updateViewerInfo(this._lastLocationData);
   }
 
   onWorkerInitialized() {}

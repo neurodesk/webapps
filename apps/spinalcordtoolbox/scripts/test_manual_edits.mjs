@@ -428,4 +428,31 @@ function fakeApp() {
   delete globalThis.confirm;
 }
 
+// ---------------------------------------------------------------------------
+// An edit belongs to its image: it parks and restores with the image's results.
+// ---------------------------------------------------------------------------
+
+{
+  const { SessionResultStore, restoreSessionResults, snapshotSessionResults } = await load('web/js/app/session-results.js');
+  const app = fakeApp();
+  app.inferenceExecutor.handleStageData({ stage: 'segmentation', taskId: 'spinalcord', niftiData: modelOutput.slice(0) });
+  const original = app.inferenceExecutor.getResult('segmentation');
+  const edited = new File([modelOutput], 'spinalcord_segmentation_edited.nii');
+  await app.setStageData('lesion', new File([modelOutput], 'img_lesion_manual.nii'), { source: 'edit', labelSetId: 'lesion', manualEdit: { kind: 'new', downloaded: false } });
+  await app.setStageData('segmentation', edited, { source: 'edit', manualEdit: { kind: 'edited', original: { file: original.file }, downloaded: true } });
+  const store = new SessionResultStore();
+  store.park('a', snapshotSessionResults(app.inferenceExecutor));
+  app.inferenceExecutor.clearResults();
+  assert.deepEqual(SctManualEdits.unsavedInSnapshot(store.peek('a'), 'a.nii'), ['Lesion of a.nii'], 'only edits not downloaded are unsaved');
+  restoreSessionResults(app.inferenceExecutor, store.unpark('a'));
+  const segmentation = app.inferenceExecutor.getResult('segmentation');
+  assert.equal(segmentation.file, edited, 'the edited mask comes back with its image');
+  assert.equal(segmentation.manualEdit.original.file, original.file, 'and so does the model mask Restore needs');
+  assert.equal(app.inferenceExecutor.getResult('lesion').labelSetId, 'lesion');
+  assert.deepEqual(app.getOverlayEntries(app.inferenceExecutor.getResults()).map(entry => [entry.stage, entry.file.name, entry.labelTaskId]), [
+    ['segmentation', 'spinalcord_segmentation_edited.nii', 'spinalcord'],
+    ['lesion', 'img_lesion_manual.nii', 'lesion']
+  ], 'Compare panels draw edited and drawn stages with their own labels');
+}
+
 console.log('Manual edit tests passed');

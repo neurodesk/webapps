@@ -230,6 +230,14 @@
       </div>
 
       <div class="viewer-actions">
+        <!-- Compare only: layout of every panel, and whether panels follow each other -->
+        <select class="colormap-select" id="compareLayoutSelect" aria-label="Comparison layout" title="Layout of every comparison panel" hidden>
+          <option value="0">Axial</option>
+          <option value="1">Coronal</option>
+          <option value="2">Sagittal</option>
+          <option value="3">Multiplanar</option>
+        </select>
+        <button class="view-tab active" id="compareLinkButton" type="button" aria-pressed="true" title="Linked panels share slice, zoom and pan by world position" hidden>Link views</button>
         <!-- Screenshot -->
         <button class="btn btn-sm btn-icon" id="screenshotViewer" title="Save screenshot as PNG">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -241,7 +249,7 @@
     <div class="viewer-canvas-wrapper">
       <div id="freebrowseViewer" class="nd-viewer-embed"></div>
       <canvas id="fallbackCanvas2d" class="fallback-canvas"></canvas>
-      <div class="comparison-grid" id="comparisonGrid" data-count="0" aria-label="Loaded image comparison grid"></div>
+      <div class="nd-compare-grid" id="comparisonGrid" data-count="0" role="group" aria-label="Loaded images side by side" hidden></div>
       <div class="viewer-unavailable-message" id="viewerUnavailableMessage" hidden>
         No preview: WebGL2 failed. Enable hardware acceleration (see chrome://gpu), then reload.
       </div>
