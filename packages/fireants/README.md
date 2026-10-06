@@ -69,8 +69,10 @@ stage on stderr. More negative is better.
 
 The command line leaves out two parts of the web app:
 
-- MindGrab brain extraction has no Node runtime yet. Brain extract both images
-  first, for example in the web app, when they still contain scalp.
+- Brain extraction. The command line registers the given images as they are,
+  because MindGrab has no Node runtime yet
+  ([#162](https://github.com/neurodesk/webapps/issues/162)). Brain extract both
+  images first, for example with SynthStrip, when they still contain scalp.
 - DICOM import. Convert DICOM with dcm2niix first.
 
 The output directory must be new or empty.

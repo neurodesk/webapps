@@ -35,7 +35,10 @@ fireants moving.nii.gz fixed.nii.gz results --transform greedy
 ```
 
 It writes `results/<moving>_registered.nii.gz`, the web app's download name.
-It has no WebGPU backend, MindGrab brain extraction or DICOM import. Portable
+It registers the given images as they are: brain extract them beforehand, for
+example with SynthStrip, until MindGrab has a Node runtime
+([#162](https://github.com/neurodesk/webapps/issues/162)). It has no WebGPU
+backend or DICOM import. Portable
 archives for Linux x64, Windows x64 and macOS arm64 bundle their own Node
 runtime. See packages/fireants/README.md.
 

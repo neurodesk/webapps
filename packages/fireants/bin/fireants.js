@@ -18,10 +18,12 @@ Options:
   --verbose         Log every iteration instead of one line per stage
   -h, --help        Show this help
 
+Registers the given images as they are. Brain extraction is not included:
+the web app's MindGrab step has no Node runtime yet
+(https://github.com/neurodesk/webapps/issues/162). Brain extract both images
+beforehand, for example with SynthStrip, when they still contain scalp.
 Runs on the CPU only; the web app's WebGPU backend needs a browser. Inputs are
-NIfTI; convert DICOM with dcm2niix first. MindGrab brain extraction is not
-included: it has no Node runtime yet, so brain extract both images beforehand
-(for example in the web app) when they still contain scalp.
+NIfTI; convert DICOM with dcm2niix first.
 download-models does nothing: FireANTs uses no model files.
 OUTPUT_DIR must be new or empty. The engine prints the similarity (NCC) after
 each stage; more negative is better.`;
