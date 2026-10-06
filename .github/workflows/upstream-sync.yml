@@ -3,6 +3,8 @@ name: upstream sync
 # Opens one pull request per app with an apps/<id>/upstream.json, merging the
 # upstream repository's new commits into the monorepo copy.
 on:
+  push:
+    branches: [t3code/upstream-sync]
   schedule:
     - cron: '17 2 * * 1'
   workflow_dispatch:
