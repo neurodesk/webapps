@@ -91,7 +91,7 @@ One worker owns one run and its ONNX sessions. Sessions are released between sta
 | `packages/topofit/src/conform.js` | Nibabel/SciPy-compatible cubic conforming, including oblique and sheared grids. |
 | `packages/topofit/src/affine.js` | Float64 weighted affine solve. |
 | `packages/topofit/src/qc.js` | Native-grid QC rasterization and NIfTI writing. |
-| `packages/topofit/src/browser.js` | Threaded ONNX Runtime WebAssembly setup and session ownership. |
+| `apps/topofit/src/onnx-runtime.js` | Threaded ONNX Runtime WebAssembly setup and session ownership. |
 | `packages/topofit/src/pipeline.js` | Conformer boundary plus staged TReGA, feature, mesh-order, subdivision, and pial execution. |
 | `packages/topofit/src/results.js` | FreeSurfer geometry and provenance serialization. |
 | `packages/topofit/model.manifest.json` | Immutable Hugging Face revision, hashes, tensor contracts, topology identity, and provenance. |

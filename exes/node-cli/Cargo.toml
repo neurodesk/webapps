@@ -1,11 +1,11 @@
 [package]
-name = "syncro-launcher"
+name = "node-cli-launcher"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
 [[bin]]
-name = "syncro-launcher"
+name = "node-cli-launcher"
 path = "src/main.rs"
 
 [profile.release]

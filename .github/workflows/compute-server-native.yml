@@ -33,6 +33,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   build:
     name: linux-x64

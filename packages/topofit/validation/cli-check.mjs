@@ -1,0 +1,275 @@
+#!/usr/bin/env node
+// Runs a TopoFit command line on the pinned OpenNeuro scan and compares it with the
+// OpenRecon end-to-end reference. Preprocessing hashes and limits come from the checked-in report.
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
+
+const report = JSON.parse(await readFile(new URL('./results/ds000001-end-to-end.json', import.meta.url), 'utf8'));
+const models = JSON.parse(await readFile(new URL('../model.manifest.json', import.meta.url), 'utf8'));
+const { values } = parseArgs({ options: { executable: { type: 'string' }, outputs: { type: 'string' } } });
+const command = values.executable
+  ? [resolve(values.executable)]
+  : [process.execPath, fileURLToPath(new URL('../bin/topofit.js', import.meta.url))];
+
+// The OpenRecon surfaces published at the model manifest's revision are the 2026-09-11 capture
+// (this report as of commit 8b7b7f5c). The report's current reference_sha256 values name an
+// unpublished recapture whose files differ, at least in FreeSurfer's "created by" stamp.
+const PUBLISHED_REFERENCE_SHA256 = {
+  'lh.white': '019b12b21a40c525f5b2574af5f31b55725d517b68e02cd811825974f4fc126b',
+  'rh.white': '4a0c230add9cece03f713a7f706251a88db176b00faea2fcac0602fa34cdd1cd',
+  'lh.pial': 'ea9d56cfa4274d0e21158bc5fb0b602e322ff92c2a0cffe8fccdb3b9bbd0fd96',
+  'rh.pial': 'ddb4a4c2e9a15dc122928a9557b03b641d93a73594ae7065867b46ef686bd7cc',
+  'lh.registration': '2ee500bb51fe710f0da82539a732fceb2bf439fd886e09bede2d77e32795d377',
+  'rh.registration': '6642526992336467480a2f786de0c2306c8e5a1c3178842ddd9d3af670070533',
+  'topofit_qc.nii.gz': 'c83de586141f6c260a5733d0345921db254abe12dfd8647280572853ba67c38b',
+};
+
+const SURFACES = ['white', 'mid.white', 'pial', 'registration'].flatMap((surface) => ['lh', 'rh'].map((hemisphere) => `${hemisphere}.${surface}`));
+const OUTPUTS = [...SURFACES, 'topofit_qc.nii', 'topofit_manifest.json'].sort();
+const QC_LABELS = { white: 4095, pial: 3500 };
+// OpenRecon's published QC image marks each vertex's voxel. The command line draws its default overlay
+// one in-plane voxel thicker, with white painted over pial.
+const QC_THICKNESS = 1;
+
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const failures = [];
+function check(passed, line) {
+  if (!passed) failures.push(line);
+  console.log(`${passed ? 'PASS' : 'FAIL'} ${line}`);
+}
+
+async function pinned(relative, expected) {
+  const directory = join(tmpdir(), 'neurodesk-topofit-validation', models.revision);
+  const path = join(directory, ...relative.split('/'));
+  const cached = await readFile(path).catch(() => null);
+  if (cached && sha256(cached) === expected) return path;
+  const url = new URL(`validation/${relative}`, models.base_url);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (sha256(bytes) !== expected) throw new Error(`${url}: SHA-256 differs from its pin`);
+  await mkdir(join(path, '..'), { recursive: true });
+  await writeFile(`${path}.partial`, bytes);
+  await rename(`${path}.partial`, path);
+  return path;
+}
+
+function readSurface(bytes) {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xff || bytes[2] !== 0xfe) throw new Error('not a FreeSurfer triangle surface');
+  let offset = bytes.indexOf(0x0a, 3) + 1;
+  if (bytes[offset] === 0x0a) offset += 1;
+  const vertexCount = bytes.readInt32BE(offset);
+  const faceCount = bytes.readInt32BE(offset + 4);
+  offset += 8;
+  const vertices = new Float32Array(vertexCount * 3);
+  for (let i = 0; i < vertices.length; i += 1, offset += 4) vertices[i] = bytes.readFloatBE(offset);
+  const faces = new Int32Array(faceCount * 3);
+  for (let i = 0; i < faces.length; i += 1, offset += 4) faces[i] = bytes.readInt32BE(offset);
+  return { vertices, faces };
+}
+
+function readNifti(bytes) {
+  const header = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;
+  const little = header.readInt32LE(0) === 348;
+  const int16 = (offset) => (little ? header.readInt16LE(offset) : header.readInt16BE(offset));
+  const float32 = (offset) => (little ? header.readFloatLE(offset) : header.readFloatBE(offset));
+  const floats = (offset, count) => Array.from({ length: count }, (_, i) => float32(offset + i * 4));
+  const dims = Array.from({ length: 4 }, (_, i) => int16(40 + i * 2));
+  if (int16(70) !== 4) throw new Error(`NIfTI datatype ${int16(70)} is not int16`);
+  const offset = float32(108);
+  const count = dims[1] * dims[2] * dims[3];
+  const data = new Int16Array(count);
+  for (let i = 0; i < count; i += 1) data[i] = little ? header.readInt16LE(offset + i * 2) : header.readInt16BE(offset + i * 2);
+  const grid = {
+    dims,
+    pixdim: floats(76, 4),
+    qformCode: int16(252),
+    sformCode: int16(254),
+    quaternion: floats(256, 6),
+    srow: floats(280, 12),
+  };
+  return { grid, data };
+}
+
+function dilateOneVoxel(mask, [, nx, ny, nz]) {
+  const output = mask.slice();
+  const strides = [1, nx, nx * ny];
+  const sizes = [nx, ny, nz];
+  for (let i = 0; i < mask.length; i += 1) {
+    if (!mask[i]) continue;
+    const position = [i % nx, Math.floor(i / nx) % ny, Math.floor(i / (nx * ny))];
+    for (let axis = 0; axis < 3; axis += 1) {
+      if (position[axis] > 0) output[i - strides[axis]] = 1;
+      if (position[axis] < sizes[axis] - 1) output[i + strides[axis]] = 1;
+    }
+  }
+  return output;
+}
+
+function dilateInPlane(mask, [, nx, ny]) {
+  const output = mask.slice();
+  for (let i = 0; i < mask.length; i += 1) {
+    if (!mask[i]) continue;
+    const x = i % nx;
+    const y = Math.floor(i / nx) % ny;
+    if (x > 0) output[i - 1] = 1;
+    if (x < nx - 1) output[i + 1] = 1;
+    if (y > 0) output[i - nx] = 1;
+    if (y < ny - 1) output[i + nx] = 1;
+  }
+  return output;
+}
+
+// Redraws OpenRecon's labels at the command line's overlay thickness. A pial voxel that white covered
+// in the reference only has white or already-white neighbours after dilation, so nothing is lost.
+function thickenLabels(reference, dims) {
+  let white = reference.data.map((value) => value === QC_LABELS.white);
+  let pial = reference.data.map((value) => value === QC_LABELS.pial);
+  for (let pass = 0; pass < QC_THICKNESS; pass += 1) {
+    white = dilateInPlane(white, dims);
+    pial = dilateInPlane(pial, dims);
+  }
+  return { white, pial: pial.map((value, i) => value & !white[i]) };
+}
+
+// compare.py symmetric_coverage: the smaller fraction of either mask within one voxel of the other.
+function symmetricCoverage(left, right, dims) {
+  const count = (mask) => mask.reduce((total, value) => total + value, 0);
+  const covered = (mask, other) => count(mask.map((value, i) => value & other[i])) / count(mask);
+  if (!count(left) && !count(right)) return 1;
+  if (!count(left) || !count(right)) return 0;
+  return Math.min(covered(left, dilateOneVoxel(right, dims)), covered(right, dilateOneVoxel(left, dims)));
+}
+
+function compareQc(qc, reference, source) {
+  check(JSON.stringify(qc.grid) === JSON.stringify(source.grid), `topofit_qc.nii grid equals the input's (dims ${qc.grid.dims.slice(1).join('x')}, sform ${qc.grid.srow.join(' ')})`);
+  if (JSON.stringify(reference.grid) !== JSON.stringify(qc.grid)) return;
+  const expected = thickenLabels(reference, qc.grid.dims);
+  for (const [name, label] of Object.entries(QC_LABELS)) {
+    const coverage = symmetricCoverage(qc.data.map((value) => value === label), expected[name], qc.grid.dims);
+    check(coverage >= report.thresholds.qcWithinOneVoxel, `topofit_qc.nii ${name} within one voxel of OpenRecon drawn at thickness ${QC_THICKNESS} ${coverage.toPrecision(4)} >= ${report.thresholds.qcWithinOneVoxel}`);
+  }
+}
+
+const midpoint = (white, pial) => ({ vertices: Float64Array.from(white.vertices, (value, i) => (value + pial.vertices[i]) / 2), faces: white.faces });
+
+// The mid surface is written in float32 from the float64 midpoint of float64 white and pial positions,
+// so each coordinate may differ from the midpoint of the float32 files by at most two float32 ulps.
+function checkMidpoint(name, mid, white, pial) {
+  const expected = midpoint(white, pial);
+  const facesIdentical = mid.faces.length === white.faces.length && mid.faces.every((value, i) => value === white.faces[i]);
+  check(facesIdentical, `${name} faces identical to the white surface's`);
+  let deviation = 0;
+  let outside = 0;
+  for (let i = 0; i < expected.vertices.length; i += 1) {
+    const difference = Math.abs(mid.vertices[i] - expected.vertices[i]);
+    const bound = Math.max(Math.abs(white.vertices[i]), Math.abs(pial.vertices[i])) * 2 ** -22;
+    deviation = Math.max(deviation, difference);
+    if (!(difference <= bound)) outside += 1;
+  }
+  check(mid.vertices.length === white.vertices.length && outside === 0, `${name} is the white/pial midpoint within float32 rounding (max ${deviation.toPrecision(3)} mm, ${outside} coordinates outside)`);
+}
+
+// numpy.quantile(..., method="linear"), as compare.py computes the reference report.
+function quantile(values, probability) {
+  const sorted = Float64Array.from(values).sort();
+  const position = (sorted.length - 1) * probability;
+  const lower = Math.floor(position);
+  const upper = Math.min(lower + 1, sorted.length - 1);
+  return sorted[lower] + (position - lower) * (sorted[upper] - sorted[lower]);
+}
+
+const mean = (values) => values.reduce((total, value) => total + value, 0) / values.length;
+const maximum = (values) => values.reduce((largest, value) => Math.max(largest, value), -Infinity);
+
+function compareSurface(name, actual, reference) {
+  const count = reference.vertices.length / 3;
+  check(actual.vertices.length === reference.vertices.length, `${name} vertices ${actual.vertices.length / 3} = ${count}`);
+  const facesIdentical = actual.faces.length === reference.faces.length && actual.faces.every((value, i) => value === reference.faces[i]);
+  check(facesIdentical, `${name} faces identical to OpenRecon (${reference.faces.length / 3})`);
+  if (actual.vertices.length !== reference.vertices.length) return;
+  const distance = new Float64Array(count);
+  const angle = new Float64Array(count);
+  const radiusError = new Float64Array(count);
+  for (let v = 0; v < count; v += 1) {
+    const [ax, ay, az] = actual.vertices.subarray(v * 3, v * 3 + 3);
+    const [rx, ry, rz] = reference.vertices.subarray(v * 3, v * 3 + 3);
+    distance[v] = Math.hypot(ax - rx, ay - ry, az - rz);
+    const actualRadius = Math.hypot(ax, ay, az);
+    const cosine = (ax * rx + ay * ry + az * rz) / (actualRadius * Math.hypot(rx, ry, rz));
+    angle[v] = (Math.acos(Math.min(1, Math.max(-1, cosine))) * 180) / Math.PI;
+    radiusError[v] = Math.abs(actualRadius - 100);
+  }
+  const limit = (value, threshold, unit, label) => check(
+    Number.isFinite(value) && value >= 0 && value <= threshold,
+    `${name} ${label} ${value.toPrecision(3)} ${unit} <= ${threshold}`,
+  );
+  const { thresholds } = report;
+  if (name.endsWith('registration')) {
+    limit(mean(angle), thresholds.registrationMeanDegrees, 'deg', 'mean angle');
+    limit(quantile(angle, 0.95), thresholds.registrationP95Degrees, 'deg', 'p95 angle');
+    limit(maximum(radiusError), thresholds.registrationRadiusMaxMm, 'mm', 'max radius error');
+  } else {
+    limit(mean(distance), thresholds.surfaceMeanMm, 'mm', 'mean distance');
+    limit(quantile(distance, 0.95), thresholds.surfaceP95Mm, 'mm', 'p95 distance');
+    limit(maximum(distance), thresholds.surfaceMaxMm, 'mm', 'max distance');
+  }
+}
+
+async function checkOutputs(output, input) {
+  const written = (await readdir(output)).sort();
+  const missing = OUTPUTS.filter((name) => !written.includes(name));
+  const extra = written.filter((name) => !OUTPUTS.includes(name));
+  check(!missing.length && !extra.length, `output files are exactly ${OUTPUTS.join(', ')}${missing.length ? `; missing ${missing.join(', ')}` : ''}${extra.length ? `; extra ${extra.join(', ')}` : ''}`);
+  if (missing.length) return;
+  const manifest = JSON.parse(await readFile(join(output, 'topofit_manifest.json'), 'utf8'));
+  check(manifest.inputSha256 === report.input.sha256, `inputSha256 ${manifest.inputSha256}`);
+  for (const key of ['inferenceSha256', 'alignmentInputSha256', 'modelInputSha256']) {
+    check(manifest[key] === report.provenance[key], `${key} ${manifest[key]}`);
+  }
+  const assets = Object.fromEntries(Object.entries(manifest.runtime.assets).sort(([a], [b]) => (a < b ? -1 : 1)));
+  check(sha256(JSON.stringify(assets)) === report.provenance.assetSetSha256, `assetSetSha256 ${sha256(JSON.stringify(assets))}`);
+  check(manifest.runtime.executionProvider === 'cpu', `executionProvider ${manifest.runtime.executionProvider}, ${manifest.runtime.threads} threads, ONNX Runtime ${manifest.runtime.onnxruntime}`);
+  const recorded = Object.keys(manifest.outputSha256).sort();
+  check(recorded.join() === OUTPUTS.filter((name) => name !== 'topofit_manifest.json').join(), `manifest records ${recorded.join(', ')}`);
+  for (const [name, hash] of Object.entries(manifest.outputSha256)) {
+    const bytes = await readFile(join(output, name)).catch(() => null);
+    check(bytes !== null && sha256(bytes) === hash, `${name} matches its recorded SHA-256`);
+  }
+  const surfaces = Object.fromEntries(await Promise.all(SURFACES.map(async (name) => [name, readSurface(await readFile(join(output, name)))])));
+  const references = {};
+  for (const name of Object.keys(report.surfaces)) {
+    references[name] = readSurface(await readFile(await pinned(`openrecon/end-to-end/surf/${name}`, PUBLISHED_REFERENCE_SHA256[name])));
+    compareSurface(name, surfaces[name], references[name]);
+  }
+  for (const hemisphere of ['lh', 'rh']) {
+    const name = `${hemisphere}.mid.white`;
+    checkMidpoint(name, surfaces[name], surfaces[`${hemisphere}.white`], surfaces[`${hemisphere}.pial`]);
+    compareSurface(name, surfaces[name], midpoint(references[`${hemisphere}.white`], references[`${hemisphere}.pial`]));
+  }
+  const referenceQc = readNifti(await readFile(await pinned('openrecon/end-to-end/topofit_qc.nii.gz', PUBLISHED_REFERENCE_SHA256['topofit_qc.nii.gz'])));
+  compareQc(readNifti(await readFile(join(output, 'topofit_qc.nii'))), referenceQc, readNifti(await readFile(input)));
+}
+
+const work = await mkdtemp(join(tmpdir(), 'topofit-cli-check-'));
+try {
+  check(report.release === models.release, `reference release ${report.release} matches the model manifest`);
+  const input = await pinned('inputs/sub-01_T1w.nii.gz', report.input.sha256);
+  const output = values.outputs ? resolve(values.outputs) : join(work, 'surfaces');
+  if (!values.outputs) {
+    const run = spawnSync(command[0], [...command.slice(1), input, output], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    if (run.error) throw run.error;
+    if (run.status !== 0) throw new Error(`${command.join(' ')} exited with ${run.status}:\n${run.stderr}`);
+  }
+  await checkOutputs(output, input);
+} finally {
+  await rm(work, { recursive: true, force: true });
+}
+console.log(failures.length ? `FAIL ${failures.length} TopoFit command-line checks` : 'PASS TopoFit command line matches the OpenRecon end-to-end reference');
+process.exitCode = failures.length ? 1 : 0;

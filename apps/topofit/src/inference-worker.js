@@ -1,5 +1,5 @@
 import { runTopofit } from '@neurodesk/topofit';
-import { Tensor, browserRuntime, createBrowserSession } from '@neurodesk/topofit/browser';
+import { Tensor, browserRuntime, createBrowserSession } from './onnx-runtime.js';
 import manifest from '@neurodesk/topofit/manifest';
 import cortexAtlas from '@neurodesk/topofit/cortex-atlas-manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
