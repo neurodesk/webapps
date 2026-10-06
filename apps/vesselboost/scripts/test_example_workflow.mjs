@@ -60,6 +60,16 @@ try {
   assert.ok(vessels > 0 && vessels < labels.length / 2, 'Expected sparse, nonempty vessel segmentation');
   await page.screenshot({ path: join(artifacts, 'segmentation.png'), fullPage: true });
   console.log(`Example loaded, segmented at 4x downsampling, and downloaded: ${path} (${vessels} vessel voxels)`);
+} catch (error) {
+  // Pipeline state and the technical log explain a step that never enabled.
+  const page = browser.contexts()[0]?.pages()[0];
+  const state = await page?.evaluate(() => ({
+    stepStatus: window.app?.inferenceExecutor?.stepStatus,
+    running: window.app?.inferenceExecutor?.isRunning(),
+    log: document.getElementById('consoleOutput')?.innerText,
+  })).catch(() => null);
+  console.error('Pipeline state at failure:', JSON.stringify(state, null, 2));
+  throw error;
 } finally {
   await browser.close();
   await site?.close();
