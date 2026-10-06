@@ -113,7 +113,11 @@ test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', asy
   await expect(label).toHaveText('SCT Segmentation');
   await expect(row.locator('.nd-edit-btn')).toBeEnabled();
 
-  await page.locator('.view-tab[data-view="axial"]').click();
+  // One axial slice fills FreeBrowse's canvas, so the stroke crosses the cord.
+  await page.evaluate(() => {
+    window.app.nv.sliceType = 0;
+    window.app.nv.drawScene();
+  });
   await row.locator('.nd-edit-btn').click();
   await expect(editor).toBeVisible();
   const box = await page.locator('#gl1').boundingBox();
@@ -133,7 +137,7 @@ test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', asy
   const baseDims = await page.evaluate(() => Array.from(window.app.nv.volumes[0].hdr.dims.slice(1, 4)));
   const before = readNifti(original.bytes);
   const after = readNifti(edited.bytes);
-  expect(edited.name).toBe(original.name);
+  expect(edited.name).toBe(original.name.replace(/\.nii(\.gz)?$/, '_edited.nii$1'));
   expect(after.datatype).toBe(2);
   expect(after.dims).toEqual(baseDims);
   expect(before.dims).toEqual(baseDims);

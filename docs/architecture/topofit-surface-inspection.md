@@ -53,10 +53,10 @@ to `1.0.0-rc.13`; other apps retain their existing versions.
 `mountViewer(element, options, embed)` in
 `packages/runtime-support/src/freebrowse-viewer/index.js`
 (`@neurodesk/runtime-support/freebrowse-viewer`) returns
-`{ nv, ready, showDrawingTools, setDrawingPenValue, destroy }`. The two drawing
-helpers open FreeBrowse's Drawing tab and set its Pen Value field for a host
-that puts its own mask on the drawing layer (Spinal Cord Toolbox's manual
-edits). The helper is shared: Spinal Cord Toolbox mounts the
+`{ nv, ready, setDrawingLocked, destroy }`. `setDrawingLocked(true)` makes
+FreeBrowse's Drawing tab and Edit as drawing buttons inert (still visible,
+dimmed) while a host edits the drawing layer with its own tools; Spinal Cord
+Toolbox does so while the shared `nd-mask-editor` is open. The helper is shared: Spinal Cord Toolbox mounts the
 same viewer, and bundler-less apps receive it as a prebuilt ES module (see
 "Sharing the viewer" below). FreeBrowse owns the React UI and canvas attachment;
 TopoFit owns the source image, reconstruction outputs and selected patch.
