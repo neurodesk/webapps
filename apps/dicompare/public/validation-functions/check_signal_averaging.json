@@ -1,0 +1,83 @@
+{
+  "id": "check_signal_averaging",
+  "name": "Signal Averaging",
+  "description": "Validates number of label/control repeats based on acquisition type and field strength. Uses NumberOfTemporalPositions to count volumes, then divides by 2 for ASL repeats.",
+  "category": "Timing",
+  "fields": [
+    "NumberOfTemporalPositions",
+    "MRAcquisitionType",
+    "MagneticFieldStrength"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "num_volumes = value[\"NumberOfTemporalPositions\"].iloc[0] if \"NumberOfTemporalPositions\" in value.columns else None\nacq_type = value[\"MRAcquisitionType\"].iloc[0] if \"MRAcquisitionType\" in value.columns else None\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0] if \"MagneticFieldStrength\" in value.columns else 3.0\n\nif num_volumes is None or (isinstance(num_volumes, float) and pd.isna(num_volumes)):\n    pass  # No temporal position data available\nelse:\n    num_volumes = int(num_volumes)\n    num_repeats = num_volumes // 2  # ASL repeats = volumes / 2 (label + control pairs)\n    is_3d = acq_type == \"3D\" if acq_type else False\n    is_3t = field_strength >= 2.5 if field_strength else True\n    \n    if is_3d:\n        # 3D techniques: 2-4 signal averages (repeats)\n        if num_repeats < 2:\n            raise ValidationWarning(f\"Number of ASL repeats is {num_repeats} ({num_volumes} volumes). For 3D ASL, 2-4 repeats are typically required for acceptable SNR.\")\n        elif num_repeats > 6:\n            raise ValidationWarning(f\"Number of ASL repeats is {num_repeats} ({num_volumes} volumes). For 3D ASL, 2-4 repeats are typically sufficient. More repeats increase scan time without proportional SNR benefit.\")\n    else:\n        # 2D techniques: 30-50 at 3T, more at 1.5T\n        if is_3t:\n            if num_repeats < 25:\n                raise ValidationWarning(f\"Number of ASL repeats is {num_repeats} ({num_volumes} volumes). For 2D ASL at 3T, 30-50 repeats are typically required for acceptable SNR.\")\n            elif num_repeats > 60:\n                raise ValidationWarning(f\"Number of ASL repeats is {num_repeats} ({num_volumes} volumes). This exceeds typical requirements (30-50 at 3T) and may result in excessive scan time.\")\n        else:\n            # 1.5T needs even more\n            if num_repeats < 40:\n                raise ValidationWarning(f\"Number of ASL repeats is {num_repeats} ({num_volumes} volumes). For 2D ASL at 1.5T, >50 repeats are typically required due to lower SNR.\")",
+  "testCases": [
+    {
+      "id": "test_3d_adequate",
+      "name": "3D with adequate repeats",
+      "data": {
+        "NumberOfTemporalPositions": [
+          8
+        ],
+        "MRAcquisitionType": [
+          "3D"
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "8 volumes = 4 repeats, adequate for 3D"
+    },
+    {
+      "id": "test_3d_low",
+      "name": "3D with too few repeats",
+      "data": {
+        "NumberOfTemporalPositions": [
+          2
+        ],
+        "MRAcquisitionType": [
+          "3D"
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "2 volumes = 1 repeat is too few for 3D"
+    },
+    {
+      "id": "test_2d_3t_adequate",
+      "name": "2D at 3T with adequate repeats",
+      "data": {
+        "NumberOfTemporalPositions": [
+          80
+        ],
+        "MRAcquisitionType": [
+          "2D"
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "80 volumes = 40 repeats, adequate for 2D at 3T"
+    },
+    {
+      "id": "test_2d_3t_low",
+      "name": "2D at 3T with too few repeats",
+      "data": {
+        "NumberOfTemporalPositions": [
+          20
+        ],
+        "MRAcquisitionType": [
+          "2D"
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "20 volumes = 10 repeats is too few for 2D at 3T"
+    }
+  ]
+}

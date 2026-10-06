@@ -1,0 +1,56 @@
+{
+  "id": "validate_mton_mt_enabled",
+  "name": "MT Pulse Enabled",
+  "description": "MTon acquisition must have magnetization transfer pulse enabled (indicated in ScanOptions or SequenceVariant).",
+  "category": "Contrast Preparation",
+  "fields": [
+    "ScanOptions",
+    "SequenceVariant"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "scan_options = str(value['ScanOptions'].iloc[0]) if 'ScanOptions' in value.columns else ''\nseq_variant = str(value['SequenceVariant'].iloc[0]) if 'SequenceVariant' in value.columns else ''\n\nif 'MT' not in scan_options.upper() and 'MTC' not in seq_variant.upper():\n    raise ValidationError(\"MTon acquisition must have MT pulse enabled. Check ScanOptions or SequenceVariant for MT/MTC.\")",
+  "testCases": [
+    {
+      "id": "test_mton_enabled_pass",
+      "name": "MT in ScanOptions",
+      "data": {
+        "ScanOptions": [
+          "MT"
+        ],
+        "SequenceVariant": [
+          "SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_mton_enabled_pass_variant",
+      "name": "MTC in SequenceVariant",
+      "data": {
+        "ScanOptions": [
+          "N/A"
+        ],
+        "SequenceVariant": [
+          "MTC_SP"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": ""
+    },
+    {
+      "id": "test_mton_enabled_fail",
+      "name": "No MT indicator",
+      "data": {
+        "ScanOptions": [
+          "N/A"
+        ],
+        "SequenceVariant": [
+          "SP"
+        ]
+      },
+      "expectedResult": "fail",
+      "description": ""
+    }
+  ]
+}

@@ -1,32 +1,113 @@
 {
   "id": "validate_pixel_bandwidth",
-  "name": "Readout Bandwidth",
-  "description": "Use the minimum readout bandwidth which generates acceptable distortions.",
+  "name": "Maximum Readout Bandwidth",
+  "description": "Validates that PixelBandwidth does not exceed a configurable maximum, optionally only at a specific field strength (other field strengths pass silently).",
   "category": "Acquisition",
-  "fields": ["PixelBandwidth", "MagneticFieldStrength"],
+  "fields": [
+    "PixelBandwidth",
+    "MagneticFieldStrength"
+  ],
   "requiredSystemFields": [],
-  "parameters": null,
-  "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\n\nif field_strength == 3.0 and pixel_bandwidth > 220:\n    raise ValidationError(f\"PixelBandwidth should be ≤220 Hz/pixel at 3T. Found {pixel_bandwidth} Hz/pixel.\")\nelif field_strength != 3.0:\n    raise ValidationError(\"PixelBandwidth recommendations are not available for this field strength.\")",
+  "implementation": "pixel_bandwidth = value[\"PixelBandwidth\"].iloc[0]\nfield_strength = value[\"MagneticFieldStrength\"].iloc[0]\nmax_bw = params.get(\"max_bandwidth_hz_px\")\nref_field = params.get(\"reference_field_t\")\nif ref_field is not None and field_strength != ref_field:\n    if params.get(\"warn_at_other_field\"):\n        raise ValidationWarning(f\"PixelBandwidth recommendations are not available at {field_strength}T (defined at {ref_field:g}T).\")\nelif max_bw is not None and pixel_bandwidth > max_bw:\n    at_field = f\" at {ref_field:g}T\" if ref_field is not None else \"\"\n    raise ValidationError(f\"PixelBandwidth should be <= {max_bw:g} Hz/pixel{at_field}. Found {pixel_bandwidth} Hz/pixel.\")\n",
   "testCases": [
     {
-      "id": "acceptable_bandwidth",
-      "name": "Acceptable Bandwidth Test",
-      "description": "Should pass with bandwidth <= 220 Hz/pixel at 3T",
+      "id": "low_pass",
+      "name": "200 Hz/px at 3T passes default 220",
       "expectedResult": "pass",
       "data": {
-        "PixelBandwidth": [180],
-        "MagneticFieldStrength": [3.0]
+        "PixelBandwidth": [
+          200
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
       }
     },
     {
-      "id": "high_bandwidth",
-      "name": "High Bandwidth Test",
-      "description": "Should fail with bandwidth > 220 Hz/pixel at 3T",
+      "id": "high_fail",
+      "name": "400 Hz/px at 3T fails default 220",
       "expectedResult": "fail",
       "data": {
-        "PixelBandwidth": [300],
-        "MagneticFieldStrength": [3.0]
+        "PixelBandwidth": [
+          400
+        ],
+        "MagneticFieldStrength": [
+          3.0
+        ]
       }
+    },
+    {
+      "id": "other_field_pass",
+      "name": "High bandwidth at 1.5T passes (check scoped to 3T)",
+      "expectedResult": "pass",
+      "data": {
+        "PixelBandwidth": [
+          400
+        ],
+        "MagneticFieldStrength": [
+          1.5
+        ]
+      }
+    },
+    {
+      "id": "limit_moves",
+      "name": "400 Hz/px fails a 300 limit applied at any field",
+      "expectedResult": "fail",
+      "data": {
+        "PixelBandwidth": [
+          400
+        ],
+        "MagneticFieldStrength": [
+          1.5
+        ]
+      },
+      "params": {
+        "max_bandwidth_hz_px": 300,
+        "reference_field_t": null
+      }
+    },
+    {
+      "id": "other_field_warns",
+      "name": "Other field strength warns when configured",
+      "expectedResult": "warning",
+      "data": {
+        "PixelBandwidth": [
+          200
+        ],
+        "MagneticFieldStrength": [
+          1.5
+        ]
+      },
+      "params": {
+        "warn_at_other_field": true
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_bandwidth_hz_px",
+      "label": "Maximum bandwidth",
+      "type": "number",
+      "default": 220,
+      "min": 0,
+      "unit": "Hz/px",
+      "description": "Fail if PixelBandwidth exceeds this"
+    },
+    {
+      "name": "reference_field_t",
+      "label": "Applies at field strength",
+      "type": "number",
+      "default": 3.0,
+      "min": 0,
+      "unit": "T",
+      "description": "Only check at this field strength (blank = check at any field strength)"
+    },
+    {
+      "name": "warn_at_other_field",
+      "label": "Warn at other field strengths",
+      "type": "boolean",
+      "default": false,
+      "description": "Emit a warning (instead of passing silently) when the field strength differs from the reference"
     }
   ]
 }

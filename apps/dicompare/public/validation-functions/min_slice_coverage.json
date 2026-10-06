@@ -1,0 +1,94 @@
+{
+  "id": "min_slice_coverage",
+  "name": "Minimum Slice Coverage",
+  "description": "Validates that slice coverage (SliceThickness x number of slices) meets a configurable minimum: warning below the minimum, optional hard error below a lower bound.",
+  "category": "Geometry",
+  "fields": [
+    "SliceThickness"
+  ],
+  "requiredSystemFields": [
+    "Count"
+  ],
+  "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\nhard_min = params.get(\"error_below_mm\")\nmin_cov = params.get(\"min_coverage_mm\")\nif hard_min is not None and coverage < hard_min:\n    raise ValidationError(f\"Insufficient slice coverage: {coverage:.0f} mm (need >= {hard_min:g} mm). Found {num_slices} slices x {slice_thickness} mm.\")\nif min_cov is not None and coverage < min_cov:\n    raise ValidationWarning(f\"Slice coverage ({coverage:.0f} mm) is below {min_cov:g} mm and may be insufficient.\")\n",
+  "testCases": [
+    {
+      "id": "coverage_pass",
+      "name": "150 mm coverage passes default 140",
+      "expectedResult": "pass",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "Count": [
+          50
+        ]
+      }
+    },
+    {
+      "id": "coverage_warns",
+      "name": "90 mm coverage warns",
+      "expectedResult": "warning",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "Count": [
+          30
+        ]
+      }
+    },
+    {
+      "id": "min_moves",
+      "name": "90 mm passes when minimum lowered to 80",
+      "expectedResult": "pass",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "Count": [
+          30
+        ]
+      },
+      "params": {
+        "min_coverage_mm": 80
+      }
+    },
+    {
+      "id": "hard_min_fails",
+      "name": "Coverage below the hard minimum fails",
+      "expectedResult": "fail",
+      "data": {
+        "SliceThickness": [
+          2.0
+        ],
+        "Count": [
+          20
+        ]
+      },
+      "params": {
+        "error_below_mm": 60,
+        "min_coverage_mm": 80
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "min_coverage_mm",
+      "label": "Minimum coverage",
+      "type": "number",
+      "default": 140,
+      "min": 0,
+      "unit": "mm",
+      "description": "Warn if total coverage is below this"
+    },
+    {
+      "name": "error_below_mm",
+      "label": "Hard minimum",
+      "type": "number",
+      "default": null,
+      "min": 0,
+      "unit": "mm",
+      "description": "Fail if total coverage is below this (optional)"
+    }
+  ]
+}

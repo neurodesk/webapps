@@ -1,0 +1,57 @@
+{
+  "id": "check_repetition_time",
+  "name": "Minimum Repetition Time",
+  "description": "Warns when TR is below a configurable minimum (e.g. ASL needs TR > 3500 ms for labeled spins to relax). Handles TR in ms or seconds.",
+  "category": "Timing",
+  "fields": [
+    "RepetitionTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "tr = value[\"RepetitionTime\"].iloc[0]\nif tr is None or (isinstance(tr, float) and pd.isna(tr)):\n    pass  # No data available\nelse:\n    # TR may be in ms or seconds depending on vendor\n    tr_ms = tr if tr > 100 else tr * 1000\n    min_tr = params.get(\"min_tr_ms\")\n    if min_tr is not None and tr_ms < min_tr:\n        raise ValidationWarning(f\"TR is {tr_ms:.0f} ms; should typically be > {min_tr:g} ms.\")\n",
+  "testCases": [
+    {
+      "id": "long_pass",
+      "name": "TR 4000 ms passes default 3500",
+      "expectedResult": "pass",
+      "data": {
+        "RepetitionTime": [
+          4000
+        ]
+      }
+    },
+    {
+      "id": "short_warns",
+      "name": "TR 3000 ms warns",
+      "expectedResult": "warning",
+      "data": {
+        "RepetitionTime": [
+          3000
+        ]
+      }
+    },
+    {
+      "id": "threshold_moves",
+      "name": "TR 3000 ms passes when minimum lowered",
+      "expectedResult": "pass",
+      "data": {
+        "RepetitionTime": [
+          3000
+        ]
+      },
+      "params": {
+        "min_tr_ms": 2500
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "min_tr_ms",
+      "label": "Minimum TR",
+      "type": "number",
+      "default": 3500,
+      "min": 0,
+      "unit": "ms",
+      "description": "Warn if TR is below this"
+    }
+  ]
+}

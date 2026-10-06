@@ -1,0 +1,56 @@
+{
+  "id": "dwi_compat_noddi",
+  "name": "DWI data compatibility: NODDI",
+  "description": "Evaluates compatibility of DWI data with NODDI based on b-values and gradient directions.",
+  "category": "Diffusion",
+  "fields": [
+    "NumberOfDiffusionShells",
+    "DiffusionBValues",
+    "DirectionsPerShell",
+    "NumberOfB0Volumes"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "import ast\n\n# Custom validation logic for NODDI (Neurite Orientation Dispersion and Density Imaging)\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures; recommendation-level items tagged [warning]\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse array-valued fields safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Build shell -> directions mapping (by index alignment) ---\n    shells = []\n    for j, b in enumerate(bvals):\n        n_dirs = dirs_per_shell[j] if j < len(dirs_per_shell) else None\n        shells.append((b, n_dirs))\n\n    # --- Rule 1: NumberOfDiffusionShells must be >= 2 (FAIL) ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 2:\n            errors.append(prefix + \"At least two b-shells must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2: at least 1 b-value in [500, 1000] recommended (WARNING) ---\n    if len([b for b in bvals if 500 <= b <= 1000]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 500 and 1000 s/mm2 is recommended for NODDI\")\n\n    # --- Rule 3: at least 1 b-value in [2000, 3000] recommended (WARNING) ---\n    if len([b for b in bvals if 2000 <= b <= 3000]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 2000 and 3000 s/mm2 is recommended for NODDI\")\n\n    # --- Rule 4: b-value in [500, 1000] must have >= 15 directions (FAIL), 30 preferred (WARNING) ---\n    low_shell_dirs = [n for b, n in shells if 500 <= b <= 1000 and n is not None]\n    if low_shell_dirs:\n        total_low = sum(low_shell_dirs)\n        if total_low < 15:\n            errors.append(prefix + \"The b-value between 500 and 1000 must have at least 15 gradient directions for NODDI\")\n        elif total_low < 30:\n            errors.append(prefix + \"[warning] The b-value between 500 and 1000 has fewer than 30 gradient directions; 30 is recommended for NODDI\")\n\n    # --- Rule 5: b-value in [2000, 3000] must have >= 15 directions (FAIL), 60 preferred (WARNING) ---\n    high_shell_dirs = [n for b, n in shells if 2000 <= b <= 3000 and n is not None]\n    if high_shell_dirs:\n        total_high = sum(high_shell_dirs)\n        if total_high < 15:\n            errors.append(prefix + \"The b-value between 2000 and 3000 must have at least 15 gradient directions for NODDI\")\n        elif total_high < 60:\n            errors.append(prefix + \"[warning] The b-value between 2000 and 3000 has fewer than 60 gradient directions; 60 is recommended for NODDI\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+  "testCases": [
+    {
+      "id": "test_noddi_recommended",
+      "name": "Recommended NODDI protocol",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "2"
+        ],
+        "DiffusionBValues": [
+          "[0, 700, 2800]"
+        ],
+        "DirectionsPerShell": [
+          "[5, 30, 60]"
+        ],
+        "NumberOfB0Volumes": [
+          "5"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "The schema's own recommended protocol must pass its rule."
+    },
+    {
+      "id": "test_noddi_wrong_bvalues",
+      "name": "Shells outside recommended ranges",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "5"
+        ],
+        "DiffusionBValues": [
+          "[0,1600]"
+        ],
+        "DirectionsPerShell": [
+          "[4,30]"
+        ],
+        "NumberOfB0Volumes": [
+          "4"
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "No shell in 500-1000 or 2000-3000: recommendation-level warnings."
+    }
+  ]
+}

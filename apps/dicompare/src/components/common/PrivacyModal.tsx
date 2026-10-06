@@ -1,5 +1,6 @@
 import React from 'react';
-import { X, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
+import Modal from './Modal';
 
 interface PrivacyModalProps {
   isOpen: boolean;
@@ -7,9 +8,8 @@ interface PrivacyModalProps {
 }
 
 const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
-
   return (
+<<<<<<< monorepo
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
       <div
         role="dialog"
@@ -30,6 +30,9 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
+=======
+    <Modal isOpen={isOpen} onClose={onClose} title="Privacy" size="md">
+>>>>>>> upstream
         {/* Body */}
         <div className="px-6 py-5 space-y-5">
           {/* Highlight box */}
@@ -70,8 +73,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

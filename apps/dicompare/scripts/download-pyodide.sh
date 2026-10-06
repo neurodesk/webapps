@@ -132,9 +132,11 @@ PYTHON_SCRIPT
 echo ""
 echo "⬇️  Downloading PyPI wheels for packages not in Pyodide..."
 
-# These are pure Python packages that work with micropip
+# These are pure Python packages that work with micropip.
+# pydicom is pinned to the patched release (>=2.4.5 fixes GHSA-v856-2rf8-9f28,
+# a DICOMDIR path traversal) and stays <3 to match dicompare's own constraint.
 PYPI_WHEELS=(
-    "pydicom==2.4.4"
+    "pydicom==2.4.5"
     "tabulate"
     "nibabel"
     "dicompare==$DICOMPARE_VERSION"
@@ -149,6 +151,26 @@ for pkg in "${PYPI_WHEELS[@]}"; do
     pip download --no-deps -d "$DEST_DIR/wheels" "$pkg" 2>/dev/null || \
     echo "   Warning: Could not download $pkg"
 done
+
+# Record exactly which wheels were bundled so the worker installs these rather
+# than a hardcoded list that can drift out of sync with what we downloaded.
+# This manifest is the single source of truth for the offline install list.
+# dicompare is ordered last so its dependencies are already present when it
+# installs (micropip cannot fetch missing deps offline).
+echo ""
+echo "🧾 Writing offline wheel manifest..."
+python3 - "$DEST_DIR/wheels" << 'PYTHON_SCRIPT'
+import json, os, sys
+wheels_dir = sys.argv[1]
+names = [f for f in os.listdir(wheels_dir) if f.endswith(".whl")]
+names.sort(key=lambda n: (n.startswith("dicompare-"), n.lower()))
+with open(os.path.join(wheels_dir, "manifest.json"), "w") as f:
+    json.dump(names, f, indent=2)
+    f.write("\n")
+print(f"   Wrote manifest.json with {len(names)} wheels:")
+for n in names:
+    print(f"     - {n}")
+PYTHON_SCRIPT
 
 echo ""
 echo "📋 Downloaded Pyodide core files:"

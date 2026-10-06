@@ -1,0 +1,45 @@
+{
+  "id": "verify_minimum_te",
+  "name": "Verify Minimum TE",
+  "description": "Reminds the operator to verify that the minimum available echo time is used. Always emits a warning showing the actual TE; the guidance text is configurable.",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "te = value[\"EchoTime\"].dropna()\nif len(te) > 0:\n    guidance = params.get(\"guidance\") or \"\"\n    raise ValidationWarning(f\"Echo Time is {te.iloc[0]} ms. Verify this is the minimum TE available for your sequence. {guidance}\".strip())\n",
+  "testCases": [
+    {
+      "id": "always_warns",
+      "name": "Warns with the actual TE",
+      "expectedResult": "warning",
+      "data": {
+        "EchoTime": [
+          70.0
+        ]
+      }
+    },
+    {
+      "id": "custom_guidance",
+      "name": "Warns with custom guidance",
+      "expectedResult": "warning",
+      "data": {
+        "EchoTime": [
+          12.0
+        ]
+      },
+      "params": {
+        "guidance": "Minimum TE should always be used for ASL."
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "guidance",
+      "label": "Guidance",
+      "type": "string",
+      "default": "Longer TE causes T2/T2* decay and reduced SNR.",
+      "description": "Context appended to the warning (e.g. why minimum TE matters for this protocol)"
+    }
+  ]
+}

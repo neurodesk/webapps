@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Loader2, Zap, FlaskConical, FileText } from 'lucide-react';
+import { Loader2, Zap, FlaskConical, FileText } from 'lucide-react';
+import Modal from '../common/Modal';
 import {
   DndContext,
   DragOverlay,
@@ -395,26 +396,16 @@ const AcquisitionMatchingModal: React.FC<AcquisitionMatchingModalProps> = ({
     return { acquisition: uploadedAcquisitions[index], index };
   }, [activeId, uploadedAcquisitions]);
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-primary rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-content-primary">
-              Match Test Data to References
-            </h2>
-            <p className="text-xs text-content-secondary mt-0.5">
-              Drag test data onto references to match them
-            </p>
-          </div>
-          <button onClick={onCancel} className="text-content-muted hover:text-content-secondary">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onCancel}
+      title="Match Test Data to References"
+      subtitle="Drag test data onto references to match them"
+      size="lg"
+      panelClassName="!max-h-[80vh]"
+      closeOnBackdrop={false}
+    >
         {/* Loading state */}
         {isComputing && (
           <div className="flex-1 flex items-center justify-center p-8">
@@ -524,8 +515,7 @@ const AcquisitionMatchingModal: React.FC<AcquisitionMatchingModalProps> = ({
             Apply
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

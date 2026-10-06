@@ -1,0 +1,56 @@
+{
+  "id": "dwi_compat_dki",
+  "name": "DWI data compatibility: DKI",
+  "description": "Evaluates compatibility of DWI data with diffusion kurtosis imaging based on b-values and gradient directions.",
+  "category": "Diffusion",
+  "fields": [
+    "NumberOfDiffusionShells",
+    "DiffusionBValues",
+    "DirectionsPerShell",
+    "NumberOfB0Volumes"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "import ast\n\n# Custom validation logic for Diffusion Kurtosis Imaging (DKI)\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures; recommendation-level items tagged [warning]\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse array-valued fields safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Rule 1: NumberOfDiffusionShells must be >= 2 ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 2:\n            errors.append(prefix + \"At least two b-shells must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2: at least 3 b-values (including b=0) must be < 3000 ---\n    if len([b for b in bvals if b < 3000]) < 3:\n        errors.append(prefix + \"At least 3 b-values below 3000 s/mm2 (including b=0) must be acquired for DKI\")\n\n    # --- Build shell -> directions mapping (by index alignment) ---\n    shells = []\n    for j, b in enumerate(bvals):\n        n_dirs = dirs_per_shell[j] if j < len(dirs_per_shell) else None\n        shells.append((b, n_dirs))\n\n    # --- Rule 3: maximal b-value shell must have >= 15 directions (fail), 30 preferred (warning) ---\n    if bvals:\n        max_b = max(bvals)\n        max_dirs = next((n for b, n in shells if b == max_b and n is not None), None)\n        if max_dirs is None:\n            errors.append(prefix + \"Could not determine gradient directions for the maximal b-value\")\n        elif max_dirs < 15:\n            errors.append(prefix + \"The maximal b-value must have at least 15 gradient directions for DKI\")\n        elif max_dirs < 30:\n            errors.append(prefix + \"[warning] The maximal b-value has fewer than 30 gradient directions; 30 is recommended for DKI\")\n\n    # --- Rule 4: total directions for b>0 data must be >= 21 (fail), 60 preferred (warning) ---\n    total_nonzero_dirs = sum(n for b, n in shells if b > 0 and n is not None)\n    if total_nonzero_dirs < 21:\n        errors.append(prefix + \"The total number of gradient directions for b>0 data must be at least 21 for DKI\")\n    elif total_nonzero_dirs < 60:\n        errors.append(prefix + \"[warning] The total number of gradient directions for b>0 data is fewer than 60; 60 is recommended for DKI\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+  "testCases": [
+    {
+      "id": "test_dki_recommended",
+      "name": "Recommended DKI protocol",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "2"
+        ],
+        "DiffusionBValues": [
+          "[0, 1000, 2500]"
+        ],
+        "DirectionsPerShell": [
+          "[5, 30, 30]"
+        ],
+        "NumberOfB0Volumes": [
+          "5"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "The schema's own recommended protocol must pass its rule."
+    },
+    {
+      "id": "test_dki_single_shell",
+      "name": "Single-shell data",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "2"
+        ],
+        "DiffusionBValues": [
+          "[0, 1000]"
+        ],
+        "DirectionsPerShell": [
+          "[5, 30]"
+        ],
+        "NumberOfB0Volumes": [
+          "5"
+        ]
+      },
+      "expectedResult": "fail",
+      "description": "Fewer than 3 b-values below 3000 s/mm2."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, List, Layers } from 'lucide-react';
+import { List, Layers } from 'lucide-react';
+import Modal from '../common/Modal';
 
 interface FieldConversionModalProps {
   isOpen: boolean;
@@ -18,28 +19,20 @@ const FieldConversionModal: React.FC<FieldConversionModalProps> = ({
 }) => {
   const [selectedMode, setSelectedMode] = useState<'separate-series' | 'single-series'>('single-series');
 
-  if (!isOpen) return null;
-
   const handleConvert = () => {
     onConvert(selectedMode);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Convert "{fieldName}" to Series Field
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Convert "${fieldName}" to Series Field`}
+      size="sm"
+      closeOnBackdrop={false}
+    >
+      <div className="p-6">
         <div className="mb-4">
           <p className="text-sm text-gray-600 mb-3">
             This field has multiple values: <span className="font-mono text-xs bg-gray-100 px-1 rounded">
@@ -108,7 +101,7 @@ const FieldConversionModal: React.FC<FieldConversionModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

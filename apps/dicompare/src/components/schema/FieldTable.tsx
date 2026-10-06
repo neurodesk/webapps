@@ -3,10 +3,14 @@ import { Trash2, ArrowRightLeft, Loader, Eye, EyeOff, Pencil } from 'lucide-reac
 import { DicomField, Acquisition } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { formatFieldValue, formatFieldTypeInfo, formatFieldDisplay } from '../../utils/fieldFormatters';
+import FieldConstraintText from './FieldConstraintText';
+import { gradedSeverity } from '../common/constraintModel';
 import { ComplianceFieldResult } from '../../types/schema';
 import CustomTooltip from '../common/CustomTooltip';
 import StatusIcon from '../common/StatusIcon';
 import FieldEditModal from './FieldEditModal';
+import FieldSeverityIndicator from './FieldSeverityIndicator';
+import { FieldNoteMarker } from './FieldNote';
 
 interface FieldTableProps {
   fields: DicomField[];
@@ -14,6 +18,8 @@ interface FieldTableProps {
   incompleteFields?: Set<string>;
   acquisitionId?: string;
   mode?: 'edit' | 'view' | 'compliance';
+  // Severity dots describe schema constraints; plain test data has none.
+  showSeverity?: boolean;
   // Compliance-specific props
   schemaId?: string;
   schemaAcquisitionId?: string;
@@ -34,6 +40,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
   incompleteFields = new Set(),
   acquisitionId = '',
   mode = 'edit',
+  showSeverity = true,
   schemaId,
   schemaAcquisitionId,
   acquisition,
@@ -71,7 +78,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
     });
 
     return result || {
-      fieldPath: field.tag,
+      fieldPath: field.tag ?? '',
       fieldName: field.keyword || field.name,
       status: 'unknown',
       message: 'No validation result available',
@@ -147,7 +154,8 @@ const FieldTable: React.FC<FieldTableProps> = ({
               // For unique identification: use tag for standard DICOM fields, name/keyword for derived fields
               // Note: some derived fields have tag="derived" which is not unique
               const isDerivedTag = !field.tag || field.tag === 'derived' || field.tag === null;
-              const fieldIdentifier = isDerivedTag ? (field.keyword || field.name) : field.tag;
+              // When not a derived tag, field.tag is guaranteed non-null by isDerivedTag above.
+              const fieldIdentifier: string = isDerivedTag ? (field.keyword || field.name) : field.tag!;
               const fieldKey = `${acquisitionId}-${fieldIdentifier}`;
               const isIncomplete = incompleteFields.has(fieldKey);
 
@@ -155,7 +163,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
               const explicitDataType = (field as any).dataType;
               const inferredDataType = inferDataTypeFromValue(field.value);
               const finalDataType = explicitDataType || inferredDataType;
-              const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule);
+              const fieldTypeDisplay = formatFieldTypeInfo(finalDataType, field.validationRule, field.graded);
 
               // Pre-calculate compliance result (will be used if needed in render)
               const complianceResult = isComplianceMode ? getFieldComplianceResult(field) : null;
@@ -169,10 +177,17 @@ const FieldTable: React.FC<FieldTableProps> = ({
                 >
                 <td className="px-2 py-1.5">
                   <div>
-                    <p className="text-xs font-medium text-content-primary">
-                      {field.keyword || field.name}
-                    </p>
-                    <p className="text-xs text-content-tertiary font-mono">
+                    {/* A div, not a p: the severity dot and note marker are
+                        tooltip-wrapped, and a tooltip's wrapper is a block
+                        element, which a paragraph cannot legally contain. */}
+                    <div className="text-xs font-medium text-content-primary flex items-center gap-1.5">
+                      {showSeverity && (
+                        <FieldSeverityIndicator severity={field.graded ? gradedSeverity(field.graded) : field.severity} />
+                      )}
+                      <span>{field.keyword || field.name}</span>
+                      {field.notes && <FieldNoteMarker note={field.notes} />}
+                    </div>
+                    <p className={`text-xs text-content-tertiary font-mono ${showSeverity ? 'pl-3' : ''}`}>
                       {field.fieldType === 'derived' ? 'Derived field' :
                        field.fieldType === 'custom' ? 'Custom field' :
                        field.fieldType === 'private' ? 'Private field' :
@@ -186,8 +201,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                     onClick={() => isEditMode && setEditingField(field)}
                     data-tutorial={index === 0 && isEditMode ? 'field-value-cell' : undefined}
                   >
-                    <p className="text-xs text-content-primary break-words">{formatFieldValue(field)}</p>
-                    <p className="text-xs text-content-tertiary mt-0.5">{fieldTypeDisplay}</p>
+                    <FieldConstraintText graded={field.graded} value={formatFieldValue(field)} typeInfo={fieldTypeDisplay} />
                   </div>
                 </td>
                 {isComplianceMode && (
@@ -203,7 +217,7 @@ const FieldTable: React.FC<FieldTableProps> = ({
                   <td className="px-2 py-1.5">
                     <div className={`flex items-center gap-2 ${showStatusMessages ? 'justify-start' : 'justify-center'}`}>
                       <CustomTooltip
-                        content={complianceResult.message}
+                        content={complianceResult.message || ''}
                         position="top"
                         delay={100}
                       >

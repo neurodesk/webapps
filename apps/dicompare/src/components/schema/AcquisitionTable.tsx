@@ -6,6 +6,7 @@ import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWork
 import { normalizeTag } from '../../utils/stringHelpers';
 import FieldTable from './FieldTable';
 import SeriesTable from './SeriesTable';
+import { FieldSeverityLegend } from './FieldSeverityIndicator';
 import DicomFieldSelector from '../common/DicomFieldSelector';
 import InlineTagInput from '../common/InlineTagInput';
 import { useTagSuggestions } from '../../hooks/useTagSuggestions';
@@ -16,6 +17,7 @@ import DetailedDescriptionModal from './DetailedDescriptionModal';
 import ImageManagerModal from './ImageManagerModal';
 import CustomTooltip from '../common/CustomTooltip';
 import { ValidationFunction } from '../validation/ValidationFunctionLibraryModal';
+import { getParameterDefinitions, getEffectiveParams, formatParamValue, getDisplayName } from '../../utils/validationParams';
 import TestDicomGeneratorModal from './TestDicomGeneratorModal';
 
 interface AcquisitionTableProps {
@@ -35,6 +37,9 @@ interface AcquisitionTableProps {
   version?: string;
   authors?: string[];
   hideHeader?: boolean; // Hide the header section (title, version, authors)
+  // Whether the acquisition being shown carries schema constraints. Plain test
+  // data has nothing to require, so its fields get no severity dots.
+  showSeverity?: boolean;
   // Collapse/deselect handlers
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -50,6 +55,7 @@ interface AcquisitionTableProps {
   onSeriesAdd: () => void;
   onSeriesDelete: (seriesIndex: number) => void;
   onSeriesNameUpdate: (seriesIndex: number, name: string) => void;
+  onSeriesNotesUpdate?: (seriesIndex: number, notes: string) => void;
   // New validation function handlers
   onValidationFunctionAdd?: (func: SelectedValidationFunction) => void;
   onValidationFunctionUpdate?: (index: number, func: SelectedValidationFunction) => void;
@@ -77,6 +83,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   version,
   authors,
   hideHeader = false,
+  showSeverity = true,
   isCollapsed = false,
   onToggleCollapse,
   onDeselect,
@@ -90,6 +97,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   onSeriesAdd,
   onSeriesDelete,
   onSeriesNameUpdate,
+  onSeriesNotesUpdate,
   onValidationFunctionAdd,
   onValidationFunctionUpdate,
   onValidationFunctionDelete,
@@ -129,7 +137,21 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       }
     });
 
+  // The dots next to field names only need decoding when a schema actually
+  // mixes requirements with reference-only constraints.
+  const hasReferenceOnlyFields =
+    showSeverity &&
+    (acquisition.acquisitionFields.some(f => f.severity === 'warning') ||
+      (acquisition.series || []).some(s => {
+        const fields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+        return (fields as any[]).some(f => f?.severity === 'warning');
+      }));
+
   const validationFunctions = acquisition.validationFunctions || [];
+  // Parameters column: always present in edit mode (so parameters are
+  // discoverable); in compliance/view mode only when a rule declares some
+  const hasParameterizedRules = validationFunctions.some(func => getParameterDefinitions(func).length > 0);
+  const showParamsColumn = hasParameterizedRules || (isEditMode && !isComplianceMode);
 
   // Build set of all schema field identifiers (used for both acquisition and series unchecked fields)
   const schemaFieldIdentifiers = useMemo(() => {
@@ -340,6 +362,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const handleValidationFunctionSelect = (func: ValidationFunction) => {
     if (isComplianceMode) return; // No validation function editing in compliance mode
 
+    const paramDefinitions = func.parameterDefinitions || [];
     const selectedFunc: SelectedValidationFunction = {
       ...func,
       customName: func.name,
@@ -347,13 +370,29 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
       customFields: [...func.fields],
       customImplementation: func.implementation,
       customTestCases: func.testCases || [],
-      enabledSystemFields: func.requiredSystemFields || []
+      enabledSystemFields: func.requiredSystemFields || [],
+      // Seed configured values from declaration defaults so the rule is
+      // runnable immediately and the defaults are visible in the rules table.
+      configuredParams: Object.fromEntries(
+        paramDefinitions
+          .filter(p => p.default !== undefined && p.default !== null)
+          .map(p => [p.name, p.default])
+      )
     };
 
     if (onValidationFunctionAdd) {
       onValidationFunctionAdd(selectedFunc);
     }
     setShowValidationLibrary(false);
+
+    // Parameterized rules need a value from the user — open the editor
+    // (with its Parameters section) right away to configure them.
+    if (paramDefinitions.length > 0) {
+      setTimeout(() => {
+        setEditingValidationIndex(validationFunctions.length);
+        setShowValidationEditor(true);
+      }, 100);
+    }
   };
 
   const handleValidationFunctionEdit = (index: number) => {
@@ -380,17 +419,29 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const handleCreateNewValidationFunction = () => {
     if (isComplianceMode) return;
 
+    // Scaffolds the ctx-based rule API (dicompare >= 0.8): typed field access
+    // via ctx.rows, findings collected with ctx.error()/ctx.warn(). The
+    // legacy `value` DataFrame interface remains supported for old rules.
+    const ruleTemplate = [
+      '# Validate this acquisition. Report findings with:',
+      '#   ctx.error("message")  # requirement not met (fails validation)',
+      '#   ctx.warn("message")   # recommendation not followed (warning)',
+      '# ctx.rows is a list of per-row dicts; list-valued fields are plain lists.',
+      'for row in ctx.rows:',
+      '    pass  # e.g. if row["FieldName"] != expected: ctx.error("...")',
+    ].join('\n');
+
     const newFunction: SelectedValidationFunction = {
       id: `custom_${Date.now()}`,
       name: 'New Validation Function',
       description: 'Custom validation function',
       category: 'Custom',
       fields: ['FieldName'],
-      implementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      implementation: ruleTemplate,
       customName: 'New Validation Function',
       customDescription: 'Custom validation function',
       customFields: ['FieldName'],
-      customImplementation: `# Custom validation logic\n# Access field data with value["FieldName"]\n# Raise ValidationError for failures\n# Function should not return anything`,
+      customImplementation: ruleTemplate,
       customTestCases: [],
       enabledSystemFields: []
     };
@@ -428,9 +479,16 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
 
   const handleConversionChoice = (mode: 'separate-series' | 'single-series') => {
     if (!conversionField) return;
+<<<<<<< monorepo
 
     // Pass the mode to the parent component - we'll need to update the interface
     onFieldConvert(conversionField.tag, 'series', mode);
+=======
+    
+    // Pass the mode to the parent component - we'll need to update the interface.
+    // Custom/derived fields have no tag, so fall back to the keyword/name identifier.
+    onFieldConvert(conversionField.tag ?? (conversionField.keyword || conversionField.name), 'series', mode);
+>>>>>>> upstream
   };
 
   return (
@@ -635,6 +693,11 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                           <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
                             Description
                           </th>
+                          {showParamsColumn && (
+                            <th className="px-2 py-1.5 text-left text-xs font-medium text-content-tertiary uppercase tracking-wider">
+                              Parameters
+                            </th>
+                          )}
                           {isComplianceMode && (
                             <th className={`px-2 py-1.5 text-xs font-medium text-content-tertiary uppercase tracking-wider ${showRuleStatusMessages ? 'min-w-[150px] text-left' : 'text-center'}`}>
                               <div className={`flex items-center gap-1 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
@@ -661,7 +724,10 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                           const ruleResult = isComplianceMode ? getValidationRuleResult(func) : null;
                           const ruleCode = func.customImplementation || func.implementation;
                           const isRuleExpanded = expandedRuleIndices.has(index);
-                          const colCount = isComplianceMode ? 3 : (isEditMode ? 3 : 2);
+                          const baseColCount = isComplianceMode ? 3 : (isEditMode ? 3 : 2);
+                          const colCount = showParamsColumn ? baseColCount + 1 : baseColCount;
+                          const paramDefs = getParameterDefinitions(func);
+                          const effectiveParams = getEffectiveParams(func);
 
                           return (
                             <React.Fragment key={`${func.id}-${index}`}>
@@ -672,13 +738,30 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                               >
                                 <td className="px-2 py-1.5">
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium text-content-primary break-words">{func.customName || func.name}</p>
+                                    <p className="text-xs font-medium text-content-primary break-words">{getDisplayName(func)}</p>
                                     <div className="flex flex-wrap gap-1 mt-1">
                                       {(func.customFields || func.fields).map(field => (
-                                        <span key={field} className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded">
+                                        <span
+                                          key={field}
+                                          title={`${field} — required by this rule`}
+                                          className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs rounded"
+                                        >
                                           {field}
                                         </span>
                                       ))}
+                                      {/* Fields the rule reads when present; absence is not an error.
+                                          Hollow to match the field tables' reference-only dot. */}
+                                      {(func.optional_fields || [])
+                                        .filter(field => !(func.customFields || func.fields).includes(field))
+                                        .map(field => (
+                                          <span
+                                            key={field}
+                                            title={`${field} — optional; used by this rule when present`}
+                                            className="px-1.5 py-0.5 border border-dashed border-amber-500/60 text-amber-600 dark:text-amber-400 text-xs rounded"
+                                          >
+                                            {field}
+                                          </span>
+                                        ))}
                                     </div>
                                     {ruleCode && (
                                       <button
@@ -701,6 +784,25 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                 <td className="px-2 py-1.5">
                                   <p className="text-xs text-content-primary break-words">{func.customDescription || func.description}</p>
                                 </td>
+                                {showParamsColumn && (
+                                  <td className="px-2 py-1.5">
+                                    {paramDefs.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {paramDefs.map(decl => (
+                                          <span
+                                            key={decl.name}
+                                            title={decl.description || decl.label || decl.name}
+                                            className="px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs rounded font-mono whitespace-nowrap"
+                                          >
+                                            {decl.name} = {formatParamValue(effectiveParams[decl.name])}{decl.unit && effectiveParams[decl.name] != null ? ` ${decl.unit}` : ''}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-content-tertiary">—</span>
+                                    )}
+                                  </td>
+                                )}
                                 {isComplianceMode && ruleResult && (
                                   <td className="px-2 py-1.5">
                                     {isValidatingRules ? (
@@ -710,7 +812,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                                     ) : (
                                       <div className={`flex items-center gap-2 ${showRuleStatusMessages ? 'justify-start' : 'justify-center'}`}>
                                         <CustomTooltip
-                                          content={ruleResult.message}
+                                          content={ruleResult.message || ''}
                                           position="top"
                                           delay={100}
                                         >
@@ -783,6 +885,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 acquisition={acquisition}
                 getSchemaContent={getSchemaContent}
                 isDataProcessing={isDataProcessing}
+                showSeverity={showSeverity}
                 complianceResultsProp={allComplianceResults.filter(r =>
                   r.validationType !== 'rule' &&
                   r.validationType !== 'series' &&
@@ -804,15 +907,23 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
                 incompleteFields={incompleteFields}
                 acquisitionId={acquisition.id}
                 mode={mode}
+                showSeverity={showSeverity}
                 complianceResults={allComplianceResults.filter(r => r.validationType === 'series')}
                 onSeriesUpdate={onSeriesUpdate}
                 onSeriesAdd={onSeriesAdd}
                 onSeriesDelete={onSeriesDelete}
                 onFieldConvert={(fieldTag) => onFieldConvert(fieldTag, 'acquisition')}
                 onSeriesNameUpdate={onSeriesNameUpdate}
+                onSeriesNotesUpdate={onSeriesNotesUpdate}
                 onSeriesView={onSeriesView}
                 onSeriesViewTestData={onSeriesViewTestData}
               />
+            </div>
+          )}
+
+          {hasReferenceOnlyFields && (
+            <div>
+              <FieldSeverityLegend />
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Download, Edit2, Brain, ImageIcon, Check, Columns2 } from 'lucide-react';
+import Modal from '../common/Modal';
 import { SchemaImage } from '../../types';
 import { isVolumeUrl, isFlatImageUrl } from '../../utils/imageHelpers';
 import NiivueViewer, { VolumeInfo, ViewMode, VIEW_MODES } from '../viewer/NiivueViewer';
@@ -224,8 +225,6 @@ const ImageManagerModal: React.FC<ImageManagerModalProps> = ({
     }
     return false;
   };
-
-  if (!isOpen) return null;
 
   const isComparing = compare !== null;
   const bothVolumes = isComparing && isVolumeSelection(primary) && isVolumeSelection(compare);
@@ -457,7 +456,13 @@ const ImageManagerModal: React.FC<ImageManagerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      ariaLabel={`${title} images`}
+      closeOnBackdrop={false}
+      panelClassName="!bg-transparent !rounded-none !w-auto !max-w-none !max-h-none !overflow-visible"
+    >
       <div
         ref={modalRef}
         className="bg-surface-primary rounded-lg overflow-hidden flex flex-col relative"
@@ -704,7 +709,7 @@ const ImageManagerModal: React.FC<ImageManagerModalProps> = ({
           </svg>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -1,0 +1,1257 @@
+{
+  "name": "HC-ChiSep Validation Protocol",
+  "description": "Acquisition protocol to validate HC-ChiSep (hollow-cylinder chi-separation with signal-derived fibre orientation) on real data. Four acquisitions: multi-echo GRE (QSM/R2*/orientation beat), multi-echo spin echo (R2' + MWF myelin reference), single-shell DTI (fibre-orientation ground truth), and T1w (segmentation/ROIs). Adapts the ISMRM QSM consensus (https://doi.org/10.1002/mrm.30006) and adds HC-ChiSep-specific requirements (long echo train, MESE-MWF, DTI-theta). Non-DICOM-checkable items (monopolar readout, reverse-PE b0, second head orientation, B0 recording, processing) are documented in each acquisition's detailed description.",
+  "version": "1.0",
+  "authors": [
+    "Ashley Stewart"
+  ],
+  "acquisitions": {
+    "Multi-Echo GRE (MEGRE)": {
+      "description": "3D RF-spoiled multi-echo GRE \u2014 supplies QSM phase, R2*, and the multi-compartment magnitude beat for HC-ChiSep.",
+      "detailed_description": "## Multi-Echo GRE (MEGRE) \u2014 primary HC-ChiSep input\n\n3D RF-spoiled multi-echo gradient-echo. This single acquisition supplies **three** of HC-ChiSep's inputs: the **phase** -> QSM (chi_total), the **magnitude** -> R2* (for R2' = R2* - R2), and the multi-echo magnitude **decay (\"beat\")** from which HC-ChiSep derives white-matter fibre orientation and myelin-water fraction.\n\n### Key requirements (auto-validated where possible)\n- **RF-spoiled 3D GRE, monopolar readout.** Monopolar avoids even/odd-echo phase mismatch.\n- **>= 8 echoes (ideally 10-12).** The hollow-cylinder multi-compartment beat needs dense temporal sampling; 4-echo in-vivo data saturated the fibre-angle estimate at 90 deg. This is the single most important parameter for HC-ChiSep.\n- **Short first echo (TE1 ~ 3 ms)** to capture the fast-decaying myelin-water pool.\n- **Short, uniform echo spacing (dTE ~ 3-4 ms).** Longest TE ~ tissue T2* (~30-40 ms at 3T).\n- **Isotropic voxels <= 1 mm**, whole-brain coverage (whole head for background-field removal).\n- **Save BOTH magnitude and phase** DICOMs for every echo (phase is essential for QSM).\n\n### Manual checks (NOT verifiable from DICOM \u2014 confirm at the console)\n- **Monopolar (fly-back) readout** \u2014 vendor-specific; not reliably in standard DICOM tags. Ensure monopolar, not bipolar.\n- **Second, tilted head orientation (~20-30 deg)** \u2014 OPTIONAL but high value: acquiring a second MEGRE with the head rotated directly probes the orientation (theta) dependence that is HC-ChiSep's core novelty (the same design principle as the digital phantom). Even one extra orientation strengthens the validation substantially.\n- **Record the B0 direction / head positioning** \u2014 HC-ChiSep's fibre angle is defined relative to B0. ImageOrientationPatient captures this in DICOM; just note any deliberate tilt.\n- **Coil >= 12 channels, parallel imaging / acceleration** as per QSM consensus.\n\n### What it validates in HC-ChiSep\nMagnitude beat -> signal-derived fibre angle (validate against DTI) and myelin-water fraction (validate against MESE-MWF); phase -> chi_total; magnitude decay -> R2*.\n",
+      "tags": [
+        "analysis:qsm",
+        "analysis:chi-separation",
+        "HC-ChiSep",
+        "MEGRE",
+        "multi-echo",
+        "GRE",
+        "susceptibility",
+        "brain"
+      ],
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D",
+          "vr": "CS",
+          "dataType": "string"
+        },
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains": "GR",
+          "vr": "CS",
+          "dataType": "string"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "megre_rf_spoiled",
+          "name": "RF-Spoiled (recommended)",
+          "description": "RF-spoiled (SequenceVariant 'SP') is recommended for clean QSM phase.",
+          "implementation": "var = str(value[\"SequenceVariant\"].iloc[0])\nif \"SP\" not in var:\n    raise ValidationWarning(f\"RF-spoiled (SequenceVariant 'SP') recommended for QSM phase. Found {var}.\")",
+          "fields": [
+            "SequenceVariant"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "SequenceVariant": [
+                  "SP"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn_not_spoiled",
+              "name": "Warn_not_spoiled",
+              "data": {
+                "SequenceVariant": [
+                  "SS"
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            }
+          ]
+        },
+        {
+          "id": "megre_echo_count",
+          "name": "Echo Count (>=8)",
+          "description": "HC-ChiSep needs a long echo train to sample the multi-compartment beat; >=8 echoes required, 10-12 ideal.",
+          "implementation": "n = value[\"EchoTime\"].dropna().nunique()\nexact = params.get(\"exact_echoes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} echoes, found {n}.\")\nelse:\n    min_n = params.get(\"min_echoes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} echoes; at least {min_n} required.\")\n    rec = params.get(\"recommended_echoes\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"Found {n} echoes; {rec}+ recommended.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass_10",
+              "name": "Pass_10",
+              "data": {
+                "EchoTime": [
+                  3,
+                  6,
+                  9,
+                  12,
+                  15,
+                  18,
+                  21,
+                  24,
+                  27,
+                  30
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn_6",
+              "name": "Warn_6",
+              "data": {
+                "EchoTime": [
+                  3,
+                  7,
+                  11,
+                  15,
+                  19,
+                  23
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_4",
+              "name": "Fail_4",
+              "data": {
+                "EchoTime": [
+                  4,
+                  10,
+                  16,
+                  22
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "min_echoes": 6,
+            "recommended_echoes": 8
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_echoes",
+              "label": "Minimum echoes",
+              "type": "number",
+              "default": 2,
+              "min": 1,
+              "description": "Fail if fewer unique echoes than this"
+            },
+            {
+              "name": "recommended_echoes",
+              "label": "Recommended echoes",
+              "type": "number",
+              "default": null,
+              "description": "Warn if fewer unique echoes than this (optional)"
+            },
+            {
+              "name": "exact_echoes",
+              "label": "Exact echoes",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many echoes (overrides min/recommended)"
+            }
+          ]
+        },
+        {
+          "id": "megre_first_echo",
+          "name": "Short First Echo",
+          "description": "TE1 should be as short as possible (~3 ms) to capture the fast-decaying myelin-water pool.",
+          "implementation": "te1 = value[\"EchoTime\"].dropna().min()\nmax_te = params.get(\"max_first_te\")\nif max_te is not None and te1 > max_te:\n    raise ValidationError(f\"First TE too long ({te1} ms); must be <= {max_te} ms.\")\npref = params.get(\"preferred_first_te\")\nif pref is not None and te1 > pref:\n    raise ValidationWarning(f\"First TE could be shorter ({te1} ms); <= {pref} ms preferred.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "EchoTime": [
+                  3,
+                  6,
+                  9,
+                  12
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn",
+              "name": "Warn",
+              "data": {
+                "EchoTime": [
+                  6,
+                  9,
+                  12
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail",
+              "name": "Fail",
+              "data": {
+                "EchoTime": [
+                  10,
+                  14,
+                  18
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "max_first_te": 8,
+            "preferred_first_te": 5
+          },
+          "parameterDefinitions": [
+            {
+              "name": "max_first_te",
+              "label": "Maximum first TE",
+              "type": "number",
+              "default": 10,
+              "min": 0,
+              "unit": "ms",
+              "description": "Fail if the first echo time exceeds this"
+            },
+            {
+              "name": "preferred_first_te",
+              "label": "Preferred first TE",
+              "type": "number",
+              "default": null,
+              "min": 0,
+              "unit": "ms",
+              "description": "Warn if the first echo time exceeds this (optional)"
+            }
+          ]
+        },
+        {
+          "id": "megre_spacing_uniform",
+          "name": "Uniform Echo Spacing",
+          "description": "Echo spacing (dTE) must be uniform for R2*/beat fitting.",
+          "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\nspacings = te.diff().iloc[1:]\ntol = params.get(\"tolerance_ms\") or 0.1\nif len(spacings) > 0 and not all(abs(spacings.iloc[0] - s) <= tol for s in spacings):\n    raise ValidationError(f\"Echo spacing not uniform (tolerance {tol} ms). Found spacings: {list(spacings.round(3))}.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "EchoTime": [
+                  3,
+                  6,
+                  9,
+                  12
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail",
+              "name": "Fail",
+              "data": {
+                "EchoTime": [
+                  3,
+                  6,
+                  10,
+                  12
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "tolerance_ms": 0.1
+          },
+          "parameterDefinitions": [
+            {
+              "name": "tolerance_ms",
+              "label": "Tolerance",
+              "type": "number",
+              "default": 0.1,
+              "min": 0,
+              "unit": "ms",
+              "description": "Maximum allowed deviation between echo spacings"
+            }
+          ]
+        },
+        {
+          "id": "megre_spacing_short",
+          "name": "Short Echo Spacing (<=4 ms)",
+          "description": "dTE should be short (~3-4 ms) so the fast myelin-water decay is sampled.",
+          "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\ndte = te.diff().iloc[1:].mean()\nmax_dte = params.get(\"max_mean_spacing_ms\")\nif max_dte is not None and dte > max_dte:\n    raise ValidationError(f\"Mean dTE {dte:.1f} ms too long; must be <= {max_dte} ms.\")\npref = params.get(\"preferred_mean_spacing_ms\")\nif pref is not None and dte > pref:\n    raise ValidationWarning(f\"Mean dTE {dte:.1f} ms; <= {pref} ms preferred.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "EchoTime": [
+                  3,
+                  6,
+                  9,
+                  12
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn",
+              "name": "Warn",
+              "data": {
+                "EchoTime": [
+                  3,
+                  8,
+                  13,
+                  18
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail",
+              "name": "Fail",
+              "data": {
+                "EchoTime": [
+                  3,
+                  10,
+                  17,
+                  24
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "max_mean_spacing_ms": 6,
+            "preferred_mean_spacing_ms": 4
+          },
+          "parameterDefinitions": [
+            {
+              "name": "max_mean_spacing_ms",
+              "label": "Maximum mean spacing",
+              "type": "number",
+              "default": 6,
+              "min": 0,
+              "unit": "ms",
+              "description": "Fail if the mean echo spacing exceeds this"
+            },
+            {
+              "name": "preferred_mean_spacing_ms",
+              "label": "Preferred mean spacing",
+              "type": "number",
+              "default": 4,
+              "min": 0,
+              "unit": "ms",
+              "description": "Warn if the mean echo spacing exceeds this"
+            }
+          ]
+        },
+        {
+          "id": "megre_mag_phase",
+          "name": "Magnitude + Phase per Echo",
+          "description": "Each echo must have both a magnitude and a phase image (phase is essential for QSM).",
+          "implementation": "# Validate magnitude/phase pairs per echo\nfor echo_time, group in value.groupby(\"EchoTime\"):\n    image_types = group[\"ImageType\"]\n\n    # ImageType is list-valued; check components, not the string repr\n    has_magnitude = any(\"M\" in as_list(it) for it in image_types)\n    has_phase = any(\"P\" in as_list(it) for it in image_types)\n\n    if not has_magnitude:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing magnitude image.\")\n\n    if not has_phase:\n        raise ValidationError(f\"Echo time {echo_time} ms is missing phase image.\")\n",
+          "fields": [
+            "ImageType",
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "ImageType": [
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "M"
+                  ],
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "P"
+                  ],
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "M"
+                  ],
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "P"
+                  ]
+                ],
+                "EchoTime": [
+                  5,
+                  5,
+                  10,
+                  10
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_no_phase",
+              "name": "Fail_no_phase",
+              "data": {
+                "ImageType": [
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "M"
+                  ],
+                  [
+                    "ORIGINAL",
+                    "PRIMARY",
+                    "M"
+                  ]
+                ],
+                "EchoTime": [
+                  5,
+                  10
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {},
+          "parameterDefinitions": []
+        },
+        {
+          "id": "megre_isotropic_1mm",
+          "name": "Isotropic Voxels <=1 mm",
+          "description": "Use isotropic voxels of at most 1 mm edge to limit partial-volume error in white matter.",
+          "implementation": "ps = value[\"PixelSpacing\"].iloc[0]\nst = value[\"SliceThickness\"].iloc[0]\ntol = params.get(\"isotropy_tolerance_mm\") or 0.1\nmax_edge = params.get(\"max_edge_mm\")\nif abs(ps[0]-ps[1]) > tol or abs(ps[0]-st) > tol:\n    raise ValidationError(f\"Voxels not isotropic (tolerance {tol} mm). PixelSpacing {ps}, SliceThickness {st}.\")\nif max_edge is not None and max(ps[0], ps[1], st) > max_edge:\n    raise ValidationWarning(f\"Voxel edge {max(ps[0],ps[1],st)} mm exceeds {max_edge} mm.\")\n",
+          "fields": [
+            "PixelSpacing",
+            "SliceThickness"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "PixelSpacing": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "SliceThickness": [
+                  1
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn_big",
+              "name": "Warn_big",
+              "data": {
+                "PixelSpacing": [
+                  [
+                    1.2,
+                    1.2
+                  ]
+                ],
+                "SliceThickness": [
+                  1.2
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_aniso",
+              "name": "Fail_aniso",
+              "data": {
+                "PixelSpacing": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "SliceThickness": [
+                  2
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "max_edge_mm": 1.05,
+            "isotropy_tolerance_mm": 0.1
+          },
+          "parameterDefinitions": [
+            {
+              "name": "max_edge_mm",
+              "label": "Maximum voxel edge",
+              "type": "number",
+              "default": 1.05,
+              "min": 0,
+              "unit": "mm",
+              "description": "Warn if the largest voxel dimension exceeds this"
+            },
+            {
+              "name": "isotropy_tolerance_mm",
+              "label": "Isotropy tolerance",
+              "type": "number",
+              "default": 0.1,
+              "min": 0,
+              "unit": "mm",
+              "description": "Fail if voxel dimensions differ from each other by more than this"
+            }
+          ]
+        }
+      ]
+    },
+    "Multi-Echo Spin Echo (MESE)": {
+      "description": "Multi-echo spin echo (CPMG) \u2014 R2 map for R2', and (>=32 echoes) an MWF myelin reference.",
+      "detailed_description": "## Multi-Echo Spin Echo (MESE) \u2014 R2 for R2', and myelin (MWF) reference\n\nMulti-echo (CPMG) spin echo. Its primary job is the **R2 map** so that **R2' = R2* - R2** can be formed (R2* comes from the MEGRE). With enough echoes it **doubles as a multi-component T2 -> myelin-water-fraction (MWF) map**, giving an *independent* reference for HC-ChiSep's diamagnetic (chi-, myelin) arm.\n\n### Key requirements (auto-validated where possible)\n- **Spin-echo (SE), CPMG multi-echo** train.\n- **>= 32 echoes for MWF** (dTE ~ 8-10 ms, TE1 ~ 10 ms). >= 8 echoes is the bare minimum for R2 alone.\n- **Uniform echo spacing.**\n\n### Manual checks (NOT verifiable from DICOM)\n- **Same geometry/coverage as the MEGRE** (or at least resample-able) so R2' = R2* - R2 is voxelwise valid. Prescribe from the same localiser.\n- **CPMG / stimulated-echo handling** \u2014 for quantitative MWF, use a sequence with known refocusing/B1 behaviour (or acquire a B1 map). GRASE is an acceptable faster alternative.\n- SNR matters for MWF; in-plane resolution can be coarser than the MEGRE.\n\n### What it validates in HC-ChiSep\nR2 (with R2* from MEGRE) -> R2' input; multi-component T2 -> MWF, an independent check of HC-ChiSep's chi- / myelin output.\n",
+      "tags": [
+        "analysis:chi-separation",
+        "HC-ChiSep",
+        "MESE",
+        "T2",
+        "R2",
+        "MWF",
+        "myelin",
+        "multi-echo",
+        "spin-echo"
+      ],
+      "fields": [
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains": "SE",
+          "vr": "CS",
+          "dataType": "string"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "mese_echo_count",
+          "name": "Echo Count (>=32 for MWF)",
+          "description": ">=8 echoes needed for R2; >=32 recommended so MESE also yields an MWF myelin reference.",
+          "implementation": "n = value[\"EchoTime\"].dropna().nunique()\nexact = params.get(\"exact_echoes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} echoes, found {n}.\")\nelse:\n    min_n = params.get(\"min_echoes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} echoes; at least {min_n} required.\")\n    rec = params.get(\"recommended_echoes\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"Found {n} echoes; {rec}+ recommended.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass_32",
+              "name": "Pass_32",
+              "data": {
+                "EchoTime": [
+                  10,
+                  18,
+                  26,
+                  34,
+                  42,
+                  50,
+                  58,
+                  66,
+                  74,
+                  82,
+                  90,
+                  98,
+                  106,
+                  114,
+                  122,
+                  130,
+                  138,
+                  146,
+                  154,
+                  162,
+                  170,
+                  178,
+                  186,
+                  194,
+                  202,
+                  210,
+                  218,
+                  226,
+                  234,
+                  242,
+                  250,
+                  258
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn_16",
+              "name": "Warn_16",
+              "data": {
+                "EchoTime": [
+                  10,
+                  20,
+                  30,
+                  40,
+                  50,
+                  60,
+                  70,
+                  80,
+                  90,
+                  100,
+                  110,
+                  120,
+                  130,
+                  140,
+                  150,
+                  160
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_4",
+              "name": "Fail_4",
+              "data": {
+                "EchoTime": [
+                  10,
+                  20,
+                  30,
+                  40
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "min_echoes": 6,
+            "recommended_echoes": 32
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_echoes",
+              "label": "Minimum echoes",
+              "type": "number",
+              "default": 2,
+              "min": 1,
+              "description": "Fail if fewer unique echoes than this"
+            },
+            {
+              "name": "recommended_echoes",
+              "label": "Recommended echoes",
+              "type": "number",
+              "default": null,
+              "description": "Warn if fewer unique echoes than this (optional)"
+            },
+            {
+              "name": "exact_echoes",
+              "label": "Exact echoes",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many echoes (overrides min/recommended)"
+            }
+          ]
+        },
+        {
+          "id": "mese_spacing_uniform",
+          "name": "Uniform Echo Spacing",
+          "description": "CPMG echo spacing must be uniform.",
+          "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\nspacings = te.diff().iloc[1:]\ntol = params.get(\"tolerance_ms\") or 0.1\nif len(spacings) > 0 and not all(abs(spacings.iloc[0] - s) <= tol for s in spacings):\n    raise ValidationError(f\"Echo spacing not uniform (tolerance {tol} ms). Found spacings: {list(spacings.round(3))}.\")\n",
+          "fields": [
+            "EchoTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "EchoTime": [
+                  10,
+                  20,
+                  30,
+                  40
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail",
+              "name": "Fail",
+              "data": {
+                "EchoTime": [
+                  10,
+                  20,
+                  35,
+                  40
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "tolerance_ms": 0.2
+          },
+          "parameterDefinitions": [
+            {
+              "name": "tolerance_ms",
+              "label": "Tolerance",
+              "type": "number",
+              "default": 0.1,
+              "min": 0,
+              "unit": "ms",
+              "description": "Maximum allowed deviation between echo spacings"
+            }
+          ]
+        }
+      ]
+    },
+    "Diffusion Tensor Imaging (DTI)": {
+      "description": "Single-shell EPI diffusion (b~1000, >=30 dir + b0) \u2014 tensor V1 gives the fibre-orientation ground truth.",
+      "detailed_description": "## Diffusion Tensor Imaging (DTI) \u2014 orientation ground truth\n\nSingle-shell diffusion for tensor fitting. Its principal eigenvector (V1) gives the **true white-matter fibre orientation**, whose **angle to B0** is the ground truth for validating HC-ChiSep's signal-derived fibre angle (theta) \u2014 the method's core novelty.\n\n### Key requirements (auto-validated where possible)\n- **Echo-planar diffusion (EP).**\n- **Single shell b ~ 1000 s/mm^2** plus **>= 1 b=0**.\n- **>= 30 directions (60 ideal)** for a robust tensor / stable V1.\n\n### Manual checks (NOT verifiable from DICOM)\n- **Reverse phase-encode b=0 (blip-up/blip-down)** for topup/distortion correction \u2014 ESSENTIAL to undistort the EPI before registering to the (undistorted) MEGRE, or the theta comparison is invalid. DICOM cannot encode blip polarity, so confirm a reverse-PE b0 (or full reverse-PE series) was acquired.\n- **Registration** DTI -> MEGRE space (rigid + distortion correction) is a processing step; V1 must be reoriented with the transform.\n- ~2 mm isotropic is typical; match/resample as needed.\n\n### What it validates in HC-ChiSep\nDTI tensor -> V1 -> angle(V1, B0) = DTI-theta, correlated against HC-ChiSep's signal-theta within white matter.\n",
+      "tags": [
+        "analysis:dti",
+        "HC-ChiSep",
+        "DTI",
+        "diffusion",
+        "orientation",
+        "validation",
+        "brain"
+      ],
+      "fields": [
+        {
+          "field": "ScanningSequence",
+          "tag": "0018,0020",
+          "contains": "EP",
+          "vr": "CS",
+          "dataType": "string"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "dti_bvalues",
+          "name": "b=0 and b~1000 Shell",
+          "description": "Need at least one b=0 and a diffusion-weighted shell around b=1000 s/mm^2 for tensor fitting.",
+          "implementation": "b = sorted(float(x) for x in value[\"DiffusionBValue\"].dropna().unique())\nif not b:\n    raise ValidationError(\"No DiffusionBValue found \u2014 is this a diffusion series?\")\n\ndef parse_ranges(spec):\n    ranges = []\n    for part in [p.strip() for p in str(spec or \"\").split(\",\") if p.strip()]:\n        lo_str, _, hi_str = part.partition(\"-\")\n        ranges.append((float(lo_str), float(hi_str) if hi_str else float(lo_str)))\n    return ranges\n\nfound = [int(round(x)) for x in b]\nmissing = [f\"{lo:g}-{hi:g}\" for lo, hi in parse_ranges(params.get(\"required_ranges\"))\n           if not any(lo <= x <= hi for x in b)]\nif missing:\n    raise ValidationError(f\"Missing required b-value range(s) {', '.join(missing)} s/mm\u00b2. Found: {found}\")\nrecommended = [f\"{lo:g}-{hi:g}\" for lo, hi in parse_ranges(params.get(\"recommended_ranges\"))\n              if not any(lo <= x <= hi for x in b)]\nif recommended:\n    raise ValidationWarning(f\"Missing recommended b-value range(s) {', '.join(recommended)} s/mm\u00b2. Found: {found}\")\n",
+          "fields": [
+            "DiffusionBValue"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "DiffusionBValue": [
+                  0,
+                  1000,
+                  1000,
+                  1000
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn_no_b0",
+              "name": "Warn_no_b0",
+              "data": {
+                "DiffusionBValue": [
+                  1000,
+                  1000,
+                  1000
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_no_shell",
+              "name": "Fail_no_shell",
+              "data": {
+                "DiffusionBValue": [
+                  0,
+                  300,
+                  300
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "required_ranges": "700-1300",
+            "recommended_ranges": "0-50"
+          },
+          "parameterDefinitions": [
+            {
+              "name": "required_ranges",
+              "label": "Required ranges",
+              "type": "string",
+              "default": "0-50, 500-50000",
+              "description": "Comma-separated 'lo-hi' b-value ranges (s/mm\u00b2) that must each contain at least one b-value"
+            },
+            {
+              "name": "recommended_ranges",
+              "label": "Recommended ranges",
+              "type": "string",
+              "default": null,
+              "description": "Ranges that produce a warning when no b-value falls within them"
+            }
+          ]
+        },
+        {
+          "id": "dti_directions",
+          "name": "Direction Count (>=30)",
+          "description": ">=30 unique diffusion directions (60 ideal) for a stable tensor and reliable V1.",
+          "implementation": "dir_col = next((c for c in value.columns if c not in (\"DiffusionBValue\", \"Count\")), None)\nif dir_col is None:\n    raise ValidationWarning(\"Cannot count directions (no gradient orientation field available).\")\nrows = value\nb0_thr = params.get(\"b0_threshold\")\nif \"DiffusionBValue\" in value.columns and b0_thr is not None:\n    b = value[\"DiffusionBValue\"].fillna(0).astype(float)\n    rows = value[b > b0_thr]\ndirs = set()\nfor o in rows[dir_col]:\n    if o is None or o != o:\n        continue\n    try:\n        dirs.add(tuple(round(float(x), 3) for x in as_list(o)))\n    except (TypeError, ValueError):\n        dirs.add(str(o))\nn = len(dirs)\nexact = params.get(\"exact_directions\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} unique diffusion directions, found {n}.\")\nelse:\n    min_n = params.get(\"min_directions\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} unique diffusion directions; at least {min_n} required.\")\n    rec = params.get(\"recommended_directions\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"{n} unique diffusion directions; {rec}+ recommended.\")\n",
+          "fields": [
+            "DiffusionBValue",
+            "DiffusionGradientOrientation"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass_32",
+              "name": "Pass_32",
+              "data": {
+                "DiffusionBValue": [
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                "DiffusionGradientOrientation": [
+                  [
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.1,
+                    0.97,
+                    0.02
+                  ],
+                  [
+                    0.2,
+                    0.94,
+                    0.04
+                  ],
+                  [
+                    0.3,
+                    0.91,
+                    0.06
+                  ],
+                  [
+                    0.4,
+                    0.88,
+                    0.08
+                  ],
+                  [
+                    0.5,
+                    0.85,
+                    0.1
+                  ],
+                  [
+                    0.6,
+                    0.82,
+                    0.12
+                  ],
+                  [
+                    0.7,
+                    0.79,
+                    0.14
+                  ],
+                  [
+                    0.8,
+                    0.76,
+                    0.16
+                  ],
+                  [
+                    0.9,
+                    0.73,
+                    0.18
+                  ],
+                  [
+                    1.0,
+                    0.7,
+                    0.2
+                  ],
+                  [
+                    1.1,
+                    0.67,
+                    0.22
+                  ],
+                  [
+                    1.2,
+                    0.64,
+                    0.24
+                  ],
+                  [
+                    1.3,
+                    0.61,
+                    0.26
+                  ],
+                  [
+                    1.4,
+                    0.58,
+                    0.28
+                  ],
+                  [
+                    1.5,
+                    0.55,
+                    0.3
+                  ],
+                  [
+                    1.6,
+                    0.52,
+                    0.32
+                  ],
+                  [
+                    1.7,
+                    0.49,
+                    0.34
+                  ],
+                  [
+                    1.8,
+                    0.46,
+                    0.36
+                  ],
+                  [
+                    1.9,
+                    0.43,
+                    0.38
+                  ],
+                  [
+                    2.0,
+                    0.4,
+                    0.4
+                  ],
+                  [
+                    2.1,
+                    0.37,
+                    0.42
+                  ],
+                  [
+                    2.2,
+                    0.34,
+                    0.44
+                  ],
+                  [
+                    2.3,
+                    0.31,
+                    0.46
+                  ],
+                  [
+                    2.4,
+                    0.28,
+                    0.48
+                  ],
+                  [
+                    2.5,
+                    0.25,
+                    0.5
+                  ],
+                  [
+                    2.6,
+                    0.22,
+                    0.52
+                  ],
+                  [
+                    2.7,
+                    0.19,
+                    0.54
+                  ],
+                  [
+                    2.8,
+                    0.16,
+                    0.56
+                  ],
+                  [
+                    2.9,
+                    0.13,
+                    0.58
+                  ],
+                  [
+                    3.0,
+                    0.1,
+                    0.6
+                  ],
+                  [
+                    3.1,
+                    0.07,
+                    0.62
+                  ]
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_6",
+              "name": "Fail_6",
+              "data": {
+                "DiffusionBValue": [
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000,
+                  1000
+                ],
+                "DiffusionGradientOrientation": [
+                  [
+                    0.0,
+                    1.0,
+                    0.0
+                  ],
+                  [
+                    0.1,
+                    0.9,
+                    0.0
+                  ],
+                  [
+                    0.2,
+                    0.8,
+                    0.0
+                  ],
+                  [
+                    0.3,
+                    0.7,
+                    0.0
+                  ],
+                  [
+                    0.4,
+                    0.6,
+                    0.0
+                  ],
+                  [
+                    0.5,
+                    0.5,
+                    0.0
+                  ]
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "min_directions": 12,
+            "recommended_directions": 30,
+            "b0_threshold": 50
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_directions",
+              "label": "Minimum directions",
+              "type": "number",
+              "default": 30,
+              "min": 1,
+              "description": "Fail if fewer unique directions than this"
+            },
+            {
+              "name": "recommended_directions",
+              "label": "Recommended directions",
+              "type": "number",
+              "default": null,
+              "description": "Warn if fewer unique directions than this (optional)"
+            },
+            {
+              "name": "exact_directions",
+              "label": "Exact directions",
+              "type": "number",
+              "default": null,
+              "description": "Require exactly this many directions (overrides min/recommended)"
+            },
+            {
+              "name": "b0_threshold",
+              "label": "b=0 threshold",
+              "type": "number",
+              "default": 50,
+              "min": 0,
+              "unit": "s/mm\u00b2",
+              "description": "Volumes with b-value at or below this are excluded (b=0 orientations are meaningless)"
+            }
+          ]
+        }
+      ]
+    },
+    "T1-weighted (T1w)": {
+      "description": "3D ~1 mm isotropic IR-prepared T1w (MPRAGE/BRAVO) for segmentation and ROI definition.",
+      "detailed_description": "## T1-weighted (T1w) \u2014 segmentation & ROIs\n\n3D IR-prepared T1w (MPRAGE / BRAVO) for tissue segmentation (GM/WM/deep-gray) and atlas registration, providing the ROIs for chi+ (deep-gray iron) and chi- (fibre-bundle) analysis.\n\n### Key requirements (auto-validated where possible)\n- **3D acquisition, ~1 mm isotropic**, whole head.\n- **IR-prepared** (InversionTime present) for strong GM/WM contrast.\n\n### Manual checks (NOT verifiable from DICOM)\n- Same session as the MEGRE; will be registered to MEGRE space for segmentation transfer.\n\n### What it validates / enables\nGM/WM/deep-gray segmentation + fibre-bundle atlas -> the ROIs over which HC-ChiSep chi+ (iron) and chi- (myelin) are summarised; deep-gray iron serves as a soft chi+ correlate (no direct in-vivo iron ground truth exists).\n",
+      "tags": [
+        "analysis:segmentation",
+        "HC-ChiSep",
+        "T1w",
+        "MPRAGE",
+        "anatomical",
+        "brain"
+      ],
+      "fields": [
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "3D",
+          "vr": "CS",
+          "dataType": "string"
+        }
+      ],
+      "series": [],
+      "rules": [
+        {
+          "id": "t1w_ir_prepared",
+          "name": "IR-Prepared T1w",
+          "description": "An inversion-recovery-prepared T1w (MPRAGE/BRAVO) gives the best GM/WM contrast for segmentation.",
+          "implementation": "ti = value[\"InversionTime\"].dropna()\nif len(ti) == 0 or float(ti.iloc[0]) <= 0:\n    raise ValidationWarning(\"No InversionTime \u2014 an IR-prepared T1w (MPRAGE/BRAVO) is recommended for segmentation.\")",
+          "fields": [
+            "InversionTime"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "InversionTime": [
+                  900
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Warn",
+              "name": "Warn",
+              "data": {
+                "InversionTime": [
+                  0
+                ]
+              },
+              "expectedResult": "warning",
+              "description": ""
+            }
+          ]
+        },
+        {
+          "id": "t1w_isotropic_1mm",
+          "name": "~1 mm Isotropic",
+          "description": "Use ~1 mm isotropic voxels, whole head.",
+          "implementation": "ps = value[\"PixelSpacing\"].iloc[0]\nst = value[\"SliceThickness\"].iloc[0]\ntol = params.get(\"isotropy_tolerance_mm\") or 0.1\nmax_edge = params.get(\"max_edge_mm\")\nif abs(ps[0]-ps[1]) > tol or abs(ps[0]-st) > tol:\n    raise ValidationError(f\"Voxels not isotropic (tolerance {tol} mm). PixelSpacing {ps}, SliceThickness {st}.\")\nif max_edge is not None and max(ps[0], ps[1], st) > max_edge:\n    raise ValidationWarning(f\"Voxel edge {max(ps[0],ps[1],st)} mm exceeds {max_edge} mm.\")\n",
+          "fields": [
+            "PixelSpacing",
+            "SliceThickness"
+          ],
+          "testCases": [
+            {
+              "id": "tc_Pass",
+              "name": "Pass",
+              "data": {
+                "PixelSpacing": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "SliceThickness": [
+                  1
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "tc_Fail_aniso",
+              "name": "Fail_aniso",
+              "data": {
+                "PixelSpacing": [
+                  [
+                    1,
+                    1
+                  ]
+                ],
+                "SliceThickness": [
+                  1.5
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ],
+          "parameters": {
+            "max_edge_mm": 1.2,
+            "isotropy_tolerance_mm": 0.15
+          },
+          "parameterDefinitions": [
+            {
+              "name": "max_edge_mm",
+              "label": "Maximum voxel edge",
+              "type": "number",
+              "default": 1.05,
+              "min": 0,
+              "unit": "mm",
+              "description": "Warn if the largest voxel dimension exceeds this"
+            },
+            {
+              "name": "isotropy_tolerance_mm",
+              "label": "Isotropy tolerance",
+              "type": "number",
+              "default": 0.1,
+              "min": 0,
+              "unit": "mm",
+              "description": "Fail if voxel dimensions differ from each other by more than this"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

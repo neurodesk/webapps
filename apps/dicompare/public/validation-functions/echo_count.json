@@ -1,0 +1,119 @@
+{
+  "id": "echo_count",
+  "name": "Echo Count",
+  "description": "Validates the number of unique echo times. Configure a minimum (error below), an optional recommended count (warning below), or an exact required count.",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "n = value[\"EchoTime\"].dropna().nunique()\nexact = params.get(\"exact_echoes\")\nif exact is not None:\n    if n != exact:\n        raise ValidationError(f\"Expected exactly {exact} echoes, found {n}.\")\nelse:\n    min_n = params.get(\"min_echoes\")\n    if min_n is not None and n < min_n:\n        raise ValidationError(f\"Only {n} echoes; at least {min_n} required.\")\n    rec = params.get(\"recommended_echoes\")\n    if rec is not None and n < rec:\n        raise ValidationWarning(f\"Found {n} echoes; {rec}+ recommended.\")\n",
+  "testCases": [
+    {
+      "id": "default_pass",
+      "name": "Two echoes meets default minimum",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0
+        ]
+      }
+    },
+    {
+      "id": "default_fail",
+      "name": "Single echo fails default minimum",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          5.0
+        ]
+      }
+    },
+    {
+      "id": "min_moves",
+      "name": "Four echoes fail when minimum raised to 8",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0,
+          15.0,
+          20.0
+        ]
+      },
+      "params": {
+        "min_echoes": 8
+      }
+    },
+    {
+      "id": "recommended_warns",
+      "name": "Four echoes warn below recommended 8",
+      "expectedResult": "warning",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0,
+          15.0,
+          20.0
+        ]
+      },
+      "params": {
+        "recommended_echoes": 8
+      }
+    },
+    {
+      "id": "exact_pass",
+      "name": "Exactly two echoes for dual-echo",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0
+        ]
+      },
+      "params": {
+        "exact_echoes": 2
+      }
+    },
+    {
+      "id": "exact_fail",
+      "name": "Three echoes fail exact=2",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          5.0,
+          10.0,
+          15.0
+        ]
+      },
+      "params": {
+        "exact_echoes": 2
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "min_echoes",
+      "label": "Minimum echoes",
+      "type": "number",
+      "default": 2,
+      "min": 1,
+      "description": "Fail if fewer unique echoes than this"
+    },
+    {
+      "name": "recommended_echoes",
+      "label": "Recommended echoes",
+      "type": "number",
+      "default": null,
+      "description": "Warn if fewer unique echoes than this (optional)"
+    },
+    {
+      "name": "exact_echoes",
+      "label": "Exact echoes",
+      "type": "number",
+      "default": null,
+      "description": "Require exactly this many echoes (overrides min/recommended)"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "id": "validate_megre_resolution",
+  "name": "In-Plane Resolution",
+  "description": "Validates that the mean in-plane resolution (PixelSpacing) does not exceed a configurable maximum.",
+  "category": "Geometry",
+  "fields": [
+    "PixelSpacing"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "if \"PixelSpacing\" in value.columns:\n    pixel_spacing = value[\"PixelSpacing\"].iloc[0]\n    if isinstance(pixel_spacing, (list, tuple)) and len(pixel_spacing) >= 2:\n        avg_spacing = (pixel_spacing[0] + pixel_spacing[1]) / 2\n        max_sp = params.get(\"max_inplane_mm\")\n        if max_sp is not None and avg_spacing > max_sp:\n            raise ValidationError(f\"In-plane resolution should be <= {max_sp:g} mm. Found: {avg_spacing:.2f} mm\")\n",
+  "testCases": [
+    {
+      "id": "high_res_pass",
+      "name": "0.5 mm passes default 0.6",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            0.5,
+            0.5
+          ]
+        ]
+      }
+    },
+    {
+      "id": "low_res_fail",
+      "name": "1.0 mm fails default 0.6",
+      "expectedResult": "fail",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ]
+      }
+    },
+    {
+      "id": "threshold_moves",
+      "name": "1.0 mm passes when max raised to 1.2",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ]
+      },
+      "params": {
+        "max_inplane_mm": 1.2
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_inplane_mm",
+      "label": "Maximum in-plane spacing",
+      "type": "number",
+      "default": 0.6,
+      "min": 0,
+      "unit": "mm",
+      "description": "Fail if the mean in-plane pixel spacing exceeds this"
+    }
+  ]
+}

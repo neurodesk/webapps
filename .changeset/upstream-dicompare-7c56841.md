@@ -1,0 +1,63 @@
+---
+"dicompare": patch
+---
+
+Merge upstream astewartau/dicompare-web f0462e2..7c56841:
+
+- Enable TypeScript strict mode and add shared Modal primitive
+- Add push/PR CI; harden worker against crashes and hangs
+- feat(schemas): add HC-ChiSep validation protocol schema
+- chore: bump version to 0.11.2
+- chore: update schema DOI mapping [skip ci]
+- Bundle patched pydicom offline; make wheel versions single-source
+- Merge pull request #14 from astewartau/fix/electron-pydicom-wheel-manifest
+- Merge pull request #13 from astewartau/chore/ci-and-worker-resilience
+- Bump bundled dicompare to 0.7.0
+- Merge pull request #15 from astewartau/chore/bump-dicompare-0.7.0
+- chore: bump version to 0.11.3
+- Confirm and surface custom schema uploads in Schema Library
+- Make rule test harness production-faithful; add schema lint hints
+- Fix test-case cell editor reformatting mid-keystroke
+- chore: bump version to 0.12.0
+- Add schema: Axon diameter mapping
+- Remove Vercel config; site is deployed via GitHub Pages
+- Merge pull request #17 from astewartau/schema/Axon_diameter_mapping
+- Auto-close submission issue when schema PR merges
+- Add schema: Protocols for DWI analysis
+- Merge pull request #19 from astewartau/schema/Protocols_for_DWI_analysis
+- Add schema authoring best-practices guide
+- Repair Jelle's DWI/axon schemas: phase encoding, rule severity, test cases
+- Normalize raw Siemens coil-combine code; lint vendor codes on enum fields
+- Consume canonical field registry from dicompare-pip
+- Wire field-registry regeneration: npm run sync:registry + CI drift check
+- Gate schema submissions on dicompare lint
+- Cleanup: remove stray test.pro; gitignore electron build dirs (out/, release/)
+- Fix .gitignore: restore /public/pyodide entry, ignore /out
+- Adopt dicompare v2 rule API in the editor; registry-driven constraint suggestions
+- Bump dicompare to 0.8.0
+- chore: bump version to 0.13.0
+- chore: update schema DOI mapping [skip ci]
+- Library maintenance: fix rules surfaced by dicompare lint
+- Library-wide tolerance pass: 209 exact continuous constraints -> tolerance
+- Vendor TE rules, abcd tests, and schema rules in the function library
+- Editor: field-constraint severity (Fail vs Warn/reference-only)
+- Revise Jelle's schemas using field severity (v1.2 / v1.1)
+- Mark SAR/dBdt constraints reference-only (severity: warning)
+- Parameterized validation functions: library, schemas, and UI
+- Pin dicompare 0.10.0 (0.9.0 on PyPI predates params support)
+- chore: bump version to 0.14.0
+- chore: update schema DOI mapping [skip ci]
+- Render tooltips through a portal so they escape sticky headers
+- Distinguish range constraints from list values
+- Constraint notes, and show required/reference state in tables and print
+- Show a rule's optional fields in the validation function list
+- Number-line constraint editor, graded pass/warn/fail, custom messages
+- chore: bump version to 0.15.0
+- Derived fields in autocomplete, enum value entry, range-edit fix
+- chore: bump version to 0.15.1
+- Severity dots only where a schema exists, amber print params, valid nesting
+- Merge pull request #20 from astewartau/claude/thirsty-bohr-bded1b
+- chore: bump version to 0.15.2
+- chore: pin dicompare 0.11.1
+- Merge pull request #22 from astewartau/bump-dicompare-0.11.1
+- chore: bump version to 0.15.3

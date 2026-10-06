@@ -1,0 +1,80 @@
+{
+  "id": "validate_acquisition_matrix",
+  "name": "Acquisition Matrix Size",
+  "description": "Validates that the acquired matrix dimensions fall within a configurable range (checked before reconstruction/interpolation).",
+  "category": "Geometry",
+  "fields": [
+    "AcquisitionMatrix"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "# AcquisitionMatrix format: [freq_rows, freq_cols, phase_rows, phase_cols]\n# Non-zero values indicate the actual dimensions\nacq_matrix = value[\"AcquisitionMatrix\"].iloc[0]\nif acq_matrix is not None and len(acq_matrix) >= 4:\n    freq_dim = acq_matrix[0] if acq_matrix[0] > 0 else acq_matrix[1]\n    phase_dim = acq_matrix[2] if acq_matrix[2] > 0 else acq_matrix[3]\n    matrix_min_found = min(freq_dim, phase_dim)\n    matrix_max_found = max(freq_dim, phase_dim)\n    lo = params.get(\"matrix_min\")\n    hi = params.get(\"matrix_max\")\n    if (lo is not None and matrix_min_found < lo) or (hi is not None and matrix_max_found > hi):\n        raise ValidationWarning(f\"Acquired matrix should be within {lo:g}-{hi:g}. Found {freq_dim}x{phase_dim}.\")\n",
+  "testCases": [
+    {
+      "id": "in_range_pass",
+      "name": "144x144 passes default 128-160",
+      "expectedResult": "pass",
+      "data": {
+        "AcquisitionMatrix": [
+          [
+            144,
+            0,
+            0,
+            144
+          ]
+        ]
+      }
+    },
+    {
+      "id": "too_big_warns",
+      "name": "256x256 warns above default maximum",
+      "expectedResult": "warning",
+      "data": {
+        "AcquisitionMatrix": [
+          [
+            256,
+            0,
+            0,
+            256
+          ]
+        ]
+      }
+    },
+    {
+      "id": "range_moves",
+      "name": "256x256 passes when range widened",
+      "expectedResult": "pass",
+      "data": {
+        "AcquisitionMatrix": [
+          [
+            256,
+            0,
+            0,
+            256
+          ]
+        ]
+      },
+      "params": {
+        "matrix_min": 128,
+        "matrix_max": 320
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "matrix_min",
+      "label": "Minimum matrix size",
+      "type": "number",
+      "default": 128,
+      "min": 1,
+      "description": "Warn if the smaller acquired dimension is below this"
+    },
+    {
+      "name": "matrix_max",
+      "label": "Maximum matrix size",
+      "type": "number",
+      "default": 160,
+      "min": 1,
+      "description": "Warn if the larger acquired dimension is above this"
+    }
+  ]
+}

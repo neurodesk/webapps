@@ -3,7 +3,7 @@ import { Bold, Italic, Heading, List, ListOrdered, Link as LinkIcon, Code, Quote
 
 interface MarkdownToolbarProps {
   /** Ref to the textarea being edited. */
-  textareaRef: React.RefObject<HTMLTextAreaElement>;
+  textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /** Current markdown value. */
   value: string;
   /** Called with the new value after a toolbar action. */

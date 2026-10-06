@@ -13,7 +13,7 @@ interface SchemaLibraryPanelProps {
   onSchemaReadmeClick: (schemaId: string, schemaName: string) => void;
   onAcquisitionReadmeClick: (schemaId: string, schemaName: string, acquisitionIndex: number) => void;
   onSchemaEdit: (schemaId: string) => void;
-  onSchemaUpload: (file: File) => Promise<void>;
+  onSchemaUpload: (file: File) => Promise<string | null>;
 }
 
 const SchemaLibraryPanel: React.FC<SchemaLibraryPanelProps> = ({

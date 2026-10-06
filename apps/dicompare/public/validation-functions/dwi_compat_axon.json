@@ -1,0 +1,14 @@
+{
+  "id": "dwi_compat_axon",
+  "name": "DWI data compatibility: Axon diameter mapping",
+  "description": "Evaluates compatibility with axon diameter mapping from Veraart et al. (2020).",
+  "category": "Diffusion",
+  "fields": [
+    "MaxDiffGradient",
+    "NumberOfDiffusionShells",
+    "DiffusionBValues"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "import ast\n\nerrors = []\nfor i in range(len(value[\"MaxDiffGradient\"])):\n    if float(value[\"MaxDiffGradient\"][i]) < 250:\n        errors.append(\"Entry \" + str(i) + \": MaxDiffGradient too low for axon diameter mapping\")\n    if float(value[\"NumberOfDiffusionShells\"][i]) < 2:\n        errors.append(\"Entry \" + str(i) + \": NumberOfDiffusionShells too low for axon diameter mapping\")\n    bvals = as_list(value[\"DiffusionBValues\"][i])\n    if len([b for b in bvals if 0 < b < 1000]) == 0:\n        errors.append(\"Entry \" + str(i) + \": no non-zero b-value below 1000 s/mm2 present\")\n\nif errors:\n    raise ValidationError(chr(10).join(errors))",
+  "testCases": []
+}
