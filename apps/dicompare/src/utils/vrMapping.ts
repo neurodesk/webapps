@@ -221,19 +221,6 @@ export function getSuggestedConstraintForVR(vr: string, fieldName?: string, tag?
     return 'tolerance';
   }
 
-<<<<<<< monorepo
-  // Special case for ImagingFrequency - use tolerance instead of exact
-  if (fieldName === 'Imaging Frequency' || tag === '0018,0084') {
-    return 'tolerance';
-  }
-
-  // Special case for PixelBandwidth - use tolerance instead of exact
-  if (fieldName === 'Pixel Bandwidth' || tag === '0018,0095') {
-    return 'tolerance';
-  }
-
-=======
->>>>>>> upstream
   // Special case for ScanOptions when source is .pro file - use contains_any instead of exact
   // .pro files show available options, but actual acquisition may only use some of them
   if ((fieldName === 'Scan Options' || tag === '0018,0022') && source === 'pro') {
@@ -250,24 +237,6 @@ export function getSuggestedConstraintForVR(vr: string, fieldName?: string, tag?
  * dicompare/fields.py, exported to src/data/fieldRegistry.json).
  */
 export function getSuggestedToleranceValue(fieldName?: string, tag?: string): number | undefined {
-<<<<<<< monorepo
-  // Special case for MagneticFieldStrength - tolerance of 0.3
-  if (fieldName === 'Magnetic Field Strength' || tag === '0018,0087') {
-    return 0.3;
-  }
-
-  // Special case for ImagingFrequency - tolerance of 1
-  if (fieldName === 'Imaging Frequency' || tag === '0018,0084') {
-    return 1;
-  }
-
-  // Special case for PixelBandwidth - tolerance of 1
-  if (fieldName === 'Pixel Bandwidth' || tag === '0018,0095') {
-    return 1;
-  }
-
-  return undefined;
-=======
   const registry: Record<string, { valueType: string; tag?: string; suggestedTolerance?: number }> = fieldRegistry;
 
   // Match by keyword ("MagneticFieldStrength"), display name with spaces
@@ -279,5 +248,4 @@ export function getSuggestedToleranceValue(fieldName?: string, tag?: string): nu
     undefined;
 
   return entry ? entry.suggestedTolerance : undefined;
->>>>>>> upstream
 }

@@ -123,6 +123,11 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
   reportProgress('Installing core packages...', 30);
   await pyodide.loadPackage(['micropip', 'sqlite3']);
 
+  // The installed suite lists its Pyodide packages and wheels in /_offline/python.json.
+  const suiteConfig: { packages: string[]; wheels: string[] } | null = suiteOffline
+    ? await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json())
+    : null;
+
   // In Electron production, pre-load all Pyodide packages from local storage
   // This prevents micropip from trying to fetch dependencies from PyPI
   if (inElectronProd) {
@@ -130,8 +135,7 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     console.log('[Worker] Pre-loading Pyodide packages for offline use...');
     // Load all required Pyodide built-in packages from local storage
     // These will be loaded from indexURL (our local pyodide/ folder)
-    const config = suiteOffline ? await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json()) : null;
-    await pyodide.loadPackage(config?.packages || ['numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema', 'packaging', 'typing-extensions', 'setuptools', 'matplotlib']);
+    await pyodide.loadPackage(suiteConfig?.packages || ['numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema', 'packaging', 'typing-extensions', 'setuptools', 'matplotlib']);
     console.log('[Worker] Pyodide packages loaded from local storage');
   }
 
@@ -147,40 +151,31 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     // of sync with what the download script actually fetched.
     console.log('[Worker] Installing dicompare from bundled wheels...');
     console.log('[Worker] Wheel base URL:', wheelBase);
-    const manifestResp = await fetch(wheelBase + 'manifest.json');
-    if (!manifestResp.ok) {
-      throw new Error(
-        `Could not load bundled wheel manifest (HTTP ${manifestResp.status}) from ${wheelBase}manifest.json`
-      );
+    // The suite stages the wheels of /_offline/python.json, dependencies first and
+    // dicompare last; the dedicated Electron build records its own in manifest.json.
+    let bundledWheels: string[];
+    if (suiteConfig) {
+      bundledWheels = suiteConfig.wheels.map(url => new URL(url).pathname.split('/').pop() as string);
+    } else {
+      const manifestResp = await fetch(wheelBase + 'manifest.json');
+      if (!manifestResp.ok) {
+        throw new Error(
+          `Could not load bundled wheel manifest (HTTP ${manifestResp.status}) from ${wheelBase}manifest.json`
+        );
+      }
+      bundledWheels = await manifestResp.json();
     }
-    const bundledWheels: string[] = await manifestResp.json();
     installCode = `
 import micropip
 
 # Install bundled wheels for offline use with absolute file:// URLs.
 wheel_base = '${wheelBase}'
-<<<<<<< monorepo
-wheels_to_install = [
-    wheel_base + 'pydicom-2.4.4-py3-none-any.whl',
-    wheel_base + 'tabulate-0.9.0-py3-none-any.whl',
-    wheel_base + 'nibabel-5.3.3-py3-none-any.whl',
-    wheel_base + 'twixtools-0.24-py3-none-any.whl',
-    '${packageSource}',
-]
-
-for wheel in wheels_to_install:
-    await micropip.install(wheel)
-    print(f"[Worker] Installed {wheel}")
-=======
 wheels_to_install = ${JSON.stringify(bundledWheels)}
 
+# A wheel that fails to install must stop start-up: offline, micropip cannot fetch a substitute.
 for name in wheels_to_install:
-    try:
-        await micropip.install(wheel_base + name)
-        print(f"[Worker] Installed {name}")
-    except Exception as e:
-        print(f"[Worker] Warning: Could not install {name}: {e}")
->>>>>>> upstream
+    await micropip.install(wheel_base + name)
+    print(f"[Worker] Installed {name}")
 
 import dicompare
 import dicompare.interface

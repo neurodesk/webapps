@@ -680,137 +680,7 @@ output
           setDicompareInstalled(true);
         }
       }
-<<<<<<< monorepo
 
-      // Properly indent the implementation - only add base indentation if not present
-      let indentedImplementation = implementation.split('\n').map(line => {
-        // If line is empty or already has indentation, keep it as is
-        if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
-          return '    ' + line;
-        }
-        // Otherwise add 4 spaces for function body indentation
-        return '    ' + line;
-      }).join('\n');
-
-      // Check if the implementation is effectively empty (only comments/whitespace)
-      const hasNonCommentCode = implementation.split('\n').some(line => {
-        const trimmed = line.trim();
-        return trimmed.length > 0 && !trimmed.startsWith('#');
-      });
-
-      // If there's no actual code, add a pass statement to avoid syntax errors
-      if (!hasNonCommentCode) {
-        indentedImplementation += '\n    pass';
-      }
-
-      // Create DataFrame-like structure for the test
-      const testData = `
-import pandas as pd
-import math
-import sys
-from io import StringIO
-from dicompare.validation import ValidationError, ValidationWarning, BaseValidationModel, validator
-
-# Capture stdout
-captured_output = StringIO()
-sys.stdout = captured_output
-
-# Create test data
-test_data = {${Object.entries(testCase.data).map(([field, values]) =>
-  `"${field}": [${values.filter(v => v !== '' && v != null).map(v => {
-    if (Array.isArray(v)) {
-      // Handle arrays - automatically detected from comma-separated input
-      return `[${v.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`;
-    } else if (typeof v === 'string') {
-      return `"${v}"`;
-    } else {
-      // Numbers are already parsed
-      return v;
-    }
-  }).join(', ')}]`
-).join(', ')}}
-
-# Try to create DataFrame with better error handling
-try:
-    value = pd.DataFrame(test_data)
-    # Compute smart Count if not already provided
-    # Count = actual slice count (handles mosaic/enhanced DICOM)
-    if "Count" not in value.columns:
-        if "SliceLocation" in value.columns:
-            value["Count"] = value["SliceLocation"].nunique()
-        else:
-            value["Count"] = len(value)
-except ValueError as e:
-    if "All arrays must be of the same length" in str(e):
-        # Provide more helpful error message
-        field_lengths = {${Object.entries(testCase.data).map(([field, values]) =>
-          `"${field}": ${values.filter(v => v !== '' && v != null).length}`
-        ).join(', ')}}
-        error_msg = f"Test data error: All fields must have the same number of values. Found: {field_lengths}"
-        raise ValueError(error_msg)
-    else:
-        raise
-
-# Initialize test results
-test_passed = False
-error_message = None
-
-# Try to compile the function first to catch syntax errors
-function_code = '''def ${editedFunc.id}(cls, value):
-${indentedImplementation}
-'''
-
-try:
-    # First compile the function
-    compiled_code = compile(function_code, '<string>', 'exec')
-
-    # Create a namespace for execution
-    exec_namespace = {
-        'pd': pd,
-        'math': math,
-        'ValidationError': ValidationError,
-        'ValidationWarning': ValidationWarning,
-        'value': value
-    }
-
-    # Execute the function definition
-    exec(compiled_code, exec_namespace)
-
-    # Now try to call the function
-    exec_namespace['${editedFunc.id}'](None, value)
-
-    # If we reach here without exception, the function passed
-    test_passed = True
-    error_message = None
-    warning_message = None
-
-except SyntaxError as e:
-    test_passed = False
-    error_message = f"Syntax error in function: {str(e)}"
-    warning_message = None
-except ValidationError as e:
-    test_passed = False
-    error_message = str(e)
-    warning_message = None
-except ValidationWarning as e:
-    test_passed = True  # Warning means it passed but with issues
-    error_message = None
-    warning_message = str(e)
-except Exception as e:
-    test_passed = False
-    error_message = f"Unexpected error: {str(e)}"
-    warning_message = None
-
-# Get captured output
-stdout_content = captured_output.getvalue()
-
-# Restore stdout
-sys.stdout = sys.__stdout__
-
-# Return result
-import json
-=======
-      
       // Route the test through the SAME pip execution path as real validation
       // (dicompare.interface.run_rule_test_case). This guarantees the sandbox,
       // allowed imports, and list-cell types (tuples) match production, so a
@@ -863,7 +733,6 @@ else:
         "expected_result": _payload.get("expected_result"),
         "stdout": "",
     }
->>>>>>> upstream
 
 json.dumps(_out)
 `;
@@ -943,22 +812,6 @@ json.dumps(_out)
   if (!isOpen || !editedFunc) return null;
 
   return (
-<<<<<<< monorepo
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-primary rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-content-primary">Edit Validation Function</h3>
-            <button
-              onClick={onClose}
-              className="text-content-tertiary hover:text-content-secondary"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-=======
     <Modal
       isOpen={isOpen}
       onClose={onClose}
@@ -966,7 +819,6 @@ json.dumps(_out)
       size="3xl"
       closeOnBackdrop={false}
     >
->>>>>>> upstream
         <div className="flex-1 p-6 min-h-0 overflow-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-full">
             {/* Left Panel - Function Details */}

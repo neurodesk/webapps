@@ -4,7 +4,6 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SchemaProvider } from './contexts/SchemaContext';
 import UnifiedWorkspacePage from './pages/UnifiedWorkspacePage';
 import SchemaViewerPage from './pages/SchemaViewerPage';
-import ConstraintBandDemo from './pages/ConstraintBandDemo';
 
 // Use HashRouter for Electron (file:// protocol), BrowserRouter for web
 const isElectron = typeof window !== 'undefined' &&
@@ -23,12 +22,7 @@ function App() {
               <Route path="/" element={<UnifiedWorkspacePage />} />
               <Route path="/schema/:id" element={<SchemaViewerPage />} />
               <Route path="/schema" element={<SchemaViewerPage />} />
-<<<<<<< monorepo
               <Route path="/workspace/*" element={<Navigate to="/" replace />} />
-=======
-              <Route path="/constraint-demo" element={<ConstraintBandDemo />} />
-              <Route path="/workspace/*" element={<UnifiedWorkspacePage />} />
->>>>>>> upstream
               {/* Redirect legacy routes to workspace */}
               <Route path="/schema-builder/*" element={<Navigate to="/" replace />} />
               <Route path="/compliance-checker/*" element={<Navigate to="/" replace />} />

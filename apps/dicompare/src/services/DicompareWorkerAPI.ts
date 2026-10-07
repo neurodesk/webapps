@@ -7,12 +7,9 @@ import type { WorkerRequest, WorkerResponse, PendingRequest, ProgressPayload } f
 import { SchemaTemplate } from '../types/schema';
 import { Acquisition as UIAcquisition, DicomField } from '../types';
 import { FileObject } from '../utils/fileUploadUtils';
-<<<<<<< monorepo
-import { fieldToSchemaField } from '../utils/schemaFieldConverters';
-import { beginActivity, isActivityRunning } from '../utils/technicalLog';
-=======
 import { fieldToSchemaField, seriesFieldToSchemaField } from '../utils/schemaFieldConverters';
 import { getEffectiveParams, getParameterDefinitions } from '../utils/validationParams';
+import { beginActivity, isActivityRunning } from '../utils/technicalLog';
 
 // Reject a request if the worker goes completely silent this long — no
 // progress, no completion. This is an *inactivity* window, not a wall-clock
@@ -22,7 +19,6 @@ import { getEffectiveParams, getParameterDefinitions } from '../utils/validation
 // Sized to comfortably exceed the largest expected gap *between* progress
 // updates, not the total job duration.
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes of silence
->>>>>>> upstream
 
 function transferableCopy(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength);
@@ -49,11 +45,6 @@ export class DicompareWorkerAPI {
     );
 
     this.worker.onmessage = this.handleMessage.bind(this);
-<<<<<<< monorepo
-    this.worker.onerror = (error) => {
-      console.error('[DicompareWorkerAPI] Worker error:', error);
-      this.terminate(new Error(error.message || 'The dicompare worker failed.'));
-=======
     // A fatal worker error (crash, OOM, script load failure) never surfaces as a
     // normal 'error' message, so without this every in-flight request would hang
     // forever. Reject them all and rebuild the worker so the app can recover.
@@ -68,7 +59,6 @@ export class DicompareWorkerAPI {
       this.handleWorkerCrash(
         new Error('Worker received an undeserializable message')
       );
->>>>>>> upstream
     };
   }
 
@@ -858,13 +848,10 @@ export class DicompareWorkerAPI {
       this.worker = null;
       this.initialized = false;
       this.initializationPromise = null;
-<<<<<<< monorepo
-      for (const request of this.pendingRequests.values()) request.reject(reason);
-=======
       for (const pending of this.pendingRequests.values()) {
         if (pending.timer) clearTimeout(pending.timer);
+        pending.reject(reason);
       }
->>>>>>> upstream
       this.pendingRequests.clear();
     }
   }
