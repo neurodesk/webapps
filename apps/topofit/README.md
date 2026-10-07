@@ -9,8 +9,9 @@ own worker. On the validation scan this takes 73 s instead of 100 s one after th
 other, and peak memory in Chrome rises from about 4.6 GB to 7.5 GB. Results are
 byte-identical either way. Turn off **Reconstruct hemispheres in parallel** in
 Advanced settings (automation: `parallelHemispheres: false`) to run one hemisphere
-at a time. The option starts off on devices that report less than 8 GB of memory,
-and the app remembers the choice. If a hemisphere worker fails during a parallel
+at a time. The option is unchecked by default on devices that report less than 8 GB
+of memory, and the app remembers the choice; an automation request that omits the
+parameter keeps it. If a hemisphere worker fails during a parallel
 run, TopoFit retries the whole reconstruction one hemisphere at a time. If the
 browser closes the tab instead (an out-of-memory crash), the next visit switches
 the option off and says so in the status bar. Each model is downloaded and verified
