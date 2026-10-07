@@ -1,5 +1,20 @@
 {
-  "name":"@neurodesk/registration", "version":"0.1.0", "type":"module", "license":"Apache-2.0",
-  "exports":{".":"./src/index.js"}, "files":["src/*.js","wasm","LICENSE","NOTICE","README.md"],
-  "scripts":{"test":"node --test test/*.test.js"}
+  "name": "@neurodesk/registration",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "src/*.js",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
 }

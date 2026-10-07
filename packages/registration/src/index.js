@@ -12,6 +12,15 @@ export function synArguments(fixed, moving, prefix, seed=42) {
     '-u','0','-z','1','--output',`[${prefix},${prefix}brain.nii.gz]`,'--verbose','1'];
 }
 
+// register() writes its inputs as .nii because ANTs picks the reader by file name, so gzipped
+// NIfTI is inflated first. Works wherever DecompressionStream exists: browsers, workers, Node 18+.
+export async function inflateNifti(bytes) {
+  const input = new Uint8Array(bytes);
+  if (input.length < 2 || input[0] !== 0x1f || input[1] !== 0x8b) return input;
+  const stream = new Blob([input]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
 export async function createRegistration({createModule,wasmBinary,onLog=()=>{}}) {
   const module=await createModule({noInitialRun:true,wasmBinary,print:onLog,printErr:onLog});
   function call(args) {
