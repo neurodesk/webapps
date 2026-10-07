@@ -40,7 +40,8 @@ class ActivationTest(unittest.TestCase):
                     report["surfaces"][name]["browser_sha256"] = activation.sha256(path)
                 elif name == "topofit_qc.nii":
                     report["qc"]["browser_sha256"] = activation.sha256(path)
-            (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}}))
+            (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}, "mode": mode}))
+            report["provenance"]["sha256"] = activation.sha256(browser / "topofit_manifest.json")
             self.write_report(mode, report)
 
     def write_report(self, mode, report):
@@ -97,6 +98,12 @@ class ActivationTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "end-to-end rh.pial differs from the pinned baseline"):
             self.validate()
 
+    def test_rejects_an_evidence_manifest_from_another_run(self):
+        browser = self.assets / "validation" / "browser"
+        (browser / "controlled" / "topofit_manifest.json").write_bytes((browser / "end-to-end" / "topofit_manifest.json").read_bytes())
+        with self.assertRaisesRegex(AssertionError, "controlled evidence manifest is not the one the report checked"):
+            self.validate()
+
     def test_rejects_a_single_run_without_a_repeat(self):
         self.change_end_to_end(lambda report: report.update(repeatability=[]))
         with self.assertRaisesRegex(AssertionError, "end-to-end has no repeat run"):
@@ -115,7 +122,18 @@ class RepeatTest(unittest.TestCase):
             for name in compare.OUTPUTS:
                 (run / name).write_bytes(name.encode())
             with self.assertRaisesRegex(AssertionError, "separate run"):
-                compare.compare_repeat(run, [run / "." ])
+                compare.compare_repeat(run, [run / "."])
+
+    def test_a_repeat_with_a_different_mid_surface_fails(self):
+        with tempfile.TemporaryDirectory() as work:
+            first, second = Path(work, "first"), Path(work, "second")
+            for run in (first, second):
+                run.mkdir()
+                for name in (*compare.BASELINE_OUTPUTS, "topofit_manifest.json"):
+                    (run / name).write_bytes(name.encode())
+            (second / "rh.mid.white").write_bytes(b"corrupted")
+            with self.assertRaisesRegex(AssertionError, "Repeat output differs: rh.mid.white"):
+                compare.compare_repeat(first, [second])
 
 
 class BaselineTest(unittest.TestCase):

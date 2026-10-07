@@ -134,7 +134,7 @@
     {
       "run": "rv-e2e-repeat",
       "byteIdentical": true,
-      "outputSetSha256": "4b95f3cd27dde97858275429382e7659725e8258778d98a57777cc389fe79463"
+      "outputSetSha256": "b60e30be5d1efa2d06e0863f683ad6a25afcbf7d24a6302e8591a6beefd20137"
     }
   ],
   "baseline": {

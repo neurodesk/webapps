@@ -132,9 +132,9 @@
   },
   "repeatability": [
     {
-      "run": "rv-ctl-repeat",
+      "run": "r3-ctl-repeat",
       "byteIdentical": true,
-      "outputSetSha256": "13fe89f5dde6153b244390041efa9903ec55c8e0d16cd86bd33b66f48be66399"
+      "outputSetSha256": "4dcaa6c390306ba26e8263286091b097a5bb384d6bda84018100ba4bd8dd6bc6"
     }
   ],
   "baseline": {

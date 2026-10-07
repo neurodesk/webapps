@@ -224,7 +224,7 @@ def compare_repeat(directory, repeats):
     for repeat in repeats:
         assert repeat.resolve() != directory.resolve(), "A repeat must be a separate run, not the primary output directory"
         hashes = {}
-        for name in OUTPUTS:
+        for name in (*BASELINE_OUTPUTS, "topofit_manifest.json"):
             expected = sha256(directory / name)
             actual = sha256(repeat / name)
             hashes[name] = actual

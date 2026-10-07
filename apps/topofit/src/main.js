@@ -914,7 +914,8 @@ registerAppAutomation({
       exampleControl.cancel();
       if (!await load(inputs.image[0])) throw new Error('The image could not be loaded.');
       signal.throwIfAborted();
-      for (const id of ['conform', 'parallelHemispheres', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
+      for (const id of ['conform', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
+      if (parameters.parallelHemispheres !== undefined) $('parallelHemispheres').checked = parameters.parallelHemispheres;
       for (const id of ['model', 'thickness', 'patchCount', 'patchRadius', 'patchHemisphere', 'patchMaxRms', 'patchMinArea']) $(id).value = String(parameters[id]);
       $('patchRegion').value = inputs.roi.length ? 'roi' : 'cortex';
       $('patchSettings').hidden = !parameters.findPatches;

@@ -129,3 +129,13 @@ test('a parallel run still going in another tab is not mistaken for a crash', as
   await expect(page.locator('#parallelHemispheres')).not.toBeChecked();
   await expect(page.locator('#statusText')).toContainText('did not finish');
 });
+
+test('automation without parallelHemispheres keeps the app setting on a small device', async ({ page }) => {
+  await stubInference(page, { deviceMemory: 4 });
+  await page.goto('/');
+  await page.locator('#neurodesk-input-transfer').setInputFiles(scan);
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'image' }));
+  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'reconstruct', parameters: {} }));
+  await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state).not.toBe('running');
+  expect((await jobs(page)).map((job) => job.hemispheres)).toEqual(['sequential']);
+});

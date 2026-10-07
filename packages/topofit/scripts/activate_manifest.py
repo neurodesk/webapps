@@ -31,6 +31,7 @@ def validate_evidence(assets, release, conversion_sha):
         browser = assets / "validation" / "browser" / mode
         provenance = json.loads((browser / "topofit_manifest.json").read_text())
         assert provenance["runtime"]["release"] == release
+        assert sha256(browser / "topofit_manifest.json") == result["provenance"]["sha256"], f"{mode} evidence manifest is not the one the report checked"
         for name in SURFACES:
             assert result["surfaces"][name]["browser_sha256"] == sha256(browser / name)
         assert result["qc"]["browser_sha256"] == sha256(browser / "topofit_qc.nii")
