@@ -145,6 +145,13 @@ jobs:
         with:
           name: release-${{ matrix.app }}
           path: release-bundle
+      # dispatch-native-release.mjs reads the app registry, which imports the yaml package.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Create app release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
