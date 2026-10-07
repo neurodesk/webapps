@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/topofit",
-  "version": "0.12.20261005",
+  "version": "0.13.20261007",
   "description": "BrainNet TopoFit cortical surface reconstruction for browsers and the command line",
   "type": "module",
   "license": "GPL-3.0-only",
