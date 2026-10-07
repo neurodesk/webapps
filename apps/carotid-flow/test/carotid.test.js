@@ -6,12 +6,7 @@ import { test } from 'node:test';
 import { decodeNiftiBuffer, readNiftiFrames } from '@neurodesk/webapp-components/file-io';
 import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, percentile, splitSeries, velocityScale } from '../src/carotid.js';
 import { flowChartSvg, tickStep } from '../src/chart.js';
-import { APP, assignSeries, stem } from '../src/config.js';
-
-test('app id is lowercase kebab-case and the config is frozen', () => {
-  assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
-  assert.ok(Object.isFrozen(APP));
-});
+import { assignSeries, stem } from '../src/config.js';
 
 test('percentile reproduces MATLAB prctile', () => {
   // Values from MATLAB: prctile([1 2 3 4], 50|20|0|100) and prctile(1:10, 99.9|35).

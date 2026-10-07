@@ -50,14 +50,16 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Validate the app catalog and generated plans
-        run: pnpm test:registry && node --test test/app-plan.test.mjs test/independent-workflows.test.mjs
-      - name: Validate date releases and app scaffolding
-        run: node --test test/app-versions.test.mjs test/new-app.test.mjs test/app-examples.test.mjs test/disconnectome-assets.test.mjs test/automation-catalog.test.mjs
-      - name: Enforce the design system and workspace contract
-        # Shared vocabulary, status footer, collapsed technical log, no start
-        # pages, help text within 90 characters and one primary per sidebar.
-        run: node --test test/design-system.test.mjs
+      - name: Run every repository contract test
+        # The app catalog, generated plans, date releases, scaffolding, the design
+        # system and the shared shell. The file list is the directory, so a new
+        # test cannot be left out. Two files run in other jobs: the runtime store
+        # needs the built site, the easter egg needs a browser.
+        run: pnpm test:contracts
+      - name: Test the shared packages every app is built from
+        # Unit tests only: the components' browser checks run in composite-site and
+        # the desktop suite in the standalone workflow.
+        run: pnpm test:packages
       - name: Check native tract conversion and WebAssembly parity
         run: |
           sudo apt-get update

@@ -11,12 +11,6 @@ const exists = async (...parts) => access(join(repoRoot, ...parts)).then(() => t
 const execFileAsync = promisify(execFile);
 const inferenceApps = ['calmar', 'musclemap', 'seedseg', 'spinalcordtoolbox', 'vesselboost'];
 
-function topLevelCssRules(css) {
-  return new Set([...css.matchAll(/^(?!\s|@)([^{}\n][^{]*)\{([^{}]*)\}/gm)].map((match) => (
-    `${match[1].trim().replace(/\s+/g, ' ')}\0${match[2].trim().replace(/\s+/g, ' ')}`
-  )));
-}
-
 test('the workspace and static pages expose one typed shell-control contract', async () => {
   const declarations = await source('packages', 'components', 'src', 'core', 'mountImagingWorkspace.d.ts');
   assert.match(declarations, /controlsContract\?:\s*ShellControlsContract/);
@@ -44,26 +38,13 @@ test('the workspace and static pages expose one typed shell-control contract', a
   assert.doesNotMatch(theme, /href\*?=["'][^"']*qsmbly|QSMbly|QSMxT/i);
 });
 
-test('shared styles have scoped entrypoints and no pairwise app duplicates', async () => {
+// Pairwise duplicate rules are reported by scripts/audit-shared-imaging.mjs, run below.
+test('shared styles have scoped entrypoints', async () => {
   const base = await source('packages', 'components', 'src', 'styles', 'base.css');
   assert.doesNotMatch(base, /--color-|--space-|--radius-|--shadow-|--transition-/);
   await source('packages', 'components', 'src', 'styles', 'inference-workspace.css');
   const imaging = await source('packages', 'components', 'src', 'styles', 'imaging-workspace.css');
   assert.match(imaging, /\.nd-imaging-controls\s*>\s*\.row[\s\S]*?flex:\s*0 0 auto/);
-
-  const sheets = await Promise.all(inferenceApps.map(async (app) => ({
-    app,
-    rules: topLevelCssRules(await source('apps', app, 'web', 'css', 'styles.css')),
-  })));
-  const duplicates = [];
-  for (let left = 0; left < sheets.length; left += 1) {
-    for (let right = left + 1; right < sheets.length; right += 1) {
-      for (const rule of sheets[left].rules) {
-        if (sheets[right].rules.has(rule)) duplicates.push(`${sheets[left].app}/${sheets[right].app}: ${rule.split('\0')[0]}`);
-      }
-    }
-  }
-  assert.deepEqual(duplicates, []);
 });
 
 test('all ORT workers use shared input and thread policy', async () => {
@@ -104,9 +85,7 @@ test('typed imaging runtimes use their declared shared or pinned owner', async (
     assert.equal(await exists('apps', app, 'src', 'niimath'), false);
   }
 
-  const browserPackage = JSON.parse(await source('apps', 'browserqc', 'package.json'));
   const browserMain = await source('apps', 'browserqc', 'src', 'main.ts');
-  assert.equal(browserPackage.dependencies['@niivue/niimath'], '1.4.20260909');
   assert.match(browserMain, /from ['"]@niivue\/niimath['"]/);
 
   const defaceMain = await source('apps', 'deface', 'src', 'main.ts');

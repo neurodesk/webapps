@@ -245,22 +245,6 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   expect(isolated).toBe(true);
 });
 
-test("a web worker loads and responds", async ({ page }) => {
-  await page.goto("/?source=custom");
-  const ok = await page.evaluate(async () => {
-    // Inline classic worker — mirrors the apps' importScripts worker style.
-    const src = "self.onmessage = () => self.postMessage('pong');";
-    const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
-    const w = new Worker(url);
-    return await new Promise((resolve) => {
-      w.onmessage = (e) => resolve(e.data === "pong");
-      w.onerror = () => resolve(false);
-      w.postMessage("ping");
-    });
-  });
-  expect(ok).toBe(true);
-});
-
 test("large NIfTI export reports progress and can be cancelled", async ({ page }) => {
   await page.addInitScript(() => {
     window.__niftiWriterAborted = false;

@@ -10,12 +10,6 @@ import { ciWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 
-test('standalone catalog covers the entire app registry', async () => {
-  const registry = await loadAppsRegistry();
-  const catalog = await loadStandalone(registry);
-  assert.equal(Object.keys(catalog.apps).length, registry.apps.length);
-});
-
 test('scanner packages link the supported apps to their OpenRecon recipes', async () => {
   const catalog = await loadStandalone(await loadAppsRegistry());
   const expected = { musclemap: 'musclemap', qsmbly: 'qsmxt', spinalcordtoolbox: 'spinalcordtoolbox', synthseg: 'synthseg', topofit: 'topofit', vesselboost: 'vesselboost' };

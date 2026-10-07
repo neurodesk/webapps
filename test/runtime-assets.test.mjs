@@ -11,7 +11,12 @@ test('composite site contains one checksum-verified runtime store', async () => 
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
   for (const family of manifest.families) {
     for (const file of family.files) {
-      await access(join(dist, '_runtime', family.target, file.name));
+      const bytes = await readFile(join(dist, '_runtime', family.target, file.name));
+      assert.equal(
+        createHash('sha256').update(bytes).digest('hex'),
+        file.sha256,
+        `${family.target}/${file.name} differs from its pinned checksum`,
+      );
     }
   }
 });
