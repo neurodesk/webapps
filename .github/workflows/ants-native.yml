@@ -1,0 +1,88 @@
+name: ants-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ants-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/ants/**'
+      - 'packages/registration/**'
+      - 'apps/ants/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ants-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/ants/**'
+      - 'packages/registration/**'
+      - 'apps/ants/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing ANTs release
+        type: boolean
+        default: false
+
+concurrency:
+  group: ants-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Registers the pinned example through the built web app and compares its four downloads with
+  # packages/ants/validation/t1-mni-reference.json, the reference the archives are held to.
+  web-app-reference:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install frozen dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Register the pinned example in the web app
+        env:
+          ANTS_BROWSER_REFERENCE: check
+        run: pnpm --filter ants exec playwright test e2e/reference.spec.js --reporter=line
+
+  portable:
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/ants
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
