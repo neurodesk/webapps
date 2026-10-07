@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/ants",
+  "version": "0.3.20261007",
+  "description": "ANTs SyN registration with the ANTsPy schedule from the command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "ants": "./bin/ants.js"
+  },
+  "exports": {
+    "./node": "./src/node.js",
+    "./outputs": "./src/outputs.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/node.js && node --check src/outputs.js && node --check bin/ants.js"
+  },
+  "dependencies": {
+    "@neurodesk/registration": "workspace:*"
+  },
+  "devDependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/ants"
+  }
+}

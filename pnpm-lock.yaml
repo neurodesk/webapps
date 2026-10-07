@@ -79,6 +79,9 @@ importers:
       '@brainchop/mindgrab':
         specifier: 0.1.20260813
         version: 0.1.20260813
+      '@neurodesk/ants':
+        specifier: workspace:*
+        version: link:../../packages/ants
       '@neurodesk/registration':
         specifier: workspace:*
         version: link:../../packages/registration
@@ -921,6 +924,16 @@ importers:
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
   packages/analytics: {}
+
+  packages/ants:
+    dependencies:
+      '@neurodesk/registration':
+        specifier: workspace:*
+        version: link:../registration
+    devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/brain-extraction:
     dependencies:
