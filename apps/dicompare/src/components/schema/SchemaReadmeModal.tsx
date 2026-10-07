@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, List } from 'lucide-react';
+import { FileText, List } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Modal from '../common/Modal';
 
 export interface ReadmeItem {
   id: string;           // 'schema' or 'acquisition-{index}'
@@ -33,29 +34,20 @@ const SchemaReadmeModal: React.FC<SchemaReadmeModalProps> = ({
     setSelectedId(initialSelection);
   }, [initialSelection, isOpen]);
 
-  if (!isOpen) return null;
-
   const selectedItem = readmeItems.find(item => item.id === selectedId) || readmeItems[0];
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg w-full max-w-5xl h-[80vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center space-x-3">
-            <h3 className="text-lg font-semibold text-content-primary">{schemaName}</h3>
-            <span className="text-sm text-content-tertiary">Documentation</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-content-tertiary hover:text-content-secondary rounded-md hover:bg-surface-secondary"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Body with sidebar and content */}
-        <div className="flex-1 flex overflow-hidden">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={schemaName}
+      subtitle="Documentation"
+      size="2xl"
+      panelClassName="h-[80vh]"
+      closeOnBackdrop={false}
+    >
+      {/* Body with sidebar and content */}
+      <div className="flex-1 flex overflow-hidden">
           {/* Sidebar */}
           <div className="w-56 flex-shrink-0 border-r border-border overflow-y-auto bg-surface-secondary">
             <div className="p-2 space-y-1">
@@ -141,10 +133,10 @@ const SchemaReadmeModal: React.FC<SchemaReadmeModalProps> = ({
               )}
             </div>
           </div>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 };
+
 
 export default SchemaReadmeModal;

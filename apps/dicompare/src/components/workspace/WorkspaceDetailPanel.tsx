@@ -237,12 +237,15 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
     await workspace.loadSchema(schemaId, getSchemaContent, getUnifiedSchema);
   }, [workspace, getSchemaContent, getUnifiedSchema]);
 
-  // Handle schema upload from the schema selector
-  const handleSchemaUpload = useCallback(async (file: File) => {
+  // Handle schema upload from the schema selector.
+  // Returns the new schema's id so the selector can highlight/surface it.
+  const handleSchemaUpload = useCallback(async (file: File): Promise<string | null> => {
     try {
-      await uploadSchema(file);
+      const metadata = await uploadSchema(file);
+      return metadata.id;
     } catch (error) {
       console.error('Failed to upload schema:', error);
+      return null;
     }
   }, [uploadSchema]);
 
@@ -363,6 +366,12 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
         onStagedCreateBlank={onStagedCreateBlank}
       />
     );
+  }
+
+  // Every mode-specific view above has returned; the remainder of this panel
+  // renders a concrete selected item, so there is nothing to show without one.
+  if (!selectedItem) {
+    return null;
   }
 
   // Use shared helper for derived state
@@ -815,6 +824,9 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             }
             getSchemaContent={getSchemaContent}
             hideHeader={true}
+            // Required/reference-only dots describe schema constraints. Test
+            // data on its own has no schema, so there is nothing to mark.
+            showSeverity={hasSchema}
             onUpdate={(key, value) => onUpdateAcquisition({ [key]: value })}
             onDelete={onRemove}
             onFieldUpdate={(fieldTag, updates) => workspace.updateField(selectedItem.id, fieldTag, updates)}
@@ -825,6 +837,7 @@ const WorkspaceDetailPanel: React.FC<WorkspaceDetailPanelProps> = ({
             onSeriesAdd={() => workspace.addSeries(selectedItem.id)}
             onSeriesDelete={(seriesIndex) => workspace.deleteSeries(selectedItem.id, seriesIndex)}
             onSeriesNameUpdate={(seriesIndex, name) => workspace.updateSeriesName(selectedItem.id, seriesIndex, name)}
+            onSeriesNotesUpdate={(seriesIndex, notes) => workspace.updateSeriesNotes(selectedItem.id, seriesIndex, notes)}
             onValidationFunctionAdd={(func) => workspace.addValidationFunction(selectedItem.id, func)}
             onValidationFunctionUpdate={(index, func) => workspace.updateValidationFunction(selectedItem.id, index, func)}
             onValidationFunctionDelete={(index) => workspace.deleteValidationFunction(selectedItem.id, index)}

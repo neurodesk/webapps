@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Download, Loader2, Play, FileDown, Table, Code, AlertTriangle, CheckCircle } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
+import Modal from '../common/Modal';
 import { Acquisition, DicomField } from '../../types';
 import { inferDataTypeFromValue } from '../../utils/datatypeInference';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
@@ -111,8 +112,10 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
         // Handle both array format (from loaded schemas) and object format (from processed data)
         if (Array.isArray(series.fields)) {
           series.fields.forEach(field => {
-            if (!seriesFieldMap.has(field.tag)) {
-              seriesFieldMap.set(field.tag, {
+            // Custom/derived fields have no tag, so key by the name identifier instead.
+            const fieldKey = field.tag ?? field.name;
+            if (!seriesFieldMap.has(fieldKey)) {
+              seriesFieldMap.set(fieldKey, {
                 ...field,
                 level: 'series'
               });
@@ -568,24 +571,15 @@ output
   const maxRows = Math.max(1, testData.length);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-primary rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-content-primary">Generate Test DICOMs</h2>
-            <p className="text-sm text-content-secondary mt-1">
-              Create compliant DICOM files from schema: {acquisition.protocolName}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-content-tertiary hover:text-content-secondary"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Generate Test DICOMs"
+      subtitle={`Create compliant DICOM files from schema: ${acquisition.protocolName}`}
+      size="xl"
+      panelClassName="shadow-xl"
+      closeOnBackdrop={false}
+    >
         {/* Content */}
         <div className="flex-1 overflow-y-auto min-h-0">
           {step === 'analyzing' && (
@@ -1017,8 +1011,7 @@ output
             </div>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -1,0 +1,86 @@
+{
+  "id": "megre_spacing_short",
+  "name": "Short Echo Spacing",
+  "description": "Validates that the mean echo spacing (dTE) is short enough. Configure the maximum allowed mean spacing (error above) and an optional preferred spacing (warning above).",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "te = value[\"EchoTime\"].dropna().sort_values()\ndte = te.diff().iloc[1:].mean()\nmax_dte = params.get(\"max_mean_spacing_ms\")\nif max_dte is not None and dte > max_dte:\n    raise ValidationError(f\"Mean dTE {dte:.1f} ms too long; must be <= {max_dte} ms.\")\npref = params.get(\"preferred_mean_spacing_ms\")\nif pref is not None and dte > pref:\n    raise ValidationWarning(f\"Mean dTE {dte:.1f} ms; <= {pref} ms preferred.\")\n",
+  "testCases": [
+    {
+      "id": "short_pass",
+      "name": "3 ms spacing passes",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          3.0,
+          6.0,
+          9.0,
+          12.0
+        ]
+      }
+    },
+    {
+      "id": "long_fail",
+      "name": "8 ms spacing fails default max 6",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          4.0,
+          12.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "id": "mid_warns",
+      "name": "5 ms spacing warns above preferred 4",
+      "expectedResult": "warning",
+      "data": {
+        "EchoTime": [
+          3.0,
+          8.0,
+          13.0
+        ]
+      }
+    },
+    {
+      "id": "max_moves",
+      "name": "8 ms spacing passes when limits raised",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          4.0,
+          12.0,
+          20.0
+        ]
+      },
+      "params": {
+        "max_mean_spacing_ms": 10,
+        "preferred_mean_spacing_ms": 9
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_mean_spacing_ms",
+      "label": "Maximum mean spacing",
+      "type": "number",
+      "default": 6,
+      "min": 0,
+      "unit": "ms",
+      "description": "Fail if the mean echo spacing exceeds this"
+    },
+    {
+      "name": "preferred_mean_spacing_ms",
+      "label": "Preferred mean spacing",
+      "type": "number",
+      "default": 4,
+      "min": 0,
+      "unit": "ms",
+      "description": "Warn if the mean echo spacing exceeds this"
+    }
+  ]
+}

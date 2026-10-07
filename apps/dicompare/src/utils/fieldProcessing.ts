@@ -84,7 +84,7 @@ export function processFieldForUI(field: any, source: 'dicom' | 'pro' = 'dicom')
         validationRule.contains_any = processedField.value;
       } else if (typeof processedField.value === 'string') {
         // Split by backslash, comma, or space and filter out empty values
-        const options = processedField.value.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
+        const options = processedField.value.split(/[\\,\s]+/).map((opt: string) => opt.trim()).filter((opt: string) => opt !== '');
         validationRule.contains_any = options.length > 0 ? options : [processedField.value];
       } else {
         validationRule.contains_any = [processedField.value];
@@ -155,7 +155,7 @@ export function processSeriesFieldValue(value: any, fieldName?: string, tag?: st
         validationRule.contains_any = processedValue.value;
       } else if (typeof processedValue.value === 'string') {
         // Split by backslash, comma, or space and filter out empty values
-        const options = processedValue.value.split(/[\\,\s]+/).map(opt => opt.trim()).filter(opt => opt !== '');
+        const options = processedValue.value.split(/[\\,\s]+/).map((opt: string) => opt.trim()).filter((opt: string) => opt !== '');
         validationRule.contains_any = options.length > 0 ? options : [processedValue.value];
       } else {
         validationRule.contains_any = [processedValue.value];

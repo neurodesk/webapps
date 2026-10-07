@@ -68,10 +68,12 @@ const DicomFieldSelector = ({
   }, []);
 
   const handleFieldSelect = (field: DicomFieldDefinition) => {
-    // Convert field.tag format from "(0018,0081)" or "0018,0081" to "0018,0081"
+    // Standard fields are identified by tag ("(0018,0081)" → "0018,0081"); derived
+    // fields have no tag and are identified by their DICOM keyword instead.
     const normalizedTag = field.tag.replace(/[()]/g, '');
-    if (!selectedFields.includes(normalizedTag) && (!maxSelections || selectedFields.length < maxSelections)) {
-      onFieldsChange([...selectedFields, normalizedTag]);
+    const identifier = normalizedTag || field.keyword || field.name;
+    if (!selectedFields.includes(identifier) && (!maxSelections || selectedFields.length < maxSelections)) {
+      onFieldsChange([...selectedFields, identifier]);
     }
     setSearchTerm('');
     setSuggestions([]);
@@ -179,22 +181,29 @@ const DicomFieldSelector = ({
           <div className="absolute z-20 w-full mt-1 bg-surface-primary border border-border rounded-md shadow-lg max-h-64 overflow-y-auto">
             {suggestions.map((field, index) => {
               const normalizedTag = field.tag.replace(/[()]/g, '');
+              const identifier = normalizedTag || field.keyword || field.name;
 
               return (
                 <div
-                  key={field.tag}
+                  key={identifier}
                   onClick={() => handleFieldSelect(field)}
                   className={`px-4 py-3 cursor-pointer border-b border-border last:border-b-0 ${
                     index === selectedSuggestionIndex
                       ? 'bg-blue-500/10 border-blue-500/20'
                       : 'hover:bg-surface-hover'
-                  } ${selectedFields.includes(normalizedTag) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  } ${selectedFields.includes(identifier) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="font-medium text-content-primary">{field.name}</div>
                       <div className="flex items-center space-x-2 mt-1">
-                        <div className="text-sm text-blue-600 dark:text-blue-400 font-mono">{normalizedTag}</div>
+                        {normalizedTag ? (
+                          <div className="text-sm text-blue-600 dark:text-blue-400 font-mono">{normalizedTag}</div>
+                        ) : (
+                          <div className="text-xs text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                            Derived
+                          </div>
+                        )}
                         {field.keyword && (
                           <div className="text-xs text-content-secondary bg-surface-secondary px-1.5 py-0.5 rounded">
                             {field.keyword}

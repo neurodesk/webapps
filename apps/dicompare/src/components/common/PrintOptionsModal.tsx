@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Printer, FileDown } from 'lucide-react';
+import { Printer, FileDown } from 'lucide-react';
+import Modal from './Modal';
 import { PrintSectionOptions } from '../../utils/printReportGenerator';
 
 type SectionKey = 'header' | 'readme' | 'schemaImages' | 'referenceDicoms' | 'testDicoms' | 'testNotes' | 'validationRules' | 'fieldsTable' | 'seriesTable' | 'uncheckedFields' | 'uncheckedSeriesFields';
@@ -80,8 +81,6 @@ const PrintOptionsModal: React.FC<PrintOptionsModalProps> = ({
     new Set(schemaImages?.map((_, i) => i) ?? [])
   );
 
-  if (!isOpen) return null;
-
   const toggle = (key: string) => {
     setEnabled(prev => ({ ...prev, [key]: !prev[key] }));
   };
@@ -117,16 +116,7 @@ const PrintOptionsModal: React.FC<PrintOptionsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between flex-shrink-0">
-          <h3 className="text-sm font-semibold text-content-primary">Print Options</h3>
-          <button onClick={onClose} className="p-1 text-content-tertiary hover:text-content-secondary rounded">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+    <Modal isOpen={isOpen} onClose={onClose} title="Print Options" size="sm" closeOnBackdrop={false}>
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* Content sections */}
@@ -251,8 +241,7 @@ const PrintOptionsModal: React.FC<PrintOptionsModalProps> = ({
             )}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

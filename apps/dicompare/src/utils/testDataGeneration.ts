@@ -107,7 +107,7 @@ export function extractValidationFieldValues(
                 if (Array.isArray(s.fields)) {
                   seriesField = s.fields.find((f: any) => f.name === fieldName || f.tag === existingField.tag);
                 } else if (s.fields && typeof s.fields === 'object') {
-                  seriesField = (s.fields as any)[existingField.tag];
+                  seriesField = (s.fields as any)[existingField.tag ?? ''];
                 }
 
                 if (seriesField && seriesField.value !== undefined) {
@@ -346,7 +346,7 @@ export function generateTestDataFromSchema(
           if (Array.isArray(s.fields)) {
             seriesField = s.fields.find((f: any) => f.tag === field.tag);
           } else if (s.fields && typeof s.fields === 'object') {
-            seriesField = (s.fields as any)[field.tag];
+            seriesField = (s.fields as any)[field.tag ?? ''];
           }
 
           if (seriesField) {

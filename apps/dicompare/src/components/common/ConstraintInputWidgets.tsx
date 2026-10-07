@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ValidationConstraint, ValidationRule } from '../../types';
+import { formatRangeConstraint } from '../../utils/fieldFormatters';
 
 interface ConstraintInputWidgetsProps {
   constraint: ValidationConstraint;
@@ -166,13 +167,7 @@ const ConstraintInputWidgets: React.FC<ConstraintInputWidgetsProps> = ({
           </div>
           {(value.min !== undefined && value.min !== null) || (value.max !== undefined && value.max !== null) ? (
             <p className="mt-2 text-sm text-content-secondary">
-              Constraint: {
-                value.min !== undefined && value.min !== null && value.max !== undefined && value.max !== null
-                  ? `[${value.min}, ${value.max}]`
-                  : value.min !== undefined && value.min !== null
-                    ? `≥ ${value.min}`
-                    : `≤ ${value.max}`
-              }
+              Constraint: {formatRangeConstraint(value.min, value.max)}
             </p>
           ) : null}
         </div>

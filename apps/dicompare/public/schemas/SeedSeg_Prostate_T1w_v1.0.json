@@ -9,7 +9,13 @@
     "T1-Weighted Gradient Echo (Seed)": {
       "description": "2D T1-weighted gradient echo (FLASH) acquisition for gold fiducial marker segmentation in prostate radiation therapy planning",
       "detailed_description": "## T1-Weighted Gradient Echo for Gold Seed Segmentation\n\n### Overview\nHigh-resolution 2D T1-weighted gradient echo acquisition optimized for visualizing and segmenting implanted gold fiducial markers (seeds) in the prostate. This sequence is part of an RT planning protocol and is designed for compatibility with the SeedSeg automated segmentation tool.\n\n### Clinical Context\n- **Application:** Radiation therapy (RT) planning for prostate cancer (PCa)\n- **Target:** Implanted gold fiducial markers (Riverpoint Medical, Portland, Oregon, US)\n- **Marker Dimensions:** 1\u00d73 mm cylindrical gold markers (3 per patient)\n- **Patient Cohort:** 127 PCa patients, each with 3 implanted gold markers\n- **Coils:** 32-channel spine coil + 18-channel body coil\n- **Scanner:** Siemens MAGNETOM 3.0T XQ (Numaris/X VA60A)\n\n### Sequence Details\n- **Sequence Name:** `fl_r` (FLASH \u2013 Fast Low Angle Shot)\n- **Dimension:** 2D multi-slice\n- **Orientation:** Transversal (axial)\n- **Phase Encoding:** R >> L\n- **Multi-Slice Mode:** Interleaved, ascending\n- **RF Spoiling:** Enabled\n- **Flow Compensation:** Slice/Read\n- **Gradient Mode:** Fast\n- **Acceleration:** GRAPPA factor 2 with 24 integrated reference lines\n\n### Key Parameters\n- **TR:** 600 ms\n- **TE:** 6.66 ms\n- **Flip Angle:** 80\u00b0\n- **Voxel Size:** 0.7\u00d70.7\u00d72.0 mm\u00b3\n- **FOV:** 220\u00d7220 mm\u00b2\n- **Base Resolution:** 320\n- **Phase Resolution:** 80%\n- **Slices:** 40\n- **Slice Thickness:** 2.0 mm (no gap)\n- **Bandwidth:** 400 Hz/Px\n- **Averages:** 1\n- **Scan Duration:** ~2:42 min\n\n### Why T1-Weighted GRE for Gold Seeds?\nGold fiducial markers produce characteristic signal voids on MRI due to their strong magnetic susceptibility. The T1-weighted gradient echo sequence with a relatively long TE (6.66 ms) and high flip angle (80\u00b0) enhances the susceptibility artifact around the gold markers while maintaining sufficient anatomical contrast for prostate delineation. The high in-plane resolution (0.7 mm) is critical for accurate localization of the small 1\u00d73 mm markers.\n\n### Ground Truth Segmentation\nGround truth FM and prostate (CTV) segmentations were delineated on registered CT images by radiation oncologists and transformed to MRI space using DICOM registration objects.\n\n### SeedSeg Compatibility\nThis protocol is designed to produce images compatible with the SeedSeg tool for automated segmentation of gold fiducial markers in prostate MRI.",
-      "tags": ["analysis:segmentation", "prostate", "T1-weighted", "RT-planning", "fiducial-markers"],
+      "tags": [
+        "analysis:segmentation",
+        "prostate",
+        "T1-weighted",
+        "RT-planning",
+        "fiducial-markers"
+      ],
       "fields": [
         {
           "field": "MRAcquisitionType",
@@ -75,7 +81,10 @@
         {
           "field": "PixelSpacing",
           "tag": "0028,0030",
-          "value": [0.6875, 0.6875],
+          "value": [
+            0.6875,
+            0.6875
+          ],
           "vr": "DS",
           "dataType": "list_number",
           "tolerance": 0.1
@@ -160,7 +169,7 @@
           "id": "validate_seed_slice_coverage",
           "name": "Adequate Slice Coverage",
           "description": "Sufficient slices are needed to cover the prostate and all implanted gold markers. Protocol specifies 40 slices with 2 mm thickness (80 mm coverage).",
-          "implementation": "if 'SliceThickness' in value.columns and 'Count' in value.columns:\n    slice_thickness = value['SliceThickness'].iloc[0]\n    num_slices = value['Count'].iloc[0]\n    coverage = slice_thickness * num_slices\n    if coverage < 60:\n        raise ValidationError(f\"Insufficient slice coverage for prostate imaging. Coverage: {coverage:.0f} mm (need \u226560 mm). Found {num_slices} slices \u00d7 {slice_thickness} mm.\")\n    elif coverage < 70:\n        raise ValidationWarning(f\"Slice coverage may be marginal for full prostate + marker coverage. Coverage: {coverage:.0f} mm. Target: ~80 mm (40 slices \u00d7 2 mm).\")",
+          "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nnum_slices = value[\"Count\"].iloc[0]\ncoverage = slice_thickness * num_slices\nhard_min = params.get(\"error_below_mm\")\nmin_cov = params.get(\"min_coverage_mm\")\nif hard_min is not None and coverage < hard_min:\n    raise ValidationError(f\"Insufficient slice coverage: {coverage:.0f} mm (need >= {hard_min:g} mm). Found {num_slices} slices x {slice_thickness} mm.\")\nif min_cov is not None and coverage < min_cov:\n    raise ValidationWarning(f\"Slice coverage ({coverage:.0f} mm) is below {min_cov:g} mm and may be insufficient.\")\n",
           "fields": [
             "SliceThickness",
             "Count"
@@ -170,8 +179,12 @@
               "id": "test_seed_coverage_pass",
               "name": "40 slices x 2mm",
               "data": {
-                "SliceThickness": [2.0],
-                "Count": [40]
+                "SliceThickness": [
+                  2.0
+                ],
+                "Count": [
+                  40
+                ]
               },
               "expectedResult": "pass",
               "description": ""
@@ -180,8 +193,12 @@
               "id": "test_seed_coverage_warning",
               "name": "35 slices x 2mm",
               "data": {
-                "SliceThickness": [2.0],
-                "Count": [35]
+                "SliceThickness": [
+                  2.0
+                ],
+                "Count": [
+                  35
+                ]
               },
               "expectedResult": "warning",
               "description": ""
@@ -190,11 +207,39 @@
               "id": "test_seed_coverage_fail",
               "name": "20 slices x 2mm",
               "data": {
-                "SliceThickness": [2.0],
-                "Count": [20]
+                "SliceThickness": [
+                  2.0
+                ],
+                "Count": [
+                  20
+                ]
               },
               "expectedResult": "fail",
               "description": ""
+            }
+          ],
+          "parameters": {
+            "error_below_mm": 60,
+            "min_coverage_mm": 80
+          },
+          "parameterDefinitions": [
+            {
+              "name": "min_coverage_mm",
+              "label": "Minimum coverage",
+              "type": "number",
+              "default": 140,
+              "min": 0,
+              "unit": "mm",
+              "description": "Warn if total coverage is below this"
+            },
+            {
+              "name": "error_below_mm",
+              "label": "Hard minimum",
+              "type": "number",
+              "default": null,
+              "min": 0,
+              "unit": "mm",
+              "description": "Fail if total coverage is below this (optional)"
             }
           ]
         }

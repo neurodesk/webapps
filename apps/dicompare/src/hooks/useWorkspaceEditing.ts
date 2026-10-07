@@ -201,8 +201,10 @@ export function useWorkspaceEditing(
           ? results.find(f => f.tag.replace(/[()]/g, '') === tagOrName)
           : results.find(f => f.keyword?.toLowerCase() === tagOrName.toLowerCase() || f.name?.toLowerCase() === tagOrName.toLowerCase());
 
-        let fieldType: 'standard' | 'private' | 'custom';
-        if (fieldDef) {
+        let fieldType: 'standard' | 'derived' | 'private' | 'custom';
+        if (fieldDef?.fieldType === 'derived') {
+          fieldType = 'derived';
+        } else if (fieldDef) {
           fieldType = 'standard';
         } else if (isDicomFormat) {
           fieldType = 'private';
@@ -214,7 +216,11 @@ export function useWorkspaceEditing(
         const tag = fieldDef?.tag?.replace(/[()]/g, '') || (isDicomFormat ? tagOrName : null);
         const name = fieldDef?.name || tagOrName;
         const keyword = fieldDef?.keyword || name;
-        const suggestedDataType = fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const;
+        // Prefer the registry's canonical type (covers derived fields, which have no VR)
+        // and fall back to VR-based inference for standard fields.
+        const suggestedDataType = fieldDef?.valueType
+          ? fieldDef.valueType
+          : (fieldDef ? suggestDataType(vr, fieldDef.valueMultiplicity) : 'string' as const);
         const constraintType = fieldDef ? suggestValidationConstraint(fieldDef) : 'exact' as const;
         const defaultValue = convertValueToDataType('', suggestedDataType);
 
@@ -303,7 +309,8 @@ export function useWorkspaceEditing(
           tag: fieldTag,
           name: updates.name || fieldTag,
           value: updates.value || '',
-          validationRule: updates.validationRule
+          validationRule: updates.validationRule,
+          severity: updates.severity
         };
         updatedSeries[seriesIndex].fields.push(newField);
       }
@@ -390,6 +397,28 @@ export function useWorkspaceEditing(
     }));
   }, [setItems]);
 
+  // Update the rationale attached to a series. Empty clears it.
+  //
+  // Stored verbatim rather than trimmed: this runs on every keystroke, so
+  // trimming here would eat the space the moment you typed it and make the
+  // field look broken. Trimming happens once, at serialization.
+  const updateSeriesNotes = useCallback((id: string, seriesIndex: number, notes: string) => {
+    setItems(prev => prev.map(item => {
+      if (item.id !== id) return item;
+
+      const acq = item.acquisition;
+      const updatedSeries = [...(acq.series || [])];
+      if (updatedSeries[seriesIndex]) {
+        updatedSeries[seriesIndex] = {
+          ...updatedSeries[seriesIndex],
+          notes: notes || undefined,
+        };
+      }
+
+      return { ...item, acquisition: { ...acq, series: updatedSeries } };
+    }));
+  }, [setItems]);
+
   // Add validation function
   const addValidationFunction = useCallback((id: string, func: SelectedValidationFunction) => {
     setItems(prev => prev.map(item =>
@@ -439,6 +468,7 @@ export function useWorkspaceEditing(
     addSeries,
     deleteSeries,
     updateSeriesName,
+    updateSeriesNotes,
     addValidationFunction,
     updateValidationFunction,
     deleteValidationFunction,

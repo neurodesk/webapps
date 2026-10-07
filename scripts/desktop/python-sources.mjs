@@ -20,7 +20,11 @@ function include(name) {
 for (const name of ['micropip', 'sqlite3', 'numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema', 'packaging', 'typing-extensions', 'setuptools', 'matplotlib']) include(name);
 const assets = [...packages].sort().map(name => ({ url: base + pyodide.packages[name].file_name, sha256: pyodide.packages[name].sha256, kind: 'python-runtime' }));
 const wheels = [];
-for (const [name, version] of [['pydicom', '2.4.4'], ['tabulate', '0.9.0'], ['nibabel', '5.3.3'], ['twixtools', '0.24'], ['dicompare', '0.6.0']]) {
+// The embed worker pins the dicompare release every Python consumer installs.
+const worker = await readFile(join(root, 'apps/dicompare/public/embed/dicompare-worker.js'), 'utf8');
+const dicompare = /'dicompare==([^']+)'/.exec(worker)[1];
+// dicompare 0.11 requires pydicom>=2.4.5,<3.
+for (const [name, version] of [['pydicom', '2.4.5'], ['tabulate', '0.9.0'], ['nibabel', '5.3.3'], ['twixtools', '0.24'], ['dicompare', dicompare]]) {
   const result = await fetch(`https://pypi.org/pypi/${name}/${version}/json`);
   if (!result.ok) throw new Error(`${name}: HTTP ${result.status}`);
   const metadata = await result.json();

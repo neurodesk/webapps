@@ -123,6 +123,11 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
   reportProgress('Installing core packages...', 30);
   await pyodide.loadPackage(['micropip', 'sqlite3']);
 
+  // The installed suite lists its Pyodide packages and wheels in /_offline/python.json.
+  const suiteConfig: { packages: string[]; wheels: string[] } | null = suiteOffline
+    ? await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json())
+    : null;
+
   // In Electron production, pre-load all Pyodide packages from local storage
   // This prevents micropip from trying to fetch dependencies from PyPI
   if (inElectronProd) {
@@ -130,48 +135,47 @@ async function initializePyodide(requestId?: string): Promise<{ pyodideVersion: 
     console.log('[Worker] Pre-loading Pyodide packages for offline use...');
     // Load all required Pyodide built-in packages from local storage
     // These will be loaded from indexURL (our local pyodide/ folder)
-    const config = suiteOffline ? await fetch(new URL('/_offline/python.json', self.location.origin)).then(response => response.json()) : null;
-    await pyodide.loadPackage(config?.packages || ['numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema', 'packaging', 'typing-extensions', 'setuptools', 'matplotlib']);
+    await pyodide.loadPackage(suiteConfig?.packages || ['numpy', 'pandas', 'scipy', 'tqdm', 'jsonschema', 'packaging', 'typing-extensions', 'setuptools', 'matplotlib']);
     console.log('[Worker] Pyodide packages loaded from local storage');
   }
 
-  // Determine package source based on environment
-  let packageSource: string;
   const wheelBase = getWheelBaseUrl();
-  if (inElectronProd) {
-    // In Electron production, install from bundled wheel with absolute path
-    packageSource = wheelBase + `dicompare-${DICOMPARE_VERSION}-py3-none-any.whl`;
-    console.log('[Worker] Installing dicompare from bundled wheel...');
-    console.log('[Worker] Wheel base URL:', wheelBase);
-  } else {
-    // Detect development vs production using Vite's build mode
-    // Note: Don't use hostname detection as localhost is used in production containers too
-    const isDevelopment = import.meta.env?.MODE === 'development';
-    packageSource = isDevelopment
-      ? `http://localhost:3001/pyodide/wheels/dicompare-${DICOMPARE_VERSION}-py3-none-any.whl`
-      : `dicompare==${DICOMPARE_VERSION}`;
-    console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local dev server' : 'PyPI'}...`);
-  }
-
   reportProgress('Loading DICOM analysis tools...', 60);
 
-  // For Electron production, we need to install dependencies from bundled wheels too
-  const installCode = inElectronProd ? `
+  let installCode: string;
+  if (inElectronProd) {
+    // Offline install. The bundled wheels — and their exact versions — are the
+    // single source of truth in scripts/download-pyodide.sh, which records them
+    // in wheels/manifest.json. Install exactly what was bundled (deps first,
+    // dicompare last) instead of hardcoding versions here that could drift out
+    // of sync with what the download script actually fetched.
+    console.log('[Worker] Installing dicompare from bundled wheels...');
+    console.log('[Worker] Wheel base URL:', wheelBase);
+    // The suite stages the wheels of /_offline/python.json, dependencies first and
+    // dicompare last; the dedicated Electron build records its own in manifest.json.
+    let bundledWheels: string[];
+    if (suiteConfig) {
+      bundledWheels = suiteConfig.wheels.map(url => new URL(url).pathname.split('/').pop() as string);
+    } else {
+      const manifestResp = await fetch(wheelBase + 'manifest.json');
+      if (!manifestResp.ok) {
+        throw new Error(
+          `Could not load bundled wheel manifest (HTTP ${manifestResp.status}) from ${wheelBase}manifest.json`
+        );
+      }
+      bundledWheels = await manifestResp.json();
+    }
+    installCode = `
 import micropip
 
-# Install bundled wheels for offline use with absolute file:// URLs
+# Install bundled wheels for offline use with absolute file:// URLs.
 wheel_base = '${wheelBase}'
-wheels_to_install = [
-    wheel_base + 'pydicom-2.4.4-py3-none-any.whl',
-    wheel_base + 'tabulate-0.9.0-py3-none-any.whl',
-    wheel_base + 'nibabel-5.3.3-py3-none-any.whl',
-    wheel_base + 'twixtools-0.24-py3-none-any.whl',
-    '${packageSource}',
-]
+wheels_to_install = ${JSON.stringify(bundledWheels)}
 
-for wheel in wheels_to_install:
-    await micropip.install(wheel)
-    print(f"[Worker] Installed {wheel}")
+# A wheel that fails to install must stop start-up: offline, micropip cannot fetch a substitute.
+for name in wheels_to_install:
+    await micropip.install(wheel_base + name)
+    print(f"[Worker] Installed {name}")
 
 import dicompare
 import dicompare.interface
@@ -182,7 +186,16 @@ import json
 from typing import List, Dict, Any
 
 print("[Worker] dicompare modules imported successfully")
-` : `
+`;
+  } else {
+    // Detect development vs production using Vite's build mode.
+    // Note: Don't use hostname detection as localhost is used in production containers too.
+    const isDevelopment = import.meta.env?.MODE === 'development';
+    const packageSource = isDevelopment
+      ? `http://localhost:3001/pyodide/wheels/dicompare-${DICOMPARE_VERSION}-py3-none-any.whl`
+      : `dicompare==${DICOMPARE_VERSION}`;
+    console.log(`[Worker] Installing dicompare from ${isDevelopment ? 'local dev server' : 'PyPI'}...`);
+    installCode = `
 import micropip
 await micropip.install('${packageSource}')
 
@@ -196,6 +209,7 @@ from typing import List, Dict, Any
 
 print("[Worker] dicompare modules imported successfully")
 `;
+  }
 
   await pyodide.runPythonAsync(installCode);
 
@@ -645,15 +659,11 @@ json.dumps({
 async function handleClearCache(id: string): Promise<void> {
   if (!pyodide) throw new Error('Pyodide not initialized');
 
-  // Clear validation cache
+  // Clear validation cache. There is no longer a persistent Python-side session
+  // cache to clear — the parsed session DataFrame is now returned directly from
+  // analysis rather than stashed in a module global.
   validationCache.clear();
   console.log('[Worker] Validation cache cleared');
-
-  await pyodide.runPython(`
-from dicompare.interface.web_utils import _cache_session
-_cache_session(None, {}, {})
-print("[Worker] Session cache cleared")
-  `);
 
   sendSuccess(id, { cleared: true });
 }

@@ -10,6 +10,7 @@ import { ComplianceFieldResult } from '../types/schema';
 import { getItemFlags } from './workspaceHelpers';
 import { escapeHtml, normalizeTag } from './stringHelpers';
 import { isAnalysisTag } from './tagUtils';
+import { getParameterDefinitions, getEffectiveParams, formatParamValue, interpolateRuleName } from './validationParams';
 import { isFlatImageUrl, isVolumeUrl } from './imageHelpers';
 import { getVolumeThumbnail, getVolumeThumbnailFromFile } from './niivueThumbnail';
 import { Dcm2niix } from '@niivue/dcm2niix';
@@ -154,7 +155,7 @@ export async function generatePrintReportHtml(options: PrintReportOptions): Prom
 
   // Build HTML sections (respecting section options)
   const fieldsHtml = sec.fieldsTable ? buildFieldsHtml(fields, isComplianceMode, isDataOnly, complianceResults) : '';
-  const seriesHtml = sec.seriesTable ? buildSeriesHtml(series, isComplianceMode, complianceResults) : '';
+  const seriesHtml = sec.seriesTable ? buildSeriesHtml(series, isComplianceMode, complianceResults, isDataOnly) : '';
   const uncheckedFieldsHtml = sec.uncheckedFields ? buildUncheckedFieldsHtml(isComplianceMode, realAcquisition, fields, series) : '';
   const uncheckedSeriesFieldsHtml = sec.uncheckedSeriesFields ? buildUncheckedSeriesFieldsHtml(isComplianceMode, realAcquisition, fields, series) : '';
   const rulesHtml = sec.validationRules ? buildRulesHtml(validationFunctions, isComplianceMode, complianceResults) : '';
@@ -210,7 +211,8 @@ export async function generatePrintReportHtml(options: PrintReportOptions): Prom
     uncheckedSeriesFieldsHtml,
     readmeHtml,
     '',
-    sec
+    sec,
+    isDataOnly
   );
 }
 
@@ -322,6 +324,7 @@ export async function generateSchemaViewerPrintHtml(options: SchemaViewerPrintOp
       <body>
         ${headerHtml}
         ${schemaReadmeHtml}
+        ${acquisitionSections.includes('sev-dot') ? renderSeverityLegend() : ''}
         ${acquisitionSections}
         <div class="print-date">Printed on ${new Date().toLocaleDateString()}</div>
       </body>
@@ -397,6 +400,46 @@ function findFieldCompliance(
   });
 }
 
+/**
+ * Renders a constraint's rationale inline. Print has no hover, so notes that
+ * appear as tooltips on screen are shown as italic text under the constraint.
+ */
+function renderNote(notes: unknown): string {
+  if (typeof notes !== 'string' || !notes.trim()) return '';
+  return `<span class="field-note">${escapeHtml(notes.trim())}</span>`;
+}
+
+/**
+ * The same amber/grey dot the tables use on screen: amber marks a requirement
+ * (severity omitted or 'error'), grey marks reference-only information.
+ */
+function renderSeverityDot(severity: unknown): string {
+  const isReference = severity === 'warning';
+  const title = isReference
+    ? 'Reference only — differing values are still compliant'
+    : 'Required — data must satisfy this constraint to be compliant';
+  return `<span class="sev-dot ${isReference ? 'sev-ref' : 'sev-req'}" title="${escapeHtml(title)}"></span>`;
+}
+
+/**
+ * Decodes the dots. On screen this legend is conditional because a tooltip is
+ * always a hover away; a printout has no such fallback, so it prints once per
+ * document regardless of whether the schema happens to mix the two states.
+ */
+function renderSeverityLegend(): string {
+  return `
+    <p class="sev-legend">
+      <span class="sev-dot sev-req"></span> Required — data must satisfy this constraint to be compliant
+      <span class="sev-legend-gap"></span>
+      <span class="sev-dot sev-ref"></span> Reference only — records what the reference protocol used; differing values are still compliant
+    </p>
+  `;
+}
+
+function seriesFieldsOf(s: any): any[] {
+  return Array.isArray(s?.fields) ? s.fields : Object.values(s?.fields || {});
+}
+
 function buildFieldsHtml(
   fields: DicomField[],
   isComplianceMode: boolean,
@@ -432,7 +475,7 @@ function buildFieldsHtml(
 
     return `
       <tr>
-        <td><span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}</td>
+        <td>${isDataOnly ? '' : renderSeverityDot(f.severity)}<span class="field-name">${escapeHtml(fieldName)}</span>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}${renderNote(f.notes)}</td>
         <td>${expectedValue}</td>
         ${isComplianceMode ? `<td>${actualDisplay}</td><td class="${statusClass}">${status}</td>` : ''}
       </tr>
@@ -457,7 +500,8 @@ function buildFieldsHtml(
 function buildSeriesHtml(
   series: any[],
   isComplianceMode: boolean,
-  complianceResults: ComplianceFieldResult[]
+  complianceResults: ComplianceFieldResult[],
+  isDataOnly: boolean = false
 ): string {
   if (series.length === 0) return '';
 
@@ -477,15 +521,34 @@ function buildSeriesHtml(
 
   if (allSeriesFields.length === 0) return '';
 
+  // Severity is recorded per series, but the table has one column per field, so
+  // a column only reads as reference-only when every series defining it agrees.
+  const severitiesByField = new Map<string, unknown[]>();
+  series.forEach(s => {
+    seriesFieldsOf(s).forEach((f: any) => {
+      const fieldKey = f.tag || f.name;
+      severitiesByField.set(fieldKey, [...(severitiesByField.get(fieldKey) ?? []), f.severity]);
+    });
+  });
+  const isColumnReferenceOnly = (fieldKey: string) => {
+    const severities = severitiesByField.get(fieldKey) ?? [];
+    return severities.length > 0 && severities.every(s => s === 'warning');
+  };
+
   const headerCells = allSeriesFields.map(f =>
-    `<th><span class="field-name">${escapeHtml(f.keyword || f.name)}</span>${f.tag ? ` <code>${escapeHtml(f.tag)}</code>` : ''}</th>`
+    `<th>${isDataOnly ? '' : renderSeverityDot(isColumnReferenceOnly(f.tag || f.name) ? 'warning' : 'error')}<span class="field-name">${escapeHtml(f.keyword || f.name)}</span>${f.tag ? ` <code>${escapeHtml(f.tag)}</code>` : ''}</th>`
   ).join('');
 
   const rows = series.map((s, i) => {
-    const seriesFields = Array.isArray(s.fields) ? s.fields : Object.values(s.fields || {});
+    const seriesFields = seriesFieldsOf(s);
     const cells = allSeriesFields.map(headerField => {
       const field = seriesFields.find((f: any) => (f.tag || f.name) === (headerField.tag || headerField.name));
-      const value = field?.value !== undefined ? escapeHtml(field.value) : '—';
+      // Same formatting as the fields table: printing the bare value drops the
+      // constraint, so a "5 ± 1" tolerance would read as a flat "5".
+      const value = field
+        ? escapeHtml(formatFieldDisplay(field.value, buildValidationRuleFromField(field), { showValue: true, showConstraint: true }))
+        : '—';
+      // No note here — a series' rationale prints once under its name.
       return `<td>${value}</td>`;
     }).join('');
 
@@ -501,7 +564,7 @@ function buildSeriesHtml(
       statusCell = `<td class="${statusClass}">${escapeHtml(status)}</td>`;
     }
 
-    return `<tr><td><span class="field-name">${escapeHtml(s.name || `Series ${i + 1}`)}</span></td>${cells}${statusCell}</tr>`;
+    return `<tr><td><span class="field-name">${escapeHtml(s.name || `Series ${i + 1}`)}</span>${renderNote(s.notes)}</td>${cells}${statusCell}</tr>`;
   }).join('');
 
   return `
@@ -767,11 +830,20 @@ function buildRulesHtml(
       ? `<div class="rule-fields">${ruleFields.map((f: string) => `<span class="field-tag-badge">${escapeHtml(f)}</span>`).join('')}</div>`
       : '';
 
+    const paramDefs = getParameterDefinitions(v);
+    const effectiveParams = getEffectiveParams(v);
+    const paramsHtml = paramDefs.length > 0
+      ? `<div class="rule-fields">${paramDefs.map(p =>
+          `<span class="param-badge">${escapeHtml(`${p.name} = ${formatParamValue(effectiveParams[p.name])}${p.unit && effectiveParams[p.name] != null ? ` ${p.unit}` : ''}`)}</span>`
+        ).join('')}</div>`
+      : '';
+
     return `
       <tr>
         <td>
-          <div class="field-name">${escapeHtml(ruleName)}</div>
+          <div class="field-name">${escapeHtml(interpolateRuleName(ruleName, effectiveParams))}</div>
           ${fieldsHtml}
+          ${paramsHtml}
         </td>
         <td>${escapeHtml(ruleDescription)}</td>
         ${isComplianceMode ? `<td class="${ruleStatusClass}">${escapeHtml(ruleStatus)}</td>` : ''}
@@ -974,7 +1046,8 @@ function buildFullHtml(
   uncheckedSeriesFieldsHtml: string,
   readmeHtml: string,
   imagesHtml: string = '',
-  sections?: PrintSectionOptions
+  sections?: PrintSectionOptions,
+  isDataOnly: boolean = false
 ): string {
   const hasContent = fieldsHtml || seriesHtml || rulesHtml || readmeHtml || testNotesHtml || imagesHtml;
   const emptyMessage = hasContent ? '' : '<p style="color: #666;">No fields, series, or validation rules defined.</p>';
@@ -994,6 +1067,7 @@ function buildFullHtml(
         ${imagesHtml}
         ${testNotesHtml}
         ${rulesHtml}
+        ${!isDataOnly && (fieldsHtml || seriesHtml) ? renderSeverityLegend() : ''}
         ${fieldsHtml}
         ${seriesHtml}
         ${uncheckedFieldsHtml}
@@ -1037,8 +1111,22 @@ function getPrintStyles(sections?: PrintSectionOptions): string {
     th { background: #f5f5f5; font-weight: 600; }
     code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: monospace; font-size: 10px; color: #666; }
     .field-name { font-weight: 500; color: #1a1a1a; }
+    /* Constraint rationale. On screen this is a hover tooltip; print has no
+       hover, so the note is rendered inline under whatever it annotates. */
+    .field-note { display: block; margin-top: 3px; font-style: italic; font-size: 10px; color: #555; font-weight: 400; }
+    /* Requirement vs reference-only, matching the dots in the app. print-color-adjust
+       keeps the fill — print engines drop backgrounds by default, which would make
+       both states render as an empty circle. */
+    .sev-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 6px; vertical-align: middle; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .sev-req { background: #f59e0b; }
+    .sev-ref { background: #9ca3af; }
+    .sev-legend { margin: 16px 0 0; padding: 6px 10px; background: #fafafa; border: 1px solid #eee; border-radius: 3px; font-size: 10px; color: #666; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .sev-legend-gap { display: inline-block; width: 16px; }
     .rule-fields { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-    .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; }
+    .field-tag-badge { display: inline-block; padding: 2px 6px; background: #dbeafe; color: #1d4ed8; font-size: 10px; border-radius: 3px; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    /* Rule parameters sit next to the checked-field badges, so they take the
+       amber the on-screen parameters column uses rather than the field blue. */
+    .param-badge { display: inline-block; padding: 2px 6px; background: #fef3c7; color: #b45309; font-size: 10px; border-radius: 3px; font-family: 'SF Mono', Monaco, 'Courier New', monospace; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 
     .pass { color: #16a34a; font-weight: 500; }
     .fail { color: #dc2626; font-weight: 500; }

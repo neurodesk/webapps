@@ -1,0 +1,106 @@
+{
+  "id": "validate_fov_400mm",
+  "name": "Field of View",
+  "description": "Validates the maximum in-plane field of view (PixelSpacing x matrix) against a configurable target range: error below the hard minimum, warning outside the target range.",
+  "category": "Geometry",
+  "fields": [
+    "PixelSpacing",
+    "Columns",
+    "Rows"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "pixel_spacing = value[\"PixelSpacing\"].iloc[0]\ncolumns = value[\"Columns\"].iloc[0]\nrows = value[\"Rows\"].iloc[0]\nfov_col = pixel_spacing[0] * columns\nfov_row = pixel_spacing[1] * rows\nfov_max = max(fov_col, fov_row)\nmin_fov = params.get(\"min_fov_mm\")\nlo = params.get(\"target_min_mm\")\nhi = params.get(\"target_max_mm\")\nif min_fov is not None and fov_max < min_fov:\n    raise ValidationError(f\"FOV too small. Found {fov_max:.0f} mm, need >= {min_fov:g} mm\")\nif (lo is not None and fov_max < lo) or (hi is not None and fov_max > hi):\n    raise ValidationWarning(f\"FOV should be within {lo:g}-{hi:g} mm. Found {fov_max:.0f} mm\")\n",
+  "testCases": [
+    {
+      "id": "target_pass",
+      "name": "400 mm FOV passes default target",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.5625,
+            1.5625
+          ]
+        ],
+        "Columns": [
+          256
+        ],
+        "Rows": [
+          256
+        ]
+      }
+    },
+    {
+      "id": "small_fail",
+      "name": "230 mm FOV fails hard minimum",
+      "expectedResult": "fail",
+      "data": {
+        "PixelSpacing": [
+          [
+            0.9,
+            0.9
+          ]
+        ],
+        "Columns": [
+          256
+        ],
+        "Rows": [
+          256
+        ]
+      }
+    },
+    {
+      "id": "target_moves",
+      "name": "230 mm FOV passes a brain-sized target",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            0.9,
+            0.9
+          ]
+        ],
+        "Columns": [
+          256
+        ],
+        "Rows": [
+          256
+        ]
+      },
+      "params": {
+        "min_fov_mm": 200,
+        "target_min_mm": 220,
+        "target_max_mm": 260
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "min_fov_mm",
+      "label": "Hard minimum FOV",
+      "type": "number",
+      "default": 350,
+      "min": 0,
+      "unit": "mm",
+      "description": "Fail if FOV is below this"
+    },
+    {
+      "name": "target_min_mm",
+      "label": "Target FOV minimum",
+      "type": "number",
+      "default": 380,
+      "min": 0,
+      "unit": "mm",
+      "description": "Warn if FOV is below this"
+    },
+    {
+      "name": "target_max_mm",
+      "label": "Target FOV maximum",
+      "type": "number",
+      "default": 420,
+      "min": 0,
+      "unit": "mm",
+      "description": "Warn if FOV is above this"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { X, Loader, ExternalLink } from 'lucide-react';
+import { Loader, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Modal from './Modal';
 import { VERSION } from '../../version';
 
 interface ChangelogModalProps {
@@ -67,30 +68,18 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose }) => {
     return () => { cancelled = true; };
   }, [isOpen, releases]);
 
-  if (!isOpen) return null;
-
   const fmtDate = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50" onClick={onClose}>
-      <div
-        className="bg-surface-primary rounded-lg shadow-xl max-w-lg w-full max-h-[75vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold text-content-primary">Changelog</h3>
-            <p className="text-xs text-content-tertiary">You're on v{VERSION}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-content-tertiary hover:text-content-primary hover:bg-surface-secondary rounded-lg transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Changelog"
+      subtitle={`You're on v${VERSION}`}
+      size="md"
+      panelClassName="max-h-[75vh]"
+    >
         <div className="px-6 py-5 overflow-y-auto">
           {loading && (
             <div className="flex items-center justify-center py-10 text-content-tertiary">
@@ -134,8 +123,7 @@ const ChangelogModal: React.FC<ChangelogModalProps> = ({ isOpen, onClose }) => {
             All releases on GitHub <ExternalLink className="h-3.5 w-3.5" />
           </a>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

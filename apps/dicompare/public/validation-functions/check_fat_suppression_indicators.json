@@ -1,0 +1,28 @@
+{
+  "id": "check_fat_suppression_indicators",
+  "name": "Fat Suppression Required",
+  "description": "Validates that fat suppression is enabled, indicated by FS/FAT in ScanOptions or SP (spectral) in SequenceVariant (e.g. required for post-contrast orbit T1).",
+  "category": "Contrast Preparation",
+  "fields": [
+    "ScanOptions",
+    "SequenceVariant"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "# Check for fat suppression techniques\n# Common indicators: ScanOptions contains 'FS' or 'FAT', or SequenceVariant contains 'SP' (spectral)\nscan_options = value[\"ScanOptions\"].iloc[0] if \"ScanOptions\" in value.columns and not pd.isna(value[\"ScanOptions\"].iloc[0]) else \"\"\nseq_variant = value[\"SequenceVariant\"].iloc[0] if \"SequenceVariant\" in value.columns and not pd.isna(value[\"SequenceVariant\"].iloc[0]) else \"\"\n\n# Convert to string for checking\nscan_options_str = str(scan_options).upper() if scan_options else \"\"\nseq_variant_str = str(seq_variant).upper() if seq_variant else \"\"\n\nhas_fat_sat = any(fs in scan_options_str for fs in ['FS', 'FAT', 'SPIR', 'SPAIR', 'CHESS'])\nhas_spectral = 'SP' in seq_variant_str\n\nif not has_fat_sat and not has_spectral:\n    raise ValidationWarning(\"Orbit T1 imaging may lack fat suppression. Fat suppression is required for adequate optic nerve visualization.\")",
+  "testCases": [
+    {
+      "id": "test_with_fs",
+      "name": "With fat saturation - passes",
+      "data": {
+        "ScanOptions": [
+          "FS"
+        ],
+        "SequenceVariant": [
+          "SK"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Fat saturation enabled"
+    }
+  ]
+}

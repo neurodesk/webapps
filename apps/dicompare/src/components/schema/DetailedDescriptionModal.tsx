@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Edit2, Eye } from 'lucide-react';
+import { Edit2, Eye } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import Modal from '../common/Modal';
 import MarkdownToolbar from '../common/MarkdownToolbar';
 import { markdownComponents } from '../../utils/markdownRenderers';
 import { handleMarkdownListContinuation } from '../../utils/markdownEditor';
@@ -70,22 +71,7 @@ const DetailedDescriptionModal: React.FC<DetailedDescriptionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-surface-primary rounded-lg max-w-4xl w-full h-[80vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
-          <div>
-            <h3 className="text-lg font-semibold text-content-primary">{title}</h3>
-            <span className="text-sm text-content-tertiary">README</span>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-1.5 text-content-tertiary hover:text-content-secondary rounded-md hover:bg-surface-secondary"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
+    <Modal isOpen={isOpen} onClose={handleClose} title={title} subtitle="README" size="xl" panelClassName="h-[80vh]">
         {/* Tabs - underline style */}
         {!isReadOnly && (
           <div className="flex border-b border-border px-6">
@@ -218,9 +204,7 @@ Add any technical details or vendor-specific information."
             </div>
           )}
         </div>
-
-      </div>
-    </div>
+    </Modal>
   );
 };
 
