@@ -1,5 +1,11 @@
 # @neurodesk/webapp-components
 
+## 0.10.2
+
+### Patch Changes
+
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+
 ## 0.10.1
 
 ### Patch Changes

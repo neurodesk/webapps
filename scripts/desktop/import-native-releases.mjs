@@ -1,45 +1,23 @@
-// Import independently versioned native releases; never guess URLs from web versions.
+// Write released native archives into registry/standalone.json by hand; CI does the same in
+// .github/workflows/standalone-catalog.yml. Needs the release tags locally (git fetch --tags).
 // Usage: node scripts/desktop/import-native-releases.mjs [app@VERSION ...]
-// Each argument adds or replaces one pinned release; its GitHub tag must already carry archives.
-import { readFile, writeFile } from 'node:fs/promises';
-import { portableCommand, releasePlatform } from '../lib/portable-command.mjs';
+// With no arguments, every command-line entry is refreshed from the release it already names.
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { catalogReleases, parseReleases } from '../lib/standalone-import.mjs';
 
-const path = new URL('../../registry/standalone.json', import.meta.url);
-const catalog = JSON.parse(await readFile(path));
-const releases = { greedy: '0.2.20260914', synthsr: '0.3.20260910', synthseg: '0.2.20260910' };
-for (const argument of process.argv.slice(2)) {
-  const [id, version] = argument.split('@');
-  if (!catalog.apps[id] || !/^\d+\.\d+\.\d{8}$/.test(version || '')) throw new Error(`Expected app@MAJOR.MINOR.YYYYMMDD, got ${argument}`);
-  releases[id] = version;
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const catalog = JSON.parse(await readFile(join(root, 'registry/standalone.json'), 'utf8'));
+const releases = process.argv.length > 2 ? parseReleases(process.argv.slice(2)) : catalogReleases(catalog);
+const directory = await mkdtemp(join(tmpdir(), 'catalog-update-'));
+try {
+  const update = join(directory, 'update.json');
+  const names = releases.map(({ id, version }) => `${id}@${version}`);
+  execFileSync(process.execPath, [join(root, 'scripts/catalog-update.mjs'), '--out', update, ...names], { stdio: 'inherit' });
+  execFileSync(process.execPath, [join(root, 'scripts/apply-catalog-update.mjs'), update], { stdio: 'inherit' });
+} finally {
+  await rm(directory, { recursive: true, force: true });
 }
-
-// Apps packaged by exes/node-cli bundle their models and describe how to run them in release.json.
-async function portableSpec(id) {
-  try {
-    return JSON.parse(await readFile(new URL(`../../packages/${id}/release.json`, import.meta.url)));
-  } catch (error) {
-    if (error.code === 'ENOENT') return null;
-    throw error;
-  }
-}
-
-for (const [id, version] of Object.entries(releases)) {
-  const response = await fetch(`https://api.github.com/repos/neurodesk/webapps/releases/tags/${id}-v${version}`);
-  if (!response.ok) throw new Error(`${id}: HTTP ${response.status}`);
-  const release = await response.json();
-  if (release.draft) throw new Error(`${id}: native release is still a draft`);
-  const spec = await portableSpec(id);
-  const downloads = release.assets.flatMap(asset => {
-    const platform = releasePlatform(spec, asset.name);
-    if (!platform) return [];
-    if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest)) throw new Error(`${asset.name}: GitHub has no asset digest`);
-    return [{ kind: 'cli', platform, version, url: asset.browser_download_url, sha256: asset.digest.slice(7), bytes: asset.size,
-      validationUrl: release.assets.find(item => item.name === `${asset.name}.validation.txt`)?.browser_download_url,
-      ...(spec ? { modelsIncluded: true, command: portableCommand(spec, platform, asset.name) } : {}),
-    }];
-  });
-  if (!downloads.length) throw new Error(`${id}: release ${id}-v${version} has no native archives`);
-  catalog.apps[id].downloads = downloads;
-  console.log(`${id}: ${downloads.length} released native downloads`);
-}
-await writeFile(path, `${JSON.stringify(catalog, null, 2)}\n`);

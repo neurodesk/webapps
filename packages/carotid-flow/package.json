@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/carotid-flow",
-  "version": "0.3.20261004",
+  "version": "0.4.20261007",
   "description": "Carotid detection and flow curves from phase-contrast MRI for browsers and the command line",
   "type": "module",
   "license": "MIT",

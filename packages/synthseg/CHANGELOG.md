@@ -1,5 +1,7 @@
 # @neurodesk/synthseg
 
+## 0.5.20261007
+
 ## 0.5.20261005
 
 ### Patch Changes
