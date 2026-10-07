@@ -34,7 +34,15 @@
       "T1_head_fast.nii.gz",
       "T1_head_2mm_default.nii.gz",
       "T1_head_2mm_fast.nii.gz"
-    ]
+    ],
+    "sha256": {
+      "T1_head.nii.gz": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+      "T1_head_2mm.nii.gz": "e4c1bb988b6b6efe0966b1bf09869f12151d75ad31e64097dcd14fa0c717aadd",
+      "T1_head_default.nii.gz": "8fea403662eb3f422ff9b942b667ef5cce454cb79c8177e55e14aa9427f4c81a",
+      "T1_head_fast.nii.gz": "80f6822d2f445fd0f8791eb2e1abd3349168c6ec99f25253423cf21c2309a8ec",
+      "T1_head_2mm_default.nii.gz": "3fd14829d1503c9179255e9c485bb04ddddd02a0f87a81d1a2aaeea41ba6ac0a",
+      "T1_head_2mm_fast.nii.gz": "12f020cf5d0c8b4ffb744d7e21405b71ddd35651f1ab8e041e4576e77459f7e7"
+    }
   },
   "repository": "neurodeskorg/webapps",
   "revision": "356a4adbce52cf9052d61ef90b14ba263e7c25e9",

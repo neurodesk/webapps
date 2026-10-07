@@ -100,6 +100,13 @@ test('hardware-GPU apps run their browser suite on a macOS runner with Metal', a
   assert.ok(job.steps.some((step) => step.run?.includes('scripts/e2e-test-data.mjs')), 'the job downloads test data');
 });
 
+test('the SynthSeg registry manifest stays identical to the package copy', async () => {
+  // exes/synthseg/scripts/repoint_model_manifest.sh pins both; the registry reads models/.
+  const registryCopy = await readFile(join(repoRoot, 'models/synthseg.manifest.json'), 'utf8');
+  const packageCopy = await readFile(join(repoRoot, 'packages/synthseg/model.manifest.json'), 'utf8');
+  assert.equal(registryCopy, packageCopy);
+});
+
 test('registry validation rejects ci.hardware_gpu without a browser suite', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   raw.apps[0].ci.browser_test = false;
