@@ -1054,13 +1054,16 @@ importers:
 
   packages/synthseg:
     dependencies:
-      '@neurodesk/runtime-support':
+      '@neurodesk/webapp-components':
         specifier: workspace:*
-        version: link:../runtime-support
-    devDependencies:
+        version: link:../components
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0
+    devDependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
 
   packages/synthsr:
     dependencies:

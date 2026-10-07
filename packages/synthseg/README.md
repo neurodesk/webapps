@@ -29,6 +29,102 @@ const { buffer, provenance } = await runSynthseg({
 `fast` skips left–right flip averaging and topology postprocessing (roughly half
 the work, slightly noisier labels). `ct` clips Hounsfield units to [0, 80].
 
+## Command line
+
+The `synthseg` command runs the web app's pipeline on your own computer: the
+same WebAssembly preprocessing and postprocessing, with ONNX Runtime Node on the
+CPU in place of WebGPU. It needs no browser, GPU or Python.
+
+### Install
+
+Download the release for your platform from the SynthSeg app's Standalone
+dialog. Linux x64 and Windows x64 get this command line. It contains a private
+Node.js runtime and the SynthSeg 2.0 model, so it runs offline from the first
+use. macOS on Apple silicon gets the native installer from `exes/synthseg`,
+which runs the same model on Metal and takes the options `exes/synthseg`
+documents.
+
+```bash
+tar -xzf synthseg-VERSION-linux-x64.tar.gz
+./synthseg-VERSION-linux-x64/synthseg self-check
+```
+
+On Windows, use `Expand-Archive` and `synthseg.exe`.
+
+### Commands
+
+```text
+synthseg INPUT.nii[.gz] OUTPUT_DIR [--mode default|fast] [--ct | --no-ct]
+                                   [--threads N] [--cache-dir DIR] [--offline]
+synthseg download-models [--cache-dir DIR]
+synthseg self-check
+synthseg --help
+```
+
+The options are the web app's automation parameters for `segment`
+(`src/parameters.json`, which a test holds equal to `apps/synthseg/automation.json`).
+`--mode fast` skips flip averaging and topology postprocessing. `--ct` treats the
+input as CT in Hounsfield units and `--no-ct` as MRI. Without either, the input
+counts as CT when any voxel is negative, as the app decides. The decision is
+recorded in the report.
+
+`OUTPUT_DIR` must be new or empty. `--threads` defaults to
+`SLURM_CPUS_PER_TASK`, or else every core. Progress goes to standard error. A
+finished run prints one JSON line with the output files, parameters and
+provenance. An error prints one message and exits with status 1. `self-check`
+runs a one-node graph on ONNX Runtime's CPU provider, loads the WebAssembly
+module and, in a release, verifies the bundled model. The command sets
+`ORT_DISABLE_TELEMETRY=1` unless you set it.
+
+### Memory and time
+
+ONNX Runtime runs without its CPU memory arena or memory pattern planning,
+which cut the peak from 9.3 GB to 6.1 GB on the example with identical labels.
+Measured on `T1_head.nii.gz` (192×224×160 after padding), Linux x64, 8 threads
+on a shared host:
+
+| Mode | Peak resident memory | Wall time |
+| --- | --- | --- |
+| default | 6.1 GB | 101 s |
+| fast | 4.4 GB | 45 s |
+
+A larger field of view needs proportionally more. Plan for 8 GB of free memory.
+
+### Models and offline use
+
+Releases set `NEURODESK_SYNTHSEG_MODEL_DIR` to their `models/` directory and
+`NEURODESK_OFFLINE=1`. Installed from the repository, the command downloads the
+53 MB model to `~/.cache/neurodesk/synthseg/<model digest>` (or
+`$XDG_CACHE_HOME`, or `--cache-dir`) on first use. `download-models` fetches it
+ahead of time. Its size and SHA-256 are checked on every load, before any
+computation. A file that fails the check stops the run and names the path to
+delete. With `--offline`, a missing model stops the run instead of downloading.
+
+### Outputs
+
+The output directory receives the web app's two downloads, named by the same
+code (`src/results.js`). For `T1.nii.gz`:
+
+- `T1_synthseg.nii.gz`, int32 FreeSurfer labels on the 1 mm grid
+- `T1_synthseg.json`, the app's run report: input and output checksums,
+  parameters, provenance (model digest, ONNX Runtime version, threads, timings)
+  and every label's voxel count and volume in ml
+
+### Accuracy
+
+`validation/cli-check.mjs --executable PATH` runs the command on both benchmark
+volumes (`T1_head` at 1 mm and `T1_head_2mm`) in both modes. FreeSurfer 8.1.0's
+`mri_synthseg` made the goldens, so the reference shares no code with the
+command. Each label map must match its golden as `exes/synthseg/tests/parity.rs`
+requires (`validation/gates.json`, read by that test, this package's tests and
+the app's end-to-end test too): int32 labels, the same shape, sform within
+1e-4 mm, the same qform/sform codes, units and quaternion, the same set of
+labels, and at most 2e-6 of the voxels different. The report's voxel volume,
+per-label volumes and total labelled volume must agree with the golden's to
+within the differing voxels. `test/cli-check.test.js` shows each gate failing
+on a golden with one defect. With `--native PATH`, the fast-mode maps are also
+compared with the native Rust `synthseg` on the same input.
+
 ## Build and test
 
     make wasm    # cargo build --target wasm32-unknown-unknown + wasm-opt -O3 -> src/synthseg.wasm

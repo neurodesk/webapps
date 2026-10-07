@@ -1,0 +1,15 @@
+{
+  "mode": {
+    "type": "string",
+    "description": "Fast mode skips flip averaging and topology postprocessing",
+    "enum": [
+      "default",
+      "fast"
+    ],
+    "default": "default"
+  },
+  "ct": {
+    "type": "boolean",
+    "description": "Input is CT in Hounsfield units; omitted uses the app's intensity detection"
+  }
+}
