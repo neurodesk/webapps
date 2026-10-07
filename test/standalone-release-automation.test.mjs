@@ -220,6 +220,10 @@ test('release tags name the app and version; specs are read from the tag itself'
     assert.match(packageDir, /^packages\//);
   }
   assert.equal(committed.get('topofit').packageDir, 'packages/topofit');
+  const natives = nativeReleases(current);
+  assert.deepEqual(natives.get('synthseg').map((source) => [source.workflow, source.targets]), [['synthseg-native.yml', ['macos-arm64']], ['synthseg-portable.yml', ['linux-x64', 'windows-x64']]]);
+  const catalog = JSON.parse(await readFile(new URL('../registry/standalone.json', import.meta.url), 'utf8'));
+  assert.ok(catalogReleases(catalog, natives).some(({ id, version }) => id === 'synthseg' && version === '0.2.20260910'), 'a refresh still finds the Rust macOS installer');
 });
 
 test('an app release starts every portable command line build, which then publishes to the catalog', async () => {

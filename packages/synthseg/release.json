@@ -1,0 +1,35 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "synthseg-v",
+  "displayName": "SynthSeg",
+  "app": "synthseg",
+  "workflow": "synthseg-portable.yml",
+  "run": "input.nii.gz results",
+  "readme": {
+    "run": "Segment a head image into FreeSurfer labels",
+    "notes": [
+      "The SynthSeg 2.0 model is included and checked locally.",
+      "No network connection or previously populated cache is required.",
+      "A 1 mm head peaks at about 6 GB of memory (4.5 GB with --mode fast).",
+      "Add --help for options. DICOM input and label editing need the web app.",
+      "The macOS release is the native Metal installer from synthseg-native.yml.",
+      "",
+      "SynthSeg is research software. Review the labels before use. Please cite:",
+      "Billot B, Greve DN, Puonti O, et al. SynthSeg: Segmentation of brain MRI scans",
+      "of any contrast and resolution without retraining. Med Image Anal. 2023;86:102789."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "synthseg"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "synthseg.exe"
+    }
+  }
+}

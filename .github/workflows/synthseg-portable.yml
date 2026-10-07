@@ -1,0 +1,47 @@
+name: synthseg-portable
+
+# The portable Node command line for Linux and Windows. macOS ships the native Metal installer from
+# synthseg-native.yml; scripts/lib/native-releases.mjs gives each workflow its own platforms.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/synthseg-portable.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'packages/synthseg/**'
+      - 'apps/synthseg/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/synthseg-portable.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'packages/synthseg/**'
+      - 'apps/synthseg/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Attach every verified archive to the existing SynthSeg release
+        type: boolean
+        default: false
+
+concurrency:
+  group: synthseg-portable-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/synthseg
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_release }}
