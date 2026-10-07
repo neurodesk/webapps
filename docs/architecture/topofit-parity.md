@@ -95,7 +95,8 @@ and rejects inputs above the 768 MiB preprocessing budget.
 | `packages/topofit/src/pipeline.js` | Select identity-grid bypass or cubic conforming, run the neural schedule, and assemble outputs. |
 | `apps/topofit/src/onnx-runtime.js` | Create ONNX Runtime sessions and bind executor settings to executor identity. |
 | `packages/topofit/src/results.js` | Write deterministic FreeSurfer surfaces. |
-| `apps/topofit/src/inference-worker.js` | Fetch verified assets, create one executor per worker, and transfer results. |
+| `apps/topofit/src/inference-worker.js` | Fetch and share verified assets, start session and hemisphere workers, and transfer results; it never runs ONNX Runtime itself. |
+| `apps/topofit/src/session-worker.js`, `hemisphere-worker.js` | Own each ONNX Runtime heap: one session for TReGA or the feature model, or one hemisphere's white and pial stages. Terminating the worker frees the heap. |
 | `packages/topofit/validation` | Capture the pinned container, run the production browser, and compare immutable evidence. |
 
 The original decoded source remains available for source-grid QC. The pipeline

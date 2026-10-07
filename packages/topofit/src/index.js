@@ -3,3 +3,4 @@ export { reconstructHemisphere, runTopofit, runSurfaceAnalysis } from './pipelin
 export { createQcVolume } from './qc.js';
 export { writeFreeSurfer } from './results.js';
 export { axisAlignedVoxelSpacing, cropAndNormalize, needsConform, readVolume } from './volume.js';
+export { shareAssets } from './shared-assets.js';

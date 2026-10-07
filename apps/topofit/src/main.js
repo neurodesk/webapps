@@ -641,21 +641,65 @@ const stored = {
   remove: (key) => { try { localStorage.removeItem(key); } catch { /* unavailable */ } },
 };
 const PARALLEL_PREFERENCE = 'topofit.parallelHemispheres';
-// Present only while a parallel reconstruction is running. A renderer out-of-memory
-// crash kills the tab before anything in-page can react, so finding the marker at
-// load means the last parallel run never settled.
-const PARALLEL_RUN_MARKER = 'topofit.parallelRunStarted';
+// Every running parallel reconstruction is listed here and holds a Web Lock of the same
+// id. An out-of-memory crash kills the tab before anything in-page can react, but the
+// browser then releases its locks: a listed run whose lock nobody holds crashed, while
+// one whose lock is held is still running in another tab.
+const PARALLEL_RUNS = 'topofit.parallelRuns';
+const parallelRunLock = (id) => `topofit-parallel-run-${id}`;
+let parallelRun = null;
+
+function listedParallelRuns() {
+  try {
+    return JSON.parse(stored.get(PARALLEL_RUNS) ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
+function listParallelRuns(runs) {
+  if (Object.keys(runs).length) stored.set(PARALLEL_RUNS, JSON.stringify(runs));
+  else stored.remove(PARALLEL_RUNS);
+}
+
+async function startParallelRun() {
+  const id = crypto.randomUUID();
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  if (navigator.locks) await new Promise((acquired) => navigator.locks.request(parallelRunLock(id), () => { acquired(); return held; }));
+  listParallelRuns({ ...listedParallelRuns(), [id]: Date.now() });
+  parallelRun = { id, release };
+}
+
+function endParallelRun() {
+  if (!parallelRun) return;
+  const runs = listedParallelRuns();
+  delete runs[parallelRun.id];
+  listParallelRuns(runs);
+  parallelRun.release();
+  parallelRun = null;
+}
+
+async function recoverFromCrashedParallelRun(option) {
+  const runs = listedParallelRuns();
+  if (!Object.keys(runs).length) return;
+  const held = new Set(navigator.locks ? (await navigator.locks.query()).held.map((lock) => lock.name) : []);
+  const crashed = Object.keys(runs).filter((id) => !held.has(parallelRunLock(id)));
+  if (!crashed.length) return;
+  const remaining = listedParallelRuns();
+  for (const id of crashed) delete remaining[id];
+  listParallelRuns(remaining);
+  option.checked = false;
+  stored.set(PARALLEL_PREFERENCE, 'false');
+  status('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
+}
+
 {
   const option = $('parallelHemispheres');
   const saved = stored.get(PARALLEL_PREFERENCE);
   option.checked = saved === null ? !(navigator.deviceMemory < 8) : saved === 'true';
   option.onchange = () => stored.set(PARALLEL_PREFERENCE, String(option.checked));
-  if (stored.get(PARALLEL_RUN_MARKER) !== null) {
-    stored.remove(PARALLEL_RUN_MARKER);
-    option.checked = false;
-    stored.set(PARALLEL_PREFERENCE, 'false');
-    status('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
-  }
+  void recoverFromCrashedParallelRun(option);
 }
 
 async function run(analysisOnly = false, { signal, progress = () => {}, roiFile } = {}) {
@@ -803,7 +847,6 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       finish(new Error(event.message || 'Worker failure'));
     };
     worker.onmessageerror = () => finish(new Error('Worker returned an unreadable result'));
-    if (!analysisOnly && mode === 'parallel') stored.set(PARALLEL_RUN_MARKER, String(Date.now()));
     worker.postMessage({
       file: source,
       ...(analysisOnly ? { surfaces: reconstruction.surfaces, provenance: reconstruction.provenance } : {}),
@@ -825,19 +868,20 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
   });
   try {
     try {
+      if (!analysisOnly && hemispheres === 'parallel') await startParallelRun();
       return await attempt(hemispheres);
     } catch (error) {
       // A hemisphere worker died mid-run (typically a wasm allocation failure). The
       // saved preference is left alone because the failure may be transient.
       if (!error.hemisphereFailure || hemispheres !== 'parallel' || preparation !== currentPreparation) throw error;
       signal?.throwIfAborted();
-      stored.remove(PARALLEL_RUN_MARKER);
+      endParallelRun();
       $('progress').value = 0;
       status('Parallel reconstruction failed; retrying one hemisphere at a time…');
       return await attempt('sequential');
     }
   } finally {
-    stored.remove(PARALLEL_RUN_MARKER);
+    endParallelRun();
     setBusy(false);
   }
 }
@@ -857,7 +901,7 @@ $('cancelButton').onclick = () => {
 };
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) return;
-  stored.remove(PARALLEL_RUN_MARKER);
+  endParallelRun();
   cancelRun?.();
   normalArrowWorker?.terminate();
   exampleControl.destroy();

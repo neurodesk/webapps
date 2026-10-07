@@ -3,6 +3,7 @@ import { conformVolume } from './conform.js';
 import { createQcVolume } from './qc.js';
 import { analyzeSurfaces, readPatchRoi } from './surface-analysis.js';
 import { validatePatchOptions } from './patches.js';
+import { shareAssets } from './shared-assets.js';
 import { readFloat32Asset, readInt32Asset, writeSurfaceFiles } from './results.js';
 import {
   applyAffine,
@@ -143,6 +144,7 @@ export async function runTopofit(options) {
     else onProgress(0.54 + behind * 0.045, `Reconstructing cortical mesh · order ${behind} of 6…`);
   };
   const sequential = async (input) => {
+    const sharedAsset = shareAssets(loadAsset);
     const results = {};
     for (const hemisphere of ['lh', 'rh']) {
       results[hemisphere] = await reconstructHemisphere({
@@ -150,7 +152,7 @@ export async function runTopofit(options) {
         hemisphere,
         features: input.features,
         contrast,
-        loadAsset,
+        loadAsset: sharedAsset,
         createSession,
         Tensor,
         lap,

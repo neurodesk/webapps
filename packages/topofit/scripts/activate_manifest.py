@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
+from compare import BASELINE_OUTPUTS
 from thresholds import SURFACES, THRESHOLDS, within_thresholds
 
 
@@ -33,6 +34,11 @@ def validate_evidence(assets, release, conversion_sha):
         for name in SURFACES:
             assert result["surfaces"][name]["browser_sha256"] == sha256(browser / name)
         assert result["qc"]["browser_sha256"] == sha256(browser / "topofit_qc.nii")
+        assert result["baseline"]["byteIdentical"] is True, f"{mode} outputs differ from the pinned baseline"
+        for name in BASELINE_OUTPUTS:
+            assert result["baseline"]["outputSha256"][name] == sha256(browser / name), f"{mode} evidence for {name} does not match"
+        assert result["repeatability"], f"{mode} has no repeat run"
+        assert all(run["byteIdentical"] for run in result["repeatability"])
 
 
 def verify_public_release(records, directory, repository, revision, path):

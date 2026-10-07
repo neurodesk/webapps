@@ -27,11 +27,14 @@ class ActivationTest(unittest.TestCase):
             self.conversion = report["conversionReportSha256"]
             browser = self.assets / "validation" / "browser" / mode
             browser.mkdir(parents=True)
-            for name in (*activation.SURFACES, "topofit_qc.nii"):
+            for name in activation.BASELINE_OUTPUTS:
                 path = browser / name
                 path.write_bytes(f"{mode}/{name}".encode())
-                target = report["surfaces"][name] if name in report["surfaces"] else report["qc"]
-                target["browser_sha256"] = activation.sha256(path)
+                report["baseline"]["outputSha256"][name] = activation.sha256(path)
+                if name in report["surfaces"]:
+                    report["surfaces"][name]["browser_sha256"] = activation.sha256(path)
+                elif name == "topofit_qc.nii":
+                    report["qc"]["browser_sha256"] = activation.sha256(path)
             (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}}))
             self.write_report(mode, report)
 
@@ -67,6 +70,21 @@ class ActivationTest(unittest.TestCase):
     def test_rejects_missing_anatomical_surface(self):
         self.change_end_to_end(lambda report: report["surfaces"].pop("lh.white"))
         with self.assertRaises(AssertionError):
+            self.validate()
+
+    def test_rejects_outputs_that_left_the_pinned_baseline(self):
+        self.change_end_to_end(lambda report: report["baseline"].update(byteIdentical=False, changed=["rh.pial"]))
+        with self.assertRaisesRegex(AssertionError, "end-to-end outputs differ from the pinned baseline"):
+            self.validate()
+
+    def test_rejects_mid_surface_evidence_that_does_not_match(self):
+        (self.assets / "validation" / "browser" / "end-to-end" / "lh.mid.white").write_bytes(b"moved")
+        with self.assertRaisesRegex(AssertionError, "end-to-end evidence for lh.mid.white does not match"):
+            self.validate()
+
+    def test_rejects_a_single_run_without_a_repeat(self):
+        self.change_end_to_end(lambda report: report.update(repeatability=[]))
+        with self.assertRaisesRegex(AssertionError, "end-to-end has no repeat run"):
             self.validate()
 
     def test_rejects_nonfinite_distance(self):

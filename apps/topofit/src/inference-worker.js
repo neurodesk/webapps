@@ -1,10 +1,9 @@
-import { runTopofit } from '@neurodesk/topofit';
+import { runTopofit, shareAssets } from '@neurodesk/topofit';
 import { Tensor, browserRuntime } from './onnx-runtime.js';
 import manifest from '@neurodesk/topofit/manifest';
 import cortexAtlas from '@neurodesk/topofit/cortex-atlas-manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { createAssetLoader, openModelCache } from './model-assets.js';
-import { shareAssets } from './shared-assets.js';
 
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
 const cachePromise = openModelCache();
@@ -44,27 +43,34 @@ function reconstructHemispheres({ mode, loadAsset }) {
     const asset = shareAssets(loadAsset);
     const workers = new Set();
     const hemisphereFailure = (message) => Object.assign(new Error(message), { hemisphereFailure: true });
+    // Creating a worker or cloning the features into it can fail for lack of memory too,
+    // so those failures are flagged for the sequential retry like a crash inside it.
     const run = (hemisphere, transfer) => {
-      const worker = new Worker(new URL('./hemisphere-worker.js', import.meta.url), { type: 'module' });
-      workers.add(worker);
+      let worker;
       return new Promise((resolve, reject) => {
-        worker.onmessage = async ({ data }) => {
-          if (data.type === 'asset') {
-            try {
-              const bytes = await asset(data.name, data.from, data.to);
-              worker.postMessage({ type: 'asset', id: data.id, bytes }, [bytes]);
-            } catch (error) {
-              reject(error);
-            }
-          } else if (data.type === 'order') onOrder(hemisphere, data.order);
-          else if (data.type === 'lap') lap(data.stage, data.seconds);
-          else if (data.type === 'result') resolve({ white: data.white, pial: data.pial, registration: data.registration });
-          else if (data.type === 'error') reject(hemisphereFailure(data.message));
-        };
-        worker.onerror = (event) => reject(hemisphereFailure(event.message || `Hemisphere ${hemisphere} worker failed.`));
-        worker.postMessage({ hemisphere, features, contrast, ...hemispheres[hemisphere] }, transfer);
+        try {
+          worker = new Worker(new URL('./hemisphere-worker.js', import.meta.url), { type: 'module' });
+          workers.add(worker);
+          worker.onmessage = async ({ data }) => {
+            if (data.type === 'asset') {
+              try {
+                const bytes = await asset(data.name, data.from, data.to);
+                worker.postMessage({ type: 'asset', id: data.id, bytes }, [bytes]);
+              } catch (error) {
+                reject(error);
+              }
+            } else if (data.type === 'order') onOrder(hemisphere, data.order);
+            else if (data.type === 'lap') lap(data.stage, data.seconds);
+            else if (data.type === 'result') resolve({ white: data.white, pial: data.pial, registration: data.registration });
+            else if (data.type === 'error') reject(hemisphereFailure(data.message));
+          };
+          worker.onerror = (event) => reject(hemisphereFailure(event.message || `Hemisphere ${hemisphere} worker failed.`));
+          worker.postMessage({ hemisphere, features, contrast, ...hemispheres[hemisphere] }, transfer);
+        } catch (error) {
+          reject(hemisphereFailure(`Hemisphere ${hemisphere} worker could not start: ${error.message || error}`));
+        }
       }).finally(() => {
-        worker.terminate();
+        worker?.terminate();
         workers.delete(worker);
       });
     };

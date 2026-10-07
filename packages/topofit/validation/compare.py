@@ -244,7 +244,7 @@ def main():
     parser.add_argument("--conversion-report", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mode", choices=tuple(INPUTS), required=True)
-    parser.add_argument("--repeat", type=Path, action="append", default=[])
+    parser.add_argument("--repeat", type=Path, action="append", required=True, help="a second run of the same build; required so one run cannot pass alone")
     args = parser.parse_args()
     fixture = INPUTS[args.mode]
     assert sha256(args.input) == fixture["sha256"]

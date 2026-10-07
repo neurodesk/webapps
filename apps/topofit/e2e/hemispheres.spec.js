@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 const PREFERENCE = 'topofit.parallelHemispheres';
-const MARKER = 'topofit.parallelRunStarted';
+const MARKER = 'topofit.parallelRuns';
 const fixture = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
 const scan = { name: 'brain.nii.gz', mimeType: 'application/gzip', buffer: fixture };
 
@@ -48,7 +48,9 @@ test('the option defaults on with enough memory, is posted with the job and the 
   await page.locator('#imageInput').setInputFiles(scan);
   await expect(page.locator('#runButton')).toBeEnabled();
   await reconstruct(page);
-  expect(await jobs(page)).toEqual([{ hemispheres: 'parallel', marker: expect.stringMatching(/^\d+$/) }]);
+  const [first] = await jobs(page);
+  expect(first.hemispheres).toBe('parallel');
+  expect(Object.keys(JSON.parse(first.marker))).toHaveLength(1);
   expect(await storedValue(page, MARKER)).toBeNull();
 
   await page.locator('#advancedSettings > summary').click();
@@ -88,7 +90,7 @@ test('a hemisphere failure in a parallel run retries sequentially once without c
 
 test('a run marker left by a crashed tab switches to one hemisphere at a time and says so', async ({ page }) => {
   await stubInference(page);
-  await page.addInitScript((key) => localStorage.setItem(key, '1759780000000'), MARKER);
+  await page.addInitScript((key) => localStorage.setItem(key, JSON.stringify({ crashed: 1759780000000 })), MARKER);
   await page.goto('/');
   await expect(page.locator('#parallelHemispheres')).not.toBeChecked();
   await expect(page.locator('#statusText')).toHaveText('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
@@ -106,4 +108,23 @@ test('automation passes parallelHemispheres through to the job', async ({ page }
   // the worker has been driven; the job it posted is what this test is about.
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state).not.toBe('running');
   expect((await jobs(page)).map((job) => job.hemispheres)).toEqual(['sequential']);
+});
+
+test('a parallel run still going in another tab is not mistaken for a crash', async ({ page, context }) => {
+  await stubInference(page);
+  const other = await context.newPage();
+  await other.goto('/');
+  await other.evaluate((key) => {
+    navigator.locks.request('topofit-parallel-run-elsewhere', () => new Promise(() => {}));
+    localStorage.setItem(key, JSON.stringify({ elsewhere: Date.now() }));
+  }, MARKER);
+  await expect.poll(() => other.evaluate(async () => (await navigator.locks.query()).held.map((lock) => lock.name))).toContain('topofit-parallel-run-elsewhere');
+  await page.goto('/');
+  await expect(page.locator('#parallelHemispheres')).toBeChecked();
+  await expect(page.locator('#statusText')).not.toContainText('did not finish');
+  expect(JSON.parse(await storedValue(page, MARKER))).toHaveProperty('elsewhere');
+  await other.close();
+  await page.reload();
+  await expect(page.locator('#parallelHemispheres')).not.toBeChecked();
+  await expect(page.locator('#statusText')).toContainText('did not finish');
 });
