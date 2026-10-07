@@ -15,7 +15,7 @@
     "./streamed-onnx": "./src/streamed-onnx/session.js"
   },
   "dependencies": {
-    "@niivue/dcm2niix": "^1.2.0"
+    "@niivue/dcm2niix": "^1.3.20260724"
   },
   "scripts": {
     "test": "node --test test/*.test.js"
