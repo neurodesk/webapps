@@ -1,5 +1,12 @@
 # browserqc
 
+## 1.4.20261007
+
+### Patch Changes
+
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
 ## 1.4.20261006
 
 ### Minor Changes
