@@ -4,11 +4,11 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import Module from '../dcm2niix/dcm2niix.js';
-import { DicomController } from '../js/controllers/DicomController.js';
+import Module from '../../../packages/runtime-support/src/dcm2niix/dcm2niix.js';
+import { parseNiftiHeader, readNiftiImageData, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
+import { QsmDicomInput } from '../js/controllers/QsmDicomInput.js';
 import { MaskController } from '../js/controllers/MaskController.js';
-import { FileIOController } from '../js/controllers/FileIOController.js';
-import { parseNiftiHeader, readNiftiImageData, sameNiftiGrid } from '../js/modules/file-io/NiftiUtils.js';
+import { QsmInputSet } from '../js/controllers/QsmInputSet.js';
 
 const directory = process.argv[2];
 assert.ok(directory, 'Pass the local troubleshoot directory');
@@ -16,7 +16,7 @@ const files = await Promise.all((await readdir(directory)).map(async name =>
   new File([await readFile(join(directory, name))], name)));
 const niftiFiles = files.filter(f => f.name.endsWith('.nii'));
 const sidecars = files.filter(f => f.name.endsWith('.json'));
-const io = new FileIOController({});
+const io = new QsmInputSet({});
 await io.addFiles([...niftiFiles, ...sidecars]);
 assert.equal(io.buckets.magnitude.length, 6);
 assert.equal(io.buckets.phase.length, 6);
@@ -36,7 +36,7 @@ assert.equal(mod.callMain(['-o', '/output', '/input']), 0);
 const converted = mod.FS.readdir('/output').filter(name => !name.startsWith('.'))
   .map(name => new File([mod.FS.readFile('/output/' + name)], name));
 let batch;
-await new DicomController({ onConversionComplete: result => { batch = result; } })._processResults(converted);
+await new QsmDicomInput({ onConversionComplete: result => { batch = result; } })._processResults(converted);
 assert.equal(batch.magnitude.length, 6);
 assert.equal(batch.phase.length, 6);
 assert.equal(batch.extras.length, 0);
@@ -53,14 +53,14 @@ for (const category of ['magnitude', 'phase']) {
       assert.ok(Math.abs(new DataView(actual).getFloat32(offset, true) -
         new DataView(expected).getFloat32(offset, true)) < 1e-5);
     }
-    assert.deepEqual(readNiftiImageData(new Uint8Array(actual)), readNiftiImageData(new Uint8Array(expected)));
+    assert.deepEqual(readNiftiImageData(new Uint8Array(actual)).data, readNiftiImageData(new Uint8Array(expected)).data);
   }
 }
 const mask = files.find(f => f.name.endsWith('.nii.gz'));
 assert.ok(mask, 'Expected compressed mask');
 const maskBytes = await new Response(mask.stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
 assert.deepEqual(parseNiftiHeader(maskBytes).dims.slice(1, 4), [96, 82, 18]);
-assert.ok(readNiftiImageData(new Uint8Array(maskBytes)).some(value => value > 0));
+assert.ok(readNiftiImageData(new Uint8Array(maskBytes)).data.some(value => value > 0));
 assert.equal(sameNiftiGrid(maskBytes, await io.buckets.magnitude[0].file.arrayBuffer()), false,
   'The supplied mask has different orientation/origin and must not be silently relabelled');
 const masks = new MaskController({ nv: { volumes: [] } });

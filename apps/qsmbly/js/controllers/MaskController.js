@@ -5,13 +5,8 @@
  * threshold detection, and BET integration.
  */
 
-<<<<<<< monorepo
 import { computeOtsuThreshold } from '@neurodesk/webapp-components/volume';
-import { createMaskNifti, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io';
-=======
-import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
-import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
->>>>>>> upstream
+import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 
 export class MaskController {
   /**
@@ -1026,23 +1021,9 @@ export class MaskController {
         settle(false);
       }) || (() => {});
 
-<<<<<<< monorepo
       worker.send({
-        type: 'hdBet',
-        data: {
-          magnitude: magnitudeArr,
-          dims: this.maskDims,
-          voxelSize: this.voxelSize,
-          patch,
-          tileStep,
-          tta,
-        },
-=======
-      worker.addEventListener('message', handler);
-      worker.postMessage({
         type: msg,
         data: { magnitude: magnitudeArr, dims: this.maskDims, voxelSize: this.voxelSize, ...params },
->>>>>>> upstream
       }, [magnitudeArr.buffer]);
     });
   }

@@ -1,4 +1,4 @@
-import { sameNiftiGrid } from './NiftiUtils.js';
+import { sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 
 function header() {
   const buffer = new ArrayBuffer(352);

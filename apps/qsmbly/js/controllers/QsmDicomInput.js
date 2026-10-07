@@ -10,7 +10,7 @@
  * conversion produces a batch result that is passed to the onConversionComplete
  * callback. Accumulation across batches is handled by the consumer (QSMApp._triageState).
  */
-import { DicomController as SharedDicomController } from '@neurodesk/webapp-components/file-io';
+import { DicomController as SharedDicomController, classifyImageComponent } from '@neurodesk/webapp-components/file-io';
 
 export class QsmDicomInput extends SharedDicomController {
   constructor(options = {}) {
@@ -76,7 +76,7 @@ export class QsmDicomInput extends SharedDicomController {
    * Returns only this batch's results (no internal accumulation).
    *
    * Strategy:
-   * 1. Primary: Check ImageType array in JSON sidecar for "P"/"PHASE" (phase) or absence (magnitude)
+   * 1. Primary: Use component metadata, including Bruker enhanced multi-echo metadata
    * 2. Fallback: Check filename for "_ph" suffix (dcm2niix convention)
    * 3. Default: Assume magnitude
    */
@@ -104,28 +104,11 @@ export class QsmDicomInput extends SharedDicomController {
       const baseName = niftiFile.name.replace(/\.nii(\.gz)?$/, '');
       const jsonEntry = jsonMap.get(baseName + '.json');
 
-      let category = 'magnitude'; // default
       let echoTime = null;
       let echoNumber = null;
 
       if (jsonEntry) {
         const json = jsonEntry.data;
-
-        // Classify by ImageType (three-way: magnitude / phase / extras)
-        const imageType = json.ImageType;
-        if (Array.isArray(imageType)) {
-          const hasPhase = imageType.some(t => t === 'P' || t === 'PHASE');
-          const hasMagnitude = imageType.some(t => t === 'M' || t === 'MAGNITUDE');
-
-          if (hasPhase) {
-            category = 'phase';
-          } else if (hasMagnitude) {
-            category = 'magnitude';
-          } else {
-            // ImageType present but not clearly mag or phase (e.g. SWI, localizer)
-            category = 'extras';
-          }
-        }
 
         // Extract echo info
         if (json.EchoTime != null) {
@@ -144,12 +127,9 @@ export class QsmDicomInput extends SharedDicomController {
         }
 
         batchJsonFiles.push(jsonEntry.file);
-      } else {
-        // No JSON sidecar — fallback to filename convention
-        if (niftiFile.name.includes('_ph')) {
-          category = 'phase';
-        }
       }
+      const detected = classifyImageComponent(niftiFile.name, jsonEntry?.data);
+      const category = detected === 'extra' ? 'extras' : (detected || 'magnitude');
 
       const entry = {
         file: niftiFile,

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { FileIOController } from './FileIOController.js';
-import { DicomController } from './DicomController.js';
+import { QsmInputSet as FileIOController } from './QsmInputSet.js';
+import { QsmDicomInput as DicomController } from './QsmDicomInput.js';
 
 const base = '_MGE_phaseimage_lowres_20250905141342';
 function batch() {
@@ -76,10 +76,11 @@ test('BIDS part- entities classify Bruker echoes whose sidecar has no component'
   expect(io.buckets.phase.map(e => e.echoNumber)).toEqual([1, 2, 3]);
 });
 
-test('native file pickers allow the final gzip extension', () => {
+test('native file pickers do not filter out gzip files', () => {
+  // The monorepo's scan pickers carry no accept filter, so .nii.gz and .gz are always selectable.
   const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
   for (const id of ['maskFiles', 'unifiedFiles']) {
     const input = html.match(new RegExp(`<input[^>]*id="${id}"[^>]*>`))[0];
-    expect(input.match(/accept="([^"]+)"/)[1].split(',')).toContain('.gz');
+    expect(input).not.toMatch(/accept=/);
   }
 });

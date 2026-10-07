@@ -1,4 +1,4 @@
-import { createMaskNifti, parseNiftiHeader } from '../file-io/NiftiUtils.js';
+import { createMaskNifti, parseNiftiHeader } from '@neurodesk/webapp-components/file-io';
 
 /** Explicit voxel-axis repair. This does not estimate registration or resample anatomy. */
 export function repairMaskAlignment(raw, maskHeader, referenceHeader, flips = [false, false, false]) {

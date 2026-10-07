@@ -1,5 +1,5 @@
 import { repairMaskAlignment, MaskAlignmentSession } from './MaskAlignment.js';
-import { readNiftiImageData, sameNiftiGrid } from '../file-io/NiftiUtils.js';
+import { readNiftiImageData, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 
 function header(dims = [3, 2, 2]) {
   const h = new ArrayBuffer(352), v = new DataView(h);
@@ -22,7 +22,7 @@ test.each([
   expect(result.data[index]).toBe(1);
   expect(result.count).toBe(1);
   expect(raw[0]).toBe(255);
-  expect(Array.from(readNiftiImageData(new Uint8Array(result.buffer)))).toEqual(Array.from(result.data));
+  expect(Array.from(readNiftiImageData(new Uint8Array(result.buffer)).data)).toEqual(Array.from(result.data));
   expect(sameNiftiGrid(result.buffer, h)).toBe(true);
 });
 
@@ -35,7 +35,7 @@ test('previews always start from the uploaded mask and require explicit acceptan
   expect(session.preview([false, true, false]).data[3]).toBe(1);
   const accepted = session.accept(file, reference);
   expect(accepted.name).toBe('mask_aligned_Y.nii');
-  expect(readNiftiImageData(new Uint8Array(await accepted.arrayBuffer()))[3]).toBe(1);
+  expect(readNiftiImageData(new Uint8Array(await accepted.arrayBuffer())).data[3]).toBe(1);
   expect(() => session.accept({}, reference)).toThrow(/Inputs changed/);
   session.invalidate();
   expect(() => session.accept(file, reference)).toThrow(/Preview/);

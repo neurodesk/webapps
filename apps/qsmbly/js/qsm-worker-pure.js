@@ -1452,7 +1452,7 @@ async function runRs2Net(data) {
     const model = dlRegistry['rs2-net'];
     if (!model) throw new Error('rs2-net is not in the model registry');
 
-    self.postMessage({ type: 'rs2NetProgress', value: 0.05, text: 'Fetching RS2-Net weights...' });
+    emitMessage({ type: 'rs2NetProgress', value: 0.05, text: 'Fetching RS2-Net weights...' });
     let weights;
     try {
       weights = await downloadWeights(model);
@@ -1465,12 +1465,12 @@ async function runRs2Net(data) {
       throw e;
     }
 
-    self.postMessage({ type: 'rs2NetProgress', value: 0.15, text: 'Loading inference bundle...' });
+    emitMessage({ type: 'rs2NetProgress', value: 0.15, text: 'Loading inference bundle...' });
     const dl = await loadDlWasm(wasmBaseUrl, QSMConfig.VERSION);
     // Same pool bound as HD-BET (see runHdBet): the DL bundle has one pool for every model.
     await initRayon(dl, 'dl', 4);
 
-    self.postMessage({
+    emitMessage({
       type: 'rs2NetLog',
       message: `Running RS2-Net on ${nx}x${ny}x${nz} @ ${vsx.toFixed(3)}x${vsy.toFixed(3)}x${vsz.toFixed(3)}mm `
              + `(step ${tileStep ?? 0.5}${tta ? ', mirroring TTA' : ''}). A mouse head usually fits in `
@@ -1487,7 +1487,7 @@ async function runRs2Net(data) {
           ? ` — ${Math.ceil(secsLeft)}s left`
           : ` — ~${Math.round(secsLeft / 60)} min left`;
       }
-      self.postMessage({
+      emitMessage({
         type: 'rs2NetProgress',
         value: 0.2 + frac * 0.75,
         text: `RS2-Net patch ${done}/${total}${eta}`,
@@ -1502,15 +1502,15 @@ async function runRs2Net(data) {
     let count = 0;
     for (let i = 0; i < maskData.length; i++) if (maskData[i]) count++;
     const mm3 = count * vsx * vsy * vsz;
-    self.postMessage({
+    emitMessage({
       type: 'rs2NetLog',
       message: `RS2-Net mask: ${count}/${maskData.length} voxels (${(100 * count / maskData.length).toFixed(1)}%, `
              + `${mm3.toFixed(0)} mm³ — an adult mouse brain is ~450-500 mm³)`,
     });
-    self.postMessage({ type: 'rs2NetProgress', value: 1.0, text: 'Complete' });
-    self.postMessage({ type: 'rs2NetComplete', maskData }, [maskData.buffer]);
+    emitMessage({ type: 'rs2NetProgress', value: 1.0, text: 'Complete' });
+    emitMessage({ type: 'rs2NetComplete', maskData }, [maskData.buffer]);
   } catch (error) {
-    self.postMessage({ type: 'rs2NetError', message: error.message || String(error) });
+    emitMessage({ type: 'rs2NetError', message: error.message || String(error) });
   }
 }
 

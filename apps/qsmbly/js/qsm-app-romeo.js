@@ -1,19 +1,12 @@
-<<<<<<< monorepo
 import { createExampleSelector, bindSectionDisclosures, ConsoleOutput, createInfoDialog } from '@neurodesk/webapp-components/ui';
+import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
 bindSectionDisclosures(document);
 
-=======
-import { MaskAlignmentSession } from './modules/mask/MaskAlignment.js';
->>>>>>> upstream
 // Import extracted utility modules
 import { createThresholdMask } from '@neurodesk/webapp-components/volume';
 import { registerQsmAutomation } from './automation.js';
 import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
-<<<<<<< monorepo
-=======
-import { createThresholdMask } from './modules/mask/ThresholdUtils.js';
 import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
->>>>>>> upstream
 import {
   parseNiftiHeader,
   isGzipped,
@@ -174,6 +167,9 @@ class QSMApp {
     this.hdBetModal = createInfoDialog({ id: 'hdBetSettingsModal' });
     this.hdBetModal.title.textContent = 'HD-BET settings';
     this.hdBetModal.setContent(document.getElementById('hdBetSettingsTemplate'));
+    this.mouseBrainModal = createInfoDialog({ id: 'mouseBrainModal' });
+    this.mouseBrainModal.title.textContent = 'Mouse brain extraction';
+    this.mouseBrainModal.setContent(document.getElementById('mouseBrainTemplate'));
     this.setupEventListeners();
     this.syncSidebarFromSettings();
     this.updateDownloadButtons();
@@ -242,11 +238,6 @@ class QSMApp {
 
     // Initialize modal managers
     this.betModal = new ModalManager('betSettingsModal');
-<<<<<<< monorepo
-=======
-    this.hdBetModal = new ModalManager('hdBetSettingsModal');
-    this.mouseBrainModal = new ModalManager('mouseBrainModal');
->>>>>>> upstream
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
     this.citationsModal = new ModalManager('citationsModal');
@@ -616,7 +607,6 @@ class QSMApp {
     document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
     // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
     document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
-    document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
     document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
     document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
       this.mouseBrainModal?.close();
@@ -2415,8 +2405,8 @@ class QSMApp {
       this.hideEchoNavigation();
       this.updateDataUnits(null);
       const axes = ['X', 'Y', 'Z'].filter((_, i) => flips[i]).join(', ');
-      status.textContent = `Preview only: ${axes ? `flip ${axes}` : 'replace header without flips'}. `
-        + `${candidate.count} mask voxels. Inspect the red overlay in all three planes and across slices. Apply only when aligned.`;
+      status.textContent = `Preview: ${axes ? `flip ${axes}` : 'header only'}, ${candidate.count} voxels. Check every plane before Apply.`;
+      this.updateOutput('Preview only: inspect the red overlay in all three planes and across slices. Apply only when aligned.');
     } catch (error) {
       session.invalidate();
       if (revision === this.maskAlignmentRevision) status.textContent = error.message;
@@ -2487,10 +2477,12 @@ class QSMApp {
     }
 
     if (!result.ok) {
-      this.maskUploadMessage = `Mask not accepted for processing. ${result.message} Its header may place the overlay outside the visible brain image.`;
-      this.updateOutput(result.message);
+      // The sidebar line stays short; the reason goes to the console.
+      this.maskUploadMessage = 'Mask not accepted for processing. See the console for the reason.';
+      this.updateOutput(`${result.message} Its header may place the overlay outside the visible brain image.`);
       if (result.alignmentMismatch && headerSource) {
-        this.maskUploadMessage = 'Alignment required. The repair preview uses the image header; it is not an accepted mask. Inspect the overlay, choose flips if needed, then Apply alignment.';
+        this.maskUploadMessage = 'Alignment required: check the preview, flip axes if needed, then Apply.';
+        this.updateOutput('The repair preview uses the image header; it is not an accepted mask. Inspect the overlay, choose flips if needed, then Apply.');
         this.updateMaskSectionState();
         await this.startMaskAlignmentRepair();
         return false;
@@ -2515,7 +2507,7 @@ class QSMApp {
     this.voxelSize = this.maskController.voxelSize;
     this.magnitudeFileBytes = this.maskController.magnitudeFileBytes;
     this.applyVoxelDefaults();
-    this.maskUploadMessage = 'Mask loaded for processing and displayed over the brain image.';
+    this.maskUploadMessage = 'Mask loaded for processing and shown over the brain image.';
 
     // Always restore the anatomy after decoding the mask, including compressed uploads.
     if (headerSource) await this.loadAndVisualizeFile(headerSource, 'Mask reference image');
@@ -2610,7 +2602,6 @@ class QSMApp {
     return createMaskNifti(maskData, this.magnitudeFileBytes);
   }
 
-<<<<<<< monorepo
   async generateRobustMask() {
     document.getElementById('thresholdModeButtons').style.display = 'none';
     await this.previewMask();
@@ -2628,15 +2619,12 @@ class QSMApp {
   }
 
   async runRomeoQSM(options = {}) {
-=======
-  async runRomeoQSM() {
     if (this.maskAlignmentActive) {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
       return;
     }
     if (this.fileIOController.hasMask() && !this.currentMaskData
         && !(await this.loadCustomMaskFile())) return;
->>>>>>> upstream
     const mode = this.fileIOController.getInputMode();
 
     if (mode === 'raw') {
@@ -3763,7 +3751,7 @@ class QSMApp {
       return;
     }
     document.getElementById('rs2NetTta').checked = !!this.rs2NetSettings?.tta;
-    this.mouseBrainModal?.open();
+    this.mouseBrainModal?.root.showModal();
   }
 
   async runRs2NetWithSettings() {
@@ -3801,8 +3789,8 @@ class QSMApp {
 
     document.getElementById('betSettingsTitle').textContent = isMouse ? 'Mouse BET Settings' : 'BET Settings';
     document.getElementById('runBetWithSettings').textContent = isMouse ? 'Run Mouse BET' : 'Run BET';
-    document.getElementById('mouseBetNote').style.display = isMouse ? '' : 'none';
-    document.getElementById('betVoxelScaleGroup').style.display = isMouse ? '' : 'none';
+    document.getElementById('mouseBetNote').hidden = !isMouse;
+    document.getElementById('betVoxelScaleGroup').hidden = !isMouse;
     this.populateBetForm(settings);
 
     // BET's defaults assume a human-sized head; point out the mismatch either way.
@@ -3886,17 +3874,6 @@ class QSMApp {
     if (!this.pipelineExecutor?.isReady()) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
-<<<<<<< monorepo
-    const unsubscribe = this.pipelineExecutor.subscribe((message) => {
-      if (message.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : message.result;
-      } else if (message.type === 'methodsResult') {
-        if (message.error) {
-          if (methodsRaw) methodsRaw.textContent = `ERROR: ${message.error}`;
-          if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
-        } else {
-          const raw = message.result;
-=======
     // Mouse BET's voxel scaling has no qsmxt equivalent: flag it in the command, and describe it
     // in the methods text.
     const scaled = this.maskOpsHistory[0]?.startsWith('bet:') && this.maskVoxelScale !== 1;
@@ -3911,18 +3888,17 @@ class QSMApp {
       scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
         + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
     }
-    const handler = (e) => {
-      if (e.data.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
-      } else if (e.data.type === 'methodsResult') {
-        if (e.data.error) {
-          if (methodsRaw) methodsRaw.textContent = `ERROR: ${e.data.error}`;
+    const unsubscribe = this.pipelineExecutor.subscribe((message) => {
+      if (message.type === 'commandResult') {
+        if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : scaleComment + message.result;
+      } else if (message.type === 'methodsResult') {
+        if (message.error) {
+          if (methodsRaw) methodsRaw.textContent = `ERROR: ${message.error}`;
           if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
         } else {
           const raw = rs2
-            ? replaceMaskingSentence(e.data.result, RS2_NET_METHODS.sentence, RS2_NET_METHODS.reference)
-            : insertBetMethodsNote(e.data.result, scaleNote);
->>>>>>> upstream
+            ? replaceMaskingSentence(message.result, RS2_NET_METHODS.sentence, RS2_NET_METHODS.reference)
+            : insertBetMethodsNote(message.result, scaleNote);
           if (methodsRaw) methodsRaw.textContent = raw;
           if (methodsRendered) methodsRendered.innerHTML = renderMarkdown(raw);
         }
