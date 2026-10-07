@@ -15,10 +15,11 @@
     "test:e2e": "npm run build && node test/smoke.mjs && playwright test"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*",
-    "@neurodesk/runtime-support": "workspace:*",
-    "@niivue/dcm2niix": "^1.2.0",
     "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/browserqc": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/dcm2niix": "^1.2.0",
     "@niivue/niimath": "1.4.20260928",
     "@niivue/niivue": "1.0.0-rc.16"
   },

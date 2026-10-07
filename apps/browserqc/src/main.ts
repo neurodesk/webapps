@@ -11,7 +11,8 @@ import { registerAppAutomation, registerViewer, createNiivueAdapter, runAbortabl
 import { downloadBlob, readNifti } from '@neurodesk/webapp-components/file-io'
 import { runSegmentation, type SegmentationBackend } from './segmentation'
 import { readImageFiles, runDcm2niix, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
-import { Niimath, type QcTissues } from '@niivue/niimath'
+import { Niimath } from '@niivue/niimath'
+import { AIR_TEMPLATE, checkAirTemplate, finishReport, qcTissues, type QcTissues } from '@neurodesk/browserqc'
 import { MODELS as BRAINCHOP } from '@brainchop/mindgrab'
 import { MODELS, parseModel, type Model } from './models'
 import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
@@ -21,8 +22,6 @@ import { resetRating, readRating } from './rate'
 import { describeSeries } from './series'
 import examples from '../examples.json'
 
-const ASSET_BASE_URL = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/'
-const TEMPLATE_URL = `${ASSET_BASE_URL}avg152T1.nii.gz`
 const TISSUE_TINTS = [
   ['gm', [255, 64, 64]],
   ['wm', [255, 255, 255]],
@@ -119,7 +118,7 @@ niimath.setOutputDataType('input')
 const listeners = new AbortController()
 const ac = { signal: listeners.signal }
 
-// Bound worker-backed steps (conform, niimath init + run). A worker that spawns but
+// Bound worker-backed steps (niimath init + run). A worker that spawns but
 // never posts back (no message, no onerror) never settles its promise, so the
 // single-flight `pending` chain never advances and the app wedges (spinner stuck)
 // until reload. A timeout rejects instead so the queue moves on. Generous — these
@@ -238,13 +237,13 @@ async function fetchFile(url: string, name: string, signal?: AbortSignal): Promi
 
 async function computeQc(t1: Uint8Array, tissues: QcTissues, model: Model, signal: AbortSignal): Promise<QcReport> {
   await runAbortable(signal, ensureNiimath, resetNiimathWorker)
-  const air = await fetchFile(TEMPLATE_URL, 'avg152T1.nii.gz', signal)
+  const air = await fetchFile(AIR_TEMPLATE.url, AIR_TEMPLATE.name, signal)
+  await checkAirTemplate(await air.arrayBuffer())
   const output = await runAbortable(signal, () => withTimeout(
     niimath.image(new Uint8Array(t1).buffer).qc(tissues, air), WORKER_TIMEOUT_MS, 'niimath QC'), resetNiimathWorker)
   const report = await readQcReport(new Blob([JSON.stringify(output)]))
   signal.throwIfAborted()
-  if (bidsMeta) report.bids_meta = bidsMeta
-  report.provenance.segmentation = `brainchop ${model} (${MODELS[model].label})`
+  finishReport(report, { model, bids: bidsMeta })
   lastReport = report
   saveBtn.disabled = false
   const metrics: QcMetrics = {}
@@ -312,7 +311,9 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
     await nv.loadVolumes([{ url: file, name: file.name }])
     current()
     reportProgress(`Brain mask and ${MODELS[model].label}… first run downloads the models`)
-    const t1 = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
+    // MindGrab and niimath read a NIfTI file's own bytes, as the command line does; NiiVue
+    // serialises only the formats it converts.
+    const t1 = /\.nii(\.gz)?$/i.test(file.name) ? new Uint8Array(await file.arrayBuffer()) : await nv.saveVolume({ volumeByIndex: 0, filename: '' })
     if (!(t1 instanceof Uint8Array)) throw new Error('could not serialize the input volume')
     // MindGrab's auto mode falls back to WebGL when WebGPU has no adapter; on a software GL
     // stack that never finishes, so adapter-less browsers use the CPU bundle instead.
@@ -324,7 +325,6 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
     const artifacts: { role: string; file: File }[] = [
       { role: 'mask', file: new File([result.mask], 'brain-mask.nii', { type: 'application/x-nifti' }) },
     ]
-    let tissues: QcTissues
     let measurements: ReturnType<typeof summarizeLabels> | undefined
     const opacity = Number(ovlSlider.value) / 255
     if (result.kind === 'labels') {
@@ -337,7 +337,6 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
       await nv.addVolume({ url: artifacts[1].file, name: 'segmentation.nii', opacity })
       current()
       await nv.setColormapLabel(1, colormap)
-      tissues = { seg: result.image, csf: MODELS[model].csf, wm: MODELS[model].wm, mask: result.mask }
     } else {
       const names = ['csf', 'gm', 'wm'] satisfies (keyof typeof result.tissues)[]
       for (const name of names) {
@@ -346,8 +345,8 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
         await nv.addVolume({ url: image, name: `${name}.nii`, colormap: tissueColormaps[name], colormapType: 1, calMin: 0.03, calMax: 1, opacity })
         current()
       }
-      tissues = { pve: [result.tissues.csf, result.tissues.gm, result.tissues.wm], mask: result.mask }
     }
+    const tissues = qcTissues(result, model)
     labelSummary = measurements ?? null
     busy = false
     await showView()
@@ -650,7 +649,7 @@ registerAppAutomation({
             ...result.artifacts,
             { role: 'qc', file: new File([JSON.stringify(result.qc, null, 2)], 'qc.json', { type: 'application/json' }) },
           ],
-          provenance: { segmentation: result.segmentation, qc: result.qc.provenance, airTemplate: TEMPLATE_URL },
+          provenance: { segmentation: result.segmentation, qc: result.qc.provenance, airTemplate: AIR_TEMPLATE.url },
           measurements: result.measurements,
         }
       })
