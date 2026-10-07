@@ -127,7 +127,9 @@ The NIfTI-MRS PRESS example uses Osprey's MIT-licensed Philips PRESS sub-01
 data at 3 T and TE 35 ms, with its water reference. The files were converted
 with spec2nii 0.8.12 and de-identified. Their immutable dataset revision is
 `2a18766f2c4b5c9086e3512cd6f2a56841da9a4f`; the dataset directory contains
-the license and provenance. `tools/convert_nifti_mrs_example.py` reproduces
+the license and provenance. The conversion script adds `SequenceName=PRESS`
+from the source's preserved `ProtocolName=PRESS PAR 35` so the app can
+recommend the correct sequence family. `tools/convert_nifti_mrs_example.py` reproduces
 the published files from checksummed sources. Install `spec2nii==0.8.12`
 and `nibabel==5.4.2` in a scratch environment, then run:
 
