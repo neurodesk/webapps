@@ -292,7 +292,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.7.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-linux-x64.tar.gz",
+          "sha256": "df500ffcb65e33ec9cc9c877fc9d207776a90787dbfc2208a2359193a8e4f737",
+          "bytes": 44647049,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf easy-mp2rage-0.7.20261007-linux-x64.tar.gz\n./easy-mp2rage-0.7.20261007-linux-x64/easy-mp2rage correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.7.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-macos-arm64.pkg",
+          "sha256": "0c1bc52f164ab93d0a1636462e7ec47ea4990b2638162ee5e3f183a167a3d154",
+          "bytes": 38250281,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg easy-mp2rage-0.7.20261007-macos-arm64.pkg -target /\neasy-mp2rage self-check\neasy-mp2rage correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.7.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-windows-x64.zip",
+          "sha256": "d396bb7edca9079ebd507bb9c0e7ccb5c11181b1db2398fb442b5d9ded09d2c8",
+          "bytes": 34954896,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/easy-mp2rage-v0.7.20261007/easy-mp2rage-0.7.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\easy-mp2rage-0.7.20261007-windows-x64.zip -DestinationPath .\n.\\easy-mp2rage-0.7.20261007-windows-x64\\easy-mp2rage.exe correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results"
+        }
+      ],
       "containers": []
     },
     "niimath": {
@@ -425,18 +459,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.3.20260915",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.3.20260915/syncro-0.3.20260915-linux-x64.tar.gz",
-          "sha256": "fdcd03e78044b8ef6fee331db58834165f1fa001481ad464e65bb1f666d2e238",
-          "modelsIncluded": true
+          "version": "0.6.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-linux-x64.tar.gz",
+          "sha256": "c1c401e3ecbf12b2131ae8634b4e8903e3ab0182f69386d7e8f1cbf1bf7007ae",
+          "bytes": 126262221,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf syncro-0.6.20261007-linux-x64.tar.gz\n./syncro-0.6.20261007-linux-x64/syncro input.nii.gz results --threads 4"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.6.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-macos-arm64.pkg",
+          "sha256": "3c6f558c66b6246b71eb206057ac7093beecdc86c592069308d97dde5c55b224",
+          "bytes": 127645390,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg syncro-0.6.20261007-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.3.20260915",
-          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.3.20260915/syncro-0.3.20260915-windows-x64.zip",
-          "sha256": "260daad0b39a8f3270751ff0b652bb1b74b4553e59350ba9755d998df8f724e0",
-          "modelsIncluded": true
+          "version": "0.6.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-windows-x64.zip",
+          "sha256": "b11f8427c1cd13f4e15aed7163a0261bb36d2c2a59893f308048e1019808e4aa",
+          "bytes": 127145770,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\syncro-0.6.20261007-windows-x64.zip -DestinationPath .\n.\\syncro-0.6.20261007-windows-x64\\syncro.exe input.nii.gz results --threads 4"
         }
       ],
       "containers": [
@@ -532,7 +583,41 @@
       "desktop": true,
       "profile": "batch",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.13.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-linux-x64.tar.gz",
+          "sha256": "70e7020243b3e11081f91ad881a5d815b992ab6d6f55ecccfcf36e61eaa76f84",
+          "bytes": 91529132,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf topofit-0.13.20261007-linux-x64.tar.gz\n./topofit-0.13.20261007-linux-x64/topofit input.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.13.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-macos-arm64.pkg",
+          "sha256": "25399c19b572067f5fcf1d5f8fbbbf6eb084dfdb482d1c8ad44d59479265ac47",
+          "bytes": 92853512,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg topofit-0.13.20261007-macos-arm64.pkg -target /\ntopofit self-check\ntopofit input.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.13.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-windows-x64.zip",
+          "sha256": "0382a1251c49d988cb09a3b0438ef58199c40ae9669293267af778856efe2c6b",
+          "bytes": 92353943,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\topofit-0.13.20261007-windows-x64.zip -DestinationPath .\n.\\topofit-0.13.20261007-windows-x64\\topofit.exe input.nii.gz results"
+        }
+      ],
       "containers": [
         {
           "id": "topofit",
@@ -570,14 +655,82 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-linux-x64.tar.gz",
+          "sha256": "ed9b75fb2361fba90c13c464d6722f3ea7b1fdc8df80b5b56bcc1bf6e06e21c7",
+          "bytes": 73001891,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf disconnectome-0.3.20261007-linux-x64.tar.gz\n./disconnectome-0.3.20261007-linux-x64/disconnectome lesion.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg",
+          "sha256": "f50e4338913b8610f8f8b403dad6bb81c66805cdba28c49f07f3de3078a9404b",
+          "bytes": 66442438,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg disconnectome-0.3.20261007-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip",
+          "sha256": "960e4521c280e224b3f0f1c5a2d55db04df3d6e2c920efbfef401c5c98763fd5",
+          "bytes": 62658167,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\disconnectome-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261007-windows-x64\\disconnectome.exe lesion.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "carotid-flow": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-linux-x64.tar.gz",
+          "sha256": "86d63f5169d228aa439b078a017f5380632babf84e79f5255c2e2db1f9e6c5e4",
+          "bytes": 44498172,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf carotid-flow-0.4.20261007-linux-x64.tar.gz\n./carotid-flow-0.4.20261007-linux-x64/carotid-flow amplitude.nii.gz phase.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-macos-arm64.pkg",
+          "sha256": "097f3362c8fb67bce45859898f6006070e66a3063533d252d8ab9dd06af74efc",
+          "bytes": 38097730,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg carotid-flow-0.4.20261007-macos-arm64.pkg -target /\ncarotid-flow self-check\ncarotid-flow amplitude.nii.gz phase.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-windows-x64.zip",
+          "sha256": "8ba30eb73e951a303eafc18b2e99905dd196706221fe68ae66a725e9413bb0e6",
+          "bytes": 34801132,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\carotid-flow-0.4.20261007-windows-x64.zip -DestinationPath .\n.\\carotid-flow-0.4.20261007-windows-x64\\carotid-flow.exe amplitude.nii.gz phase.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "white-matter-lesions": {
