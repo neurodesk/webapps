@@ -1,0 +1,34 @@
+{
+  "example": "t1-head",
+  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads",
+  "methods": {
+    "bet": {
+      "tolerance": {
+        "basis": "BET is the same qsm-core source compiled to WebAssembly in the browser bundle and the command line, and WebAssembly arithmetic is deterministic. The command line reproduced this mask bit for bit, so any difference is a defect.",
+        "relative": 0,
+        "minimumDice": 1
+      },
+      "maskVoxels": 1474433,
+      "maskSha256": "8b1a40a3984036933a6e80644f8b6ff71e04faa33df2cea7968743c61e3270d0",
+      "brainHeaderSha256": "f6d0d240380458d5328c87625178204d46a9d5ec09f9dee8d217d2524a9dd7cf",
+      "maskHeaderSha256": "a2659a350b6b39b3bd1886daf7e27bfaafe2a20fe6679056529c40a562856abe",
+      "background": 0,
+      "brainMean": 147.396,
+      "brainMax": 342
+    },
+    "synthstrip": {
+      "tolerance": {
+        "basis": "Native ONNX Runtime and ONNX Runtime Web reproduced this mask bit for bit on linux-x64. Other CPUs' kernels round differently and can move boundary voxels; SYNcro's native SynthStrip pipeline kept brain-mask Dice 0.9999987 against its reference (packages/syncro/validation/README.md). The bounds allow about 160 of the 1.6 million mask voxels to differ.",
+        "relative": 0.0001,
+        "minimumDice": 0.9999
+      },
+      "maskVoxels": 1635060,
+      "maskSha256": "dadad701abb90d19e3d535448af13afe6ce54fe9ef73ec0ba9adf15a22e6157a",
+      "brainHeaderSha256": "f6d0d240380458d5328c87625178204d46a9d5ec09f9dee8d217d2524a9dd7cf",
+      "maskHeaderSha256": "a2659a350b6b39b3bd1886daf7e27bfaafe2a20fe6679056529c40a562856abe",
+      "background": 0,
+      "brainMean": 138.838,
+      "brainMax": 318
+    }
+  }
+}

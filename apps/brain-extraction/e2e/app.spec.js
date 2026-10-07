@@ -3,7 +3,9 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { readVolume } from '@neurodesk/synthsr';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
-import { browserSynthstrip } from '../../../packages/syncro/src/assets.js';
+import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
+import { outputNames } from '@neurodesk/brain-extraction/outputs';
+import { browserReference, compareWithBrowser, measure } from '../validation/browser-reference.mjs';
 
 const fixture = new URL('../../calmar/tests/fixtures/synthstrip-mini/T1.nii.gz', import.meta.url).pathname;
 const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
@@ -227,6 +229,37 @@ test('MindGrab processing choice survives closing settings and switching methods
   await expect(page.locator('#betSettings')).toBeHidden();
 });
 
+// Holds each run on the real T1 example to validation/browser-reference.json and attaches its
+// measurements, which re-record the reference when the pipeline changes on purpose.
+for (const method of ['bet', 'synthstrip']) {
+  test(`${method} on the T1 example matches the recorded browser reference`, async ({ page }, testInfo) => {
+    test.skip(!process.env.BRAIN_EXTRACTION_REAL_MODELS, 'Set BRAIN_EXTRACTION_REAL_MODELS=1 for the example download and inference.');
+    test.setTimeout(1200000);
+    const example = examples.find(({ id }) => id === browserReference.example);
+    await page.goto('./');
+    await page.getByLabel('Example', { exact: true }).selectOption(example.id);
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 600000 });
+    await page.locator('#method').selectOption(method);
+    await page.locator('#runButton').click();
+    await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', /succeeded|failed/, { timeout: 1100000 });
+    await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready');
+    const names = outputNames(example.files[0].name, method);
+    const download = async index => {
+      const pending = page.waitForEvent('download');
+      await page.locator('#resultList .nd-download-btn').nth(index).click();
+      const file = await pending;
+      return { name: file.suggestedFilename(), bytes: await readFile(await file.path()) };
+    };
+    const brain = await download(1);
+    const mask = await download(2);
+    expect([brain.name, mask.name]).toEqual([names.brain, names.mask]);
+    const measured = measure({ brain: brain.bytes, mask: mask.bytes });
+    await testInfo.attach(`browser-reference-${method}`, { body: JSON.stringify(measured), contentType: 'application/json' });
+    for (const [passed, line] of compareWithBrowser(measured, method)) expect(passed, line).toBe(true);
+    if (method === 'bet') expect(measured.maskSha256).toBe(browserReference.methods.bet.maskSha256);
+  });
+}
+
 for (const method of ['mindgrab', 'synthstrip']) {
   test(`${method} real model returns a nonempty binary mask in input geometry`, async ({ page }) => {
     test.skip(!process.env.BRAIN_EXTRACTION_REAL_MODELS, 'Set BRAIN_EXTRACTION_REAL_MODELS=1 for model downloads and inference.');
@@ -262,7 +295,7 @@ for (const method of ['mindgrab', 'synthstrip']) {
     expect(input.sha256).toBe(createHash('sha256').update(await readFile(fixture)).digest('hex'));
     expect(artifact.sha256).toBe(createHash('sha256').update(maskBytes).digest('hex'));
     if (method === 'mindgrab') expect(report.provenance.backend).toBe('cpu');
-    else expect(report.provenance.modelHash).toBe(browserSynthstrip.sha256);
+    else expect(report.provenance.modelHash).toBe(SYNTHSTRIP_MODEL.sha256);
     console.log(JSON.stringify({ method, maskVoxels: count, comparedVoxels: mask.data.length, provenance: report.provenance, inputSha256: input.sha256, outputSha256: artifact.sha256 }));
   });
 }

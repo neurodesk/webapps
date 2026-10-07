@@ -1,4 +1,5 @@
-import { readVolume, writeVolume } from '@neurodesk/synthsr';
+import { readVolume } from '@neurodesk/synthsr';
+import { writeOutputs } from '@neurodesk/brain-extraction/outputs';
 
 self.onmessage = async ({ data: job }) => {
   const onProgress = (value, message) => self.postMessage({ type: 'progress', value, message });
@@ -23,8 +24,7 @@ self.onmessage = async ({ data: job }) => {
     } else {
       throw new Error('Choose BET, MindGrab or SynthStrip.');
     }
-    const brain = writeVolume(result.brain, 'Brain extraction');
-    const mask = writeVolume(result.mask, 'Brain mask');
+    const { brain, mask } = writeOutputs(result);
     self.postMessage({ type: 'result', brain, mask, provenance: result.provenance }, [brain, mask]);
   } catch (error) {
     self.postMessage({ type: 'error', message: error.message || String(error) });
