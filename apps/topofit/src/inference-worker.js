@@ -53,11 +53,17 @@ function reconstructHemispheres({ mode, loadAsset }) {
           workers.add(worker);
           worker.onmessage = async ({ data }) => {
             if (data.type === 'asset') {
+              let bytes;
               try {
-                const bytes = await asset(data.name, data.from, data.to);
-                worker.postMessage({ type: 'asset', id: data.id, bytes }, [bytes]);
+                bytes = await asset(data.name, data.from, data.to);
               } catch (error) {
                 reject(error);
+                return;
+              }
+              try {
+                worker.postMessage({ type: 'asset', id: data.id, bytes }, [bytes]);
+              } catch (error) {
+                reject(hemisphereFailure(`Hemisphere ${hemisphere} worker could not receive ${data.name}: ${error.message || error}`));
               }
             } else if (data.type === 'order') onOrder(hemisphere, data.order);
             else if (data.type === 'lap') lap(data.stage, data.seconds);

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
-from compare import BASELINE_OUTPUTS
+from compare import BASELINE_OUTPUTS, INPUTS
 from thresholds import SURFACES, THRESHOLDS, within_thresholds
 
 
@@ -37,6 +37,7 @@ def validate_evidence(assets, release, conversion_sha):
         assert result["baseline"]["byteIdentical"] is True, f"{mode} outputs differ from the pinned baseline"
         for name in BASELINE_OUTPUTS:
             assert result["baseline"]["outputSha256"][name] == sha256(browser / name), f"{mode} evidence for {name} does not match"
+            assert sha256(browser / name) == INPUTS[mode]["outputSha256"][name], f"{mode} {name} differs from the pinned baseline"
         assert result["repeatability"], f"{mode} has no repeat run"
         assert all(run["byteIdentical"] for run in result["repeatability"])
 

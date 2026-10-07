@@ -222,6 +222,7 @@ def validate_manifest(directory, fixture):
 def compare_repeat(directory, repeats):
     result = []
     for repeat in repeats:
+        assert repeat.resolve() != directory.resolve(), "A repeat must be a separate run, not the primary output directory"
         hashes = {}
         for name in OUTPUTS:
             expected = sha256(directory / name)

@@ -21,6 +21,10 @@ class ActivationTest(unittest.TestCase):
         self.assets = Path(self.work.name)
         self.reports = self.assets / "validation" / "reports"
         self.reports.mkdir(parents=True)
+        self.pins = {mode: {} for mode in ("controlled", "end-to-end")}
+        original = activation.INPUTS
+        activation.INPUTS = {mode: {**original[mode], "outputSha256": self.pins[mode]} for mode in original}
+        self.addCleanup(setattr, activation, "INPUTS", original)
         for mode in ("controlled", "end-to-end"):
             report = json.loads((PACKAGE / "validation" / "results" / f"ds000001-{mode}.json").read_text())
             self.release = report["release"]
@@ -31,6 +35,7 @@ class ActivationTest(unittest.TestCase):
                 path = browser / name
                 path.write_bytes(f"{mode}/{name}".encode())
                 report["baseline"]["outputSha256"][name] = activation.sha256(path)
+                self.pins[mode][name] = activation.sha256(path)
                 if name in report["surfaces"]:
                     report["surfaces"][name]["browser_sha256"] = activation.sha256(path)
                 elif name == "topofit_qc.nii":
@@ -82,6 +87,16 @@ class ActivationTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "end-to-end evidence for lh.mid.white does not match"):
             self.validate()
 
+    def test_rejects_evidence_that_is_self_consistent_but_not_the_pinned_baseline(self):
+        browser = self.assets / "validation" / "browser" / "end-to-end"
+        (browser / "rh.pial").write_bytes(b"moved by 1e-6 mm")
+        self.change_end_to_end(lambda report: (
+            report["surfaces"]["rh.pial"].update(browser_sha256=activation.sha256(browser / "rh.pial")),
+            report["baseline"]["outputSha256"].update({"rh.pial": activation.sha256(browser / "rh.pial")}),
+        ))
+        with self.assertRaisesRegex(AssertionError, "end-to-end rh.pial differs from the pinned baseline"):
+            self.validate()
+
     def test_rejects_a_single_run_without_a_repeat(self):
         self.change_end_to_end(lambda report: report.update(repeatability=[]))
         with self.assertRaisesRegex(AssertionError, "end-to-end has no repeat run"):
@@ -91,6 +106,16 @@ class ActivationTest(unittest.TestCase):
         self.change_end_to_end(lambda report: report["surfaces"]["rh.pial"].update(mean_corresponding_distance_mm=float("nan")))
         with self.assertRaises(AssertionError):
             self.validate()
+
+
+class RepeatTest(unittest.TestCase):
+    def test_a_repeat_must_be_a_separate_run(self):
+        with tempfile.TemporaryDirectory() as work:
+            run = Path(work)
+            for name in compare.OUTPUTS:
+                (run / name).write_bytes(name.encode())
+            with self.assertRaisesRegex(AssertionError, "separate run"):
+                compare.compare_repeat(run, [run / "." ])
 
 
 class BaselineTest(unittest.TestCase):

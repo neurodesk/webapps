@@ -641,54 +641,48 @@ const stored = {
   remove: (key) => { try { localStorage.removeItem(key); } catch { /* unavailable */ } },
 };
 const PARALLEL_PREFERENCE = 'topofit.parallelHemispheres';
-// Every running parallel reconstruction is listed here and holds a Web Lock of the same
-// id. An out-of-memory crash kills the tab before anything in-page can react, but the
-// browser then releases its locks: a listed run whose lock nobody holds crashed, while
-// one whose lock is held is still running in another tab.
-const PARALLEL_RUNS = 'topofit.parallelRuns';
+// Every running parallel reconstruction writes its own key and holds a Web Lock of the
+// same id. An out-of-memory crash kills the tab before anything in-page can react, but
+// the browser then releases its locks: a key whose lock nobody holds belongs to a crashed
+// run, while one whose lock is held is still running in another tab. One key per run
+// keeps every write a single set or remove, so tabs never overwrite each other's runs.
+const PARALLEL_RUN_PREFIX = 'topofit.parallelRun.';
 const parallelRunLock = (id) => `topofit-parallel-run-${id}`;
 let parallelRun = null;
 
 function listedParallelRuns() {
   try {
-    return JSON.parse(stored.get(PARALLEL_RUNS) ?? '{}');
+    return Object.keys(localStorage).filter((key) => key.startsWith(PARALLEL_RUN_PREFIX)).map((key) => key.slice(PARALLEL_RUN_PREFIX.length));
   } catch {
-    return {};
+    return [];
   }
 }
 
-function listParallelRuns(runs) {
-  if (Object.keys(runs).length) stored.set(PARALLEL_RUNS, JSON.stringify(runs));
-  else stored.remove(PARALLEL_RUNS);
-}
-
+// The lock is taken before the key is written and released after it is removed, so a
+// tab that sees a key without a held lock is looking at a run that cannot finish.
 async function startParallelRun() {
   const id = crypto.randomUUID();
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   if (navigator.locks) await new Promise((acquired) => navigator.locks.request(parallelRunLock(id), () => { acquired(); return held; }));
-  listParallelRuns({ ...listedParallelRuns(), [id]: Date.now() });
+  stored.set(PARALLEL_RUN_PREFIX + id, String(Date.now()));
   parallelRun = { id, release };
 }
 
 function endParallelRun() {
   if (!parallelRun) return;
-  const runs = listedParallelRuns();
-  delete runs[parallelRun.id];
-  listParallelRuns(runs);
+  stored.remove(PARALLEL_RUN_PREFIX + parallelRun.id);
   parallelRun.release();
   parallelRun = null;
 }
 
 async function recoverFromCrashedParallelRun(option) {
-  const runs = listedParallelRuns();
-  if (!Object.keys(runs).length) return;
+  const listed = listedParallelRuns();
+  if (!listed.length) return;
   const held = new Set(navigator.locks ? (await navigator.locks.query()).held.map((lock) => lock.name) : []);
-  const crashed = Object.keys(runs).filter((id) => !held.has(parallelRunLock(id)));
+  const crashed = listed.filter((id) => !held.has(parallelRunLock(id)) && stored.get(PARALLEL_RUN_PREFIX + id) !== null);
   if (!crashed.length) return;
-  const remaining = listedParallelRuns();
-  for (const id of crashed) delete remaining[id];
-  listParallelRuns(remaining);
+  for (const id of crashed) stored.remove(PARALLEL_RUN_PREFIX + id);
   option.checked = false;
   stored.set(PARALLEL_PREFERENCE, 'false');
   status('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');

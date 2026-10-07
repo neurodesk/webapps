@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
 const PREFERENCE = 'topofit.parallelHemispheres';
-const MARKER = 'topofit.parallelRuns';
+const MARKER = 'topofit.parallelRun.';
 const fixture = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
 const scan = { name: 'brain.nii.gz', mimeType: 'application/gzip', buffer: fixture };
 
@@ -20,7 +20,7 @@ async function stubInference(page, { deviceMemory = 8, failFirst = false } = {})
       }
       postMessage(job, ...rest) {
         if (!this.fixture) return super.postMessage(job, ...rest);
-        window.topofitJobs.push({ hemispheres: job.hemispheres, marker: localStorage.getItem(MARKER) });
+        window.topofitJobs.push({ hemispheres: job.hemispheres, markers: Object.keys(localStorage).filter((key) => key.startsWith(MARKER)) });
         if (failFirst && window.topofitJobs.length === 1) {
           this.onmessage({ data: { type: 'error', message: 'Hemisphere lh worker failed: Out of memory', hemisphereFailure: true } });
           return;
@@ -38,6 +38,7 @@ async function reconstruct(page) {
 
 const jobs = (page) => page.evaluate(() => window.topofitJobs);
 const storedValue = (page, key) => page.evaluate((key) => localStorage.getItem(key), key);
+const markers = (page) => page.evaluate((prefix) => Object.keys(localStorage).filter((key) => key.startsWith(prefix)), MARKER);
 
 test('the option defaults on with enough memory, is posted with the job and the choice survives reload', async ({ page }) => {
   await stubInference(page);
@@ -50,13 +51,13 @@ test('the option defaults on with enough memory, is posted with the job and the 
   await reconstruct(page);
   const [first] = await jobs(page);
   expect(first.hemispheres).toBe('parallel');
-  expect(Object.keys(JSON.parse(first.marker))).toHaveLength(1);
-  expect(await storedValue(page, MARKER)).toBeNull();
+  expect(first.markers).toHaveLength(1);
+  expect(await markers(page)).toEqual([]);
 
   await page.locator('#advancedSettings > summary').click();
   await option.uncheck();
   await reconstruct(page);
-  expect((await jobs(page))[1]).toEqual({ hemispheres: 'sequential', marker: null });
+  expect((await jobs(page))[1]).toEqual({ hemispheres: 'sequential', markers: [] });
   expect(await storedValue(page, PREFERENCE)).toBe('false');
 
   await page.reload();
@@ -84,17 +85,17 @@ test('a hemisphere failure in a parallel run retries sequentially once without c
   await expect(messages.filter({ hasText: 'Parallel reconstruction failed; retrying one hemisphere at a time' })).toHaveCount(1);
   await expect(page.locator('#parallelHemispheres')).toBeChecked();
   expect(await storedValue(page, PREFERENCE)).toBeNull();
-  expect(await storedValue(page, MARKER)).toBeNull();
+  expect(await markers(page)).toEqual([]);
   await expect(page.locator('#runButton')).toBeEnabled();
 });
 
 test('a run marker left by a crashed tab switches to one hemisphere at a time and says so', async ({ page }) => {
   await stubInference(page);
-  await page.addInitScript((key) => localStorage.setItem(key, JSON.stringify({ crashed: 1759780000000 })), MARKER);
+  await page.addInitScript((prefix) => localStorage.setItem(`${prefix}crashed`, '1759780000000'), MARKER);
   await page.goto('/');
   await expect(page.locator('#parallelHemispheres')).not.toBeChecked();
   await expect(page.locator('#statusText')).toHaveText('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
-  expect(await storedValue(page, MARKER)).toBeNull();
+  expect(await markers(page)).toEqual([]);
   expect(await storedValue(page, PREFERENCE)).toBe('false');
 });
 
@@ -114,15 +115,15 @@ test('a parallel run still going in another tab is not mistaken for a crash', as
   await stubInference(page);
   const other = await context.newPage();
   await other.goto('/');
-  await other.evaluate((key) => {
+  await other.evaluate((prefix) => {
     navigator.locks.request('topofit-parallel-run-elsewhere', () => new Promise(() => {}));
-    localStorage.setItem(key, JSON.stringify({ elsewhere: Date.now() }));
+    localStorage.setItem(`${prefix}elsewhere`, String(Date.now()));
   }, MARKER);
   await expect.poll(() => other.evaluate(async () => (await navigator.locks.query()).held.map((lock) => lock.name))).toContain('topofit-parallel-run-elsewhere');
   await page.goto('/');
   await expect(page.locator('#parallelHemispheres')).toBeChecked();
   await expect(page.locator('#statusText')).not.toContainText('did not finish');
-  expect(JSON.parse(await storedValue(page, MARKER))).toHaveProperty('elsewhere');
+  expect(await markers(page)).toEqual([`${MARKER}elsewhere`]);
   await other.close();
   await page.reload();
   await expect(page.locator('#parallelHemispheres')).not.toBeChecked();
