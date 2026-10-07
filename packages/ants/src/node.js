@@ -68,6 +68,6 @@ export async function registerImages({ moving, fixed, output, onLog = () => {} }
   const seconds = (performance.now() - started) / 1000;
   const files = artifactFiles(basename(moving), result);
   await mkdir(destination, { recursive: true });
-  for (const file of files) await writeFile(join(destination, file.name), file.bytes);
+  for (const file of files) await writeFile(join(destination, file.name), file.bytes, { flag: 'wx' });
   return { output: destination, files: files.map((file) => file.name), seconds, heapBytes: ants.memoryBytes() };
 }

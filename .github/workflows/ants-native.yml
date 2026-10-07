@@ -10,6 +10,7 @@ on:
       - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/ants/**'
       - 'packages/registration/**'
+      - 'packages/components/**'
       - 'apps/ants/**'
       - 'test/independent-workflows.test.mjs'
   push:
@@ -22,6 +23,7 @@ on:
       - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/ants/**'
       - 'packages/registration/**'
+      - 'packages/components/**'
       - 'apps/ants/**'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
@@ -66,7 +68,10 @@ jobs:
           ANTS_BROWSER_REFERENCE: check
         run: pnpm --filter ants exec playwright test e2e/reference.spec.js --reporter=line
 
+  # Archives are built, and published, only once the web app still matches the reference they are
+  # held to.
   portable:
+    needs: web-app-reference
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
