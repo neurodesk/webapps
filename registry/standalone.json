@@ -706,8 +706,8 @@
           "platform": "macos-arm64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg",
-          "sha256": "f50e4338913b8610f8f8b403dad6bb81c66805cdba28c49f07f3de3078a9404b",
-          "bytes": 66442438,
+          "sha256": "d63d14e4317db62a0b9655730469cdb3ff8fcf0ba206f7dffb0d5013c2513955",
+          "bytes": 66442398,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg disconnectome-0.3.20261007-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
@@ -717,8 +717,8 @@
           "platform": "windows-x64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip",
-          "sha256": "960e4521c280e224b3f0f1c5a2d55db04df3d6e2c920efbfef401c5c98763fd5",
-          "bytes": 62658167,
+          "sha256": "40bf60ae80814084b13d69e46db65819b5eb699caf409f6ad79d775e7decf3e1",
+          "bytes": 62658161,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\disconnectome-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261007-windows-x64\\disconnectome.exe lesion.nii.gz results"
