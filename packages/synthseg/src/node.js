@@ -206,5 +206,6 @@ export async function segment({
   await mkdir(destination, { recursive: true });
   await writeAtomically(join(destination, names.labels), labels);
   await writeAtomically(join(destination, names.report), `${JSON.stringify(report, null, 2)}\n`);
-  return { output: destination, files: [names.labels, names.report], parameters, provenance };
+  const peakMemoryMb = Math.round(process.resourceUsage().maxRSS / 1024);
+  return { output: destination, files: [names.labels, names.report], parameters, provenance, peakMemoryMb };
 }

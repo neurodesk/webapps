@@ -64,7 +64,7 @@ async function segment(work, { input, mode }) {
   const labels = await readFile(join(output, names.labels));
   const report = JSON.parse(await readFile(join(output, names.report), 'utf8'));
   const provenance = report.provenance;
-  check(provenance.executionProvider === 'cpu' && provenance.modelSha256 === manifest.assets[0].sha256, `${name} ran ${provenance.app} on ONNX Runtime ${provenance.onnxRuntime} CPU, ${provenance.threads} threads, model ${provenance.modelSha256.slice(0, 12)}, ${seconds.toFixed(1)} s`);
+  check(provenance.executionProvider === 'cpu' && provenance.modelSha256 === manifest.assets[0].sha256, `${name} ran ${provenance.app} on ONNX Runtime ${provenance.onnxRuntime} CPU, ${provenance.threads} threads, model ${provenance.modelSha256.slice(0, 12)}, ${seconds.toFixed(1)} s, peak memory ${(result.peakMemoryMb / 1024).toFixed(1)} GB`);
   check(report.parameters.mode === mode && provenance.fast === (mode === 'fast') && provenance.flip === (mode !== 'fast') && report.parameters.ct === false, `${name} report records mode ${report.parameters.mode}, ct ${report.parameters.ct}, flip ${provenance.flip}`);
   check(report.artifacts.labels.sha256 === sha256(labels) && result.files.includes(names.labels), `${name} report describes the label file it sits beside`);
   const golden = await validationFile(`${input}_${mode}.nii.gz`);

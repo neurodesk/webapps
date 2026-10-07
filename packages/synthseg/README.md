@@ -70,8 +70,8 @@ recorded in the report.
 
 `OUTPUT_DIR` must be new or empty. `--threads` defaults to
 `SLURM_CPUS_PER_TASK`, or else every core. Progress goes to standard error. A
-finished run prints one JSON line with the output files, parameters and
-provenance. An error prints one message and exits with status 1. `self-check`
+finished run prints one JSON line with the output files, parameters, peak memory
+and provenance. An error prints one message and exits with status 1. `self-check`
 runs a one-node graph on ONNX Runtime's CPU provider, loads the WebAssembly
 module and, in a release, verifies the bundled model. The command sets
 `ORT_DISABLE_TELEMETRY=1` unless you set it.
