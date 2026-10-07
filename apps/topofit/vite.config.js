@@ -1,5 +1,6 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { isolationFallback } from '../../scripts/lib/isolation-fallback-plugin.mjs';
 import { neurodeskViteConfig } from '../../scripts/lib/vite-app-config.mjs';
 
 function localModels() {
@@ -24,7 +25,7 @@ function localModels() {
 // One shared owner supplies the app path, dev shell, theme, and isolation policy.
 export default neurodeskViteConfig({
   appId: 'topofit',
-  plugins: [localModels()],
+  plugins: [localModels(), isolationFallback()],
   build: { target: 'es2022', outDir: 'dist', assetsInlineLimit: 0 },
   optimizeDeps: { exclude: ['@niivue/niimath', 'onnxruntime-web'] },
   resolve: { conditions: ['onnxruntime-web-use-extern-wasm'] },

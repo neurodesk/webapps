@@ -20,7 +20,8 @@ export function browserRuntime() {
   return {
     inference: 'ONNX Runtime Web WASM',
     onnxruntime: ort.env.versions?.web || '1.29.0',
-    threads: ort.env.wasm.numThreads,
+    // Without cross-origin isolation ONNX Runtime has no SharedArrayBuffer and runs on one thread.
+    threads: self.crossOriginIsolated ? ort.env.wasm.numThreads : 1,
     graphOptimizationLevel: 'all',
   };
 }
