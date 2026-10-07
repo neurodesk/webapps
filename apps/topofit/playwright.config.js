@@ -11,4 +11,10 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
   },
   use: { baseURL: 'http://localhost:4173' },
+  // A real reconstruction uses every core and several gigabytes; running it beside the
+  // viewer tests made their 30 s waits time out on 4-core CI runners. It runs alone, last.
+  projects: [
+    { name: 'interface', grepInvert: /full reconstruction exports/ },
+    { name: 'inference', grep: /full reconstruction exports/, dependencies: ['interface'] },
+  ],
 });

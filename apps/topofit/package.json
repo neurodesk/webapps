@@ -24,5 +24,10 @@
     "eslint": "^9.0.0",
     "vite": "^6.3.2"
   },
-  "license": "GPL-3.0-only"
+  "license": "GPL-3.0-only",
+  "neurodeskWebapp": {
+    "static": {
+      "coiServiceWorker": true
+    }
+  }
 }
