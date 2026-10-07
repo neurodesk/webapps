@@ -658,8 +658,8 @@
           "platform": "macos-arm64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg",
-          "sha256": "4e39afc6822cda831df304f9c818bfe22079434e98421618e2942d33cdd41d66",
-          "bytes": 37155036,
+          "sha256": "74961c4f2e1c12245164ed2297528abcd0e1a435346b0b56ce4f607e43952cbe",
+          "bytes": 37155009,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg fireants-0.3.20261007-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
@@ -669,8 +669,8 @@
           "platform": "windows-x64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip",
-          "sha256": "b705d29dbac504b7c8ba509152d9231ab66b3a37ac530732fd1b19f28cf48f8a",
-          "bytes": 33382087,
+          "sha256": "58d0e1c58372f92bbac61fcf1044115e4d40df79a8d50e3c6a69b30568cbd8fd",
+          "bytes": 33382085,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\fireants-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\fireants-0.3.20261007-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
