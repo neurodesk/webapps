@@ -112,11 +112,11 @@ file's bytes must be identical. ITK writes qform and sform code 1 where the
 MNI template has 4, so the outputs are compared with the fixed image by
 position, not by stored header.
 
-The kernel is single-threaded WebAssembly with a fixed seed, so its output
-should be bit-identical wherever it runs. On the validation host (Linux x64),
-four web app runs and three command-line runs produced the same voxels in all
-three images and the same affine bytes. CI repeats the check on Windows x64
-and macOS arm64. The check also reports statistics against limits, to show how far a
+The kernel is single-threaded WebAssembly with a fixed seed, so its output is
+bit-identical wherever it runs. The web app in Chromium and the packaged
+command line on Linux x64, Windows x64 and macOS arm64 produced the same voxels
+in all three images and the same affine bytes. Packaged registrations took
+124 s (Linux), 82 s (Windows) and 102 s (macOS) on the CI runners. The check also reports statistics against limits, to show how far a
 differing output is: voxel mean and std (relative 1e-6), the registered image's
 correlation with the fixed brain (1e-4) and the affine parameters (1e-3). The
 smallest legitimate change to the schedule is a different seed. Seed 43
