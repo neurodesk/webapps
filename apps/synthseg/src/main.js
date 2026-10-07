@@ -15,7 +15,8 @@ import {
 import { downloadBlob, downloadFile, readNifti } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import manifest from '@neurodesk/synthseg/manifest';
-import { editedResult, gridOf, labelNames, labelsResult, looksLikeCt, outputStem, sameGrid } from './logic.js';
+import { LABELS_ARTIFACT, outputNames } from '@neurodesk/synthseg/results';
+import { editedResult, gridOf, labelNames, labelsResult, looksLikeCt, sameGrid } from './logic.js';
 import freesurferLut from '@neurodesk/webapp-components/automation/freesurfer-lut';
 import './styles.css';
 
@@ -433,12 +434,12 @@ async function segmentImage(parameters, { signal, progress = () => {} } = {}) {
           if (data.type === 'error') fail(new Error(data.message));
           if (data.type === 'result') {
             try {
-              const file = new File([data.buffer], `${outputStem(source.name)}_synthseg.nii.gz`, { type: 'application/gzip' });
+              const file = new File([data.buffer], outputNames(source.name).labels, { type: LABELS_ARTIFACT.mediaType });
               const image = await readNifti(data.buffer);
               if (!run.current) throw new DOMException('Cancelled', 'AbortError');
               const measurements = summarizeLabels(image, freesurferLut);
               const succeeded = await run.succeed({
-                artifacts: { labels: { file, type: 'neuro:label-map', mediaType: 'application/gzip', space: 'subject-1mm', labelSystem: 'FreeSurfer' } },
+                artifacts: { labels: { file, ...LABELS_ARTIFACT } },
                 provenance: data.provenance,
                 measurements,
               });
