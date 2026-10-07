@@ -24,10 +24,14 @@ bash run.sh
 - **SCT stable task inventory** for spinal cord MRI segmentation workflows
 - **Manifest-driven model provenance** with supported, unvalidated, unsupported, and retired task states
 - **DICOM and NIfTI** input support
+- **Several images of one patient**: load sessions side by side in Compare, each with its own results
 - **Interactive pipeline**: load input data, run SCT task inference, and inspect/download results
-- **Manual correction**: edit any mask or label result in the viewer (draw, erase, fill) before downloading it
-- **Configurable**: overlap, probability threshold, component size filtering
-- **Smart auto-contrast**: percentile-based windowing for better default display
+- **Spine labels from TotalSpineSeg**: vertebrae, discs and disc points come from the `TotalSpineSeg` task; `sct_label_vertebrae` is not ported
+- **SCT analysis**: cord morphometry (`sct_process_segmentation`) and lesion analysis (`sct_analyze_lesion`) of generated or uploaded masks, with SCT's own Python in the browser or the pinned SCT CLI on your compute server (see below)
+- **Browser lesion metrics (approximate)**: SCIseg runs also report a quick local lesion table; it is not a substitute for SCT analysis
+- **Manual correction**: Edit on a result row opens the shared mask editor in the viewer (draw, erase, fill, label, brush, undo); the edited mask replaces the result for download, display, Compare and SCT analysis
+- **Configurable**: probability threshold, component size filtering
+- **FreeBrowse viewer**: zoom and pan in 2D slices and the 3D render, layout selection, intensity window, per-layer opacity, colormap and visibility, and image download
 - **Privacy**: segmentation stays in the browser; browser analysis stays local; native execution sends selected masks to your chosen compute server
 
 ## SCT Model Assets
@@ -51,14 +55,26 @@ spinalcordtoolbox/
 ├── web/
 │   ├── js/
 │   │   ├── app/           # Config and labels
-│   │   ├── controllers/   # FileIO, DICOM, Inference, Viewer
-│   │   ├── modules/       # UI components and inference pipeline
+│   │   ├── controllers/   # Input sessions and the inference pipeline adapter
+│   │   ├── modules/       # Viewer (sct-viewer.js), 2D fallback preview, processing
 │   │   ├── spinalcordtoolbox-app.js    # Main app
 │   │   └── inference-worker.js   # Web Worker (3D inference pipeline)
 │   ├── models/            # SCT model manifest + browser-runnable assets
 │   └── index.html
 └── README.md
 ```
+
+## Viewer
+
+The viewer is [FreeBrowse](https://github.com/freesurfer/freebrowse) around NiiVue 1.0, the same embedding TopoFit uses (`@neurodesk/runtime-support/freebrowse-viewer`). This app has no bundler, so `pnpm runtime-support` builds the viewer into `web/freebrowse-viewer/` and the page loads it from its own origin.
+
+- **Zoom and pan**: choose **pan/zoom** beside "Right drag" in the viewer toolbar, then scroll to zoom and right-drag to pan. On a touch screen, pinch to zoom and drag with two fingers to pan, in any mode. In the 3D render the wheel always zooms. The ⟲ button resets view and contrast.
+- **Layers**: the sidebar button opens the Volumes tab with visibility, opacity, intensity window and colormap for every layer, and Download for the current images. The Results eye buttons in the left sidebar toggle the same layers.
+- **SCT's own toolbar** keeps only what FreeBrowse lacks: Single/Compare for multiple loaded images, and the PNG screenshot.
+- **Compare** shows every loaded image side by side (up to four), for example a scan before and after surgery. Each panel is labelled with its file and shows that image's own results; the active image, the one Run and the Results list act on, is outlined and marked "active". Click a panel, or its title with the keyboard, to make it active. The layout menu applies to all panels. **Link views** (on by default) keeps slice, zoom, pan and crosshair in step by world (scanner mm) position, so scans of different size or orientation line up as far as their headers agree; follow-up scans are usually not registered, so turn it off to navigate each panel on its own.
+- **Results per image**: running a task on one image keeps the results of the others. Results are kept for the active image and the three most recently used others; older ones are released, with a note in the Analysis log.
+- **Editing a mask**: press **Edit** on a result row. A toolbar row opens under the viewer toolbar with **Draw**, **Erase** and **Fill** (outline a region; it fills on release), the **Label** to paint (by name for label maps), **Brush** size, **Undo**, **Apply** and **Cancel** (keys D, E, F, [ and ], Ctrl+Z). **Apply** makes the drawing the result: the Results row reads *(edited)*, the download is `<name>_edited.nii`, and SCT analysis offers the edited mask. The automatic browser lesion metrics are removed after an edit of the lesion or cord mask, because they described the model's mask. While the editor is open, FreeBrowse's own Drawing tab is shown but locked, so only one tool works on the drawing layer. An edit belongs to its image: switching images or opening Compare applies an open drawing to that image, and the edited result travels with the image's other results. A new run, Clear All, an example (which replaces every image) or a new image that would release an image's results asks first while an edit is not downloaded.
+- Without WebGL2 the app shows a 2D axial preview instead; segmentation, results and downloads still work.
 
 ## Pipeline
 
@@ -120,6 +136,7 @@ If you use SCT workflows, please cite Spinal Cord Toolbox and the relevant SCT t
 - **dcm2niix**: Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56. [GitHub](https://github.com/rordenlab/dcm2niix)
 - **ONNX Runtime Web**: Microsoft. [onnxruntime.ai](https://onnxruntime.ai)
 - **NiiVue**: NiiVue Contributors. [github.com/niivue/niivue](https://github.com/niivue/niivue)
+- **FreeBrowse**: FreeSurfer developers. [github.com/freesurfer/freebrowse](https://github.com/freesurfer/freebrowse)
 
 ## Privacy
 

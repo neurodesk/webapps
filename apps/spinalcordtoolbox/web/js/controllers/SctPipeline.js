@@ -8,17 +8,17 @@ export class SctPipeline extends PipelineExecutor {
       workerUrl: `js/inference-worker.js?v=${VERSION}`,
       workerType: 'module',
       version: VERSION,
-      steps: ['load', 'inference', 'processing'],
+      steps: ['load', 'inference'],
       currentTaskId: 'spinalcord',
       readyMessage: 'ONNX Runtime ready',
       hiddenArtifacts: { segmentationState: { segLabelsRAS: null, segMinComponentSize: 10 } },
       resultFileName: (stage, data) => `${data.taskId || 'spinalcord'}_${stage}.nii`,
     });
     this.graph = new StepPipelineState({
-      nodeOrder: ['load', 'inference', 'processing'],
-      stageToNode: { input: 'load', segmentation: 'inference', vertebrae: 'processing' },
-      nodeToStages: { load: ['input'], inference: ['segmentation'], processing: ['vertebrae'] },
-      dependencies: { load: [], inference: ['load'], processing: ['inference'] },
+      nodeOrder: ['load', 'inference'],
+      stageToNode: { input: 'load', segmentation: 'inference' },
+      nodeToStages: { load: ['input'], inference: ['segmentation'] },
+      dependencies: { load: [], inference: ['load'] },
     });
   }
 
@@ -34,13 +34,6 @@ export class SctPipeline extends PipelineExecutor {
     return this.executeCommand('run-inference', settings, {
       step: 'inference',
       taskId: settings?.taskId || 'spinalcord',
-    });
-  }
-
-  runVertebralLabeling(settings = {}) {
-    return this.executeCommand('run-vertebral-labeling', settings, {
-      step: 'processing',
-      taskId: 'vertebrae',
     });
   }
 }

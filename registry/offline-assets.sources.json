@@ -126,18 +126,6 @@
     ],
     "spinalcordtoolbox": [
       {
-        "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz",
-        "sha256": "5e5b27aee46837abfdb85bffb01d5eb6c20f41ed7d308f5388fc86fd251942b6",
-        "bytes": 129677,
-        "kind": "atlas-template"
-      },
-      {
-        "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz",
-        "sha256": "3e98b3275454e783a2683af0a6c895a9fa40c5c8da7eac9d6d478516fe85f0a8",
-        "bytes": 24057343,
-        "kind": "atlas-template"
-      },
-      {
         "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-graymatter.onnx",
         "sha256": "73c1d741aa2f2f38555e250b0d69b95ae72f8d69b56c162c424985660e705897",
         "bytes": 134270580,
@@ -163,10 +151,6 @@
       },
       {
         "url": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
-        "kind": "runtime-cdn"
-      },
-      {
-        "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
       },
       {

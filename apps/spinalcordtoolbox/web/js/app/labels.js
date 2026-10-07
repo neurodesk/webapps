@@ -5,69 +5,33 @@ export const LABELS = Object.freeze([
   { index: 1, name: 'Spinal cord', color: [68, 128, 255, 255] },
 ]);
 
-// NiiVue interpolates linearly between adjacent LUT stops. For discrete label
-// maps this smears one vertebra into its neighbour at sub-voxel boundaries. We
-// emit a step LUT: each label gets a stop at its integer index and another at
-// just-below the next index, holding the color flat across (i, i+1).
-//
-// IMPORTANT: NiiVue's `makeLut()` casts our `I` array through
-// `Uint8ClampedArray.from(...)` (round-half-to-even). For a binary mask
-// (spinalcord: 2 labels → max=1) the held stop sits at scaleToLutIndex(1)
-// minus this epsilon, i.e. 255-EPSILON. With EPSILON < 0.5 that rounds back
-// to 255, collapsing the held stop and the label-1 stop onto the same
-// Uint8 index. The first LUT segment (idxLo=0..idxHi=255) then interpolates
-// background→background and the trailing zero-range segment produces NaNs
-// (divide-by-zero) that Uint8ClampedArray clamps to 0 — the entire LUT
-// becomes transparent and the segmentation overlay disappears even though
-// the volume is loaded. EPSILON >= 1.0 keeps the held stop at a different
-// Uint8 bucket from the next label start. `npm run test:labels` enforces
-// the gap; the spinalcord-LUT regression case in `test_labels.mjs` confirms
-// the binary case stays visible.
-const STEP_EPSILON = 1.0;
-
-export function generateNiivueColormap(taskId = 'spinalcord') {
+// NiiVue 1.0 label colormap for `nv.setColormapLabel(volumeIndex, colormap)`:
+// one entry per label, `I` holding the raw label value. NiiVue builds an
+// index-addressed lookup table from it, samples it nearest-neighbour (so
+// neighbouring labels never blend), and reports `labels[value]` in its
+// location events and legend. Label 0 is always present and transparent,
+// otherwise NiiVue would treat the lowest label as the table origin.
+export function generateLabelColormap(taskId = 'spinalcord') {
   const labels = [...getTaskLabels(taskId)].sort((a, b) => a.index - b.index);
-  const maxLabelIndex = Math.max(1, ...labels.map(label => label.index));
-  const scaleToLutIndex = index => (index / maxLabelIndex) * 255;
+  if (!labels.some(label => label.index === 0)) {
+    labels.unshift({ index: 0, name: 'Background', color: [0, 0, 0, 0] });
+  }
   const R = [];
   const G = [];
   const B = [];
   const A = [];
   const I = [];
-  const labelNames = [];
-
-  for (let i = 0; i < labels.length; i++) {
-    const label = labels[i];
+  const names = [];
+  for (const label of labels) {
     const color = label.color || label.rgba || [128, 128, 128, 255];
     R.push(color[0]);
     G.push(color[1]);
     B.push(color[2]);
-    A.push(color[3]);
-    I.push(scaleToLutIndex(label.index));
-    labelNames.push(label.name);
-
-    const next = labels[i + 1];
-    if (next && next.index > label.index + 1) continue;
-    if (next) {
-      R.push(color[0]);
-      G.push(color[1]);
-      B.push(color[2]);
-      A.push(color[3]);
-      I.push(scaleToLutIndex(next.index) - STEP_EPSILON);
-      labelNames.push('');
-    }
+    A.push(label.index === 0 ? 0 : color[3] ?? 255);
+    I.push(label.index);
+    names.push(label.name);
   }
-
-  return {
-    R,
-    G,
-    B,
-    A,
-    I,
-    labels: labelNames,
-    min: 0,
-    max: Math.max(1, ...labels.map(label => label.index))
-  };
+  return { R, G, B, A, I, labels: names };
 }
 
 /**

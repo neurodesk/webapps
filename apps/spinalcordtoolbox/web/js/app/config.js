@@ -1,4 +1,4 @@
-export const VERSION = '0.6.20261007';
+export const VERSION = '0.7.20261007';
 
 // Model - relative path (served from same origin)
 export const MODEL_BASE_URL = './models';
@@ -32,14 +32,12 @@ export const INFERENCE_DEFAULTS = {
   testTimeAugmentation: false
 };
 
+// NiiVue 1.0 constructor options for the embedded FreeBrowse viewer and the
+// comparison canvases. SCT's own input flow loads files, so canvas drops stay
+// off; WebGL2 is the renderer the app is tested on.
 export const VIEWER_CONFIG = {
-  loadingText: "",
-  dragToMeasure: false,
-  isColorbar: false,
-  textHeight: 0.03,
-  show3Dcrosshair: false,
-  crosshairColor: [0.23, 0.51, 0.96, 1.0],
-  crosshairWidth: 0.75
+  backend: 'webgl2',
+  isDragDropEnabled: false
 };
 
 export const PROGRESS_CONFIG = {
@@ -49,11 +47,10 @@ export const PROGRESS_CONFIG = {
 export const STAGE_NAMES = {
   'input': 'Input',
   'segmentation': 'SCT Segmentation',
-  'lesion': 'SCI Lesion',
-  'vertebrae': 'Vertebral Labels',
+  'lesion': 'Lesion',
   'spine_step1': 'TotalSpineSeg Labels',
   'spine_discs': 'Spine Disc Labels',
-  'lesion_metrics': 'Lesion Metrics'
+  'lesion_metrics': 'Browser lesion metrics (approximate)'
 };
 
 export const ONNX_CONFIG = {

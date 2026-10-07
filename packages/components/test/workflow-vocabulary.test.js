@@ -177,6 +177,15 @@ test('imaging workspace provides a reusable three-panel viewer layout', async ()
   assert.match(css, /orientation: landscape\) \{\s*\.nd-imaging-viewer:has\([^)]*\) \.nd-viewer-canvas-wrapper \{ height: calc\(100vw \/ 3\); \}/);
 });
 
+test('imaging workspace provides a session comparison grid with a marked active panel', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-compare-grid \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.nd-compare-grid\[hidden\] \{ display: none; \}/);
+  assert.match(css, /\.nd-compare-panel\[aria-current="true"\]::after \{ border-color: var\(--nd-color-primary\); \}/);
+  assert.match(css, /\.nd-compare-title\[aria-pressed="true"\]/);
+  assert.match(css, /@media \(pointer: coarse\) \{ \.nd-compare-title \{ min-height: 44px; \} \}/);
+});
+
 test('result labels wrap when visibility and View controls, or an Edit button, share a row', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /\.nd-volume-toggle:has\(\.nd-result-visibility\):has\(\.nd-view-btn\) \.nd-stage-label,\s*\.nd-volume-toggle:has\(\.nd-edit-btn\) \.nd-stage-label\s*\{\s*white-space: normal;\s*overflow-wrap: anywhere;/);
@@ -206,6 +215,20 @@ test('result selection and colour swatches use shared theme tokens', async () =>
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
   assert.match(css, /#controls \.nd-result-selected\s*\{[^}]*box-shadow: 0 0 0 2px var\(--nd-color-primary\)/);
   assert.match(css, /\.nd-result-swatch\s*\{[^}]*border: 1px solid var\(--nd-color-border\)/);
+});
+
+test('resizable and tabbed console vocabulary lives in the shared stylesheet', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const container = ':is\\(\\.console-container, \\.nd-console-container\\)\\[data-console-resizable\\]';
+  assert.match(css, new RegExp(`${container}\\s*\\{[^}]*height: var\\(--nd-console-height, 120px\\);[^}]*min-height: 120px;[^}]*max-height:`));
+  assert.match(css, new RegExp(`${container}\\.collapsed\\s*\\{[^}]*height: auto;`));
+  assert.match(css, /\.nd-console-resizer\s*\{[^}]*cursor: ns-resize;[^}]*touch-action: none;/);
+  assert.match(css, /\.collapsed > \.nd-console-resizer\s*\{\s*display: none;/);
+  assert.match(css, /\.nd-console-tab\[aria-selected="true"\]\s*\{[^}]*color: var\(--nd-color-primary\)/);
+  assert.match(css, /\.nd-console-panels\s*\{[^}]*flex: 1;[^}]*min-height: 0;/);
+  const touchRules = css.slice(css.indexOf('@media (pointer: coarse), (max-width: 780px)'));
+  assert.match(touchRules, /\.nd-console-tab\s*\{[^}]*min-height: 44px;/);
+  assert.match(touchRules, /\.nd-console-resizer\s*\{[^}]*height: 44px;/);
 });
 
 test('custom element hosts retain block layout in the shared stylesheet', async () => {

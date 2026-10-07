@@ -1,7 +1,7 @@
 import examples from '../examples.json';
 import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import { SLICE_TYPE } from '@niivue/niivue';
-import { mountViewer } from './freebrowse-viewer.js';
+import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { runDcm2niix, readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -323,7 +323,7 @@ async function ensureViewer() {
         backgroundColor: [0.04, 0.06, 0.08, 1],
         meshXRay: Number(xrayInput.value),
         backend: 'webgl2',
-      });
+      }, { canvasLabel: 'Brain image and cortical surface viewer' });
       viewer = await embeddedViewer.ready;
       toolbar.hidden = false;
       viewer.addEventListener('change', (event) => {
