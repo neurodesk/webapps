@@ -577,7 +577,41 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-linux-x64.tar.gz",
+          "sha256": "86d63f5169d228aa439b078a017f5380632babf84e79f5255c2e2db1f9e6c5e4",
+          "bytes": 44498172,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf carotid-flow-0.4.20261007-linux-x64.tar.gz\n./carotid-flow-0.4.20261007-linux-x64/carotid-flow amplitude.nii.gz phase.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-macos-arm64.pkg",
+          "sha256": "097f3362c8fb67bce45859898f6006070e66a3063533d252d8ab9dd06af74efc",
+          "bytes": 38097730,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg carotid-flow-0.4.20261007-macos-arm64.pkg -target /\ncarotid-flow self-check\ncarotid-flow amplitude.nii.gz phase.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-windows-x64.zip",
+          "sha256": "8ba30eb73e951a303eafc18b2e99905dd196706221fe68ae66a725e9413bb0e6",
+          "bytes": 34801132,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/carotid-flow-v0.4.20261007/carotid-flow-0.4.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\carotid-flow-0.4.20261007-windows-x64.zip -DestinationPath .\n.\\carotid-flow-0.4.20261007-windows-x64\\carotid-flow.exe amplitude.nii.gz phase.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "white-matter-lesions": {
