@@ -124,8 +124,11 @@ test('an app release starts every portable command line build, which then publis
   const release = await workflow('release.yml');
   assert.equal(release.permissions.actions, undefined, 'only the release job may dispatch workflows');
   assert.deepEqual(release.jobs.release.permissions, { contents: 'write', actions: 'write' });
-  const start = release.jobs.release.steps.find((step) => step.name === 'Start the signed native build');
+  const steps = release.jobs.release.steps;
+  const start = steps.find((step) => step.name === 'Start the signed native build');
   assert.match(start.run, /node scripts\/dispatch-native-release\.mjs "\$APP" "\$\{APP\}-v\$\{VERSION\}"/);
+  const install = steps.findIndex((step) => step.run === 'pnpm install --frozen-lockfile');
+  assert.ok(install >= 0 && install < steps.indexOf(start), 'the dispatch script needs installed dependencies (yaml)');
   for (const [app, native] of nativeReleases(await portableSpecs())) {
     const flow = await workflow(native.workflow);
     assert.equal(flow.on.workflow_dispatch.inputs.sign_release.type, 'boolean', `${app}: dispatched with sign_release`);
