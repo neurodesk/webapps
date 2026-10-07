@@ -6,8 +6,30 @@ import { parse } from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { provisioners, unpublished } from '../scripts/lib/e2e-test-data.mjs';
 
+// The full argument text of every `test.skip(...)` call, across line breaks.
+// Parentheses inside string literals do not end the call.
+function skipCalls(source) {
+  const calls = [];
+  for (const match of source.matchAll(/test\.skip\(/g)) {
+    let depth = 1;
+    let quote = null;
+    let index = match.index + match[0].length;
+    for (; index < source.length && depth > 0; index++) {
+      const character = source[index];
+      if (quote) {
+        if (character === '\\') index++;
+        else if (character === quote) quote = null;
+      } else if (`'"\``.includes(character)) quote = character;
+      else if (character === '(') depth++;
+      else if (character === ')') depth--;
+    }
+    calls.push(source.slice(match.index, index));
+  }
+  return calls;
+}
+
 // Environment variables that decide whether an e2e test skips itself: any
-// `process.env.X` in a `test.skip(...)` line, or a `name` there where
+// `process.env.X` in a `test.skip(...)` call, or a `name` there where
 // `const name = process.env.X` (`!name`, `name !== "check"`, ...).
 async function dataGates() {
   const gates = new Map();
@@ -17,7 +39,7 @@ async function dataGates() {
     for (const file of files.filter((name) => /\.(spec\.)?[cm]?[jt]s$/.test(name))) {
       const source = await readFile(join(directory, file), 'utf8');
       const aliases = new Map([...source.matchAll(/const (\w+) = process\.env\.([A-Z0-9_]+);/g)].map(([, name, variable]) => [name, variable]));
-      for (const [line] of source.matchAll(/test\.skip\([^\n]*/g)) {
+      for (const line of skipCalls(source)) {
         for (const [, variable] of line.matchAll(/process\.env\.([A-Z0-9_]+)/g)) gates.set(variable, `${app}/e2e/${file}`);
         for (const [name] of line.matchAll(/\b\w+\b/g)) if (aliases.has(name)) gates.set(aliases.get(name), `${app}/e2e/${file}`);
       }
