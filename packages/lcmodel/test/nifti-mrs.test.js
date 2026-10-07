@@ -49,13 +49,13 @@ function niftiMrs({ singleton = false, version = 1, water = false } = {}) {
   return bytes;
 }
 
-async function module() {
+async function loadTestLcmodel() {
   return loadLcmodel(await readFile(new URL("../src/lcmodel.wasm", import.meta.url)));
 }
 
 for (const version of [1, 2]) {
   test(`NIfTI-${version} MRS singleton coil processes like coil-combined dynamics`, async () => {
-    const lcm = await module();
+    const lcm = await loadTestLcmodel();
     const processed = [];
     for (const singleton of [false, true]) {
       lcm.reset();
@@ -76,7 +76,7 @@ for (const version of [1, 2]) {
 }
 
 test("NIfTI-MRS acquisition times stay in milliseconds through preprocessing and RAW export", async () => {
-  const lcm = await module();
+  const lcm = await loadTestLcmodel();
   lcm.addFile("spectra.nii", niftiMrs());
   lcm.addFile("spectra_ref.nii", niftiMrs({ water: true }));
   const loaded = lcm.load();

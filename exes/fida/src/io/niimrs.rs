@@ -212,15 +212,22 @@ pub fn load(data: &[u8]) -> Res<Spectra> {
         return Err("This NIfTI-MRS file holds more than one voxel (MRSI); FID-A's reader handles single-voxel data only.".into());
     }
     let mut fids = fids.squeeze();
-    // x,y,z -> 0, every other non-zero dim moves down by 3
     let names = ["x", "y", "z", "t", "coils", "averages", "subSpecs", "extras"];
     let mut sqz = Vec::new();
     for k in 0..3 {
         d[k] = 0;
     }
+    let mut squeezed_axis = [0usize; 8];
+    let mut axis = 0;
+    for k in 1..=nd {
+        if h.dim[k] != 1 {
+            axis += 1;
+            squeezed_axis[k] = axis;
+        }
+    }
     for k in 3..8 {
+        d[k] = squeezed_axis[d[k]];
         if d[k] != 0 {
-            d[k] -= 3;
             sqz.push(names[k]);
         }
     }
