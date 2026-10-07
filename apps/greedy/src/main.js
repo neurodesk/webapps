@@ -8,6 +8,7 @@ import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from "@neurodesk/webapp-components/automation";
 import { extractBrain } from "./brain-extraction.js";
+import { createRegistrationRunner } from "./registration-runner.js";
 
 const $ = (id) => document.getElementById(id);
 const slots = {
@@ -25,8 +26,6 @@ let output = null;
 let busy = false;
 let viewersReady = false;
 let viewersDestroyed = false;
-let registrationWorker = null;
-let cancelRegistration = null;
 let timer;
 
 mountImagingWorkspace({
@@ -298,60 +297,10 @@ const results = createResultList({
   onDownload: () => downloadFile(output),
 });
 
-function runRegistration(fixed, moving, mode, onProgress, signal) {
-  signal?.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" });
-    registrationWorker = worker;
-    let closed = false;
-    const close = () => {
-      closed = true;
-      signal?.removeEventListener("abort", abort);
-      worker.terminate();
-      if (registrationWorker === worker) {
-        registrationWorker = null;
-        cancelRegistration = null;
-        $("cancelButton").hidden = true;
-      }
-    };
-    worker.onmessage = ({ data }) => {
-      if (closed) return;
-      if (data.phase) {
-        onProgress(data.phase);
-        return;
-      }
-      close();
-      if (data.error) reject(new Error(data.error));
-      else resolve(data);
-    };
-    worker.onerror = (event) => {
-      if (closed) return;
-      close();
-      reject(new Error(event.error instanceof Error ? event.error.message : event.message || "Greedy worker failed to start."));
-    };
-    worker.onmessageerror = () => {
-      if (closed) return;
-      close();
-      reject(new Error("Greedy worker could not exchange registration data."));
-    };
-    const abort = () => {
-      if (closed) return;
-      close();
-      reject(signal?.reason ?? new DOMException("Cancelled", "AbortError"));
-    };
-    cancelRegistration = abort;
-    signal?.addEventListener("abort", abort, { once: true });
-    $("cancelButton").hidden = false;
-    Promise.all([fixed.arrayBuffer(), moving.arrayBuffer()]).then(([fixedBytes, movingBytes]) => {
-      if (closed) return;
-      worker.postMessage({ fixed: fixedBytes, moving: movingBytes, mode }, [fixedBytes, movingBytes]);
-    }).catch((error) => {
-      if (closed) return;
-      close();
-      reject(error);
-    });
-  });
-}
+const registration = createRegistrationRunner({
+  createWorker: () => new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" }),
+  onActiveChange: (active) => { $("cancelButton").hidden = !active; },
+});
 
 async function register({
   moving = slots.moving.file,
@@ -374,7 +323,7 @@ async function register({
   }, 1000);
   $("progress").removeAttribute("value");
   try {
-    const data = await runRegistration(fixed, moving, method, (next) => {
+    const data = await registration.run(fixed, moving, method, (next) => {
       phase = next;
       status(next);
       progress({ message: next });
@@ -414,7 +363,7 @@ $("runButton").onclick = () => void runTask("Starting registration…", async ()
 $("method").onchange = () => void runTask("Changing registration method…", clearOutput);
 $("cancelButton").onclick = () => {
   status("Cancelling registration…");
-  cancelRegistration?.();
+  registration.cancel();
 };
 
 async function init() {
@@ -439,7 +388,7 @@ async function init() {
 window.addEventListener("pagehide", () => {
   exampleControl.destroy();
   clearInterval(timer);
-  registrationWorker?.terminate();
+  registration.terminate();
   destroyViewers();
 });
 

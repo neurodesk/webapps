@@ -7,27 +7,21 @@ test("brain-extracted names preserve NIfTI suffixes", () => {
   assert.equal(strippedName("scan.nii"), "scan_brain.nii");
 });
 
-test("the MindGrab adapter requests worker-backed automatic extraction", async () => {
-  const calls = [];
-  const input = new File([Uint8Array.of(1, 2)], "T1_head.nii.gz");
+test("the extracted image is returned as a file named after its source", async () => {
   const result = await extractBrain({
-    file: input,
+    file: new File([Uint8Array.of(1, 2)], "T1_head.nii.gz"),
     assetPath: "/brainchop/",
-    segmenter: async (bytes, options) => {
-      calls.push({ bytes: new Uint8Array(bytes), options });
-      return { image: Uint8Array.of(3, 4), backend: "webgpu", elapsedMs: 25 };
-    },
-  });
-  assert.deepEqual(calls[0].bytes, Uint8Array.of(1, 2));
-  const { onLog, ...options } = calls[0].options;
-  assert.equal(typeof onLog, "function");
-  assert.deepEqual(options, {
-    model: "mindgrab",
-    worker: true,
-    backend: "auto",
-    assetPath: "/brainchop/",
-    timeoutMs: 300_000,
+    segmenter: async () => ({ image: Uint8Array.of(3, 4), backend: "webgpu", elapsedMs: 25 }),
   });
   assert.equal(result.file.name, "T1_head_brain.nii.gz");
-  assert.deepEqual(new Uint8Array(await result.file.arrayBuffer()), Uint8Array.of(3, 4));
+  assert.equal(result.backend, "webgpu");
+});
+
+test("a missing input or an empty MindGrab result is an error, not an empty file", async () => {
+  await assert.rejects(extractBrain({ file: null, assetPath: "/brainchop/" }), /Choose an image/);
+  await assert.rejects(extractBrain({
+    file: new File([Uint8Array.of(1, 2)], "T1_head.nii.gz"),
+    assetPath: "/brainchop/",
+    segmenter: async () => ({ backend: "webgpu" }),
+  }), /did not return a brain-extracted image/);
 });

@@ -2,16 +2,8 @@
 // Playwright test in e2e/ — Node tests must not import modules that touch `document`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { APP, MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "../src/config.js";
+import { MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "../src/config.js";
 import viteConfigPromise from "../vite.config.js";
-
-test("app id is lowercase kebab-case", () => {
-  assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
-});
-
-test("app config is frozen", () => {
-  assert.ok(Object.isFrozen(APP));
-});
 
 test("examples use the shared registration dataset layout", () => {
   assert.equal(MOVING_EXAMPLES.length, 13);
