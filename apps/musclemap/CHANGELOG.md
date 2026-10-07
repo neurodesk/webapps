@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
 - 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
 - dd05e46: Ship whole-body v1.3 and the regional models as FP32 exports, which match upstream MuscleMap voxel for voxel on public parity cases. The previous Q8 exports could drop a whole label on partial-coverage scans. Each regional model download grows from about 39 MB to 104 MB.
 - 03a9e8c: Run every model, including whole-body v1.3 and the regional models, through the upstream MONAI pipeline, and pad slices to upstream's 256 x 256 before 128 x 128 sliding windows. Remove the slice-thickness and low-res controls and their automation parameters, which only that older path used.
