@@ -1,367 +1,741 @@
 #!/usr/bin/env node --no-warnings
-// Contract test for web/index.html under the CALMaR rewrite. Pins the sidebar
-// structure the orchestrator binds to, plus that no SCT branding survives.
+// web/index.html, checked as a document rather than as text.
+//
+// Part 1 parses the page with jsdom and queries elements, attributes, ARIA
+// groups and document order.
+// Part 2 boots the real LesionNetworkMappingApp against that same document
+// (only NiiVue, fetch and Worker are stand-ins) and drives the controls, so a
+// renamed or missing id shows up as a control that no longer does anything.
+// Part 3 holds the few policy lints that are properties of the source file.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { JSDOM } from 'jsdom';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const html = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
-const css = fs.readFileSync(path.join(ROOT, 'web/css/styles.css'), 'utf8');
-const sharedInferenceCss = fs.readFileSync(
-  path.join(ROOT, '../../packages/components/src/styles/inference-workspace.css'),
-  'utf8'
+const dom = new JSDOM(html, { url: 'http://localhost:8080/', pretendToBeVisual: true });
+const { document } = dom.window;
+
+const $ = selector => document.querySelector(selector);
+const $$ = selector => Array.from(document.querySelectorAll(selector));
+const text = element => element.textContent.replace(/\s+/g, ' ').trim();
+// Own text of a control, without the text of nested help popovers.
+const label = element => Array.from(element.childNodes)
+  .filter(node => node.nodeType === 3)
+  .map(node => node.textContent)
+  .join(' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+const ids = elements => elements.map(element => element.id);
+const precedes = (first, second) => Boolean(first.compareDocumentPosition(second) & 4);
+
+// =========================================================================
+// Part 1: document structure
+// =========================================================================
+
+// ---- identity ----
+assert.equal(document.title, 'CALMaR | Co-designed Automated Lesion Mapping and Reporting');
+assert.equal(text($('header.app-header h1')), 'CALMaR');
+assert.equal(text($('header.app-header .tagline')), 'Co-designed Automated Lesion Mapping and Reporting');
+
+// ---- the workspace is the first screen ----
+assert.equal($('#startPage, #enterAppButton, .start-page'), null, 'no start page, hero or welcome overlay');
+const appContainer = $('.app-container');
+assert.deepEqual(
+  Array.from(appContainer.children).map(child => child.tagName.toLowerCase()),
+  ['header', 'aside', 'main', 'footer'],
+  'the app is one header, sidebar, viewer and status footer'
 );
-const effectiveCss = `${sharedInferenceCss}\n${css}`;
-const serviceWorker = fs.readFileSync(path.join(ROOT, 'web/coi-serviceworker.js'), 'utf8');
-const runScript = fs.readFileSync(path.join(ROOT, 'web/run.sh'), 'utf8');
-const devServer = fs.readFileSync(path.join(ROOT, '../../scripts/dev-server.mjs'), 'utf8');
-const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 
-// Title + h1 reflect the CALMaR identity, not SCT.
-assert.match(html, /<title>[^<]*CALMaR\s*\|\s*Co-designed Automated Lesion Mapping and Reporting[^<]*<\/title>/,
-  'page title must include the CALMaR project name');
-assert.match(html, /<h1>CALMaR<\/h1>/,
-  'main heading must use CALMaR as the app name');
-assert.match(html, /class=["']tagline["']>Co-designed Automated Lesion Mapping and Reporting<\/span>/,
-  'header tagline must be the expanded CALMaR name');
-assert.doesNotMatch(html, /Browser-based lesion atlas overlap and reporting/,
-  'old browser-based tagline copy should not remain');
-assert.doesNotMatch(html, /SpinalCordToolbox/i,
-  'no surviving "SpinalCordToolbox" branding allowed');
-assert.doesNotMatch(html, /\bSCT\b(?!\.com)/,   // allow URL fragments like spinalcordtoolbox.com
-  'no surviving "SCT" branding allowed (apart from any incidental URL).');
-
-// Sidebar sections — the orchestrator binds to these IDs. If they drift, the
-// app fails silently instead of throwing, so we lock them down.
-const requiredIds = [
-  // Phase 32 — sidebar redesign: three primary sections (Input → Run → Results).
-  // Per-stage controls live inside <details> disclosures inside Run/Results so
-  // the orchestrator's bindings keep working without dominating the UI.
-  // Shared status footer (the workspace is the first screen; no start page).
-  '#status',
-  '#statusText',
-  '#elapsed',
-  '#progress',
-  '#cancelButton',
-  '#stepLoadSection',
-  '#stepLesionSection',
-  // (#stepNetworkSection removed; computeOverlapButton moved under the Run
-  //  section's Advanced disclosure.)
-  '#resultsSection',
-  '#networkOverlapTable',
-  '#directFunctionProfileResults',
-  '#directFunctionProfileTable',
-  '#downloadOverlapCsv',
-  '#computeOverlapButton',
-  '#outsideAtlasWarning',
-  '#structuralFileInput',
-  '#deepIslesDwiFileInput',
-  '#deepIslesAdcFileInput',
-  '#atlasSelect',
-  '#lesionFileInput',
-  // Phase 2a.1.4b additions: brain-extraction button (explicit trigger) and
-  // the brain-mask download button.
-  '#runBrainExtractionButton',
-  '#downloadBrainMaskButton',
-  // Phase 2a.2.3 additions: lesion-segmentation trigger button + mask
-  // download button.
-  '#runLesionSegmentationButton',
-  '#runDeepIslesSegmentationButton',
-  '#startManualMaskButton',
-  '#downloadLesionMaskButton',
-  // Phase 3.4 additions: registration button.
-  '#runRegistrationButton',
-  '#registrationQcMode',
-  '#registrationBlendValue',
-  '#registrationBlendLabel',
-  '#checkAtlasAlignmentButton',
-  // Phase 4.4 additions: Network map subsection.
-  '#computeNetworkMapButton',
-  '#downloadNetworkMapButton',
-  // Phase 5 additions: threshold controls + thresholded download.
-  '#networkThresholdValue',
-  '#networkThresholdSymmetric',
-  '#networkThresholdMinCluster',
-  '#affectedNetworkResults',
-  '#affectedNetworkTable',
-  '#mapFunctionProfileResults',
-  '#mapFunctionProfileTable',
-  '#downloadThresholdedNetworkMapButton',
-  '#showSubjectAtlasButton',
-  '#downloadSubjectAtlasButton',
-  // Phase 6 additions: warp+resample bridge button + one-click full chain.
-  '#applyRegistrationToLesionButton',
-  '#runFullPipelineButton',
-// Phase 16 addition: in-browser affine pre-registration.
-  '#prealignToMniButton',
-  // Phase 21 addition: clear-results / new-run UX control.
-  '#clearResultsButton',
-  // Phase 32 additions: Advanced disclosure container.
-  '#advancedStageControls',
-  // Patient-space viewer layer toggles.
-  '#layerToggleT1',
-  '#layerToggleBrainMask',
-  '#layerToggleLesionMask',
-  '#layerToggleThresholdMap',
-  '#layerToggleAtlasQc',
-  // Split logging: default clinician-facing analysis log plus collapsed
-  // technical support log.
-  '#consoleOutput',
-  '#copyConsole',
-  '#clearConsole',
-  '#technicalLogDetails',
-  '#technicalConsoleOutput',
-  '#copyTechnicalConsole',
-  '#clearTechnicalConsole',
-  // Manual lesion-mask refinement toolbar.
-  '#maskDrawingToolbar',
-  '#maskReviewStatus',
-  '#maskApprovalBanner',
-  '#manualMaskFileInput',
-  '#uploadManualMaskButton',
-  '#maskPaintButton',
-  '#maskEraseButton',
-  '#maskEraseClusterButton',
-  '#maskBrushSize',
-  '#maskBrushSizeLabel',
-  '#maskShapeSelect',
-  '#maskFilledToggle',
-  '#maskUndoButton',
-  '#maskBlankButton',
-  '#uploadReviewMaskButton',
-  '#maskSmoothButton',
-  '#maskInterpolateAxis',
-  '#maskInterpolateButton',
-  '#maskInterpolateHelp',
-  '#confirmLesionMaskButton',
-  '#downloadEditedLesionMaskButton'
-];
-for (const id of requiredIds) {
-  const escaped = id.slice(1);
-  const re = new RegExp(`id=["']${escaped}["']`);
-  assert.match(html, re, `index.html must contain element with ${id}`);
+// ---- shared status footer ----
+{
+  const footer = $('footer#status');
+  assert.ok(footer.classList.contains('nd-imaging-status'));
+  const statusText = footer.querySelector('#statusText');
+  assert.equal(statusText.getAttribute('role'), 'status', 'status text is announced');
+  assert.equal(statusText.getAttribute('aria-live'), 'polite');
+  assert.equal(footer.querySelector('#progress').tagName, 'PROGRESS', 'progress is a native <progress>');
+  assert.ok(footer.querySelector('#elapsed'));
+  const cancel = footer.querySelector('#cancelButton');
+  assert.equal(cancel.hidden, true, 'the cancel is hidden until a run can be cancelled');
+  assert.equal(cancel.getAttribute('aria-label'), 'Cancel processing');
+  assert.equal($('.app-sidebar #statusText, .app-sidebar progress, .sidebar-status'), null, 'no status or progress in the sidebar');
+  assert.equal($$('footer').length, 1, 'no second, static footer');
 }
 
-assert.doesNotMatch(html, /start-page|id=["']startPage["']|id=["']enterAppButton["']/,
-  'the workspace is the first screen; intro copy lives in About and Privacy');
-assert.match(html, /<footer id="status" class="nd-imaging-status">[\s\S]*id="statusText" class="nd-status-text"[\s\S]*<progress id="progress"[\s\S]*id="cancelButton" class="nd-btn-cancel"[^>]*hidden/,
-  'status lives in the shared footer with a native progress bar and a hidden cancel');
-assert.doesNotMatch(html, /sidebar-status/,
-  'the sidebar status block is retired');
-assert.match(html, /Background execution is possible if this site is added under "Always keep these sites active" in your browser settings\./,
-  'About must explain how to allow background execution');
-assert.equal((html.match(/class=["'][^"']*\bbtn-primary\b/g) || []).length, 1,
-  'the sidebar has one primary action: Run analysis');
-const moreAppsLinks = [
-  ...html.matchAll(/<a\b(?=[^>]*href=["']\.\.\/["'])(?=[^>]*class=["'][^"']*\bheader-link\b[^"']*["'])(?=[^>]*title=["']More Neurodesk web apps["'])[^>]*>[\s\S]*?<span>More Apps<\/span>[\s\S]*?<\/a>/g)
-];
-assert.equal(moreAppsLinks.length, 1,
-  'the workspace header must return to the composite More Apps page');
-for (const link of moreAppsLinks) {
-  assert.doesNotMatch(link[0], /target=["']_blank["']/,
-    'More Apps must navigate in the current tab');
-  assert.match(link[0], /<rect x=["']3["'] y=["']3["'] width=["']7["'] height=["']7["']\/>/,
-    'More Apps link must use the shared 2x2 grid icon pattern');
+// ---- header actions ----
+{
+  const links = $$('.header-links .header-link');
+  assert.deepEqual(links.map(text), ['About', 'Cite', 'Privacy', 'More Apps', 'GitHub']);
+  const moreApps = links[3];
+  assert.equal(moreApps.tagName, 'A');
+  assert.equal(moreApps.getAttribute('href'), '../', 'More Apps returns to the composite site root');
+  assert.equal(moreApps.getAttribute('title'), 'More Neurodesk web apps');
+  assert.equal(moreApps.hasAttribute('target'), false, 'More Apps stays in the current tab');
+  assert.equal(moreApps.querySelectorAll('svg rect').length, 4, 'More Apps uses the 2x2 grid icon');
+  assert.equal(links[4].getAttribute('href'), 'https://github.com/neurodesk/webapps/tree/main/apps/calmar');
+  assert.equal(links[4].getAttribute('rel'), 'noopener noreferrer');
+  assert.deepEqual(
+    links.slice(0, 3).map(link => link.dataset.neurodeskControl),
+    ['about', 'cite', 'privacy'],
+    'About, Cite and Privacy are registered through the shell control contract'
+  );
 }
 
-const prealignButton = html.match(/<button\b[^>]*id=["']prealignToMniButton["'][^>]*>([\s\S]*?)<\/button>/i);
-assert.ok(prealignButton, '#prealignToMniButton must be a button element');
-assert.equal(prealignButton[1].trim(), '2 Pre-align T1',
-  '#prealignToMniButton visible label must stay compact');
-assert.doesNotMatch(prealignButton[1], /<sup\b/i,
-  '#prealignToMniButton must not embed unit/superscript text that wraps into a broken label');
-assert.match(prealignButton[0], /title=["']Pre-align T1 to the MNI160 1 mm grid["']/,
-  '#prealignToMniButton title must retain the MNI160 1 mm detail');
+// ---- sidebar: three sections, one primary action ----
+{
+  assert.deepEqual(ids($$('.app-sidebar section.sidebar-section')), ['stepLoadSection', 'stepLesionSection', 'resultsSection']);
+  assert.deepEqual(
+    $$('.app-sidebar .section-toggle').map(label),
+    ['1. Input', '2. Run analysis', '3. Results']
+  );
+  const primary = $$('.app-sidebar .btn-primary');
+  assert.deepEqual(ids(primary), ['runFullPipelineButton'], 'the sidebar has exactly one primary action');
+  assert.equal(text(primary[0]), 'Run analysis');
+  assert.equal($$('.btn-primary').length, 1, 'and no other primary button anywhere');
+  assert.equal($('#pipelineSelect, label[for="pipelineSelect"]'), null, 'no visible pipeline selector');
+}
 
-const workflowStart = html.indexOf('aria-label="Advanced workflow order"');
-const workflowEnd = html.indexOf('</details>', workflowStart);
-const advancedWorkflow = workflowStart >= 0 && workflowEnd > workflowStart
-  ? html.slice(workflowStart, workflowEnd)
-  : '';
-assert.ok(advancedWorkflow, 'advanced controls must expose an ordered workflow container');
-assert.match(
-  advancedWorkflow,
-  /1 Brain extraction[\s\S]*2 Pre-align T1[\s\S]*3 Lesion mask[\s\S]*Auto seed mask[\s\S]*DeepISLES DWI\/ADC seed[\s\S]*Manual mask[\s\S]*Upload mask[\s\S]*4 MNI registration \(SynthMorph\)[\s\S]*5 Check atlas alignment[\s\S]*6 Warp lesion → atlas grid[\s\S]*7 Compute atlas overlap[\s\S]*8 Compute network map/,
-  'advanced controls must show the seed/manual mask review workflow in execution order'
-);
-assert.match(html, /<label\b[^>]*for=["']atlasSelect["'][^>]*>Atlas<\/label>/,
-  'atlas selector label must be exactly Atlas');
-assert.match(html, /<option\s+value=["']schaefer400["']\s+selected>Schaefer 400 parcels<\/option>/,
-  'atlas selector must select Schaefer 400 parcels by default');
-assert.match(html, /<option\s+value=["']yeo7["']>Yeo 7 networks<\/option>/,
-  'atlas selector must keep Yeo 7 networks selectable for compatibility');
-assert.match(
-  advancedWorkflow,
-  /aria-label=["']Lesion mask source choice["'][\s\S]*id=["']runLesionSegmentationButton["'][\s\S]*id=["']runDeepIslesSegmentationButton["'][\s\S]*id=["']startManualMaskButton["'][\s\S]*id=["']uploadManualMaskButton["']/,
-  'advanced controls must offer SynthStroke seed, DeepISLES seed, blank manual mask, and manual mask upload choices'
-);
-assert.match(
-  advancedWorkflow,
-  /<input\b[^>]*data-neurodesk-input=["']image["'][^>]*id=["']manualMaskFileInput["'][^>]*class=["']hidden["'][^>]*multiple[^>]*>/i,
-  'manual mask upload must use a hidden multi-file scan input behind the compact buttons'
-);
-assert.match(
-  advancedWorkflow,
-  /id=["']runRegistrationButton["'][\s\S]*id=["']registrationQcMode["'][\s\S]*id=["']checkAtlasAlignmentButton["'][\s\S]*id=["']registrationBlendValue["'][\s\S]*id=["']applyRegistrationToLesionButton["']/,
-  'advanced QC controls must follow execution order: registration -> QC view -> check alignment -> blend -> lesion warp'
-);
-assert.doesNotMatch(html, /Researcher mode: lesion mask/,
-  'advanced controls must not expose the researcher-mode lesion-mask upload');
-assert.match(html, /<input\b[^>]*id=["']lesionFileInput["'][^>]*class=["']hidden["'][^>]*>/i,
-  'manual lesion-mask input may remain only as a hidden compatibility hook');
-assert.match(html, /<option\s+value=["']patient["']>Patient space<\/option>/,
-  'registration QC selector must offer patient-space view');
-assert.match(html, /<option\s+value=["']mni["']\s+selected>MNI space<\/option>/,
-  'registration QC selector must default to MNI-space view for patient/template blending');
-assert.match(html, /<option\s+value=["']checkerboard["']>Checkerboard<\/option>/,
-  'registration QC selector must offer checkerboard view');
-assert.match(html, /<option\s+value=["']displacement["']>Displacement<\/option>/,
-  'registration QC selector must offer displacement view');
-const registrationBlendInput = html.match(/<input\b[^>]*id=["']registrationBlendValue["'][^>]*>/i);
-assert.ok(registrationBlendInput, 'registration QC must expose a Patient/MNI blend slider');
-assert.match(registrationBlendInput[0], /type=["']range["']/,
-  'Patient/MNI blend control must be a range slider');
-assert.match(registrationBlendInput[0], /min=["']0["'][\s\S]*max=["']1["'][\s\S]*step=["']0\.05["'][\s\S]*value=["']0\.5["']/,
-  'Patient/MNI blend slider must run from MNI-only to registered-patient-only with a 50% default');
-assert.match(html, /Patient\/MNI blend/,
-  'registration QC blend label must make the MNI/patient comparison explicit');
-assert.doesNotMatch(html, /id=["']networkThresholdMode["']/,
-  'connectivity-map threshold UI must not expose an absolute-vs-percent mode selector');
-assert.doesNotMatch(html, /Absolute t-stat|Absolute mode|absolute mode/i,
-  'connectivity-map threshold UI must not expose absolute t-stat thresholding');
-assert.match(html, /Top voxels/,
-  'connectivity-map threshold UI must present a top-percent voxel slider');
-assert.match(html, /Use \|t\| magnitude/,
-  'connectivity-map threshold UI may only offer top-percent ranking by magnitude, not a t-stat threshold mode');
-assert.match(html, /Analysis log/,
-  'default log viewer must be clinician-facing analysis log');
-assert.match(html, /<div data-disclosure class="collapsed console-container[^"]*" id="analysisLog"/,
-  'analysis log must be a collapsed console disclosure by default');
-assert.match(html, /<div data-disclosure class="collapsed console-container[^"]*" id="technicalLogDetails"/,
-  'technical support log must be a collapsed console disclosure by default');
-assert.match(html, /data-disclosure-toggle>Technical log<\/button>/,
-  'technical log toggle must be labelled Technical log');
-assert.doesNotMatch(html, /Copy this when reporting a problem\./,
-  'the technical log carries no caption');
-assert.match(html, /aria-label=["']Lesion mask drawing tools["']/,
-  'viewer toolbar must expose compact lesion-mask drawing controls');
-assert.match(html, /Paint[\s\S]*Erase[\s\S]*Erase cluster[\s\S]*Confirm mask/,
-  'mask drawing toolbar must label whole-cluster erasing explicitly');
-assert.match(html, /Erase the connected lesion cluster under the cursor/,
-  'mask drawing toolbar must describe what the cluster erase action does');
-assert.match(html, /Start a blank mask/,
-  'mask drawing toolbar must allow blank manual lesion masks');
-assert.match(html, /id=["']uploadReviewMaskButton["'][\s\S]*Upload/,
-  'mask drawing toolbar must allow uploading a replacement mask during review');
-assert.match(html, /Smooth the 3D mask volume/,
-  'mask drawing toolbar must expose a 3D mask smoothing tool');
-assert.match(html, /Interpolate mask between boundary slices/,
-  'mask drawing toolbar must expose between-slice interpolation');
-assert.match(html, /id=["']maskInterpolateHelp["'][\s\S]*Interpolate mask help[\s\S]*first and last non-empty slices[\s\S]*NiiVue mask interpolation/,
-  'mask interpolation help must explain the boundary-slice interpolation behavior');
-assert.match(html, /aria-label=["']Draw lesion mask["'][\s\S]*id=["']maskPaintButton["'][\s\S]*id=["']maskBrushSize["'][\s\S]*id=["']maskShapeSelect["'][\s\S]*id=["']maskFilledToggle["']/,
-  'mask review toolbar must group drawing mode, brush, shape, and fill controls together');
-assert.match(html, /aria-label=["']Mask edit actions["'][\s\S]*id=["']maskUndoButton["'][\s\S]*id=["']maskBlankButton["'][\s\S]*id=["']maskSmoothButton["']/,
-  'mask review toolbar must group undo, blank, and smooth edit actions together');
-assert.match(html, /aria-label=["']Mask slice interpolation["'][\s\S]*id=["']maskInterpolateAxis["'][\s\S]*id=["']maskInterpolateButton["'][\s\S]*id=["']maskInterpolateHelp["']/,
-  'mask review toolbar must group interpolation axis, action, and help together');
-assert.match(html, /id=["']downloadEditedLesionMaskButton["'][\s\S]*Download/,
-  'mask confirmation toolbar must expose a download option for the edited mask');
-assert.match(html, /class=["']mask-file-actions["'][\s\S]*id=["']uploadReviewMaskButton["'][\s\S]*id=["']downloadEditedLesionMaskButton["']/,
-  'mask confirmation toolbar must group Upload and Download as file actions');
-assert.match(html, /aria-label=["']Mask review actions["'][\s\S]*id=["']confirmLesionMaskButton["'][\s\S]*class=["']mask-file-actions["']/,
-  'mask review toolbar must group confirm and file actions after editing tools');
-assert.match(html, /id=["']maskApprovalBanner["'][\s\S]*Mask approval required[\s\S]*Review the lesion mask before analysis continues\./,
-  'mask review must expose a persistent approval banner without duplicating action buttons');
-assert.doesNotMatch(html, /id=["']approveLesionMaskButton["']|id=["']downloadReviewMaskButton["']/,
-  'mask approval banner must not duplicate the toolbar confirm/download actions');
+// ---- inputs ----
+{
+  const inputLabels = Object.fromEntries(
+    $$('#stepLoadSection label[for]').map(element => [element.getAttribute('for'), text(element)])
+  );
+  assert.deepEqual(inputLabels, {
+    structuralFileInput: 'Structural T1 (NIfTI / DICOM)',
+    deepIslesDwiFileInput: 'DWI/TRACE (NIfTI / DICOM)',
+    deepIslesAdcFileInput: 'ADC (NIfTI / DICOM)'
+  });
+  for (const id of Object.keys(inputLabels)) {
+    const input = document.getElementById(id);
+    assert.equal(input.type, 'file');
+    assert.equal(input.dataset.neurodeskInput, 'image', `${id} is a shared scan input`);
+    assert.equal(input.multiple, true, `${id} accepts a DICOM series`);
+  }
+  const structuralHelp = $('#stepLoadSection .help-icon[aria-label="Structural T1 help"] .help-popover');
+  assert.match(text(structuralHelp), /Loading the image only displays it; processing starts when you click Run analysis\./);
+  // The hidden compatibility hooks behind the compact buttons.
+  for (const id of ['lesionFileInput', 'manualMaskFileInput']) {
+    const input = document.getElementById(id);
+    assert.ok(input.classList.contains('hidden'), `${id} is hidden`);
+    assert.equal(input.getAttribute('aria-hidden'), 'true');
+    assert.equal(input.tabIndex, -1, `${id} is out of the tab order`);
+    assert.equal(input.multiple, true);
+  }
+}
 
-assert.doesNotMatch(html, /id=["']pipelineSelect["']/,
-  'Pipeline selector must not be visible; Run analysis is input-driven');
-assert.doesNotMatch(html, /for=["']pipelineSelect["']/,
-  'Pipeline label must not be visible; internal pipeline selection is not a user-facing control');
+// ---- atlas selector ----
+{
+  assert.equal(text($('label[for="atlasSelect"]')), 'Atlas');
+  const options = Array.from($('#atlasSelect').options);
+  assert.deepEqual(
+    options.map(option => [option.value, option.textContent, option.selected]),
+    [['schaefer400', 'Schaefer 400 parcels', true], ['yeo7', 'Yeo 7 networks', false]]
+  );
+}
 
-// Helper copy should live behind compact inline help popovers, following the
-// QSMbly-style "i" affordance, rather than always-visible paragraphs.
-assert.match(html, /class=["'][^"']*\bhelp-icon\b[^"']*["']/,
-  'index.html must include compact help icons');
-assert.match(html, /class=["'][^"']*\bhelp-popover\b[^"']*["']/,
-  'index.html must include help popover content');
-assert.match(html, /Loading the image only displays it; processing starts when you click Run analysis/,
-  'structural input help must make explicit that loading does not start processing');
-assert.doesNotMatch(html, /<p\s+class=["']param-help["']/,
-  'always-visible param-help paragraphs should be replaced with popovers or status text');
-assert.doesNotMatch(html, /auto-promoted on file drop|auto-fires/i,
-  'UI copy must not imply processing starts on file load');
-assert.match(html, /Direct lesion overlap/,
-  'direct lesion result section must clearly label the lesion-overlap table');
-assert.match(html, /id=["']resultsSection["'][\s\S]*id=["']networkThresholdMinCluster["'][\s\S]*Direct lesion overlap/,
-  'min-cluster control must appear at the beginning of Results before following result tables');
-assert.match(html, /id=["']networkThresholdMinCluster["'][^>]*value=["']30["']/,
-  'min-cluster control must default to 30 voxels');
-assert.match(html, /Atlas labels listed here contain lesion voxels directly/,
-  'direct lesion help must explain that the first table is direct lesion overlap');
-assert.match(html, /Threshold connectivity map/,
-  'threshold panel must identify the second result source as a connectivity map');
-assert.match(html, /group-FC weighted t-map derived from the direct lesion-overlap profile/,
-  'threshold help must explain the connectivity-map source');
-assert.match(html, /Connectivity-map effects/,
-  'threshold results must clearly label the affected-network table');
-assert.match(html, /surviving the thresholded connectivity map/,
-  'affected-network help must explain that the second table comes from the thresholded map');
-assert.match(html, /Functional associations from direct lesion overlap/,
-  'direct lesion functional profile section must clearly identify its source table');
-assert.match(html, /Functional associations from connectivity-map effects/,
-  'connectivity-map functional profile section must clearly identify its source table');
-assert.match(html, /Exploratory literature terms are available for selected atlas labels/,
-  'direct functional profile help must frame terms as exploratory literature associations');
-assert.match(html, /Atlas label drivers/,
-  'static functional profile tables must use atlas-label driver copy for the default Schaefer atlas');
-assert.match(html, /they are not clinical predictions/,
-  'functional profile help must avoid clinical prediction framing');
-assert.match(html, /Show subject atlas/,
-  'results actions must expose subject-space atlas QC');
+// ---- advanced workflow, in execution order ----
+{
+  const advanced = $('#advancedStageControls');
+  assert.equal(advanced.tagName, 'DETAILS', 'advanced controls are a collapsible section');
+  assert.equal(advanced.open, false, 'collapsed by default');
+  const workflow = advanced.querySelector('[aria-label="Advanced workflow order"]');
+  const steps = $$('#advancedStageControls [aria-label="Advanced workflow order"] > *')
+    .filter(element => !element.classList.contains('hidden'))
+    .map(element => element.id || element.getAttribute('aria-label') || element.querySelector('select, input').id);
+  assert.deepEqual(steps, [
+    'runBrainExtractionButton',
+    'prealignToMniButton',
+    'Lesion mask source choice',
+    'runRegistrationButton',
+    'registrationQcMode',
+    'checkAtlasAlignmentButton',
+    'registrationBlendValue',
+    'applyRegistrationToLesionButton',
+    'computeOverlapButton',
+    'computeNetworkMapButton'
+  ]);
+  assert.deepEqual(
+    Array.from(workflow.querySelectorAll(':scope > button')).map(text),
+    [
+      '1 Brain extraction',
+      '2 Pre-align T1',
+      '4 MNI registration (SynthMorph)',
+      '5 Check atlas alignment',
+      '6 Warp lesion → atlas grid',
+      '7 Compute atlas overlap',
+      '8 Compute network map'
+    ]
+  );
+  const choice = workflow.querySelector('[aria-label="Lesion mask source choice"]');
+  assert.equal(text(choice.querySelector('.param-label')), '3 Lesion mask');
+  assert.deepEqual(
+    Array.from(choice.querySelectorAll('button')).map(button => [button.id, text(button)]),
+    [
+      ['runLesionSegmentationButton', 'Auto seed mask'],
+      ['runDeepIslesSegmentationButton', 'DeepISLES DWI/ADC seed'],
+      ['startManualMaskButton', 'Manual mask'],
+      ['uploadManualMaskButton', 'Upload mask']
+    ]
+  );
+  // Compact label; the grid detail lives in the title.
+  const prealign = $('#prealignToMniButton');
+  assert.equal(prealign.children.length, 0, 'no superscript or unit markup inside the label');
+  assert.equal(prealign.title, 'Pre-align T1 to the MNI160 1 mm grid');
+  assert.equal($$('.advanced-workflow .btn-primary').length, 0, 'per-stage buttons are secondary');
+  assert.equal(advanced.textContent.includes('Researcher mode'), false, 'no researcher-mode upload');
+}
 
-// Module loader points at the new orchestrator, not the old SCT app.
-assert.match(html, /<script\s[^>]*src=["']js\/lnm-app\.js["'][^>]*type=["']module["']/,
-  '<script type=module src="js/lnm-app.js"> must be present');
-assert.doesNotMatch(html, /spinalcordtoolbox-app\.js/,
-  'old spinalcordtoolbox-app.js script tag must be gone');
-assert.match(html, /<script\s[^>]*src=["']coi-serviceworker\.js["']/,
-  'COI service worker script must remain loaded for same-origin mask downloads');
-assert.doesNotMatch(html, /googletagmanager\.com\/gtag\/js|gtag\(['"]config['"]/,
-  'app source must leave analytics bootstrap to the shared hosting shell');
-assert.doesNotMatch(html, /Cloudflare Web Analytics|cloudflareinsights\.com|data-cf-beacon|4312648587884e6b984b7bc189db840e/,
-  'the old Cloudflare analytics provider must be absent');
-assert.match(html, /The Neurodesk hosting layer records page views only, unless your browser sends Do Not Track or Global Privacy Control\.[\s\S]*?It does not send custom events/,
-  'privacy copy must disclose page-view-only analytics and privacy controls');
-assert.match(serviceWorker, /__lnm_downloads/,
-  'service worker must serve staged mask downloads from the same-origin route');
-assert.match(serviceWorker, /lnm-mask-downloads-v1/,
-  'service worker must use the mask download Cache Storage bucket');
-assert.match(serviceWorker, /request\.method\s*!==\s*["']GET["'][\s\S]*event\.respondWith\(fetch\(request\)\)/,
-  'service worker must let localhost download POSTs reach the dev server');
-assert.match(serviceWorker, /if\s*\(!response\)\s*return\s+fetch\(request\)/,
-  'service worker must let uncached localhost download GETs reach the dev server');
-assert.doesNotMatch(serviceWorker, /window\.crossOriginIsolated\s*!==\s*false\s*\|\|\s*!coi\.shouldRegister\(\)/,
-  'service worker registration must not be skipped when server COOP/COEP already makes the page isolated');
-assert.match(runScript, /dev-server\.mjs/,
-  'web/run.sh must delegate to the shared scripts/dev-server.mjs');
-assert.match(runScript, /--staging-route \/__lnm_downloads\//,
-  'web/run.sh must enable the staged mask download route on the shared dev server');
-assert.match(packageJson.scripts.dev, /--staging-route \/__lnm_downloads\//,
-  'the dev script must enable the staged mask download route on the shared dev server');
-assert.match(devServer, /x-lnm-stage-only/i,
-  'local dev server must support staged HTTP mask downloads without direct-writing to ~/Downloads');
-assert.match(devServer, /Content-Disposition/,
-  'local dev server must serve staged mask downloads as attachments');
-assert.match(devServer, /await rename\(temporary, savedPath\)/,
-  'local dev server must keep atomic direct-save support for non-staged local downloads');
+// ---- registration QC controls ----
+{
+  assert.equal(text($('label[for="registrationQcMode"]')), 'Registration QC view');
+  assert.deepEqual(
+    Array.from($('#registrationQcMode').options).map(option => [option.value, option.textContent, option.selected]),
+    [
+      ['mni', 'MNI space', true],
+      ['patient', 'Patient space', false],
+      ['checkerboard', 'Checkerboard', false],
+      ['displacement', 'Displacement', false]
+    ]
+  );
+  assert.equal(text($('label[for="registrationBlendValue"]')), 'Patient/MNI blend');
+  const blend = $('#registrationBlendValue');
+  assert.deepEqual([blend.type, blend.min, blend.max, blend.step, blend.value], ['range', '0', '1', '0.05', '0.5']);
+  assert.equal($('#checkAtlasAlignmentButton').disabled, true, 'alignment QC needs a registration first');
+}
 
-// NiiVue canvas must remain (we reuse it for structural + lesion overlay).
-assert.match(html, /id=["']gl1["']/, '#gl1 NiiVue canvas must be retained');
+// ---- results ----
+{
+  const results = $('#resultsSection');
+  assert.ok(results.classList.contains('collapsed'), 'results start collapsed');
+  assert.deepEqual(
+    Array.from(results.querySelectorAll('h3')).map(text),
+    [
+      'Direct lesion overlap',
+      'Functional associations from direct lesion overlap',
+      'Threshold connectivity map',
+      'Connectivity-map effects',
+      'Functional associations from connectivity-map effects'
+    ]
+  );
+  const minCluster = $('#networkThresholdMinCluster');
+  assert.equal(text($('label[for="networkThresholdMinCluster"]')), 'Min cluster size (voxels)');
+  assert.deepEqual([minCluster.type, minCluster.value, minCluster.min], ['number', '30', '0']);
+  assert.ok(precedes(minCluster, results.querySelector('h3')), 'min cluster size leads the results it filters');
 
-console.log(`index.html OK: ${requiredIds.length} required IDs, no SCT branding, lnm-app.js wired.`);
+  const columns = id => Array.from(document.getElementById(id).querySelectorAll('thead th')).map(text);
+  assert.deepEqual(columns('networkOverlapTable'), ['Atlas label', 'Voxels', 'Lesion %']);
+  assert.deepEqual(columns('affectedNetworkTable'), ['Atlas label', 'Voxels', 'Map %']);
+  assert.deepEqual(columns('directFunctionProfileTable'), ['Term', 'Score', 'Atlas label drivers']);
+  assert.deepEqual(columns('mapFunctionProfileTable'), ['Term', 'Score', 'Atlas label drivers']);
+  for (const id of ['outsideAtlasWarning', 'directFunctionProfileResults', 'affectedNetworkResults', 'mapFunctionProfileResults']) {
+    assert.ok(document.getElementById(id).classList.contains('hidden'), `${id} is hidden until there is a result`);
+  }
+
+  // Top-percent thresholding only.
+  assert.equal(text($('label[for="networkThresholdValue"]')), 'Top voxels');
+  assert.equal($('#networkThresholdValue').type, 'range');
+  assert.equal($('#networkThresholdMode'), null, 'no absolute-vs-percent mode selector');
+  assert.equal(/absolute/i.test(text($('#thresholdControls'))), false, 'no absolute t-stat threshold copy');
+  const symmetric = $('#networkThresholdSymmetric');
+  assert.equal(symmetric.type, 'checkbox');
+  assert.equal(text(symmetric.closest('label')), 'Use |t| magnitude');
+
+  const helpFor = name => text($(`#resultsSection .help-icon[aria-label="${name}"] .help-popover`));
+  assert.match(helpFor('Direct lesion overlap help'), /^Atlas labels listed here contain lesion voxels directly\./);
+  assert.match(helpFor('Threshold connectivity map help'), /group-FC weighted t-map derived from the direct lesion-overlap profile/);
+  assert.match(helpFor('Connectivity-map effects help'), /surviving the thresholded connectivity map/);
+  for (const name of ['Direct functional associations help', 'Connectivity-map functional associations help']) {
+    assert.equal(
+      helpFor(name),
+      'Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.'
+    );
+  }
+
+  assert.deepEqual(
+    $$('#resultsSection .results-actions button').map(button => [button.id, text(button), button.disabled]),
+    [
+      ['downloadOverlapCsv', 'Download overlap CSV', true],
+      ['downloadNetworkMapButton', 'Download network map', true],
+      ['downloadThresholdedNetworkMapButton', 'Download thresholded mask', true],
+      ['showSubjectAtlasButton', 'Show subject atlas', true],
+      ['downloadSubjectAtlasButton', 'Download subject atlas', true],
+      ['clearResultsButton', 'Start over', false]
+    ]
+  );
+  assert.deepEqual(
+    ids($$('#resultsSection details button')),
+    ['downloadBrainMaskButton', 'downloadLesionMaskButton'],
+    'intermediate downloads sit in their own disclosure'
+  );
+}
+
+// ---- help lives behind compact popovers ----
+{
+  const helpIcons = $$('.help-icon');
+  assert.ok(helpIcons.length >= 8);
+  for (const icon of helpIcons) {
+    assert.ok(icon.getAttribute('aria-label'), 'every help icon is labelled');
+    const popover = icon.querySelector('.help-popover');
+    assert.equal(popover?.getAttribute('role'), 'tooltip', `${icon.getAttribute('aria-label')} opens a tooltip`);
+  }
+  assert.equal($('p.param-help'), null, 'no always-visible helper paragraphs');
+  const sidebarCopy = text($('.app-sidebar'));
+  assert.equal(/auto-promoted on file drop|auto-fires/i.test(sidebarCopy), false, 'copy never implies processing starts on load');
+}
+
+// ---- viewer ----
+{
+  assert.equal($('#gl1').tagName, 'CANVAS');
+  assert.deepEqual(
+    $$('.view-tabs .view-tab').map(tab => [tab.dataset.view, text(tab)]),
+    [['multiplanar', '3-Plane'], ['axial', 'Axial'], ['coronal', 'Coronal'], ['sagittal', 'Sagittal'], ['render', '3D']]
+  );
+  assert.deepEqual(
+    $$('[aria-label="Viewer layers"] label').map(element => [element.querySelector('input').id, text(element)]),
+    [
+      ['layerToggleT1', 'T1'],
+      ['layerToggleBrainMask', 'Brain mask'],
+      ['layerToggleLesionMask', 'Lesion mask'],
+      ['layerToggleThresholdMap', 'Threshold map'],
+      ['layerToggleAtlasQc', 'Atlas']
+    ]
+  );
+}
+
+// ---- mask review toolbar, grouped by workflow ----
+{
+  const toolbar = $('#maskDrawingToolbar');
+  assert.equal(toolbar.getAttribute('aria-label'), 'Lesion mask drawing tools');
+  assert.ok(toolbar.classList.contains('hidden'), 'hidden until a mask is under review');
+  const groups = Array.from(toolbar.querySelectorAll(':scope > [role="group"]'));
+  const controls = group => Array.from(group.querySelectorAll('button, input, select')).map(element => element.id);
+  assert.deepEqual(
+    groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
+    [
+      ['Draw lesion mask', ['maskPaintButton', 'maskEraseButton', 'maskEraseClusterButton', 'maskBrushSize', 'maskShapeSelect', 'maskFilledToggle']],
+      ['Mask edit actions', ['maskUndoButton', 'maskBlankButton', 'maskSmoothButton']],
+      ['Mask slice interpolation', ['maskInterpolateAxis', 'maskInterpolateButton', 'maskInterpolateHelp']],
+      ['Mask review actions', ['confirmLesionMaskButton', 'uploadReviewMaskButton', 'downloadEditedLesionMaskButton']]
+    ]
+  );
+  assert.deepEqual(
+    Array.from(toolbar.querySelectorAll('button:not(.help-icon)')).map(button => [label(button), button.title]),
+    [
+      ['Paint', 'Paint lesion voxels'],
+      ['Erase', 'Erase lesion voxels'],
+      ['Erase cluster', 'Erase the connected lesion cluster under the cursor'],
+      ['Undo', 'Undo mask edit'],
+      ['Blank', 'Start a blank mask'],
+      ['Smooth', 'Smooth the 3D mask volume'],
+      ['Interp', 'Interpolate mask between boundary slices'],
+      ['Confirm mask', 'Confirm edited lesion mask and continue analysis'],
+      ['Upload', 'Upload a native-space lesion mask into this review'],
+      ['Download', 'Download the edited native-space mask']
+    ]
+  );
+  const fileActions = toolbar.querySelector('[aria-label="Mask file actions"]');
+  assert.deepEqual(ids(Array.from(fileActions.querySelectorAll('button'))), ['uploadReviewMaskButton', 'downloadEditedLesionMaskButton']);
+  assert.deepEqual(
+    Array.from($('#maskInterpolateAxis').options).map(option => [option.value, option.textContent]),
+    [['0', 'Axial'], ['1', 'Coronal'], ['2', 'Sagittal']]
+  );
+  const interpolateHelp = $('#maskInterpolateHelp');
+  assert.equal(interpolateHelp.getAttribute('aria-label'), 'Interpolate mask help');
+  assert.match(text(interpolateHelp.querySelector('.help-popover')), /first and last non-empty slices.*NiiVue mask interpolation/);
+
+  // The approval banner is a prompt only: it carries no buttons of its own.
+  const banner = $('#maskApprovalBanner');
+  assert.equal(banner.getAttribute('role'), 'status');
+  assert.ok(banner.classList.contains('hidden'));
+  assert.equal(text(banner), 'Mask approval required Review the lesion mask before analysis continues.');
+  assert.equal(banner.querySelector('button'), null, 'confirm and download stay in the toolbar');
+}
+
+// ---- logs: two collapsed consoles below the viewer ----
+{
+  const consoles = $$('.app-main .console-stack > [data-disclosure]');
+  assert.deepEqual(ids(consoles), ['analysisLog', 'technicalLogDetails']);
+  assert.ok(precedes($('.viewer-canvas-wrapper'), consoles[0]), 'consoles sit below the viewer');
+  const expected = [
+    ['Analysis log', 'consoleOutput', ['copyConsole', 'clearConsole']],
+    ['Technical log', 'technicalConsoleOutput', ['copyTechnicalConsole', 'clearTechnicalConsole']]
+  ];
+  consoles.forEach((element, i) => {
+    const [title, outputId, actionIds] = expected[i];
+    assert.ok(element.classList.contains('console-container'));
+    assert.ok(element.classList.contains('collapsed'), `${title} is collapsed by default`);
+    const toggle = element.querySelector('.console-header [data-disclosure-toggle]');
+    assert.equal(text(toggle), title);
+    assert.equal(element.querySelector('[data-disclosure-panel]').id, outputId);
+    const actions = Array.from(element.querySelectorAll('.console-header .console-actions button'));
+    assert.deepEqual(ids(actions), actionIds, 'Copy and Clear live in the console header');
+    assert.deepEqual(actions.map(text), ['Copy', 'Clear']);
+  });
+  assert.equal($('.app-sidebar .console-output'), null, 'no second log in the sidebar');
+}
+
+// ---- About and Privacy copy ----
+{
+  assert.match(
+    text($('#aboutModal')),
+    /Background execution is possible if this site is added under "Always keep these sites active" in your browser settings\./
+  );
+  assert.match(
+    text($('#privacyModal')),
+    /The Neurodesk hosting layer records page views only, unless your browser sends Do Not Track or Global Privacy Control\..*It does not send custom events/
+  );
+  for (const id of ['aboutModal', 'privacyModal', 'citationsModal']) {
+    assert.ok(document.getElementById(id).classList.contains('modal-overlay'));
+  }
+}
+
+// ---- scripts the page loads ----
+{
+  const scripts = $$('script[src]').map(script => [script.getAttribute('src'), script.type]);
+  assert.deepEqual(scripts.at(-1), ['js/lnm-app.js', 'module'], 'the orchestrator is the last script and an ES module');
+  assert.ok(scripts.some(([src]) => src === 'coi-serviceworker.js'), 'the isolation service worker stays loaded');
+  assert.ok(scripts.some(([src]) => src === 'nifti-js/index.js'));
+  const importMap = JSON.parse($('script[type="importmap"]').textContent);
+  assert.equal(importMap.imports['@neurodesk/webapp-components'], './vendor/webapp-components/src/index.js');
+}
+
+// =========================================================================
+// Part 2: the real app bound to this document
+// =========================================================================
+
+for (const name of [
+  'window', 'document', 'HTMLElement', 'customElements', 'Event', 'CustomEvent', 'Node',
+  'MutationObserver', 'getComputedStyle', 'requestAnimationFrame', 'cancelAnimationFrame'
+]) {
+  globalThis[name] = dom.window[name];
+}
+
+const viewerCalls = [];
+globalThis.niivue = {
+  SHOW_RENDER: { NEVER: 0, AUTO: 2 },
+  Niivue: class {
+    constructor() {
+      this.opts = {};
+      this.volumes = [];
+      this.sliceTypeMultiplanar = 3;
+    }
+    async attachTo(id) {
+      viewerCalls.push(['attachTo', id]);
+    }
+    setMultiplanarPadPixels() {}
+    setSliceType() {}
+    setInterpolation(value) {
+      viewerCalls.push(['setInterpolation', value]);
+    }
+    setCrosshairWidth(value) {
+      viewerCalls.push(['setCrosshairWidth', value]);
+    }
+    drawScene() {}
+    addColormap() {}
+  }
+};
+const fetched = [];
+globalThis.fetch = async url => {
+  const target = String(url);
+  fetched.push(target);
+  if (target.endsWith('examples.json')) {
+    return { ok: true, json: async () => JSON.parse(fs.readFileSync(path.join(ROOT, 'examples.json'), 'utf8')) };
+  }
+  if (target === 'build-info.json') {
+    return { ok: true, json: async () => ({ sha: 'abc1234', branch: 'feature/x', dirty: false }) };
+  }
+  return { ok: false, status: 404, json: async () => ({}) };
+};
+globalThis.Worker = class {
+  postMessage() {}
+  terminate() {}
+};
+
+const { LesionNetworkMappingApp } = await import(path.join(ROOT, 'web/js/lnm-app.js'));
+const { VERSION } = await import(path.join(ROOT, 'web/js/app/config.js'));
+const app = new LesionNetworkMappingApp();
+await app.init();
+await new Promise(resolve => setTimeout(resolve, 0));
+
+const click = id => document.getElementById(id).dispatchEvent(new dom.window.Event('click', { bubbles: true }));
+const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.window.Event(type, { bubbles: true }));
+
+// ---- boot ----
+{
+  assert.deepEqual(viewerCalls[0], ['attachTo', 'gl1'], 'NiiVue attaches to the #gl1 canvas');
+  assert.equal(text($('#statusText')), 'Ready');
+  assert.match(text($('#consoleOutput')), /Ready\.$/, 'the analysis log reports readiness');
+  assert.equal(text($('#appVersion')), `v${VERSION} (abc1234, feature/x)`, 'header version label');
+  assert.equal(text($('#aboutAppVersion')), `v${VERSION} (abc1234, feature/x)`, 'About version label');
+  const selector = $('#stepLoadSection .section-content').firstElementChild;
+  assert.equal(selector.tagName.toLowerCase(), 'nd-example-selector', 'the example selector leads the input section');
+  assert.equal($('#atlasSelect').value, 'schaefer400');
+  assert.equal($('#atlasSelect').options.length, 2, 'atlas options are not duplicated at boot');
+  assert.equal(app.registrationQcMode, 'mni', 'QC view starts from the selected option');
+  assert.equal(text($('#registrationBlendLabel')), '50% patient');
+  const slider = $('#networkThresholdValue');
+  assert.deepEqual([slider.min, slider.max, slider.step], ['0', '10', '0.1'], 'top-percent slider spans 0 to 10 % in 0.1 % steps');
+  assert.equal(text($('#networkThresholdValueLabel')), '5%');
+  // Nothing is loaded: every output control is disabled and no layer is on.
+  for (const id of [
+    'downloadOverlapCsv', 'downloadBrainMaskButton', 'downloadLesionMaskButton', 'downloadNetworkMapButton',
+    'downloadThresholdedNetworkMapButton', 'showSubjectAtlasButton', 'downloadSubjectAtlasButton',
+    'checkAtlasAlignmentButton', 'downloadEditedLesionMaskButton'
+  ]) {
+    assert.equal(document.getElementById(id).disabled, true, `${id} is disabled before any result exists`);
+  }
+  for (const id of ['layerToggleT1', 'layerToggleBrainMask', 'layerToggleLesionMask', 'layerToggleThresholdMap', 'layerToggleAtlasQc']) {
+    const toggle = document.getElementById(id);
+    assert.deepEqual([toggle.disabled, toggle.checked], [true, false], `${id} is off while its layer is unavailable`);
+  }
+}
+
+// ---- every button runs its action ----
+{
+  const calls = [];
+  const spy = (target, method, result = Promise.resolve()) => {
+    target[method] = (...args) => {
+      calls.push([method, ...args]);
+      return result;
+    };
+  };
+  for (const method of [
+    'runFullPipeline', 'runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'runDeepIslesSegmentation',
+    'startLesionMaskReview', 'runRegistration', 'showRegistrationQc', 'applyRegistrationToLesion', 'runAtlasOverlap',
+    'runFcNetworkMap', 'exportCsv', 'downloadNetworkMap', 'downloadThresholdedNetworkMap', 'showSubjectSpaceAtlas',
+    'downloadSubjectSpaceAtlas', 'clearResults', 'downloadBrainMask', 'downloadLesionMask', 'confirmLesionDrawing',
+    'downloadEditedLesionMask', 'setMaskDrawingTool', 'handleRegistrationBlendInput', 'applyNetworkThreshold'
+  ]) {
+    assert.equal(typeof app[method], 'function', `app.${method} exists`);
+    spy(app, method);
+  }
+  spy(app.maskDrawingController, 'undo', true);
+  spy(app.maskDrawingController, 'smoothDrawing', true);
+  spy(app.maskDrawingController, 'interpolateAcrossSlices', true);
+  spy(app.viewerController, 'setViewType', undefined);
+
+  const expectClick = async (id, expected) => {
+    calls.length = 0;
+    const element = document.getElementById(id);
+    const wasDisabled = element.disabled;
+    element.disabled = false;
+    click(id);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    element.disabled = wasDisabled;
+    assert.deepEqual(calls, expected, `#${id}`);
+  };
+
+  await expectClick('runFullPipelineButton', [['runFullPipeline']]);
+  await expectClick('runBrainExtractionButton', [['runBrainExtraction']]);
+  await expectClick('prealignToMniButton', [['prealignToMni160']]);
+  app.autoLesionSeedFile = { name: 'seed.nii' };
+  await expectClick('runLesionSegmentationButton', [
+    ['runLesionSegmentation'],
+    ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
+  ]);
+  // A DWI-space DeepISLES seed never opens T1 mask review on its own.
+  app.deepIslesSeedCompatibleWithNativeT1 = false;
+  await expectClick('runDeepIslesSegmentationButton', [['runDeepIslesSegmentation']]);
+  app.deepIslesSeedCompatibleWithNativeT1 = true;
+  await expectClick('runDeepIslesSegmentationButton', [
+    ['runDeepIslesSegmentation'],
+    ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
+  ]);
+  await expectClick('startManualMaskButton', [['startLesionMaskReview', { blank: true }]]);
+  await expectClick('runRegistrationButton', [['runRegistration']]);
+  await expectClick('checkAtlasAlignmentButton', [['showRegistrationQc']]);
+  await expectClick('applyRegistrationToLesionButton', [['applyRegistrationToLesion']]);
+  await expectClick('computeOverlapButton', [['runAtlasOverlap']]);
+  await expectClick('computeNetworkMapButton', [['runFcNetworkMap']]);
+  await expectClick('downloadOverlapCsv', [['exportCsv']]);
+  await expectClick('downloadNetworkMapButton', [['downloadNetworkMap']]);
+  await expectClick('downloadThresholdedNetworkMapButton', [['downloadThresholdedNetworkMap']]);
+  await expectClick('showSubjectAtlasButton', [['showSubjectSpaceAtlas']]);
+  await expectClick('downloadSubjectAtlasButton', [['downloadSubjectSpaceAtlas']]);
+  await expectClick('clearResultsButton', [['clearResults', { full: false }]]);
+  await expectClick('downloadBrainMaskButton', [['downloadBrainMask']]);
+  await expectClick('downloadLesionMaskButton', [['downloadLesionMask']]);
+
+  // Mask review toolbar.
+  await expectClick('maskPaintButton', [['setMaskDrawingTool', 'paint']]);
+  await expectClick('maskEraseButton', [['setMaskDrawingTool', 'erase']]);
+  await expectClick('maskEraseClusterButton', [['setMaskDrawingTool', 'eraseCluster']]);
+  await expectClick('maskUndoButton', [['undo']]);
+  await expectClick('maskBlankButton', [['startLesionMaskReview', { blank: true }]]);
+  await expectClick('maskSmoothButton', [['smoothDrawing']]);
+  $('#maskInterpolateAxis').value = '2';
+  await expectClick('maskInterpolateButton', [['interpolateAcrossSlices', 2]]);
+  await expectClick('confirmLesionMaskButton', [['confirmLesionDrawing', { resumePipeline: true }]]);
+  await expectClick('downloadEditedLesionMaskButton', [['downloadEditedLesionMask']]);
+
+  // Both upload buttons open the one hidden mask picker.
+  let pickerOpened = 0;
+  $('#manualMaskFileInput').click = () => {
+    pickerOpened++;
+  };
+  click('uploadManualMaskButton');
+  click('uploadReviewMaskButton');
+  assert.equal(pickerOpened, 2, 'Upload mask and the review Upload open the mask picker');
+
+  // Registration QC view and blend.
+  calls.length = 0;
+  $('#registrationQcMode').value = 'checkerboard';
+  fire('registrationQcMode', 'change');
+  assert.equal(app.registrationQcMode, 'checkerboard');
+  assert.deepEqual(calls, [], 'changing the view before registration only records the choice');
+  app.hasRegistrationDisplacement = true;
+  $('#registrationQcMode').value = 'displacement';
+  fire('registrationQcMode', 'change');
+  assert.deepEqual(calls, [['showRegistrationQc']], 'after registration the new view is rendered');
+  app.hasRegistrationDisplacement = false;
+  calls.length = 0;
+  fire('registrationBlendValue', 'input');
+  assert.deepEqual(calls, [['handleRegistrationBlendInput']]);
+
+  // Threshold controls recompute only once a network map exists.
+  calls.length = 0;
+  $('#networkThresholdValue').value = '2.5';
+  fire('networkThresholdValue', 'input');
+  assert.equal(text($('#networkThresholdValueLabel')), '2.5%', 'the slider label follows the slider');
+  assert.deepEqual(calls, [], 'no map yet, nothing to threshold');
+  app.networkMapData = new Float32Array(1);
+  fire('networkThresholdValue', 'input');
+  fire('networkThresholdSymmetric', 'change');
+  fire('networkThresholdMinCluster', 'input');
+  assert.deepEqual(calls, [['applyNetworkThreshold'], ['applyNetworkThreshold'], ['applyNetworkThreshold']]);
+  app.networkMapData = null;
+
+  // Viewer tabs; the 3D tab is refused while a mask is under review.
+  calls.length = 0;
+  $('.view-tab[data-view="axial"]').dispatchEvent(new dom.window.Event('click'));
+  assert.deepEqual(calls, [['setViewType', 'axial']]);
+  assert.deepEqual($$('.view-tab.active').map(tab => tab.dataset.view), ['axial']);
+  app.maskReviewActive = true;
+  $('.view-tab[data-view="render"]').dispatchEvent(new dom.window.Event('click'));
+  assert.deepEqual($$('.view-tab.active').map(tab => tab.dataset.view), ['multiplanar'], '3D is replaced by 3-plane during review');
+  app.maskReviewActive = false;
+
+  // Viewer checkboxes.
+  viewerCalls.length = 0;
+  $('#crosshairToggle').checked = false;
+  fire('crosshairToggle', 'change');
+  $('#interpolation').checked = true;
+  fire('interpolation', 'change');
+  assert.deepEqual(viewerCalls, [['setCrosshairWidth', 0], ['setInterpolation', false]]);
+}
+
+// ---- atlas selection ----
+{
+  app.overlapResult = { stale: true };
+  $('#downloadOverlapCsv').disabled = false;
+  $('#atlasSelect').value = 'yeo7';
+  fire('atlasSelect', 'change');
+  assert.equal(app.selectedAtlasOptionId, 'yeo7');
+  assert.equal(app.getAtlasOption().displayName, 'Yeo 7 networks');
+  assert.equal(app.overlapResult, null, 'results from the previous atlas are dropped');
+  assert.equal($('#downloadOverlapCsv').disabled, true);
+  assert.match(text($('#consoleOutput')), /Atlas set to Yeo 7 networks\.$/);
+  $('#atlasSelect').value = 'schaefer400';
+  fire('atlasSelect', 'change');
+  assert.equal(app.selectedAtlasOptionId, 'schaefer400');
+}
+
+// ---- file inputs reach their loaders ----
+{
+  const handled = [];
+  app.structuralFileIO.handleFiles = files => handled.push(['structural', files]);
+  app.lesionFileIO.handleFiles = files => handled.push(['lesion', files]);
+  fire('structuralFileInput', 'change');
+  fire('lesionFileInput', 'change');
+  assert.deepEqual(handled.map(([kind]) => kind), ['structural', 'lesion']);
+  assert.equal(handled[0][1], $('#structuralFileInput').files);
+}
+
+// ---- dialogs ----
+{
+  for (const [button, modal, close] of [
+    ['aboutButton', 'aboutModal', 'closeAbout'],
+    ['privacyButton', 'privacyModal', 'closePrivacy'],
+    ['citationsButton', 'citationsModal', 'closeCitations']
+  ]) {
+    const overlay = document.getElementById(modal);
+    assert.equal(overlay.classList.contains('active'), false);
+    click(button);
+    assert.equal(overlay.classList.contains('active'), true, `#${button} opens #${modal}`);
+    click(close);
+    assert.equal(overlay.classList.contains('active'), false, `#${close} closes it`);
+  }
+}
+
+// ---- consoles: Copy and Clear ----
+{
+  app.updateOutput('Starting MNI registration (SynthMorph deformable)...');
+  assert.match(text($('#consoleOutput')), /MNI registration started\.$/, 'the analysis log shows the condensed message');
+  assert.match(
+    text($('#technicalConsoleOutput')),
+    /Starting MNI registration \(SynthMorph deformable\)\.\.\.$/,
+    'the technical log keeps the full message'
+  );
+  click('clearConsole');
+  assert.equal(text($('#consoleOutput')), '');
+  assert.notEqual(text($('#technicalConsoleOutput')), '', 'clearing one log leaves the other');
+  click('clearTechnicalConsole');
+  assert.equal(text($('#technicalConsoleOutput')), '');
+}
+
+// ---- cancel ----
+{
+  let cancelled = 0;
+  app.executor.cancel = () => {
+    cancelled++;
+  };
+  app._pipelineRunning = true;
+  $('#statusText').classList.add('error');
+  click('cancelButton');
+  assert.equal(cancelled, 1, 'the footer cancel stops the worker');
+  assert.equal(app._pipelineRunning, false);
+  assert.equal(text($('#statusText')), 'Cancelled');
+  assert.equal($('#statusText').classList.contains('error'), false);
+}
+
+// ---- worker failures land in the status footer ----
+{
+  app.failStatus('Error: synthetic failure');
+  assert.equal(text($('#statusText')), 'Error: synthetic failure');
+  assert.ok($('#statusText').classList.contains('error'));
+}
+
+// =========================================================================
+// Part 3: policy lints on the page source
+// =========================================================================
+// These are properties of the file itself, not of app behaviour.
+
+// Policy: CDN scripts are pinned to an exact version.
+for (const script of $$('script[src^="http"]')) {
+  assert.match(
+    script.getAttribute('src'),
+    /^https:\/\/unpkg\.com\/@niivue\/niivue@\d+\.\d+\.\d+\/dist\/niivue\.umd\.js$/,
+    `external script ${script.getAttribute('src')} must be the version-pinned NiiVue build`
+  );
+}
+
+// Policy: analytics belong to the shared hosting shell, never to the app.
+for (const script of $$('script')) {
+  const source = `${script.getAttribute('src') || ''}\n${script.textContent}`;
+  assert.doesNotMatch(
+    source,
+    /googletagmanager\.com|gtag\(|cloudflareinsights\.com|data-cf-beacon/,
+    'the page must not bootstrap analytics itself'
+  );
+}
+assert.equal($('[data-cf-beacon]'), null, 'no Cloudflare beacon attribute');
+
+// Policy: the app hardcodes no colour scheme and draws no dialog element.
+assert.equal($('dialog'), null, 'dialogs come from the shared shell, not <dialog> markup');
+
+console.log('index.html OK: document structure, live control wiring and page policies checked with jsdom.');
+process.exit(0);

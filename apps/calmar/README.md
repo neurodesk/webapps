@@ -380,7 +380,11 @@ after a re-review showed every blocker was softer than it sounded.
   network voxel counts for ds004884; the bridge test asserts max-abs
   diff stays under 25 voxels per network. Catches a silent shift in
   the resample / bridge / overlap chain that doesn't crash but moves
-  the answer.
+  the answer. (Since replaced: the JSON is now an independent reference
+  written by `tests/fixtures/ds004884-mini/reference_yeo_overlap.py`
+  with nibabel + nilearn + numpy, the test uses the atlas file's own
+  affine instead of a hardcoded x-flipped one, and counts must match
+  exactly.)
 
 **Phase 25 complete (v0.13.2)** — manifest checksum verifier.
 
