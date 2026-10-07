@@ -174,24 +174,37 @@ function filterLine(data, offset, stride, length, gain) {
 function interpolateAxis(input, dims, axis, coordinates) {
   const outputDims = dims.map((size, currentAxis) => currentAxis === axis ? coordinates.length : size);
   const output = new Float64Array(outputDims[0] * outputDims[1] * outputDims[2]);
+  const axisStride = axis === 0 ? 1 : axis === 1 ? dims[0] : dims[0] * dims[1];
+  const weights = new Float64Array(coordinates.length * 4);
+  const sources = new Int32Array(coordinates.length * 4);
+  const inRange = new Uint8Array(coordinates.length);
+  for (let index = 0; index < coordinates.length; index += 1) {
+    const coordinate = coordinates[index];
+    if (coordinate < 0 || coordinate > dims[axis] - 1) continue;
+    inRange[index] = 1;
+    const start = Math.floor(coordinate) - 1;
+    cubicWeights(coordinate, weights.subarray(index * 4, index * 4 + 4));
+    for (let tap = 0; tap < 4; tap += 1) {
+      sources[index * 4 + tap] = mirror(start + tap, dims[axis]) * axisStride;
+    }
+  }
+  const strideX = axis === 0 ? 0 : 1;
+  const strideY = axis === 1 ? 0 : dims[0];
+  const strideZ = axis === 2 ? 0 : dims[0] * dims[1];
+  let target = 0;
   for (let z = 0; z < outputDims[2]; z += 1) {
     for (let y = 0; y < outputDims[1]; y += 1) {
-      for (let x = 0; x < outputDims[0]; x += 1) {
-        const targetCoordinates = [x, y, z];
-        const coordinate = coordinates[targetCoordinates[axis]];
-        if (coordinate < 0 || coordinate > dims[axis] - 1) continue;
-        const start = Math.floor(coordinate) - 1;
-        const weights = cubicWeights(coordinate);
+      const rowBase = y * strideY + z * strideZ;
+      const rowIndex = axis === 2 ? z : y;
+      for (let x = 0; x < outputDims[0]; x += 1, target += 1) {
+        const index = axis === 0 ? x : rowIndex;
+        if (!inRange[index]) continue;
+        const base = rowBase + x * strideX;
+        const tapOffset = index * 4;
         let value = 0;
         for (let tap = 0; tap < 4; tap += 1) {
-          const sourceCoordinates = [...targetCoordinates];
-          sourceCoordinates[axis] = mirror(start + tap, dims[axis]);
-          const source = sourceCoordinates[0] + dims[0] * (
-            sourceCoordinates[1] + dims[1] * sourceCoordinates[2]
-          );
-          value += input[source] * weights[tap];
+          value += input[base + sources[tapOffset + tap]] * weights[tapOffset + tap];
         }
-        const target = x + outputDims[0] * (y + outputDims[1] * z);
         output[target] = value;
       }
     }
