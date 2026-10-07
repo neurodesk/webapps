@@ -165,3 +165,19 @@ test('the catalog workflow computes without write access and publishes without r
   assert.ok(publish.steps.some((step) => step.run?.includes('git push --quiet "$remote" HEAD:main')));
   assert.equal(publish.steps.at(-1).run, 'gh workflow run deploy-pages.yml --ref main');
 });
+
+test('the scripts release jobs run without installing dependencies import only Node built-ins', async () => {
+  const pending = ['../scripts/dispatch-native-release.mjs', '../scripts/apply-catalog-update.mjs'].map((path) => new URL(path, import.meta.url));
+  const seen = new Set();
+  while (pending.length) {
+    const url = pending.pop();
+    if (seen.has(url.href)) continue;
+    seen.add(url.href);
+    const source = await readFile(url, 'utf8');
+    for (const [, specifier] of source.matchAll(/^import [^'"]*['"]([^'"]+)['"]/gm)) {
+      if (specifier.startsWith('.')) pending.push(new URL(specifier, url));
+      else assert.match(specifier, /^node:/, `${url.pathname} imports ${specifier}, which the release job does not install`);
+    }
+  }
+  assert.ok(seen.size >= 4);
+});

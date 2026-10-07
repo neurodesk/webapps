@@ -2,7 +2,10 @@
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { repoRoot } from './apps-registry.mjs';
+import { fileURLToPath } from 'node:url';
+
+// The release job runs this without installing dependencies, so only Node built-ins may be imported.
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 // Rust tools with their own workflow, dispatched by hand: their release jobs attach to a draft or
 // prerelease, and SynthSR and SynthSEG follow their Cargo.toml version rather than the app's.
