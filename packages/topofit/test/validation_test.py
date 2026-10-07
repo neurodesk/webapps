@@ -42,6 +42,8 @@ class ActivationTest(unittest.TestCase):
                     report["qc"]["browser_sha256"] = activation.sha256(path)
             (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}, "mode": mode}))
             report["provenance"]["sha256"] = activation.sha256(browser / "topofit_manifest.json")
+            evidence = {name: activation.sha256(browser / name) for name in (*activation.BASELINE_OUTPUTS, "topofit_manifest.json")}
+            report["repeatability"] = [{"run": "repeat", "byteIdentical": True, "outputSetSha256": activation.canonical_sha256(evidence)}]
             self.write_report(mode, report)
 
     def write_report(self, mode, report):
@@ -102,6 +104,11 @@ class ActivationTest(unittest.TestCase):
         browser = self.assets / "validation" / "browser"
         (browser / "controlled" / "topofit_manifest.json").write_bytes((browser / "end-to-end" / "topofit_manifest.json").read_bytes())
         with self.assertRaisesRegex(AssertionError, "controlled evidence manifest is not the one the report checked"):
+            self.validate()
+
+    def test_rejects_a_repeat_that_does_not_match_the_evidence(self):
+        self.change_end_to_end(lambda report: report["repeatability"][0].update(outputSetSha256="0" * 64))
+        with self.assertRaisesRegex(AssertionError, "end-to-end repeat repeat does not match the evidence"):
             self.validate()
 
     def test_rejects_a_single_run_without_a_repeat(self):

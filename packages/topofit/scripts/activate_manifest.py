@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "validation"))
-from compare import BASELINE_OUTPUTS, INPUTS
+from compare import BASELINE_OUTPUTS, INPUTS, canonical_sha256
 from thresholds import SURFACES, THRESHOLDS, within_thresholds
 
 
@@ -40,7 +40,11 @@ def validate_evidence(assets, release, conversion_sha):
             assert result["baseline"]["outputSha256"][name] == sha256(browser / name), f"{mode} evidence for {name} does not match"
             assert sha256(browser / name) == INPUTS[mode]["outputSha256"][name], f"{mode} {name} differs from the pinned baseline"
         assert result["repeatability"], f"{mode} has no repeat run"
-        assert all(run["byteIdentical"] for run in result["repeatability"])
+        # A repeat passes only with bytes equal to the primary run, so its output-set hash
+        # must equal the hash of the evidence files themselves.
+        evidence_set = canonical_sha256({name: sha256(browser / name) for name in (*BASELINE_OUTPUTS, "topofit_manifest.json")})
+        for run in result["repeatability"]:
+            assert run["byteIdentical"] is True and run["outputSetSha256"] == evidence_set, f"{mode} repeat {run['run']} does not match the evidence"
 
 
 def verify_public_release(records, directory, repository, revision, path):
