@@ -1,0 +1,17 @@
+Brain extraction for the Neurodesk brain extraction web app and command line.
+
+BET: Smith SM. Fast robust automated brain extraction. Human Brain Mapping
+17(3):143-155, 2002. https://doi.org/10.1002/hbm.10062
+The BET implementation is qsm-core (QSM.rs) by Ashley Stewart, MIT license:
+https://github.com/astewartau/QSM.rs
+wasm/bet.wasm is compiled from it by bet-wasm/ and scripts/build-bet-wasm.sh.
+
+SynthStrip: Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M. SynthStrip:
+skull-stripping for any brain image. NeuroImage 260:119474, 2022.
+https://doi.org/10.1016/j.neuroimage.2022.119474
+Model and processing through @neurodesk/synthstrip (Apache-2.0); see its NOTICE.
+
+MindGrab, used by the web app: @brainchop/mindgrab,
+https://github.com/neuroneural/brainchop
+
+JavaScript adapters and packaging by Neurodesk, Apache-2.0.
