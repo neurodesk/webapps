@@ -8,7 +8,6 @@
 
 ### Patch Changes
 
-- @neurodesk/synthsr@0.6.20261007
 - @neurodesk/synthstrip@0.1.3
 - @neurodesk/synthsr@0.6.20261007
 - @neurodesk/synthstrip@0.1.2
