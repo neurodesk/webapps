@@ -12,8 +12,8 @@ and run report stay as the model produced them.
 
 1. SynthStrip (`@neurodesk/synthstrip`, the shared browser port) finds the brain. Tick
    *Image is already skull-stripped* in the advanced settings to use nonzero voxels instead.
-2. `src/pipeline.js` repeats nnU-Net's inference for FLAMeS without reorienting: permute the
-   axes as the plans' `transpose_forward` does, crop to the brain, z-score inside it, resample to
+2. `packages/white-matter-lesions/src/pipeline.js` (`@neurodesk/white-matter-lesions`)
+   repeats nnU-Net's inference for FLAMeS without reorienting: permute the axes as the plans' `transpose_forward` does, crop to the brain, z-score inside it, resample to
    1 × 0.9 × 0.9 mm with nnU-Net's cubic, per-slice-when-anisotropic resampling, run
    112 × 128 × 160 patches at half overlap with Gaussian weighting, resample the lesion
    probability back and threshold at 0.5.
@@ -43,6 +43,11 @@ With five folds the port reproduces `nnUNetv2_predict` (Dice 0.710 against 0.714
 against 0.648 on MS). As shipped, with SynthStrip including CSF, the app scores Dice 0.726 on WMH
 and 0.608 on MS with one fold, and 0.733 and 0.647 with the ensemble. Mirroring at test time is
 not implemented.
+
+## Command line
+
+The `flames` command runs this pipeline offline on the CPU and writes the same three files. See
+[`packages/white-matter-lesions/README.md`](../../packages/white-matter-lesions/README.md#command-line).
 
 ## Development
 

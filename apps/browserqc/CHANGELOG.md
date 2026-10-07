@@ -1,5 +1,11 @@
 # browserqc
 
+## 1.4.20261006
+
+### Minor Changes
+
+- Update BrowserQC to upstream 30f385f. Use an independent brain mask with the default MindMap tissue fractions or three label models, update the QC engine and viewer, and add background-noise viewing, manual ratings and the native Python launcher. Preserve shared examples, local DICOM import and cancellable processing. Register BrowserQC in the weekly upstream pull-request workflow.
+
 ## 1.3.20261004
 
 ### Patch Changes

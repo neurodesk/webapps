@@ -1,14 +1,16 @@
-import { labelLesions, lesionTable } from "./pipeline.js";
+import { labelLesions, lesionTable } from "@neurodesk/white-matter-lesions";
+import { outputNames } from "@neurodesk/white-matter-lesions/results";
 
 export function lesionSummary({ count, totalMl }) {
   return `${count} ${count === 1 ? "lesion" : "lesions"} · ${totalMl.toFixed(2)} ml`;
 }
 
-export function segmentationOutputs(stem, { mask, probability, tsv, summary }) {
+export function segmentationOutputs(inputName, { mask, probability, tsv, summary }) {
+  const names = outputNames(inputName);
   return {
-    mask: { description: `Lesion mask · ${lesionSummary(summary)}`, editable: true, file: new File([mask], `${stem}_lesions.nii`) },
-    probability: { description: "Lesion probability", file: new File([probability], `${stem}_lesion_probability.nii`) },
-    table: { description: "Lesion table (TSV)", viewable: false, file: new File([tsv], `${stem}_lesions.tsv`, { type: "text/tab-separated-values" }) },
+    mask: { description: `Lesion mask · ${lesionSummary(summary)}`, editable: true, file: new File([mask], names.mask) },
+    probability: { description: "Lesion probability", file: new File([probability], names.probability) },
+    table: { description: "Lesion table (TSV)", viewable: false, file: new File([tsv], names.table, { type: "text/tab-separated-values" }) },
   };
 }
 

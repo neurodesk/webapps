@@ -289,7 +289,12 @@ test('normal arrows follow mid-surfaces with adjustable spacing and length', asy
   await page.locator('#showNormalArrows').check();
   await expect(page.locator('#normalArrowStatus')).toContainText('1 outward arrow');
   await page.locator('.nd-volume-toggle').filter({ hasText: 'Right mid-surface' }).getByRole('button', { name: 'View', exact: true }).click();
-  await expect(page.locator('#normalArrowStatus')).toContainText('1 outward arrow');
+  for (const label of ['Left mid-surface', 'Right mid-surface']) {
+    const visible = page.locator('.nd-volume-toggle').filter({ hasText: label }).getByRole('checkbox');
+    await expect(visible).toBeChecked();
+    await expect(visible).toBeEnabled();
+  }
+  await expect(page.locator('#normalArrowStatus')).toHaveText('2 outward arrows · 12 mm spacing · 6 mm length');
   await page.getByRole('radio', { name: 'Multi view', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#normalArrowSettings').scrollIntoViewIfNeeded();

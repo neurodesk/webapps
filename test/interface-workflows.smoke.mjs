@@ -36,6 +36,20 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('browserqc', async page => {
+    await page.locator('#modelPick').selectOption('mindmap')
+    await page.locator('#processingSection > summary').tap()
+    await page.locator('#processingSection > summary').tap()
+    await expect(page.locator('#modelPick')).toHaveValue('mindmap')
+    await page.locator('#ratingSection > summary').tap()
+    await page.locator('#rateComments').fill('Review later')
+    await page.locator('#ratingSection > summary').tap()
+    await page.locator('#ratingSection > summary').tap()
+    await expect(page.locator('#rateComments')).toHaveValue('Review later')
+    await expect(page.locator('#rateSave')).toBeDisabled()
+    await page.locator('#viewPick').selectOption('background')
+    await expect(page.locator('#viewPick')).toHaveValue('background')
+  })
   await check('nesvor', async page => {
     await page.locator('#imageInput').setInputFiles(nifti('stack.nii'));
     await expect(page.locator('#fileInfo')).toContainText('1 stack loaded');

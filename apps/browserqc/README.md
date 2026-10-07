@@ -1,51 +1,60 @@
 # BrowserQC
 
-Automated MRI quality control, **entirely in your browser** — no upload, no server. Drag in a NIfTI image (or a folder of DICOM files) and BrowserQC runs on its own: it segments the brain, shows the parcellation over your scan, and reports MRIQC-style image-quality metrics.
+BrowserQC computes MRIQC-style image-quality metrics locally in the browser.
+Choose a pinned example, a NIfTI scan or a DICOM folder, then select
+**Run quality control**. Images and reports remain on your machine.
 
-Live demo: `https://webapps.neurodesk.org/browserqc/`.
+The MindGrab WebAssembly models compute an independent brain mask and either
+tissue fractions or labels. They return results on the displayed input grid.
+Niimath computes CJV, CNR, SNR, FBER, WM2MAX, EFC and tissue composition using
+the tissue maps, brain mask and pinned MNI air template. These measurements are
+an MRIQC-style approximation and are not MRIQC normative values.
 
-## How it works
-
-Everything runs in WebAssembly + WebGPU/WebGL2 on your machine, so your images are never shared with the cloud. When an image loads (on startup and on every drag-and-drop):
-
-1. **Conform** — the scan is resampled to the model's canonical 256³ 1 mm space ([@niivue/nv-ext-image-processing](https://www.npmjs.com/package/@niivue/nv-ext-image-processing)).
-2. **Segment** — a [brainchop](https://github.com/neuroneural/brainchop) deep-learning model (`model16chan18cls`, "Subcortical + GWM") running in [TensorFlow.js](https://www.tensorflow.org/js) parcellates the brain into 17 gray/white-matter and subcortical regions.
-3. **Back-project** — the labels are resliced onto the native input grid and drawn as a colour overlay on the original scan (adjust with the **Opacity** slider).
-4. **Quality control** — [niimath](https://github.com/rordenlab/niimath) computes MRIQC-style anatomical image-quality metrics from the scan and its segmentation, shown in the side panel:
-   - **CJV** — coefficient of joint variation (noise + intensity non-uniformity); lower is better
-   - **CNR** — contrast-to-noise (no-air variant); higher is better
-   - **SNR** — signal-to-noise, averaged over tissues; higher is better
-   - **WM2MAX** — white-matter median ÷ P99.95 intensity
-   - **EFC** — entropy focus criterion (ghosting / blur); lower is better
-   - **Tissue composition** — CSF / GM / WM as % of intracranial volume and absolute volume
-
-Rendering uses [NiiVue](https://niivue.com/); DICOM import uses [dcm2niix](https://github.com/rordenlab/dcm2niix).
-
-> The QC is a hard-segmentation MRIQC variant: with a masked background it omits the air-noise term, so CNR is a *relative* contrast measure, not comparable to MRIQC normative values. See [runtime-support niimath](../../packages/runtime-support/src/niimath/) / niimath's `--qc`.
+NiiVue renders the scan. DICOM import uses the shared dcm2niix converter.
+The viewer requires a WebGPU-capable desktop browser. Segmentation can use
+WebGPU, WebGL2 or a threaded CPU on a cross-origin isolated page.
 
 ## Develop
 
-```bash
-npm install
-npm run dev      # vite dev server (http://localhost:8091)
-npm run build    # typecheck + production build to dist/
-npm run preview  # serve the production build
-npm run test:e2e # build, then a headless-Chromium smoke of the full auto-run path
-```
+From the repository root, run `pnpm install`, then `pnpm --filter browserqc dev`.
+Run `pnpm --filter browserqc build` for a production build and
+`pnpm --filter browserqc test` for TypeScript and unit checks.
+`pnpm --filter browserqc test:e2e` builds and runs the browser smoke test.
+The full pipeline tests need a WebGPU-capable browser; the CPU automation tests
+also need cross-origin isolation.
 
-Requires a browser with WebGPU (recent desktop Chrome, Edge, or Safari).
+The example images and air template are pinned in `examples.json` and the
+repository's offline asset inventories. Model runtimes are staged from the
+pinned `@brainchop/mindgrab` dependency during dev and build.
 
-The sample scan and brainchop model are fetched from the immutable Hugging Face
-revision recorded in `../../models/browserqc.manifest.json`; they are not embedded
-in the application bundle.
+## Upstream integration
+
+Integrated from niivue/browserqc commit `30f385f498299ceb580ead4709e55ac695b7c55c`.
+The default is `mindmap-pve`, with CSF, GM and WM fraction maps and a separate
+MindGrab brain mask. The `16chan18cls`, `mindmap` and `mindsnap` label models remain
+available. QC uses niimath's public `qc()` method on the displayed image's native
+grid. Background noise display, right-drag contrast or pan, and MRIQC-compatible
+manual ratings are available. Ratings require ten seconds of inspection and an
+edit before download.
+
+The Neurodesk integration keeps its shared shell, local DICOM conversion,
+explicit Run action, pinned examples and cancellable automation. Automated PVE
+runs return `csf`, `gm`, `wm`, `mask` and `qc`; label runs return `labels`, `mask`
+and `qc`. Choose `model: "16chan18cls"` to retain the previous label output.
+
+## Native pipeline
+
+Run `python3 cli/qc.py --in T1.nii.gz --out qc.json`. Install the matching
+`brainchop-mindgrab`, `brainchop-<model>` and `niimath` executables on PATH or set
+`BROWSERQC_BIN`. The CLI requires niimath with `--qc --pve --mask` support and
+uses the same model catalog as the app. The default air template is downloaded
+from the pinned Neurodesk dataset and SHA-256 checked, including cache hits.
+Set `BROWSERQC_CACHE` to choose its external cache directory, or use `--template`
+for an explicit alternative air template. Temporary processing data uses `TMPDIR`.
+
+The CLI tests verify argument wiring with stub executables. They do not establish
+numerical parity with the browser or native pipelines.
 
 ## License
 
-**BSD-2-Clause.** niimath is shared through [packages/runtime-support](../../packages/runtime-support/src/niimath/) because its `--qc` metrics and `-conform` are newer than the current npm release. The app can switch back to npm once niimath republishes. The brainchop tfjs inference engine is vendored under [src/brainchop/](src/brainchop/).
-
-## Links
-
-This live demo already provides several of the core measures used by MRIQC (with more to come).
-
- - [MRIQC documentation](https://mriqc.readthedocs.io/en/latest/)
- - Esteban et al. (2017) MRIQC: Advancing the automatic prediction of image quality in MRI from unseen sites. PLoS One [PMID: 28945803](https://pubmed.ncbi.nlm.nih.gov/28945803/)
+BSD-2-Clause. See [LICENSE](LICENSE).

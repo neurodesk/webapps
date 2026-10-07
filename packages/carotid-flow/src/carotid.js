@@ -1,8 +1,9 @@
 // Carotid detection and flow curves from one phase-contrast neck slice. Two methods, chosen by
 // the data. Unsigned phase frames (a magnitude-weighted speed image, as the requesting lab's
 // scanner exports) go through a port of the lab's standalone_automatic_carotid_flow.m.
-// Signed velocity goes through detectFromVelocity. The variability method follows the updated
-// lab script, retaining the stored voxel grid and affine-based anatomical directions.
+// Velocity, signed or raw phase decoded with the VENC, goes through detectFromVelocity. The
+// variability method follows the updated lab script, retaining the stored voxel grid and
+// affine-based anatomical directions.
 // Pure: typed arrays in, typed arrays and numbers out, so Node tests it without a browser.
 import { connectedComponents3D, keepLargestComponent } from '@neurodesk/webapp-components/volume';
 
@@ -25,6 +26,13 @@ export const DEFAULTS = Object.freeze({
 // Raw 12-bit phase, as Siemens stores it, spans ±4096 (or 0–4095); velocities in cm/s stay
 // well inside ±1000 for any VENC used on the neck.
 const RAW_PHASE = 1000;
+
+// How each raw representation maps to ±VENC: velocity = (stored - zero) × VENC / full.
+// Rescaled Siemens phase (dcm2niix) is ±4096; unrescaled phase is 0–4095 with zero at 2048.
+const RAW_ENCODINGS = Object.freeze({
+  'raw-signed': { range: '±4096', zero: 0, full: 4096 },
+  'raw-offset': { range: '0–4095', zero: 2048, full: 2048 },
+});
 
 // MATLAB strel('disk', 3): a 7 × 7 octagon, not the Euclidean disk.
 const DISK3 = ['0011100', '0111110', '1111111', '1111111', '1111111', '0111110', '0011100'];
@@ -131,26 +139,62 @@ export function isSignedPhase(phase) {
   return low < -0.05 * Math.max(high, 1e-9);
 }
 
-/**
- * cm/s per stored unit. Velocity-scaled phase (Philips and GE through dcm2niix) is already cm/s;
- * raw ±4096 phase needs the VENC, which maps ±4096 to ±VENC.
- */
-export function velocityScale(phase, venc) {
+/** Raw phase rather than velocity already scaled to cm/s. */
+export function isRawPhase(phase) {
   let largest = 0;
   for (const value of phase) largest = Math.max(largest, Math.abs(value));
-  if (largest <= RAW_PHASE) return 1;
-  if (!(venc > 0)) throw new Error('This phase series is stored as raw phase (±4096). Enter the velocity encoding (VENC) under Advanced settings.');
-  return venc / 4096;
+  return largest > RAW_PHASE;
 }
 
 /**
- * Find both carotids and their curves: the velocity method for signed phase, the port of the
- * lab's script for an unsigned speed image.
+ * Non-negative raw phase sits at 2048 wherever nothing moves, so its median lies mid-range. A
+ * speed image is zero in the background and near zero in static tissue, so its median does not.
+ */
+function isCentredOn2048(phase) {
+  let largest = 0;
+  for (const value of phase) largest = Math.max(largest, value);
+  if (largest > 4095) return false;
+  const median = percentile(phase, 50);
+  return median > 1536 && median < 2560;
+}
+
+/**
+ * How the phase frames store velocity: `velocity` (signed cm/s), `raw-signed` (±4096),
+ * `raw-offset` (0–4095, zero at 2048), or `speed` (the unsigned speed image the port expects).
+ */
+export function phaseEncoding(phase) {
+  if (isSignedPhase(phase)) return isRawPhase(phase) ? 'raw-signed' : 'velocity';
+  if (isRawPhase(phase) && isCentredOn2048(phase)) return 'raw-offset';
+  return 'speed';
+}
+
+/** Phase in cm/s. Raw phase needs the VENC, which maps the stored extremes to ±VENC. */
+export function phaseVelocity(phase, venc) {
+  const raw = RAW_ENCODINGS[phaseEncoding(phase)];
+  if (!raw) return phase;
+  if (!(venc > 0)) throw new Error(`This phase series is stored as raw phase (${raw.range}). Enter the velocity encoding (VENC) under Advanced settings.`);
+  const scale = venc / raw.full;
+  return phase.map(value => (value - raw.zero) * scale);
+}
+
+/**
+ * Find both carotids and their curves: the velocity method for velocity, ±4096 phase, or 0–4095
+ * phase given a VENC; otherwise the port of the lab's script, as for an unsigned speed image.
+ * A VENC beside an unsigned series above 1000 that is not centred on 2048 is refused, since it
+ * cannot then be told apart from a speed image.
  * @param {{ amplitude: ArrayLike<number>, phase: ArrayLike<number>, nx: number, ny: number,
  *           phases: number, affine: number[][], voxelSize?: number[] }} series
  */
 export function detectCarotids(series, options = {}) {
-  return isSignedPhase(series.phase) ? detectFromVelocity(series, options) : detectFromVariability(series, options);
+  const encoding = phaseEncoding(series.phase);
+  if (encoding === 'velocity' || encoding === 'raw-signed') return detectFromVelocity(series, options);
+  // Without a VENC an unsigned series keeps the lab's path, whatever its median.
+  if (encoding === 'raw-offset' && options.venc === undefined) return detectFromVariability(series, options);
+  if (encoding === 'raw-offset') return detectFromVelocity(series, options);
+  if (options.venc !== undefined && isRawPhase(series.phase)) {
+    throw new Error('A VENC was given, but this phase series is unsigned and not centred on 2048, so it cannot be told apart from a speed image. Leave the VENC empty to analyse it as a speed image.');
+  }
+  return detectFromVariability(series, options);
 }
 
 function extentOf(values) {
@@ -388,8 +432,7 @@ export function detectFromVelocity(series, options = {}) {
   const settings = { ...DEFAULTS, ...options };
   const { amplitude, nx, ny, phases, affine } = series;
   const voxels = nx * ny;
-  const scale = velocityScale(series.phase, settings.venc);
-  const velocity = scale === 1 ? series.phase : series.phase.map(value => value * scale);
+  const velocity = phaseVelocity(series.phase, settings.venc);
   const meanAmplitude = meanFrames(amplitude, voxels, phases);
   const { head, inHead } = headMask(meanAmplitude, nx, ny, settings.headPercentile);
   const meanVelocity = meanFrames(velocity, voxels, phases);

@@ -531,7 +531,9 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/embed/DicompareController.js",
-        "kind": "runtime"
+        "path": "apps/dicompare/public/embed/DicompareController.js",
+        "contentType": "text/javascript",
+        "kind": "built-runtime"
       },
       {
         "url": "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js",
@@ -543,7 +545,9 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",
-        "kind": "schema"
+        "path": "apps/dicompare/public/schemas/QSM_Consensus_Guidelines_v1.0.json",
+        "contentType": "application/json",
+        "kind": "built-schema"
       },
       {
         "url": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",
@@ -841,7 +845,9 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/embed/DicompareController.js",
-        "kind": "runtime"
+        "path": "apps/dicompare/public/embed/DicompareController.js",
+        "contentType": "text/javascript",
+        "kind": "built-runtime"
       },
       {
         "url": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
@@ -853,7 +859,9 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json",
-        "kind": "schema"
+        "path": "apps/dicompare/public/schemas/SeedSeg_Prostate_T1w_v1.0.json",
+        "contentType": "application/json",
+        "kind": "built-schema"
       },
       {
         "url": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",
@@ -1049,15 +1057,21 @@
       },
       {
         "url": "https://dicompare.neurodesk.org/embed/DicompareController.js",
-        "kind": "runtime"
+        "path": "apps/dicompare/public/embed/DicompareController.js",
+        "contentType": "text/javascript",
+        "kind": "built-runtime"
       },
       {
         "url": "https://dicompare.neurodesk.org/embed/dicompare-worker.js",
-        "kind": "runtime"
+        "path": "apps/dicompare/public/embed/dicompare-worker.js",
+        "contentType": "text/javascript",
+        "kind": "built-runtime"
       },
       {
         "url": "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",
-        "kind": "schema"
+        "path": "apps/dicompare/public/schemas/QSM_Consensus_Guidelines_v1.0.json",
+        "contentType": "application/json",
+        "kind": "built-schema"
       },
       {
         "url": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/attrs-23.2.0-py3-none-any.whl",

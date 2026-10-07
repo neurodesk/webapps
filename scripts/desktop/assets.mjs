@@ -21,6 +21,8 @@ await mkdir(cache, { recursive: true });
 
 async function acquire(source) {
   const url = canonicalUrl(source.url);
+  // Assembled from this checkout, never fetched.
+  if (source.path) return url;
   if (tasks.has(url)) return tasks.get(url);
   const task = (async () => {
     const expected = previous.assets[url]?.sha256 || source.sha256;
@@ -98,6 +100,10 @@ for (const [id, entries] of Object.entries(sources.apps)) {
     }));
   }
   apps[id].sort();
+  const locked = [...(previous.apps[id] || [])].sort();
+  if (!refresh && JSON.stringify(locked) !== JSON.stringify(apps[id])) {
+    failures.push({ app: id, error: 'Locked asset list differs from sources; run with --refresh' });
+  }
   console.log(`${id}: ${apps[id].length}/${entries.length} source assets`);
 }
 const lock = { schemaVersion: 1, assets: Object.fromEntries(Object.entries(assets).sort(([a], [b]) => a.localeCompare(b))), apps };

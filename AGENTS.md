@@ -103,6 +103,14 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
   every archive must pass `validation/cli-check.mjs`. Only presets in the pipeline's `MODELS` are accepted or
   installed; add `synth-1mm` there only together with its own parity report.
 
+## white-matter-lesions
+
+- The pipeline, output writer and model pins live in `packages/white-matter-lesions`, shared by the
+  worker and the `flames` command (`bin/flames.js`, `src/node.js`); change outputs there so both stay
+  identical. Its `model.manifest.json` must equal `models/white-matter-lesions.manifest.json` (tested).
+  Every `flames` archive must pass `validation/cli-check.mjs`: mask Dice >= 0.998 against the worker path
+  on ONNX Runtime Web (`validation/web-reference.mjs`).
+
 ## nesvor and the compute server
 
 - `apps/nesvor` is the first app whose method runs outside the browser: NeSVoR needs CUDA, so the
@@ -164,6 +172,11 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
 - The Standalone bar action belongs to the shell and renders `registry/standalone.json`; an app
   cannot replace it with its own dialog. Every registered app needs an entry there or the
   catalog check fails.
+- The `disconnectome` command line is `packages/nii2tvx/bin/disconnectome.js`. It shares the
+  row id, file name and grid refusal with the app through `@neurodesk/nii2tvx/disconnectome`, and
+  ships a copy of `models/disconnectome.manifest.json` that its tests require to be identical;
+  `repoint_manifest.sh` writes both. Its release check compares each example's table with the
+  committed native goldens in `exes/nii2tvx/test`.
 - Examples are declared once, in `apps/disconnectome/examples.json`, which the shared
   `nd-example-selector` downloads and checksums. Re-pinning the dataset changes every URL, so
   after `repoint_manifest.sh` run `apps/disconnectome/scripts/sync-examples.mjs` and then
@@ -176,6 +189,7 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
 - The example is PCMCalculator's MIT test data. Its right carotid must stay within 10 % of PCMCalculator's 225 ml/min (`CAROTID_FLOW_OPEN_EXAMPLE`), and the e2e and offline workflow tests pin 231 and 211 ml/min.
 - Left and right are the patient's, from the affine. The MATLAB script called the image-left vessel left, which on the scanner's radiological grid is the patient's right; do not "fix" the app back to the script.
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
+- The detection, series reading and output naming live in `packages/carotid-flow`, which the app and the `carotid-flow` command line both import. Change the outputs there, not in the app, so the command line keeps writing the app's downloads byte for byte. `validation/pcmcalculator.json` holds the example's pins for both the open-example unit test and the command line's release check.
 
 ## easy-mp2rage
 
@@ -201,6 +215,22 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
 
 - Uses the registry `@niivue/niivue` with no patch. Everything the old rc.11 patch provided is upstream API as of `1.0.0-rc.14` ([niivue/mono#160](https://github.com/niivue/mono/issues/160)); see `docs/architecture/zarro-niivue-streaming-integration.md` for the mapping. Do not reintroduce `patchedDependencies` or reach into NiiVue internals; ask upstream for an API instead.
 - `src/cursor_zoom.ts` stays until NiiVue exports its wheel-zoom anchor helpers or a configurable wheel step, because the Scroll zoom speed setting needs a continuous zoom. `src/nvslide_measurement.ts` stays until NVSlide scalar tiles land upstream (niivue/mono#159).
+
+## Upstream apps (qsmbly, seedseg, dicompare)
+
+- These apps are copies of Ashley Stewart's repositories, which stay the source. `source:` in
+  `registry/apps.yml` pins the upstream commit each copy last merged; `apps/<id>/upstream.json`
+  lists upstream paths not imported, path and identifier rewrites, and the adaptations to keep.
+- `.github/workflows/upstream-sync.yml` runs `scripts/sync-upstream.mjs` weekly and opens one PR per
+  app on `upstream/<id>`: a three-way merge from the pinned commit, monorepo date versions kept,
+  conflict markers left in a draft PR. Resolve conflicts on that branch; once a person has pushed
+  to it the workflow stops overwriting it until it is merged or deleted. It pushes with the
+  `neurodesk-webapps-upstream-sync` GitHub App so CI runs on its PRs ([setup](docs/architecture/upstream-sync.md)).
+- Upstream files the monorepo deleted (replaced by shared code) stay deleted; their upstream
+  changes are listed in the PR, not applied. Port anything relevant to the shared code by hand.
+- The standalone bundle serves the dicompare worker, controller and the QSM/SeedSeg schemas from
+  `apps/dicompare/public`, not from dicompare.neurodesk.org (`path` entries in
+  `registry/offline-assets.sources.json`).
 
 ## Native executables (exes/)
 

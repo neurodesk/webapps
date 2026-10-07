@@ -2,6 +2,7 @@ import examples from '../examples.json';
 import { createExampleSelector, bindInfoTooltips } from '@neurodesk/webapp-components/ui';
 import NiiVue, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import { register as registerFireants } from "@fireants/fireants";
+import { registeredFileName } from "@neurodesk/fireants/outputs";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import { createResultList, bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
@@ -382,7 +383,7 @@ async function register({
       progress({ message: next });
     }, signal);
     signal?.throwIfAborted();
-    output = new File([data.image], `${moving.name.replace(/\.nii(\.gz)?$/i, "")}_registered.nii.gz`);
+    output = new File([data.image], registeredFileName(moving.name));
     await viewers.resliced.loadVolumes([{ url: output, name: output.name }]);
     signal?.throwIfAborted();
     results.render({ registered: { description: "Registered moving image" } });

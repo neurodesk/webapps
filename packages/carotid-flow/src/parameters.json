@@ -1,0 +1,70 @@
+{
+  "candidatePercentile": {
+    "type": "number",
+    "description": "Unsigned-speed candidate percentile.",
+    "default": 99.9,
+    "minimum": 50.000001,
+    "maximum": 99.999999
+  },
+  "headPercentile": {
+    "type": "number",
+    "description": "Head threshold percentile.",
+    "default": 20,
+    "minimum": 1e-06,
+    "maximum": 99.999999
+  },
+  "venc": {
+    "type": "number",
+    "description": "Velocity encoding in cm/s; required for raw ±4096 phase; decodes raw 0–4095 phase.",
+    "minimum": 1e-06,
+    "maximum": 999.999999
+  },
+  "tiltLimit": {
+    "type": "number",
+    "description": "Tilt search limit in degrees; 0.5-degree steps.",
+    "default": 30,
+    "minimum": 0.5,
+    "maximum": 60,
+    "multipleOf": 0.5
+  },
+  "posterior": {
+    "type": "number",
+    "description": "Posterior fraction of head height.",
+    "default": 0.15,
+    "minimum": 0,
+    "maximum": 0.5,
+    "multipleOf": 0.01
+  },
+  "anterior": {
+    "type": "number",
+    "description": "Anterior fraction of head height.",
+    "default": 0.1,
+    "minimum": 0,
+    "maximum": 0.5,
+    "multipleOf": 0.01
+  },
+  "lateral": {
+    "type": "number",
+    "description": "Lateral fraction of head width.",
+    "default": 0.3,
+    "minimum": 0.01,
+    "maximum": 0.5,
+    "multipleOf": 0.01
+  },
+  "midline": {
+    "type": "number",
+    "description": "Midline exclusion fraction; must be below lateral.",
+    "default": 0.08,
+    "minimum": 0,
+    "maximum": 0.49,
+    "multipleOf": 0.01
+  },
+  "minSeparation": {
+    "type": "number",
+    "description": "Minimum pair separation in pixels.",
+    "default": 5,
+    "minimum": 1,
+    "maximum": 100,
+    "multipleOf": 1
+  }
+}
