@@ -140,9 +140,8 @@ export function cropAndNormalize(volume, outSize, center) {
     }
   }
   const values = output.slice();
-  values.sort();
-  const low = quantile(values, 0.001);
-  const high = quantile(values, 0.999);
+  const low = selectQuantile(values, 0.001);
+  const high = selectQuantile(values, 0.999);
   const span = high - low;
   for (let i = 0; i < output.length; i += 1) {
     output[i] = Math.max(0, Math.min(1, span > 0 ? (output[i] - low) / span : output[i] - low));
@@ -211,9 +210,53 @@ export function inverseAffine(matrix) {
   return augmented.map((row) => row.slice(4));
 }
 
-function quantile(sorted, probability) {
-  const position = (sorted.length - 1) * probability;
+// Reads the same two order statistics a full TypedArray sort would, partially sorting `values`
+// in place; `values` must be finite. Selection with < cannot tell -0 from +0, which the sort
+// places first, so a zero result is resolved by counting.
+export function selectQuantile(values, probability) {
+  const position = (values.length - 1) * probability;
   const lower = Math.floor(position);
   const fraction = position - lower;
-  return sorted[lower] + fraction * (sorted[Math.min(sorted.length - 1, lower + 1)] - sorted[lower]);
+  const upper = Math.min(values.length - 1, lower + 1);
+  select(values, lower, 0, values.length - 1);
+  select(values, upper, upper, values.length - 1);
+  let lowValue = values[lower];
+  let upperValue = values[upper];
+  if (lowValue === 0 || upperValue === 0) {
+    let negatives = 0;
+    let negativeZeros = 0;
+    for (let i = 0; i < values.length; i += 1) {
+      if (values[i] < 0) negatives += 1;
+      else if (values[i] === 0 && 1 / values[i] < 0) negativeZeros += 1;
+    }
+    if (lowValue === 0) lowValue = lower - negatives < negativeZeros ? -0 : 0;
+    if (upperValue === 0) upperValue = upper - negatives < negativeZeros ? -0 : 0;
+  }
+  return lowValue + fraction * (upperValue - lowValue);
+}
+
+function select(values, k, left, right) {
+  while (right > left) {
+    const middle = (left + right) >> 1;
+    const a = values[left];
+    const b = values[middle];
+    const c = values[right];
+    const pivot = a < b ? (b < c ? b : a < c ? c : a) : (a < c ? a : b < c ? c : b);
+    let i = left;
+    let j = right;
+    while (i <= j) {
+      while (values[i] < pivot) i += 1;
+      while (values[j] > pivot) j -= 1;
+      if (i <= j) {
+        const swap = values[i];
+        values[i] = values[j];
+        values[j] = swap;
+        i += 1;
+        j -= 1;
+      }
+    }
+    if (k <= j) right = j;
+    else if (k >= i) left = i;
+    else return;
+  }
 }

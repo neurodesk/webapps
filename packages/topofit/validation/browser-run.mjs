@@ -1,9 +1,9 @@
 import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 
-const [url, input, outputDirectory, conformOption] = process.argv.slice(2);
+const [url, input, outputDirectory, ...options] = process.argv.slice(2);
 if (!outputDirectory) {
-  throw new Error('Usage: browser-run.mjs URL input.nii.gz output-directory');
+  throw new Error('Usage: browser-run.mjs URL input.nii.gz output-directory [--no-conform] [--sequential]');
 }
 
 await mkdir(outputDirectory, { recursive: true });
@@ -14,6 +14,12 @@ const page = await browser.newPage({
 });
 const pageErrors = [];
 page.on('pageerror', (error) => pageErrors.push(error.message));
+// A fresh browser has an empty model cache, so this counts cold downloads per model.
+const modelRequests = {};
+page.on('request', (request) => {
+  const name = request.url().split('?')[0].split('/').pop();
+  if (name.endsWith('.onnx')) modelRequests[name] = (modelRequests[name] || 0) + 1;
+});
 await page.addInitScript(() => {
   const NativeWorker = window.Worker;
   window.Worker = class extends NativeWorker {
@@ -35,7 +41,8 @@ try {
   await page.locator('#imageInput').setInputFiles(input);
   await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60_000 });
   await page.locator('#advancedSettings > summary').click();
-  if (conformOption === '--no-conform') await page.locator('#conform').uncheck();
+  if (options.includes('--no-conform')) await page.locator('#conform').uncheck();
+  if (options.includes('--sequential')) await page.locator('#parallelHemispheres').uncheck();
   await page.locator('#thickness').selectOption('0');
   await page.screenshot({ path: `${outputDirectory}/desktop-input.png`, fullPage: true });
 
@@ -84,6 +91,9 @@ try {
       crossOriginIsolated: await page.evaluate(() => crossOriginIsolated),
       pageErrors,
       finalStatus: previousStatus,
+      hemispheres: options.includes('--sequential') ? 'sequential' : 'parallel',
+      modelRequests,
+      timings: await page.evaluate(() => window.topofitValidationResult.timings),
     }, null, 2)}\n`,
   );
   if (pageErrors.length) throw new Error(pageErrors.join('\n'));

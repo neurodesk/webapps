@@ -47,6 +47,10 @@
           "default": true,
           "description": "Conform to the model 1 mm RAS grid"
         },
+        "parallelHemispheres": {
+          "type": "boolean",
+          "description": "Reconstruct both hemispheres at once; uses about 3 GB more memory. Omit to keep the app's setting, which is off below 8 GB and after a crashed parallel run"
+        },
         "thickness": {
           "type": "integer",
           "default": 1,

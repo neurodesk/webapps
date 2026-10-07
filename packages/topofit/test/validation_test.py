@@ -9,6 +9,9 @@ PACKAGE = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("activation", PACKAGE / "scripts" / "activate_manifest.py")
 activation = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(activation)
+COMPARE_SPEC = importlib.util.spec_from_file_location("compare", PACKAGE / "validation" / "compare.py")
+compare = importlib.util.module_from_spec(COMPARE_SPEC)
+COMPARE_SPEC.loader.exec_module(compare)
 
 
 class ActivationTest(unittest.TestCase):
@@ -18,18 +21,29 @@ class ActivationTest(unittest.TestCase):
         self.assets = Path(self.work.name)
         self.reports = self.assets / "validation" / "reports"
         self.reports.mkdir(parents=True)
+        self.pins = {mode: {} for mode in ("controlled", "end-to-end")}
+        original = activation.INPUTS
+        activation.INPUTS = {mode: {**original[mode], "outputSha256": self.pins[mode]} for mode in original}
+        self.addCleanup(setattr, activation, "INPUTS", original)
         for mode in ("controlled", "end-to-end"):
             report = json.loads((PACKAGE / "validation" / "results" / f"ds000001-{mode}.json").read_text())
             self.release = report["release"]
             self.conversion = report["conversionReportSha256"]
             browser = self.assets / "validation" / "browser" / mode
             browser.mkdir(parents=True)
-            for name in (*activation.SURFACES, "topofit_qc.nii"):
+            for name in activation.BASELINE_OUTPUTS:
                 path = browser / name
                 path.write_bytes(f"{mode}/{name}".encode())
-                target = report["surfaces"][name] if name in report["surfaces"] else report["qc"]
-                target["browser_sha256"] = activation.sha256(path)
-            (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}}))
+                report["baseline"]["outputSha256"][name] = activation.sha256(path)
+                self.pins[mode][name] = activation.sha256(path)
+                if name in report["surfaces"]:
+                    report["surfaces"][name]["browser_sha256"] = activation.sha256(path)
+                elif name == "topofit_qc.nii":
+                    report["qc"]["browser_sha256"] = activation.sha256(path)
+            (browser / "topofit_manifest.json").write_text(json.dumps({"runtime": {"release": self.release}, "mode": mode}))
+            report["provenance"]["sha256"] = activation.sha256(browser / "topofit_manifest.json")
+            evidence = {name: activation.sha256(browser / name) for name in (*activation.BASELINE_OUTPUTS, "topofit_manifest.json")}
+            report["repeatability"] = [{"run": "repeat", "byteIdentical": True, "outputSetSha256": activation.canonical_sha256(evidence)}]
             self.write_report(mode, report)
 
     def write_report(self, mode, report):
@@ -66,10 +80,108 @@ class ActivationTest(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.validate()
 
+    def test_rejects_outputs_that_left_the_pinned_baseline(self):
+        self.change_end_to_end(lambda report: report["baseline"].update(byteIdentical=False, changed=["rh.pial"]))
+        with self.assertRaisesRegex(AssertionError, "end-to-end outputs differ from the pinned baseline"):
+            self.validate()
+
+    def test_rejects_mid_surface_evidence_that_does_not_match(self):
+        (self.assets / "validation" / "browser" / "end-to-end" / "lh.mid.white").write_bytes(b"moved")
+        with self.assertRaisesRegex(AssertionError, "end-to-end evidence for lh.mid.white does not match"):
+            self.validate()
+
+    def test_rejects_evidence_that_is_self_consistent_but_not_the_pinned_baseline(self):
+        browser = self.assets / "validation" / "browser" / "end-to-end"
+        (browser / "rh.pial").write_bytes(b"moved by 1e-6 mm")
+        self.change_end_to_end(lambda report: (
+            report["surfaces"]["rh.pial"].update(browser_sha256=activation.sha256(browser / "rh.pial")),
+            report["baseline"]["outputSha256"].update({"rh.pial": activation.sha256(browser / "rh.pial")}),
+        ))
+        with self.assertRaisesRegex(AssertionError, "end-to-end rh.pial differs from the pinned baseline"):
+            self.validate()
+
+    def test_rejects_an_evidence_manifest_from_another_run(self):
+        browser = self.assets / "validation" / "browser"
+        (browser / "controlled" / "topofit_manifest.json").write_bytes((browser / "end-to-end" / "topofit_manifest.json").read_bytes())
+        with self.assertRaisesRegex(AssertionError, "controlled evidence manifest is not the one the report checked"):
+            self.validate()
+
+    def test_rejects_a_repeat_that_does_not_match_the_evidence(self):
+        self.change_end_to_end(lambda report: report["repeatability"][0].update(outputSetSha256="0" * 64))
+        with self.assertRaisesRegex(AssertionError, "end-to-end repeat repeat does not match the evidence"):
+            self.validate()
+
+    def test_rejects_a_single_run_without_a_repeat(self):
+        self.change_end_to_end(lambda report: report.update(repeatability=[]))
+        with self.assertRaisesRegex(AssertionError, "end-to-end has no repeat run"):
+            self.validate()
+
     def test_rejects_nonfinite_distance(self):
         self.change_end_to_end(lambda report: report["surfaces"]["rh.pial"].update(mean_corresponding_distance_mm=float("nan")))
         with self.assertRaises(AssertionError):
             self.validate()
+
+
+class RepeatTest(unittest.TestCase):
+    def test_a_repeat_must_be_a_separate_run(self):
+        with tempfile.TemporaryDirectory() as work:
+            run = Path(work)
+            for name in compare.OUTPUTS:
+                (run / name).write_bytes(name.encode())
+            with self.assertRaisesRegex(AssertionError, "separate run"):
+                compare.compare_repeat(run, [run / "."])
+
+    def test_a_repeat_with_a_different_mid_surface_fails(self):
+        with tempfile.TemporaryDirectory() as work:
+            first, second = Path(work, "first"), Path(work, "second")
+            for run in (first, second):
+                run.mkdir()
+                for name in (*compare.BASELINE_OUTPUTS, "topofit_manifest.json"):
+                    (run / name).write_bytes(name.encode())
+            (second / "rh.mid.white").write_bytes(b"corrupted")
+            with self.assertRaisesRegex(AssertionError, "Repeat output differs: rh.mid.white"):
+                compare.compare_repeat(first, [second])
+
+
+class BaselineTest(unittest.TestCase):
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory()
+        self.addCleanup(self.work.cleanup)
+        self.browser = Path(self.work.name)
+        for name in compare.BASELINE_OUTPUTS:
+            (self.browser / name).write_bytes(name.encode())
+        self.pinned = {name: compare.sha256(self.browser / name) for name in compare.BASELINE_OUTPUTS}
+
+    def test_accepts_byte_identical_outputs(self):
+        self.assertEqual(compare.compare_baseline(self.browser, self.pinned)["changed"], [])
+
+    def test_names_each_output_that_moved(self):
+        (self.browser / "rh.pial").write_bytes(b"one float moved")
+        (self.browser / "lh.mid.white").write_bytes(b"derived surface moved")
+        result = compare.compare_baseline(self.browser, self.pinned)
+        self.assertFalse(result["byteIdentical"])
+        self.assertEqual(result["changed"], ["lh.mid.white", "rh.pial"])
+
+    def test_every_mode_pins_every_baseline_output_and_reference_surface(self):
+        for fixture in compare.INPUTS.values():
+            self.assertEqual(set(fixture["outputSha256"]), set(compare.BASELINE_OUTPUTS))
+            self.assertEqual(set(fixture["referenceGeometrySha256"]), set(compare.SURFACES))
+
+    def test_reference_geometry_ignores_creation_stamp(self):
+        import nibabel as nib
+        import numpy as np
+
+        vertices = np.arange(12, dtype=np.float64).reshape(4, 3)
+        faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
+        first = self.browser / "first"
+        second = self.browser / "second"
+        nib.freesurfer.write_geometry(first, vertices, faces, create_stamp="created by topofit on Mon")
+        nib.freesurfer.write_geometry(second, vertices, faces, create_stamp="created by topofit on Tue")
+        self.assertNotEqual(compare.sha256(first), compare.sha256(second))
+        self.assertEqual(compare.geometry_sha256(first), compare.geometry_sha256(second))
+        vertices[3, 2] = np.nextafter(np.float32(11), np.float32(12))
+        nib.freesurfer.write_geometry(second, vertices, faces, create_stamp="created by topofit on Tue")
+        self.assertNotEqual(compare.geometry_sha256(first), compare.geometry_sha256(second))
 
 
 if __name__ == "__main__":

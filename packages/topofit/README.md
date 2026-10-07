@@ -25,8 +25,19 @@ browser and Node execution. It preserves nibabel's grid center, RAS axis
 permutation/flips, normalized oblique rotation/shear, and effective scalar dtype.
 Inputs already on an identity 1 mm grid bypass resampling, as in BrainNet.
 The production worker cannot substitute a different conformer.
-ONNX Runtime WebAssembly uses one thread so repeated runs have a fixed executor
-policy. The downloaded processing manifest contains SHA-256 hashes for the
+ONNX Runtime WebAssembly uses a fixed two threads on every machine. Thread count
+changes how some operators split their sums: two threads reproduce the
+single-thread outputs bit for bit, while four or more change rounding in TReGA
+and white-surface orders 1-3. The count is constant rather than taken from the
+host so every machine runs the same arithmetic.
+
+`runTopofit` reconstructs the hemispheres one after the other unless the caller
+passes `reconstructHemispheres`, which receives the feature maps and both
+hemispheres' starting meshes and returns their white, pial and registration
+vertices. The web app uses it to run `reconstructHemisphere` in two workers at
+once; each hemisphere's model runs are unchanged, so the outputs are identical.
+
+The downloaded processing manifest contains SHA-256 hashes for the
 input, conformed tensor, model inputs, assets, and outputs; elapsed time is kept
 outside that stable manifest.
 

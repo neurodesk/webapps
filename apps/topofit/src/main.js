@@ -634,6 +634,68 @@ $('exampleControl').replaceWith(exampleControl);
 $('findPatches').onchange = () => { $('patchSettings').hidden = !$('findPatches').checked; };
 $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion').value !== 'roi'; };
 
+// localStorage may be unavailable (privacy modes); the app then keeps defaults.
+const stored = {
+  get: (key) => { try { return localStorage.getItem(key); } catch { return null; } },
+  set: (key, value) => { try { localStorage.setItem(key, value); } catch { /* unavailable */ } },
+  remove: (key) => { try { localStorage.removeItem(key); } catch { /* unavailable */ } },
+};
+const PARALLEL_PREFERENCE = 'topofit.parallelHemispheres';
+// Every running parallel reconstruction writes its own key and holds a Web Lock of the
+// same id. An out-of-memory crash kills the tab before anything in-page can react, but
+// the browser then releases its locks: a key whose lock nobody holds belongs to a crashed
+// run, while one whose lock is held is still running in another tab. One key per run
+// keeps every write a single set or remove, so tabs never overwrite each other's runs.
+const PARALLEL_RUN_PREFIX = 'topofit.parallelRun.';
+const parallelRunLock = (id) => `topofit-parallel-run-${id}`;
+let parallelRun = null;
+
+function listedParallelRuns() {
+  try {
+    return Object.keys(localStorage).filter((key) => key.startsWith(PARALLEL_RUN_PREFIX)).map((key) => key.slice(PARALLEL_RUN_PREFIX.length));
+  } catch {
+    return [];
+  }
+}
+
+// The lock is taken before the key is written and released after it is removed, so a
+// tab that sees a key without a held lock is looking at a run that cannot finish.
+async function startParallelRun() {
+  const id = crypto.randomUUID();
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  if (navigator.locks) await new Promise((acquired) => navigator.locks.request(parallelRunLock(id), () => { acquired(); return held; }));
+  stored.set(PARALLEL_RUN_PREFIX + id, String(Date.now()));
+  parallelRun = { id, release };
+}
+
+function endParallelRun() {
+  if (!parallelRun) return;
+  stored.remove(PARALLEL_RUN_PREFIX + parallelRun.id);
+  parallelRun.release();
+  parallelRun = null;
+}
+
+async function recoverFromCrashedParallelRun(option) {
+  const listed = listedParallelRuns();
+  if (!listed.length) return;
+  const held = new Set(navigator.locks ? (await navigator.locks.query()).held.map((lock) => lock.name) : []);
+  const crashed = listed.filter((id) => !held.has(parallelRunLock(id)) && stored.get(PARALLEL_RUN_PREFIX + id) !== null);
+  if (!crashed.length) return;
+  for (const id of crashed) stored.remove(PARALLEL_RUN_PREFIX + id);
+  option.checked = false;
+  stored.set(PARALLEL_PREFERENCE, 'false');
+  status('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
+}
+
+{
+  const option = $('parallelHemispheres');
+  const saved = stored.get(PARALLEL_PREFERENCE);
+  option.checked = saved === null ? !(navigator.deviceMemory < 8) : saved === 'true';
+  option.onchange = () => stored.set(PARALLEL_PREFERENCE, String(option.checked));
+  void recoverFromCrashedParallelRun(option);
+}
+
 async function run(analysisOnly = false, { signal, progress = () => {}, roiFile } = {}) {
   signal?.throwIfAborted();
   if (!source || busy || viewerBusy || (analysisOnly && !reconstruction)) throw new Error('Load an image and wait for the current operation to finish.');
@@ -698,7 +760,8 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
     setBusy(false);
     signal.throwIfAborted();
   }
-  return new Promise((resolve, reject) => {
+  const hemispheres = $('parallelHemispheres').checked ? 'parallel' : 'sequential';
+  const attempt = (mode) => new Promise((resolve, reject) => {
     worker = analysisOnly
       ? new Worker(new URL('./analysis-worker.js', import.meta.url), { type: 'module' })
       : new Worker(new URL('./inference-worker.js', import.meta.url), { type: 'module' });
@@ -711,7 +774,6 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       if (worker === active) worker = null;
       signal?.removeEventListener('abort', cancel);
       cancelRun = null;
-      setBusy(false);
       if (error) reject(error);
       else resolve(data);
     };
@@ -731,7 +793,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
         }
         if (data.type === 'error') {
           status(data.message, true);
-          finish(new Error(data.message));
+          finish(Object.assign(new Error(data.message), { hemisphereFailure: Boolean(data.hemisphereFailure) }));
         }
         if (data.type === 'result') {
           showPatchMeasurements(null);
@@ -784,6 +846,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       ...(analysisOnly ? { surfaces: reconstruction.surfaces, provenance: reconstruction.provenance } : {}),
       model: $('model').value,
       conform: $('conform').checked,
+      hemispheres: mode,
       overlayThickness: Number($('thickness').value),
       estimateNormals: $('estimateNormals').checked,
       patches: $('findPatches').checked ? {
@@ -797,6 +860,24 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       assetBase,
     });
   });
+  try {
+    try {
+      if (!analysisOnly && hemispheres === 'parallel') await startParallelRun();
+      return await attempt(hemispheres);
+    } catch (error) {
+      // A hemisphere worker died mid-run (typically a wasm allocation failure). The
+      // saved preference is left alone because the failure may be transient.
+      if (!error.hemisphereFailure || hemispheres !== 'parallel' || preparation !== currentPreparation) throw error;
+      signal?.throwIfAborted();
+      endParallelRun();
+      $('progress').value = 0;
+      status('Parallel reconstruction failed; retrying one hemisphere at a time…');
+      return await attempt('sequential');
+    }
+  } finally {
+    endParallelRun();
+    setBusy(false);
+  }
 }
 
 $('runButton').onclick = () => void run().catch((error) => { if (error.name !== 'AbortError') status(error.message, true); });
@@ -814,6 +895,7 @@ $('cancelButton').onclick = () => {
 };
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) return;
+  endParallelRun();
   cancelRun?.();
   normalArrowWorker?.terminate();
   exampleControl.destroy();
@@ -833,6 +915,7 @@ registerAppAutomation({
       if (!await load(inputs.image[0])) throw new Error('The image could not be loaded.');
       signal.throwIfAborted();
       for (const id of ['conform', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
+      if (parameters.parallelHemispheres !== undefined) $('parallelHemispheres').checked = parameters.parallelHemispheres;
       for (const id of ['model', 'thickness', 'patchCount', 'patchRadius', 'patchHemisphere', 'patchMaxRms', 'patchMinArea']) $(id).value = String(parameters[id]);
       $('patchRegion').value = inputs.roi.length ? 'roi' : 'cortex';
       $('patchSettings').hidden = !parameters.findPatches;

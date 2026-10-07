@@ -79,7 +79,7 @@ TReGA runs at `192 x 224 x 192`. Its ONNX artifact emits 32 subject-space target
 
 TopoFit runs at `176 x 208 x 176`. The image U-Net emits its four decoder maps once. Seven white-surface graphs preserve the source order-0 through order-6 schedule; exact DeepSurfer edge tables drive deterministic midpoint subdivision between them. One exported learned pial update is applied ten times by the browser, matching the checkpoint's recurrent schedule without duplicating weights. The export lowers PyTorch's rank-5 trilinear sampling with `align_corners=true`, graph neighbor means, and max pooling without changing learned convolution, normalization, or PReLU parameters.
 
-One worker owns one run and its ONNX sessions. Sessions are released between stages, and cancellation terminates the worker when an inference call cannot be interrupted. A new run gets new mutable state and may reuse only completely downloaded, hash-verified cache entries.
+One worker owns one run. It never instantiates ONNX Runtime itself: TReGA and the feature model each run in a session worker that closes on release, because a WebAssembly heap cannot shrink. Each hemisphere's white and pial stages run in a hemisphere worker, both at once by default or one after the other when the user turns parallel reconstruction off; the run worker downloads and verifies each model once and hands each hemisphere a copy. Cancellation terminates the run worker, which ends the workers it owns. A new run gets new mutable state and may reuse only completely downloaded, hash-verified cache entries.
 
 ## Ownership
 

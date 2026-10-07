@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { estimateBrainAffine } from '../src/affine.js';
-import { runTopofit } from '../src/pipeline.js';
+import { reconstructHemisphere, runTopofit } from '../src/pipeline.js';
 import { writeFreeSurfer, writeSurfaceFiles } from '../src/results.js';
 import {
   axisAlignedVoxelSpacing,
@@ -127,4 +127,65 @@ test('reconstruction export includes complete bilateral mid-surfaces without opt
   }
   assert.equal(files.length, 8);
   assert.deepEqual(vertices, original);
+});
+
+test('a hemisphere runs white orders 0-6 then ten pial steps on one session per stage', async () => {
+  class FakeTensor {
+    constructor(type, data, dims) {
+      Object.assign(this, { type, data, dims });
+    }
+  }
+  const assets = [];
+  const runs = [];
+  const released = [];
+  const edges = new Int32Array([0, 1]).buffer;
+  const loadAsset = async (name) => {
+    assets.push(name);
+    return name.startsWith('subdivide') ? edges : new ArrayBuffer(4);
+  };
+  const createSession = async () => {
+    const session = { runs: 0 };
+    session.run = async (feeds) => {
+      session.runs += 1;
+      runs.push(Object.keys(feeds).join(','));
+      const count = (feeds.vertices ?? feeds.white).dims[1];
+      const grow = (array) => Float32Array.from(array, (value) => value + 1);
+      assert.equal(feeds.dec3.data, features.dec3);
+      return feeds.white
+        ? { pial: { data: grow(feeds.white.data) }, uncertainty_out: { data: new Float32Array(count * 3) } }
+        : {
+          vertices_out: { data: grow(feeds.vertices.data) },
+          uncertainty_out: { data: new Float32Array(count * 3) },
+          registration_out: { data: feeds.registration.data },
+        };
+    };
+    session.release = async () => released.push(session.runs);
+    return session;
+  };
+  const features = { dec0: new Float32Array(1), dec1: new Float32Array(1), dec2: new Float32Array(1), dec3: new Float32Array(1) };
+  const orders = [];
+  const laps = [];
+  const result = await reconstructHemisphere({
+    hemisphere: 'lh',
+    features,
+    vertices: new Float32Array([1, 0, 0, 0, 1, 0]),
+    registration: new Float32Array([100, 0, 0, 0, 100, 0]),
+    contrast: 't1w',
+    loadAsset,
+    createSession,
+    Tensor: FakeTensor,
+    onOrder: (order) => orders.push(order),
+    lap: (stage) => laps.push(stage),
+  });
+  assert.deepEqual(released, [2, 2, 2, 2, 2, 2, 1, 10]);
+  assert.deepEqual(orders, [0, 1, 2, 3, 4, 5, 6, 7]);
+  assert.equal(result.white.length, (2 + 6) * 3);
+  assert.equal(result.pial.length, result.white.length);
+  assert.equal(result.registration.length, result.white.length);
+  assert.ok(Math.abs(Math.hypot(...result.registration.subarray(6, 9)) - 100) < 1e-4);
+  assert.equal(result.pial[0], result.white[0] + 10);
+  assert.ok(runs.slice(0, 13).every((names) => names === 'dec0,dec1,dec2,dec3,vertices,uncertainty,registration'));
+  assert.ok(runs.slice(13).every((names) => names === 'dec0,dec1,dec2,dec3,white,uncertainty'));
+  assert.ok(assets.includes('topofit-t1w-1mm-white-order-6.onnx') && assets.includes('topofit-t1w-1mm-pial.onnx'));
+  assert.ok(laps.includes('run white-order-3 lh') && laps.includes('run pial lh'));
 });
