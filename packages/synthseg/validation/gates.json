@@ -1,5 +1,5 @@
 {
-  "description": "SynthSeg label maps against the FreeSurfer 8.1.0 goldens. exes/synthseg/tests/parity.rs, the package's pipeline test, the app's fixture e2e and validation/cli-check.mjs all read these gates.",
+  "description": "SynthSeg label maps against the FreeSurfer 8.1.0 goldens. exes/synthseg/tests/parity.rs, the package's pipeline test, the app's fixture e2e and validation/cli-check.mjs all read these gates. maxQuaternionError is exclusive; the other limits are inclusive.",
   "maxAffineErrorMm": 0.0001,
   "maxQuaternionError": 0.0001,
   "maxMismatchFraction": {

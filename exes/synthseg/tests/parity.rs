@@ -167,7 +167,7 @@ fn assert_header_matches(out: &Path, reference: &Path) {
     for o in (76..80).chain(256..280).step_by(4) {
         let f = |h: &[u8]| f32::from_le_bytes(h[o..o + 4].try_into().unwrap());
         assert!(
-            f64::from((f(&a) - f(&b)).abs()) <= gate_value(&["maxQuaternionError"]),
+            f64::from((f(&a) - f(&b)).abs()) < gate_value(&["maxQuaternionError"]),
             "quaternion field at {o}: {} vs {}",
             f(&a),
             f(&b)

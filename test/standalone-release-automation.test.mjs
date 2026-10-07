@@ -196,6 +196,12 @@ test('one tag can carry both sources, and each source it carries must be complet
   applyCatalogUpdate(catalog, changes);
   assert.deepEqual(catalog.apps.synthseg.downloads.map((download) => [download.platform, download.version]), [['linux-x64', '0.5.20261007'], ['macos-arm64', '0.5.20261007'], ['windows-x64', '0.5.20261007']]);
   await assert.rejects(synthsegUpdate(catalog, '0.5.20261007', nodeArchives('0.5.20261007').slice(0, 1)), /lacks windows-x64/);
+  const stale = [...nodeArchives('0.5.20261007'), 'synthseg-0.2.20260910-macos-arm64.pkg'];
+  await assert.rejects(synthsegUpdate(catalog, '0.5.20261007', stale, receipt), /synthseg-0\.2\.20260910-macos-arm64\.pkg: release synthseg-v0\.5\.20261007 expects synthseg-0\.5\.20261007-macos-arm64\./);
+  const twice = ['synthseg-0.5.20261007-macos-arm64.pkg', 'synthseg-0.5.20261007-macos-arm64.zip'];
+  await assert.rejects(synthsegUpdate(catalog, '0.5.20261007', twice, rustReceipt), /has two macos-arm64 archives/);
+  const shasum = async () => `${'c'.repeat(64)}  dist/synthseg-0.5.20261007-macos-arm64.pkg\n`;
+  await assert.rejects(synthsegUpdate(catalog, '0.5.20261007', ['synthseg-0.5.20261007-macos-arm64.pkg'], shasum), /validated different bytes/, 'a shasum line naming the archive binds the receipt to its bytes');
   await assert.rejects(synthsegUpdate(catalog, '0.5.20261007', []), /has no command-line archives/);
   assert.throws(() => catalogReleases({ apps: { synthseg: { downloads: [{ kind: 'cli', platform: 'linux-x64', version: '0.5.20261007' }] } } }, nativeReleases(new Map())), /no release source builds linux-x64/);
 });

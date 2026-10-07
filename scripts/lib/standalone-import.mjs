@@ -49,10 +49,15 @@ export function releaseSources(sources, release) {
 
 // A receipt must vouch for these exact bytes. exes/node-cli receipts open with "PASS <target>" and record
 // archive_sha256. The Rust tools' receipts vary (SynthSR's lists an expected "webgpu: FAILED" on GPU-less
-// runners), so they must be non-empty and match the digest whenever they record one.
+// runners), so they must be non-empty and match the digest whenever they record one, as "sha256: DIGEST"
+// or as a shasum line naming this archive (SynthSEG's).
 export function checkReceipt({ name, digest, platform, native, text: raw }) {
   const text = raw.replace(/\r\n/g, '\n');
-  const recorded = [...text.matchAll(/(?:archive_sha256=|sha256:\s*)([a-f0-9]{64})/g)].map((match) => match[1]);
+  const shasumLine = new RegExp(`^([a-f0-9]{64}) [ *]?(?:\\S*/)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'gm');
+  const recorded = [
+    ...[...text.matchAll(/(?:archive_sha256=|sha256:\s*)([a-f0-9]{64})/g)].map((match) => match[1]),
+    ...[...text.matchAll(shasumLine)].map((match) => match[1]),
+  ];
   if (recorded.some((value) => value !== digest)) throw new Error(`${name}: its receipt validated different bytes`);
   if (native.startsWithAppRelease) {
     if (!text.startsWith(`PASS ${platform}\n`) || !recorded.includes(digest)) throw new Error(`${name}: its receipt does not pass these exact bytes`);
@@ -61,7 +66,14 @@ export function checkReceipt({ name, digest, platform, native, text: raw }) {
   }
 }
 
-// Only a released (not draft, not prerelease) GitHub release with every target of its source verified is published.
+// The file-name stem of a source's archives: the portable executable's name (FLAMeS ships as flames-...),
+// otherwise the app id.
+function archiveStem(id, spec, platform) {
+  return spec ? spec.targets[platform].executable.replace(/\.exe$/, '') : id;
+}
+
+// Only a released (not draft, not prerelease) GitHub release with every target of its source verified is
+// published, one archive per platform, each named for the release's own version.
 export async function releaseDownloads({ id, version, release, native, previous = [], fetchText }) {
   if (release.draft || release.prerelease) throw new Error(`${id}: release ${release.tag_name} is not released yet`);
   const spec = native.spec;
@@ -70,6 +82,9 @@ export async function releaseDownloads({ id, version, release, native, previous 
   for (const asset of release.assets) {
     const platform = releasePlatform(spec, asset.name);
     if (!native.targets.includes(platform)) continue;
+    const expected = `${archiveStem(id, spec, platform)}-${version}-${platform}.`;
+    if (!asset.name.startsWith(expected)) throw new Error(`${asset.name}: release ${release.tag_name} expects ${expected}* for ${platform}`);
+    if (downloads.some((download) => download.platform === platform)) throw new Error(`${id}: release ${release.tag_name} has two ${platform} archives`);
     if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) throw new Error(`${asset.name}: GitHub has no asset digest`);
     const receipt = release.assets.find((item) => item.name === `${asset.name}.validation.txt`);
     if (!receipt) throw new Error(`${asset.name}: no validation receipt, so the archive was never verified`);

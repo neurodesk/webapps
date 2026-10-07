@@ -34,6 +34,14 @@ function labelled(view, count) {
   return voxels;
 }
 
+test('the shared gates only ever tighten the constants parity.rs held before they moved here', () => {
+  assert.ok(gates.maxAffineErrorMm <= 1e-4);
+  assert.ok(gates.maxQuaternionError <= 1e-4);
+  assert.ok(gates.maxMismatchFraction.fixture <= 5e-6);
+  assert.ok(gates.maxMismatchFraction.fullVolume <= 2e-6);
+  assert.deepEqual(gates.fullVolumes.map(({ input, mode }) => `${input} ${mode}`).sort(), ['T1_head default', 'T1_head fast', 'T1_head_2mm default', 'T1_head_2mm fast']);
+});
+
 test('the golden passes every gate against itself', async () => {
   const compared = compareLabels('golden', golden, golden, limit);
   assert.deepEqual(failed(compared.checks), []);

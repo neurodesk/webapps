@@ -42,7 +42,7 @@ export function compareLabels(name, actualBytes, referenceBytes, maxMismatchFrac
   const codes = sameList([...actual.header.subarray(252, 256)], [...reference.header.subarray(252, 256)]);
   checks.push([codes && actual.header[123] === reference.header[123], `${name} qform/sform codes and xyzt_units match ${against}`]);
   const quaternionError = Math.max(...QUATERNION_OFFSETS.map((offset) => Math.abs(actual.view.getFloat32(offset, true) - reference.view.getFloat32(offset, true))));
-  checks.push([quaternionError <= gates.maxQuaternionError, `${name} quaternion and qfac differ by ${quaternionError} <= ${gates.maxQuaternionError}`]);
+  checks.push([quaternionError < gates.maxQuaternionError, `${name} quaternion and qfac differ by ${quaternionError} < ${gates.maxQuaternionError}`]);
   const actualLabels = [...counts(actual.data).keys()].sort((a, b) => a - b);
   const referenceLabels = [...counts(reference.data).keys()].sort((a, b) => a - b);
   checks.push([sameList(actualLabels, referenceLabels), `${name} has ${against}'s ${referenceLabels.length} labels (got ${actualLabels.length}: ${actualLabels.join(' ')})`]);
