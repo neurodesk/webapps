@@ -20,7 +20,7 @@ test('CPU segmentation can be cancelled and retried to produce native-grid label
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await adopt(page, 'image', fixture);
   const created = page.waitForEvent('worker', { predicate: worker => worker.url().includes('segmentation-worker-') });
-  await dispatch(page, 'start', { operation: 'quality-control', parameters: { backend: 'cpu' } });
+  await dispatch(page, 'start', { operation: 'quality-control', parameters: { backend: 'cpu', model: '16chan18cls' } });
   const worker = await created;
   const closed = new Promise(resolve => worker.once('close', resolve));
   await dispatch(page, 'cancel');
@@ -28,7 +28,7 @@ test('CPU segmentation can be cancelled and retried to produce native-grid label
   expect((await dispatch(page, 'snapshot')).state).toBe('cancelled');
   await adopt(page, 'image', fixture);
   await adopt(page, 'sidecar', { name: 'scan.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ EchoTime: 0.003, RepetitionTime: 2.1 })) });
-  await dispatch(page, 'start', { operation: 'quality-control', parameters: { backend: 'cpu' } });
+  await dispatch(page, 'start', { operation: 'quality-control', parameters: { backend: 'cpu', model: '16chan18cls' } });
   await expect.poll(async () => {
     const snapshot = await dispatch(page, 'snapshot');
     if (snapshot.state === 'failed') throw new Error(JSON.stringify(snapshot.error));
@@ -57,11 +57,11 @@ test('QC failure after real segmentation fails the operation instead of publishi
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await adopt(page, 'image', fixture);
   await adopt(page, 'sidecar', { name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('null') });
-  await dispatch(page, 'start', { parameters: { backend: 'cpu' } });
+  await dispatch(page, 'start', { parameters: { backend: 'cpu', model: '16chan18cls' } });
   await expect.poll(async () => (await dispatch(page, 'snapshot')).state).toBe('failed');
   expect((await dispatch(page, 'snapshot')).error.message).toContain('JSON object');
   await adopt(page, 'image', fixture);
-  await dispatch(page, 'start', { parameters: { backend: 'cpu' } });
+  await dispatch(page, 'start', { parameters: { backend: 'cpu', model: '16chan18cls' } });
   await expect.poll(async () => (await dispatch(page, 'snapshot')).state, { timeout: 840000, intervals: [1000, 2000, 5000] }).toBe('failed');
   const snapshot = await dispatch(page, 'snapshot');
   expect(snapshot.error.message).toContain('fetch avg152T1.nii.gz failed: 503');
@@ -69,4 +69,30 @@ test('QC failure after real segmentation fails the operation instead of publishi
   const regions = await dispatch(page, 'viewers.regions', { viewerId: 'main' });
   expect(regions.find(region => region.name === 'Hippocampus').voxels).toBeGreaterThan(0);
   await expect(page.locator('#saveBtn')).toBeDisabled();
+});
+
+test('default PVE analysis publishes native-grid fractions and an independent mask', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
+  await adopt(page, 'image', fixture);
+  await dispatch(page, 'start', { parameters: { backend: 'cpu' } });
+  await expect.poll(async () => {
+    const snapshot = await dispatch(page, 'snapshot');
+    if (snapshot.state === 'failed') throw new Error(JSON.stringify(snapshot.error));
+    return snapshot.state;
+  }, { timeout: 840000, intervals: [1000, 2000, 5000] }).toBe('succeeded');
+  const input = readVolume(source(await readFile(fixture)));
+  for (const name of ['csf', 'gm', 'wm', 'mask']) {
+    const volume = readVolume(source(await download(page, name)));
+    expect(volume.dims).toEqual(input.dims);
+    expect(volume.affine).toEqual(input.affine);
+    expect(volume.data.every(value => Number.isFinite(value) && value >= 0 && value <= 1)).toBe(true);
+    expect(volume.data.some(value => value > 0)).toBe(true);
+    if (name !== 'mask') expect(volume.data.some(value => value > 0 && value < 1)).toBe(true);
+  }
+  const qc = JSON.parse((await download(page, 'qc')).toString());
+  expect(qc.provenance.segmentation).toContain('mindmap-pve');
+  for (const key of ['cjv', 'cnr', 'vol_gm_mm3', 'vol_wm_mm3']) expect(Number.isFinite(qc[key])).toBe(true);
+  const regions = await dispatch(page, 'viewers.regions', { viewerId: 'main' });
+  expect(regions).toEqual([]);
 });

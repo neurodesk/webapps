@@ -277,7 +277,7 @@ apps:
     runtime: vite-webgpu
     model_manifest: models/browserqc.manifest.json
     asset_manifest_schema: scientific-assets-v1
-    source: niivue/browserqc@4116840f4352496a33f4a462d4b989f659ea71c8
+    source: niivue/browserqc@30f385f498299ceb580ead4709e55ac695b7c55c
     license: BSD-2-Clause
     maintainers: [neurolabusc]
     support_status: active

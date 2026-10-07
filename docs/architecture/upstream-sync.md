@@ -1,15 +1,25 @@
 # Upstream sync
 
-QSMbly, SeedSeg and dicompare are copies of Ashley Stewart's repositories
-(`astewartau/qsmbly`, `astewartau/prostate`, `astewartau/dicompare-web`), which
-stay the source. `.github/workflows/upstream-sync.yml` runs every Monday and
+QSMbly, SeedSeg and dicompare track Ashley Stewart's repositories
+(`astewartau/qsmbly`, `astewartau/prostate`, `astewartau/dicompare-web`).
+BrowserQC tracks `niivue/browserqc`. `.github/workflows/upstream-sync.yml` runs every Monday and
 opens one pull request per app on `upstream/<id>` with the upstream commits made
 since the commit pinned by `source:` in `registry/apps.yml`.
 
 `scripts/sync-upstream.mjs` does the merge. `apps/<id>/upstream.json` holds each
 app's rules: upstream paths never imported, text rewritten in paths and
 contents, and the adaptations a reviewer keeps when resolving conflicts. Run it
-locally with `node scripts/sync-upstream.mjs --app <id>`.
+locally with `TMPDIR=/storage/tmp node scripts/sync-upstream.mjs --app <id>`.
+The workflow always starts from `main`, including manual runs. Its optional app
+input selects one registered app; an empty input syncs every registered app.
+When upstream matches the source pin, the script writes nothing.
+
+BrowserQC excludes upstream public assets, standalone layout and styling, and
+vendored DICOM code. The pull request lists changes to these files for manual
+porting. Scientific source changes still undergo the three-way merge, so
+conflicts in QC, ratings, models or processing open a draft for review. Keep
+the shared shell, pinned assets and examples, worker cancellation, automation,
+model partial-volume estimates and public niimath API described in its rules.
 
 ## GitHub App
 

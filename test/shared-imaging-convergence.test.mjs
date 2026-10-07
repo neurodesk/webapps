@@ -103,7 +103,7 @@ test('typed imaging runtimes use their declared shared or pinned owner', async (
 
   const browserPackage = JSON.parse(await source('apps', 'browserqc', 'package.json'));
   const browserMain = await source('apps', 'browserqc', 'src', 'main.ts');
-  assert.equal(browserPackage.dependencies['@niivue/niimath'], '1.4.20260909');
+  assert.equal(browserPackage.dependencies['@niivue/niimath'], '1.4.20260928');
   assert.match(browserMain, /from ['"]@niivue\/niimath['"]/);
 
   const defaceMain = await source('apps', 'deface', 'src', 'main.ts');

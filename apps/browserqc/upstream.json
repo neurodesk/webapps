@@ -1,0 +1,24 @@
+{
+  "branch": "main",
+  "ignore": [
+    ".github/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".gitignore",
+    "package-lock.json",
+    "public/**",
+    "index.html",
+    "src/style.css",
+    "vite.config.ts",
+    "src/dcm2niix/**"
+  ],
+  "integration": [
+    "Keep the shared Neurodesk shell, imaging workspace, dialogs, technical console and ProgressManager status bar.",
+    "Keep pinned examples, shared example loading, automation controls and workflow coverage.",
+    "Keep the local segmentation worker and abortable automation operations; adapt upstream processing changes to that worker.",
+    "Keep model weights and example images outside the repository, fetched with checksums from pinned Hugging Face manifests; port relevant ignored public asset changes by updating those manifests.",
+    "Keep MindGrab model selection and partial-volume tissue estimates; review QC metrics and ratings against each model.",
+    "Use the public niimath package API and shared DICOM importer instead of upstream vendored runtimes.",
+    "Keep monorepo date-based release versions and deployment workflows; port relevant ignored index.html and src/style.css changes through the shared design system."
+  ]
+}
