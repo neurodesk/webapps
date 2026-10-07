@@ -3383,6 +3383,20 @@
         "sha256": "15f4f19fef726947de2cdf53e86be76bb9fe6539630e382aca0b042b04fc23a5",
         "bytes": 4438531,
         "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz",
+        "sha256": "4dfa483da8df68510ea54008e0464c2b4e1a8f7990bc4798b65f143d389dbeff",
+        "bytes": 16016,
+        "kind": "example",
+        "license": "MIT"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz",
+        "sha256": "b8c5398be85219e87c696685f48874b8f34c961e8503aabbc028d40e01fbbfcf",
+        "bytes": 16124,
+        "kind": "example",
+        "license": "MIT"
       }
     ]
   },

@@ -85,6 +85,14 @@ pub fn header(s: &Spectra) -> Value {
     })
 }
 
+// FID-A preserves NIfTI-MRS seconds; the application and LCModel use milliseconds.
+fn normalize_timing(s: &mut Spectra, format: Format) {
+    if format == Format::NiftiMrs {
+        s.te *= 1000.0;
+        s.tr *= 1000.0;
+    }
+}
+
 /// Detect and load every dataset among `files`. Returns the datasets and a
 /// JSON summary (including per-file problems) for the interface.
 pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
@@ -94,16 +102,22 @@ pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
     let mut summary = Vec::new();
     let mut errors = Vec::new();
     for (pair, (metab, water)) in det.pairs.iter().zip(loaded) {
-        let metab = match metab {
+        let mut metab = match metab {
             Ok(m) => m,
             Err(e) => {
                 errors.push(json!({ "file": pair.metabolite.name, "error": e }));
                 continue;
             }
         };
+        normalize_timing(&mut metab.out, pair.metabolite.format);
         let mut water_name = pair.water.as_ref().map(|w| w.name.clone());
         let water = match water {
-            Some(Ok(w)) => Some(w.out),
+            Some(Ok(mut w)) => {
+                if let Some(source) = &pair.water {
+                    normalize_timing(&mut w.out, source.format);
+                }
+                Some(w.out)
+            }
             Some(Err(e)) => {
                 errors.push(json!({ "file": water_name.clone().unwrap_or_default(), "error": e }));
                 water_name = None;
@@ -126,14 +140,10 @@ pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
         };
         let edit = if splits_editing(format) { detect_editing(&metab, water.as_ref()) } else { None };
         let mut h = header(&metab);
-        // FID-A's NIfTI-MRS reader keeps TE and TR in seconds (the other readers in ms).
-        let ms = if format == Format::NiftiMrs { 1000.0 } else { 1.0 };
-        h["teMs"] = json!(metab.te * ms);
-        h["trMs"] = json!(metab.tr * ms);
         // The water scan's timing, for relaxation-corrected water scaling.
         if let Some(w) = &water {
-            h["waterTeMs"] = json!(w.te * ms);
-            h["waterTrMs"] = json!(w.tr * ms);
+            h["waterTeMs"] = json!(w.te);
+            h["waterTrMs"] = json!(w.tr);
         }
         // Where the voxel sits (RAS mm affine), when the format records it.
         if let Some(v) = &voxel {

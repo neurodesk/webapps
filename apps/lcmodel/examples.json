@@ -153,6 +153,28 @@
     ]
   },
   {
+    "id": "nifti-mrs-press",
+    "label": "NIfTI-MRS PRESS 3 T, TE 35 ms, with water",
+    "description": "Osprey's openly licensed Philips PRESS data, converted to NIfTI-MRS with spec2nii: 3 T, TE 35 ms, scanner-combined averages and a separate water reference.",
+    "expectedResult": "LCModel fits the spectrum with the PRESS TE 35 ms basis and reports water-scaled concentrations. Download the concentration table, preprocessed spectrum and water reference.",
+    "files": [
+      {
+        "role": "spectrum",
+        "name": "sub-01_PRESS_35.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz",
+        "sha256": "4dfa483da8df68510ea54008e0464c2b4e1a8f7990bc4798b65f143d389dbeff",
+        "license": "MIT"
+      },
+      {
+        "role": "water",
+        "name": "sub-01_PRESS_35_water.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz",
+        "sha256": "b8c5398be85219e87c696685f48874b8f34c961e8503aabbc028d40e01fbbfcf",
+        "license": "MIT"
+      }
+    ]
+  },
+  {
     "id": "lcmodel-test",
     "label": "LCModel test spectrum (Synthetic)",
     "description": "Synthetic: LCModel's own test case, a 3 T spectrum simulated with spant, with its basis set and control file. It checks the fit, not preprocessing.",
