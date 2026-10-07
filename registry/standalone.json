@@ -570,7 +570,41 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-linux-x64.tar.gz",
+          "sha256": "ed9b75fb2361fba90c13c464d6722f3ea7b1fdc8df80b5b56bcc1bf6e06e21c7",
+          "bytes": 73001891,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf disconnectome-0.3.20261007-linux-x64.tar.gz\n./disconnectome-0.3.20261007-linux-x64/disconnectome lesion.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg",
+          "sha256": "f50e4338913b8610f8f8b403dad6bb81c66805cdba28c49f07f3de3078a9404b",
+          "bytes": 66442438,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg disconnectome-0.3.20261007-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.3.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip",
+          "sha256": "960e4521c280e224b3f0f1c5a2d55db04df3d6e2c920efbfef401c5c98763fd5",
+          "bytes": 62658167,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\disconnectome-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261007-windows-x64\\disconnectome.exe lesion.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "carotid-flow": {
