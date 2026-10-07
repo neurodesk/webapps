@@ -15,6 +15,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',
+  '@neurodesk/edgereg': 'edgereg',
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/synthseg': 'synthseg',
