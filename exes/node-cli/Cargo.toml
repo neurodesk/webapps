@@ -1,0 +1,15 @@
+[package]
+name = "node-cli-launcher"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "node-cli-launcher"
+path = "src/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

@@ -1,5 +1,7 @@
 // DOM-independent app config. Kept pure so it can be unit-tested under Node
-// without a browser (see test/config.test.js).
+// without a browser (see test/carotid.test.js).
+import { stem } from "@neurodesk/carotid-flow/outputs";
+
 export const APP = Object.freeze({
   id: "carotid-flow",
 });
@@ -28,9 +30,4 @@ export function assignSeries(files) {
     return { error: `Choose the amplitude series to go with ${phase[0].name}: give it a _mod suffix, or choose only the two series.` };
   }
   return { amplitude: modulus[0], phase: phase[0] };
-}
-
-/** A file name without the NIfTI extension, for naming the outputs after their input. */
-export function stem(name) {
-  return name.replace(/\.nii(\.gz)?$/i, "").replace(/\.[^.]+$/, "");
 }

@@ -36,6 +36,41 @@ against `thresholds.py`. Run its regression checks with
 
 The checked-in end-to-end report passes: its conformed 256³ tensor is byte-identical to OpenRecon, mean corresponding anatomical surface distance is 0.046–0.068 mm, p95 distance is 0.098–0.164 mm, mean registration error is 0.028–0.038 degrees, and one-voxel QC coverage is at least 0.9996. Three production-browser runs produced byte-identical surfaces, QC output, and processing manifests. The controlled report records the same remaining ONNX-versus-PyTorch numerical scale.
 
+## Command line
+
+`cli-check.mjs` gates the `topofit` command and every portable archive. It
+downloads the pinned OpenNeuro input and the published OpenRecon end-to-end
+surfaces and QC image into `$TMPDIR/neurodesk-topofit-validation`, checking each SHA-256,
+then reconstructs the input into a fresh directory:
+
+```bash
+node packages/topofit/validation/cli-check.mjs                        # bin/topofit.js
+node packages/topofit/validation/cli-check.mjs --executable ./topofit # an extracted archive
+```
+
+The input, inference, alignment-input and model-input hashes and the asset-set
+hash must equal this end-to-end report's provenance. White and pial surfaces
+need identical faces and corresponding-vertex mean, p95 and maximum distance
+within the report's thresholds; registration spheres need mean and p95 angle
+and maximum radius error within them. The output directory must hold exactly
+the eight surfaces, `topofit_qc.nii` and `topofit_manifest.json`. Each
+`mid.white` vertex must be the midpoint of the command's own white and pial
+vertices within two float32 ulps, with the white surface's faces, and must
+match the midpoint of OpenRecon's white and pial surfaces within the surface
+thresholds. `topofit_qc.nii` must keep the input's dimensions, voxel sizes,
+qform and sform. Its white and pial labels must each have one-voxel symmetric
+coverage of OpenRecon's `topofit_qc.nii.gz` labels of at least
+`qcWithinOneVoxel`, computed as `compare.py` does. OpenRecon's published QC
+marks one voxel per vertex, while the command draws its default overlay one
+in-plane voxel thicker, so the check dilates OpenRecon's labels the same way
+first. Drawn from OpenRecon's own surfaces, the package's QC then differs from
+that redrawing in one voxel. The check prints one line
+per metric. `--outputs <directory>` checks an existing output directory
+without running the command.
+The published reference files are the 2026-09-11 capture. The report's
+current `reference_sha256` values name a later, unpublished recapture, so the
+script pins the published files' hashes itself.
+
 ## Oblique inputs
 
 Browser and Node execution share the package's cubic B-spline conformer.

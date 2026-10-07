@@ -78,8 +78,6 @@ select { cursor: pointer; appearance: none; background-image: url("data:image/sv
 .viewer-canvas-wrapper { flex: 1; position: relative; background: #000; min-height: 0; }
 .viewer-canvas-wrapper canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
 .console-title { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--nd-color-text-muted); }
-.console-clear { font-size: 0.7rem; color: var(--nd-color-text-dim); background: none; border: none; cursor: pointer; transition: color var(--nd-transition-fast); }
-.console-clear:hover { color: var(--nd-color-text-muted); }
 .console-output { flex: 1; overflow-y: auto; padding: var(--nd-space-xs) var(--nd-space-md); font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.7rem; line-height: 1.5; }
 .console-time { color: var(--nd-color-text-dim); flex-shrink: 0; }
 .opacity-control { display: flex; align-items: center; gap: var(--nd-space-xs); font-size: 0.7rem; color: var(--nd-color-text-muted); margin-left: var(--nd-space-sm); }

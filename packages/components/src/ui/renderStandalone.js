@@ -23,7 +23,7 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
   const addDownload = (root, download, id) => {
     const row = element('div', undefined, { className: 'nd-download-option' });
     const label = `${download.kind === 'cli' ? `${title} command line · ` : ''}${platforms[download.platform] || download.platform}`;
-    const size = download.bytes ? ` · ${(download.bytes / 1e9).toFixed(2)} GB` : '';
+    const size = !download.bytes ? '' : download.bytes < 1e9 ? ` · ${(download.bytes / 1e6).toFixed(0)} MB` : ` · ${(download.bytes / 1e9).toFixed(2)} GB`;
     row.append(element('h4', `${label}${size}`));
     if (download.parts?.length) {
       const links = element('p');
@@ -35,9 +35,10 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
     } else row.append(element('a', 'Download', { href: download.url }));
     // Integrity metadata stays in the release catalog, outside the user flow.
     const instructions = download.command?.split('\n').filter(line => !/sha256|sha-256|shasum|get-filehash/i.test(line)).join('\n');
-    if (download.parts?.length && instructions) {
+    if (instructions && (download.parts?.length || download.kind === 'cli')) {
       const details = element('details');
-      details.append(element('summary', 'Installation instructions'));
+      const summary = download.parts?.length ? 'Installation instructions' : download.url?.endsWith('.pkg') ? 'Install and run' : 'Extract and run';
+      details.append(element('summary', summary));
       command(details, `install-${id}`, instructions);
       row.append(details);
     }
@@ -129,7 +130,8 @@ export function openStandalone({ title, app, suite, installed = false }, doc = g
   }
   const downloads = [...(suite?.downloads || []), ...app.downloads];
   if (downloads.length) {
-    const root = section('standalone-downloads', 'Webapp standalone', 'Download the archive for your platform. Models download when first used.');
+    const models = downloads.every(download => download.modelsIncluded) ? 'Models are included.' : 'Models download when first used.';
+    const root = section('standalone-downloads', 'Webapp standalone', `Download the archive for your platform. ${models}`);
     for (const [index, download] of downloads.entries()) addDownload(root, download, `platform-${index}`);
   }
   if (suite?.models) {

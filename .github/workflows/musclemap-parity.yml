@@ -26,6 +26,10 @@ concurrency:
   group: musclemap-parity-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   parity:
     runs-on: ubuntu-latest

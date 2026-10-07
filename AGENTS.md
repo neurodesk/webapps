@@ -94,6 +94,10 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
   round-trips mz3 and writes STL itself. Both are fixed upstream in `~/src/niimath` for the release after
   1.4.20260909 — once that ships, drop the direct `callMain` path and `writeMz3`/`readMz3` for the fluent
   API's own STL output.
+- The `topofit` command (`packages/topofit/bin/topofit.js`, `src/node.js`) runs the same pipeline on the CPU
+  with `onnxruntime-node`; `exes/node-cli` packages it (shared with SYNcro, driven by `release.json`), and
+  every archive must pass `validation/cli-check.mjs`. Only presets in the pipeline's `MODELS` are accepted or
+  installed; add `synth-1mm` there only together with its own parity report.
 
 ## nesvor and the compute server
 
@@ -168,6 +172,12 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 - The example is PCMCalculator's MIT test data. Its right carotid must stay within 10 % of PCMCalculator's 225 ml/min (`CAROTID_FLOW_OPEN_EXAMPLE`), and the e2e and offline workflow tests pin 231 and 211 ml/min.
 - Left and right are the patient's, from the affine. The MATLAB script called the image-left vessel left, which on the scanner's radiological grid is the patient's right; do not "fix" the app back to the script.
 - Raw ±4096 phase needs the VENC from the user; velocity-scaled phase does not. Aliasing is not unwrapped.
+- The detection, series reading and output naming live in `packages/carotid-flow`, which the app and the `carotid-flow` command line both import. Change the outputs there, not in the app, so the command line keeps writing the app's downloads byte for byte. `validation/pcmcalculator.json` holds the example's pins for both the open-example unit test and the command line's release check.
+
+## easy-mp2rage
+
+- The WASM core in `packages/easy-mp2rage/wasm/` is committed. The web app stages it (`tools/stage_core.sh`) and the `easy-mp2rage` command line loads it, so both run one binary. After changing `crates/mp2rage-core` or `crates/mp2rage-wasm`, run `pnpm --filter @neurodesk/easy-mp2rage build:wasm` (Rust 1.98.0, wasm-pack 0.13.1, binaryen `version_117` wasm-opt) and commit the result. The `wasm-source` job in `easy-mp2rage-native.yml` rebuilds it from source and fails when the committed bytes differ; a toolchain bump means rebuilding and committing in the same change.
+- `packages/easy-mp2rage/validation/cli-check.mjs` holds every command-line output, for each option, to the Python pipeline's files in `apps/easy-mp2rage/tools/golden/cli/` and to the web worker's WASM calls. After changing the Python pipeline or adding an option, rerun `tools/gen_cli_golden.py` and add a case whose output the option changes.
 
 ## lcmodel
 

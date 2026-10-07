@@ -30,7 +30,7 @@
               <div class="nd-field">
                 <label for="venc">Velocity encoding (VENC) <small>cm/s</small></label>
                 <input id="venc" type="number" min="1" max="999" step="1" placeholder="from the series" />
-                <p class="nd-hint">Only for raw ±4096 phase. Phase already scaled to cm/s needs none.</p>
+                <p class="nd-hint">Needed for raw ±4096 phase; decodes raw 0–4095 phase. cm/s phase needs none.</p>
               </div>
               <div class="nd-field">
                 <label for="candidatePercentile">Candidate percentile <small>%</small> <span class="nd-info-icon" tabindex="0" aria-label="About the candidate percentile">i<span class="nd-info-tooltip">Unsigned speed images only: candidates are pixels whose signal varies more over the cycle than this share of the head.</span></span></label>

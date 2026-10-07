@@ -70,7 +70,6 @@ input[type="file"]::file-selector-button:hover { border-color: var(--nd-color-bo
 .console-container { height: 120px; flex-shrink: 0; background: var(--nd-color-surface); display: flex; flex-direction: column; }
 .console-primary-log { height: 118px; }
 .console-header { display: flex; align-items: center; justify-content: space-between; gap: var(--nd-space-md); padding: var(--nd-space-xs) var(--nd-space-md); border-bottom: 1px solid var(--nd-color-border); flex-shrink: 0; }
-.console-actions { display: inline-flex; align-items: center; gap: var(--nd-space-sm); flex-shrink: 0; }
 .console-line { display: flex; align-items: baseline; gap: var(--nd-space-md); }
 .console-message { color: var(--nd-color-text-muted); min-width: 0; overflow-wrap: anywhere; }
 .console-source { color: var(--nd-color-text-dim); flex-shrink: 0; }

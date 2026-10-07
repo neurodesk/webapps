@@ -2,7 +2,6 @@ import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mj
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {unzipSync} from 'fflate';
-const PACKAGE_VERSION=JSON.parse(await readFile(new URL('../../../packages/syncro/package.json',import.meta.url),'utf8')).version;
 test.beforeEach(async({page})=>{await page.route('**/MNI152_T1_1mm_brain.nii.gz',async route=>route.fulfill({body:await readFile(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz',import.meta.url))}));});
 function scan(name,translation=0,value=20){
  const buffer=Buffer.alloc(352+4096);

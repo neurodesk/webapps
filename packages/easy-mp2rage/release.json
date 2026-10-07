@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "easy-mp2rage-v",
+  "displayName": "Easy MP2RAGE",
+  "app": "easy-mp2rage",
+  "run": "correct --uni UNI.nii.gz --inv2 INV2.nii.gz --b1 B1.nii.gz --b1-type tfl --mp2rage TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,EFF results",
+  "readme": {
+    "run": "Compute a B1-corrected T1 map",
+    "notes": [
+      "Denoise UNI with the same executable:",
+      "  easy-mp2rage denoise --uni UNI.nii.gz --inv1 INV1.nii.gz --inv2 INV2.nii.gz results",
+      "",
+      "No network connection is required. Add --help for every option.",
+      "Inputs are NIfTI. DICOM import and BIDS batches need the web app.",
+      "",
+      "Easy MP2RAGE is research software. Check the maps and parameters before use.",
+      "Please cite Marques et al. 2010 (NeuroImage), Marques and Gruetter 2013",
+      "(PLoS ONE), Eggenschwiler et al. 2012 (MRM) and O'Brien et al. 2014 (PLoS ONE)."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "easy-mp2rage"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "easy-mp2rage.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "easy-mp2rage"
+    }
+  }
+}

@@ -12,6 +12,10 @@ concurrency:
   group: sct-full-tests-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   full-suite:
     runs-on: ubuntu-latest

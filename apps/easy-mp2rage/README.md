@@ -88,19 +88,35 @@ Check these against your protocol:
       --uni UNI.nii.gz --inv2 INV2.nii.gz --b1-map B1.nii.gz \
       --b1-map-type tfl --b1-extend-fov --out out
 
+The Rust CLI has no denoising or DICOM input and is not released.
+
+## Command line (portable)
+
+The released command line is `easy-mp2rage` from `packages/easy-mp2rage`. It
+runs the web app's WebAssembly core with Node, offers the `correct` and
+`denoise` operations with the web app's parameters, and writes the web app's
+download files. Portable archives for Linux x64, Windows x64 and macOS arm64
+bundle their own Node runtime. See packages/easy-mp2rage/README.md.
+
+    easy-mp2rage correct --uni UNI.nii.gz --inv2 INV2.nii.gz \
+      --b1 B1.nii.gz --b1-type tfl \
+      --mp2rage 5.0,0.7,2.5,4,5,64,128,0.0067,0.96 results
+
 ## Run the web app locally
 
 The web app is a static site (Rust compiled to WebAssembly). To build and run it
 yourself, following the same approach as QSMbly:
 
-Prerequisites:
+The WebAssembly build is committed in packages/easy-mp2rage/wasm/. Stage it
+into web/:
 
-- Rust: install from https://rustup.rs/
-- wasm-pack: `cargo install wasm-pack`
+    bash tools/stage_core.sh
 
-Build the WebAssembly and stage it into web/:
+After changing crates/mp2rage-core or crates/mp2rage-wasm, rebuild it with Rust
+1.98.0 (https://rustup.rs/), wasm-pack 0.13.1 and binaryen version_117 wasm-opt
+(packages/easy-mp2rage/README.md lists why each is pinned):
 
-    bash tools/build_wasm.sh
+    pnpm --filter @neurodesk/easy-mp2rage build:wasm
 
 Serve the web/ folder over HTTP and open it. It uses ES modules and WebAssembly,
 so it must be served over http, not opened as a file:// path:

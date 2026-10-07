@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, cp, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium, expect } from "@playwright/test";
 import { serveSite } from "../test-utils/serve-site.mjs";
-import { readNifti } from "../apps/easy-mp2rage/web/js/nifti.js";
+import { readNifti } from "../packages/easy-mp2rage/src/nifti.js";
 import { repoRoot } from "../scripts/lib/apps-registry.mjs";
 
 const site = await serveSite(join(repoRoot, "apps", "easy-mp2rage", "dist"));

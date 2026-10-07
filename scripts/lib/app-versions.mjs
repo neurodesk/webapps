@@ -10,7 +10,9 @@ import { repoRoot } from './apps-registry.mjs';
 
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
+  '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
+  '@neurodesk/easy-mp2rage': 'easy-mp2rage',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
