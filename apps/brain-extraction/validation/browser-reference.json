@@ -18,9 +18,9 @@
     },
     "synthstrip": {
       "tolerance": {
-        "basis": "Native ONNX Runtime and ONNX Runtime Web reproduced this mask bit for bit on linux-x64. Other CPUs' kernels round differently and can move boundary voxels; SYNcro's native SynthStrip pipeline kept brain-mask Dice 0.9999987 against its reference (packages/syncro/validation/README.md). The bounds allow about 160 of the 1.6 million mask voxels to differ.",
+        "basis": "The native command line reproduced this mask bit for bit on linux-x64 and macos-arm64 (PR #198), as did ONNX Runtime Web under Node. Other CPUs' kernels can round differently and move boundary voxels; SYNcro's native SynthStrip pipeline kept brain-mask Dice 0.9999987 against its reference (packages/syncro/validation/README.md). Dice 0.99995 allows about 160 of the 1.6 million mask voxels to differ.",
         "relative": 0.0001,
-        "minimumDice": 0.9999
+        "minimumDice": 0.99995
       },
       "maskVoxels": 1635060,
       "maskSha256": "dadad701abb90d19e3d535448af13afe6ce54fe9ef73ec0ba9adf15a22e6157a",

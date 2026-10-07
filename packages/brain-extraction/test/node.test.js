@@ -102,7 +102,15 @@ test('BET runs offline without a model and writes the web app\'s file names', as
   const { root, cache } = await workspace(t);
   const requests = forbidNetwork(t);
   const output = join(root, 'out');
-  const result = await extract({ input: fixture, output, method: 'bet', fractionalIntensity: '0.5', threads: 1, cacheDir: cache, offline: true });
+  const scheduler = process.env.SLURM_CPUS_PER_TASK;
+  process.env.SLURM_CPUS_PER_TASK = 'all';
+  let result;
+  try {
+    result = await extract({ input: fixture, output, method: 'bet', fractionalIntensity: '0.5', cacheDir: cache, offline: true });
+  } finally {
+    if (scheduler === undefined) delete process.env.SLURM_CPUS_PER_TASK;
+    else process.env.SLURM_CPUS_PER_TASK = scheduler;
+  }
   assert.deepEqual(requests, []);
   assert.deepEqual(await readdir(output), ['T1_bet_brain.nii', 'T1_bet_mask.nii']);
   assert.equal(result.maskVoxels, 246875);
@@ -123,6 +131,36 @@ test('extraction refuses a non-empty output directory and keeps its contents', a
   assert.match(result.stderr, /is not empty/);
   assert.deepEqual(await readdir(output), ['keep.txt']);
   assert.equal(await readFile(join(output, 'keep.txt'), 'utf8'), 'preserve');
+});
+
+test('two runs into one empty directory never mix their files', async (t) => {
+  const { root, cache } = await workspace(t);
+  const output = join(root, 'shared');
+  const runs = await Promise.allSettled([0.5, 0.3].map((fractionalIntensity) => extract({ input: fixture, output, method: 'bet', fractionalIntensity, cacheDir: cache, offline: true })));
+  const [succeeded, ...others] = runs.filter(({ status }) => status === 'fulfilled');
+  const failed = runs.filter(({ status }) => status === 'rejected');
+  assert.ok(succeeded);
+  assert.deepEqual(others, []);
+  assert.equal(failed.length, 1);
+  assert.match(failed[0].reason.message, /is not empty|Another brain-extraction run/);
+  assert.deepEqual(await readdir(output), ['T1_bet_brain.nii', 'T1_bet_mask.nii']);
+  const mask = await readFile(join(output, 'T1_bet_mask.nii'));
+  const voxels = readVolume(mask.buffer.slice(mask.byteOffset, mask.byteOffset + mask.byteLength)).data.reduce((sum, value) => sum + value, 0);
+  assert.equal(voxels, succeeded.value.maskVoxels);
+});
+
+test('options a command does not use are refused instead of ignored', async (t) => {
+  const { root, cache } = await workspace(t);
+  const bet = run([fixture, join(root, 'out'), '--method', 'bet', '--threads', '2', '--cache-dir', cache]);
+  assert.equal(bet.status, 1);
+  assert.match(bet.stderr, /--threads applies to --method synthstrip only/);
+  const selfCheck = run(['self-check', '--cache-dir', cache]);
+  assert.equal(selfCheck.status, 1);
+  assert.match(selfCheck.stderr, /self-check does not accept --cache-dir/);
+  const download = run(['download-models', '--method', 'bet', '--cache-dir', cache]);
+  assert.equal(download.status, 1);
+  assert.match(download.stderr, /download-models does not accept --method/);
+  assert.deepEqual(await readdir(root), ['input.nii']);
 });
 
 test('methods are synthstrip or bet, and mindgrab points to its issue', async (t) => {

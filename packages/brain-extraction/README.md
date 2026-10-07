@@ -25,7 +25,12 @@ brain-extraction self-check
 | `--threads N` | SynthStrip ONNX Runtime threads, default `SLURM_CPUS_PER_TASK` or all cores. |
 | `--cache-dir DIR`, `--offline` | Model directory and no-download mode. |
 
-The output directory must be new or empty. The command prints a JSON report
+The archives also carry the MindGrab adapter and `@brainchop/mindgrab`
+(4.4 MB), which the command line will use once #162 lands.
+
+The output directory must be new or empty. A lock file keeps two runs from
+writing into the same directory, and the brain and mask are staged before
+either is moved into place. The command prints a JSON report
 with the mask voxel count and the provenance, including the method, its
 settings and the model's SHA-256.
 
@@ -42,7 +47,7 @@ The portable archives are built by `exes/node-cli` and
 example and holds the files to the browser run recorded in
 `apps/brain-extraction/validation/browser-reference.json`: NIfTI headers, mask
 voxels, mask Dice and brain intensities. BET must match the browser's mask bit
-for bit. SynthStrip must reach Dice 0.9999; when its mask is not the browser's
+for bit. SynthStrip must reach Dice 0.99995; when its mask is not the browser's
 exactly, the Dice is taken against `validation/web-reference.mjs`, the app's
 ONNX Runtime Web path, after that reference reproduces the browser's mask.
 

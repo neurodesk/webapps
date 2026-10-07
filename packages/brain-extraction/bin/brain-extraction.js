@@ -54,13 +54,19 @@ try {
     },
   });
   const [command] = positionals;
+  const allowOnly = (allowed) => {
+    const ignored = Object.keys(values).find((name) => !allowed.includes(name));
+    if (ignored) throw new Error(`${command} does not accept --${ignored}.`);
+  };
   if (values.help) {
     console.log(HELP);
   } else if (command === 'self-check') {
     if (positionals.length !== 1) throw new Error('self-check does not accept arguments.');
+    allowOnly([]);
     console.log(JSON.stringify(await checkInstallation()));
   } else if (command === 'download-models') {
     if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
+    allowOnly(['cache-dir', 'offline']);
     const onProgress = reportProgress();
     const models = await downloadModels({
       cacheDir: values['cache-dir'],

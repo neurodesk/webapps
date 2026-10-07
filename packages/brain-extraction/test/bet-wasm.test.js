@@ -7,7 +7,8 @@ import { runBet } from '../src/bet.js';
 import { betRuntime } from '../src/bet-runtime.js';
 
 const read = (path) => readFile(new URL(path, import.meta.url));
-const qsmCoreSource = (lock) => /name = "qsm-core"\nversion = "[^"]*"\nsource = "([^"]+)"/.exec(lock)?.[1];
+// Windows checkouts may convert the lock files to CRLF.
+const qsmCoreSource = (lock) => /name = "qsm-core"\r?\nversion = "[^"]*"\r?\nsource = "([^"]+)"/.exec(lock)?.[1];
 
 test('bet.wasm builds from the qsm-core QSMbly\'s browser bundle locks', async () => {
   const browser = qsmCoreSource(await read('../../../apps/qsmbly/rust-wasm/Cargo.lock').then(String));

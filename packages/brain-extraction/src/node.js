@@ -30,6 +30,7 @@ async function loadBetRuntime() {
 const METHODS = {
   synthstrip: {
     models: [SYNTHSTRIP_MODEL],
+    threaded: true,
     async extract({ volume, models: [model], threads, onProgress }) {
       // Without the arena the T1 example peaks at 2.6 GB instead of 4.4 GB, at the same speed and mask.
       const sessionOptions = { executionProviders: ['cpu'], graphOptimizationLevel: 'all', intraOpNumThreads: threads, interOpNumThreads: 1, enableCpuMemArena: false };
@@ -179,6 +180,30 @@ async function assertNewOutput(directory) {
   if (entries.length) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
 }
 
+// Publishes the brain and mask together into a directory this run alone owns: an exclusively
+// created lock in an otherwise empty directory keeps two runs from interleaving their files,
+// and both files are staged before either is renamed into place.
+async function publish(directory, files) {
+  await mkdir(directory, { recursive: true });
+  const lock = join(directory, '.brain-extraction.lock');
+  try {
+    await writeFile(lock, '', { flag: 'wx' });
+  } catch (error) {
+    if (error.code === 'EEXIST') throw new Error(`Another brain-extraction run is writing to ${directory}. Choose a new or empty directory.`);
+    throw error;
+  }
+  const staged = Object.entries(files).map(([name, bytes]) => ({ path: join(directory, name), partial: join(directory, `${name}.${randomUUID()}.partial`), bytes }));
+  try {
+    const entries = await readdir(directory);
+    if (entries.length !== 1) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
+    for (const { partial, bytes } of staged) await writeFile(partial, bytes, { flag: 'wx' });
+    for (const { partial, path } of staged) await rename(partial, path);
+  } finally {
+    for (const { partial } of staged) await rm(partial, { force: true });
+    await rm(lock, { force: true });
+  }
+}
+
 export async function extract({
   input,
   output,
@@ -192,7 +217,8 @@ export async function extract({
   if (!input || !output) throw new Error('An input image and an output directory are required.');
   const method = resolveMethod(methodName);
   const fraction = resolveFractionalIntensity(fractionalIntensity, methodName);
-  const intraOpNumThreads = resolveThreads(threads);
+  if (!method.threaded && threads !== undefined) throw new Error('--threads applies to --method synthstrip only.');
+  const intraOpNumThreads = method.threaded ? resolveThreads(threads) : undefined;
   const destination = resolve(output);
   await assertNewOutput(destination);
   const volume = readVolume(arrayBuffer(await readFile(input)));
@@ -202,9 +228,7 @@ export async function extract({
   const result = await method.extract({ volume, models, threads: intraOpNumThreads, fractionalIntensity: fraction, onProgress });
   const names = outputNames(basename(input), methodName);
   const files = writeOutputs(result);
-  await mkdir(destination, { recursive: true });
-  await writeAtomically(join(destination, names.brain), new Uint8Array(files.brain));
-  await writeAtomically(join(destination, names.mask), new Uint8Array(files.mask));
+  await publish(destination, { [names.brain]: new Uint8Array(files.brain), [names.mask]: new Uint8Array(files.mask) });
   return {
     output: destination,
     files: [names.brain, names.mask],

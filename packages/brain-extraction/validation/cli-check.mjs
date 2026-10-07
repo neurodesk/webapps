@@ -103,6 +103,7 @@ try {
     if (method === 'bet') check(report.provenance.fractionalIntensity === 0.5, `BET fractional intensity ${report.provenance.fractionalIntensity}, the web app's default`);
     const outputs = await files(output);
     check(JSON.stringify([...outputs.keys()]) === JSON.stringify([names.brain, names.mask].sort()), `outputs ${[...outputs.keys()].join(', ')}`);
+    if (!outputs.has(names.brain) || !outputs.has(names.mask)) continue;
     const measured = measure({ brain: outputs.get(names.brain), mask: outputs.get(names.mask) });
     check(report.maskVoxels === measured.maskVoxels, `reported ${report.maskVoxels} mask voxels, written ${measured.maskVoxels}`);
     for (const [passed, line] of compareWithBrowser(measured, method)) check(passed, line);
