@@ -1,7 +1,7 @@
 {
   "name": "@neurodesk/lcmodel",
   "version": "0.3.2",
-  "description": "LCModel and FID-A spectroscopy processing for browsers (Rust ports compiled to WebAssembly)",
+  "description": "FID-A preprocessing and LCModel fitting of MR spectroscopy for browsers and the command line (Rust ports compiled to WebAssembly)",
   "type": "module",
   "private": true,
   "license": "BSD-3-Clause",
@@ -10,11 +10,27 @@
   },
   "exports": {
     ".": "./src/wasm.js",
-    "./wasm": "./src/lcmodel.wasm"
+    "./wasm": "./src/lcmodel.wasm",
+    "./pipeline": "./src/pipeline.js",
+    "./basis-select": "./src/basis-select.js",
+    "./group": "./src/group.js",
+    "./inputs": "./src/inputs.js",
+    "./lcmodel-io": "./src/lcmodel-io.js",
+    "./library": "./src/library.js",
+    "./report": "./src/report.js",
+    "./spectrum-plot": "./src/spectrum-plot.js",
+    "./tissue": "./src/tissue.js",
+    "./manifest": "./model.manifest.json",
+    "./package.json": "./package.json"
   },
+  "files": [
+    "src",
+    "model.manifest.json",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js",
+    "lint": "node --check src/*.js",
     "build:wasm": "make wasm"
   },
   "repository": {

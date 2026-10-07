@@ -343,6 +343,20 @@ export function concentrationsCsv(rows, ratioTo) {
   return [header, ...cells].map((row) => row.map((c) => (/[",]/.test(String(c)) ? `"${String(c).replace(/"/g, '""')}"` : c)).join(",")).join("\n") + "\n";
 }
 
+/** LCModel's stop code ("FATAL ERROR MYBASI 3") as a message, naming the common ones. */
+export function lcmodelError(code, outputs) {
+  const hints = {
+    "MYBASI 9": "The basis set was simulated for a different field strength.",
+    "MYBASI 2": "The basis set's bandwidth is too narrow for these data.",
+    "MYDATA 1": "The spectrum file could not be read.",
+    "INITIA 4": "The fit range lies outside the spectrum.",
+  };
+  const key = Object.keys(hints).find((k) => code.includes(k));
+  const detail = key ? ` ${hints[key]}` : "";
+  const diag = Object.entries(outputs ?? {}).find(([name]) => name.endsWith(".table"))?.[1]?.split("$$DIAG")[1]?.split("$$")[0]?.trim();
+  return `LCModel stopped (${code}).${detail}${diag ? ` Diagnostics: ${diag.replace(/\s+/g, " ")}` : ""}`;
+}
+
 const GABA_PLUS = "GABA+MM3co";
 export const MODEL_NOTES = Object.freeze({
   [GABA_PLUS]: "GABA+ (GABA + MM3co): primary result",

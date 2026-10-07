@@ -15,8 +15,6 @@ on:
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
-      - 'apps/lcmodel/src/lcmodel-io.js'
-      - 'apps/lcmodel/test/water-scaling.test.js'
       - '.github/workflows/lcmodel-native.yml'
   push:
     branches: [main]
@@ -24,8 +22,6 @@ on:
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
-      - 'apps/lcmodel/src/lcmodel-io.js'
-      - 'apps/lcmodel/test/water-scaling.test.js'
       - '.github/workflows/lcmodel-native.yml'
   workflow_dispatch:
 
@@ -85,4 +81,4 @@ jobs:
       - name: The app's default control file recovers synthetic water-scaled concentrations
         env:
           FIDA_REQUIRE_REFERENCE: '1'
-        run: LCMODEL_BASIS_DIR="$DATA/basis" node --test apps/lcmodel/test/water-scaling.test.js
+        run: LCMODEL_BASIS_DIR="$DATA/basis" node --test packages/lcmodel/test/water-scaling.test.js
