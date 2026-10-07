@@ -9,6 +9,9 @@ PACKAGE = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("activation", PACKAGE / "scripts" / "activate_manifest.py")
 activation = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(activation)
+COMPARE_SPEC = importlib.util.spec_from_file_location("compare", PACKAGE / "validation" / "compare.py")
+compare = importlib.util.module_from_spec(COMPARE_SPEC)
+COMPARE_SPEC.loader.exec_module(compare)
 
 
 class ActivationTest(unittest.TestCase):
@@ -70,6 +73,47 @@ class ActivationTest(unittest.TestCase):
         self.change_end_to_end(lambda report: report["surfaces"]["rh.pial"].update(mean_corresponding_distance_mm=float("nan")))
         with self.assertRaises(AssertionError):
             self.validate()
+
+
+class BaselineTest(unittest.TestCase):
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory()
+        self.addCleanup(self.work.cleanup)
+        self.browser = Path(self.work.name)
+        for name in compare.BASELINE_OUTPUTS:
+            (self.browser / name).write_bytes(name.encode())
+        self.pinned = {name: compare.sha256(self.browser / name) for name in compare.BASELINE_OUTPUTS}
+
+    def test_accepts_byte_identical_outputs(self):
+        self.assertEqual(compare.compare_baseline(self.browser, self.pinned)["changed"], [])
+
+    def test_names_each_output_that_moved(self):
+        (self.browser / "rh.pial").write_bytes(b"one float moved")
+        (self.browser / "lh.mid.white").write_bytes(b"derived surface moved")
+        result = compare.compare_baseline(self.browser, self.pinned)
+        self.assertFalse(result["byteIdentical"])
+        self.assertEqual(result["changed"], ["lh.mid.white", "rh.pial"])
+
+    def test_every_mode_pins_every_baseline_output_and_reference_surface(self):
+        for fixture in compare.INPUTS.values():
+            self.assertEqual(set(fixture["outputSha256"]), set(compare.BASELINE_OUTPUTS))
+            self.assertEqual(set(fixture["referenceGeometrySha256"]), set(compare.SURFACES))
+
+    def test_reference_geometry_ignores_creation_stamp(self):
+        import nibabel as nib
+        import numpy as np
+
+        vertices = np.arange(12, dtype=np.float64).reshape(4, 3)
+        faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
+        first = self.browser / "first"
+        second = self.browser / "second"
+        nib.freesurfer.write_geometry(first, vertices, faces, create_stamp="created by topofit on Mon")
+        nib.freesurfer.write_geometry(second, vertices, faces, create_stamp="created by topofit on Tue")
+        self.assertNotEqual(compare.sha256(first), compare.sha256(second))
+        self.assertEqual(compare.geometry_sha256(first), compare.geometry_sha256(second))
+        vertices[3, 2] = np.nextafter(np.float32(11), np.float32(12))
+        nib.freesurfer.write_geometry(second, vertices, faces, create_stamp="created by topofit on Tue")
+        self.assertNotEqual(compare.geometry_sha256(first), compare.geometry_sha256(second))
 
 
 if __name__ == "__main__":
