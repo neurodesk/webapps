@@ -440,10 +440,13 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
   // Max dimension for LBV adaptive maxit
   const maxDim = maskDims ? Math.max(maskDims[0], maskDims[1], maskDims[2]) : 256;
 
+  const vsharpMaxRadius = Math.round(18 * minVsz);
+
   return {
-    // V-SHARP: max_radius = 18 * min(vsz), min_radius = 2 * max(vsz)
-    vsharpMaxRadius: Math.round(18 * minVsz),
-    vsharpMinRadius: Math.round(Math.max(1, 2 * minVsz)),
+    // V-SHARP: max_radius = 18 * min(vsz), min_radius = 2 * max(vsz) - matches QSM.jl
+    // sharp.jl. Capped at max_radius so strongly anisotropic voxels keep one kernel.
+    vsharpMaxRadius,
+    vsharpMinRadius: Math.min(vsharpMaxRadius, Math.round(Math.max(1, 2 * maxVsz))),
     // SHARP: radius = 18 * min(vsz) - matches QSM.jl sharp.jl line 22
     sharpRadius: Math.round(18 * minVsz),
     // iSMV: radius = 2 * max(vsz) - matches QSM.jl ismv.jl line 20
