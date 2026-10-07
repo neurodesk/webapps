@@ -6,8 +6,9 @@ import { parse } from 'yaml';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { provisioners, unpublished } from '../scripts/lib/e2e-test-data.mjs';
 
-// Environment variables whose absence makes an e2e test skip itself:
-// `test.skip(!process.env.X ...)`, or `!name` where `const name = process.env.X`.
+// Environment variables that decide whether an e2e test skips itself: any
+// `process.env.X` in a `test.skip(...)` line, or a `name` there where
+// `const name = process.env.X` (`!name`, `name !== "check"`, ...).
 async function dataGates() {
   const gates = new Map();
   for (const app of await readdir(join(repoRoot, 'apps'))) {
@@ -17,8 +18,8 @@ async function dataGates() {
       const source = await readFile(join(directory, file), 'utf8');
       const aliases = new Map([...source.matchAll(/const (\w+) = process\.env\.([A-Z0-9_]+);/g)].map(([, name, variable]) => [name, variable]));
       for (const [line] of source.matchAll(/test\.skip\([^\n]*/g)) {
-        for (const [, variable] of line.matchAll(/!process\.env\.([A-Z0-9_]+)/g)) gates.set(variable, `${app}/e2e/${file}`);
-        for (const [, name] of line.matchAll(/!(\w+)\b/g)) if (aliases.has(name)) gates.set(aliases.get(name), `${app}/e2e/${file}`);
+        for (const [, variable] of line.matchAll(/process\.env\.([A-Z0-9_]+)/g)) gates.set(variable, `${app}/e2e/${file}`);
+        for (const [name] of line.matchAll(/\b\w+\b/g)) if (aliases.has(name)) gates.set(aliases.get(name), `${app}/e2e/${file}`);
       }
     }
   }

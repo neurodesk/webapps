@@ -5,8 +5,9 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { COMPUTE_PORT, COMPUTE_TOKEN } from "../playwright.config.js";
+import { gpuBrowser } from "../../../test-utils/hardware-gpu.mjs";
 
-test.use({ launchOptions: { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'] } });
+test.use(gpuBrowser);
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const example = examples[0];
