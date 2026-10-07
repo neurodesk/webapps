@@ -13,12 +13,14 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',
+  '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });
 
 export function releaseDate(now = new Date()) {

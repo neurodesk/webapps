@@ -170,8 +170,8 @@ importers:
   apps/browserqc:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260925
+        version: 0.1.20260925
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -182,11 +182,11 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@niivue/niimath':
-        specifier: 1.4.20260909
-        version: 1.4.20260909
+        specifier: 1.4.20260928
+        version: 1.4.20260928
       '@niivue/niivue':
-        specifier: 1.0.0-rc.11
-        version: 1.0.0-rc.11
+        specifier: 1.0.0-rc.16
+        version: 1.0.0-rc.16
     devDependencies:
       '@webgpu/types':
         specifier: ^0.1.52
@@ -528,6 +528,9 @@ importers:
       '@fireants/fireants':
         specifier: 0.1.20260913
         version: 0.1.20260913
+      '@neurodesk/fireants':
+        specifier: workspace:*
+        version: link:../../packages/fireants
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -875,6 +878,9 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
+      '@neurodesk/white-matter-lesions':
+        specifier: workspace:*
+        version: link:../../packages/white-matter-lesions
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -962,6 +968,12 @@ importers:
         specifier: workspace:*
         version: link:../components
 
+  packages/fireants:
+    dependencies:
+      '@fireants/fireants':
+        specifier: 0.1.20260913
+        version: 0.1.20260913
+
   packages/greedy: {}
 
   packages/lcmodel: {}
@@ -1042,6 +1054,22 @@ importers:
         specifier: 0.8.0
         version: 0.8.0
       onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
+  packages/white-matter-lesions:
+    dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/synthstrip':
+        specifier: workspace:*
+        version: link:../synthstrip
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+    devDependencies:
+      onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
 
@@ -1309,6 +1337,9 @@ packages:
 
   '@brainchop/mindgrab@0.1.20260923':
     resolution: {integrity: sha512-U6u1UPNxIn/mudogTtUgaDi5zWzwtxQxiPAgOu3dT9zvqRS9hWaGRyLX3zPXFb07/WGJA/OrmVsGGsT/PzdqZw==}
+
+  '@brainchop/mindgrab@0.1.20260925':
+    resolution: {integrity: sha512-FFuU3IMQqrUuiHdm6l0//eXZ5X4vuOTgq4yK4qgUn5dOiMnY7LjRP+SpFULCZK3H4zW/mNuONXAE/Ex1PZvbvA==}
 
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     resolution: {integrity: sha512-ZKZ/F8US7JR92J4DMct6cLW/Y66o2K576+zjlEN/MevH70bFIsB10wkZEQPLzl2oNh2SMGy55xpJ9JoBRl5DOA==}
@@ -2542,6 +2573,9 @@ packages:
   '@niivue/niimath@1.4.20260909':
     resolution: {integrity: sha512-El7ugOE3Hn30Xsjsvd2l0rMnQG2EqkoWFAXBLV6YQxSaW8PSR/qJ8Kj8jgUG9zyvSAC4YNXrbTYFqv5MUqTCwQ==}
 
+  '@niivue/niimath@1.4.20260928':
+    resolution: {integrity: sha512-uHXuzQDY6l1b1i77jLBgBdGWNI9t6pdjfPjM0eqECH12PUB6MaBZNgKJdSLHqOZb/JYUqPMsYG0JidJlUldrNw==}
+
   '@niivue/niimath@file:apps/dwi2trx/vendor/niimath':
     resolution: {directory: apps/dwi2trx/vendor/niimath, type: directory}
 
@@ -2562,6 +2596,9 @@ packages:
 
   '@niivue/niivue@1.0.0-rc.14':
     resolution: {integrity: sha512-QJtugUVRxTb0dpOyVxK65ufXK0zF5xp7uMw9S+aIDfXgd6ffJvRSJuqwyfgnNzMwH8TKHE+znApYW00sCiVECQ==}
+
+  '@niivue/niivue@1.0.0-rc.16':
+    resolution: {integrity: sha512-ACDAQtuFzP7OhDEFT9iml57nyd7oqAjMAY3g1UPAt2nCmLtxK66BYF3GxBhQvKYbNyN8jCqJBMVwqAD42bLC5g==}
 
   '@niivue/niivue@1.0.0-rc.9':
     resolution: {integrity: sha512-CPu6+KTONESagpbYn+BF/TWy27twmPgqpLNam9x24tl9XDWKfJTLhkjqBZSCVOyWqu1eYMdJFt/nQeDbTGdWvA==}
@@ -7087,6 +7124,10 @@ snapshots:
     dependencies:
       '@webgpu/types': 0.1.71
 
+  '@brainchop/mindgrab@0.1.20260925':
+    dependencies:
+      '@webgpu/types': 0.1.71
+
   '@cbor-extract/cbor-extract-darwin-arm64@2.2.2':
     optional: true
 
@@ -8248,6 +8289,8 @@ snapshots:
 
   '@niivue/niimath@1.4.20260909': {}
 
+  '@niivue/niimath@1.4.20260928': {}
+
   '@niivue/niimath@file:apps/dwi2trx/vendor/niimath': {}
 
   '@niivue/niivue@0.62.1':
@@ -8304,6 +8347,15 @@ snapshots:
       zarrita: 0.7.4
 
   '@niivue/niivue@1.0.0-rc.14':
+    dependencies:
+      cbor-x: 1.6.4
+      clipper2-ts: 2.0.1-18
+      earcut: 3.2.3
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.0
+      zarrita: 0.7.4
+
+  '@niivue/niivue@1.0.0-rc.16':
     dependencies:
       cbor-x: 1.6.4
       clipper2-ts: 2.0.1-18

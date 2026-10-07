@@ -7,7 +7,7 @@
   "operations": {
     "quality-control": {
       "title": "Quality control",
-      "description": "Run MindGrab 18-label segmentation and niimath MRIQC-style metrics on the same native grid.",
+      "description": "Run an independent brain mask and PVE or label segmentation, then native-grid MRIQC-style metrics.",
       "mode": "batch",
       "inputs": {
         "image": {
@@ -41,21 +41,59 @@
             "cpu"
           ],
           "default": "auto"
+        },
+        "model": {
+          "type": "string",
+          "description": "Segmentation model",
+          "enum": [
+            "mindmap-pve",
+            "16chan18cls",
+            "mindmap",
+            "mindsnap"
+          ],
+          "default": "mindmap-pve"
         }
       },
       "artifacts": {
         "labels": {
           "type": "neuro:label-map",
           "mediaType": "application/x-nifti",
-          "labelSystem": "mindgrab-16chan18cls",
           "space": "input",
-          "minimum": 1,
+          "minimum": 0,
           "maximum": 1
         },
         "qc": {
           "type": "neuro:report",
           "mediaType": "application/json",
           "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "neuro:label-map",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "csf": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "gm": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "wm": {
+          "type": "neuro:volume",
+          "mediaType": "application/x-nifti",
+          "space": "input",
+          "minimum": 0,
           "maximum": 1
         }
       },

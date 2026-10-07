@@ -1,0 +1,127 @@
+name: upstream sync
+
+# Opens one pull request per app with an apps/<id>/upstream.json, merging the
+# upstream repository's new commits into the monorepo copy.
+on:
+  schedule:
+    - cron: '17 2 * * 1'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App id; leave empty for every app with an upstream.json
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.plan.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - id: plan
+        env:
+          APP: ${{ inputs.app }}
+        run: |
+          apps=$(ls apps/*/upstream.json | cut -d/ -f2 | jq -R . | jq -sc --arg app "$APP" 'map(select($app == "" or . == $app))')
+          echo "apps=$apps" >> "$GITHUB_OUTPUT"
+
+  sync:
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    concurrency:
+      group: upstream-sync-${{ matrix.app }}
+    env:
+      APP: ${{ matrix.app }}
+      BASE: main
+      BRANCH: upstream/${{ matrix.app }}
+    steps:
+      # An App token, unlike GITHUB_TOKEN, starts CI on the pull requests it opens.
+      # Setup: docs/architecture/upstream-sync.md.
+      - id: app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.UPSTREAM_SYNC_CLIENT_ID }}
+          private-key: ${{ secrets.UPSTREAM_SYNC_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Commit as the App
+        id: bot
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          name="$SLUG[bot]"
+          git config user.name "$name"
+          git config user.email "$(gh api "/users/$name" --jq .id)+$name@users.noreply.github.com"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Leave a branch with manual fixes alone
+        id: guard
+        env:
+          BOT: ${{ steps.bot.outputs.name }}
+        run: |
+          if git rev-parse -q --verify "origin/$BRANCH" >/dev/null \
+            && git log --format='%an%n%cn' "origin/$BASE..origin/$BRANCH" | grep -qvxF "$BOT"; then
+            echo "::notice::$BRANCH has commits from a person; merge or delete it to resume syncing $APP."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Merge upstream
+        id: merge
+        if: steps.guard.outputs.skip != 'true'
+        run: |
+          summary=$(TMPDIR="$RUNNER_TEMP" node scripts/sync-upstream.mjs --app "$APP" --body "$RUNNER_TEMP/body.md")
+          echo "$summary"
+          echo "commits=$(jq .commits <<<"$summary")" >> "$GITHUB_OUTPUT"
+          echo "conflicts=$(jq '.conflicts | length' <<<"$summary")" >> "$GITHUB_OUTPUT"
+          echo "target=$(jq -r .target <<<"$summary" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          if jq -e '.conflicts | index("package.json") | not' <<<"$summary" >/dev/null \
+            && ! git diff --quiet -- "apps/$APP/package.json"; then
+            pnpm install --lockfile-only --no-frozen-lockfile
+          fi
+      - name: Open or refresh the pull request
+        if: steps.merge.outputs.commits > 0
+        env:
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TARGET: ${{ steps.merge.outputs.target }}
+        run: |
+          git checkout -B "$BRANCH"
+          git add -A
+          git commit -qm "chore($APP): merge upstream at $TARGET"
+          if git rev-parse -q --verify "origin/$BRANCH" >/dev/null && git diff --quiet "origin/$BRANCH" HEAD; then
+            echo "$BRANCH is already at upstream $TARGET."
+            exit 0
+          fi
+          expected=$(git rev-parse -q --verify "origin/$BRANCH" || true)
+          git push --force-with-lease="refs/heads/$BRANCH:$expected" origin "$BRANCH"
+          title="chore($APP): merge upstream at $TARGET"
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -z "$pr" ]; then
+            draft=()
+            if [ "$CONFLICTS" -gt 0 ]; then draft=(--draft); fi
+            gh pr create --base "$BASE" --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/body.md" "${draft[@]}"
+          else
+            gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            if [ "$CONFLICTS" -gt 0 ]; then gh pr ready "$pr" --undo || true; fi
+          fi

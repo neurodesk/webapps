@@ -1,34 +1,34 @@
-/**
- * BrowserQC — browser-only MRI quality control. No data leaves the machine.
- *
- * Drop a NIfTI (or a DICOM folder → dcm2niix) and it runs automatically: run the
- * MindGrab "Subcortical + GWM" parcellation on the native grid as a colour overlay,
- * then compute niimath MRIQC-style quality metrics into the side panel. Everything
- * runs in WebAssembly + WebGPU/WebGL2 locally.
- */
-
 import NiiVueGPU, {
-  type ColorMap,
-  type ImageFromUrlOptions,
+  DRAG_MODE,
   MULTIPLANAR_TYPE,
   SHOW_RENDER,
   SLICE_TYPE,
 } from '@niivue/niivue'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { bindFileDrop, createInfoDialog, createConsole, createExampleSelector } from '@neurodesk/webapp-components/ui'
+import { bindFileDrop, createInfoDialog, createConsole, createExampleSelector, createViewerToolbar, ProgressManager } from '@neurodesk/webapp-components/ui'
 import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { registerAppAutomation, registerViewer, createNiivueAdapter, runAbortable, summarizeLabels, type OperationContext } from '@neurodesk/webapp-components/automation'
-import { readNifti } from '@neurodesk/webapp-components/file-io'
+import { downloadBlob, readNifti } from '@neurodesk/webapp-components/file-io'
 import { runSegmentation, type SegmentationBackend } from './segmentation'
 import { readImageFiles, runDcm2niix, traverseDataTransferItems } from '@neurodesk/runtime-support/dcm2niix-client'
-import { Niimath } from '@niivue/niimath'
+import { Niimath, type QcTissues } from '@niivue/niimath'
+import { MODELS as BRAINCHOP } from '@brainchop/mindgrab'
+import { MODELS, parseModel, type Model } from './models'
 import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
-import { CSF_LABELS, WM_LABELS, bindSidecar, readQcReport, renderQc } from './qc'
+import { bindSidecar, readQcReport, renderQc } from './qc'
 import type { QcMetrics, QcReport } from './qc'
+import { resetRating, readRating } from './rate'
+import { describeSeries } from './series'
 import examples from '../examples.json'
 
 const ASSET_BASE_URL = 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/12eb1069c34097b7c0881b22e1f7e4ed953aa5cc/browserqc/'
 const TEMPLATE_URL = `${ASSET_BASE_URL}avg152T1.nii.gz`
+const TISSUE_TINTS = [
+  ['gm', [255, 64, 64]],
+  ['wm', [255, 255, 255]],
+  ['csf', [64, 128, 255]],
+] as const
+let tissueColormaps: Record<string, string> = {}
 
 mountImagingWorkspace({
   controls: '#qcPanel',
@@ -41,14 +41,23 @@ mountImagingWorkspace({
 })
 
 function $<T extends HTMLElement>(id: string): T {
-  const el = document.getElementById(id)
+  const el = document.querySelector<T>(`#${id}`)
   if (!el) throw new Error(`Element #${id} not found`)
-  return el as T
+  return el
 }
 
 // --- DOM handles ---
 const locationEl = $('location')
-const loadingCircle = $('loadingCircle')
+const progressManager = new ProgressManager({ progressBarId: 'loadingCircle', statusTextId: 'statusMsg' })
+let manualRun: AbortController | null = null
+const modelPick = $<HTMLSelectElement>('modelPick')
+for (const [id, model] of Object.entries(MODELS)) {
+  const option = document.createElement('option')
+  option.value = id
+  option.textContent = model.label
+  modelPick.append(option)
+}
+modelPick.value = 'mindmap-pve'
 const statusMsg = $<HTMLLabelElement>('statusMsg')
 const aboutBtn = $<HTMLButtonElement>('aboutBtn')
 const aboutDialog = createInfoDialog({ id: 'aboutDialog' })
@@ -68,7 +77,7 @@ $('canvas-container').appendChild(technicalLog)
 // throws on a browser without it. So construct here but defer attachTo to init(),
 // AFTER the navigator.gpu guard, or a no-WebGPU browser gets an unhandled
 // top-level rejection instead of the friendly "needs WebGPU" message.
-const nv = new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] })
+const nv = new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1], volumeIsNearestInterpolation: true })
 type ExtCtx = ReturnType<typeof nv.createExtensionContext>
 let ctx: ExtCtx | null = null
 
@@ -80,6 +89,9 @@ async function attachNiiVue(): Promise<void> {
   nv.showRender = SHOW_RENDER.ALWAYS
   nv.crosshairGap = 5
   nv.isLegendVisible = false
+  tissueColormaps = Object.fromEntries(TISSUE_TINTS.map(([name, [r, g, b]]) => [name,
+    nv.addColormap(`tissue-${name}`, { R: [r >> 1, r], G: [g >> 1, g], B: [b >> 1, b], A: [0, 48], I: [0, 255] }),
+  ]))
   ctx = nv.createExtensionContext()
   ctx.on('locationChange', (e) => {
     locationEl.textContent = e.detail.string
@@ -123,12 +135,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   })
 }
 
-// The runtime-support niimath wrapper exposes no public worker accessor. The
-// raw --qc path still needs that worker for compatibility, so keep the private
-// lookup in one place and assert it after init().
-function niimathWorker(): Worker | null {
-  return (niimath as unknown as { worker?: Worker | null }).worker ?? null
-}
 // --- Status helpers ---
 function setStatus(msg: string): void {
   statusMsg.textContent = msg
@@ -138,9 +144,63 @@ function setStatus(msg: string): void {
   if (msg) technicalLog.log(msg)
 }
 function spin(on: boolean): void {
-  if (on) loadingCircle.removeAttribute('value')
-  else loadingCircle.setAttribute('value', '0')
+  if (on) progressManager.setIndeterminate(statusMsg.textContent ?? 'Working…')
+  else progressManager.setProgress(0)
 }
+
+const viewPick = document.createElement('select')
+viewPick.id = 'viewPick'
+viewPick.setAttribute('aria-label', 'Image display')
+for (const [value, label] of [['tissues', 'Tissues'], ['background', 'Background noise']]) {
+  const option = document.createElement('option')
+  option.value = value
+  option.textContent = label
+  viewPick.append(option)
+}
+const dragPick = document.createElement('select')
+dragPick.id = 'dragPick'
+dragPick.setAttribute('aria-label', 'Right drag action')
+for (const [value, label] of [['contrast', 'Right drag contrast'], ['pan', 'Right drag pan']]) {
+  const option = document.createElement('option')
+  option.value = value
+  option.textContent = label
+  dragPick.append(option)
+}
+const toolbar = createViewerToolbar({
+  views: false, window: false, overlay: false, colormap: false, download: false, screenshot: false,
+  actions: [viewPick, dragPick, ovlSlider.closest('.nd-field') ?? ovlSlider],
+})
+$('canvas-container').prepend(toolbar)
+async function showView(): Promise<void> {
+  const t1 = nv.volumes[0]
+  if (!t1) return
+  const background = viewPick.value === 'background'
+  ovlSlider.disabled = background
+  for (let index = 1; index < nv.volumes.length; index++) {
+    await nv.setVolume(index, { opacity: background ? 0 : Number(ovlSlider.value) / 255 })
+  }
+  let calMin = t1.robustMin
+  let calMax = t1.robustMax
+  if (background && t1.img) {
+    const image = t1.img
+    const stride = Math.max(1, Math.ceil(t1.nVox3D / 1e6))
+    const values = Float64Array.from({ length: Math.ceil(t1.nVox3D / stride) }, (_, index) => image[index * stride])
+      .filter(value => value !== 0 && Number.isFinite(value)).sort()
+    if (values.length) {
+      const slope = t1.hdr.scl_slope || 1
+      calMin = values[0] * slope + t1.hdr.scl_inter
+      calMax = values[Math.floor(0.61 * (values.length - 1))] * slope + t1.hdr.scl_inter
+    }
+  }
+  await nv.setVolume(0, { colormap: background ? 'viridis' : 'gray', isColormapInverted: background, calMin, calMax })
+}
+viewPick.addEventListener('change', () => {
+  if (!busy) enqueue(showView)
+}, ac)
+dragPick.addEventListener('change', () => {
+  nv.secondaryDragMode = dragPick.value === 'pan' ? DRAG_MODE.pan : DRAG_MODE.contrast
+}, ac)
+$('cancelButton').addEventListener('click', () => manualRun?.abort(), ac)
 
 // --- Serial task queue (load / drop / segment must not overlap) ---
 let pending: Promise<unknown> = Promise.resolve()
@@ -158,11 +218,7 @@ function enqueue(fn: () => Promise<unknown>): void {
 }
 
 async function ensureNiimath(): Promise<void> {
-  if (!niimathReady)
-    niimathReady = niimath.init().then(() => {
-      if (!(niimathWorker() instanceof Worker))
-        throw new Error('niimath worker handle missing after init (wrapper changed?)')
-    })
+  if (!niimathReady) niimathReady = niimath.init().then(() => {})
   await withTimeout(niimathReady, WORKER_TIMEOUT_MS, 'niimath init')
 }
 
@@ -180,76 +236,15 @@ async function fetchFile(url: string, name: string, signal?: AbortSignal): Promi
 
 
 
-// MindGrab returns native-grid labels, so no conform/reslice implementation or model
-// files are shipped with this demo.
-const SEG_COLORMAP = {
-  R: [0, 245, 205, 120, 196, 220, 230, 0, 122, 236, 12, 204, 42, 119, 220, 103, 255, 165],
-  G: [0, 245, 62, 18, 58, 248, 148, 118, 186, 13, 48, 182, 204, 159, 216, 255, 165, 42],
-  B: [0, 245, 78, 134, 250, 164, 34, 14, 220, 176, 255, 142, 164, 176, 20, 255, 0, 42],
-  labels: ['Unknown', 'Cerebral-White-Matter', 'Cerebral-Cortex', 'Lateral-Ventricle', 'Inferior-Lateral-Ventricle', 'Cerebellum-White-Matter', 'Cerebellum-Cortex', 'Thalamus', 'Caudate', 'Putamen', 'Pallidum', '3rd-Ventricle', '4th-Ventricle', 'Brain-Stem', 'Hippocampus', 'Amygdala', 'Accumbens-area', 'VentralDC'],
-  I: [...Array(18).keys()],
-  A: [0, ...Array(17).fill(255)],
-} satisfies ColorMap
-
-// Post a raw `--qc` job straight to the niimath worker. The wrapper's chain run()
-// only models image→ops→image; --qc takes its own argv and writes a TSV, so we drive
-// the worker directly (it stages `blob`+`extraFiles` into MEMFS, runs `cmd`, reads
-// `outName` back). The app's single-flight queue guarantees no niimath run overlaps
-// this one-shot handler swap.
-async function runNiimathQc(t1: File, seg: File, signal: AbortSignal): Promise<QcReport> {
-  const worker = niimathWorker()
-  if (!worker) throw new Error('niimath worker unavailable')
-  const template = await fetchFile(TEMPLATE_URL, 'avg152T1.nii.gz', signal)
-  if (worker !== niimathWorker()) throw new Error('QC cancelled')
-  return new Promise((resolve, reject) => {
-    worker.onmessage = (e: MessageEvent<unknown>) => {
-      const d = e.data
-      if (d && typeof d === 'object' && 'type' in d && d.type === 'error') {
-        reject(new Error('message' in d ? String(d.message) : 'QC worker failed.'))
-        return
-      }
-      if (d && typeof d === 'object' && 'blob' in d) {
-        if (!(d.blob instanceof Blob)) {
-          reject(new Error('QC worker returned an invalid report file.'))
-          return
-        }
-        void readQcReport(d.blob).then(resolve, reject)
-      }
-    }
-    worker.onerror = event => reject(new Error(event.message || 'QC worker failed.'))
-    worker.onmessageerror = () => reject(new Error('QC worker returned an unreadable result.'))
-    worker.postMessage({
-      blob: t1, // staged in MEMFS under t1.name
-      extraFiles: [{ name: seg.name, data: seg }, { name: template.name, data: template }],
-      cmd: [
-        '--qc', t1.name, '--seg', seg.name,
-        '--csf', CSF_LABELS.join(','), '--wm', WM_LABELS.join(','),
-        '--air', template.name, '--json', 'qc.json',
-      ],
-      outName: 'qc.json',
-    })
-  })
-}
-
-// MRIQC-style QC on the native input + the native-space segmentation. The T1 is
-// serialized straight from NiiVue (volumes[0]) so it shares the exact grid of the
-// segmentation we built from that same volume — `--qc` requires identical geometry.
-async function computeQc(segBytes: Uint8Array, signal: AbortSignal): Promise<QcReport> {
+async function computeQc(t1: Uint8Array, tissues: QcTissues, model: Model, signal: AbortSignal): Promise<QcReport> {
   await runAbortable(signal, ensureNiimath, resetNiimathWorker)
-  const t1 = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
-  if (!(t1 instanceof Uint8Array)) throw new Error('could not serialize the input volume')
-  signal.throwIfAborted()
-  const report = await runAbortable(signal, () => withTimeout(
-    // Both inputs are uncompressed .nii (saveVolume with an empty filename does not
-    // gzip; writeNifti emits raw) — no gunzip cost, and `--qc` writes a TSV so output
-    // gz never applies. Name matches content so niimath doesn't attempt a gunzip.
-    runNiimathQc(new File([t1], 'qc_t1.nii'), new File([segBytes], 'qc_seg.nii'), signal),
-    WORKER_TIMEOUT_MS,
-    'niimath --qc --air',
-  ), resetNiimathWorker)
+  const air = await fetchFile(TEMPLATE_URL, 'avg152T1.nii.gz', signal)
+  const output = await runAbortable(signal, () => withTimeout(
+    niimath.image(new Uint8Array(t1).buffer).qc(tissues, air), WORKER_TIMEOUT_MS, 'niimath QC'), resetNiimathWorker)
+  const report = await readQcReport(new Blob([JSON.stringify(output)]))
   signal.throwIfAborted()
   if (bidsMeta) report.bids_meta = bidsMeta
-  report.provenance.segmentation = 'mindgrab 16chan18cls (Subcortical + GWM)'
+  report.provenance.segmentation = `brainchop ${model} (${MODELS[model].label})`
   lastReport = report
   saveBtn.disabled = false
   const metrics: QcMetrics = {}
@@ -264,6 +259,7 @@ let viewerReady = false
 async function loadSource(file: File, signal?: AbortSignal): Promise<void> {
   signal?.throwIfAborted()
   sourceFile = null
+  $<HTMLButtonElement>('rateSave').disabled = true
   labelSummary = null
   lastReport = null
   saveBtn.disabled = true
@@ -274,6 +270,8 @@ async function loadSource(file: File, signal?: AbortSignal): Promise<void> {
   await nv.loadVolumes([{ url: file, name: file.name }])
   signal?.throwIfAborted()
   sourceFile = file
+  resetRating()
+  await showView()
   lastReport = null
   saveBtn.disabled = true
   renderQc(qcBody, null)
@@ -284,7 +282,7 @@ async function loadSource(file: File, signal?: AbortSignal): Promise<void> {
   setStatus('Image loaded. Run quality control when ready.')
 }
 
-async function runSegment(file: File, options: { backend?: SegmentationBackend; signal?: AbortSignal; strictQc?: boolean; progress?: OperationContext['progress'] } = {}) {
+async function runSegment(file: File, options: { backend?: SegmentationBackend; model?: Model; signal?: AbortSignal; strictQc?: boolean; progress?: OperationContext['progress'] } = {}) {
   const signal = options.signal ?? listeners.signal
   const current = () => {
     signal.throwIfAborted()
@@ -295,8 +293,11 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
     setStatus(message)
     options.progress?.({ message })
   }
+  const model = options.model ?? parseModel(modelPick.value)
   current()
   spin(true)
+  modelPick.disabled = true
+  viewPick.disabled = true
   exampleControl.setDisabled(true)
   $<HTMLButtonElement>('runButton').disabled = true
   busy = true
@@ -308,9 +309,9 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
   const t0 = performance.now()
   try {
     reportProgress(`Loading ${file.name}…`)
-    await nv.loadVolumes([{ url: file, name: file.name } as ImageFromUrlOptions])
+    await nv.loadVolumes([{ url: file, name: file.name }])
     current()
-    reportProgress('Segmenting (Subcortical + GWM)… first run downloads the model')
+    reportProgress(`Brain mask and ${MODELS[model].label}… first run downloads the models`)
     const t1 = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
     if (!(t1 instanceof Uint8Array)) throw new Error('could not serialize the input volume')
     // MindGrab's auto mode falls back to WebGL when WebGPU has no adapter; on a software GL
@@ -318,39 +319,50 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
     const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null
     const backend = options.backend ?? (adapter ? 'auto' : 'cpu')
     if (!adapter) reportProgress('Segmenting on the CPU (no WebGPU adapter)… first run downloads the model')
-    const result = await runSegmentation(t1, backend, signal)
-    const bytes = new Uint8Array(result.image)
-    const measurements = summarizeLabels(await readNifti(bytes), SEG_COLORMAP)
-    const labels = new File([bytes], 'labels.nii', { type: 'application/x-nifti' })
+    const result = await runSegmentation(t1, backend, model, signal)
     current()
-    await nv.addVolume({
-      url: new File([bytes], 'segmentation.nii'),
-      name: 'segmentation.nii',
-      opacity: Number(ovlSlider.value) / 255,
-    } as ImageFromUrlOptions)
-    current()
-
-    await nv.setColormapLabel(nv.volumes.length - 1, SEG_COLORMAP)
-    // Scene mutation is done. Apply the latest slider value first — a drag during the
-    // locked window updated the control but the handler dropped it, so `addVolume`'s
-    // sampled opacity may be stale — then release the lock so subsequent drags land
-    // during the (scene-untouching) QC run below. `finally` still clears it if we
-    // bailed earlier.
-    await nv.setVolume(nv.volumes.length - 1, { opacity: Number(ovlSlider.value) / 255 })
-    current()
-    labelSummary = measurements
+    const artifacts: { role: string; file: File }[] = [
+      { role: 'mask', file: new File([result.mask], 'brain-mask.nii', { type: 'application/x-nifti' }) },
+    ]
+    let tissues: QcTissues
+    let measurements: ReturnType<typeof summarizeLabels> | undefined
+    const opacity = Number(ovlSlider.value) / 255
+    if (result.kind === 'labels') {
+      if (model === 'mindmap-pve') throw new Error('PVE model returned labels.')
+      const palette = BRAINCHOP[model].colormap
+      const colormap = { ...palette, I: palette.labels.map((_, index) => index), A: palette.labels.map((_, index) => index === 0 ? 0 : 255) }
+      const bytes = new Uint8Array(result.image)
+      measurements = summarizeLabels(await readNifti(bytes), colormap)
+      artifacts.push({ role: 'labels', file: new File([bytes], 'labels.nii', { type: 'application/x-nifti' }) })
+      await nv.addVolume({ url: artifacts[1].file, name: 'segmentation.nii', opacity })
+      current()
+      await nv.setColormapLabel(1, colormap)
+      tissues = { seg: result.image, csf: MODELS[model].csf, wm: MODELS[model].wm, mask: result.mask }
+    } else {
+      const names = ['csf', 'gm', 'wm'] satisfies (keyof typeof result.tissues)[]
+      for (const name of names) {
+        const image = new File([result.tissues[name]], `${name}.nii`, { type: 'application/x-nifti' })
+        artifacts.push({ role: name, file: image })
+        await nv.addVolume({ url: image, name: `${name}.nii`, colormap: tissueColormaps[name], colormapType: 1, calMin: 0.03, calMax: 1, opacity })
+        current()
+      }
+      tissues = { pve: [result.tissues.csf, result.tissues.gm, result.tissues.wm], mask: result.mask }
+    }
+    labelSummary = measurements ?? null
     busy = false
+    await showView()
 
     // QC on the result. Non-fatal: a QC failure must not discard the segmentation
     // display — reset the worker, surface it in the status bar, leave the panel empty.
     try {
       reportProgress('Computing image-quality metrics (niimath)…')
-      const qc = await computeQc(bytes, signal)
+      const qc = await computeQc(t1, tissues, model, signal)
       $<HTMLDetailsElement>('resultsSection').open = true
       current()
       reportProgress(`Segmentation + QC complete (${Math.round(performance.now() - t0)} ms)`)
-      return { labels, qc, measurements, segmentation: { model: '16chan18cls', version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs } }
+      return { artifacts, qc, measurements, segmentation: { model, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs } }
     } catch (err) {
+      if (signal.aborted) throw err
       console.warn('QC failed', err)
       resetNiimathWorker()
       renderQc(qcBody, null)
@@ -360,6 +372,8 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
     }
   } finally {
     busy = false
+    modelPick.disabled = false
+    viewPick.disabled = false
     spin(false)
     exampleControl.setDisabled(!viewerReady)
     $<HTMLButtonElement>('runButton').disabled = !sourceFile
@@ -367,7 +381,7 @@ async function runSegment(file: File, options: { backend?: SegmentationBackend; 
 }
 
 // --- DICOM / file drag-drop ---
-let dcmConverted: File[] = []
+let dcmConverted: Awaited<ReturnType<typeof describeSeries>> = []
 const DIRECT_VOLUME_RE = /\.(nii|nii\.gz|mgh|mgz|nrrd|mha|mhd|nhdr|head|v)$/i
 
 async function handleDrop(filesPromise: Promise<File[]>, signal?: AbortSignal): Promise<void> {
@@ -401,25 +415,41 @@ async function handleDrop(filesPromise: Promise<File[]>, signal?: AbortSignal): 
     }
     setStatus(`Converting ${files.length} file(s) with dcm2niix…`)
     const t0 = performance.now()
-    const niftiFiles = await readImageFiles(files, { directVolume: DIRECT_VOLUME_RE, signal })
+    const outputs = await readImageFiles(files, { directVolume: DIRECT_VOLUME_RE, niftiOnly: false, signal })
+    const niftiFiles = outputs.filter(file => DIRECT_VOLUME_RE.test(file.name))
     const ms = Math.round(performance.now() - t0)
     if (niftiFiles.length === 0) {
       setStatus('No NIfTI output produced. Are these DICOM images?')
       return
     }
-    if (niftiFiles.length > 1) {
-      dcmConverted = niftiFiles
+    dcmConverted = await describeSeries(niftiFiles, [...files, ...outputs].filter(file => /\.json$/i.test(file.name)), bidsMeta)
+    if (dcmConverted.length > 1) {
+      sourceFile = null
+      bidsMeta = null
+      lastReport = null
+      saveBtn.disabled = true
+      $<HTMLButtonElement>('runButton').disabled = true
+      $<HTMLButtonElement>('rateSave').disabled = true
+      renderQc(qcBody, null)
       dicomPick.replaceChildren()
-      niftiFiles.forEach((f, i) => {
+      const prompt = document.createElement('option')
+      prompt.value = ''
+      prompt.textContent = 'Choose a series…'
+      prompt.disabled = true
+      prompt.selected = true
+      dicomPick.append(prompt)
+      dcmConverted.forEach((series, i) => {
         const opt = document.createElement('option')
         opt.value = String(i)
-        opt.text = f.name
+        opt.text = series.label
         dicomPick.appendChild(opt)
       })
-      dicomPick.value = '0'
+      dicomPick.value = ''
       dicomPick.classList.remove('hidden')
       setStatus(`dcm2niix: ${niftiFiles.length} NIfTI in ${ms} ms — pick one.`)
+      return
     }
+    bidsMeta = dcmConverted[0].meta
     await loadSource(niftiFiles[0], signal)
   } finally {
     spin(false)
@@ -478,7 +508,18 @@ $('exampleControl').append(exampleControl)
 exampleControl.setDisabled(true)
 $('runButton').addEventListener('click', () => {
   const file = sourceFile
-  if (file) enqueue(() => runSegment(file))
+  if (file) enqueue(async () => {
+    const controller = new AbortController()
+    manualRun = controller
+    progressManager.begin('Starting quality control…')
+    try {
+      await runSegment(file, { signal: controller.signal })
+      progressManager.end(statusMsg.textContent ?? 'Quality control complete')
+    } catch (error) {
+      progressManager.end(controller.signal.aborted ? 'Quality control cancelled.' : 'Quality control failed.', { success: false })
+      if (!controller.signal.aborted) throw error
+    } finally { manualRun = null }
+  })
 }, ac)
 
 // --- Wiring ---
@@ -504,8 +545,11 @@ document.addEventListener(
 dicomPick.addEventListener(
   'change',
   () => {
-    const file = dcmConverted[Number(dicomPick.value)]
-    if (file) enqueue(() => loadSource(file))
+    const series = dcmConverted[Number(dicomPick.value)]
+    if (series) enqueue(async () => {
+      bidsMeta = series.meta
+      await loadSource(series.file)
+    })
   },
   ac,
 )
@@ -538,11 +582,16 @@ ovlSlider.addEventListener(
     // Skip while a segmentation is mid-flight — mutating the scene between its
     // loadVolumes/addVolume awaits can hit the wrong volume or throw. The final
     // opacity is applied via addVolume's `opacity` when the overlay lands.
-    if (!busy && nv.volumes.length > 1)
-      void nv.setVolume(nv.volumes.length - 1, { opacity: Number(ovlSlider.value) / 255 })
+    if (!busy) void showView()
   },
   ac,
 )
+
+$('rateSave').addEventListener('click', () => {
+  if (!sourceFile) return
+  downloadBlob(new Blob([JSON.stringify(readRating(sourceFile.name), null, 2)], { type: 'application/json' }),
+    `${sourceFile.name.replace(/\.nii(\.gz)?$/i, '')}_rating.json`)
+}, ac)
 
 // --- Cleanup (HMR / tab close) ---
 async function cleanup(): Promise<void> {
@@ -550,6 +599,8 @@ async function cleanup(): Promise<void> {
   if (isCleanedUp) return
   isCleanedUp = true
   listeners.abort()
+  manualRun?.abort()
+  progressManager.reset()
   // Terminate the niimath worker FIRST (don't await `pending`): a WASM run is one
   // uninterruptible call, so awaiting the queue would stall teardown. The terminated
   // run never resolves; any run that already resolved hits `if (isCleanedUp) return`
@@ -575,6 +626,7 @@ registerAppAutomation({
     async 'quality-control'({ inputs, inputDetails, parameters, signal, progress }) {
       const files = inputs.image
       if (!Array.isArray(files) || files.length !== 1) throw new Error('BrowserQC requires one selected image.')
+      const model = parseModel(parameters.model ?? 'mindmap-pve')
       const backend = parameters.backend
       if (backend !== 'auto' && backend !== 'cpu') throw new Error('Choose the auto or CPU segmentation backend.')
       const sidecars = inputs.sidecar
@@ -590,12 +642,12 @@ registerAppAutomation({
         bidsMeta = metadata
         stagedSidecar = null
         await loadSource(files[0], signal)
-        const result = await runSegment(files[0], { backend, signal, progress, strictQc: true })
+        const result = await runSegment(files[0], { backend, model, signal, progress, strictQc: true })
         signal.throwIfAborted()
         if (!result) throw new Error('BrowserQC completed without quality metrics.')
         return {
           artifacts: [
-            { role: 'labels', file: result.labels },
+            ...result.artifacts,
             { role: 'qc', file: new File([JSON.stringify(result.qc, null, 2)], 'qc.json', { type: 'application/json' }) },
           ],
           provenance: { segmentation: result.segmentation, qc: result.qc.provenance, airTemplate: TEMPLATE_URL },

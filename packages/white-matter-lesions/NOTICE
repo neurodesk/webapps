@@ -1,0 +1,17 @@
+FLAMeS white matter lesion segmentation
+Dereskewicz E, La Rosa F, dos Santos Silva J, et al. FLAMeS: a robust deep
+learning model for automated multiple sclerosis lesion segmentation. medRxiv. 2025.
+https://doi.org/10.1101/2025.05.19.25327707
+Model weights: FLAMeS 2.0, Zenodo record 17955359, CC BY 4.0
+https://doi.org/10.5281/zenodo.17955359
+The weights are converted to ONNX by apps/white-matter-lesions/scripts/export_model.py
+and published separately on Hugging Face. model.manifest.json pins each file
+by size and SHA-256.
+
+Inference repeats nnU-Net v2's preprocessing, sliding-window prediction and
+resampling (Isensee et al., Nature Methods 2021, Apache-2.0):
+https://github.com/MIC-DKFZ/nnUNet
+
+Brain extraction: FreeSurfer SynthStrip, Hoopes et al., through @neurodesk/synthstrip.
+
+JavaScript port and packaging by Neurodesk, Apache-2.0.

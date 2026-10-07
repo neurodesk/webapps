@@ -1,0 +1,10 @@
+{
+  "16chan18cls": { "label": "Subcortical + GWM, 16ch", "csf": [3, 4, 11, 12], "wm": [1, 5] },
+  "mindmap": { "label": "Subcortical + GWM, 24ch", "csf": [3, 4, 11, 12], "wm": [1, 5] },
+  "mindsnap": {
+    "label": "Desikan-Killiany 104, 24ch",
+    "csf": [87, 88, 89, 90, 91, 92, 93],
+    "wm": [85, 86, 95, 96, 99, 100, 101, 102, 103]
+  },
+  "mindmap-pve": { "label": "GM/WM/CSF fractions, 24ch", "pve": "mindmap" }
+}
