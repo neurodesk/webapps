@@ -123,6 +123,22 @@ sub-01 (TE 35 ms) with its T1, defaced with the Deface app's
 `niimath -deface avg152T1 avg152T1mask` (the published T1 has no face), and LCModel's synthetic test case,
 whose table the app reproduces exactly (`e2e/smoke.spec.js`).
 
+The NIfTI-MRS PRESS example uses Osprey's MIT-licensed Philips PRESS sub-01
+data at 3 T and TE 35 ms, with its water reference. The files were converted
+with spec2nii 0.8.12 and de-identified. Their immutable dataset revision is
+`2a18766f2c4b5c9086e3512cd6f2a56841da9a4f`; the dataset directory contains
+the license and provenance. `tools/convert_nifti_mrs_example.py` reproduces
+the published files from checksummed sources. Install `spec2nii==0.8.12`
+and `nibabel==5.4.2` in a scratch environment, then run:
+
+```bash
+TMPDIR=/storage/tmp python tools/convert_nifti_mrs_example.py /storage/tmp/nifti-mrs-press
+```
+
+NIfTI-MRS echo and repetition times are seconds in the file. The app
+normalizes them to milliseconds before preprocessing and LCModel export.
+Tagged dimensions of size one do not count as coils or averages.
+
 ```bash
 pnpm --filter lcmodel test        # basis selection, LCModel file parsing, plots, group table, report
 pnpm --filter lcmodel test:e2e    # browser workflow; LCMODEL_E2E_LARGE=1 adds SPECIAL and MEGA-PRESS

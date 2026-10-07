@@ -1,5 +1,11 @@
 # @neurodesk/lcmodel
 
+## 0.3.2
+
+### Patch Changes
+
+- Fix NIfTI-MRS preprocessing for singleton coil and dynamic dimensions, and preserve echo and repetition times in milliseconds through fitting and export. Add an openly licensed PRESS NIfTI-MRS example with a water reference and a reproducible conversion recipe.
+
 ## 0.3.1
 
 ### Patch Changes
