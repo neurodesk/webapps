@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260813",
+    "@neurodesk/ants": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

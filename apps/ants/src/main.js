@@ -5,6 +5,7 @@ import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import { createResultList, bindFileDrop, createInfoDialog, renderCommand, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
+import { artifactFiles } from "@neurodesk/ants/outputs";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from "@neurodesk/webapp-components/automation";
 import { extractBrain } from "./brain-extraction.js";
@@ -302,7 +303,7 @@ const RESULTS = {
   registered: { description: "Registered moving image" },
   affine: { description: "Affine transform (.mat)" },
   warp: { description: "Forward warp" },
-  inverseWarp: { description: "Inverse warp" },
+  "inverse-warp": { description: "Inverse warp" },
 };
 const results = createResultList({
   element: $("resultList"),
@@ -395,14 +396,9 @@ async function register({
       progress({ message: next });
     }, signal);
     signal?.throwIfAborted();
-    const stem = moving.name.replace(/\.nii(\.gz)?$/i, "");
-    output = new File([data.image], `${stem}_registered.nii.gz`);
-    outputs = {
-      registered: output,
-      affine: new File([data.transforms["0GenericAffine.mat"]], `${stem}_0GenericAffine.mat`),
-      warp: new File([data.transforms["1Warp.nii.gz"]], `${stem}_1Warp.nii.gz`),
-      inverseWarp: new File([data.transforms["1InverseWarp.nii.gz"]], `${stem}_1InverseWarp.nii.gz`),
-    };
+    const files = artifactFiles(moving.name, { warped: data.image, transforms: data.transforms });
+    outputs = Object.fromEntries(files.map(({ role, name, bytes }) => [role, new File([bytes], name)]));
+    output = outputs.registered;
     await viewers.resliced.loadVolumes([{ url: output, name: output.name }]);
     signal?.throwIfAborted();
     results.render(RESULTS);
@@ -410,7 +406,7 @@ async function register({
     $("progress").value = 1;
     status(`Registration complete in ${((performance.now() - started) / 1000).toFixed(1)} s`);
     return {
-      artifacts: Object.entries(outputs).map(([role, file]) => ({ role: role === "inverseWarp" ? "inverse-warp" : role, file })),
+      artifacts: Object.entries(outputs).map(([role, file]) => ({ role, file })),
       provenance: { algorithm: "ANTs SyN", implementation: "@neurodesk/registration", seed: 42, affineIterations: "2100x1200x1200x0", synIterations: "40x20x0", elapsedMs: performance.now() - started },
     };
   } catch (error) {
