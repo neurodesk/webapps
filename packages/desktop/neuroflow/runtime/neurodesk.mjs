@@ -140,7 +140,9 @@ function resourceBytes(resource, uri) {
   throw new Error('Desktop resource has no content');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Node resolves symlinks in import.meta.url but not in argv: compare real paths, or a
+// bundle under a symlinked directory (macOS /var, a linked install) exits without running.
+if (process.argv[1] && fileURLToPath(import.meta.url) === await realpath(process.argv[1]).catch(() => null)) {
   const controller = new AbortController();
   const cancel = () => controller.abort(new DOMException('NeuroFlow cancelled the tool', 'AbortError'));
   process.once('SIGINT', cancel);
