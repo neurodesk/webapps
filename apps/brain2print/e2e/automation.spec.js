@@ -1,42 +1,104 @@
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { inspectMz3, inspectStl, voxelVolume } from './mesh-geometry.js';
 
-test.use({ launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.platform === 'darwin' ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'])] } });
+const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
+const small = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
+// The MNI152 2 mm template: a whole brain, so the mesh volume can be held to an anatomical range.
+const brain = await readFile(new URL('../../calmar/tests/fixtures/synthstrip-mini/T1.nii.gz', import.meta.url));
 
-const fixture = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
-async function start(page, parameters = {}) {
+async function start(page, buffer, parameters = {}) {
   await page.goto('/');
   await expect(page.locator('#imageInput')).toBeEnabled();
-  await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'brain.nii.gz', mimeType: 'application/gzip', buffer: fixture });
-  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('adopt', { role: 'image' }));
-  await page.evaluate((parameters) => globalThis.neurodeskAutomation.dispatch('start', { operation: 'create-mesh', parameters }), parameters);
+  await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'brain.nii.gz', mimeType: 'application/gzip', buffer });
+  await dispatch(page, 'adopt', { role: 'image' });
+  await dispatch(page, 'start', { operation: 'create-mesh', parameters });
+}
+
+async function finished(page) {
+  await expect.poll(async () => {
+    const snapshot = await dispatch(page, 'snapshot');
+    if (snapshot.state === 'failed') throw new Error(JSON.stringify(snapshot.error));
+    return snapshot.state;
+  }, { timeout: 840_000, intervals: [1000, 2000, 5000] }).toBe('succeeded');
+  const { report } = await dispatch(page, 'snapshot');
+  const files = {};
+  for (const [artifactId, artifact] of Object.entries(report.artifacts)) {
+    const downloading = page.waitForEvent('download');
+    await dispatch(page, 'download', { artifactId });
+    files[artifact.role] = await readFile(await (await downloading).path());
+    expect(createHash('sha256').update(files[artifact.role]).digest('hex')).toBe(artifact.sha256);
+  }
+  return { report, files };
+}
+
+// Everything here is measured from the downloaded files, not read from the app's report.
+function expectPrintableBrain(files, input) {
+  expect(Object.keys(files).sort()).toEqual(['geometry', 'mesh', 'segmentation']);
+  const source = voxelVolume(input, Infinity);
+  const fraction = voxelVolume(files.segmentation, 0.5);
+  expect(fraction.dims).toEqual(source.dims);
+  for (const [row, values] of fraction.affine.entries()) {
+    for (const [column, value] of values.entries()) expect(value).toBeCloseTo(source.affine[row][column], 3);
+  }
+  expect(fraction.minimum).toBeGreaterThanOrEqual(0);
+  expect(fraction.maximum).toBeLessThanOrEqual(1.001);
+  // GM + WM of an adult brain. The MNI152 average is larger than most single subjects.
+  expect(fraction.volume).toBeGreaterThan(1_000_000);
+  expect(fraction.volume).toBeLessThan(1_800_000);
+
+  const stl = inspectStl(files.mesh);
+  expect(stl.triangles).toBeGreaterThan(1000);
+  expect(stl.openEdges).toBe(0);
+  expect(stl.misorientedEdges).toBe(0);
+  expect(stl.contradicting).toBe(0);
+  // The 0.5 isosurface of the brain fraction encloses the voxels at or above 0.5.
+  expect(stl.volume).toBeGreaterThan(fraction.volume * 0.95);
+  expect(stl.volume).toBeLessThan(fraction.volume * 1.05);
+
+  const mz3 = inspectMz3(files.geometry);
+  expect(mz3.triangles).toBe(stl.triangles);
+  expect(mz3.vertices).toBe(stl.vertices);
+  expect(mz3.openEdges).toBe(0);
+  expect(mz3.misorientedEdges).toBe(0);
+  expect(mz3.volume).toBeCloseTo(stl.volume, 0);
+  return { stl, fraction };
 }
 
 test('automation can cancel the real segmentation worker while its runtime is loading', async ({ page }) => {
   test.setTimeout(90_000);
   await page.route('**/brainchop/**', () => {});
   const runtime = page.waitForRequest(/brainchop\//);
-  await start(page);
+  await start(page, small);
   await runtime;
-  await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('cancel'));
-  await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state).toBe('cancelled');
+  await dispatch(page, 'cancel');
+  await expect.poll(async () => (await dispatch(page, 'snapshot')).state).toBe('cancelled');
   await expect(page.locator('#imageInput')).toBeEnabled();
-  expect((await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).report).toBeUndefined();
+  expect((await dispatch(page, 'snapshot')).report).toBeUndefined();
 });
 
+test('CPU inference returns a watertight STL enclosing the segmented brain volume, and a matching MZ3', async ({ page }) => {
+  test.setTimeout(900_000);
+  await start(page, brain, { backend: 'cpu' });
+  const { report, files } = await finished(page);
+  expect(report.provenance.segmentation.backend).toBe('cpu');
+  const { stl, fraction } = expectPrintableBrain(files, brain);
+  console.log(`cpu: ${stl.triangles} triangles, mesh ${stl.volume.toFixed(0)} mm^3, voxels ${fraction.volume.toFixed(0)} mm^3`);
+});
+
+// The hardware variant: scripts/desktop/verify-scientific-macos.sh selects it by title and
+// launches Chromium on Metal. The software adapter has no shader-f16, so it cannot run there.
 test('hardware inference returns corrected STL, matching MZ3 and the segmented image', async ({ page }) => {
-  test.skip(process.platform !== 'darwin', 'Requires a hardware WebGPU adapter for MindGrab inference.');
+  await page.goto('/');
+  const software = await page.evaluate(async () => {
+    const adapter = await navigator.gpu?.requestAdapter();
+    return !adapter || adapter.info.isFallbackAdapter || !adapter.features.has('shader-f16');
+  });
+  test.skip(software, 'Hardware variant: needs a WebGPU adapter with shader-f16 (BRAIN2PRINT_HARDWARE_GPU=1 on macOS).');
   test.setTimeout(600_000);
-  await start(page, { model: '16chan18cls' });
-  await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 540_000 }).toBe('succeeded');
-  const { report } = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
-  expect(Object.values(report.artifacts).map(({ role }) => role).sort()).toEqual(['geometry','mesh','segmentation']);
-  expect(report.measurements.triangles).toBeGreaterThan(0);
-  for (const [artifactId, artifact] of Object.entries(report.artifacts)) {
-    const downloading = page.waitForEvent('download');
-    await page.evaluate((artifactId) => globalThis.neurodeskAutomation.dispatch('download', { artifactId }), artifactId);
-    const bytes = await readFile(await (await downloading).path());
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe(artifact.sha256);
-  }
+  await start(page, brain);
+  const { report, files } = await finished(page);
+  expect(report.provenance.segmentation.backend).toBe('webgpu');
+  expectPrintableBrain(files, brain);
 });

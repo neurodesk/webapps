@@ -79,26 +79,6 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   expect(isolated).toBe(true);
 });
 
-test("a web worker loads and responds", async ({ page }) => {
-  await page.goto("/");
-  const ok = await page.evaluate(async () => {
-    const src = "self.onmessage = () => self.postMessage('pong');";
-    const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
-    const w = new Worker(url, { type: "module" });
-    return await new Promise((resolve) => {
-      const finish = (result) => {
-        w.terminate();
-        URL.revokeObjectURL(url);
-        resolve(result);
-      };
-      w.onmessage = (e) => finish(e.data === "pong");
-      w.onerror = () => finish(false);
-      w.postMessage("ping");
-    });
-  });
-  expect(ok).toBe(true);
-});
-
 test('input, cancellation, and privacy workflow preserve the scan', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#runButton')).toBeDisabled();

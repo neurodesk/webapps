@@ -144,7 +144,7 @@ async function chooseFiles(files) {
   await loadImage(series[0])
 }
 
-async function segment({ signal, progress = () => {} } = {}) {
+async function segment({ signal, progress = () => {}, backend = 'auto' } = {}) {
   if (!source || busy) throw new Error('Load an image and wait for the current step to finish.')
   signal?.throwIfAborted()
   const image = source
@@ -163,7 +163,8 @@ async function segment({ signal, progress = () => {} } = {}) {
     const options = {
       model: isPve ? 'mindmap' : choice,
       worker: true,
-      backend: 'auto',
+      // The worker resolves `auto` (src/backend.js): hardware WebGPU, hardware WebGL2, then threaded CPU; automation may name `cpu`.
+      backend,
       gzipOutput: false,
       assetPath: `${import.meta.env.BASE_URL}brainchop/${mindgrabVersion}/`,
     }
@@ -171,14 +172,25 @@ async function segment({ signal, progress = () => {} } = {}) {
     const result = await runSegmentation(input, isPve, options, signal)
     signal?.throwIfAborted()
     let labels
+    let surface
     if (isPve) {
       // Brain fraction = GM + WM; its 0.5 isosurface is a sub-voxel pial surface.
       const brain = readNiftiImageData(result.tissues.gm).data
       const wm = readNiftiImageData(result.tissues.wm).data
       for (let i = 0; i < brain.length; i++) brain[i] += wm[i]
       labels = new Uint8Array(createFloat32Nifti(brain, extractNiftiHeader(result.tissues.gm)))
+      surface = labels
     } else {
       labels = new Uint8Array(result.image)
+      // Mesh the 0/1 brain mask, not the label values. Marching cubes interpolates between voxel
+      // centres, so at isovalue 0.5 a 0/1 edge is cut half way and the surface encloses the
+      // labelled voxels (skimage on the 2 mm fixture: within 0.5 %). A raw label L puts the cut
+      // (L - 0.5) / L of the way out, almost at the background voxel, and niimath's volume
+      // smoothing spreads large labels further still: 17-20 % too large, mindsnap (up to 103) 87 %.
+      const values = readNiftiImageData(result.image).data
+      const mask = new Float32Array(values.length)
+      for (let i = 0; i < values.length; i++) mask[i] = values[i] > 0 ? 1 : 0
+      surface = new Uint8Array(createFloat32Nifti(mask, extractNiftiHeader(result.image)))
     }
     if (source !== image) throw new Error('The image changed during segmentation; run it again.')
     await dropOverlays()
@@ -190,7 +202,8 @@ async function segment({ signal, progress = () => {} } = {}) {
       await nv.setColormapLabel(nv.volumes.length - 1, choice === 'mindsnap' ? MINDSNAP_COLORMAP : SEG_COLORMAP)
     }
     signal?.throwIfAborted()
-    segmentation = labels
+    // What the mesh step surfaces at 0.5: the brain fraction, or the binary mask of the labels.
+    segmentation = surface
     status(`Segmentation complete on ${result.backend} (${Math.round(result.elapsedMs)} ms). Create the mesh when ready.`)
     return { file: new File([labels], isPve ? 'brain-fraction.nii' : 'segmentation.nii'), type: isPve ? 'neuro:volume' : 'neuro:label-map', provenance: { model: options.model, partialVolume: isPve, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs } }
   } catch (error) {
@@ -362,7 +375,7 @@ registerAppAutomation({
       $('smoothValue').textContent = String(parameters.smooth)
       $('largestOnly').checked = parameters.largestOnly
       $('fillBubbles').checked = parameters.fillBubbles
-      const segmented = await segment({ signal, progress })
+      const segmented = await segment({ signal, progress, backend: parameters.backend })
       const meshed = await mesh({ signal, progress })
       return { artifacts: [{ role: 'segmentation', file: segmented.file, type: segmented.type }, ...meshed.artifacts], measurements: meshed.measurements, provenance: { segmentation: segmented.provenance, meshing: meshed.provenance } }
     },

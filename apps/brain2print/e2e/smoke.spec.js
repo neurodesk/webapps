@@ -6,12 +6,34 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
+import { inspectStl, labels, voxelVolume } from "./mesh-geometry.js";
 
-// Headless Chromium otherwise exposes only a SwiftShader WebGPU adapter, on which
-// MindGrab does not finish; these flags hand it the real GPU. Must stay top level
-// (Playwright forbids launchOptions inside a describe group).
-const hardwareGpu = process.platform === "darwin";
-test.use({ launchOptions: { args: ["--enable-unsafe-webgpu", ...(hardwareGpu ? ["--use-angle=metal", "--enable-features=Metal"] : ["--use-angle=swiftshader", "--use-vulkan=swiftshader", "--enable-features=Vulkan", "--disable-vulkan-surface"])] } });
+const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
+
+// The pipeline tests start the run through the automation contract on the threaded CPU backend,
+// so they do not depend on backend selection; everything after it is the page's own controls.
+// The Segment button's own `auto` choice is covered separately below.
+async function createMesh(page, file, parameters = {}) {
+  await page.goto("/");
+  await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 60_000 });
+  await page.locator("#neurodesk-input-transfer").setInputFiles(file);
+  await dispatch(page, "adopt", { role: "image" });
+  await dispatch(page, "start", { operation: "create-mesh", parameters: { backend: "cpu", ...parameters } });
+  await expect.poll(async () => {
+    const snapshot = await dispatch(page, "snapshot");
+    if (snapshot.state === "failed") throw new Error(JSON.stringify(snapshot.error));
+    return snapshot.state;
+  }, { timeout: 500_000, intervals: [1000, 2000, 5000] }).toBe("succeeded");
+  const { report } = await dispatch(page, "snapshot");
+  expect(report.provenance.segmentation.backend).toBe("cpu");
+  const files = {};
+  for (const [artifactId, artifact] of Object.entries(report.artifacts)) {
+    const downloading = page.waitForEvent("download");
+    await dispatch(page, "download", { artifactId });
+    files[artifact.role] = readFileSync(await (await downloading).path());
+  }
+  return files;
+}
 
 test("app boots", async ({ page }) => {
   await page.goto("/");
@@ -38,26 +60,6 @@ test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   expect(isolated).toBe(true);
 });
 
-test("a web worker loads and responds", async ({ page }) => {
-  await page.goto("/");
-  const ok = await page.evaluate(async () => {
-    const src = "self.onmessage = () => self.postMessage('pong');";
-    const url = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
-    const w = new Worker(url, { type: "module" });
-    return await new Promise((resolve) => {
-      const finish = (result) => {
-        w.terminate();
-        URL.revokeObjectURL(url);
-        resolve(result);
-      };
-      w.onmessage = (e) => finish(e.data === "pong");
-      w.onerror = () => finish(false);
-      w.postMessage("ping");
-    });
-  });
-  expect(ok).toBe(true);
-});
-
 const fixture = fileURLToPath(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
 // The fixture with its first voxel axis reversed and the sform updated to match, so the
@@ -81,49 +83,30 @@ function leftHanded(path) {
   return Buffer.concat([header, raw.subarray(352, offset), data]);
 }
 
-// Binary STL: signed volume from the vertices (positive = outward winding in world space),
-// and any stored facet normal that contradicts the winding. NiiVue writes zero normals,
-// which the format allows and slicers treat as "derive from winding".
-function inspectStl(bytes) {
-  const count = bytes.readUInt32LE(80);
-  let volume = 0, contradicting = 0;
-  for (let f = 0; f < count; f++) {
-    const at = (i) => bytes.readFloatLE(84 + f * 50 + i * 4);
-    const [nx, ny, nz, ax, ay, az, bx, by, bz, cx, cy, cz] = Array.from({ length: 12 }, (_, i) => at(i));
-    volume += ax * (by * cz - bz * cy) - ay * (bx * cz - bz * cx) + az * (bx * cy - by * cx);
-    const [ux, uy, uz, vx, vy, vz] = [bx - ax, by - ay, bz - az, cx - ax, cy - ay, cz - az];
-    if (nx * (uy * vz - uz * vy) + ny * (uz * vx - ux * vz) + nz * (ux * vy - uy * vx) < 0) contradicting++;
-  }
-  return { count, volume: volume / 6, contradicting };
-}
-
 // The whole pipeline: MindGrab segmentation, niimath mesh, STL download, on the fixture as
-// stored (right-handed) and on a left-handed copy, asserting outward normals for both.
-for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]]) {
+// stored (right-handed) and on a left-handed copy, asserting a closed surface with outward
+// normals that encloses the segmented voxels for both.
+for (const [name, handedness] of [["small.nii.gz", 1], ["small_lh.nii.gz", -1]]) {
   test(`segments, meshes and downloads a printable brain from ${name}`, async ({ page }) => {
-    test.skip(!hardwareGpu, "needs a hardware WebGPU adapter");
     test.setTimeout(600_000);
-    await page.goto("/");
-    const status = page.locator("#statusText");
-    // Wait for WebGPU initialization before choosing the input.
-    await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
-
-    await page.setInputFiles("#imageInput", file ?? { name, mimeType: "application/gzip", buffer: gzipSync(leftHanded(fixture)) });
-    await expect(status).toHaveText(`${name} loaded`, { timeout: 120_000 });
+    const buffer = handedness > 0 ? readFileSync(fixture) : gzipSync(leftHanded(fixture));
+    const { segmentation } = await createMesh(page, { name, mimeType: "application/gzip", buffer });
+    const fraction = voxelVolume(segmentation, 0.5);
+    expect(fraction.handedness).toBe(handedness); // the segmentation stays on the input grid
+    expect(fraction.volume).toBeGreaterThan(100_000);
 
     // The viewer reports the voxel under the cursor into the shared info bar.
     await page.locator("#gl1").click({ position: { x: 120, y: 120 } });
     await expect(page.locator("#location")).toHaveText(/\d/);
 
-    await page.locator("#segmentButton").click();
-    await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
-    await expect(page.locator("#meshButton")).toBeEnabled();
-
+    const completed = page.locator("#technicalLog .nd-console-message").filter({ hasText: "Mesh complete" });
+    await expect(completed).toHaveCount(1);
     await page.locator("#smooth").fill("5"); // smoothing must keep the mesh closed
     await page.locator("#meshButton").click();
-    await expect(status).toHaveText(/^Mesh complete: \d+ triangles, closed manifold/, { timeout: 300_000 });
+    await expect(completed).toHaveCount(2, { timeout: 300_000 });
+    const status = page.locator("#statusText");
+    await expect(status).toHaveText(/^Mesh complete: \d+ triangles, closed manifold/);
     const triangles = Number((await status.textContent()).match(/(\d+) triangles/)[1]);
-    expect(triangles).toBeGreaterThan(0);
 
     const [download] = await Promise.all([
       page.waitForEvent("download"),
@@ -131,28 +114,52 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
     ]);
     expect(download.suggestedFilename()).toBe("brain2print.stl");
     const stl = inspectStl(readFileSync(await download.path()));
-    expect(stl.count).toBe(triangles);
-    expect(stl.volume).toBeGreaterThan(0); // outward winding in world space
+    expect(stl.triangles).toBe(triangles);
+    expect(stl.openEdges).toBe(0);
+    expect(stl.misorientedEdges).toBe(0);
     expect(stl.contradicting).toBe(0);
-    console.log(`${name}: ${triangles} triangles, volume ${stl.volume.toFixed(0)} mm^3`);
+    // Outward winding in world space, enclosing the voxels the brain fraction puts inside.
+    expect(stl.volume).toBeGreaterThan(fraction.volume * 0.9);
+    expect(stl.volume).toBeLessThan(fraction.volume * 1.1);
+    console.log(`${name}: ${triangles} triangles, mesh ${stl.volume.toFixed(0)} mm^3, voxels ${fraction.volume.toFixed(0)} mm^3`);
   });
 }
 
-// The pipeline above runs the default partial-volume model; the label models share one page.
-test("each label model segments with its own colormap", async ({ page }) => {
-  test.skip(!hardwareGpu, "needs a hardware WebGPU adapter");
-  test.setTimeout(900_000);
+// The pipeline above runs the default partial-volume model; each label model must return its
+// own parcellation on the input grid and a closed mesh around every labelled voxel.
+for (const [model, labelCount] of [["16chan18cls", 18], ["mindmap", 18], ["mindsnap", 104]]) {
+  test(`${model} returns its label set and a closed mesh around it`, async ({ page }) => {
+    test.setTimeout(600_000);
+    const files = await createMesh(page, fixture, { model });
+    const { dims, values } = labels(files.segmentation);
+    expect(dims).toEqual([44, 52, 44]);
+    expect(values.every((value) => Number.isInteger(value) && value >= 0 && value < labelCount)).toBe(true);
+    // A cropped head still shows most structures; mindsnap's cortical parcels exceed 18 labels.
+    expect(values.length).toBeGreaterThan(labelCount === 104 ? 30 : 10);
+    const stl = inspectStl(files.mesh);
+    expect(stl.openEdges).toBe(0);
+    expect(stl.misorientedEdges).toBe(0);
+    // The same standard as the brain fraction: the 0.5 isosurface of the 0/1 brain mask encloses
+    // the labelled voxels. Independently, skimage marching cubes at 0.5 on these masks lands within
+    // 0.5 % of the voxel volume (1 % after largest-component and cavity filling), and Gaussian
+    // smoothing (sigma one voxel) before it within 4 %. Meshing the raw labels gave +17 to +87 %.
+    const labelled = voxelVolume(files.segmentation, 0.5).volume;
+    expect(stl.volume).toBeGreaterThan(labelled * 0.95);
+    expect(stl.volume).toBeLessThan(labelled * 1.05);
+  });
+}
+
+// On a machine with no GPU, Chromium offers only SwiftShader. MindGrab's own `auto` then took
+// software WebGL2 and did not finish in 9 minutes; the threaded CPU module needs about 25 s.
+test("the Segment button runs on the CPU when the only GPU is a software renderer", async ({ page }) => {
+  test.skip(Boolean(process.env.BRAIN2PRINT_HARDWARE_GPU), "a hardware GPU is expected to take WebGPU or WebGL2");
+  test.setTimeout(300_000);
   await page.goto("/");
-  const status = page.locator("#statusText");
-  await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
+  await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 60_000 });
   await page.setInputFiles("#imageInput", fixture);
-  await expect(status).toHaveText("small.nii.gz loaded", { timeout: 120_000 });
-  for (const model of ["16chan18cls", "mindmap", "mindsnap"]) {
-    await page.locator("#modelSelect").selectOption(model);
-    await page.locator("#segmentButton").click();
-    await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
-    await expect(page.locator("#meshButton")).toBeEnabled();
-  }
+  await expect(page.locator("#segmentButton")).toBeEnabled({ timeout: 30_000 });
+  await page.locator("#segmentButton").click();
+  await expect(page.locator("#statusText")).toHaveText(/^Segmentation complete on cpu \(/, { timeout: 180_000 });
 });
 
 test("a delayed example never replaces a selected image", async ({ page }) => {

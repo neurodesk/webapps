@@ -1,19 +1,21 @@
-// Real inference is opt-in. See packages/desktop/SCIENTIFIC-VALIDATION.md.
+// The real model, in the real worker, against FreeSurfer's own output. The small fixture runs on
+// every machine: Chromium's software WebGPU adapter (SwiftShader) is enough, so CI needs no GPU.
+// The full benchmark volumes need a hardware adapter; see the end of this file and
+// packages/desktop/SCIENTIFIC-VALIDATION.md.
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 import { readNifti } from '../../../packages/components/src/file-io/NiftiUtils.js';
-import { summarizeLabels } from '../../../packages/components/src/automation/label-measurements.js';
 import { planGpuGraph } from '../../../packages/runtime-support/src/gpu-unet/session.js';
 
-const freesurferLut = JSON.parse(readFileSync(new URL('../../../packages/components/src/automation/freesurfer-lut.json', import.meta.url), 'utf8'));
 const graph = JSON.parse(readFileSync(new URL('../../../packages/synthseg/src/gpu-model.json', import.meta.url), 'utf8'));
 
 const fixtures = '../../exes/synthseg/test/fixtures';
 const references = process.env.SYNTHSEG_REFERENCE_DIR;
 const probeOnly = Boolean(process.env.SYNTHSEG_PROBE_ONLY);
-const reportPath = resolve(process.env.SYNTHSEG_VALIDATION_REPORT || 'validation/report.json');
+// Only the hardware benchmark run refreshes the committed validation/report.json.
+const reportPath = resolve(process.env.SYNTHSEG_VALIDATION_REPORT || (references ? 'validation/report.json' : 'test-results/validation-report.json'));
 const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
 const evidence = {
   schemaVersion: 1,
@@ -26,8 +28,6 @@ const save = () => {
   mkdirSync(dirname(reportPath), { recursive: true });
   writeFileSync(reportPath, `${JSON.stringify(evidence, null, 2)}\n`);
 };
-
-test.skip(!process.env.SYNTHSEG_E2E_FIXTURE && !probeOnly, 'set SYNTHSEG_E2E_FIXTURE=1 to run the real model in the browser');
 
 test.afterEach(async ({}, info) => {
   if (info.status !== info.expectedStatus) {
@@ -75,7 +75,20 @@ async function adapterEvidence(page) {
   }
 }
 
-async function checkCase(page, { input, reference, mode, limit }) {
+// FreeSurfer 8.1.0 mri_synthseg voxel counts in the small fixture's goldens, counted once from the
+// raw NIfTI bytes outside the app. The output grid is 1 mm, so a voxel is 0.001 ml.
+const goldenVoxels = {
+  fast: { 'Left-Hippocampus': 4561, 'Right-Hippocampus': 4350, 'Brain-Stem': 17533, 'Left-Cerebral-White-Matter': 136645 },
+  default: { 'Left-Hippocampus': 4439, 'Right-Hippocampus': 4456, 'Brain-Stem': 17510, 'Left-Cerebral-White-Matter': 138793 },
+};
+
+function countLabels(data) {
+  const counts = new Map();
+  for (const value of data) counts.set(value, (counts.get(value) || 0) + 1);
+  return counts;
+}
+
+async function checkCase(page, { input, reference, mode, limit, pinned }) {
   const result = { device: 'webgpu', input, mode, pass: false, limit };
   evidence.results.push(result);
   save();
@@ -86,7 +99,8 @@ async function checkCase(page, { input, reference, mode, limit }) {
   await page.locator('#mode').selectOption(mode);
   await page.locator('#processButton').click();
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', /succeeded|failed/, { timeout: 1700000 });
-  expect(await page.locator('#statusText').textContent()).toContain('Labels ready');
+  await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'succeeded');
+  await expect(page.locator('#statusText')).toContainText('Labels ready', { timeout: 120000 });
   const download = await Promise.all([page.waitForEvent('download'), page.locator('#saveBtn').click()]).then(([value]) => value);
   const reportDownload = await Promise.all([page.waitForEvent('download'), page.locator('#reportBtn').click()]).then(([value]) => value);
   const producedBytes = readFileSync(await download.path());
@@ -100,7 +114,21 @@ async function checkCase(page, { input, reference, mode, limit }) {
   expect(inputDescriptor.sha256).toBe(checksum(readFileSync(input)));
   expect(outputDescriptor.sha256).toBe(checksum(producedBytes));
   expect(report.provenance.gpuImplementation).toBe('synthseg-blocked-fp32-v1');
-  expect(report.measurements).toEqual(summarizeLabels(produced, freesurferLut));
+  // The report's measurements are checked against FreeSurfer's label map, not against the app's
+  // own counting: every label FreeSurfer found is reported, within the voxels the gate allows.
+  const allowed = Math.floor(limit * golden.data.length);
+  const expectedCounts = countLabels(golden.data);
+  expect(report.measurements.voxelVolumeMl).toBeCloseTo(0.001, 9);
+  expect(report.measurements.labels.map(label => label.id)).toEqual([...expectedCounts.keys()].sort((a, b) => a - b));
+  for (const label of report.measurements.labels) {
+    expect(Math.abs(label.voxels - expectedCounts.get(label.id)), `${label.name} voxels`).toBeLessThanOrEqual(allowed);
+    expect(Math.abs(label.volumeMl / (label.voxels / 1000) - 1), `${label.name} volume`).toBeLessThan(1e-6);
+  }
+  for (const [name, voxels] of Object.entries(pinned ?? {})) {
+    const label = report.measurements.labels.find(entry => entry.name === name);
+    expect(label, name).toBeTruthy();
+    expect(Math.abs(label.voxels - voxels), `${name} voxels`).toBeLessThanOrEqual(allowed);
+  }
   expect(produced.dims).toEqual(golden.dims);
   expect(produced.header.xyztUnits).toBe(golden.header.xyztUnits);
   const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
@@ -131,31 +159,37 @@ test('records the WebGPU adapter and planned buffer limits', async ({ page }) =>
   expect(evidence.bufferProbe[1].fitsValidatedLimit).toBe(false);
 });
 
-for (const mode of ['fast', 'default']) {
-  test(`segments the small fixture in ${mode} mode against the FreeSurfer golden`, async ({ page }) => {
-    test.skip(probeOnly, 'adapter probe does not run inference');
-    test.setTimeout(1800000);
-    await checkCase(page, {
-      input: `${fixtures}/small.nii.gz`,
-      reference: `${fixtures}/small_${mode}.nii.gz`,
-      mode,
-      limit: 5e-6,
+if (!probeOnly) {
+  for (const mode of ['fast', 'default']) {
+    test(`segments the small fixture in ${mode} mode against the FreeSurfer golden`, async ({ page }) => {
+      test.setTimeout(1800000);
+      await checkCase(page, {
+        input: `${fixtures}/small.nii.gz`,
+        reference: `${fixtures}/small_${mode}.nii.gz`,
+        mode,
+        limit: 5e-6,
+        pinned: goldenVoxels[mode],
+      });
     });
-  });
+  }
 }
 
-test('segments the benchmark volumes within the native parity gate', async ({ page }) => {
-  test.skip(probeOnly, 'adapter probe does not run inference');
-  test.skip(!references, 'set SYNTHSEG_REFERENCE_DIR to run the full volumes');
-  test.setTimeout(7200000);
-  for (const stem of ['T1_head', 'T1_head_2mm']) {
-    for (const mode of ['fast', 'default']) {
-      await checkCase(page, {
-        input: `${references}/${stem}.nii.gz`,
-        reference: `${references}/${stem}_${mode}.nii.gz`,
-        mode,
-        limit: 2e-6,
-      });
+// Hardware only: the full volumes plan a 1.98 GB activation buffer and SwiftShader stops at 1 GB.
+// This test exists only when SYNTHSEG_REFERENCE_DIR names the fetched references, and then it
+// refuses a software adapter instead of skipping. scripts/desktop/verify-scientific-macos.sh runs it.
+if (references && !probeOnly) {
+  test('segments the benchmark volumes within the native parity gate', async ({ page }) => {
+    expect(process.env.SYNTHSEG_HARDWARE_GPU, 'The benchmark volumes need SYNTHSEG_HARDWARE_GPU=1').toBeTruthy();
+    test.setTimeout(7200000);
+    for (const stem of ['T1_head', 'T1_head_2mm']) {
+      for (const mode of ['fast', 'default']) {
+        await checkCase(page, {
+          input: `${references}/${stem}.nii.gz`,
+          reference: `${references}/${stem}_${mode}.nii.gz`,
+          mode,
+          limit: 2e-6,
+        });
+      }
     }
-  }
-});
+  });
+}

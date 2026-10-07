@@ -50,7 +50,7 @@ pnpm --filter synthseg dev      # SYNTHSEG_ASSET_DIR=<dir with synthseg-2.0.onnx
 pnpm --filter synthseg test
 pnpm --filter synthseg lint
 pnpm --filter synthseg build
-pnpm --filter synthseg test:e2e # needs a WebGPU-capable Chromium
+pnpm --filter synthseg test:e2e # real model on SwiftShader WebGPU; downloads the 53 MB weights
 ```
 
 The model is fetched from Hugging Face and cached (Cache API) after a SHA-256
@@ -59,8 +59,12 @@ it is never bundled.
 
 ## Validation
 
-`SYNTHSEG_E2E_FIXTURE=1 SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
-runs the small fixture and both benchmark volumes through the built app on the real GPU and
+`pnpm --filter synthseg test:e2e` always runs the real model on the small fixture, in both modes,
+and gates the labels against FreeSurfer's (mismatch ≤ 5e-6). It needs no GPU: Chromium's software
+WebGPU adapter (SwiftShader) is enough, at a few minutes per mode.
+
+`SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
+adds both benchmark volumes on the real GPU (SwiftShader cannot hold their buffers) and
 gates them like the native CLI (mismatch ≤ 2e-6, identical geometry). The last run is in
 `validation/report.json`: 0–1 of 5.6 M voxels differ from FreeSurfer, 6–10 s per volume on an
 M4 Pro.
