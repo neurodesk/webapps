@@ -344,16 +344,16 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl": {
-      "sha256": "58a6a3ed02e33f39066814aebf4430d63599dd7bc9b94a35b7362208f06a1d8a",
-      "bytes": 283584,
+    "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl": {
+      "sha256": "b1d9ff53eabba5791c7b9a3a3da16ed4ebcb0e0f435924687992db49b5ac76e8",
+      "bytes": 396689,
       "contentType": "application/octet-stream",
       "kind": "python-wheel",
       "dependencies": []
     },
-    "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl": {
-      "sha256": "f9f8e19b78525be57aa6384484298833e4d06ac1d6226c79459131ddb0bd7c42",
-      "bytes": 1771279,
+    "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl": {
+      "sha256": "35a594cc8ebae8dd40b1f632cd7c9f08ecaa147cb9305a9f9fbca2c03f5ccc93",
+      "bytes": 1771963,
       "contentType": "application/octet-stream",
       "kind": "python-wheel",
       "dependencies": []
@@ -3529,8 +3529,8 @@
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522",
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0",
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
@@ -3584,8 +3584,8 @@
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/typing_extensions-4.11.0-py3-none-any.whl",
       "https://dicompare.neurodesk.org/embed/DicompareController.js",
       "https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
@@ -3631,8 +3631,8 @@
       "https://dicompare.neurodesk.org/embed/DicompareController.js",
       "https://dicompare.neurodesk.org/embed/dicompare-worker.js",
       "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
