@@ -14,7 +14,7 @@ export default defineConfig({
   // A real reconstruction uses every core and several gigabytes; running it beside the
   // viewer tests made their 30 s waits time out on 4-core CI runners. It runs alone, last.
   projects: [
-    { name: 'interface', grepInvert: /@inference/ },
-    { name: 'inference', grep: /@inference/, dependencies: ['interface'] },
+    { name: 'interface', grepInvert: /full reconstruction exports/ },
+    { name: 'inference', grep: /full reconstruction exports/, dependencies: ['interface'] },
   ],
 });

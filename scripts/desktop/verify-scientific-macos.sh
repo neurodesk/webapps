@@ -125,7 +125,8 @@ catalog() {
   for app in brain2print dwi2trx syncro topofit; do
     config="$(node "$evidence" config "$app" "$validation")"
     title="$(node "$evidence" catalog-title "$app")"
-    pnpm --filter "$app" exec playwright test e2e/automation.spec.js --config "$config" --grep "$title$" 2>&1 | tee "$validation/catalog/$app/run.log"
+    # --no-deps: a project dependency (TopoFit runs inference after its interface tests) would add tests outside the selection.
+    pnpm --filter "$app" exec playwright test e2e/automation.spec.js --config "$config" --grep "$title$" --no-deps 2>&1 | tee "$validation/catalog/$app/run.log"
     node "$evidence" check-catalog "$app" "$validation/catalog/$app"
   done
 }

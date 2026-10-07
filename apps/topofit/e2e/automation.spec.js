@@ -32,7 +32,7 @@ test('automation cancellation terminates a real worker awaiting its model', asyn
   expect((await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).report).toBeUndefined();
 });
 
-test('full reconstruction exports every actual surface, QC and processing manifest', { tag: '@inference' }, async ({ page }) => {
+test('full reconstruction exports every actual surface, QC and processing manifest', async ({ page }) => {
   test.skip(!process.env.TOPOFIT_AUTOMATION_IMAGE, 'Set TOPOFIT_AUTOMATION_IMAGE to a suitable T1 for full model inference.');
   test.setTimeout(900_000);
   await page.goto('/');
