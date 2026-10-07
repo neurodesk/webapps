@@ -1003,6 +1003,15 @@ importers:
         specifier: 2.5.0-next.1
         version: 2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
     devDependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@niivue/niimath':
+        specifier: 1.4.20260928
+        version: 1.4.20260928
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
