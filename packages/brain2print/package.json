@@ -1,0 +1,46 @@
+{
+  "name": "@neurodesk/brain2print",
+  "version": "0.4.20261007",
+  "private": true,
+  "description": "MindGrab segmentation to printable brain meshes for browsers and the command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "brain2print": "./bin/brain2print.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./browser": "./src/browser.js",
+    "./mesh": "./src/mesh.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/brain2print.js"
+  },
+  "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20260909"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "vite": "^6.3.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/brain2print"
+  }
+}
