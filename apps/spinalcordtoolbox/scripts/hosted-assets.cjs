@@ -57,9 +57,6 @@ function collectManifestHostedAssets(manifest) {
     for (const asset of task.modelAssets || []) {
       if (asset.downloadUrl) assets.push({ ...asset, taskId: task.id, assetKind: 'model' });
     }
-    for (const asset of task.templateAssets || []) {
-      if (asset.downloadUrl) assets.push({ ...asset, taskId: task.id, assetKind: 'template' });
-    }
   }
   return assets;
 }

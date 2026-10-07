@@ -1,0 +1,84 @@
+{
+  "id": "first_echo_max",
+  "name": "Short First Echo",
+  "description": "Validates that the first echo time is short enough. Configure the maximum allowed first TE (error above) and an optional preferred first TE (warning above).",
+  "category": "Echo Timing",
+  "fields": [
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "te1 = value[\"EchoTime\"].dropna().min()\nmax_te = params.get(\"max_first_te\")\nif max_te is not None and te1 > max_te:\n    raise ValidationError(f\"First TE too long ({te1} ms); must be <= {max_te} ms.\")\npref = params.get(\"preferred_first_te\")\nif pref is not None and te1 > pref:\n    raise ValidationWarning(f\"First TE could be shorter ({te1} ms); <= {pref} ms preferred.\")\n",
+  "testCases": [
+    {
+      "id": "short_pass",
+      "name": "Short first echo passes",
+      "expectedResult": "pass",
+      "data": {
+        "EchoTime": [
+          3.0,
+          10.0,
+          17.0
+        ]
+      }
+    },
+    {
+      "id": "long_fail",
+      "name": "Long first echo fails default 10 ms",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          12.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "id": "max_moves",
+      "name": "First TE of 6 ms fails when max lowered to 5",
+      "expectedResult": "fail",
+      "data": {
+        "EchoTime": [
+          6.0,
+          12.0
+        ]
+      },
+      "params": {
+        "max_first_te": 5
+      }
+    },
+    {
+      "id": "preferred_warns",
+      "name": "First TE of 6 ms warns above preferred 5",
+      "expectedResult": "warning",
+      "data": {
+        "EchoTime": [
+          6.0,
+          12.0
+        ]
+      },
+      "params": {
+        "preferred_first_te": 5
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_first_te",
+      "label": "Maximum first TE",
+      "type": "number",
+      "default": 10,
+      "min": 0,
+      "unit": "ms",
+      "description": "Fail if the first echo time exceeds this"
+    },
+    {
+      "name": "preferred_first_te",
+      "label": "Preferred first TE",
+      "type": "number",
+      "default": null,
+      "min": 0,
+      "unit": "ms",
+      "description": "Warn if the first echo time exceeds this (optional)"
+    }
+  ]
+}

@@ -134,7 +134,7 @@ apps:
     runtime: rust-wasm
     model_manifest: models/qsmbly.manifest.json
     asset_manifest_schema: scientific-assets-v1
-    source: astewartau/qsmbly@6e01b15b43b615639881f35e6b1f7dbc214e0864
+    source: astewartau/qsmbly@2f91e83685c53c103a37a429cc20cc3e97c1abe8
     license: MIT
     maintainers: [astewartau]
     support_status: active
@@ -176,7 +176,7 @@ apps:
     runtime: react-vite
     model_manifest: null
     asset_manifest_schema: null
-    source: astewartau/dicompare-web@f0462e2b514f79eb1b32078f682f339c050897cd
+    source: astewartau/dicompare-web@7c56841fe414384d60bfda822c65836aff10fd7f
     license: NOASSERTION
     maintainers: [astewartau]
     support_status: active

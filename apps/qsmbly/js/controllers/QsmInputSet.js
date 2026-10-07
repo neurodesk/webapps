@@ -5,7 +5,7 @@
  * Uses unified bucket storage with auto-detection and drag-between-bucket support.
  */
 
-import { readSingleImage } from '@neurodesk/webapp-components/file-io';
+import { classifyImageComponent, readSingleImage } from '@neurodesk/webapp-components/file-io';
 
 export class QsmInputSet {
   constructor(options) {
@@ -53,11 +53,12 @@ export class QsmInputSet {
   // ==================== Auto-Categorization ====================
 
   /**
-   * Determine which bucket a file belongs to based on filename.
+   * Determine the bucket from component metadata, then filename conventions.
    * @param {File} file
+   * @param {Object} [metadata] - the file's JSON sidecar
    * @returns {string} bucket key
    */
-  categorizeFile(file) {
+  categorizeFile(file, metadata) {
     const name = file.name.toLowerCase();
 
     // JSON sidecar files
@@ -65,7 +66,9 @@ export class QsmInputSet {
 
     // NIfTI files: apply filename heuristics
     if (name.endsWith('.nii') || name.endsWith('.nii.gz')) {
-      if (/phase|_ph[\._]/.test(name)) return 'phase';
+      const component = classifyImageComponent(name, metadata);
+      if (component) return component;
+      if (/(^|[_\-.])phase([_\-.]|$)|_ph[\._]/.test(name)) return 'phase';
       if (/total|b0|fieldmap|field_map/.test(name)) return 'totalField';
       if (/local|chi/.test(name)) return 'localField';
       if (/mag/.test(name)) return 'magnitude';
@@ -82,17 +85,47 @@ export class QsmInputSet {
    * Add files to buckets via auto-categorization.
    * Enforces single-file and mutual exclusivity constraints.
    * @param {File[]} files - Array of File objects
-   * @returns {Object} categorization results {added: [{entry, bucket}]}
+   * @returns {Promise<Object>} categorization results {added: [{entry, bucket}]}
    */
-  addFiles(files) {
+  async addFiles(files) {
+    const metadata = new Map();
+    const sidecars = [...this.buckets.json.map(entry => entry.file), ...files]
+      .filter(file => file.name.toLowerCase().endsWith('.json'));
+    for (const file of sidecars) {
+      try {
+        metadata.set(file.name.replace(/\.json$/i, ''), JSON.parse(await file.text()));
+      } catch (error) {
+        this.updateOutput(`Could not read sidecar ${file.name}: ${error.message}`);
+      }
+    }
     const results = { added: [] };
 
     for (const file of files) {
-      const bucket = this.categorizeFile(file);
+      const json = metadata.get(file.name.replace(/\.nii(\.gz)?$/i, ''));
+      const bucket = this.categorizeFile(file, json);
       const entry = { file, name: file.name };
+      if (json?.EchoTime != null) entry.echoTime = json.EchoTime * 1000;
+      if (json?.EchoNumber != null) entry.echoNumber = json.EchoNumber;
 
       this._addToBucket(bucket, entry);
       results.added.push({ entry, bucket });
+    }
+
+    // A sidecar dropped after its image reclassifies that image.
+    const arrived = new Set(files
+      .filter(file => file.name.toLowerCase().endsWith('.json'))
+      .map(file => file.name.replace(/\.json$/i, '')));
+    for (const [bucket, entries] of Object.entries(this.buckets)) {
+      if (bucket === 'json') continue;
+      for (const entry of [...entries]) {
+        const stem = entry.name.replace(/\.nii(\.gz)?$/i, '');
+        const json = metadata.get(stem);
+        if (files.includes(entry.file) || !arrived.has(stem) || !json) continue;
+        this.buckets[bucket].splice(this.buckets[bucket].indexOf(entry), 1);
+        if (json.EchoTime != null) entry.echoTime = json.EchoTime * 1000;
+        if (json.EchoNumber != null) entry.echoNumber = json.EchoNumber;
+        this._addToBucket(this.categorizeFile(entry.file, json), entry);
+      }
     }
 
     // Sort all buckets alphabetically
@@ -459,7 +492,7 @@ export class QsmInputSet {
 
     // Sort by echo time and populate inputs
     echoTimes.sort((a, b) => a.echoTime - b.echoTime);
-    this.populateEchoTimeInputs(echoTimes.map(et => et.echoTime));
+    this.populateEchoTimeInputs([...new Set(echoTimes.map(et => et.echoTime))]);
 
     // Populate field strength if found
     if (fieldStrength !== null) {

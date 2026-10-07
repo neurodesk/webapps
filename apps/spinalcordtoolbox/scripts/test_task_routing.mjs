@@ -1,5 +1,10 @@
 #!/usr/bin/env node --no-warnings
 
+// Asserts the SCT Segmentation task selector routes work to the right model.
+// A runnable task without a model asset would make runInference() silently
+// fall back to the default model name and report DONE with the wrong output;
+// this test enforces that every task in the dropdown has its own asset.
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,28 +17,19 @@ const {
   SCT_TASKS,
   isTaskRunnable,
   getPrimaryModelAsset,
-  getTaskModelUrl,
-  getTaskTemplateAssetUrl
+  getTaskModelUrl
 } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/sct-tasks.js')));
 
 const HOSTED_MODEL_URL_RE = /^https:\/\/huggingface\.co\/datasets\/sbollmann\/sct-webapp-data\/resolve\/[0-9a-f]{40}\/web\/models\/.+$/;
 
 // Tasks offered in the segmentation dropdown must each have a primary model
 // asset. Without one, runInference() falls back to Config.MODEL.name.
-const segmentationDropdownTasks = SCT_TASKS.filter(task => isTaskRunnable(task) && !task.processingOnly);
+const segmentationDropdownTasks = SCT_TASKS.filter(task => isTaskRunnable(task));
 for (const task of segmentationDropdownTasks) {
   const asset = getPrimaryModelAsset(task);
-  assert.ok(asset, `Task "${task.id}" appears in the segmentation dropdown but has no primary model asset. Either add modelAssets, mark it processingOnly, or set supportStatus to unsupported.`);
+  assert.ok(asset, `Task "${task.id}" appears in the segmentation dropdown but has no primary model asset. Either add modelAssets or set supportStatus to unsupported.`);
   assert.match(asset.downloadUrl || '', HOSTED_MODEL_URL_RE, `Task "${task.id}" must use a pinned Hugging Face model asset URL`);
   assert.equal(getTaskModelUrl(task), asset.downloadUrl, `Task "${task.id}" runtime URL must resolve to the hosted model asset`);
-}
-
-const vertebrae = SCT_TASKS.find(task => task.id === 'vertebrae');
-assert.ok(vertebrae, 'vertebrae task is defined');
-assert.equal(vertebrae.processingOnly, true, 'vertebrae must be flagged processingOnly');
-assert.ok(!segmentationDropdownTasks.includes(vertebrae), 'vertebrae must be filtered out of the segmentation dropdown');
-for (const assetId of ['pam50-t2', 'pam50-levels']) {
-  assert.match(getTaskTemplateAssetUrl(vertebrae, assetId) || '', HOSTED_MODEL_URL_RE, `Vertebrae template asset "${assetId}" must use a pinned Hugging Face URL`);
 }
 
 const lesionSci = SCT_TASKS.find(task => task.id === 'lesion_sci_t2');
@@ -84,61 +80,62 @@ assert.match(appJs, /keepLargestComponent:\s*!!\(assetDefaults\.keepLargestCompo
 
 const workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
 assert.match(workerJs, /resolvedModelUrl\s*=\s*modelUrl\s*\|\|\s*`\$\{modelBaseUrl\}\/\$\{modelName\}`/, 'worker must prefer per-asset modelUrl before falling back to MODEL_BASE_URL + filename');
-assert.match(workerJs, /pam50LevelsUrl\s*=\s*params\.pam50LevelsUrl\s*\|\|/, 'worker must prefer the hosted PAM50 levels URL from task metadata');
 
 const gitAttributesPath = path.join(ROOT, '.gitattributes');
 const gitAttributes = fs.existsSync(gitAttributesPath) ? fs.readFileSync(gitAttributesPath, 'utf8') : '';
 assert.doesNotMatch(gitAttributes, /filter=lfs/, 'model assets must not be tracked with Git LFS after migration to Hugging Face');
 
-// runInference() must reject processingOnly / asset-less tasks rather than
-// silently falling back to Config.MODEL.name.
-assert.match(appJs, /processingOnly\s*\|\|\s*!selectedAsset/, 'runInference must guard against processingOnly tasks and missing model assets');
+// runInference() must reject asset-less tasks rather than silently falling
+// back to Config.MODEL.name.
+assert.match(appJs, /if \(!selectedAsset\) \{/, 'runInference must guard against missing model assets');
 
-// Label masks must be independently toggleable result stages. When input is
-// visible they render as overlays; when input is hidden, renderViewerVolumes()
-// promotes the first visible label mask to the NiiVue base volume because
-// volume 0 is not a reliable hide target.
-assert.match(appJs, /isOverlayStage\(stage\)\s*\{\s*return stage === 'segmentation' \|\| stage === 'lesion' \|\| stage === 'vertebrae' \|\| stage === 'spine_step1' \|\| stage === 'spine_discs'/, 'isOverlayStage must include segmentation, lesion, vertebrae, and TotalSpineSeg label stages');
-assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-vertebrae'/, 'getOverlayColormapId must map vertebrae to sct-vertebrae');
+// Label masks must be independently toggleable result stages. Every label
+// mask of the current run is one tracked entry of the viewer stack above the
+// base image; visibility (the input's included) is a property of the entry,
+// so an eye toggle changes opacity instead of reloading or reordering volumes.
+assert.match(appJs, /isOverlayStage\(stage\)\s*\{\s*return stage === 'segmentation' \|\| stage === 'lesion' \|\| stage === 'spine_step1' \|\| stage === 'spine_discs'/, 'isOverlayStage must include segmentation, lesion, and TotalSpineSeg label stages');
 assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-lesion'/, 'getOverlayColormapId must map lesion to sct-lesion');
 assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-totalspineseg'/, 'getOverlayColormapId must map TotalSpineSeg labels to sct-totalspineseg');
 assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-spine-discs'/, 'getOverlayColormapId must map TotalSpineSeg disc points to sct-spine-discs');
-assert.match(appJs, /_stageVisibility\s*=\s*\{[\s\S]*?segmentation:\s*true[\s\S]*?lesion:\s*true[\s\S]*?vertebrae:\s*true[\s\S]*?spine_step1:\s*true[\s\S]*?spine_discs:\s*true/, 'result visibility must show TotalSpineSeg label stages by default');
+assert.match(appJs, /_stageVisibility\s*=\s*\{[\s\S]*?segmentation:\s*true[\s\S]*?lesion:\s*true[\s\S]*?spine_step1:\s*true[\s\S]*?spine_discs:\s*true/, 'result visibility must show TotalSpineSeg label stages by default');
 assert.match(appJs, /setStageVisible\(data\.stage,\s*this\.getDefaultStageVisibility\(\)\[data\.stage\]\s*!==\s*false\)/, 'new overlay stage data must honor default visibility instead of forcing raw localizers visible');
-assert.match(appJs, /getVisibleOverlayStages\(\)[\s\S]*?\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\][\s\S]*?isStageVisible\(stage\)[\s\S]*?hasResult\(stage\)/, 'visible overlay stages must be resolved from per-stage visibility and existing results');
-assert.match(appJs, /stackEntries\s*=\s*\[\{[\s\S]*?stage:\s*baseOverlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'hidden-input rendering must promote the first visible label mask to the base volume with stage tracking');
-assert.match(appJs, /for \(const overlayStage of visibleOverlayStages\)[\s\S]*?stackEntries\.push\(\{[\s\S]*?stage:\s*overlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'visible label masks must be loaded as one independently tracked volume stack');
+assert.match(appJs, /getVisibleOverlayStages\(\)[\s\S]*?\['segmentation', 'lesion', 'spine_step1', 'spine_discs'\][\s\S]*?isStageVisible\(stage\)[\s\S]*?hasResult\(stage\)/, 'visible overlay stages must be resolved from per-stage visibility and existing results');
+assert.match(appJs, /getViewerStack\(\)\s*\{[\s\S]*?stackEntries\s*=\s*\[\{[\s\S]*?file:\s*baseFile[\s\S]*?visible:\s*this\.isStageVisible\('input'\)/, 'the base image stays in the stack when hidden; its visibility is an entry property');
+assert.match(appJs, /for \(const overlayStage of this\.getOverlayStagesWithResults\(\)\)[\s\S]*?stackEntries\.push\(\{[\s\S]*?stage:\s*overlayStage[\s\S]*?visible:\s*this\.isStageVisible\(overlayStage\)[\s\S]*?colormapKey:\s*this\.getOverlayColormapId\(overlayStage, taskId\)[\s\S]*?labelColormap:\s*generateLabelColormap\(this\.getOverlayLabelTaskId\(overlayStage, taskId\)\)/, 'label masks must be loaded as independently tracked label-colormap entries, coloured by the task that produced them');
+assert.match(appJs, /const taskId = result\?\.raw\?\.taskId;/, 'an overlay keeps the colours of the task that produced it');
+assert.match(appJs, /getOverlayStagesWithResults\(\)\s*\{[\s\S]*?\['segmentation', 'lesion', 'spine_step1', 'spine_discs'\]\.filter\(stage => \(\s*this\.inferenceExecutor\.hasResult\(stage\)/, 'only stages with a current result enter the viewer stack, in stable order');
 assert.match(appJs, /_renderViewerPromise\s*=\s*Promise\.resolve\(\)/, 'viewer renders must be serialized to prevent late base loads from wiping overlays');
 assert.match(appJs, /renderViewerVolumes\(\)\s*\{[\s\S]*?_renderViewerPromise\s*=\s*this\._renderViewerPromise\.then/, 'renderViewerVolumes must enqueue render work in order');
-assert.match(appJs, /loadViewerStackIfChanged\(stackEntries\)\s*\{[\s\S]*?isCurrentVolumeStack\?\.\(stackEntries\)[\s\S]*?return false[\s\S]*?loadVolumeStack\(stackEntries\)/, 'renderViewerVolumes must skip loadVolumeStack when the requested stack is already current');
+assert.match(appJs, /_renderViewerVolumesNow\(\)\s*\{\s*await this\.viewer\.showVolumes\(this\.getViewerStack\(\)\);\s*\}/, 'renderViewerVolumes must hand the whole stack to SctViewer, which reloads only what changed');
+assert.equal((appJs.match(/\.showVolumes\(/g) || []).length, 1, 'renderViewerVolumes is the only path that changes the main viewer stack');
 assert.match(appJs, /getResultListStages\(\)\s*\{[\s\S]*?getStageOrder\(\)\.filter\(stage => !this\.isMetricsResultStage\(stage\)\)/, 'metrics stages must be excluded from the viewable/downloadable image-layer result list');
 assert.match(appJs, /renderMetricsResult\(stage\)[\s\S]*?metrics-download-btn[\s\S]*?downloadMetricsResult\(stage\)/, 'metrics statistics panel must provide its own CSV download button');
 assert.match(appJs, /downloadMetricsResult\(stage\)[\s\S]*?result\?\.kind !== 'metrics'[\s\S]*?Downloaded statistics/, 'metrics CSV download must be handled as statistics, not as a layer download');
 
 // Visibility must not resurrect missing sibling results. Auto-rendering a
-// stale vertebrae result onto a new input or new segmentation would silently
+// stale label result onto a new input or new segmentation would silently
 // render the wrong label mask.
 assert.doesNotMatch(
   appJs,
-  /getVisibleOverlayStages\(\)\s*\{[\s\S]*?return\s+\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\]\.filter\(stage => \(\s*this\.isStageVisible\(stage\)\s*\)\)/,
+  /getVisibleOverlayStages\(\)\s*\{[\s\S]*?return\s+\['segmentation', 'lesion', 'spine_step1', 'spine_discs'\]\.filter\(stage => \(\s*this\.isStageVisible\(stage\)\s*\)\)/,
   'getVisibleOverlayStages must also require an existing result for each visible stage'
 );
 
 // runSegmentation must reset visibility and re-render before kicking off
-// inference, so a previous vertebrae overlay is not visible during the new run.
+// inference, so a previous overlay is not visible during the new run.
 assert.match(appJs, /clearResults\(\);[\s\S]*?disableAllResultTabs\(\);[\s\S]*?resetStageVisibility\(\);[\s\S]*?renderViewerVolumes\(\)/, 'runSegmentation must reset stage visibility and re-render before starting inference');
 
 // Reproduce the visible-stage semantics directly: each result controls only
 // its own visibility, and missing results are excluded even when their default
 // visibility flag is on.
 function getVisibleOverlayStages(visibility, available) {
-  return ['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'].filter(stage => visibility[stage] && available.has(stage));
+  return ['segmentation', 'lesion', 'spine_step1', 'spine_discs'].filter(stage => visibility[stage] && available.has(stage));
 }
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['segmentation', 'lesion', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: false, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['segmentation', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: true, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['lesion', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, vertebrae: true }, new Set(['segmentation'])), ['segmentation'], 'must not render missing sibling results');
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, vertebrae: false }, new Set(['segmentation', 'lesion', 'vertebrae'])), []);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, vertebrae: false, spine_step1: true, spine_discs: true }, new Set(['spine_step1', 'spine_discs'])), ['spine_step1', 'spine_discs'], 'default TotalSpineSeg view shows both label stages');
+assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, spine_discs: true }, new Set(['segmentation', 'lesion', 'spine_discs'])), ['segmentation', 'lesion', 'spine_discs']);
+assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: false, spine_discs: true }, new Set(['segmentation', 'lesion', 'spine_discs'])), ['segmentation', 'spine_discs']);
+assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: true, spine_discs: true }, new Set(['segmentation', 'lesion', 'spine_discs'])), ['lesion', 'spine_discs']);
+assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, spine_discs: true }, new Set(['segmentation'])), ['segmentation'], 'must not render missing sibling results');
+assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, spine_discs: false }, new Set(['segmentation', 'lesion', 'spine_discs'])), []);
+assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, spine_step1: true, spine_discs: true }, new Set(['spine_step1', 'spine_discs'])), ['spine_step1', 'spine_discs'], 'default TotalSpineSeg view shows both label stages');
 
-console.log(`Task routing OK: ${segmentationDropdownTasks.length} segmentation task(s) all have model assets; vertebrae is processing-only.`);
+console.log(`Task routing OK: ${segmentationDropdownTasks.length} segmentation task(s) all have model assets.`);

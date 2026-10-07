@@ -1831,6 +1831,55 @@ pub fn hd_bet_wasm(
     .map_err(|e| JsValue::from_str(&format!("HD-BET: {e}")))
 }
 
+/// RS2-Net deep-learning rodent brain extraction: magnitude → brain mask.
+///
+/// A mask **generator**, like [`hd_bet_wasm`]: JS runs this, then hands the result to
+/// [`apply_mask_ops_wasm`] for any refinements. qsm-core's `bet::rs2_net` does the work (a port of
+/// RS2-Net's nnU-Net pipeline); qsmxt-config has no RS2-Net op, so it is not reachable through
+/// `apply_mask_ops_wasm`.
+///
+/// Weights are not bundled: JS fetches `rs2-net.onnx` from the model registry (63 MB,
+/// IndexedDB-cached) and passes the bytes. The graph is traced at a fixed 128×96×128 patch
+/// (`qsm_core::bet::RS2_NET_PATCH`, peak ≈2.7 GB); RS2-Net's native 128×128×160 would need
+/// ≈4.5 GB, over wasm32's 4 GB address space. Only the DL bundle has this.
+///
+/// `tile_step` is the sliding-window stride as a fraction of the patch, in `(0, 1]`; `tta`
+/// turns on 8-fold mirroring. `progress_callback(done, total)` reports network evaluations.
+#[cfg(feature = "onnx")]
+#[wasm_bindgen]
+pub fn rs2_net_wasm(
+    magnitude: &[f64],
+    nx: usize, ny: usize, nz: usize,
+    vsx: f64, vsy: f64, vsz: f64,
+    weights: &[u8],
+    tile_step: f64,
+    tta: bool,
+    progress_callback: &js_sys::Function,
+) -> Result<Vec<u8>, JsValue> {
+    console_log!(
+        "WASM RS2-Net: {}x{}x{} @ {:.3}x{:.3}x{:.3}mm, patch {:?}, step {:.2}, tta={}",
+        nx, ny, nz, vsx, vsy, vsz, qsm_core::bet::RS2_NET_PATCH, tile_step, tta
+    );
+    let n = nx * ny * nz;
+    if magnitude.len() != n {
+        return Err(js_err(format!(
+            "RS2-Net: magnitude has {} voxels, expected {n} for {nx}x{ny}x{nz}",
+            magnitude.len()
+        )));
+    }
+    let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
+    let params = qsm_core::bet::Rs2NetParams { tile_step, mirror_tta: tta };
+    let callback = progress_callback.clone();
+    qsm_core::bet::rs2_net(magnitude, &grid, weights, &params, move |done, total| {
+        let _ = callback.call2(
+            &JsValue::NULL,
+            &JsValue::from_f64(done as f64),
+            &JsValue::from_f64(total as f64),
+        );
+    })
+    .map_err(|e| js_err(format!("RS2-Net: {e}")))
+}
+
 /// Apply mask operations to an existing mask, through qsm-core's masking pipeline.
 ///
 /// One implementation for every host: this is the same `qsm_core::pipeline::apply_mask_ops` the
@@ -2712,23 +2761,40 @@ pub fn calculate_swi_wasm(
 /// # Arguments
 /// * `data` - 3D volume (nx * ny * nz, Fortran order)
 /// * `nx`, `ny`, `nz` - Array dimensions
+/// * `affine` - Row-major 4x4 voxel->world affine of the source volume (16 values)
 /// * `window` - Number of slices in the projection window
 ///
 /// # Returns
-/// MIP volume with dimensions nx × ny × (nz - window + 1)
+/// JS object with: data (Float64Array, nx × ny × (nz - window + 1)), dims (array),
+/// affine (Float64Array). Each output slice stands for a slab, so the projection's origin
+/// sits (window - 1) / 2 slices along the source affine's third column — reusing the source
+/// affine would place the mIP half a slab off.
 #[wasm_bindgen]
 pub fn create_mip_wasm(
     data: &[f64],
     nx: usize, ny: usize, nz: usize,
+    affine: &[f64],
     window: usize,
-) -> Vec<f64> {
+) -> Result<js_sys::Object, JsValue> {
     console_log!("WASM MIP: {}x{}x{}, window={}", nx, ny, nz, window);
 
+    let affine_arr: [f64; 16] = affine.try_into()
+        .map_err(|_| js_err(format!("create_mip_wasm: affine must have 16 values, got {}", affine.len())))?;
     let grid = qsm_core::Grid::new(nx, ny, nz, 1.0, 1.0, 1.0);
-    let result = qsm_core::swi::create_mip(data, &grid, window);
+    let mip = qsm_core::swi::create_mip(data, &grid, &affine_arr, window)
+        .map_err(js_err)?;
 
-    console_log!("WASM MIP complete: output nz={}", if window <= nz { nz - window + 1 } else { 0 });
-    result
+    let result = js_sys::Object::new();
+    js_sys::Reflect::set(&result, &"data".into(), &js_sys::Float64Array::from(mip.data.as_slice()))?;
+    let dims = js_sys::Array::new();
+    dims.push(&JsValue::from(mip.grid.dims.0 as u32));
+    dims.push(&JsValue::from(mip.grid.dims.1 as u32));
+    dims.push(&JsValue::from(mip.grid.dims.2 as u32));
+    js_sys::Reflect::set(&result, &"dims".into(), &dims)?;
+    js_sys::Reflect::set(&result, &"affine".into(), &js_sys::Float64Array::from(mip.affine.as_slice()))?;
+
+    console_log!("WASM MIP complete: output nz={}", mip.grid.dims.2);
+    Ok(result)
 }
 
 // ============================================================================
@@ -3556,8 +3622,19 @@ pub fn run_dl_separation_wasm(
     use qsm_core::separation as sep;
     let grid = qsm_core::Grid::new(nx, ny, nz, vsx, vsy, vsz);
     let res = match model_id {
-        "susep-net" => sep::susep_net(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::SusepNetNorm::default()),
-        "chi-sepnet" => sep::chisepnet(local_field_ppm, qsm, r2prime, mask, &grid, weights, &sep::ChiSepNetNorm::default()),
+        // Both nets run a sliding window rather than the authors' whole-volume pass: at their
+        // patch size the intermediate tensors are ~1.2 GB, past what a 4 GB wasm heap can hold.
+        "susep-net" => sep::susep_net(
+            local_field_ppm, qsm, r2prime, mask, &grid, weights,
+            &sep::SusepNetNorm::default(),
+            &sep::SusepNetParams { patch: Some(qsm_core::separation::susep_net::WASM_PATCH) },
+            |_, _| {},
+        ),
+        "chi-sepnet" => sep::chisepnet(
+            local_field_ppm, qsm, r2prime, mask, &grid, weights,
+            &sep::ChiSepNetNorm::default(),
+            &sep::ChiSepNetParams { patch: qsm_core::separation::chisepnet::WASM_PATCH },
+        ),
         other => {
             return Err(js_err(format!("run_dl_separation_wasm: unknown model '{other}'")));
         }

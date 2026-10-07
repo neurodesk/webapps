@@ -6,7 +6,7 @@
  */
 
 import { computeOtsuThreshold } from '@neurodesk/webapp-components/volume';
-import { createMaskNifti, createNiftiHeaderFromVolume } from '@neurodesk/webapp-components/file-io';
+import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 
 export class MaskController {
   /**
@@ -646,8 +646,18 @@ export class MaskController {
     }
   }
 
-  async displayCurrentMask() {
-    if (!this.currentMaskData) return;
+  // Preview in the uploaded file's physical coordinates without accepting it for processing.
+  async previewUploadedMask(file, loadReference) {
+    const header = await this.readNiftiHeader(file);
+    const raw = await this.readNiftiData(file);
+    const data = Float32Array.from(raw, value => value > 0.5 ? 1 : 0);
+    // Gzip decoding can temporarily load the mask into NiiVue. Restore the anatomy afterwards.
+    await loadReference();
+    await this.displayCurrentMask(data, header);
+  }
+
+  async displayCurrentMask(maskData = this.currentMaskData, header = this.magnitudeFileBytes) {
+    if (!maskData) return;
 
     // Close any existing drawing layer
     if (this.nv.drawBitmap) {
@@ -660,7 +670,7 @@ export class MaskController {
     }
 
     // Create mask NIfTI by copying header from original file
-    const maskNifti = createMaskNifti(this.currentMaskData, this.magnitudeFileBytes);
+    const maskNifti = createMaskNifti(maskData, header);
     const maskBlob = new Blob([maskNifti], { type: 'application/octet-stream' });
     const maskUrl = URL.createObjectURL(maskBlob);
 
@@ -687,6 +697,106 @@ export class MaskController {
 
     // Show overlay opacity control when overlay exists
     this.showOverlayControl(true);
+  }
+
+  // ==================== Custom Mask Upload ====================
+
+  /**
+   * Read dim[1..3] out of a NIfTI header buffer.
+   */
+  _volumeCount(headerBuffer) {
+    const h = new DataView(headerBuffer);
+    const rank = Math.min(h.getInt16(40, true), 7);
+    let volumes = 1;
+    for (let axis = 4; axis <= rank; axis++) volumes *= Math.max(h.getInt16(40 + 2 * axis, true), 1);
+    return volumes;
+  }
+
+  _dimsFromHeader(headerBuffer) {
+    if (!headerBuffer || headerBuffer.byteLength < 348) return null;
+    const h = new DataView(headerBuffer);
+    const dims = [h.getInt16(42, true), h.getInt16(44, true), h.getInt16(46, true)];
+    return dims.every(d => d > 0) ? dims : null;
+  }
+
+  /**
+   * Adopt a user-supplied mask file as the current mask.
+   *
+   * An uploaded mask is a mask *generator*, like Threshold/BET/HD-BET: everything downstream —
+   * the run-button gate, the `customMaskBuffer` handed to the worker, the Results stage button —
+   * reads `currentMaskData`, so the file has to be parsed and published here. Left sitting in the
+   * file list it has no effect on anything.
+   *
+   * @param {File} file - Uploaded mask NIfTI (.nii/.nii.gz)
+   * @param {File} [headerSourceFile] - An image the pipeline runs on, whose grid the mask must
+   *   match. Its header also becomes the template for the mask NIfTI handed to the worker, so the
+   *   mask travels on the pipeline's grid rather than on whatever the mask file happened to carry.
+   * @returns {Promise<{ok: boolean, message: string}>}
+   */
+  async loadMaskFromFile(file, headerSourceFile = null) {
+    await this.clearMask();
+    if (!file) return { ok: false, message: 'No mask file selected' };
+
+    const maskHeader = await this.readNiftiHeader(file);
+    const maskDims = this._dimsFromHeader(maskHeader);
+    if (!maskDims) {
+      return { ok: false, message: `Could not read NIfTI dimensions from ${file.name}` };
+    }
+    // readNiftiData reads one volume, so a 4D mask would silently lose every later volume.
+    const volumes = this._volumeCount(maskHeader);
+    if (volumes > 1) {
+      return { ok: false, message: `${file.name} holds ${volumes} volumes. Upload a single 3D mask.` };
+    }
+
+    // Validate against the actual pipeline input, not a cached previous magnitude header.
+    const referenceHeader = headerSourceFile
+      ? await this.readNiftiHeader(headerSourceFile)
+      : (this.magnitudeFileBytes || maskHeader);
+    const refDims = this._dimsFromHeader(referenceHeader);
+    if (!refDims || refDims.some((dim, axis) => dim !== maskDims[axis])) {
+      return {
+        ok: false,
+        message: `Mask is ${maskDims.join('x')} but the image is ${refDims?.join('x') || 'unknown'}. `
+          + 'Upload a mask on the same grid.'
+      };
+    }
+    if (!sameNiftiGrid(maskHeader, referenceHeader)) {
+      return {
+        ok: false,
+        alignmentMismatch: true,
+        message: 'Mask orientation, origin, or voxel spacing differs from the input image. '
+          + 'Use Repair mask alignment to review axis flips or a header correction. '
+          + 'Other grid differences require resampling.'
+      };
+    }
+
+    // Binarise: masks arrive as uint8/uint16/float, and everything downstream assumes 0/1.
+    const raw = await this.readNiftiData(file);
+    const maskData = new Float32Array(raw.length);
+    let voxelCount = 0;
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] > 0.5) {
+        maskData[i] = 1;
+        voxelCount++;
+      }
+    }
+
+    if (voxelCount === 0) {
+      return { ok: false, message: `${file.name} contains no non-zero voxels` };
+    }
+
+    this.magnitudeFileBytes = referenceHeader;
+    this.currentMaskData = maskData;
+    this.originalMaskData = new Float32Array(maskData);
+
+    // Re-derive geometry from the reference header now that it is known.
+    this.maskDims = null;
+    this.voxelSize = null;
+    this.ensureGeometry();
+
+    await this.displayCurrentMask();
+
+    return { ok: true, message: `Loaded mask ${file.name} (${voxelCount} voxels)` };
   }
 
   // ==================== Threshold ====================
@@ -830,21 +940,51 @@ export class MaskController {
    * @returns {Promise<boolean>} true if the mask was created
    */
   async runHdBetMask(options = {}) {
-    const patch = options.patch || [128, 128, 64];
-    const tileStep = options.tileStep ?? 0.5;
-    const tta = !!options.tta;
+    return this.runDlMaskGenerator('HD-BET', 'hdBet', {
+      patch: options.patch || [128, 128, 64],
+      tileStep: options.tileStep ?? 0.5,
+      tta: !!options.tta,
+    });
+  }
 
+  /**
+   * RS2-Net deep-learning rodent brain extraction — a mask *generator*, like HD-BET.
+   *
+   * Runs in the lazily-loaded DL wasm bundle, so the first call downloads 63 MB of weights
+   * (IndexedDB-cached afterwards). The patch is fixed by the exported graph (128x96x128).
+   *
+   * @param {{tileStep?: number, tta?: boolean}} [options] - `tileStep` is the sliding-window
+   *   stride as a fraction of the patch, in (0, 1]; `tta` turns on 8-fold mirroring.
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runRs2NetMask(options = {}) {
+    return this.runDlMaskGenerator('RS2-Net', 'rs2Net', {
+      tileStep: options.tileStep ?? 0.5,
+      tta: !!options.tta,
+    });
+  }
+
+  /**
+   * Run a deep-learning mask generator in the worker on the signal magnitude, and make its
+   * result the current (and original) mask.
+   *
+   * @param {string} name - display name, for messages
+   * @param {string} msg - worker message type; replies are `${msg}Progress|Log|Complete|Error`
+   * @param {object} params - model parameters, sent alongside the magnitude and geometry
+   * @returns {Promise<boolean>} true if the mask was created
+   */
+  async runDlMaskGenerator(name, msg, params) {
     if (!this.ensureGeometry()) {
-      this.updateOutput('HD-BET needs the image geometry — run Prepare first.');
+      this.updateOutput(`${name} needs the image geometry — run Prepare first.`);
       return false;
     }
     const magnitude = await this.getSignalMagnitude();
     if (!magnitude) {
-      this.updateOutput('HD-BET needs the magnitude image, and none is loaded.');
+      this.updateOutput(`${name} needs the magnitude image, and none is loaded.`);
       return false;
     }
 
-    // BET and HD-BET are alternative generators; neither uses the threshold slider.
+    // The BET-style generators don't use the threshold slider.
     this.setThresholdSliderEnabled(false);
 
     // A previous cancel terminates and nulls the worker, so make sure there is a live one.
@@ -868,20 +1008,20 @@ export class MaskController {
       unsubscribe = worker.subscribe((message) => {
         const { type, ...data } = message;
         switch (type) {
-          case 'hdBetProgress':
+          case `${msg}Progress`:
             this.setProgress(data.value, data.text);
             break;
-          case 'hdBetLog':
+          case `${msg}Log`:
             this.updateOutput(data.message);
             break;
-          case 'hdBetComplete':
+          case `${msg}Complete`:
             this.currentMaskData = data.maskData;
             this.originalMaskData = data.maskData.slice();
             settle(true);
             break;
-          case 'hdBetError':
-            this.updateOutput(`HD-BET failed: ${data.message}`);
-            this.setProgress(0, 'HD-BET failed');
+          case `${msg}Error`:
+            this.updateOutput(`${name} failed: ${data.message}`);
+            this.setProgress(0, `${name} failed`);
             settle(false);
             break;
         }
@@ -889,21 +1029,14 @@ export class MaskController {
 
       // Cancelling terminates the worker, so no reply ever comes — settle from here instead.
       release = this.beginCancellableJob?.(() => {
-        this.updateOutput('HD-BET cancelled.');
+        this.updateOutput(`${name} cancelled.`);
         this.setProgress(0, 'Cancelled');
         settle(false);
       }) || (() => {});
 
       worker.send({
-        type: 'hdBet',
-        data: {
-          magnitude: magnitudeArr,
-          dims: this.maskDims,
-          voxelSize: this.voxelSize,
-          patch,
-          tileStep,
-          tta,
-        },
+        type: msg,
+        data: { magnitude: magnitudeArr, dims: this.maskDims, voxelSize: this.voxelSize, ...params },
       }, [magnitudeArr.buffer]);
     });
   }
@@ -1511,7 +1644,8 @@ export class MaskController {
           voxelSize: voxelSize,
           fractionalIntensity: betSettings.fractionalIntensity,
           iterations: betSettings.iterations,
-          subdivisions: betSettings.subdivisions
+          subdivisions: betSettings.subdivisions,
+          voxelScale: betSettings.voxelScale || 1
         }
       }, []);
 

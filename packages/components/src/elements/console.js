@@ -1,9 +1,20 @@
 import { createElement } from '../core/dom.js';
 import { ConsoleOutput } from '../ui/ConsoleOutput.js';
 import { bindSectionDisclosure, unbindSectionDisclosure } from '../ui/bindSectionDisclosures.js';
+import { bindConsoleResize, unbindConsoleResize } from '../ui/bindConsoleResize.js';
 import { defineElement, upgradeProperties } from './define.js';
 
 let nextId = 0;
+
+/** `"analysis:Analysis,technical:Technical"`, `['analysis']` or `[{ id, label }]` become `[{ id, label }]`. */
+function normalizeChannels(value) {
+  const entries = typeof value === 'string' ? value.split(',') : value || [];
+  return entries.map((entry) => {
+    if (typeof entry !== 'string') return { id: String(entry.id), label: entry.label || String(entry.id) };
+    const [id, label] = entry.split(':').map((part) => part.trim());
+    return { id, label: label || `${id.charAt(0).toUpperCase()}${id.slice(1)}` };
+  }).filter((channel) => channel.id);
+}
 
 export function defineConsole(view) {
   return defineElement('nd-console', createConsoleClass, view);
@@ -11,10 +22,12 @@ export function defineConsole(view) {
 
 function createConsoleClass(view) {
   return class NeurodeskConsole extends view.HTMLElement {
-    static observedAttributes = ['collapsed', 'label', 'max-lines'];
+    static observedAttributes = ['collapsed', 'label', 'max-lines', 'resizable'];
 
-    #output;
-    #console;
+    #panel;
+    #channels = new Map();
+    #active;
+    #tabs;
     #title;
     #observer;
     #copyTimer;
@@ -22,7 +35,7 @@ function createConsoleClass(view) {
 
     connectedCallback() {
       this.initialize();
-      upgradeProperties(this, ['collapsed']);
+      upgradeProperties(this, ['collapsed', 'resizable']);
       this.collapsed = this.classList.contains('collapsed');
       bindSectionDisclosure(this);
       this.#observer ??= new view.MutationObserver(() => {
@@ -44,10 +57,13 @@ function createConsoleClass(view) {
     }
 
     attributeChangedCallback(name) {
-      if (!this.#output) return;
+      if (!this.#panel) return;
       if (name === 'collapsed') this.classList.toggle('collapsed', this.collapsed);
-      if (name === 'label') this.#title.textContent = this.getAttribute('label') || 'Technical log';
-      if (name === 'max-lines') this.#console.maxLines = this.#maxLines();
+      if (name === 'label') this.#title.textContent = this.getAttribute('label') || this.#defaultLabel();
+      if (name === 'max-lines') {
+        for (const channel of this.#channels.values()) channel.console.maxLines = this.#maxLines();
+      }
+      if (name === 'resizable') this.#syncResizable();
     }
 
     get collapsed() { return this.hasAttribute('collapsed'); }
@@ -55,35 +71,93 @@ function createConsoleClass(view) {
       this.toggleAttribute('collapsed', Boolean(value));
       this.classList.toggle('collapsed', Boolean(value));
     }
-    get output() { this.initialize(); return this.#output; }
-    get console() { this.initialize(); return this.#console; }
+    get resizable() { return this.hasAttribute('resizable'); }
+    set resizable(value) { this.toggleAttribute('resizable', Boolean(value)); }
+    /** The visible log: the only one, or the selected channel's. */
+    get output() { this.initialize(); return this.#channels.get(this.#active).output; }
+    get console() { this.initialize(); return this.#channels.get(this.#active).console; }
+    get channels() { this.initialize(); return [...this.#channels.keys()]; }
+    get activeChannel() { this.initialize(); return this.#active; }
 
     #maxLines() {
       const value = Number(this.getAttribute('max-lines'));
       return Number.isInteger(value) && value > 0 ? value : 1000;
     }
 
+    #defaultLabel() { return this.#channels.size > 1 ? 'Log' : 'Technical log'; }
+
+    #syncResizable() {
+      if (this.resizable) bindConsoleResize(this);
+      else unbindConsoleResize(this);
+    }
+
+    #entry(channel) {
+      const entry = this.#channels.get(channel ?? this.#active);
+      if (!entry) throw new Error(`Unknown console channel: ${channel}`);
+      return entry;
+    }
+
     initialize(config = {}) {
-      if (this.#output) return;
+      if (this.#panel) return;
       const doc = this.ownerDocument;
       this.id ||= config.id || `nd-console-${++nextId}`;
       if (config.title) this.setAttribute('label', config.title);
       if (config.maxLines != null) this.setAttribute('max-lines', String(config.maxLines));
       if (config.collapsed !== undefined) this.toggleAttribute('collapsed', config.collapsed);
+      if (config.resizable !== undefined) this.toggleAttribute('resizable', Boolean(config.resizable));
       this.classList.add('nd-console-container');
       this.classList.toggle('collapsed', this.collapsed);
       this.setAttribute('data-disclosure', '');
-      this.#output = createElement('div', {
-        className: 'nd-console-output', id: config.outputId || `${this.id}Output`,
-        'aria-label': config.outputLabel || 'Processing log', 'data-disclosure-panel': '', ownerDocument: doc,
-      });
+      const declared = normalizeChannels(config.channels ?? this.getAttribute('channels'));
+      const mirrorToConsole = config.mirrorToConsole ?? false;
+      const addChannel = (channel, outputId) => {
+        const output = createElement('div', {
+          className: 'nd-console-output', id: outputId,
+          'aria-label': config.outputLabel || 'Processing log', ownerDocument: doc,
+        });
+        const log = new ConsoleOutput({ element: output, mirrorToConsole, maxLines: this.#maxLines() });
+        this.#channels.set(channel.id, { ...channel, output, console: log });
+        return output;
+      };
+      if (declared.length > 1) {
+        // One log per channel behind tabs; the disclosure panel wraps them so collapsing hides all.
+        this.#panel = createElement('div', {
+          className: 'nd-console-panels', id: `${this.id}Panels`, 'data-disclosure-panel': '', ownerDocument: doc,
+        });
+        this.#tabs = createElement('div', { className: 'nd-console-tabs', role: 'tablist', ownerDocument: doc });
+        for (const channel of declared) {
+          const output = addChannel(channel, `${this.id}Output-${channel.id}`);
+          const tab = createElement('button', {
+            type: 'button', className: 'nd-console-tab', id: `${this.id}Tab-${channel.id}`, role: 'tab',
+            'aria-controls': output.id, 'data-console-channel': channel.id, text: channel.label, ownerDocument: doc,
+          });
+          tab.addEventListener('click', () => {
+            this.selectChannel(channel.id);
+            this.open();
+          });
+          output.setAttribute('role', 'tabpanel');
+          output.setAttribute('aria-label', `${channel.label} log`);
+          output.setAttribute('data-console-channel', channel.id);
+          this.#channels.get(channel.id).tab = tab;
+          this.#tabs.append(tab);
+          this.#panel.append(output);
+        }
+        this.#tabs.addEventListener('keydown', (event) => this.#onTabKey(event));
+      } else {
+        const channel = declared[0] || { id: 'log', label: 'Technical log' };
+        this.#panel = addChannel(channel, config.outputId || `${this.id}Output`);
+        this.#panel.setAttribute('data-disclosure-panel', '');
+      }
       this.#title = createElement('button', {
         type: 'button', className: 'nd-console-title', 'data-disclosure-toggle': '',
-        text: this.getAttribute('label') || 'Technical log', ownerDocument: doc,
+        text: this.getAttribute('label') || this.#defaultLabel(), ownerDocument: doc,
       });
+      this.#tabs?.setAttribute('aria-label', 'Log type');
       const actions = createElement('div', { className: 'nd-console-actions', ownerDocument: doc });
-      this.append(createElement('div', { className: 'nd-console-header', ownerDocument: doc }, [this.#title, actions]), this.#output);
-      this.#console = new ConsoleOutput({ element: this.#output, mirrorToConsole: config.mirrorToConsole ?? false, maxLines: this.#maxLines() });
+      const header = createElement('div', { className: 'nd-console-header', ownerDocument: doc });
+      header.append(...[this.#title, this.#tabs, actions].filter(Boolean));
+      this.append(header, this.#panel);
+      this.selectChannel(this.#channels.has(config.channel) ? config.channel : this.#channels.keys().next().value);
       if (config.copy !== false) {
         const button = createElement('button', {
           id: config.copyId || `${this.id}Copy`, type: 'button', className: 'nd-console-clear',
@@ -91,7 +165,7 @@ function createConsoleClass(view) {
         });
         button.addEventListener('click', async () => {
           const generation = ++this.#copyGeneration;
-          const copied = await this.#console.copyToClipboard().catch(() => false);
+          const copied = await this.console.copyToClipboard().catch(() => false);
           if (generation !== this.#copyGeneration || !this.isConnected) return;
           button.textContent = copied ? 'Copied' : 'Copy failed';
           clearTimeout(this.#copyTimer);
@@ -106,21 +180,67 @@ function createConsoleClass(view) {
         button.addEventListener('click', () => this.clear());
         actions.append(button);
       }
-      this.#title.setAttribute('aria-controls', this.#output.id);
+      this.#title.setAttribute('aria-controls', this.#panel.id);
       this.#title.setAttribute('aria-expanded', String(!this.collapsed));
-      this.#output.hidden = this.collapsed;
-      this.#output.inert = this.collapsed;
+      this.#panel.hidden = this.collapsed;
+      this.#panel.inert = this.collapsed;
+      this.#syncResizable();
+    }
+
+    #onTabKey(event) {
+      const ids = this.channels;
+      const index = ids.indexOf(event.target.getAttribute?.('data-console-channel'));
+      const next = {
+        ArrowRight: (index + 1) % ids.length,
+        ArrowLeft: (index - 1 + ids.length) % ids.length,
+        Home: 0,
+        End: ids.length - 1,
+      }[event.key];
+      if (index < 0 || next === undefined) return;
+      event.preventDefault();
+      this.selectChannel(ids[next]);
+      this.#channels.get(ids[next]).tab.focus();
+    }
+
+    /** Show one channel's log; Copy and Clear then act on it. */
+    selectChannel(id) {
+      this.initialize();
+      this.#entry(id);
+      const changed = this.#active !== undefined && this.#active !== id;
+      this.#active = id;
+      if (this.#channels.size > 1) {
+        for (const [channelId, { tab, output }] of this.#channels) {
+          const selected = channelId === id;
+          tab.setAttribute('aria-selected', String(selected));
+          tab.classList.toggle('active', selected);
+          tab.tabIndex = selected ? 0 : -1;
+          output.hidden = !selected;
+        }
+        const { output } = this.#channels.get(id);
+        output.scrollTop = output.scrollHeight;
+      }
+      if (changed) {
+        const { CustomEvent } = this.ownerDocument.defaultView;
+        this.dispatchEvent(new CustomEvent('nd-console-channel', { bubbles: true, detail: { channel: id } }));
+      }
     }
 
     open() { this.collapsed = false; }
     close() { this.collapsed = true; }
-    log(message, level) {
+    /** Without `channel` the entry goes to the first channel. An error opens the log on its channel. */
+    log(message, level, channel) {
       this.initialize();
-      if (level === 'error') this.open();
-      this.#console.log(message, level);
+      const entry = this.#entry(channel ?? this.channels[0]);
+      if (level === 'error') {
+        this.selectChannel(entry.id);
+        this.open();
+      }
+      entry.console.log(message, level);
     }
-    clear() { this.console.clear(); }
-    getText() { return this.console.getText(); }
+    /** The `ConsoleOutput` behind one channel. */
+    channel(id) { this.initialize(); return this.#entry(id).console; }
+    clear(channel) { this.initialize(); this.#entry(channel).console.clear(); }
+    getText(channel) { this.initialize(); return this.#entry(channel).console.getText(); }
   };
 }
 

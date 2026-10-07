@@ -831,9 +831,6 @@ importers:
       '@niivue/niivue':
         specifier: 1.0.0-rc.13
         version: 1.0.0-rc.13
-      freebrowse:
-        specifier: 2.5.0-next.1
-        version: 2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -993,9 +990,22 @@ importers:
 
   packages/runtime-support:
     dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       '@niivue/dcm2niix':
         specifier: ^1.2.0
         version: 1.2.0
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
+      freebrowse:
+        specifier: 2.5.0-next.1
+        version: 2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
+    devDependencies:
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
   packages/syncro:
     dependencies:

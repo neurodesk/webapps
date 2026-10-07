@@ -24,7 +24,7 @@ export function registerSctAutomation(app) {
           if (parameters.threshold !== undefined) document.getElementById('thresholdInput').value = String(parameters.threshold);
           if (parameters.minimumComponentSize !== undefined) document.getElementById('minSizeInput').value = String(parameters.minimumComponentSize);
           document.getElementById('ttaToggle').checked = parameters.testTimeAugmentation;
-          await awaitPipelineStep(executor, { step: 'inference', terminal: 'complete' }, () => app.runSegmentation(), signal);
+          await awaitPipelineStep(executor, { step: 'inference', terminal: 'complete' }, () => app.runSegmentation({ discardEdits: true }), signal);
           const artifacts = [];
           const measurements = {};
           for (const [stage, result] of Object.entries(executor.getResults())) {
@@ -63,6 +63,7 @@ export function registerSctAutomation(app) {
       },
     },
   });
-  automation.registerViewer('main', createNiivueAdapter(app.nv));
+  // No viewer is registered when WebGL2 is unavailable; processing still runs.
+  if (app.nv) automation.registerViewer('main', createNiivueAdapter(app.nv));
   return automation;
 }

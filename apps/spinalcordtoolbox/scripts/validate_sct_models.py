@@ -99,36 +99,6 @@ def validate_asset(asset: dict, where: str, model_dir: Path, errors: list[str]) 
                     fail(errors, f"{where}.output: sigmoid-labels labelPriority must only reference classLabels")
 
 
-def validate_template_asset(asset: dict, where: str, model_dir: Path, errors: list[str]) -> None:
-    for key in ("id", "filename", "sourceUrl"):
-        require(asset, key, where, errors)
-    filename = asset.get("filename")
-    if not filename:
-        return
-
-    path = model_dir / filename
-    download_url = asset.get("downloadUrl")
-    if not path.exists() and not download_url:
-        fail(errors, f"{where}: template file does not exist: {path}")
-    if download_url is not None and not isinstance(download_url, str):
-        fail(errors, f"{where}: downloadUrl must be a string")
-
-    expected_size = asset.get("sizeBytes")
-    if expected_size is not None:
-        if not isinstance(expected_size, int) or expected_size <= 0:
-            fail(errors, f"{where}: sizeBytes must be a positive integer")
-        elif path.exists() and path.stat().st_size != expected_size:
-            fail(errors, f"{where}: sizeBytes={expected_size} but file size is {path.stat().st_size}")
-
-    checksum = asset.get("checksum")
-    if checksum is not None and not (isinstance(checksum, str) and checksum.startswith("sha256:")):
-        fail(errors, f"{where}: checksum must be null or a sha256: digest")
-    if path.exists() and isinstance(checksum, str) and checksum.startswith("sha256:"):
-        digest = hashlib.sha256(path.read_bytes()).hexdigest()
-        if checksum != f"sha256:{digest}":
-            fail(errors, f"{where}: checksum mismatch, manifest={checksum} file=sha256:{digest}")
-
-
 def validate_output_stage(stage: dict, where: str, errors: list[str]) -> None:
     for key in ("id", "kind"):
         require(stage, key, where, errors)
@@ -173,8 +143,6 @@ def validate_task(task: dict, index: int, model_dir: Path, errors: list[str]) ->
         seen_stages.add(stage_id)
     for asset_index, asset in enumerate(task.get("modelAssets", [])):
         validate_asset(asset, f"{where}.modelAssets[{asset_index}]", model_dir, errors)
-    for asset_index, asset in enumerate(task.get("templateAssets", [])):
-        validate_template_asset(asset, f"{where}.templateAssets[{asset_index}]", model_dir, errors)
 
 
 def validate_manifest(path: Path, task_filter: str | None = None) -> list[str]:

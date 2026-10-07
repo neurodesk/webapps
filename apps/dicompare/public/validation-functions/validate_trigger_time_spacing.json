@@ -1,0 +1,58 @@
+{
+  "id": "validate_trigger_time_spacing",
+  "name": "Uniform Temporal Spacing",
+  "description": "Validates that TriggerTime values are uniformly spaced according to the RepetitionTime (TR).",
+  "category": "Timing",
+  "fields": [
+    "TriggerTime",
+    "RepetitionTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "trigger_times = value[\"TriggerTime\"].dropna().sort_values()\ntr = value[\"RepetitionTime\"].iloc[0]\n\n# Calculate spacing between consecutive trigger times\nspacings = trigger_times.diff().dropna()\n\n# Check if all spacings match TR (within small tolerance for floating point)\ntolerance = 1  # 1ms tolerance\nnon_uniform = spacings[abs(spacings - tr) > tolerance]\n\nif len(non_uniform) > 0:\n    raise ValidationError(f\"TriggerTime spacing should be {tr}ms (TR), but found non-uniform gaps: {non_uniform.values[:5]}...\")",
+  "testCases": [
+    {
+      "id": "test_spacing_pass",
+      "name": "Uniform spacing",
+      "data": {
+        "TriggerTime": [
+          0,
+          2500,
+          5000,
+          7500,
+          10000
+        ],
+        "RepetitionTime": [
+          2500,
+          2500,
+          2500,
+          2500,
+          2500
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Evenly spaced at TR=2500ms"
+    },
+    {
+      "id": "test_spacing_fail",
+      "name": "Non-uniform spacing",
+      "data": {
+        "TriggerTime": [
+          0,
+          2500,
+          5000,
+          8000,
+          10000
+        ],
+        "RepetitionTime": [
+          2500,
+          2500,
+          2500,
+          2500,
+          2500
+        ]
+      },
+      "expectedResult": "fail",
+      "description": "Gap of 3000ms instead of 2500ms"
+    }
+  ]
+}

@@ -344,16 +344,16 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl": {
-      "sha256": "58a6a3ed02e33f39066814aebf4430d63599dd7bc9b94a35b7362208f06a1d8a",
-      "bytes": 283584,
+    "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl": {
+      "sha256": "b1d9ff53eabba5791c7b9a3a3da16ed4ebcb0e0f435924687992db49b5ac76e8",
+      "bytes": 396689,
       "contentType": "application/octet-stream",
       "kind": "python-wheel",
       "dependencies": []
     },
-    "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl": {
-      "sha256": "f9f8e19b78525be57aa6384484298833e4d06ac1d6226c79459131ddb0bd7c42",
-      "bytes": 1771279,
+    "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl": {
+      "sha256": "35a594cc8ebae8dd40b1f632cd7c9f08ecaa147cb9305a9f9fbca2c03f5ccc93",
+      "bytes": 1771963,
       "contentType": "application/octet-stream",
       "kind": "python-wheel",
       "dependencies": []
@@ -1231,20 +1231,6 @@
       "bytes": 123468139,
       "contentType": "application/octet-stream",
       "kind": "model",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz": {
-      "sha256": "5e5b27aee46837abfdb85bffb01d5eb6c20f41ed7d308f5388fc86fd251942b6",
-      "bytes": 129677,
-      "contentType": "application/gzip",
-      "kind": "atlas-template",
-      "dependencies": []
-    },
-    "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz": {
-      "sha256": "3e98b3275454e783a2683af0a6c895a9fa40c5c8da7eac9d6d478516fe85f0a8",
-      "bytes": 24057343,
-      "contentType": "application/gzip",
-      "kind": "atlas-template",
       "dependencies": []
     },
     "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx": {
@@ -2388,42 +2374,42 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/autoqsm.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/autoqsm.onnx": {
       "sha256": "c2f23c6ae735fd1677e8623da22cb6f25b4a932ae50ba1ef08a75439e240977e",
       "bytes": 5609662,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmnet-plus.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmnet-plus.onnx": {
       "sha256": "0ed31f9a1b66f75fee4a96022b6bc3838b91bc5b819714dade5ca87cd331683d",
       "bytes": 397801854,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/ir2qsm.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/ir2qsm.onnx": {
       "sha256": "dcaf7a26d6633900f339f94be16d580ccea6147bbf6da26eacb9a5e1acdc0c53",
       "bytes": 40259354,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/nextqsm-bf.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/nextqsm-bf.onnx": {
       "sha256": "d0f0b0391153f8e5e07ef85d46fbe492afc8394fab008350540a6868d0b4a3ba",
       "bytes": 113211474,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/xqsm.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/xqsm.onnx": {
       "sha256": "81854ec2ca85bba25c2f9aae05efdcac299d0efffb03fe6a0e6797019e46b487",
       "bytes": 20901826,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/modl-qsm.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/modl-qsm.onnx": {
       "sha256": "1f8da7d39eaaa4c3f0f9e67298fba5f14230e769cfd6349c81d0b74a6f800c57",
       "bytes": 1794143,
       "kind": "model",
@@ -2437,7 +2423,7 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/lpcnn.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/lpcnn.onnx": {
       "sha256": "831f2a161f6ab8ee7bf64cc2dd8bca532fc971d0083cf5729d6302d3ed31625d",
       "bytes": 1790869,
       "kind": "model",
@@ -2451,21 +2437,21 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmgan.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmgan.onnx": {
       "sha256": "238573a6fa8a563004fc28e63a30694289d1a1a204f3c406daba486b1122d604",
       "bytes": 10753955,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/nextqsm-vjp.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/nextqsm-vjp.onnx": {
       "sha256": "50fe388663c05b1d3996139975270e500e13feb025f1b792576dbc0da814a4bc",
       "bytes": 42437407,
       "kind": "model",
       "contentType": "application/octet-stream",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmnet.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmnet.onnx": {
       "sha256": "8fd1d79b7a9258a262a2faab9e8469757ae7735f3da6212e431acfb207c21b54",
       "bytes": 397801854,
       "kind": "model",
@@ -2486,11 +2472,19 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/hd-bet.onnx": {
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/hd-bet.onnx": {
       "sha256": "f15200f9a0697cf53b151e316a0c4fe2cacfdbe2220deb36cb56184be4a227f9",
       "bytes": 123168028,
       "kind": "model",
       "contentType": "application/octet-stream",
+      "dependencies": []
+    },
+    "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/rs2-net.onnx": {
+      "sha256": "a120ce43b06a9f3ddecf85bf18f281cbb54c354ef15b34a6bcaaffa4e3c4a570",
+      "bytes": 63456162,
+      "kind": "model",
+      "contentType": "application/octet-stream",
+      "license": "GPL-3.0",
       "dependencies": []
     },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_INV2.nii.gz": {
@@ -3401,6 +3395,22 @@
       "kind": "model",
       "license": "MIT",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz": {
+      "sha256": "4dfa483da8df68510ea54008e0464c2b4e1a8f7990bc4798b65f143d389dbeff",
+      "bytes": 16016,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "license": "MIT",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz": {
+      "sha256": "b8c5398be85219e87c696685f48874b8f34c961e8503aabbc028d40e01fbbfcf",
+      "bytes": 16124,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "license": "MIT",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3432,10 +3442,7 @@
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-graymatter.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-lesion-sci-t2.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-spinalcord.onnx",
-      "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz",
-      "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx",
-      "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz",
       "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.asm.js",
       "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.asm.wasm",
@@ -3529,8 +3536,8 @@
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522",
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0",
       "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
@@ -3541,17 +3548,18 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.json",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/xqsm.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmnet.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmnet-plus.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/qsmgan.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/ir2qsm.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/lpcnn.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/modl-qsm.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/autoqsm.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/nextqsm-bf.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/nextqsm-vjp.onnx",
-      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261/hd-bet.onnx"
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/xqsm.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmnet.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmnet-plus.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/qsmgan.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/ir2qsm.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/lpcnn.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/modl-qsm.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/autoqsm.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/nextqsm-bf.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/nextqsm-vjp.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/hd-bet.onnx",
+      "https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701/rs2-net.onnx"
     ],
     "seedseg": [
       "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
@@ -3584,8 +3592,8 @@
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/typing_extensions-4.11.0-py3-none-any.whl",
       "https://dicompare.neurodesk.org/embed/DicompareController.js",
       "https://dicompare.neurodesk.org/schemas/SeedSeg_Prostate_T1w_v1.0.json",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
@@ -3631,8 +3639,8 @@
       "https://dicompare.neurodesk.org/embed/DicompareController.js",
       "https://dicompare.neurodesk.org/embed/dicompare-worker.js",
       "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",
-      "https://files.pythonhosted.org/packages/2c/61/bc22c38bf4c5bf5d5e59d76dd0357502df328aa5c07c49f1634341608a22/dicompare-0.6.0-py3-none-any.whl",
-      "https://files.pythonhosted.org/packages/35/2a/8c0f6fe243e6b6793868c6834203a44cc8f3f25abad780e1c7b21e15594d/pydicom-2.4.4-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
+      "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
@@ -4031,7 +4039,9 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.spar",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.sdat",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.spar",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz"
     ]
   }
 }

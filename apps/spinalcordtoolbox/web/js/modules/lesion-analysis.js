@@ -1,9 +1,11 @@
 /*
- * Browser-local subset of SCT lesion analysis for SCIseg outputs.
+ * Browser-local subset of SCT lesion analysis.
  *
- * The worker passes RAS-space binary masks. Metrics are computed after
- * restricting the lesion mask to the spinal-cord mask, matching the relevant
- * `sct_analyze_lesion -m lesion -s cord` contract for browser use.
+ * The worker passes RAS-space binary masks. With a spinal-cord mask (SCIseg)
+ * metrics are computed after restricting the lesion mask to the cord, matching
+ * the relevant `sct_analyze_lesion -m lesion -s cord` contract for browser use.
+ * Without one (lesion_ms) only lesion count, volume, length, width and
+ * equivalent diameter are reported, as `sct_analyze_lesion -m lesion` does.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -38,6 +40,19 @@
     'summary_max_width_mm'
   ];
 
+  const CORD_RELATIVE_COLUMNS = [
+    'max_axial_damage_ratio',
+    'midsagittal_x',
+    'midsagittal_length_mm',
+    'midsagittal_width_mm',
+    'dorsal_bridge_width_mm',
+    'ventral_bridge_width_mm',
+    'total_bridge_width_mm',
+    'dorsal_bridge_ratio',
+    'ventral_bridge_ratio',
+    'total_bridge_ratio'
+  ];
+
   function idx(x, y, z, dims) {
     return x + y * dims[0] + z * dims[0] * dims[1];
   }
@@ -51,6 +66,14 @@
     const out = new Uint8Array(lesion.length);
     for (let i = 0; i < lesion.length; i++) {
       if (lesion[i] > 0 && spinalCord[i] > 0) out[i] = 1;
+    }
+    return out;
+  }
+
+  function binarize(mask) {
+    const out = new Uint8Array(mask.length);
+    for (let i = 0; i < mask.length; i++) {
+      if (mask[i] > 0) out[i] = 1;
     }
     return out;
   }
@@ -234,6 +257,9 @@
     };
   }
 
+  // Without a cord mask only the lesion's own geometry is defined. Cord-relative
+  // fields (axial damage ratio, midsagittal slice, tissue bridges) stay empty, as
+  // in `sct_analyze_lesion -m lesion` run without `-s`.
   function analyzeComponent(labels, component, spinalCord, dims, spacing, cordAreas) {
     const [nx, ny, nz] = dims;
     const [sx, sy, sz] = spacing;
@@ -273,9 +299,24 @@
       zSliceCount++;
       maxWidth = Math.max(maxWidth, yWidthBySlice.get(z) || 0);
       maxAxialVoxels = Math.max(maxAxialVoxels, sliceCounts[z]);
-      if (cordAreas[z] > 0) {
+      if (cordAreas && cordAreas[z] > 0) {
         maxAxialDamageRatio = Math.max(maxAxialDamageRatio, sliceCounts[z] / cordAreas[z]);
       }
+    }
+
+    const geometry = {
+      row_type: 'lesion',
+      lesion_id: component,
+      voxel_count: count,
+      volume_mm3: roundMetric(count * voxelVolume),
+      length_mm: roundMetric(zSliceCount * (sz || 1)),
+      max_width_mm: roundMetric(maxWidth),
+      max_equivalent_diameter_mm: roundMetric(2 * Math.sqrt((maxAxialVoxels * axialArea) / Math.PI))
+    };
+    if (!spinalCord) {
+      const row = { ...geometry };
+      for (const column of CORD_RELATIVE_COLUMNS) row[column] = null;
+      return row;
     }
 
     const xMid = estimateMidsagittalX(spinalCord, dims, zMin, zMax);
@@ -284,13 +325,7 @@
     const midsagittal = computeMidsagittalMetrics(labels, component, dims, spacing, xMid, zMin, zMax);
 
     const row = {
-      row_type: 'lesion',
-      lesion_id: component,
-      voxel_count: count,
-      volume_mm3: roundMetric(count * voxelVolume),
-      length_mm: roundMetric(zSliceCount * (sz || 1)),
-      max_width_mm: roundMetric(maxWidth),
-      max_equivalent_diameter_mm: roundMetric(2 * Math.sqrt((maxAxialVoxels * axialArea) / Math.PI)),
+      ...geometry,
       max_axial_damage_ratio: roundMetric(maxAxialDamageRatio),
       midsagittal_x: roundMetric(xMid),
       midsagittal_length_mm: roundMetric(midsagittal.midsagittalLength),
@@ -341,20 +376,20 @@
   }
 
   function analyzeLesions({ lesion, spinalCord, dims, spacing }) {
-    if (!lesion || !spinalCord || !dims) {
-      throw new Error('lesion, spinalCord, and dims are required');
+    if (!lesion || !dims) {
+      throw new Error('lesion and dims are required');
     }
     const voxelCount = dims[0] * dims[1] * dims[2];
-    if (lesion.length !== voxelCount || spinalCord.length !== voxelCount) {
+    if (lesion.length !== voxelCount || (spinalCord && spinalCord.length !== voxelCount)) {
       throw new Error(`Mask length mismatch for dims ${dims.join('x')}`);
     }
     const safeSpacing = Array.isArray(spacing) ? spacing.map(value => Number(value) || 1) : [1, 1, 1];
-    const restricted = restrictLesionToCord(lesion, spinalCord);
+    const restricted = spinalCord ? restrictLesionToCord(lesion, spinalCord) : binarize(lesion);
     const { labels, numComponents } = connectedComponents3D(restricted, dims);
-    const cordAreas = cordAreaBySlice(spinalCord, dims);
+    const cordAreas = spinalCord ? cordAreaBySlice(spinalCord, dims) : null;
     const rows = [];
     for (let component = 1; component <= numComponents; component++) {
-      rows.push(analyzeComponent(labels, component, spinalCord, dims, safeSpacing, cordAreas));
+      rows.push(analyzeComponent(labels, component, spinalCord || null, dims, safeSpacing, cordAreas));
     }
 
     const lesionSlices = new Set();
@@ -372,7 +407,7 @@
       max_width_mm: roundMetric(rows.reduce((max, row) => Math.max(max, row.max_width_mm), 0))
     };
     const csv = buildCsv(rows, summary);
-    return { rows, summary, csv, restrictedLesion: restricted, componentLabels: labels };
+    return { rows, summary, csv, restrictedLesion: restricted, componentLabels: labels, cordRestricted: !!spinalCord };
   }
 
   return {
@@ -380,6 +415,7 @@
     buildCsv,
     connectedComponents3D,
     restrictLesionToCord,
-    BASE_COLUMNS
+    BASE_COLUMNS,
+    CORD_RELATIVE_COLUMNS
   };
 }));

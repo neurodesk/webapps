@@ -136,6 +136,27 @@
     return weights;
   }
 
+  // nnU-Net weights a patch with a Gaussian whose sigma is a fraction of each
+  // patch dimension (1/8 by default), not a fixed voxel count.
+  function computeScaledGaussianWeightMap3D(dim0, dim1, dim2, sigmaScale) {
+    const scale = sigmaScale > 0 ? sigmaScale : 0.125;
+    const dims = [dim0, dim1, dim2];
+    const centers = dims.map(dim => (dim - 1) / 2);
+    const denominators = dims.map(dim => 2 * (dim * scale) * (dim * scale));
+    const weights = new Float32Array(dim0 * dim1 * dim2);
+    for (let i0 = 0; i0 < dim0; i0++) {
+      const e0 = ((i0 - centers[0]) * (i0 - centers[0])) / denominators[0];
+      for (let i1 = 0; i1 < dim1; i1++) {
+        const e1 = ((i1 - centers[1]) * (i1 - centers[1])) / denominators[1];
+        for (let i2 = 0; i2 < dim2; i2++) {
+          const e2 = ((i2 - centers[2]) * (i2 - centers[2])) / denominators[2];
+          weights[i0 * dim1 * dim2 + i1 * dim2 + i2] = Math.exp(-(e0 + e1 + e2));
+        }
+      }
+    }
+    return weights;
+  }
+
   function computePatchPositions3D(volumeDims, patchDims, overlap) {
     const positions = [];
     const seen = new Set();
@@ -684,15 +705,23 @@
     }
 
     const prePadDims = [...currentDims];
-    const padded = zeroPadToPatchMultiple(currentData, currentDims, patchDims);
+    const paddingMode = options.paddingMode || 'end-multiple';
+    const padded = paddingMode === 'center-min-patch'
+      ? centerPadToPatchSize(currentData, currentDims, patchDims)
+      : zeroPadToPatchMultiple(currentData, currentDims, patchDims);
     if (padded.dims[0] !== currentDims[0] || padded.dims[1] !== currentDims[1] || padded.dims[2] !== currentDims[2]) {
-      onLog(`Padded: ${currentDims.join('x')} -> ${padded.dims.join('x')} (zero-pad)`);
+      const padDetail = paddingMode === 'center-min-patch' && padded.padBelow
+        ? `center zero-pad, below=${padded.padBelow.join('x')}, above=${padded.padAbove.join('x')}`
+        : 'zero-pad';
+      onLog(`Padded: ${currentDims.join('x')} -> ${padded.dims.join('x')} (${padDetail})`);
       currentData = padded.data;
       currentDims = padded.dims;
     }
     const processingDims = [...currentDims];
 
-    const gaussianWeights = computeGaussianWeightMap3D(PATCH_DIM0, PATCH_DIM1, PATCH_DIM2, 8);
+    const gaussianWeights = options.gaussianSigmaScale > 0
+      ? computeScaledGaussianWeightMap3D(PATCH_DIM0, PATCH_DIM1, PATCH_DIM2, options.gaussianSigmaScale)
+      : computeGaussianWeightMap3D(PATCH_DIM0, PATCH_DIM1, PATCH_DIM2, 8);
     const positions = computePatchPositions3D(currentDims, patchDims, overlap);
     const totalPatches = positions.length;
     onLog(`Starting region inference: ${totalPatches} patches (${PATCH_DIM0}x${PATCH_DIM1}x${PATCH_DIM2}), channels=${channelCount}, overlap=${overlap}, TTA=${testTimeAugmentation ? 'on' : 'off'}`);
@@ -774,7 +803,9 @@
 
       let outputLabels = binaryMask;
       if (prePadDims[0] !== processingDims[0] || prePadDims[1] !== processingDims[1] || prePadDims[2] !== processingDims[2]) {
-        outputLabels = unpadVolume(outputLabels, processingDims, prePadDims, Uint8Array);
+        outputLabels = paddingMode === 'center-min-patch' && padded.padBelow
+          ? unpadVolumeFromOffset(outputLabels, processingDims, prePadDims, padded.padBelow, Uint8Array)
+          : unpadVolume(outputLabels, processingDims, prePadDims, Uint8Array);
       }
       const preCleanupLabels = outputLabels;
       if (regionMinComponentSize > 1) {
@@ -1093,6 +1124,7 @@
     unpadVolume,
     unpadVolumeFromOffset,
     computeGaussianWeightMap3D,
+    computeScaledGaussianWeightMap3D,
     computePatchPositions3D,
     extractPatch3D,
     flipPatch3D,

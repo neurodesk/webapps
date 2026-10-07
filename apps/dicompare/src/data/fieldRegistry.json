@@ -1,0 +1,253 @@
+{
+  "CoilCombinationMethod": {
+    "valueType": "string",
+    "vocabulary": [
+      "Sum of Squares",
+      "Adaptive Combine"
+    ]
+  },
+  "ComplexImageComponent": {
+    "valueType": "string",
+    "vocabulary": [
+      "MAGNITUDE",
+      "PHASE",
+      "REAL",
+      "IMAGINARY",
+      "MIXED"
+    ]
+  },
+  "DiffusionBValues": {
+    "valueType": "list_number",
+    "unit": "s/mm2"
+  },
+  "DiffusionHemisphereCoverage": {
+    "valueType": "string",
+    "vocabulary": [
+      "full-sphere",
+      "half-sphere",
+      "unknown"
+    ]
+  },
+  "DirectionsPerShell": {
+    "valueType": "list_number"
+  },
+  "EchoSpacing": {
+    "valueType": "number",
+    "vr": "DS",
+    "unit": "ms",
+    "continuous": true,
+    "suggestedTolerance": 0.05
+  },
+  "EchoTime": {
+    "valueType": "number",
+    "tag": "0018,0081",
+    "vr": "DS",
+    "unit": "ms",
+    "continuous": true,
+    "suggestedTolerance": 1.0
+  },
+  "FlipAngle": {
+    "valueType": "number",
+    "tag": "0018,1314",
+    "vr": "DS",
+    "unit": "deg",
+    "continuous": true,
+    "suggestedTolerance": 2.0
+  },
+  "ImagedNucleus": {
+    "valueType": "string",
+    "tag": "0018,0085",
+    "vr": "SH",
+    "vocabulary": [
+      "1H",
+      "31P",
+      "13C",
+      "23NA",
+      "19F",
+      "129XE",
+      "2H",
+      "7LI"
+    ]
+  },
+  "ImagingFrequency": {
+    "valueType": "number",
+    "tag": "0018,0084",
+    "vr": "DS",
+    "unit": "MHz",
+    "continuous": true,
+    "suggestedTolerance": 1.0
+  },
+  "InPlanePhaseEncodingDirection": {
+    "valueType": "string",
+    "tag": "0018,1312",
+    "vr": "CS",
+    "vocabulary": [
+      "ROW",
+      "COL"
+    ]
+  },
+  "InversionTime": {
+    "valueType": "number",
+    "tag": "0018,0082",
+    "vr": "DS",
+    "unit": "ms",
+    "continuous": true,
+    "suggestedTolerance": 10.0
+  },
+  "MRAcquisitionType": {
+    "valueType": "string",
+    "tag": "0018,0023",
+    "vr": "CS",
+    "vocabulary": [
+      "2D",
+      "3D"
+    ]
+  },
+  "MagneticFieldStrength": {
+    "valueType": "number",
+    "tag": "0018,0087",
+    "vr": "DS",
+    "unit": "T",
+    "continuous": true,
+    "suggestedTolerance": 0.3
+  },
+  "NumberOfB0Volumes": {
+    "valueType": "number"
+  },
+  "NumberOfDiffusionShells": {
+    "valueType": "number"
+  },
+  "NumberOfDiffusionVolumes": {
+    "valueType": "number"
+  },
+  "ParallelAcquisitionTechnique": {
+    "valueType": "string",
+    "tag": "0018,9078",
+    "vr": "CS",
+    "vocabulary": [
+      "GRAPPA",
+      "SENSE",
+      "mSENSE",
+      "SMASH",
+      "PILS",
+      "ASSET",
+      "ARC"
+    ]
+  },
+  "PatientPosition": {
+    "valueType": "string",
+    "tag": "0018,5100",
+    "vr": "CS",
+    "vocabulary": [
+      "HFS",
+      "HFP",
+      "FFS",
+      "FFP",
+      "HFDR",
+      "HFDL",
+      "FFDR",
+      "FFDL",
+      "LFP",
+      "LFS",
+      "RFP",
+      "RFS",
+      "AFDR",
+      "AFDL",
+      "PFDR",
+      "PFDL"
+    ]
+  },
+  "PercentPhaseFieldOfView": {
+    "valueType": "number",
+    "tag": "0018,0094",
+    "vr": "DS",
+    "unit": "%",
+    "continuous": true,
+    "suggestedTolerance": 10.0
+  },
+  "PercentSampling": {
+    "valueType": "number",
+    "tag": "0018,0093",
+    "vr": "DS",
+    "unit": "%",
+    "continuous": true,
+    "suggestedTolerance": 10.0
+  },
+  "PhaseEncodingDirectionPositive": {
+    "valueType": "number",
+    "vocabulary": [
+      0,
+      1
+    ]
+  },
+  "PhotometricInterpretation": {
+    "valueType": "string",
+    "tag": "0028,0004",
+    "vr": "CS",
+    "vocabulary": [
+      "MONOCHROME1",
+      "MONOCHROME2",
+      "PALETTE COLOR",
+      "RGB",
+      "YBR_FULL",
+      "YBR_FULL_422",
+      "YBR_PARTIAL_422",
+      "YBR_ICT",
+      "YBR_RCT"
+    ]
+  },
+  "PixelBandwidth": {
+    "valueType": "number",
+    "tag": "0018,0095",
+    "vr": "DS",
+    "unit": "Hz/pixel",
+    "continuous": true,
+    "suggestedTolerance": 50.0
+  },
+  "PixelSpacing": {
+    "valueType": "list_number",
+    "tag": "0028,0030",
+    "vr": "DS",
+    "unit": "mm",
+    "continuous": true,
+    "suggestedTolerance": 0.1
+  },
+  "RepetitionTime": {
+    "valueType": "number",
+    "tag": "0018,0080",
+    "vr": "DS",
+    "unit": "ms",
+    "continuous": true,
+    "suggestedTolerance": 10.0
+  },
+  "SAR": {
+    "valueType": "number",
+    "tag": "0018,1316",
+    "vr": "DS",
+    "unit": "W/kg",
+    "continuous": true
+  },
+  "SliceThickness": {
+    "valueType": "number",
+    "tag": "0018,0050",
+    "vr": "DS",
+    "unit": "mm",
+    "continuous": true,
+    "suggestedTolerance": 0.1
+  },
+  "SpacingBetweenSlices": {
+    "valueType": "number",
+    "tag": "0018,0088",
+    "vr": "DS",
+    "unit": "mm",
+    "continuous": true,
+    "suggestedTolerance": 0.1
+  },
+  "dBdt": {
+    "valueType": "number",
+    "tag": "0018,1318",
+    "vr": "DS",
+    "unit": "T/s",
+    "continuous": true
+  }
+}

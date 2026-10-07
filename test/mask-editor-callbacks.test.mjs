@@ -48,8 +48,10 @@ const apps = [
   { id: 'musclemap', name: 'MuscleMapApp', callback: 'applySegmentationEdit', show: 'showSegmentationSource' },
   { id: 'seedseg', name: 'SeedSegApp', callback: 'onMaskApplied', show: 'showResult' },
   { id: 'vesselboost', name: 'VesselBoostApp', callback: 'onMaskApplied', show: 'renderVisibleResults' },
-  { id: 'spinalcordtoolbox', name: 'SpinalCordToolboxApp', callback: 'applyMaskEdit', show: 'renderViewerVolumes' },
 ];
+// Spinal Cord Toolbox keeps its editor session open across viewer renders (the
+// edited overlay stays hidden in the stack) and applies through its stage-data
+// seam; apps/spinalcordtoolbox/scripts/test_mask_edit.mjs covers both.
 
 async function setup(spec, t) {
   const { window } = new JSDOM('<div id="viewer"></div>');

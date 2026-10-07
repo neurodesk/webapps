@@ -18,11 +18,11 @@
     },
     {
       "id": "dcm2niix",
-      "version": "1",
-      "target": "dcm2niix/1",
+      "version": "1.3.20260724",
+      "target": "dcm2niix/1.3.20260724",
       "files": [
-        {"name":"dcm2niix.js","source_package":"runtime-support","source":"src/dcm2niix/dcm2niix.js","sha256":"0e7165cf346a5a78c17ca0568230f459e3f33fdd468fff52e46c835dd268e7a8"},
-        {"name":"dcm2niix.wasm","source_package":"runtime-support","source":"src/dcm2niix/dcm2niix.wasm","sha256":"c522e5627fee4a4abca0609ec438e3098efb8f972c3b6452f320c528b69045be"},
+        {"name":"dcm2niix.js","source_package":"runtime-support","source":"src/dcm2niix/dcm2niix.js","sha256":"5f31f5eb95b4c81072cee4e87c0d04d099bd0b0c0bde1b0a1b08a8b64bd5958f"},
+        {"name":"dcm2niix.wasm","source_package":"runtime-support","source":"src/dcm2niix/dcm2niix.wasm","sha256":"4bc755ab7fcea339717720163bd804bc6ee3c24f75966e8f43e9e763bf105798"},
         {"name":"index.js","source_package":"runtime-support","source":"src/dcm2niix/index.js","sha256":"7107d091fc3fae5697edce7cd6cef4d28e3b158a67a435c6c13766fdd40829a3"},
         {"name":"worker.js","source_package":"runtime-support","source":"src/dcm2niix/worker.js","sha256":"8cafd33fbc8a75f3bc72384e393e10c7aef7c7aa01ad309e0a08760b5655e863"}
       ]

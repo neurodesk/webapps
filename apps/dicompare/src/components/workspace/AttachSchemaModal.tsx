@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { X, Loader2, Zap, ArrowUpDown } from 'lucide-react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { Loader2, Zap, ArrowUpDown } from 'lucide-react';
+import Modal from '../common/Modal';
 import UnifiedSchemaSelector from '../schema/UnifiedSchemaSelector';
 import { UnifiedSchema, SchemaBinding } from '../../hooks/useSchemaService';
 import { Acquisition } from '../../types';
@@ -150,33 +151,24 @@ const AttachSchemaModal: React.FC<AttachSchemaModalProps> = ({
   };
 
   // Reset state when modal closes
-  if (!isOpen) {
-    if (scores.length > 0) {
+  useEffect(() => {
+    if (!isOpen && scores.length > 0) {
       setScores([]);
       setSortByScore(false);
     }
-    return null;
-  }
+  }, [isOpen, scores.length]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" data-tutorial="attach-schema-modal">
-      <div className="bg-surface-primary rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-content-primary">Attach Schema</h2>
-            <p className="text-sm text-content-secondary mt-1">
-              Select a schema acquisition to validate against
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-content-muted hover:text-content-secondary"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Attach Schema"
+      subtitle="Select a schema acquisition to validate against"
+      size="xl"
+      panelClassName="!max-h-[80vh]"
+      closeOnBackdrop={false}
+    >
+      <div className="flex flex-col min-h-0 flex-1" data-tutorial="attach-schema-modal">
         {/* Actions bar */}
         {testDataAcquisition && (
           <div className="px-6 py-2 border-b border-border bg-surface-secondary flex items-center justify-between">
@@ -244,7 +236,7 @@ const AttachSchemaModal: React.FC<AttachSchemaModalProps> = ({
           />
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 

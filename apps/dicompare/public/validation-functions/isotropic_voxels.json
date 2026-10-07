@@ -1,0 +1,101 @@
+{
+  "id": "isotropic_voxels",
+  "name": "Isotropic Voxels",
+  "description": "Validates that voxels are isotropic (within tolerance) and that the voxel edge does not exceed a configurable maximum.",
+  "category": "Geometry",
+  "fields": [
+    "PixelSpacing",
+    "SliceThickness"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "ps = value[\"PixelSpacing\"].iloc[0]\nst = value[\"SliceThickness\"].iloc[0]\ntol = params.get(\"isotropy_tolerance_mm\") or 0.1\nmax_edge = params.get(\"max_edge_mm\")\nif abs(ps[0]-ps[1]) > tol or abs(ps[0]-st) > tol:\n    raise ValidationError(f\"Voxels not isotropic (tolerance {tol} mm). PixelSpacing {ps}, SliceThickness {st}.\")\nif max_edge is not None and max(ps[0], ps[1], st) > max_edge:\n    raise ValidationWarning(f\"Voxel edge {max(ps[0],ps[1],st)} mm exceeds {max_edge} mm.\")\n",
+  "testCases": [
+    {
+      "id": "isotropic_pass",
+      "name": "1 mm isotropic voxels pass",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "SliceThickness": [
+          1.0
+        ]
+      }
+    },
+    {
+      "id": "anisotropic_fail",
+      "name": "Anisotropic voxels fail",
+      "expectedResult": "fail",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "SliceThickness": [
+          2.0
+        ]
+      }
+    },
+    {
+      "id": "edge_warns",
+      "name": "Large voxels warn above max edge",
+      "expectedResult": "warning",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.5,
+            1.5
+          ]
+        ],
+        "SliceThickness": [
+          1.5
+        ]
+      }
+    },
+    {
+      "id": "edge_moves",
+      "name": "1.5 mm voxels pass when max edge raised to 2",
+      "expectedResult": "pass",
+      "data": {
+        "PixelSpacing": [
+          [
+            1.5,
+            1.5
+          ]
+        ],
+        "SliceThickness": [
+          1.5
+        ]
+      },
+      "params": {
+        "max_edge_mm": 2.0
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_edge_mm",
+      "label": "Maximum voxel edge",
+      "type": "number",
+      "default": 1.05,
+      "min": 0,
+      "unit": "mm",
+      "description": "Warn if the largest voxel dimension exceeds this"
+    },
+    {
+      "name": "isotropy_tolerance_mm",
+      "label": "Isotropy tolerance",
+      "type": "number",
+      "default": 0.1,
+      "min": 0,
+      "unit": "mm",
+      "description": "Fail if voxel dimensions differ from each other by more than this"
+    }
+  ]
+}

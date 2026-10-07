@@ -145,7 +145,7 @@ test('SpinalCordToolbox routine releases exclude generated batch parity and work
     await readFile(join(repoRoot, 'apps', 'spinalcordtoolbox', 'package.json'), 'utf8'),
   );
   const releaseTest = packageJson.scripts['test:release'];
-  assert.match(releaseTest, /test:vertebrae:unit/);
+  assert.match(releaseTest, /test:totalspineseg/);
   assert.match(releaseTest, /test:batch:webapp/);
   assert.doesNotMatch(releaseTest, /test:fixtures(?:\s|$)/);
   assert.doesNotMatch(releaseTest, /test:inference:e2e/);

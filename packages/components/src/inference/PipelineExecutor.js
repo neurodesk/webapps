@@ -108,7 +108,7 @@ export class PipelineExecutor {
         this.setProgress(data.value ?? data.percentage ?? 0, data.text || data.currentOperation || null);
         break;
       case WorkerEventType.LOG:
-        this.workerLog(data.message);
+        this.workerLog(data.message, data);
         break;
       case WorkerEventType.ERROR:
         this.handleError(data.message || data.error || 'Worker failed');

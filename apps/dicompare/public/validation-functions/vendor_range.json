@@ -1,0 +1,165 @@
+{
+  "id": "vendor_range",
+  "name": "Vendor-Specific Range",
+  "description": "Validates that a numeric field falls within a vendor-specific range (Siemens / GE / Philips). Declare Manufacturer plus the field to check; configure per-vendor bounds (leave blank to skip a vendor) and whether a violation is an error or a warning.",
+  "category": "Vendor-Specific",
+  "fields": [
+    "Manufacturer",
+    "EchoTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "field = [c for c in value.columns if c not in (\"Manufacturer\", \"Count\")][0]\nm = str(value[\"Manufacturer\"].iloc[0]).upper() if \"Manufacturer\" in value.columns else \"\"\nv = value[field].iloc[0]\nlabel = params.get(\"label\") or field\nunit = params.get(\"unit\") or \"\"\nissue = ValidationWarning if params.get(\"severity\") == \"warning\" else ValidationError\nif v is not None and not pd.isna(v):\n    v = float(v)\n    ranges = {\n        \"SIEMENS\": (params.get(\"siemens_min\"), params.get(\"siemens_max\")),\n        \"PHILIPS\": (params.get(\"philips_min\"), params.get(\"philips_max\")),\n        \"GE\": (params.get(\"ge_min\"), params.get(\"ge_max\")),\n    }\n    for vendor, (lo, hi) in ranges.items():\n        if vendor in m:\n            if lo is not None and v < lo:\n                raise issue(f\"{vendor.title()} {label} should be >= {lo} {unit}. Found: {v} {unit}\")\n            if hi is not None and v > hi:\n                raise issue(f\"{vendor.title()} {label} should be <= {hi} {unit}. Found: {v} {unit}\")\n            break\n",
+  "testCases": [
+    {
+      "id": "in_range_pass",
+      "name": "Siemens TE within configured range",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          3.0
+        ]
+      },
+      "params": {
+        "siemens_min": 2.5,
+        "siemens_max": 4.5,
+        "label": "T1w TE"
+      }
+    },
+    {
+      "id": "out_of_range_fail",
+      "name": "Siemens TE above configured range",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          6.0
+        ]
+      },
+      "params": {
+        "siemens_min": 2.5,
+        "siemens_max": 4.5,
+        "label": "T1w TE"
+      }
+    },
+    {
+      "id": "other_vendor_ignored",
+      "name": "Vendor without configured bounds is not checked",
+      "expectedResult": "pass",
+      "data": {
+        "Manufacturer": [
+          "GE MEDICAL SYSTEMS"
+        ],
+        "EchoTime": [
+          999.0
+        ]
+      },
+      "params": {
+        "siemens_min": 2.5,
+        "siemens_max": 4.5
+      }
+    },
+    {
+      "id": "range_moves",
+      "name": "Same TE fails when the range is tightened",
+      "expectedResult": "fail",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          3.0
+        ]
+      },
+      "params": {
+        "siemens_min": 1.0,
+        "siemens_max": 2.0
+      }
+    },
+    {
+      "id": "warning_severity",
+      "name": "Out-of-range only warns with warning severity",
+      "expectedResult": "warning",
+      "data": {
+        "Manufacturer": [
+          "SIEMENS"
+        ],
+        "EchoTime": [
+          6.0
+        ]
+      },
+      "params": {
+        "siemens_min": 2.5,
+        "siemens_max": 4.5,
+        "severity": "warning"
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "label",
+      "label": "Value label",
+      "type": "string",
+      "default": "value",
+      "description": "Human-readable name of the checked value, used in messages (e.g. 'MPRAGE TE')"
+    },
+    {
+      "name": "unit",
+      "label": "Unit",
+      "type": "string",
+      "default": "ms",
+      "description": "Unit shown in messages"
+    },
+    {
+      "name": "siemens_min",
+      "label": "Siemens min",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "siemens_max",
+      "label": "Siemens max",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "ge_min",
+      "label": "GE min",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "ge_max",
+      "label": "GE max",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "philips_min",
+      "label": "Philips min",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "philips_max",
+      "label": "Philips max",
+      "type": "number",
+      "default": null
+    },
+    {
+      "name": "severity",
+      "label": "Severity",
+      "type": "enum",
+      "default": "error",
+      "options": [
+        "error",
+        "warning"
+      ],
+      "description": "Whether an out-of-range value fails validation or only warns"
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "id": "check_no_gap",
+  "name": "No Gap Between Slices",
+  "description": "Validates that there is no gap between slices (SpacingBetweenSlices should equal SliceThickness), within a configurable tolerance.",
+  "category": "Geometry",
+  "fields": [
+    "SliceThickness",
+    "SpacingBetweenSlices"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "slice_thickness = value[\"SliceThickness\"].iloc[0]\nspacing = value[\"SpacingBetweenSlices\"].iloc[0] if \"SpacingBetweenSlices\" in value.columns and not pd.isna(value[\"SpacingBetweenSlices\"].iloc[0]) else slice_thickness\ngap = spacing - slice_thickness\nmax_gap = params.get(\"max_gap_mm\")\nif max_gap is not None and gap > max_gap:\n    raise ValidationWarning(f\"Gap detected between slices ({gap:.1f} mm). SpacingBetweenSlices should equal SliceThickness.\")\n",
+  "testCases": [
+    {
+      "id": "no_gap_pass",
+      "name": "Contiguous slices pass",
+      "expectedResult": "pass",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "SpacingBetweenSlices": [
+          3.0
+        ]
+      }
+    },
+    {
+      "id": "gap_warns",
+      "name": "1 mm gap warns",
+      "expectedResult": "warning",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "SpacingBetweenSlices": [
+          4.0
+        ]
+      }
+    },
+    {
+      "id": "tolerance_moves",
+      "name": "1 mm gap passes with loose tolerance",
+      "expectedResult": "pass",
+      "data": {
+        "SliceThickness": [
+          3.0
+        ],
+        "SpacingBetweenSlices": [
+          4.0
+        ]
+      },
+      "params": {
+        "max_gap_mm": 1.5
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "max_gap_mm",
+      "label": "Maximum gap",
+      "type": "number",
+      "default": 0.5,
+      "min": 0,
+      "unit": "mm",
+      "description": "Warn if the inter-slice gap exceeds this"
+    }
+  ]
+}

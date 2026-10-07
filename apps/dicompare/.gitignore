@@ -30,3 +30,4 @@ dist/
 
 # Pyodide offline bundle (downloaded at build time)
 /public/pyodide
+/out

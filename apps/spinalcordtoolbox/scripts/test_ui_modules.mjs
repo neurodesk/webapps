@@ -169,4 +169,111 @@ globalThis.cancelAnimationFrame = globalThis.cancelAnimationFrame || (() => {});
   mm2.toggle(); // no throw
 }
 
+// ============================================================
+// Analysis and technical logs: routing, and the console built from the app's own markup
+// ============================================================
+{
+  const { ANALYSIS, TECHNICAL, describeRun, routePipelineMessage, routeWorkerLog } = await import('../web/js/app/log-channels.js');
+
+  assert.deepEqual(routeWorkerLog('Session created. Input: input, Output: output'), { channel: TECHNICAL, level: 'info' });
+  assert.deepEqual(routeWorkerLog('Warning: Could not cache model (storage full?)'), { channel: TECHNICAL, level: 'warning' });
+  assert.deepEqual(routeWorkerLog('segmentation: 2400 voxels (1505.3 mm^3)', { channel: 'analysis', level: 'info' }), { channel: ANALYSIS, level: 'info' });
+  assert.deepEqual(routeWorkerLog('WARNING: Segmentation is empty.', { channel: 'analysis', level: 'warning' }), { channel: ANALYSIS, level: 'warning' });
+  assert.deepEqual(routeWorkerLog('x', { channel: 'unknown' }), { channel: TECHNICAL, level: 'info' });
+
+  assert.deepEqual(routePipelineMessage('Initializing worker...'), { channel: TECHNICAL, level: 'info' });
+  assert.deepEqual(routePipelineMessage('ONNX Runtime ready'), { channel: TECHNICAL, level: 'info' });
+  assert.deepEqual(routePipelineMessage('Pipeline completed successfully'), { channel: TECHNICAL, level: 'info' });
+  assert.deepEqual(routePipelineMessage('Cancelling...'), { channel: TECHNICAL, level: 'info' });
+  assert.deepEqual(routePipelineMessage('Error: Model download failed'), { channel: ANALYSIS, level: 'error' });
+  assert.deepEqual(routePipelineMessage('Worker error: out of memory'), { channel: ANALYSIS, level: 'error' });
+  assert.deepEqual(routePipelineMessage('Aborted inference. Restored previous state.'), { channel: ANALYSIS, level: 'warning' });
+
+  assert.deepEqual(describeRun({
+    task: 'Spinal cord', input: 't2.nii.gz', model: 'sct-spinalcord.onnx', sourceVersion: 'r20250101',
+    threshold: 0.5, minComponentSize: 0, overlap: 0.5, testTimeAugmentation: false, patchSize: [64, 224, 160],
+  }), [
+    'Task: Spinal cord on t2.nii.gz',
+    'Parameters: model sct-spinalcord.onnx (r20250101), threshold 0.5, min component 0 voxels, overlap 0.5, TTA off, patch 64x224x160',
+  ]);
+
+  // The console element the app declares in index.html, driven the way the app drives it.
+  const { readFileSync } = await import('node:fs');
+  const { JSDOM } = await import('jsdom');
+  const { defineConsole } = await import('../../../packages/components/src/elements/console.js');
+  const html = readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const markup = html.match(/<nd-console\b[^>]*><\/nd-console>/)[0];
+  const { window } = new JSDOM(`<main><div id="canvas"></div>${markup}</main>`);
+  defineConsole(window);
+  const log = window.document.getElementById('spinalcordtoolbox-log');
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const write = (message, details) => {
+    const { channel, level } = details === 'pipeline' ? routePipelineMessage(message) : routeWorkerLog(message, details);
+    log.log(message, level, channel);
+  };
+  assert.equal(log.collapsed, true, 'console starts collapsed');
+  assert.deepEqual(log.channels, [ANALYSIS, TECHNICAL]);
+  assert.equal(log.activeChannel, ANALYSIS, 'the analysis log is shown first');
+  assert.deepEqual([...log.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent), ['Analysis', 'Technical']);
+  assert.equal(log.querySelector('[data-disclosure-toggle]').textContent, 'Log');
+
+  write('Task: Spinal cord on t2.nii.gz', { channel: 'analysis' });
+  write('Creating ONNX InferenceSession (wasm - 3D ops require WASM backend)...');
+  write('segmentation: 2400 voxels (1505.3 mm^3)', { channel: 'analysis' });
+  write('Inference complete in 12.3s');
+  write('Pipeline completed successfully', 'pipeline');
+  assert.equal(log.collapsed, true, 'ordinary lines leave the console collapsed');
+  const lines = (channel) => [...log.querySelectorAll(`#spinalcordtoolbox-logOutput-${channel} .nd-console-message`)].map((node) => node.textContent);
+  assert.deepEqual(lines(ANALYSIS), ['Task: Spinal cord on t2.nii.gz', 'segmentation: 2400 voxels (1505.3 mm^3)']);
+  assert.deepEqual(lines(TECHNICAL), [
+    'Creating ONNX InferenceSession (wasm - 3D ops require WASM backend)...',
+    'Inference complete in 12.3s',
+    'Pipeline completed successfully',
+  ]);
+  assert.equal(lines(ANALYSIS).filter((line) => lines(TECHNICAL).includes(line)).length, 0, 'no line is in both logs');
+
+  // Toggle open and closed: both logs keep their entries.
+  const toggle = log.querySelector('[data-disclosure-toggle]');
+  toggle.click();
+  await tick();
+  assert.equal(log.collapsed, false);
+  toggle.click();
+  await tick();
+  assert.equal(log.collapsed, true);
+  assert.equal(log.querySelectorAll('.nd-console-line').length, 5, 'entries survive collapse and reopen');
+
+  // Clear acts on the visible log only.
+  log.querySelector('[role="tab"][data-console-channel="technical"]').click();
+  await tick();
+  assert.equal(log.collapsed, false, 'choosing a tab opens the console');
+  log.querySelector('#spinalcordtoolbox-logClear').click();
+  assert.equal(log.getText(TECHNICAL), '');
+  assert.match(log.getText(ANALYSIS), /segmentation: 2400 voxels/);
+
+  // A failed run opens the console on the analysis log.
+  toggle.click();
+  await tick();
+  write('Error: Model download failed', 'pipeline');
+  await tick();
+  assert.equal(log.collapsed, false);
+  assert.equal(log.activeChannel, ANALYSIS);
+
+  // Enlarge with the keyboard; the size is kept while collapsed.
+  const height = () => log.style.getPropertyValue('--nd-console-height');
+  log.getBoundingClientRect = () => ({ height: parseFloat(height()) || 120 });
+  window.document.getElementById('canvas').getBoundingClientRect = () => ({ height: 600 - (parseFloat(height()) || 120) });
+  const handle = log.querySelector('.nd-console-resizer');
+  assert.equal(handle.getAttribute('role'), 'separator');
+  handle.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'PageUp', bubbles: true, cancelable: true }));
+  assert.equal(height(), '216px');
+  handle.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+  assert.equal(height(), '440px', 'the viewer keeps 160px');
+  toggle.click();
+  await tick();
+  toggle.click();
+  await tick();
+  assert.equal(height(), '440px', 'size survives collapse and reopen');
+  window.close();
+}
+
 console.log('UI module tests passed');

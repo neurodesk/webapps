@@ -1,6 +1,6 @@
 {
   "name": "topofit",
-  "version": "0.12.20261005",
+  "version": "0.13.20261007",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,7 +17,6 @@
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niimath": "1.4.20260909",
     "@niivue/niivue": "1.0.0-rc.13",
-    "freebrowse": "2.5.0-next.1",
     "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {

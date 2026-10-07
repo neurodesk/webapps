@@ -14,11 +14,6 @@ const DOCKER_FIXTURE_MAP = Object.freeze([
     output: 't2/t2_seg.nii.gz'
   },
   {
-    id: 'batch_t2_label_vertebrae',
-    input: 't2/t2.nii.gz',
-    output: 't2/t2_seg_labeled.nii.gz'
-  },
-  {
     id: 'batch_t2s_deepseg_spinalcord',
     input: 't2s/t2s.nii.gz',
     output: 't2s/t2s_seg.nii.gz'

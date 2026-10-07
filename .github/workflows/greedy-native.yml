@@ -252,6 +252,7 @@ jobs:
           test "$(gh release view "$tag" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release=greedy@$version" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: greedy-*
@@ -275,3 +276,14 @@ jobs:
             "release-bundle/greedy-signed-macos/greedy-$version-macos-arm64.pkg" \
             "release-bundle/greedy-signed-macos/greedy-$version-macos-arm64.pkg.sha256" \
             "release-bundle/greedy-signed-macos/greedy-$version-macos-arm64.pkg.validation.txt" --clobber
+      - name: Publish to the Standalone catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ steps.target.outputs.release }}
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true ]; then
+            echo "::notice::$RELEASE_TAG is a draft or prerelease; publishing it adds its downloads to the Standalone catalog"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
+          fi

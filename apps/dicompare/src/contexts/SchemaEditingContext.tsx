@@ -18,6 +18,7 @@ interface SchemaEditingContextType {
   addSeries: (id: string) => void;
   deleteSeries: (id: string, seriesIndex: number) => void;
   updateSeriesName: (id: string, seriesIndex: number, name: string) => void;
+  updateSeriesNotes: (id: string, seriesIndex: number, notes: string) => void;
 
   // Validation function operations
   addValidationFunction: (id: string, func: SelectedValidationFunction) => void;

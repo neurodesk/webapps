@@ -1,5 +1,12 @@
 # @neurodesk/synthseg
 
+## 0.5.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.2.0
+
 ## 0.5.20261005
 
 ### Patch Changes

@@ -76,6 +76,20 @@ test('typed automation completes the real SCT T2 workflow and downloads its cord
   expect(output.length).toBe(artifact.bytes);
   expect(createHash('sha256').update(output).digest('hex')).toBe(artifact.sha256);
   await writeFile(join(directory, 'report.json'), JSON.stringify(snapshot.report, null, 2));
+
+  // The run is described in the analysis log; machinery stays in the technical log.
+  const logs = await page.evaluate(() => ({ analysis: app.log.getText('analysis'), technical: app.log.getText('technical') }));
+  expect(logs.analysis).toMatch(/Input volume: \d+x\d+x\d+, spacing: /);
+  expect(logs.analysis).toMatch(/Task: .+ on sct_T2_spinalcord\.nii\.gz/);
+  expect(logs.analysis).toMatch(/Parameters: model .+, threshold [\d.]+, min component \d+ voxels, overlap [\d.]+, TTA (on|off), patch \d+x\d+x\d+/);
+  expect(logs.analysis).toMatch(/segmentation: \d+ voxels \([\d.]+ mm\^3\)/);
+  expect(logs.analysis).not.toMatch(/Patch \d+ pos=|InferenceSession|Inference complete in/);
+  expect(logs.technical).toMatch(/Creating ONNX InferenceSession/);
+  expect(logs.technical).toMatch(/Inference complete in [\d.]+s/);
+  expect(logs.technical).not.toMatch(/Task: |segmentation: \d+ voxels/);
+  const lines = text => text.split('\n').map(line => line.replace(/^\[[\d:]+\]/, ''));
+  expect(lines(logs.analysis).filter(line => lines(logs.technical).includes(line))).toEqual([]);
+  await expect(page.locator('#spinalcordtoolbox-log')).toHaveClass(/collapsed/);
 });
 
 test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', async ({ page }) => {
@@ -99,7 +113,11 @@ test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', asy
   await expect(label).toHaveText('SCT Segmentation');
   await expect(row.locator('.nd-edit-btn')).toBeEnabled();
 
-  await page.locator('.view-tab[data-view="axial"]').click();
+  // One axial slice fills FreeBrowse's canvas, so the stroke crosses the cord.
+  await page.evaluate(() => {
+    window.app.nv.sliceType = 0;
+    window.app.nv.drawScene();
+  });
   await row.locator('.nd-edit-btn').click();
   await expect(editor).toBeVisible();
   const box = await page.locator('#gl1').boundingBox();
@@ -119,7 +137,7 @@ test('a cord mask edited in the viewer downloads as the edited uint8 NIfTI', asy
   const baseDims = await page.evaluate(() => Array.from(window.app.nv.volumes[0].hdr.dims.slice(1, 4)));
   const before = readNifti(original.bytes);
   const after = readNifti(edited.bytes);
-  expect(edited.name).toBe(original.name);
+  expect(edited.name).toBe(original.name.replace(/\.nii(\.gz)?$/, '_edited.nii$1'));
   expect(after.datatype).toBe(2);
   expect(after.dims).toEqual(baseDims);
   expect(before.dims).toEqual(baseDims);

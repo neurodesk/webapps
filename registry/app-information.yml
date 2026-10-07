@@ -122,6 +122,7 @@ apps:
       - { name: Spinal Cord Toolbox, url: https://spinalcordtoolbox.com, role: morphometry and lesion analysis in the browser or on your compute server }
       - { name: Pyodide, url: https://pyodide.org, role: runs SCT Python and scientific libraries in WebAssembly }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation models in the browser }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive viewer with zoom, pan, layers and drawing }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -146,14 +147,14 @@ apps:
         title: TotalSpineSeg
         reference: "Warszawer Y, Molinier N, Valošek J, et al. TotalSpineSeg: Robust spine segmentation and labeling across multiple MRI contrasts. Proceedings of the ISMRM. 2025."
         url: https://github.com/neuropoly/totalspineseg
-      - group: Vertebral labeling
-        title: Vertebral level labeling
-        reference: "Ullmann E, Pelletier Paquette JF, Thong WE, Cohen-Adad J. Automatic labeling of vertebral levels using a robust template-based approach. International Journal of Biomedical Imaging. 2014;2014:719520."
-        doi: 10.1155/2014/719520
-      - group: Template
-        title: PAM50
-        reference: "De Leener B, Fonov VS, Collins DL, Callot V, Stikov N, Cohen-Adad J. PAM50: Unbiased multimodal template of the brainstem and spinal cord aligned with the ICBM152 space. NeuroImage. 2018;165:170–179."
-        doi: 10.1016/j.neuroimage.2017.10.041
+      - group: Lesion analysis
+        title: Midsagittal tissue bridges
+        reference: "Huber E, Lachappelle P, Sutter R, Curt A, Freund P. Are midsagittal tissue bridges predictive of outcome after cervical spinal cord injury? Annals of Neurology. 2017;81(5):740–748."
+        doi: 10.1002/ana.24932
+      - group: Lesion analysis
+        title: Axial damage ratio
+        reference: "Smith AC, Albin SR, O'Dell DR, et al. Axial MRI biomarkers of spinal cord damage to predict future walking and motor function: a retrospective study. Spinal Cord. 2021;59(6):693–699."
+        doi: 10.1038/s41393-020-00561-w
       - group: Deep learning framework
         title: PyTorch
         reference: "Paszke A, Gross S, Massa F, et al. PyTorch: An imperative style, high-performance deep learning library. Advances in Neural Information Processing Systems. 2019;32."
@@ -307,6 +308,11 @@ apps:
         reference: "Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143–155."
         doi: 10.1002/hbm.10062
         code: https://github.com/Bostrix/FSL-BET2
+      - group: Brain extraction
+        title: RS2-Net (rodent brain extraction)
+        reference: "Lin Y, Ding Y, Chang S, Ge X, Sui X, Jiang Y. RS2-Net: An end-to-end deep learning framework for rodent skull stripping in multi-center brain MRI. NeuroImage. 2024;298:120769."
+        doi: 10.1016/j.neuroimage.2024.120769
+        code: https://github.com/VitoLin21/Rodent-Skull-Stripping
       - group: Phase unwrapping
         title: ROMEO
         reference: "Dymerska B, Eckstein K, Bachrata B, et al. Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO). Magnetic Resonance in Medicine. 2021;85(4):2294–2308."

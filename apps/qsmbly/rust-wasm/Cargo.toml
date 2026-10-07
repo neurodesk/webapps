@@ -1,6 +1,6 @@
 [package]
 name = "qsm_wasm"
-version = "0.29.20261004"
+version = "0.29.20261007"
 edition = "2021"
 authors = ["QSM-WASM"]
 description = "WASM bindings for QSM processing pipeline (powered by qsm-core)"
@@ -21,12 +21,12 @@ parallel = ["qsm-core/parallel", "dep:wasm-bindgen-rayon"]
 [dependencies]
 # Core QSM algorithms. `parallel` (rayon) is enabled via our own `parallel` feature for
 # threaded wasm builds; plain builds stay single-threaded.
-qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.35.0" }
+qsm-core = { git = "https://github.com/astewartau/QSM.rs.git", tag = "v0.38.0" }
 
 # Pipeline configuration, command generation, methods text.
 # qsmxt-config's canonical home is the QSMxT/QSMxT workspace (the old
 # astewartau/qsmxt.rs repo is being retired).
-qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.21.0" }
+qsmxt-config = { git = "https://github.com/QSMxT/QSMxT.git", tag = "v9.22.0" }
 
 # WASM bindings
 # getrandom (pulled by tract-onnx) needs an explicit browser-crypto backend on wasm32. Since
@@ -38,6 +38,13 @@ wasm-bindgen-rayon = { version = "1.2", optional = true }
 js-sys = "0.3"
 serde_json = "1"
 console_error_panic_hook = { version = "0.1", optional = true }
+
+# RS2-Net rodent brain extraction (qsm_core::bet::rs2_net) is in review upstream
+# (astewartau/QSM.rs#126). Until it is released, take qsm-core — for us *and* for qsmxt-config,
+# which pins the same v0.38.0 — from v0.38.0 plus that one commit, so the crate graph still has a
+# single qsm-core. Once released: bump the tag above (and qsmxt-config's) and drop this patch.
+[patch."https://github.com/astewartau/QSM.rs.git"]
+qsm-core = { git = "https://github.com/stebo85/QSM.rs.git", rev = "30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"

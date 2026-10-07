@@ -4,6 +4,7 @@
 import { FieldDataType } from '../types';
 import { getDataTypeFromVR, getSuggestedConstraintForVR, getSuggestedToleranceValue } from '../utils/vrMapping';
 import { roundDicomValue } from '../utils/valueRounding';
+import fieldRegistry from '../data/fieldRegistry.json';
 
 export interface DicomFieldDefinition {
   tag: string;
@@ -16,7 +17,80 @@ export interface DicomFieldDefinition {
   // Legacy compatibility
   vr: string;
   description?: string;
+  // Metadata sourced from the dicompare field registry (src/data/fieldRegistry.json,
+  // generated from dicompare-pip/dicompare/fields.py — the single source of truth).
+  // Present on standard fields the registry enriches and on derived fields it defines.
+  valueType?: FieldDataType;           // registry canonical type (number/string/list_*)
+  vocabulary?: (string | number)[];    // fixed set of allowed values (enum), if any
+  unit?: string;                       // canonical unit, e.g. "ms", "mm"
+  continuous?: boolean;                // exact matches are brittle for this field
+  suggestedTolerance?: number;         // default tolerance for continuous fields
+  // 'derived' marks a computed field with no official DICOM tag (e.g. CoilCombinationMethod).
+  fieldType?: 'standard' | 'derived';
 }
+
+// The dicompare field registry, keyed by DICOM keyword. Generated from the Python
+// package via `npm run sync:registry`; do not hand-edit fieldRegistry.json.
+interface RegistryEntry {
+  valueType: FieldDataType;
+  tag?: string;                        // "GGGG,EEEE"; absent for derived fields
+  vr?: string;
+  unit?: string;
+  vocabulary?: (string | number)[];
+  continuous?: boolean;
+  suggestedTolerance?: number;
+}
+const REGISTRY = fieldRegistry as Record<string, RegistryEntry>;
+
+// Build a suggestion entry for a registry-only (derived) field that has no
+// official DICOM tag, so it can appear in the "Add DICOM fields…" autocomplete.
+const buildDerivedFieldDefinition = (keyword: string, entry: RegistryEntry): DicomFieldDefinition => {
+  const bits: string[] = ['Derived field'];
+  if (entry.unit) bits.push(entry.unit);
+  if (entry.vocabulary) bits.push(`one of: ${entry.vocabulary.join(', ')}`);
+  return {
+    tag: '',                           // derived fields are identified by keyword
+    name: keyword,
+    keyword,
+    valueRepresentation: entry.vr,
+    vr: entry.vr || 'UN',
+    valueType: entry.valueType,
+    vocabulary: entry.vocabulary,
+    unit: entry.unit,
+    continuous: entry.continuous,
+    suggestedTolerance: entry.suggestedTolerance,
+    fieldType: 'derived',
+    description: bits.join(' • '),
+  };
+};
+
+// Fold the dicompare registry into a fetched field list: enrich matching standard
+// fields with registry metadata (type, unit, vocabulary) and append derived fields
+// so both official and derived fields are suggested from one source of truth.
+const mergeRegistryFields = (base: DicomFieldDefinition[]): DicomFieldDefinition[] => {
+  const byKeyword = new Map<string, DicomFieldDefinition>();
+  for (const f of base) {
+    if (f.keyword) byKeyword.set(f.keyword, f);
+  }
+
+  const derived: DicomFieldDefinition[] = [];
+  for (const [keyword, entry] of Object.entries(REGISTRY)) {
+    const existing = byKeyword.get(keyword);
+    if (existing) {
+      existing.valueType = entry.valueType;
+      if (entry.vocabulary) existing.vocabulary = entry.vocabulary;
+      if (entry.unit) existing.unit = entry.unit;
+      if (entry.continuous) existing.continuous = entry.continuous;
+      if (entry.suggestedTolerance !== undefined) existing.suggestedTolerance = entry.suggestedTolerance;
+      existing.fieldType = entry.tag ? 'standard' : 'derived';
+    } else if (!entry.tag) {
+      // Derived field with no official tag and no equivalent in the standard list.
+      derived.push(buildDerivedFieldDefinition(keyword, entry));
+    }
+  }
+
+  return [...base, ...derived];
+};
 
 // Cache for field list to avoid repeated fetches
 let cachedFieldList: DicomFieldDefinition[] | null = null;
@@ -61,16 +135,17 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
           description: `${field.name} (${field.valueRepresentation}, ${field.valueMultiplicity})`
         }));
 
-      // Cache the result
-      cachedFieldList = fieldList;
-      resolve(fieldList);
+      // Cache the result, enriched with the dicompare registry (adds derived fields)
+      const merged = mergeRegistryFields(fieldList);
+      cachedFieldList = merged;
+      resolve(merged);
     } catch (error) {
       console.warn('Failed to fetch DICOM field list from official standard, using fallback data:', error);
 
       // Fallback to mock data if external fetch fails
-      const fallbackData = getFallbackFieldList();
-      cachedFieldList = fallbackData;
-      resolve(fallbackData);
+      const merged = mergeRegistryFields(getFallbackFieldList());
+      cachedFieldList = merged;
+      resolve(merged);
     } finally {
       fetchPromise = null;
     }
@@ -161,7 +236,7 @@ export const searchDicomFields = async (query: string, limit: number = 50): Prom
   for (const field of fieldList) {
     const name = field.name.toLowerCase();
     const tag = field.tag.toLowerCase();
-    const keyword = field.keyword.toLowerCase();
+    const keyword = (field.keyword || '').toLowerCase();
 
     // Exact matches (highest priority)
     if (name === lowercaseQuery || tag === lowercaseQuery || keyword === lowercaseQuery) {

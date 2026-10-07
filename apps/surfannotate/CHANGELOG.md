@@ -1,5 +1,14 @@
 # surfannotate
 
+## 0.6.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
 ## 0.6.20261004
 
 ### Patch Changes
