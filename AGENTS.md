@@ -232,6 +232,22 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
   `apps/dicompare/public`, not from dicompare.neurodesk.org (`path` entries in
   `registry/offline-assets.sources.json`).
 
+## Node drivers for command lines (MindGrab, niimath)
+
+- A portable command line that needs MindGrab or niimath uses `@neurodesk/runtime-support/node/mindgrab`
+  (`loadMindgrabCpu`) or `/node/niimath` (`runNiimath`), not the browser wrappers and not shimmed browser
+  globals. Both take the build the caller pins (`import.meta.resolve('@brainchop/mindgrab/package.json')`,
+  the `@niivue/niimath/niimath.js` factory), so pin the app's own version in the command line's package.
+  The MindGrab result has the wrapper's shape, so pass `mindgrab.segment` where code takes a `segmenter`.
+- One MindGrab call peaks at 2.6 GB (mindgrab) to 3.9 GB (mindmap tissues) and uses one thread per core.
+  The driver runs each call in its own worker thread, so memory is freed when it ends, and queues calls
+  within a process; do not start MindGrab in two processes at once.
+- `packages/runtime-support/validation/reference.json` pins the browser outputs both drivers reproduce byte
+  for byte. After bumping either devDependency there, rerun `pnpm --filter @neurodesk/runtime-support
+  exec node validation/browser-reference.mjs` and commit the new references; `node-drivers.yml` checks
+  them on Linux, Windows and macOS. A command line's own release check still needs its own independent
+  reference.
+
 ## Native executables (exes/)
 
 `exes/<app>` holds native Rust executables, not pnpm packages. `exes/synthsr`
