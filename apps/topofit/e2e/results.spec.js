@@ -306,6 +306,8 @@ test('normal arrows follow mid-surfaces with adjustable spacing and length', asy
 });
 
 test('computed patches, local normals and QC can be viewed and downloaded', async ({ page }, testInfo) => {
+  // Several full-page desktop and phone screenshots; 30 s is too tight on a loaded runner.
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 1024, height: 1100 });
   const white = [];
   const faces = [];

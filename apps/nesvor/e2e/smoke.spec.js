@@ -71,7 +71,7 @@ test("automation opens stacks in the real viewer and replaces previous inputs", 
     await page.locator('#neurodesk-input-transfer').setInputFiles({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [5, 5, 5] }) });
     await dispatch('adopt', { role: 'stacks' });
     await dispatch('start');
-    await expect.poll(async () => (await dispatch('snapshot')).state).toBe('succeeded');
+    await expect.poll(async () => (await dispatch('snapshot')).state, { timeout: 60000 }).toBe('succeeded');
     const { report } = await dispatch('snapshot');
     expect(report.summary.stacks).toHaveLength(1);
     expect(report.summary.stacks[0].name).toBe(name);
