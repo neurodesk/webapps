@@ -16,7 +16,7 @@ const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined
 export const VERSION = '0.29.20261007';
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
-export const QSM_RS_VERSION = '0.35.0';
+export const QSM_RS_VERSION = '0.38.0';
 
 // Where deep-learning model weights are fetched from in the browser. The qsm-core model
 // registry points at OSF, which does NOT send CORS headers, so a browser fetch from it
@@ -25,7 +25,7 @@ export const QSM_RS_VERSION = '0.35.0';
 // (Access-Control-Allow-Origin: *), so they work both locally and on the deployed site.
 // (A relative path like 'models' resolves against the app root for same-origin dev serving;
 // '' falls back to the registry's OSF URLs, which the browser can't fetch cross-origin.)
-export const MODEL_WEIGHT_BASE_URL = 'https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/c0fc38f28de3221699afaffa0d5796fe96d6b261';
+export const MODEL_WEIGHT_BASE_URL = 'https://huggingface.co/qsmxt/qsm-onnx-weights/resolve/7d01b11c2562bc8072674a8b8fa3d4b0f1d07701';
 
 // Physics constants
 export const PHYSICS = {
@@ -220,6 +220,7 @@ export const MCPC3DS_DEFAULTS = {
 // Linear fit B0 calculation defaults
 export const LINEAR_FIT_DEFAULTS = {
   estimate_offset: _LINEAR_FIT.estimate_offset,
+  reliability_threshold_percentile: _LINEAR_FIT.reliability_threshold_percentile,
 };
 
 // Homogeneity correction defaults

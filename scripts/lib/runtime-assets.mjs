@@ -50,7 +50,7 @@ async function copyVerifiedFamily({ family, repoRoot, siteDist, registry }) {
 
 async function rewriteFile(file, runtimeRoot, app, relativePath) {
   const ortDir = join(runtimeRoot, 'ort-web', '1.21.0');
-  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1', 'index.js');
+  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1.3.20260724', 'index.js');
   const niftiReader = join(runtimeRoot, 'nifti-reader', '0.8.0', 'index.js');
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');
   let source = await readFile(file, 'utf8');

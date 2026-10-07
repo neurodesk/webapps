@@ -35,6 +35,20 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(artifacts, 'hd-bet-phone.png') });
   await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator('#runMouseBet').click();
+  const mouse = page.locator('#mouseBrainModal');
+  await expect(mouse).toBeVisible();
+  await expect(mouse).toContainText('GPL-3.0');
+  await page.screenshot({ path: join(artifacts, 'mouse-brain-desktop.png') });
+  await page.locator('#runMouseScaledBet').click();
+  await expect(mouse).toBeHidden();
+  await expect(page.locator('#betSettingsTitle')).toHaveText('Mouse BET Settings');
+  await expect(page.locator('#betVoxelScale')).toHaveValue('10');
+  await page.locator('#runBetWithSettings').click();
+  await page.waitForFunction(() => window.app?.currentMaskData?.some(value => value > 0), null, { timeout: 180000 });
+  assert.equal(await page.evaluate(() => window.app.maskVoxelScale), 10);
+  console.log('PASS QSMbly: mouse brain dialog and voxel-scaled BET fallback');
   assert.equal(await page.evaluate(() => crossOriginIsolated), true);
   console.log('PASS QSMbly: About upstream link, shared HD-BET dialog, and cross-origin isolation');
 

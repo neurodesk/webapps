@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   FileIOController,
   categorizeNeuroFile,
+  classifyImageComponent,
   createFloat64Nifti,
   createNiftiFromData,
   createNiftiHeaderFromVolume,
@@ -10,7 +11,8 @@ import {
   isNiftiFile,
   parseNiftiHeader,
   readNiftiFrames,
-  readNiftiImageData
+  readNiftiImageData,
+  sameNiftiGrid
 } from '../src/file-io/index.js';
 
 function fakeFile(name) {
@@ -136,4 +138,78 @@ test('single-image conversion rejects ambiguous series and frees its worker', as
   await assert.rejects(controller.convertFiles([fakeFile('slice.IMA')]), /one series at a time/);
   assert.equal(terminated, true);
   assert.equal(controller.converting, false);
+});
+
+test('classifies image components from sidecars before names', () => {
+  const bruker = (phase) => ({ Manufacturer: 'Bruker', ImageType: ['ORIGINAL', 'PRIMARY', 'MULTIECHO', 'NONE', ...(phase ? ['PHASE'] : [])] });
+  assert.equal(classifyImageComponent('_MGE_phaseimage_lowres_90001_e1.nii', bruker(false)), 'magnitude');
+  assert.equal(classifyImageComponent('_MGE_phaseimage_lowres_90002_e1_ph.nii', bruker(true)), 'phase');
+  assert.equal(classifyImageComponent('phase.nii.gz', { ImageType: ['ORIGINAL', 'PRIMARY', 'M'] }), 'magnitude');
+  assert.equal(classifyImageComponent('localizer.nii', { ImageType: ['ORIGINAL', 'PRIMARY', 'LOCALIZER'] }), 'extra');
+  assert.equal(classifyImageComponent('scan.nii', { ComplexImageComponent: 'REAL' }), 'extra');
+  assert.equal(classifyImageComponent('sub-1_echo-01_part-mag_MEGRE.nii', { ImageType: ['ORIGINAL', 'PRIMARY', 'OTHER'] }), 'magnitude');
+  assert.equal(classifyImageComponent('sub-1_echo-01_part-phase_MEGRE.nii', { ImageType: ['ORIGINAL', 'PRIMARY', 'OTHER'] }), 'phase');
+  assert.equal(classifyImageComponent('sub-1_part-imag_MEGRE.nii'), 'extra');
+  assert.equal(classifyImageComponent('scan_e2.nii'), 'magnitude');
+  assert.equal(classifyImageComponent('scan_e2_ph.nii'), 'phase');
+  assert.equal(classifyImageComponent('scan.nii'), null);
+});
+
+test('a phase token is not hidden by an echo suffix or a protocol name', () => {
+  assert.equal(categorizeNeuroFile(fakeFile('sub_phase_e1.nii.gz')), 'phase');
+  assert.equal(categorizeNeuroFile(fakeFile('_MGE_phaseimage_lowres_90001_e1.nii')), 'magnitude');
+  assert.notEqual(categorizeNeuroFile(fakeFile('swi_phaseimage.nii')), 'phase');
+});
+
+function gridHeader() {
+  const buffer = new ArrayBuffer(352);
+  const view = new DataView(buffer);
+  [96, 82, 18].forEach((dim, i) => view.setInt16(42 + i * 2, dim, true));
+  [1, 0.167, 0.195, 0.8].forEach((value, i) => view.setFloat32(76 + i * 4, value, true));
+  view.setInt16(254, 1, true);
+  view.setUint8(123, 2);
+  [0.167, 0, 0, -8, 0, 0.195, 0, -1, 0, 0, 0.8, -8].forEach((value, i) => view.setFloat32(280 + i * 4, value, true));
+  return buffer;
+}
+
+test('sameNiftiGrid allows float32 rounding but rejects translated and flipped grids', () => {
+  const a = gridHeader();
+  const b = gridHeader();
+  const view = new DataView(b);
+  view.setFloat32(292, -8.000002, true);
+  assert.equal(sameNiftiGrid(a, b), true);
+  view.setFloat32(292, -7, true);
+  assert.equal(sameNiftiGrid(a, b), false);
+  view.setFloat32(292, -8, true);
+  view.setFloat32(280, -0.167, true);
+  assert.equal(sameNiftiGrid(a, b), false);
+});
+
+test('sameNiftiGrid matches qform-only and sform headers of one grid', () => {
+  const a = gridHeader();
+  const b = gridHeader();
+  const view = new DataView(b);
+  view.setInt16(254, 0, true);
+  view.setInt16(252, 1, true);
+  [-8, -1, -8].forEach((value, i) => view.setFloat32(268 + i * 4, value, true));
+  assert.equal(sameNiftiGrid(a, b), true);
+  view.setFloat32(76, -1, true);
+  assert.equal(sameNiftiGrid(a, b), false);
+});
+
+test('sameNiftiGrid honours spatial units and rejects non-finite transforms', () => {
+  const a = gridHeader();
+  const b = gridHeader();
+  const view = new DataView(b);
+  view.setUint8(123, 1);
+  for (let offset = 280; offset < 328; offset += 4) view.setFloat32(offset, view.getFloat32(offset, true) / 1000, true);
+  assert.equal(sameNiftiGrid(a, b), true);
+  view.setFloat32(280, NaN, true);
+  assert.equal(sameNiftiGrid(a, b), false);
+});
+
+test('sameNiftiGrid rejects different dimensions', () => {
+  const b = gridHeader();
+  new DataView(b).setInt16(46, 19, true);
+  assert.equal(sameNiftiGrid(gridHeader(), b), false);
 });
