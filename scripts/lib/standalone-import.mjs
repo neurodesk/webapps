@@ -1,5 +1,8 @@
 // Turn a released GitHub release into the Standalone catalog's command-line downloads.
 // Never guess URLs: every entry comes from an uploaded asset, GitHub's own digest and a validation receipt.
+// An app can have several release sources (scripts/lib/native-releases.mjs). Each owns its platforms and
+// can version independently, so an update replaces and version-checks only the platforms of the source it
+// came from.
 import { portableCommand, releasePlatform } from './portable-command.mjs';
 
 export const RELEASE_ARGUMENT = /^([a-z0-9][a-z0-9-]*)@(\d+\.\d+\.\d{8})$/;
@@ -18,13 +21,30 @@ export function releaseFromTag(tag) {
   return match ? { id: match[1], version: match[2] } : null;
 }
 
-// The release each app's catalog entry currently points at, so a refresh needs no hard-coded versions.
-export function catalogReleases(catalog) {
+// The one version the catalog lists for these platforms' command lines, or null when it lists none.
+function listedVersion(id, platforms, downloads) {
+  const owned = downloads.filter((download) => download.kind === 'cli' && platforms.includes(download.platform));
+  const versions = [...new Set(owned.map((download) => download.version))];
+  if (versions.length > 1) throw new Error(`${id}: command-line downloads for ${platforms.join(', ')} mix versions ${versions.join(', ')}`);
+  return versions[0] ?? null;
+}
+
+// The release each source's catalog entries currently point at, so a refresh needs no hard-coded versions.
+export function catalogReleases(catalog, natives) {
   return Object.entries(catalog.apps).flatMap(([id, app]) => {
-    const versions = [...new Set(app.downloads.filter((download) => download.kind === 'cli').map((download) => download.version))];
-    if (versions.length > 1) throw new Error(`${id}: command-line downloads mix versions ${versions.join(', ')}`);
-    return versions.map((version) => ({ id, version }));
+    const sources = natives.get(id) ?? [];
+    const unowned = app.downloads.filter((download) => download.kind === 'cli' && !sources.some((source) => source.targets.includes(download.platform)));
+    if (unowned.length) throw new Error(`${id}: no release source builds ${unowned.map((download) => download.platform).join(', ')}`);
+    return sources.flatMap((source) => {
+      const version = listedVersion(id, source.targets, app.downloads);
+      return version ? [{ id, version }] : [];
+    });
   });
+}
+
+// The sources whose archives a release carries. Sources can attach to one shared tag or to their own.
+export function releaseSources(sources, release) {
+  return sources.filter((source) => release.assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name))));
 }
 
 // A receipt must vouch for these exact bytes. exes/node-cli receipts open with "PASS <target>" and record
@@ -41,15 +61,15 @@ export function checkReceipt({ name, digest, platform, native, text: raw }) {
   }
 }
 
-// Only a released (not draft, not prerelease) GitHub release with every target verified is published.
+// Only a released (not draft, not prerelease) GitHub release with every target of its source verified is published.
 export async function releaseDownloads({ id, version, release, native, previous = [], fetchText }) {
   if (release.draft || release.prerelease) throw new Error(`${id}: release ${release.tag_name} is not released yet`);
   const spec = native.spec;
-  const embeddedModels = previous.some((download) => download.kind === 'cli' && download.modelsIncluded);
+  const embeddedModels = previous.some((download) => download.kind === 'cli' && native.targets.includes(download.platform) && download.modelsIncluded);
   const downloads = [];
   for (const asset of release.assets) {
     const platform = releasePlatform(spec, asset.name);
-    if (!platform) continue;
+    if (!native.targets.includes(platform)) continue;
     if (!/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) throw new Error(`${asset.name}: GitHub has no asset digest`);
     const receipt = release.assets.find((item) => item.name === `${asset.name}.validation.txt`);
     if (!receipt) throw new Error(`${asset.name}: no validation receipt, so the archive was never verified`);
@@ -71,16 +91,23 @@ export async function releaseDownloads({ id, version, release, native, previous 
   return downloads;
 }
 
-// The catalog changes for a set of releases, as { app: downloads }. Nothing is written here.
+// The catalog changes for a set of releases, as [{ id, version, downloads }], one entry per source whose
+// archives a release carries; each such source must have every one of its targets verified. A one-source
+// app is held to its targets even before any archive is attached. Nothing is written here.
 export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText, nativeAt }) {
-  const update = {};
+  const update = [];
   for (const { id, version } of releases) {
     if (!catalog.apps[id]) throw new Error(`${id}: not in the Standalone catalog`);
     const tag = `${id}-v${version}`;
-    const native = nativeAt(tag).get(id);
-    if (!native) throw new Error(`${id}: ${tag} ships no native command line`);
+    const sources = nativeAt(tag).get(id) ?? [];
+    if (!sources.length) throw new Error(`${id}: ${tag} ships no native command line`);
     const release = await fetchRelease(tag);
-    update[id] = await releaseDownloads({ id, version, release, native, previous: catalog.apps[id].downloads, fetchText });
+    const built = sources.length === 1 ? sources : releaseSources(sources, release);
+    if (!built.length) throw new Error(`${id}: release ${tag} has no command-line archives`);
+    for (const native of built) {
+      const downloads = await releaseDownloads({ id, version, release, native, previous: catalog.apps[id].downloads, fetchText });
+      update.push({ id, version, downloads });
+    }
   }
   return update;
 }
@@ -97,16 +124,22 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-// Catalog runs are not serialised, so a slow run for an older release must not replace a newer one.
+// Replaces only the platforms each release's source owns and keeps every other download.
+// Catalog runs are not serialised, so a slow run for an older release must not replace a newer one of the
+// same source. Another source's version is never compared: the sources number their releases independently.
 export function applyCatalogUpdate(catalog, update) {
-  for (const [id, downloads] of Object.entries(update)) {
-    if (!catalog.apps[id]) throw new Error(`${id}: not in the Standalone catalog`);
-    const [current] = catalogReleases({ apps: { [id]: catalog.apps[id] } });
-    if (current && compareVersions(downloads[0].version, current.version) < 0) {
-      console.log(`${id}: catalog already lists ${current.version}; keeping it over ${downloads[0].version}`);
+  if (!Array.isArray(update)) throw new Error('A catalog update is a list of { id, version, downloads } releases');
+  for (const { id, version, downloads } of update) {
+    const app = catalog.apps[id];
+    if (!app) throw new Error(`${id}: not in the Standalone catalog`);
+    const platforms = downloads.map((download) => download.platform);
+    const current = listedVersion(id, platforms, app.downloads);
+    if (current && compareVersions(version, current) < 0) {
+      console.log(`${id}: catalog already lists ${current} for ${platforms.join(', ')}; keeping it over ${version}`);
       continue;
     }
-    catalog.apps[id].downloads = downloads;
+    const kept = app.downloads.filter((download) => !(download.kind === 'cli' && platforms.includes(download.platform)));
+    app.downloads = [...kept, ...downloads].sort((a, b) => (a.platform < b.platform ? -1 : a.platform > b.platform ? 1 : 0));
   }
   return catalog;
 }

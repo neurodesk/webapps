@@ -54,7 +54,7 @@ jobs:
             repository_dispatch) node scripts/catalog-update.mjs --out update.json $DISPATCHED ;;
             *) node scripts/catalog-update.mjs --out update.json $REQUESTED ;;
           esac
-          echo "changed=$(node -p "Object.keys(require('./update.json')).length > 0")" >> "$GITHUB_OUTPUT"
+          echo "changed=$(node -p "require('./update.json').length > 0")" >> "$GITHUB_OUTPUT"
       - name: Validate the updated catalog
         run: |
           node scripts/apply-catalog-update.mjs update.json
@@ -94,7 +94,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          releases=$(node -p "Object.entries(require(process.env.UPDATE)).map(([id, d]) => id + ' ' + d[0].version).join(', ')")
+          releases=$(node -p "require(process.env.UPDATE).map((entry) => entry.id + ' ' + entry.version).join(', ')")
           for attempt in 1 2 3 4 5; do
             git fetch --quiet "$remote" main
             git reset --quiet --hard FETCH_HEAD
