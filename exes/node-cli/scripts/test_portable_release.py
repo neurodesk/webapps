@@ -64,6 +64,25 @@ class PortableReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "deviceid"):
                 portable_release.check_home_untouched(home, target)
 
+    def test_check_pkg_resolves_a_relative_package_against_the_caller(self):
+        target = portable_release.load_target(ROOT, "packages/topofit", "macos-arm64")
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = pathlib.Path(temporary)
+            (directory / "tool.pkg").write_bytes(b"xar!")
+            seen = []
+            def run(command, **_):
+                seen.extend(argument for argument in command if argument.endswith("tool.pkg"))
+                raise RuntimeError("stop")
+            previous = os.getcwd()
+            os.chdir(directory)
+            try:
+                with mock.patch.object(portable_release.subprocess, "run", side_effect=run):
+                    with self.assertRaises(RuntimeError):
+                        portable_release.check_pkg(target, pathlib.Path("tool.pkg"), portable_release.mac_signing({}))
+            finally:
+                os.chdir(previous)
+        self.assertEqual(seen, [str(directory.resolve() / "tool.pkg")])
+
     def test_release_target_derives_safe_names(self):
         target = portable_release.load_target(ROOT, "packages/syncro", "linux-x64")
         version = package_version("packages/syncro")

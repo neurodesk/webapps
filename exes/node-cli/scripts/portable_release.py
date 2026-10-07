@@ -737,6 +737,8 @@ def check_signature(step: SigningStep, signing: MacSigning, team: str | None) ->
 
 def check_pkg(target: ReleaseTarget, package: pathlib.Path, signing: MacSigning) -> str:
     """Check an installer without installing it, and return pkgutil's signature report."""
+    # notarize_macos.sh calls this from dist/ with a relative name, while _run works from the repository root.
+    package = package.resolve()
     report = subprocess.run(
         ["pkgutil", "--check-signature", str(package)],
         text=True,
