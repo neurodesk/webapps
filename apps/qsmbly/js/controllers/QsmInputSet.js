@@ -111,6 +111,23 @@ export class QsmInputSet {
       results.added.push({ entry, bucket });
     }
 
+    // A sidecar dropped after its image reclassifies that image.
+    const arrived = new Set(files
+      .filter(file => file.name.toLowerCase().endsWith('.json'))
+      .map(file => file.name.replace(/\.json$/i, '')));
+    for (const [bucket, entries] of Object.entries(this.buckets)) {
+      if (bucket === 'json') continue;
+      for (const entry of [...entries]) {
+        const stem = entry.name.replace(/\.nii(\.gz)?$/i, '');
+        const json = metadata.get(stem);
+        if (files.includes(entry.file) || !arrived.has(stem) || !json) continue;
+        this.buckets[bucket].splice(this.buckets[bucket].indexOf(entry), 1);
+        if (json.EchoTime != null) entry.echoTime = json.EchoTime * 1000;
+        if (json.EchoNumber != null) entry.echoNumber = json.EchoNumber;
+        this._addToBucket(this.categorizeFile(entry.file, json), entry);
+      }
+    }
+
     // Sort all buckets alphabetically
     this._sortAllBuckets();
 

@@ -704,6 +704,14 @@ export class MaskController {
   /**
    * Read dim[1..3] out of a NIfTI header buffer.
    */
+  _volumeCount(headerBuffer) {
+    const h = new DataView(headerBuffer);
+    const rank = Math.min(h.getInt16(40, true), 7);
+    let volumes = 1;
+    for (let axis = 4; axis <= rank; axis++) volumes *= Math.max(h.getInt16(40 + 2 * axis, true), 1);
+    return volumes;
+  }
+
   _dimsFromHeader(headerBuffer) {
     if (!headerBuffer || headerBuffer.byteLength < 348) return null;
     const h = new DataView(headerBuffer);
@@ -733,6 +741,11 @@ export class MaskController {
     const maskDims = this._dimsFromHeader(maskHeader);
     if (!maskDims) {
       return { ok: false, message: `Could not read NIfTI dimensions from ${file.name}` };
+    }
+    // readNiftiData reads one volume, so a 4D mask would silently lose every later volume.
+    const volumes = this._volumeCount(maskHeader);
+    if (volumes > 1) {
+      return { ok: false, message: `${file.name} holds ${volumes} volumes. Upload a single 3D mask.` };
     }
 
     // Validate against the actual pipeline input, not a cached previous magnitude header.

@@ -84,3 +84,14 @@ test('native file pickers do not filter out gzip files', () => {
     expect(input).not.toMatch(/accept=/);
   }
 });
+
+test('a sidecar dropped after its image reclassifies the image', async () => {
+  const io = new FileIOController({});
+  await io.addFiles([{ name: 'scan_e2.nii' }, { name: 'scan.nii' }]);
+  expect(io.buckets.extra.map(e => e.name)).toEqual(['scan.nii']);
+  await io.addFiles([{ name: 'scan.json', text: async () => JSON.stringify({
+    ImageType: ['ORIGINAL', 'PRIMARY', 'PHASE'], EchoNumber: 3, EchoTime: 0.012
+  }) }]);
+  expect(io.buckets.extra).toHaveLength(0);
+  expect(io.buckets.phase.map(e => [e.name, e.echoNumber, e.echoTime])).toEqual([['scan.nii', 3, 12]]);
+});

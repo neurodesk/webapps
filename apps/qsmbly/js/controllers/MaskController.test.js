@@ -126,6 +126,21 @@ describe('MaskController.loadMaskFromFile', () => {
     expect(Array.from(controller.originalMaskData)).toEqual(Array.from(controller.currentMaskData));
   });
 
+  it('rejects a 4D mask instead of keeping only its first volume', async () => {
+    const values = new Uint8Array(N * 2).fill(1);
+    const mask = makeNiftiFile('brain_mask_4d.nii', DIMS, 2, values);
+    const buffer = await mask.arrayBuffer();
+    const view = new DataView(buffer);
+    view.setInt16(40, 4, true);
+    view.setInt16(48, 2, true);
+
+    const result = await controller.loadMaskFromFile(mask, referenceImage());
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toMatch(/2 volumes/);
+    expect(controller.currentMaskData).toBeNull();
+  });
+
   it('rejects matching dimensions with different voxel spacing', async () => {
     const values = new Uint16Array(N).fill(1);
     const mask = makeNiftiFile('brain_mask.nii', DIMS, 512, values, [1, 9, 9, 9]);
