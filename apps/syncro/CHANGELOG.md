@@ -1,5 +1,22 @@
 # syncro
 
+## 0.6.20261007
+
+### Minor Changes
+
+- d627aca: Add a macOS arm64 installer package for the `syncro` command line. It installs SYNcro in `/usr/local/lib/neurodesk/syncro` and the `syncro` command in `/usr/local/bin`, bundles Node and the models, and is signed with a Developer ID and notarized for release. The app no longer ships its own download dialog, which the shared bar's Standalone action had replaced, or the npm tarball that only that dialog linked.
+
+### Patch Changes
+
+- 6be20aa: Add the `topofit` command line: CPU reconstruction with ONNX Runtime Node, offline model installation with SHA-256 checks on every load, portable Linux x64 and Windows x64 archives, and a Developer ID signed, notarized macOS arm64 installer package that installs `/usr/local/bin/topofit`. Each bundles Node and the T1-weighted models, and each must match the OpenRecon end-to-end reference before release. SYNcro's portable archives are now built by the shared `exes/node-cli` packager; their contents and behaviour are unchanged apart from the launcher binary.
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/runtime-support@0.1.4
+  - @neurodesk/synthsr@0.6.20261007
+  - @neurodesk/synthstrip@0.1.2
+  - @neurodesk/brain-extraction@0.1.21
+  - @neurodesk/greedy@0.4.20261007
+
 ## 0.5.20261005
 
 ### Patch Changes

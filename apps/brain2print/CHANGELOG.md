@@ -1,5 +1,15 @@
 # brain2print
 
+## 0.4.20261007
+
+### Patch Changes
+
+- Updated dependencies [70f2770]
+- Updated dependencies [6be20aa]
+  - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/topofit@0.13.20261007
+  - @neurodesk/runtime-support@0.1.4
+
 ## 0.4.20261005
 
 ### Patch Changes
