@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
+import { gpuBrowser, hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 
-test.use({ launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.platform === 'darwin' ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'])] } });
+test.use(gpuBrowser);
 
 function diffusion() {
   const directions = [[0,0,0],[1,0,0],[0,1,0],[0,0,1],[Math.SQRT1_2,Math.SQRT1_2,0],[Math.SQRT1_2,0,Math.SQRT1_2],[0,Math.SQRT1_2,Math.SQRT1_2]];
@@ -57,7 +58,7 @@ test('explicit roles fit a known tensor through the real CPU worker and download
 });
 
 test('hardware tractography returns tensor maps and a hashed TRX for the reference DWI', async ({ page }) => {
-  test.skip(process.platform !== 'darwin' || !process.env.DWI2TRX_FIXTURE_DIR, 'Requires hardware WebGPU with subgroups and DWI2TRX_FIXTURE_DIR.');
+  test.skip(!hardwareGpu || !process.env.DWI2TRX_FIXTURE_DIR, 'Requires hardware WebGPU with subgroups and DWI2TRX_FIXTURE_DIR.');
   test.setTimeout(600_000);
   await page.goto('/');
   for (const [role, extension] of [['image','nii.gz'],['bval','bval'],['bvec','bvec']]) {

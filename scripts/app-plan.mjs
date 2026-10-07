@@ -20,14 +20,16 @@ if (only && only !== 'affected') {
   changedPaths = [...ids].map((id) => `apps/${id}/package.json`);
 }
 const plan = createAppPlan(registry, changedPaths);
-const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, app_scoped_runtime: false, release_test: 'test' }] };
+const emptyMatrix = { include: [{ app: '__none__', path: '', runtime: '', rust_wasm: false, python_reference: false, shared_runtime: false, browser_test: false, hardware_gpu: false, app_scoped_runtime: false, release_test: 'test' }] };
 const outputs = {
   apps: JSON.stringify(plan.apps.include.length ? plan.apps : emptyMatrix),
   browser_apps: JSON.stringify(plan.browserApps.include.length ? plan.browserApps : emptyMatrix),
+  gpu_apps: JSON.stringify(plan.gpuApps.include.length ? plan.gpuApps : emptyMatrix),
   release_apps: JSON.stringify(plan.releaseApps.include.length ? plan.releaseApps : emptyMatrix),
   selected_ids: JSON.stringify(plan.selected.map((app) => app.id)),
   has_apps: String(plan.apps.include.length > 0),
   has_browser_apps: String(plan.browserApps.include.length > 0),
+  has_gpu_apps: String(plan.gpuApps.include.length > 0),
   has_release_apps: String(plan.releaseApps.include.length > 0),
   all_apps: String(plan.allApps),
 };

@@ -6,12 +6,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
-
-// Headless Chromium otherwise exposes only a SwiftShader WebGPU adapter, on which
-// MindGrab does not finish; these flags hand it the real GPU. Must stay top level
-// (Playwright forbids launchOptions inside a describe group).
-const hardwareGpu = process.platform === "darwin";
-test.use({ launchOptions: { args: ["--enable-unsafe-webgpu", ...(hardwareGpu ? ["--use-angle=metal", "--enable-features=Metal"] : ["--use-angle=swiftshader", "--use-vulkan=swiftshader", "--enable-features=Vulkan", "--disable-vulkan-surface"])] } });
+import { hardwareGpu } from "../../../test-utils/hardware-gpu.mjs";
 
 test("app boots", async ({ page }) => {
   await page.goto("/");
@@ -105,8 +100,8 @@ for (const [name, file] of [["small.nii.gz", fixture], ["small_lh.nii.gz", null]
     test.setTimeout(600_000);
     await page.goto("/");
     const status = page.locator("#statusText");
-    // Wait for WebGPU initialization before choosing the input.
-    await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
+    // The placeholder status already says Ready; the input enables once WebGPU is up.
+    await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 180_000 });
 
     await page.setInputFiles("#imageInput", file ?? { name, mimeType: "application/gzip", buffer: gzipSync(leftHanded(fixture)) });
     await expect(status).toHaveText(`${name} loaded`, { timeout: 120_000 });
@@ -144,14 +139,16 @@ test("each label model segments with its own colormap", async ({ page }) => {
   test.setTimeout(900_000);
   await page.goto("/");
   const status = page.locator("#statusText");
-  await expect(status).toHaveText(/Ready|failed|error/i, { timeout: 180_000 });
+  await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 180_000 });
   await page.setInputFiles("#imageInput", fixture);
   await expect(status).toHaveText("small.nii.gz loaded", { timeout: 120_000 });
   for (const model of ["16chan18cls", "mindmap", "mindsnap"]) {
     await page.locator("#modelSelect").selectOption(model);
     await page.locator("#segmentButton").click();
-    await expect(status).toHaveText(/^Segmentation complete/, { timeout: 300_000 });
-    await expect(page.locator("#meshButton")).toBeEnabled();
+    // The previous model's "Segmentation complete" is still showing; the click disables
+    // Create mesh at once, and it comes back only when this model has finished.
+    await expect(page.locator("#meshButton")).toBeEnabled({ timeout: 300_000 });
+    await expect(status).toHaveText(/^Segmentation complete/);
   }
 });
 

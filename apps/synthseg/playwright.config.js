@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { gpuBrowser } from '../../test-utils/hardware-gpu.mjs';
 
 export default defineConfig({
   testDir: './e2e', timeout: 600000, workers: 1,
@@ -10,9 +11,8 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://127.0.0.1:4175/synthseg/',
-    // Headless Chromium only exposes a SwiftShader WebGPU adapter; SYNTHSEG_HARDWARE_GPU
-    // switches to the real GPU (macOS/Metal), which the full-model run needs.
-    launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.env.SYNTHSEG_HARDWARE_GPU ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader', '--enable-features=Vulkan', '--use-vulkan=swiftshader'])] },
+    // The full-model run needs NEURODESK_HARDWARE_GPU=1 (Metal); SwiftShader is too slow.
+    ...gpuBrowser,
     screenshot: 'only-on-failure',
   },
 });

@@ -347,6 +347,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
     artifact_budget_bytes: 65000000
   - id: synthseg
@@ -369,6 +370,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
   - id: syncro
     path: syncro
@@ -390,6 +392,7 @@ apps:
       toolchains: [node, rust-wasm]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
   - id: dwi2trx
     path: dwi2trx
@@ -410,6 +413,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
   - id: edgereg
     path: edgereg
@@ -512,6 +516,7 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true
   - id: topofit
     path: topofit
@@ -657,4 +662,5 @@ apps:
       toolchains: [node]
       shared_runtime: false
       browser_test: true
+      hardware_gpu: true
       release: true

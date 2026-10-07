@@ -47,6 +47,7 @@ $(MODEL):
 	mv "$@.partial" "$@"
 
 fetch-validation: $(VALIDATION_FILES)
+	@python3 -c 'import hashlib, json, sys; m = json.load(open("$(MANIFEST)"))["validation"]["sha256"]; bad = [f for f, h in m.items() if hashlib.sha256(open(sys.argv[1] + "/" + f, "rb").read()).hexdigest() != h]; sys.exit("checksum mismatch, delete and refetch: " + ", ".join(bad) if bad else 0)' "$(SYNTHSEG_REFERENCE_DIR)"
 $(SYNTHSEG_REFERENCE_DIR)/%.nii.gz:
 	mkdir -p "$(SYNTHSEG_REFERENCE_DIR)"
 	curl -fL --retry 3 -o "$@.partial" "$(call manifest_url,["validation"]["base_url"])$*.nii.gz"

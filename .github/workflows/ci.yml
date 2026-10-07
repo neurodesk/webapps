@@ -37,6 +37,8 @@ jobs:
       has_apps: ${{ steps.plan.outputs.has_apps }}
       browser_apps: ${{ steps.plan.outputs.browser_apps }}
       has_browser_apps: ${{ steps.plan.outputs.has_browser_apps }}
+      gpu_apps: ${{ steps.plan.outputs.gpu_apps }}
+      has_gpu_apps: ${{ steps.plan.outputs.has_gpu_apps }}
       all_apps: ${{ steps.plan.outputs.all_apps }}
     steps:
       - uses: actions/checkout@v7
@@ -66,7 +68,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Validate the app catalog and generated plans
-        run: pnpm test:registry && node --test test/app-plan.test.mjs test/independent-workflows.test.mjs test/upstream-sync.test.mjs test/standalone-release-automation.test.mjs
+        run: pnpm test:registry && node --test test/app-plan.test.mjs test/independent-workflows.test.mjs test/upstream-sync.test.mjs test/standalone-release-automation.test.mjs test/e2e-test-data.test.mjs test/hardware-gpu.test.mjs
       - name: Validate date releases and app scaffolding
         run: node --test test/app-versions.test.mjs test/new-app.test.mjs test/app-examples.test.mjs test/disconnectome-assets.test.mjs test/automation-catalog.test.mjs
       - name: Enforce the design system and workspace contract
@@ -266,10 +268,95 @@ jobs:
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           node node_modules/@playwright/test/cli.js install --with-deps chromium
+      # Pinned examples and models for the data-gated tests. Hardware-GPU apps
+      # get theirs on the macOS job: SwiftShader cannot finish those workloads.
+      - uses: actions/cache@v6
+        if: ${{ !matrix.hardware_gpu }}
+        with:
+          path: ~/.cache/neurodesk-e2e-test-data
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+      - name: Download ${{ matrix.app }} test data
+        if: ${{ !matrix.hardware_gpu }}
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} in a browser
         run: pnpm --filter ${{ matrix.app }} test:e2e
+
+  # The free macOS runners expose a paravirtual Apple GPU that full Chromium
+  # reaches through Metal, for WebGL2 and WebGPU alike (niivue/mono#199). This
+  # runs the hardware-GPU tests that Linux SwiftShader skips or cannot finish.
+  # The VM has 3 cores and 7 GB: it checks correctness, not speed. Each app
+  # downloads its pinned models and fixtures, so no test skips for lack of
+  # data; SYNcro's full normalizations make it the slowest by far.
+  browser-e2e-gpu:
+    needs: app-plan
+    if: needs.app-plan.outputs.has_gpu_apps == 'true'
+    runs-on: macos-15
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.app-plan.outputs.gpu_apps) }}
+    env:
+      NEURODESK_HARDWARE_GPU: '1'
+      NEURODESK_HARDWARE_GPU_VENDOR: apple
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # SynthSR's full-volume reference comes from its native CLI.
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.rust_wasm || matrix.app == 'synthsr'
+      - name: Install Greedy WebAssembly toolchain
+        if: matrix.rust_wasm
+        run: |
+          rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
+          cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        if: matrix.rust_wasm
+        uses: ./.github/actions/setup-wasm-opt
+      - uses: actions/setup-python@v7
+        if: matrix.python_reference
+        with:
+          python-version: '3.13'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Python reference dependencies
+        if: matrix.python_reference
+        run: pip install -r apps/${{ matrix.app }}/requirements.txt nibabel
+      - name: Install full Chromium
+        run: node node_modules/@playwright/test/cli.js install chromium
+      - name: Check that Chromium reaches the Metal GPU
+        run: node scripts/probe-hardware-gpu.mjs
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/neurodesk-e2e-test-data
+            exes/synthseg/models
+            exes/synthsr/models
+          key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
+      - name: Download ${{ matrix.app }} models and fixtures
+        # Explicit bash adds pipefail, so a failed download fails the step.
+        shell: bash
+        env:
+          APP: ${{ matrix.app }}
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
+      - name: Build ${{ matrix.app }} browser runtime
+        run: pnpm --filter ${{ matrix.app }} build
+      - name: Test ${{ matrix.app }} on the hardware GPU
+        run: pnpm --filter ${{ matrix.app }} test:e2e
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: gpu-e2e-${{ matrix.app }}
+          path: apps/${{ matrix.app }}/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   homepage-easter-egg:
     runs-on: ubuntu-latest

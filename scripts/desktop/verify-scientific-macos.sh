@@ -23,6 +23,8 @@ export SYNTHSEG_REFERENCE_DIR="${SYNTHSEG_REFERENCE_DIR:-$validation/references}
 export SYNTHSEG_ASSET_DIR="$root/exes/synthseg/models"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$validation/native-target}"
 export CI=1
+# Every stage runs on Apple silicon; the e2e suites gate their hardware cases on this.
+export NEURODESK_HARDWARE_GPU=1
 fixtures="${NEURODESK_SCIENTIFIC_FIXTURES:-${TMPDIR%/}/neurodesk-scientific-fixtures}"
 fixtures="$(node --input-type=module -e 'import {resolve} from "node:path"; console.log(resolve(process.argv[1]))' "$fixtures")"
 printf '%s\n' "$validation" > "$validation/evidence-directory.txt"
@@ -79,7 +81,7 @@ native() {
 }
 
 probe() {
-  SYNTHSEG_PROBE_ONLY=1 SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_VALIDATION_REPORT="$validation/webgpu-probe.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/probe-tests.json" \
+  SYNTHSEG_PROBE_ONLY=1 SYNTHSEG_VALIDATION_REPORT="$validation/webgpu-probe.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/probe-tests.json" \
     pnpm --filter synthseg exec playwright test e2e/fixture.spec.js --headed --grep 'records the WebGPU adapter and planned buffer limits$' --reporter=line,json --retries=0
   node "$evidence" check-playwright "$validation/probe-tests.json" 'records the WebGPU adapter and planned buffer limits'
   node "$evidence" check-synthseg probe "$validation/webgpu-probe.json"
@@ -93,7 +95,7 @@ webgpu() {
   else
     make -C exes/synthseg check-model fetch-validation
   fi
-  SYNTHSEG_PROBE_ONLY= SYNTHSEG_E2E_FIXTURE=1 SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_VALIDATION_REPORT="$validation/webgpu.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/webgpu-tests.json" \
+  SYNTHSEG_PROBE_ONLY= SYNTHSEG_E2E_FIXTURE=1 SYNTHSEG_VALIDATION_REPORT="$validation/webgpu.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/webgpu-tests.json" \
     pnpm --filter synthseg exec playwright test e2e/fixture.spec.js --headed --reporter=line,json --retries=0
   node "$evidence" check-playwright "$validation/webgpu-tests.json" \
     'records the WebGPU adapter and planned buffer limits' \

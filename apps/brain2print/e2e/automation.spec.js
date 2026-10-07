@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-
-test.use({ launchOptions: { args: ['--enable-unsafe-webgpu', ...(process.platform === 'darwin' ? ['--use-angle=metal', '--enable-features=Metal'] : ['--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'])] } });
+import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 
 const fixture = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
 async function start(page, parameters = {}) {
@@ -26,7 +25,7 @@ test('automation can cancel the real segmentation worker while its runtime is lo
 });
 
 test('hardware inference returns corrected STL, matching MZ3 and the segmented image', async ({ page }) => {
-  test.skip(process.platform !== 'darwin', 'Requires a hardware WebGPU adapter for MindGrab inference.');
+  test.skip(!hardwareGpu, 'Requires a hardware WebGPU adapter for MindGrab inference.');
   test.setTimeout(600_000);
   await start(page, { model: '16chan18cls' });
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 540_000 }).toBe('succeeded');

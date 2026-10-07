@@ -62,7 +62,7 @@ it is never bundled.
 
 ## Validation
 
-`SYNTHSEG_E2E_FIXTURE=1 SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
+`SYNTHSEG_E2E_FIXTURE=1 NEURODESK_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
 runs the small fixture and both benchmark volumes through the built app on the real GPU and
 gates them like the native CLI (mismatch ≤ 2e-6, identical geometry). The last run is in
 `validation/report.json`: 0–1 of 5.6 M voxels differ from FreeSurfer, 6–10 s per volume on an
