@@ -480,7 +480,9 @@ export class SpinalCordToolboxApp {
       details.classList.toggle('task-disabled', task.supportStatus !== 'supported');
     }
     if (runBtn) {
-      runBtn.disabled = !isTaskRunnable(task);
+      // Run stays locked until an input has unlocked the segmentation step;
+      // the section's pointer-events rule does not stop keyboard activation.
+      runBtn.disabled = !isTaskRunnable(task) || !this.isStepEnabled('inference');
       runBtn.title = isTaskRunnable(task) ? 'Run SCT segmentation' : 'Task unavailable';
     }
   }

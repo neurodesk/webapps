@@ -1,166 +1,531 @@
 #!/usr/bin/env node --no-warnings
 
-// Asserts the SCT Segmentation task selector and the SCT Processing operation
-// selector route work to the right pipeline. The browser silently fell back to
-// the default model name when a user selected "Vertebral labeling" from the
-// segmentation dropdown — runInference() spent ~22 minutes producing a sparse
-// spinal cord segmentation, then claimed DONE without ever invoking the
-// vertebrae module. The fix marks vertebrae as processingOnly and filters it
-// from the segmentation dropdown; this test enforces the invariant.
+// Executes SCT task routing end to end instead of reading the source.
+//
+// The browser once fell back to the default model when a user picked
+// "Vertebral labeling" from the segmentation dropdown: runInference() spent
+// ~22 minutes producing a sparse cord mask and reported success without ever
+// running the vertebrae module. This test boots the real application against
+// the real index.html in jsdom, clicks the real controls and asserts the
+// message that reaches the worker. The second half loads the real worker and
+// asserts the URL it fetches.
+//
+// Expected values are literals from the SCT task definitions as recorded in
+// web/models/manifest.json (the runtime reads web/js/app/sct-tasks.js, a
+// separate file) and from SCT's own defaults; nothing is recomputed with the
+// application's expressions.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
+import vm from 'node:vm';
+import { pathToFileURL } from 'node:url';
+import {
+  APP_ROOT,
+  bootApp,
+  click,
+  emitStage,
+  loadInput,
+  parseIndexHtml,
+  report,
+  setChecked,
+  setValue,
+  settle,
+  tinyNiftiBytes,
+  waitFor
+} from './lib/app-harness.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+const require = createRequire(import.meta.url);
+const manifest = require('../web/models/manifest.json');
 
-const {
-  SCT_TASKS,
-  isTaskRunnable,
-  getPrimaryModelAsset,
-  getTaskModelUrl,
-  getTaskTemplateAssetUrl
-} = await import(pathToFileURL(path.join(ROOT, 'web/js/app/sct-tasks.js')));
+const HF = 'https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models';
+const LOCAL_MODELS = 'http://localhost:4320/models';
 
-const HOSTED_MODEL_URL_RE = /^https:\/\/huggingface\.co\/datasets\/sbollmann\/sct-webapp-data\/resolve\/[0-9a-f]{40}\/web\/models\/.+$/;
+// One row per task offered in the SCT Task dropdown. `overlap`,
+// `keepLargestComponent`, `minComponentSize` and `testTimeAugmentation` for the
+// spinal cord follow SCT's wrapper (tile_step_size=0.5, largest component kept,
+// no extra size filter, no TTA). Tasks without an SCT overlap default use the
+// app default of 0 and keep every component.
+const EXPECTED_SEGMENTATION_REQUESTS = [
+  {
+    taskId: 'spinalcord',
+    label: 'Spinal cord',
+    modelAssetId: 'sct-spinalcord',
+    modelName: 'sct-spinalcord.onnx',
+    modelUrl: `${HF}/sct-spinalcord.onnx`,
+    patchSize: [160, 224, 64],
+    overlap: 0.5,
+    threshold: 0.5,
+    minComponentSize: 0,
+    keepLargestComponent: true,
+    sourceVersion: 'stable'
+  },
+  {
+    taskId: 'graymatter',
+    label: 'Gray matter',
+    modelAssetId: 'sct-graymatter',
+    modelName: 'sct-graymatter.onnx',
+    modelUrl: `${HF}/sct-graymatter.onnx`,
+    patchSize: [64, 64, 64],
+    overlap: 0,
+    threshold: 0.5,
+    minComponentSize: 1000,
+    keepLargestComponent: false,
+    sourceVersion: 'stable'
+  },
+  {
+    taskId: 'lesion_sci_t2',
+    label: 'SCI lesion T2',
+    modelAssetId: 'sct-lesion-sci-t2',
+    modelName: 'sct-lesion-sci-t2.onnx',
+    modelUrl: `${HF}/sct-lesion-sci-t2.onnx`,
+    patchSize: [128, 192, 96],
+    overlap: 0,
+    threshold: 0.5,
+    minComponentSize: 1,
+    keepLargestComponent: false,
+    sourceVersion: 'r20240729'
+  },
+  {
+    taskId: 'spine',
+    label: 'TotalSpineSeg',
+    modelAssetId: 'totalspineseg-step1',
+    modelName: 'totalspineseg-step1.onnx',
+    modelUrl: `${HF}/totalspineseg-step1.onnx`,
+    patchSize: [256, 256, 48],
+    overlap: 0,
+    threshold: 0.5,
+    minComponentSize: 1,
+    keepLargestComponent: false,
+    sourceVersion: 'r20251124'
+  }
+];
 
-// Tasks offered in the segmentation dropdown must each have a primary model
-// asset. Without one, runInference() falls back to Config.MODEL.name.
-const segmentationDropdownTasks = SCT_TASKS.filter(task => isTaskRunnable(task) && !task.processingOnly);
-for (const task of segmentationDropdownTasks) {
-  const asset = getPrimaryModelAsset(task);
-  assert.ok(asset, `Task "${task.id}" appears in the segmentation dropdown but has no primary model asset. Either add modelAssets, mark it processingOnly, or set supportStatus to unsupported.`);
-  assert.match(asset.downloadUrl || '', HOSTED_MODEL_URL_RE, `Task "${task.id}" must use a pinned Hugging Face model asset URL`);
-  assert.equal(getTaskModelUrl(task), asset.downloadUrl, `Task "${task.id}" runtime URL must resolve to the hosted model asset`);
+function manifestAsset(taskId) {
+  return manifest.tasks.find(task => task.id === taskId).modelAssets[0];
 }
 
-// The vertebrae task is post-processing and must be hidden from the segmentation
-// dropdown but available from the SCT Processing operation dropdown.
-const vertebrae = SCT_TASKS.find(task => task.id === 'vertebrae');
-assert.ok(vertebrae, 'vertebrae task is defined');
-assert.equal(vertebrae.processingOnly, true, 'vertebrae must be flagged processingOnly');
-assert.ok(!segmentationDropdownTasks.includes(vertebrae), 'vertebrae must be filtered out of the segmentation dropdown');
-for (const assetId of ['pam50-t2', 'pam50-levels']) {
-  assert.match(getTaskTemplateAssetUrl(vertebrae, assetId) || '', HOSTED_MODEL_URL_RE, `Vertebrae template asset "${assetId}" must use a pinned Hugging Face URL`);
+async function runSegmentationFor(harness, taskId) {
+  const before = harness.postedOfType('run-inference').length;
+  setValue(harness.document.getElementById('modelSelect'), taskId);
+  click(harness.document.getElementById('runSegmentation'));
+  await waitFor(() => harness.postedOfType('run-inference').length > before, `run-inference for ${taskId}`);
+  return harness.postedOfType('run-inference').at(-1).message.data;
 }
 
-const lesionSci = SCT_TASKS.find(task => task.id === 'lesion_sci_t2');
-assert.ok(lesionSci, 'lesion_sci_t2 task is defined');
-assert.equal(lesionSci.supportStatus, 'supported', 'lesion_sci_t2 must be runnable from SCT Segmentation');
-assert.ok(segmentationDropdownTasks.includes(lesionSci), 'lesion_sci_t2 must appear in the segmentation dropdown');
-assert.deepEqual(lesionSci.outputStages?.map(stage => stage.id), ['segmentation', 'lesion', 'lesion_metrics'], 'lesion_sci_t2 must declare spinal-cord, lesion, and metrics stages');
-assert.equal(getPrimaryModelAsset(lesionSci)?.output?.activation, 'sigmoid-regions', 'lesion_sci_t2 must use SCIsegV2 region-channel output metadata');
-
-const spinalcord = SCT_TASKS.find(task => task.id === 'spinalcord');
-assert.ok(spinalcord, 'spinalcord task is defined');
-const spinalcordAsset = getPrimaryModelAsset(spinalcord);
-assert.ok(spinalcordAsset, 'spinalcord task has a primary model asset');
-assert.equal(spinalcordAsset?.preprocessing?.modelOrientation, 'RPI', 'spinalcord must match SCT dataset.json image_orientation=RPI');
-assert.equal(spinalcordAsset?.preprocessing?.modelAxisOrder, 'zyx', 'spinalcord must feed the nnU-Net plan in zyx tensor order');
-assert.deepEqual(spinalcordAsset?.preprocessing?.targetSpacing, [0.8958333, 0.7, 1.0], 'spinalcord targetSpacing is stored in browser RAS/XYZ order');
-assert.equal(spinalcordAsset?.inferenceDefaults?.overlap, 0.5, 'spinalcord overlap must match SCT tile_step_size=0.5');
-assert.equal(spinalcordAsset?.inferenceDefaults?.testTimeAugmentation, false, 'spinalcord TTA must stay disabled by SCT default');
-assert.equal(spinalcordAsset?.inferenceDefaults?.keepLargestComponent, true, 'spinalcord must keep the largest component like SCT');
-assert.equal(spinalcordAsset?.inferenceDefaults?.minComponentSize, 0, 'spinalcord must not add a separate browser-only min-size cleanup');
-
-const spine = SCT_TASKS.find(task => task.id === 'spine');
-assert.ok(spine, 'spine task is defined');
-assert.equal(spine.supportStatus, 'supported', 'spine must be runnable once the TotalSpineSeg ONNX asset is present');
-assert.equal(spine.validationStatus, 'manual-only', 'spine must remain manual-only until SCT fixture parity is added');
-assert.equal(spine.displayName, 'TotalSpineSeg', 'spine task must be labeled TotalSpineSeg in the UI');
-assert.ok(segmentationDropdownTasks.includes(spine), 'spine must appear in the segmentation dropdown');
-assert.equal(getPrimaryModelAsset(spine)?.output?.activation, 'sigmoid-labels', 'spine must use TotalSpineSeg region-sigmoid label aggregation');
-assert.deepEqual(getPrimaryModelAsset(spine)?.patchSize, [256, 256, 48], 'spine must use the browser-safe TotalSpineSeg zyx patch size');
-assert.equal(getPrimaryModelAsset(spine)?.preprocessing?.modelOrientation, 'RAS', 'spine must match upstream nib.as_closest_canonical RAS preprocessing');
-assert.equal(getPrimaryModelAsset(spine)?.preprocessing?.modelAxisOrder, 'zyx', 'spine must feed TotalSpineSeg in nnU-Net zyx tensor order');
-assert.deepEqual(getPrimaryModelAsset(spine)?.output?.labelPriority, [1, 2, 3, 4, 5, 6, 7, 8, 9], 'spine must collapse TotalSpineSeg regions in nnU-Net regions_class_order');
-assert.equal(getPrimaryModelAsset(spine)?.output?.paddingMode, 'center-min-patch', 'spine must use nnU-Net centered padding for short axes');
-assert.equal(getPrimaryModelAsset(spine)?.output?.discPointRadius, 2, 'spine disc labels must use visible markers rather than one-voxel points');
-assert.match(getPrimaryModelAsset(spine)?.downloadUrl || '', /^https:\/\/huggingface\.co\/datasets\/sbollmann\/sct-webapp-data\/resolve\/[0-9a-f]{40}\/web\/models\/totalspineseg-step1\.onnx$/, 'spine ONNX must be hosted on the Hugging Face dataset at a pinned revision');
-assert.equal(getTaskModelUrl(spine), getPrimaryModelAsset(spine)?.downloadUrl, 'spine runtime URL must resolve to the Hugging Face-hosted ONNX asset');
-assert.deepEqual(spine.outputStages?.map(stage => stage.id), ['spine_step1', 'spine_discs'], 'spine must declare TotalSpineSeg step-1 and disc-label stages');
-assert.equal(spine.outputStages?.find(stage => stage.id === 'spine_step1')?.visibleByDefault, true, 'TotalSpineSeg step-1 labels must be visible by default');
-assert.equal(spine.outputStages?.find(stage => stage.id === 'spine_discs')?.visibleByDefault, true, 'TotalSpineSeg disc labels must be visible by default');
-
-const indexHtml = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
-assert.doesNotMatch(indexHtml, /id="overlapSelect"/, 'sliding-window overlap is an SCT model default, not a user-facing control');
-const processingOptions = [...indexHtml.matchAll(/<select id="processingOperationSelect">([\s\S]*?)<\/select>/g)][0]?.[1] || '';
-assert.match(processingOptions, /value="vertebrae"/, 'processingOperationSelect must offer vertebrae');
-const exposedProcessingOptionValues = [...processingOptions.matchAll(/<option\s+value="([^"]+)"/g)].map(match => match[1]);
-assert.deepEqual(exposedProcessingOptionValues, ['vertebrae'], 'processingOperationSelect must only expose real pipeline operations');
-assert.doesNotMatch(
-  processingOptions,
-  /centerline|morphometry|mt|dmri|registration|metadata/i,
-  'processingOperationSelect must not expose pure helper/demo operations'
-);
-
-// runProcessingOperation must early-return on missing segmentation, and route
-// 'vertebrae' to runVertebralLabeling rather than to runInference.
-const appJs = fs.readFileSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js'), 'utf8');
-assert.match(appJs, /operation === 'vertebrae'[\s\S]*?hasResult\('segmentation'\)[\s\S]*?runVertebralLabeling/, 'runProcessingOperation must route vertebrae to runVertebralLabeling, gated on segmentation');
-assert.match(appJs, /getTaskModelUrl\(selectedTask\)[\s\S]*?modelUrl:\s*modelUrl\s*\?/, 'runInference must pass the resolved per-asset model URL into the worker');
-assert.match(appJs, /const overlap\s*=\s*assetDefaults\.overlap\s*\?\?\s*Config\.INFERENCE_DEFAULTS\.overlap/, 'runSegmentation must read overlap from task metadata instead of a public selector');
-assert.match(appJs, /keepLargestComponent:\s*!!\(assetDefaults\.keepLargestComponent\s*\?\?\s*Config\.INFERENCE_DEFAULTS\.keepLargestComponent\)/, 'runSegmentation must pass SCT largest-component cleanup to the worker');
-
-const workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
-assert.match(workerJs, /resolvedModelUrl\s*=\s*modelUrl\s*\|\|\s*`\$\{modelBaseUrl\}\/\$\{modelName\}`/, 'worker must prefer per-asset modelUrl before falling back to MODEL_BASE_URL + filename');
-assert.match(workerJs, /pam50LevelsUrl\s*=\s*params\.pam50LevelsUrl\s*\|\|/, 'worker must prefer the hosted PAM50 levels URL from task metadata');
-
-const gitAttributesPath = path.join(ROOT, '.gitattributes');
-const gitAttributes = fs.existsSync(gitAttributesPath) ? fs.readFileSync(gitAttributesPath, 'utf8') : '';
-assert.doesNotMatch(gitAttributes, /filter=lfs/, 'model assets must not be tracked with Git LFS after migration to Hugging Face');
-
-// runInference() must reject processingOnly / asset-less tasks rather than
-// silently falling back to Config.MODEL.name.
-assert.match(appJs, /processingOnly\s*\|\|\s*!selectedAsset/, 'runInference must guard against processingOnly tasks and missing model assets');
-
-// Label masks must be independently toggleable result stages. When input is
-// visible they render as overlays; when input is hidden, renderViewerVolumes()
-// promotes the first visible label mask to the NiiVue base volume because
-// volume 0 is not a reliable hide target.
-assert.match(appJs, /isOverlayStage\(stage\)\s*\{\s*return stage === 'segmentation' \|\| stage === 'lesion' \|\| stage === 'vertebrae' \|\| stage === 'spine_step1' \|\| stage === 'spine_discs'/, 'isOverlayStage must include segmentation, lesion, vertebrae, and TotalSpineSeg label stages');
-assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-vertebrae'/, 'getOverlayColormapId must map vertebrae to sct-vertebrae');
-assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-lesion'/, 'getOverlayColormapId must map lesion to sct-lesion');
-assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-totalspineseg'/, 'getOverlayColormapId must map TotalSpineSeg labels to sct-totalspineseg');
-assert.match(appJs, /getOverlayColormapId[\s\S]*?'sct-spine-discs'/, 'getOverlayColormapId must map TotalSpineSeg disc points to sct-spine-discs');
-assert.match(appJs, /_stageVisibility\s*=\s*\{[\s\S]*?segmentation:\s*true[\s\S]*?lesion:\s*true[\s\S]*?vertebrae:\s*true[\s\S]*?spine_step1:\s*true[\s\S]*?spine_discs:\s*true/, 'result visibility must show TotalSpineSeg label stages by default');
-assert.match(appJs, /setStageVisible\(data\.stage,\s*this\.getDefaultStageVisibility\(\)\[data\.stage\]\s*!==\s*false\)/, 'new overlay stage data must honor default visibility instead of forcing raw localizers visible');
-assert.match(appJs, /getVisibleOverlayStages\(\)[\s\S]*?\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\][\s\S]*?isStageVisible\(stage\)[\s\S]*?hasResult\(stage\)/, 'visible overlay stages must be resolved from per-stage visibility and existing results');
-assert.match(appJs, /stackEntries\s*=\s*\[\{[\s\S]*?stage:\s*baseOverlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'hidden-input rendering must promote the first visible label mask to the base volume with stage tracking');
-assert.match(appJs, /for \(const overlayStage of visibleOverlayStages\)[\s\S]*?stackEntries\.push\(\{[\s\S]*?stage:\s*overlayStage[\s\S]*?labelMask:\s*true[\s\S]*?loadViewerStackIfChanged\(stackEntries\)/, 'visible label masks must be loaded as one independently tracked volume stack');
-assert.match(appJs, /_renderViewerPromise\s*=\s*Promise\.resolve\(\)/, 'viewer renders must be serialized to prevent late base loads from wiping overlays');
-assert.match(appJs, /renderViewerVolumes\(\)\s*\{[\s\S]*?_renderViewerPromise\s*=\s*this\._renderViewerPromise\.then/, 'renderViewerVolumes must enqueue render work in order');
-assert.match(appJs, /loadViewerStackIfChanged\(stackEntries\)\s*\{[\s\S]*?isCurrentVolumeStack\?\.\(stackEntries\)[\s\S]*?return false[\s\S]*?loadVolumeStack\(stackEntries\)/, 'renderViewerVolumes must skip loadVolumeStack when the requested stack is already current');
-assert.match(appJs, /getResultListStages\(\)\s*\{[\s\S]*?getStageOrder\(\)\.filter\(stage => !this\.isMetricsResultStage\(stage\)\)/, 'metrics stages must be excluded from the viewable/downloadable image-layer result list');
-assert.match(appJs, /renderMetricsResult\(stage\)[\s\S]*?metrics-download-btn[\s\S]*?downloadMetricsResult\(stage\)/, 'metrics statistics panel must provide its own CSV download button');
-assert.match(appJs, /downloadMetricsResult\(stage\)[\s\S]*?result\?\.kind !== 'metrics'[\s\S]*?Downloaded statistics/, 'metrics CSV download must be handled as statistics, not as a layer download');
-
-// Visibility must not resurrect missing sibling results. Auto-rendering a
-// stale vertebrae result onto a new input or new segmentation would silently
-// render the wrong label mask.
-assert.doesNotMatch(
-  appJs,
-  /getVisibleOverlayStages\(\)\s*\{[\s\S]*?return\s+\['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'\]\.filter\(stage => \(\s*this\.isStageVisible\(stage\)\s*\)\)/,
-  'getVisibleOverlayStages must also require an existing result for each visible stage'
-);
-
-// runSegmentation must reset visibility and re-render before kicking off
-// inference, so a previous vertebrae overlay is not visible during the new run.
-assert.match(appJs, /clearResults\(\);[\s\S]*?disableAllResultTabs\(\);[\s\S]*?resetStageVisibility\(\);[\s\S]*?renderViewerVolumes\(\)/, 'runSegmentation must reset stage visibility and re-render before starting inference');
-
-// Reproduce the visible-stage semantics directly: each result controls only
-// its own visibility, and missing results are excluded even when their default
-// visibility flag is on.
-function getVisibleOverlayStages(visibility, available) {
-  return ['segmentation', 'lesion', 'vertebrae', 'spine_step1', 'spine_discs'].filter(stage => visibility[stage] && available.has(stage));
+async function finishInference(harness) {
+  harness.worker().emit({ type: 'step-complete', step: 'inference' });
+  harness.worker().emit({ type: 'complete' });
+  await settle(harness);
 }
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['segmentation', 'lesion', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: false, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['segmentation', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: true, vertebrae: true }, new Set(['segmentation', 'lesion', 'vertebrae'])), ['lesion', 'vertebrae']);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: true, lesion: true, vertebrae: true }, new Set(['segmentation'])), ['segmentation'], 'must not render missing sibling results');
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, vertebrae: false }, new Set(['segmentation', 'lesion', 'vertebrae'])), []);
-assert.deepEqual(getVisibleOverlayStages({ segmentation: false, lesion: false, vertebrae: false, spine_step1: true, spine_discs: true }, new Set(['spine_step1', 'spine_discs'])), ['spine_step1', 'spine_discs'], 'default TotalSpineSeg view shows both label stages');
 
-console.log(`Task routing OK: ${segmentationDropdownTasks.length} segmentation task(s) all have model assets; vertebrae is processing-only.`);
+let checks = 0;
+function check(fn) {
+  checks++;
+  return fn();
+}
+
+// ---------------------------------------------------------------------------
+// Static page: what the two selectors offer before any script runs.
+// ---------------------------------------------------------------------------
+{
+  const { document } = parseIndexHtml().window;
+  check(() => assert.equal(document.getElementById('overlapSelect'), null, 'sliding-window overlap is an SCT model default, not a user control'));
+  const operations = [...document.querySelectorAll('#processingOperationSelect option')].map(option => option.value);
+  check(() => assert.deepEqual(operations, ['vertebrae'], 'SCT Processing offers only operations wired to a real pipeline step'));
+}
+
+// ---------------------------------------------------------------------------
+// SCT Task dropdown -> run-inference message, one task at a time.
+// ---------------------------------------------------------------------------
+{
+  const harness = await bootApp();
+  await loadInput(harness);
+
+  const options = [...harness.document.querySelectorAll('#modelSelect option')];
+  check(() => assert.deepEqual(
+    options.map(option => option.value),
+    ['spinalcord', 'graymatter', 'lesion_sci_t2', 'spine'],
+    'the SCT Task dropdown lists the supported model tasks and not the processing-only vertebrae task'
+  ));
+  check(() => assert.deepEqual(
+    options.map(option => option.textContent),
+    ['Spinal cord', 'Gray matter', 'SCI lesion T2', 'TotalSpineSeg']
+  ));
+
+  for (const expected of EXPECTED_SEGMENTATION_REQUESTS) {
+    const sent = await runSegmentationFor(harness, expected.taskId);
+    const asset = manifestAsset(expected.taskId);
+    check(() => assert.equal(sent.taskId, expected.taskId));
+    check(() => assert.equal(sent.modelAssetId, expected.modelAssetId, `${expected.taskId}: model asset id`));
+    check(() => assert.equal(sent.modelName, expected.modelName, `${expected.taskId}: model file`));
+    check(() => assert.equal(sent.modelUrl, expected.modelUrl, `${expected.taskId}: pinned Hugging Face model URL`));
+    check(() => assert.equal(sent.modelUrl, asset.downloadUrl, `${expected.taskId}: URL matches manifest.json`));
+    check(() => assert.deepEqual(sent.patchSize, expected.patchSize, `${expected.taskId}: patch size`));
+    check(() => assert.equal(sent.overlap, expected.overlap, `${expected.taskId}: overlap`));
+    check(() => assert.equal(sent.threshold, expected.threshold, `${expected.taskId}: threshold`));
+    check(() => assert.equal(sent.minComponentSize, expected.minComponentSize, `${expected.taskId}: min component size`));
+    check(() => assert.equal(sent.keepLargestComponent, expected.keepLargestComponent, `${expected.taskId}: largest-component cleanup`));
+    check(() => assert.equal(sent.testTimeAugmentation, false, `${expected.taskId}: TTA off by default`));
+    check(() => assert.equal(sent.supportStatus, 'supported'));
+    check(() => assert.equal(sent.modelBaseUrl, LOCAL_MODELS));
+    check(() => assert.deepEqual(sent.preprocessing, asset.preprocessing || {}, `${expected.taskId}: preprocessing matches manifest.json`));
+    check(() => assert.deepEqual(sent.output, asset.output || {}, `${expected.taskId}: output metadata matches manifest.json`));
+    check(() => assert.equal(sent.provenance.sourceVersion, expected.sourceVersion));
+    check(() => assert.equal(sent.provenance.modelAssetId, expected.modelAssetId));
+    await finishInference(harness);
+  }
+
+  // SCT reference values the spinal cord request must carry, stated once more
+  // as plain literals so a manifest edit cannot move them silently.
+  const cord = await runSegmentationFor(harness, 'spinalcord');
+  check(() => assert.deepEqual(cord.preprocessing, {
+    modelOrientation: 'RPI',
+    modelAxisOrder: 'zyx',
+    targetSpacing: [0.8958333, 0.7, 1.0]
+  }));
+  await finishInference(harness);
+
+  const lesion = await runSegmentationFor(harness, 'lesion_sci_t2');
+  check(() => assert.equal(lesion.output.activation, 'sigmoid-regions', 'SCIsegV2 is a region-channel sigmoid model'));
+  await finishInference(harness);
+
+  const spine = await runSegmentationFor(harness, 'spine');
+  check(() => assert.equal(spine.output.activation, 'sigmoid-labels'));
+  check(() => assert.deepEqual(spine.output.labelPriority, [1, 2, 3, 4, 5, 6, 7, 8, 9]));
+  check(() => assert.equal(spine.output.paddingMode, 'center-min-patch'));
+  check(() => assert.equal(spine.output.discPointRadius, 2));
+  check(() => assert.equal(spine.preprocessing.modelOrientation, 'RAS'));
+  await finishInference(harness);
+
+  // The advanced controls reach the worker.
+  setValue(harness.document.getElementById('modelSelect'), 'spinalcord');
+  setValue(harness.document.getElementById('thresholdInput'), '0.3');
+  setValue(harness.document.getElementById('minSizeInput'), '25');
+  setChecked(harness.document.getElementById('ttaToggle'), true);
+  const before = harness.postedOfType('run-inference').length;
+  click(harness.document.getElementById('runSegmentation'));
+  await waitFor(() => harness.postedOfType('run-inference').length > before, 'run-inference with edited settings');
+  const edited = harness.postedOfType('run-inference').at(-1).message.data;
+  check(() => assert.equal(edited.threshold, 0.3));
+  check(() => assert.equal(edited.minComponentSize, 25));
+  check(() => assert.equal(edited.testTimeAugmentation, true));
+  await finishInference(harness);
+
+  // Choosing a task restores that task's defaults in the controls.
+  setValue(harness.document.getElementById('modelSelect'), 'graymatter');
+  check(() => assert.equal(harness.document.getElementById('minSizeInput').value, '1000'));
+  check(() => assert.equal(harness.document.getElementById('thresholdInput').value, '0.5'));
+  check(() => assert.equal(harness.document.getElementById('ttaToggle').checked, false));
+  check(() => assert.equal(harness.document.getElementById('taskDetails').textContent, 'Input: T2star'));
+}
+
+// ---------------------------------------------------------------------------
+// A processing-only task must never be sent to run-inference.
+// ---------------------------------------------------------------------------
+{
+  const harness = await bootApp();
+  await loadInput(harness);
+  const select = harness.document.getElementById('modelSelect');
+  const forced = harness.document.createElement('option');
+  forced.value = 'vertebrae';
+  forced.textContent = 'Vertebral labeling';
+  select.appendChild(forced);
+  select.value = 'vertebrae';
+  click(harness.document.getElementById('runSegmentation'));
+  await settle(harness);
+  check(() => assert.equal(harness.postedOfType('run-inference').length, 0, 'vertebrae is not routed to model inference'));
+  check(() => assert.match(harness.logText(), /"Vertebral labeling" is a post-processing step/));
+
+  // An unsupported task is refused as well.
+  const unsupported = harness.document.createElement('option');
+  unsupported.value = 'lesion_ms';
+  select.appendChild(unsupported);
+  select.value = 'lesion_ms';
+  click(harness.document.getElementById('runSegmentation'));
+  await settle(harness);
+  check(() => assert.equal(harness.postedOfType('run-inference').length, 0, 'an unsupported task is not routed to model inference'));
+  check(() => assert.match(harness.logText(), /is unavailable\./));
+}
+
+// ---------------------------------------------------------------------------
+// SCT Processing -> run-vertebral-labeling, gated on a segmentation result.
+// ---------------------------------------------------------------------------
+{
+  const harness = await bootApp();
+  await loadInput(harness);
+
+  click(harness.document.getElementById('runProcessingBtn'));
+  await settle(harness);
+  check(() => assert.equal(harness.postedOfType('run-vertebral-labeling').length, 0, 'no vertebral labeling without a segmentation'));
+  check(() => assert.match(harness.logText(), /Run spinal cord segmentation before vertebral labeling/));
+
+  await runSegmentationFor(harness, 'spinalcord');
+  await emitStage(harness, 'segmentation');
+  await finishInference(harness);
+
+  click(harness.document.getElementById('runProcessingBtn'));
+  await waitFor(() => harness.postedOfType('run-vertebral-labeling').length === 1, 'run-vertebral-labeling');
+  check(() => assert.deepEqual(harness.postedOfType('run-vertebral-labeling')[0].message.data, {
+    modelBaseUrl: LOCAL_MODELS,
+    pam50LevelsUrl: `${HF}/templates/PAM50/PAM50_levels.nii.gz`,
+    scaleDist: 0.55,
+    detectorMinScore: 0.1
+  }));
+  check(() => assert.equal(harness.postedOfType('run-inference').length, 1, 'vertebral labeling does not start a second model inference'));
+}
+
+// ---------------------------------------------------------------------------
+// Result stages: what the viewer shows as stages arrive and are toggled.
+// ---------------------------------------------------------------------------
+{
+  const harness = await bootApp();
+  await loadInput(harness);
+  await runSegmentationFor(harness, 'lesion_sci_t2');
+  await emitStage(harness, 'segmentation', { taskId: 'lesion_sci_t2' });
+  await emitStage(harness, 'lesion', { taskId: 'lesion_sci_t2' });
+  harness.worker().emit({
+    type: 'stageData',
+    stage: 'lesion_metrics',
+    kind: 'metrics',
+    taskId: 'lesion_sci_t2',
+    csv: 'lesion_id,volume_mm3\n1,12.5\n',
+    rows: [{ lesion_id: 1, volume_mm3: 12.5 }],
+    summary: { lesion_count: 1 }
+  });
+  await finishInference(harness);
+
+  // Input as base, then each label mask as its own overlay with its colormap.
+  check(() => assert.deepEqual(harness.viewerStack(), [
+    { name: 'input.nii', colormap: 'gray' },
+    { name: 'lesion_sci_t2_segmentation.nii', colormap: 'sct-spinalcord' },
+    { name: 'lesion_sci_t2_lesion.nii', colormap: 'sct-lesion' }
+  ]));
+
+  // Metrics are a table with its own CSV download, not an image layer.
+  const rows = [...harness.document.querySelectorAll('#stageButtons .stage-label')].map(label => label.textContent);
+  check(() => assert.deepEqual(rows, ['Input', 'SCT Segmentation', 'SCI Lesion']));
+  const metricsDownload = harness.document.querySelector('#metricsResults .metrics-download-btn');
+  check(() => assert.ok(metricsDownload, 'the statistics panel has its own download button'));
+  click(metricsDownload);
+  check(() => assert.match(harness.logText(), /Downloaded statistics: lesion_sci_t2_lesion_metrics\.csv/));
+  check(() => assert.deepEqual(harness.downloads.map(download => download.name), ['lesion_sci_t2_lesion_metrics.csv']));
+
+  // An unchanged stack is not reloaded.
+  const loadsBefore = harness.niivueCalls.filter(call => call[0] === 'loadVolumes').length;
+  await harness.app.renderViewerVolumes();
+  check(() => assert.equal(harness.niivueCalls.filter(call => call[0] === 'loadVolumes').length, loadsBefore, 'a repeated render does not reload the input volume'));
+
+  // Each eye button toggles only its own stage.
+  const eye = stage => harness.document.querySelector(`#stageButtons .view-btn[data-stage="${stage}"]`);
+  click(eye('segmentation'));
+  await settle(harness);
+  check(() => assert.deepEqual(harness.viewerStack().map(volume => volume.name), ['input.nii', 'lesion_sci_t2_lesion.nii']));
+  check(() => assert.equal(eye('segmentation').classList.contains('active'), false));
+  check(() => assert.equal(eye('lesion').classList.contains('active'), true));
+
+  // Hiding the input promotes the first visible label mask to the base volume.
+  setChecked(harness.document.getElementById('inputVisibilityToggle'), false);
+  await settle(harness);
+  check(() => assert.deepEqual(harness.viewerStack(), [{ name: 'lesion_sci_t2_lesion.nii', colormap: 'sct-lesion' }]));
+  click(eye('segmentation'));
+  await settle(harness);
+  check(() => assert.deepEqual(harness.viewerStack(), [
+    { name: 'lesion_sci_t2_segmentation.nii', colormap: 'sct-spinalcord' },
+    { name: 'lesion_sci_t2_lesion.nii', colormap: 'sct-lesion' }
+  ]));
+
+  // A new run must not show the previous run's overlays, and must show the new
+  // segmentation even though its eye was switched off during the old run.
+  click(eye('segmentation'));
+  await settle(harness);
+  await runSegmentationFor(harness, 'spinalcord');
+  await settle(harness);
+  check(() => assert.deepEqual(harness.viewerStack().map(volume => volume.name), ['input.nii'], 'stale overlays are gone when a new run starts'));
+  await emitStage(harness, 'segmentation', { taskId: 'spinalcord' });
+  check(() => assert.deepEqual(harness.viewerStack(), [
+    { name: 'input.nii', colormap: 'gray' },
+    { name: 'spinalcord_segmentation.nii', colormap: 'sct-spinalcord' }
+  ]));
+  await finishInference(harness);
+
+  // Vertebral labels join as a third independent overlay.
+  click(harness.document.getElementById('runProcessingBtn'));
+  await waitFor(() => harness.postedOfType('run-vertebral-labeling').length === 1, 'run-vertebral-labeling');
+  await emitStage(harness, 'vertebrae');
+  harness.worker().emit({ type: 'step-complete', step: 'processing' });
+  await settle(harness);
+  check(() => assert.deepEqual(harness.viewerStack().map(volume => volume.colormap), ['gray', 'sct-spinalcord', 'sct-vertebrae']));
+}
+
+{
+  // TotalSpineSeg shows both of its label stages by default.
+  const harness = await bootApp();
+  await loadInput(harness);
+  await runSegmentationFor(harness, 'spine');
+  await emitStage(harness, 'spine_step1', { taskId: 'spine' });
+  await emitStage(harness, 'spine_discs', { taskId: 'spine' });
+  await finishInference(harness);
+  check(() => assert.deepEqual(harness.viewerStack(), [
+    { name: 'input.nii', colormap: 'gray' },
+    { name: 'spine_spine_step1.nii', colormap: 'sct-totalspineseg' },
+    { name: 'spine_spine_discs.nii', colormap: 'sct-spine-discs' }
+  ]));
+}
+
+// ---------------------------------------------------------------------------
+// Worker: which URL is fetched for a model and for the PAM50 template.
+// ---------------------------------------------------------------------------
+async function startWorker(fetched) {
+  const {
+    prepareModuleWorkerSource,
+    loadSharedWorkerBindings,
+    installModuleLoader
+  } = require('./worker-vm.cjs');
+  const workerPath = path.join(APP_ROOT, 'web/js/inference-worker.js');
+  const messages = [];
+  const selfObj = {
+    onmessage: null,
+    postMessage: message => messages.push(message)
+  };
+  // The network boundary: the committed C2-C3 detector YAML is served from
+  // disk, every other request is recorded and refused.
+  const detectorUrl = `${LOCAL_MODELS}/c2c3_disc_models/t2_model.yml`;
+  const refuse = async (url) => {
+    fetched.push(String(url));
+    if (String(url) === detectorUrl) {
+      return new Response(fs.readFileSync(path.join(APP_ROOT, 'web/models/c2c3_disc_models/t2_model.yml')));
+    }
+    throw new Error('offline');
+  };
+  const localforage = {
+    config() {},
+    getItem: async () => null,
+    setItem: async () => {},
+    removeItem: async () => {}
+  };
+  const sandbox = {
+    self: selfObj,
+    ort: {
+      env: { wasm: {} },
+      InferenceSession: {
+        create: async () => {
+          throw new Error('no session in the routing test');
+        }
+      }
+    },
+    localforage,
+    // The vendored NIfTI reader only gunzips for the worker; inputs here are
+    // uncompressed, so it must never be called.
+    nifti: {
+      decompress() {
+        throw new Error('unexpected gzip input in the routing test');
+      }
+    },
+    fetch: refuse,
+    performance,
+    console: { log() {}, warn() {}, error() {} },
+    URL,
+    setTimeout,
+    clearTimeout,
+    queueMicrotask,
+    navigator: { hardwareConcurrency: 1 },
+    location: { href: 'http://localhost:4320/js/inference-worker.js' }
+  };
+  Object.assign(sandbox, await loadSharedWorkerBindings());
+  vm.createContext(sandbox);
+  sandbox.globalThis = sandbox;
+  installModuleLoader(sandbox, selfObj, localforage);
+  // The shared model fetcher runs in this realm and reads globalThis.fetch.
+  globalThis.fetch = refuse;
+  vm.runInContext(prepareModuleWorkerSource(fs.readFileSync(workerPath, 'utf8')), sandbox, { filename: workerPath });
+  const send = async (type, data) => {
+    const before = messages.length;
+    await selfObj.onmessage({ data: { type, data, version: 'test' } });
+    return messages.slice(before);
+  };
+  await send('init');
+  return { send, messages };
+}
+
+{
+  const input = tinyNiftiBytes();
+  const settings = {
+    supportStatus: 'supported',
+    taskId: 'graymatter',
+    modelAssetId: 'sct-graymatter',
+    modelName: 'sct-graymatter.onnx',
+    modelBaseUrl: LOCAL_MODELS
+  };
+
+  const fetched = [];
+  const worker = await startWorker(fetched);
+  await worker.send('load', { inputData: input.buffer.slice(0) });
+
+  const hosted = await worker.send('run-inference', { ...settings, modelUrl: `${HF}/sct-graymatter.onnx` });
+  check(() => assert.deepEqual([...new Set(fetched)], [`${HF}/sct-graymatter.onnx`], 'the worker downloads the per-asset model URL it was given'));
+  check(() => assert.equal(hosted.filter(message => message.type === 'error').length, 1, 'a failed download ends in one error message'));
+
+  fetched.length = 0;
+  await worker.send('run-inference', settings);
+  check(() => assert.deepEqual([...new Set(fetched)], [`${LOCAL_MODELS}/sct-graymatter.onnx`], 'without a per-asset URL the worker falls back to the local models directory'));
+
+  fetched.length = 0;
+  const refused = await worker.send('run-inference', { ...settings, supportStatus: 'unsupported' });
+  check(() => assert.deepEqual(fetched, [], 'an unsupported task downloads nothing'));
+  check(() => assert.match(refused.find(message => message.type === 'error').message, /SCT task "graymatter" is unsupported/));
+
+  // Vertebral labeling needs a segmentation; restore one, then watch the fetches.
+  await worker.send('restore-state', {
+    inputData: input.buffer.slice(0),
+    hiddenArtifacts: { segmentationState: { segLabelsRAS: new Uint8Array(64).fill(1), segMinComponentSize: 0 } }
+  });
+  fetched.length = 0;
+  await worker.send('run-vertebral-labeling', {
+    modelBaseUrl: LOCAL_MODELS,
+    pam50LevelsUrl: `${HF}/templates/PAM50/PAM50_levels.nii.gz`
+  });
+  check(() => assert.deepEqual(fetched, [
+    `${LOCAL_MODELS}/c2c3_disc_models/t2_model.yml`,
+    `${HF}/templates/PAM50/PAM50_levels.nii.gz`
+  ], 'vertebral labeling loads the local detector and the hosted PAM50 levels it was given'));
+
+  fetched.length = 0;
+  await worker.send('run-vertebral-labeling', { modelBaseUrl: LOCAL_MODELS });
+  check(() => assert.deepEqual(fetched, [
+    `${LOCAL_MODELS}/c2c3_disc_models/t2_model.yml`,
+    `${LOCAL_MODELS}/templates/PAM50/PAM50_levels.nii.gz`
+  ], 'without a hosted URL the PAM50 levels fall back to the local models directory'));
+}
+
+// ---------------------------------------------------------------------------
+// Repository lint: model binaries stay on Hugging Face, not in Git LFS.
+// ---------------------------------------------------------------------------
+{
+  const gitAttributesPath = path.join(APP_ROOT, '.gitattributes');
+  const gitAttributes = fs.existsSync(gitAttributesPath) ? fs.readFileSync(gitAttributesPath, 'utf8') : '';
+  check(() => assert.doesNotMatch(gitAttributes, /filter=lfs/, 'model assets must not be tracked with Git LFS'));
+}
+
+// ---------------------------------------------------------------------------
+// Task definitions the browser reads (web/js/app/sct-tasks.js).
+// ---------------------------------------------------------------------------
+{
+  const tasks = await import(pathToFileURL(path.join(APP_ROOT, 'web/js/app/sct-tasks.js')));
+  const vertebrae = tasks.getTaskById('vertebrae');
+  check(() => assert.equal(vertebrae.processingOnly, true));
+  check(() => assert.equal(tasks.getPrimaryModelAsset(vertebrae), null, 'vertebrae has no model asset to fall back to'));
+  check(() => assert.equal(tasks.getTaskTemplateAssetUrl(vertebrae, 'pam50-t2'), `${HF}/templates/PAM50/PAM50_t2.nii.gz`));
+  check(() => assert.equal(tasks.getTaskTemplateAssetUrl(vertebrae, 'pam50-levels'), `${HF}/templates/PAM50/PAM50_levels.nii.gz`));
+
+  const lesion = tasks.getTaskById('lesion_sci_t2');
+  check(() => assert.deepEqual(lesion.outputStages.map(stage => stage.id), ['segmentation', 'lesion', 'lesion_metrics']));
+
+  const spine = tasks.getTaskById('spine');
+  check(() => assert.equal(spine.validationStatus, 'manual-only', 'spine stays manual-only until an SCT reference fixture exists'));
+  check(() => assert.deepEqual(spine.outputStages.map(stage => [stage.id, stage.visibleByDefault]), [['spine_step1', true], ['spine_discs', true]]));
+}
+
+report(`Task routing OK: ${checks} executed checks across ${EXPECTED_SEGMENTATION_REQUESTS.length} segmentation tasks, vertebral labeling, result stages and the worker.`);
+process.exit(0);

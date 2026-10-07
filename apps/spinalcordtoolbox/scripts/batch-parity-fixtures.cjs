@@ -106,7 +106,80 @@ const FIXTURE_CASES = Object.freeze([
   }
 ]);
 
+// Parity gates: the app's output against native SCT output for each fixture.
+// Read by test_fixture_parity_outputs.cjs (nightly, Node inference) and by
+// e2e/automation.spec.js (browser inference on the T2 example).
+const CRITICAL_BROWSER_OUTPUTS = Object.freeze([
+  {
+    id: 'batch_t2_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.95,
+    foregroundRatioTolerance: 0.1
+  },
+  {
+    id: 'batch_t2_label_vertebrae',
+    taskId: 'vertebrae',
+    minDice: 0.7,
+    foregroundRatioTolerance: 0.15,
+    mode: 'multilabel',
+    minPositiveLabels: 10
+  },
+  {
+    id: 'batch_t2_deepseg_lesion_sci_t2_sc',
+    fixtureId: 'batch_t2_deepseg_lesion_sci_t2',
+    stage: 'segmentation',
+    taskId: 'lesion_sci_t2',
+    minDice: 0.8,
+    foregroundRatioTolerance: 0.35
+  },
+  {
+    id: 'batch_t2_deepseg_lesion_sci_t2_lesion',
+    fixtureId: 'batch_t2_deepseg_lesion_sci_t2',
+    stage: 'lesion',
+    taskId: 'lesion_sci_t2',
+    minDice: 0.6,
+    foregroundRatioTolerance: 0.75
+  },
+  {
+    id: 'batch_dmri_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.8,
+    foregroundRatioTolerance: 0.5
+  },
+  {
+    id: 'batch_t2s_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.9,
+    foregroundRatioTolerance: 0.2
+  },
+  {
+    id: 'batch_t2s_deepseg_graymatter',
+    taskId: 'graymatter',
+    minDice: 0.7,
+    foregroundRatioTolerance: 0.15
+  },
+  {
+    id: 'batch_t1_deepseg_spinalcord_t1',
+    taskId: 'spinalcord',
+    minDice: 0.9,
+    foregroundRatioTolerance: 0.2
+  },
+  {
+    id: 'batch_t1_deepseg_spinalcord_t2',
+    taskId: 'spinalcord',
+    minDice: 0.95,
+    foregroundRatioTolerance: 0.1
+  },
+  {
+    id: 'batch_mt_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.85,
+    foregroundRatioTolerance: 0.2
+  }
+]);
+
 module.exports = {
   DEFAULT_NIFTI_POLICY,
-  FIXTURE_CASES
+  FIXTURE_CASES,
+  CRITICAL_BROWSER_OUTPUTS
 };
