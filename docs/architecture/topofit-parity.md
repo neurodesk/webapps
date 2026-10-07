@@ -114,7 +114,9 @@ preflight budgets the worst RAS permutation before decoding.
 
 The end-to-end gate runs the original `ds000001` input through the production browser and the pinned container. It requires exact topology, finite vertices, mean anatomical distance at most 0.25 mm, p95 at most 0.5 mm, maximum distance at most 2 mm, the existing registration limits, and at least 0.99 source-voxel QC coverage.
 
-Repeatability runs the same production build at least twice with one thread. A fixed executor must produce identical surface, QC, and provenance bytes.
+Repeatability runs the same production build at least twice with its fixed two-thread executor. It must produce identical surface, QC, and provenance bytes.
+
+Each mode also pins the production output bytes (surfaces, mid-surfaces, QC) and the upstream reference geometry. A performance change passes only if every output is byte-identical to that baseline; staying within the distance thresholds is not enough. A four-thread build, for example, moved every output by about 1e-6 mm, stayed within the thresholds, and is rejected as `baseline-changed`.
 
 The comparison rejects mixed evidence by checking the conversion status, input digest, captured conform digest, runtime identity, asset-set digest, per-output digests, and repeat output bytes.
 
@@ -143,7 +145,7 @@ code gives one preprocessing contract and passes the measured surface gate.
 
 - TopoFit owns its cubic preprocessing because the model requires the upstream numerical contract. Other apps' niimath paths are unchanged.
 - Cubic preprocessing uses more memory than niimath; the existing 768 MiB preflight bounds supported inputs.
-- The existing single-thread executor policy costs runtime but permits exact repeat comparisons. Stable provenance excludes timing, which stays available to the UI and validation sidecars.
+- The fixed two-thread executor is the fastest count measured to reproduce the single-thread bytes; more threads would be faster but change rounding. Stable provenance excludes timing, which stays available to the UI and validation sidecars.
 
 ## Alternatives
 

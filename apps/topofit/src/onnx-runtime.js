@@ -3,7 +3,9 @@ import wasmURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import wasmModuleURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 
 ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
-ort.env.wasm.numThreads = 1;
+// A fixed count keeps every machine on the same arithmetic. Two threads reproduce the
+// single-thread outputs bit for bit; four or more change rounding in trega and white orders 1-3.
+ort.env.wasm.numThreads = 2;
 
 export const Tensor = ort.Tensor;
 

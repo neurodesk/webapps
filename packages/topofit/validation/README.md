@@ -34,7 +34,7 @@ Asset activation requires both reports to pass and rechecks their metrics
 against `thresholds.py`. Run its regression checks with
 `pnpm --filter @neurodesk/topofit test:validation`.
 
-The checked-in end-to-end report passes: its conformed 256³ tensor is byte-identical to OpenRecon, mean corresponding anatomical surface distance is 0.046–0.068 mm, p95 distance is 0.098–0.164 mm, mean registration error is 0.028–0.038 degrees, and one-voxel QC coverage is at least 0.9996. Three production-browser runs produced byte-identical surfaces, QC output, and processing manifests. The controlled report records the same remaining ONNX-versus-PyTorch numerical scale.
+The checked-in end-to-end report passes: its conformed 256³ tensor is byte-identical to OpenRecon, mean corresponding anatomical surface distance is 0.046–0.068 mm, p95 distance is 0.098–0.164 mm, mean registration error is 0.028–0.038 degrees, and one-voxel QC coverage is at least 0.9996. Two production-browser runs with parallel hemispheres (the default) produced byte-identical surfaces, QC output, and processing manifests, and a run with one hemisphere at a time (`browser-run.mjs ... --sequential`) matches the same pinned bytes. The controlled report records the same remaining ONNX-versus-PyTorch numerical scale.
 
 ## Command line
 

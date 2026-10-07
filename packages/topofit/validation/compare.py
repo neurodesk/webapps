@@ -203,7 +203,7 @@ def validate_manifest(directory, fixture):
     assert manifest["runtime"]["release"] == RELEASE
     assert manifest["runtime"]["inference"] == "ONNX Runtime Web WASM"
     assert manifest["runtime"]["onnxruntime"] == "1.29.0"
-    assert manifest["runtime"]["threads"] == 1
+    assert manifest["runtime"]["threads"] == 2
     assert manifest["runtime"]["graphOptimizationLevel"] == "all"
     for name in (*SURFACES, "topofit_qc.nii"):
         assert manifest["outputSha256"][name] == sha256(directory / name)

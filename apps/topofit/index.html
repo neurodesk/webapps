@@ -29,6 +29,7 @@
             <summary class="nd-section-title">Advanced settings</summary>
             <div class="nd-section-content">
               <label class="nd-check"><input id="conform" type="checkbox" checked> Conform to the 1 mm RAS model grid</label>
+              <label class="nd-check"><input id="parallelHemispheres" type="checkbox" checked> Reconstruct hemispheres in parallel <span class="nd-info-icon" tabindex="0" aria-label="About parallel reconstruction">i<span class="nd-info-tooltip">Faster, but needs about 3 GB more memory. Results are identical either way. If a parallel run fails, TopoFit retries one hemisphere at a time.</span></span></label>
               <div class="nd-field">
                 <label for="thickness">QC line thickness</label>
                 <select id="thickness"><option value="0">Thin</option><option value="1" selected>Standard</option><option value="2">Wide</option><option value="3">Widest</option></select>
