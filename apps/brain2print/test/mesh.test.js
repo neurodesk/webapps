@@ -38,7 +38,7 @@ test('an open surface is not manifold; a flipped face is not consistent', () => 
 })
 
 test('STL and MZ3 retain the corrected displayed geometry', async () => {
-  const { writeStl, writeMz3, readMz3 } = await import('@neurodesk/topofit/results')
+  const { writeStl, writeMz3, readMz3 } = await import('@neurodesk/webapp-components/file-io/mesh')
   const indices = flipWinding(cube())
   if (inspectMesh({ positions, indices }).signedVolume < 0) flipWinding(indices)
   const mz3 = await readMz3(writeMz3(positions, indices))

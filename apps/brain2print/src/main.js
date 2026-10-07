@@ -10,7 +10,7 @@ import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
 import mindsnapColormap from './mindsnap-colormap.json'
 import { Niimath } from '@niivue/niimath'
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation'
-import { writeStl, writeMz3 } from '@neurodesk/topofit/results'
+import { writeStl, writeMz3 } from '@neurodesk/webapp-components/file-io/mesh'
 import { APP } from './config.js'
 import { flipWinding, inspectMesh } from './mesh.js'
 

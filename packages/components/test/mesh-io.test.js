@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readMz3, writeMz3, writeStl } from '../src/results.js';
+import { readMz3, writeMz3, writeStl } from '../src/file-io/mesh.js';
 
 const vertices = Float32Array.from([0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
 const faces = Int32Array.from([0, 1, 2, 0, 2, 3, 0, 3, 1, 1, 3, 2]);

@@ -33,6 +33,7 @@
     "lint": "node --check src/*.js && node --check bin/topofit.js"
   },
   "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
     "nifti-reader-js": "0.8.0",
     "onnxruntime-node": "1.29.0"
   },

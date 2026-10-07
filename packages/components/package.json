@@ -26,6 +26,7 @@
     },
     "./file-io": "./src/file-io/index.js",
     "./file-io/nifti": "./src/file-io/NiftiUtils.js",
+    "./file-io/mesh": "./src/file-io/mesh.js",
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",
       "default": "./src/net/fetchWithRetry.js"

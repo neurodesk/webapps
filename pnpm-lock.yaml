@@ -147,9 +147,6 @@ importers:
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
-      '@neurodesk/topofit':
-        specifier: workspace:*
-        version: link:../../packages/topofit
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1082,6 +1079,9 @@ importers:
 
   packages/topofit:
     dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
