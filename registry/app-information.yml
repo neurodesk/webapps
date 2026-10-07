@@ -307,6 +307,11 @@ apps:
         reference: "Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143–155."
         doi: 10.1002/hbm.10062
         code: https://github.com/Bostrix/FSL-BET2
+      - group: Brain extraction
+        title: RS2-Net (rodent brain extraction)
+        reference: "Lin Y, Ding Y, Chang S, Ge X, Sui X, Jiang Y. RS2-Net: An end-to-end deep learning framework for rodent skull stripping in multi-center brain MRI. NeuroImage. 2024;298:120769."
+        doi: 10.1016/j.neuroimage.2024.120769
+        code: https://github.com/VitoLin21/Rodent-Skull-Stripping
       - group: Phase unwrapping
         title: ROMEO
         reference: "Dymerska B, Eckstein K, Bachrata B, et al. Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO). Magnetic Resonance in Medicine. 2021;85(4):2294–2308."
