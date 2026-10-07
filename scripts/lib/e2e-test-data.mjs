@@ -51,6 +51,8 @@ export const provisioners = {
       return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx') };
     },
   },
+  // The browser reference registers the 1 mm example once, about 30 s.
+  edgereg: { env: ['EDGEREG_BROWSER_REFERENCE'], provision: async () => ({ EDGEREG_BROWSER_REFERENCE: 'check' }) },
   // Both presets on the CPU, about 35 min each; the reference needs exactly 4 threads, which
   // matches GitHub's Linux runners.
   fireants: { env: ['FIREANTS_BROWSER_REFERENCE'], provision: async () => ({ FIREANTS_BROWSER_REFERENCE: 'check' }) },
