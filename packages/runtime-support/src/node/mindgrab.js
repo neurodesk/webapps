@@ -15,6 +15,8 @@ import { Worker } from 'node:worker_threads';
 import { gunzipSync, gzipSync } from 'node:zlib';
 
 const TISSUE_OUTPUTS = ['/out_wm.nii', '/out_csf.nii', '/out_brain.nii'];
+// The wrapper's limit for the cpu backend.
+const CPU_TIMEOUT_MS = 900_000;
 
 // One run holds 2.6-3.9 GB and a thread per core, so runs in this process queue.
 let previousRun = Promise.resolve();
@@ -63,7 +65,7 @@ export async function loadMindgrabCpu(packageJsonUrl) {
     return { args, maskPath };
   }
 
-  function run({ model, args, input, primaryOutput, extraOutputs, onLog }) {
+  function run({ model, args, input, primaryOutput, extraOutputs, timeoutMs, onLog }) {
     const log = [];
     const worker = new Worker(new URL('./mindgrab-worker.js', import.meta.url), {
       workerData: {
@@ -75,24 +77,31 @@ export async function loadMindgrabCpu(packageJsonUrl) {
       },
     });
     return new Promise((resolve, reject) => {
+      let settled = false;
+      // Settle only after the thread is gone, so the next queued run starts on a freed heap.
+      const finish = async (error, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        await worker.terminate();
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const fail = message => finish(new BrainchopError('inference-failed', message, log));
+      const timer = setTimeout(() => fail(`the ${model} module did not finish within ${timeoutMs} ms; this machine may simply be slower than the limit allows`), timeoutMs);
       worker.on('message', message => {
         if (message.type === 'log') {
           log.push(message.line);
           onLog?.(message.line);
           return;
         }
-        void worker.terminate();
         const { code, files, elapsedMs } = message;
-        if (code !== 0) {
-          reject(new BrainchopError('inference-failed', `the ${model} module exited with status ${code}`, log));
-        } else if (!files[primaryOutput]) {
-          reject(new BrainchopError('inference-failed', `the ${model} module exited cleanly but wrote no output`, log));
-        } else {
-          resolve({ image: files[primaryOutput], extras: new Map(Object.entries(files)), elapsedMs });
-        }
+        if (code !== 0) fail(`the ${model} module exited with status ${code}`);
+        else if (!files[primaryOutput]) fail(`the ${model} module exited cleanly but wrote no output`);
+        else finish(null, { image: files[primaryOutput], extras: new Map(Object.entries(files)), elapsedMs });
       });
-      worker.on('error', error => reject(new BrainchopError('inference-failed', `the ${model} module failed: ${error.message}`, log)));
-      worker.on('exit', code => reject(new BrainchopError('inference-failed', `the ${model} worker stopped with ${code} before finishing`, log)));
+      worker.on('error', error => fail(`the ${model} module failed: ${error.message}`));
+      worker.on('exit', code => fail(`the ${model} worker stopped with ${code} before finishing`));
     });
   }
 
@@ -117,12 +126,14 @@ export async function loadMindgrabCpu(packageJsonUrl) {
       input: compressed ? gunzipSync(raw) : raw,
       primaryOutput: tissueMode ? '/out_gm.nii' : '/out.nii',
       extraOutputs: tissueMode ? TISSUE_OUTPUTS : maskPath ? [maskPath] : [],
+      timeoutMs: options.timeoutMs ?? CPU_TIMEOUT_MS,
       onLog: options.onLog,
     }));
-    previousRun = turn.catch(() => {});
+    previousRun = turn.then(() => {}, () => {});
     const result = await turn;
-    const pack = data => (wantGzip ? gzipSync(data) : data).slice().buffer;
-    const segmented = { image: pack(result.image), elapsedMs: result.elapsedMs, backend: 'cpu', ranInWorker: false };
+    // A Buffer's .buffer can be a larger pooled allocation, so copy exactly its bytes.
+    const pack = data => Uint8Array.prototype.slice.call(wantGzip ? gzipSync(data) : data).buffer;
+    const segmented = { image: pack(result.image), elapsedMs: result.elapsedMs, backend: 'cpu', ranInWorker: true };
     const mask = maskPath ? result.extras.get(maskPath) : undefined;
     if (mask) segmented.mask = pack(mask);
     if (tissueMode) {

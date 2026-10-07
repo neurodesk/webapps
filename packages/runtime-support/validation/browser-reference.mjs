@@ -132,7 +132,12 @@ if (check) {
   const failures = [];
   for (const tool of ['niimath', 'mindgrab']) {
     if (reference[tool].version !== pinned[tool].version) failures.push(`${tool} ${reference[tool].version} is installed but ${pinned[tool].version} is pinned`);
+    const pinnedIds = Object.keys(pinned[tool].cases).filter(id => !only || only.has(id));
+    for (const id of pinnedIds.filter(id => !reference[tool].cases[id])) failures.push(`${tool} ${id} is pinned but was not run`);
     for (const [id, entry] of Object.entries(reference[tool].cases)) {
+      const names = Object.keys(entry.outputs).sort().join(', ');
+      const pinnedNames = Object.keys(pinned[tool].cases[id]?.outputs ?? {}).sort().join(', ');
+      if (names !== pinnedNames) failures.push(`${tool} ${id} wrote ${names || 'nothing'}; pinned ${pinnedNames || 'nothing'}`);
       for (const [name, digest] of Object.entries(entry.outputs)) {
         const expected = pinned[tool].cases[id]?.outputs[name];
         console.log(`${digest === expected ? 'PASS' : 'FAIL'} browser ${tool} ${id} ${name}`);
