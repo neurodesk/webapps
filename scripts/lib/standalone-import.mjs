@@ -47,23 +47,30 @@ export function releaseSources(sources, release) {
   return sources.filter((source) => release.assets.some((asset) => source.targets.includes(releasePlatform(source.spec, asset.name))));
 }
 
-// A receipt must vouch for these exact bytes. exes/node-cli receipts open with "PASS <target>" and record
-// archive_sha256. The Rust tools' receipts vary (SynthSR's lists an expected "webgpu: FAILED" on GPU-less
-// runners), so they must be non-empty and match the digest whenever they record one, as "sha256: DIGEST"
-// or as a shasum line naming this archive (SynthSEG's).
+// The archive digests a receipt records: "archive_sha256=DIGEST" (exes/node-cli), "sha256: DIGEST"
+// (SynthSR), and "sha256: DIGEST  FILE" or a shasum line "DIGEST  FILE" (Greedy, SynthSEG). A line that names
+// a file counts only when the file is this archive, so a receipt renamed from another archive records nothing.
+function recordedDigests(text, name) {
+  const digests = [];
+  for (const line of text.split('\n')) {
+    const match = /^(?:archive_sha256=|sha256:\s*)?([a-f0-9]{64})(?:\s+[ *]?(\S+))?\s*$/.exec(line.trim());
+    if (!match) continue;
+    const [, digest, file] = match;
+    const labelled = /^(?:archive_sha256=|sha256:)/.test(line.trim());
+    if (file ? file.split('/').at(-1) === name : labelled) digests.push(digest);
+  }
+  return digests;
+}
+
+// A receipt must vouch for these exact bytes: it records this archive's digest, and no other digest for it.
+// exes/node-cli receipts also open with "PASS <target>". The Rust tools' receipts otherwise vary (SynthSR's
+// lists an expected "webgpu: FAILED" on GPU-less runners).
 export function checkReceipt({ name, digest, platform, native, text: raw }) {
   const text = raw.replace(/\r\n/g, '\n');
-  const shasumLine = new RegExp(`^([a-f0-9]{64}) [ *]?(?:\\S*/)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'gm');
-  const recorded = [
-    ...[...text.matchAll(/(?:archive_sha256=|sha256:\s*)([a-f0-9]{64})/g)].map((match) => match[1]),
-    ...[...text.matchAll(shasumLine)].map((match) => match[1]),
-  ];
+  const recorded = recordedDigests(text, name);
   if (recorded.some((value) => value !== digest)) throw new Error(`${name}: its receipt validated different bytes`);
-  if (native.startsWithAppRelease) {
-    if (!text.startsWith(`PASS ${platform}\n`) || !recorded.includes(digest)) throw new Error(`${name}: its receipt does not pass these exact bytes`);
-  } else if (!text.trim()) {
-    throw new Error(`${name}: its receipt is empty`);
-  }
+  if (!recorded.length) throw new Error(`${name}: its receipt records no SHA-256 of the archive`);
+  if (native.startsWithAppRelease && !text.startsWith(`PASS ${platform}\n`)) throw new Error(`${name}: its receipt does not pass these exact bytes`);
 }
 
 // The file-name stem of a source's archives: the portable executable's name (FLAMeS ships as flames-...),
@@ -125,6 +132,25 @@ export async function catalogUpdate(catalog, releases, { fetchRelease, fetchText
     }
   }
   return update;
+}
+
+// Publishers re-upload with --clobber, so an update computed before a re-upload names bytes the release no
+// longer serves. The publish job calls this just before each commit; a changed asset stops the commit, and
+// the run that re-uploaded it publishes its own update.
+export async function checkUpdateAssets(update, fetchRelease) {
+  for (const { id, version, downloads } of update) {
+    const tag = `${id}-v${version}`;
+    const release = await fetchRelease(tag);
+    for (const download of downloads) {
+      const name = download.url.split('/').at(-1);
+      const asset = release.assets.find((item) => item.name === name);
+      const same = asset
+        && asset.browser_download_url === download.url
+        && asset.digest === `sha256:${download.sha256}`
+        && asset.size === download.bytes;
+      if (!same) throw new Error(`${name}: release ${tag} no longer serves the bytes this update verified`);
+    }
+  }
 }
 
 function versionKey(version) {

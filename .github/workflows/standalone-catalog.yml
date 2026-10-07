@@ -103,6 +103,7 @@ jobs:
               echo "main already lists ${releases}"
               exit 0
             fi
+            node scripts/verify-catalog-update.mjs "$UPDATE"
             git commit --quiet -m "chore(standalone): publish ${releases} downloads" registry/standalone.json
             if git push --quiet "$remote" HEAD:main; then
               exit 0

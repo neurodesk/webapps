@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom';
 import YAML from 'yaml';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { nativeReleases, portableSpecs, portableSpecsAt } from '../scripts/lib/native-releases.mjs';
-import { applyCatalogUpdate, catalogReleases, catalogUpdate, parseReleases, releaseFromTag } from '../scripts/lib/standalone-import.mjs';
+import { applyCatalogUpdate, catalogReleases, catalogUpdate, checkReceipt, checkUpdateAssets, parseReleases, releaseFromTag } from '../scripts/lib/standalone-import.mjs';
 
 const CATALOG_DISPATCH = 'gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"';
 
@@ -72,12 +72,12 @@ test('a receipt must pass the exact bytes released, and the catalog never moves 
   const catalog = { apps: { tool: { downloads: [] } } };
   const release = verifiedRelease(archives);
   await assert.rejects(update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace('a'.repeat(64), 'c'.repeat(64))), /validated different bytes/);
-  await assert.rejects(update(catalog, release, portable, undefined, async () => ''), /does not pass these exact bytes/);
+  await assert.rejects(update(catalog, release, portable, undefined, async () => ''), /records no SHA-256 of the archive/);
   await assert.rejects(update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace('PASS', 'FAIL')), /does not pass these exact bytes/);
   const rust = nativeReleases(new Map());
   const names = ['synthseg-0.2.20260910-macos-arm64.pkg'];
   const rustRelease = verifiedRelease(names, 'synthseg-v0.2.20260910');
-  await assert.rejects(update({ apps: { synthseg: { downloads: [] } } }, rustRelease, rust, 'synthseg@0.2.20260910', async () => ' \n'), /receipt is empty/);
+  await assert.rejects(update({ apps: { synthseg: { downloads: [] } } }, rustRelease, rust, 'synthseg@0.2.20260910', async () => ' \n'), /records no SHA-256 of the archive/);
   await assert.rejects(update({ apps: { synthseg: { downloads: [] } } }, rustRelease, rust, 'synthseg@0.2.20260910', async () => `sha256: ${'c'.repeat(64)}\n`), /validated different bytes/);
   assert.ok(await update(catalog, release, portable, undefined, async (url) => passingReceipt(url).replace(/\n/g, '\r\n')), 'Windows line endings are the same receipt');
   const newer = await update(catalog, release);
@@ -97,7 +97,7 @@ test('Rust tools need every target and a receipt per archive, and keep their emb
   await assert.rejects(update(catalog, verifiedRelease(names.slice(0, 1), 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910'), /lacks/);
   const bare = { tag_name: 'synthsr-v0.3.20260910', draft: false, prerelease: false, assets: names.map((name) => asset(name)) };
   await assert.rejects(update(catalog, bare, rust, 'synthsr@0.3.20260910'), /no validation receipt/);
-  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910', async () => 'packaged CPU inference: ok\n'));
+  applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(names, 'synthsr-v0.3.20260910'), rust, 'synthsr@0.3.20260910', async () => `packaged CPU inference: ok\nsha256: ${'a'.repeat(64)}\n`));
   assert.ok(catalog.apps.synthsr.downloads.every((download) => download.modelsIncluded && !download.command));
 });
 
@@ -206,6 +206,35 @@ test('one tag can carry both sources, and each source it carries must be complet
   assert.throws(() => catalogReleases({ apps: { synthseg: { downloads: [{ kind: 'cli', platform: 'linux-x64', version: '0.5.20261007' }] } } }, nativeReleases(new Map())), /no release source builds linux-x64/);
 });
 
+test('every receipt records the archive digest, and a line naming a file binds it to that file', () => {
+  const name = 'greedy-0.3.20261008-linux-x64.tar.gz';
+  const digest = 'a'.repeat(64);
+  const rust = { startsWithAppRelease: false };
+  const check = (text) => checkReceipt({ name, digest, platform: 'linux-x64', native: rust, text });
+  assert.doesNotThrow(() => check(`PASS: identity reslice\nsha256: ${digest}  ${name}\n`), 'Greedy\'s receipt line');
+  assert.doesNotThrow(() => check(`${digest}  dist/${name}\n`), 'SynthSEG\'s shasum line');
+  assert.doesNotThrow(() => check(`sha256: ${digest}\n`), 'SynthSR\'s line');
+  assert.throws(() => check('PASS: identity reslice\n'), /records no SHA-256 of the archive/, 'a non-empty receipt without a digest');
+  assert.throws(() => check(`sha256: ${digest}  greedy-0.3.20260915-linux-x64.tar.gz\n`), /records no SHA-256 of the archive/, 'a receipt renamed from an older archive');
+  assert.throws(() => check(`${'b'.repeat(64)}  ${name}\n`), /validated different bytes/);
+  assert.doesNotThrow(() => check(`model: x.onnx sha256 ${'c'.repeat(64)}\nsha256: ${digest}  ${name}\n`), 'other files\' digests are not the archive\'s');
+});
+
+test('an archive re-uploaded between computing and publishing an update blocks the commit', async () => {
+  const catalog = { apps: { tool: { downloads: [] } } };
+  const release = verifiedRelease(archives);
+  const changes = await update(catalog, release);
+  await checkUpdateAssets(changes, async () => release);
+  const reuploaded = structuredClone(release);
+  reuploaded.assets[0].digest = `sha256:${'d'.repeat(64)}`;
+  await assert.rejects(checkUpdateAssets(changes, async () => reuploaded), /tool-0\.2\.20261006-linux-x64\.tar\.gz: release tool-v0\.2\.20261006 no longer serves the bytes this update verified/);
+  const resized = structuredClone(release);
+  resized.assets[2].size += 1;
+  await assert.rejects(checkUpdateAssets(changes, async () => resized), /no longer serves/);
+  const removed = { ...release, assets: release.assets.slice(2) };
+  await assert.rejects(checkUpdateAssets(changes, async () => removed), /no longer serves/);
+});
+
 test('a release.json from before exes/node-cli lists its targets without install commands', async () => {
   const legacy = nativeReleases(new Map([['syncro', { packageDir: 'packages/syncro', spec: { targets: { 'linux-x64': { archive: 'tar.gz' } } }, legacy: true }]]));
   const names = ['syncro-0.3.20260915-linux-x64.tar.gz'];
@@ -283,11 +312,15 @@ test('the catalog workflow computes without write access and publishes without r
   assert.equal(publish.steps.find((step) => step.uses?.startsWith('actions/checkout@')).with['persist-credentials'], false);
   assert.ok(!publish.steps.some((step) => step.uses?.startsWith('pnpm/') || /\b(pnpm|npm) (install|ci)\b/.test(step.run || '')), 'no dependency code runs with the write token');
   assert.ok(publish.steps.some((step) => step.run?.includes('git push --quiet "$remote" HEAD:main')));
+  const commit = publish.steps.find((step) => step.run?.includes('git commit')).run.split('\n').map((line) => line.trim());
+  const verify = commit.indexOf('node scripts/verify-catalog-update.mjs "$UPDATE"');
+  assert.ok(verify >= 0 && verify < commit.findIndex((line) => line.startsWith('git commit')), 'every commit attempt first re-reads the releases');
+  assert.ok(commit.indexOf('node scripts/apply-catalog-update.mjs "$UPDATE"') < verify);
   assert.equal(publish.steps.at(-1).run, 'gh workflow run deploy-pages.yml --ref main');
 });
 
 test('the scripts release jobs run without installing dependencies import only Node built-ins', async () => {
-  const pending = ['../scripts/dispatch-native-release.mjs', '../scripts/apply-catalog-update.mjs'].map((path) => new URL(path, import.meta.url));
+  const pending = ['../scripts/dispatch-native-release.mjs', '../scripts/apply-catalog-update.mjs', '../scripts/verify-catalog-update.mjs', '../scripts/check-native-receipts.mjs'].map((path) => new URL(path, import.meta.url));
   const seen = new Set();
   while (pending.length) {
     const url = pending.pop();
@@ -299,5 +332,5 @@ test('the scripts release jobs run without installing dependencies import only N
       else assert.match(specifier, /^node:/, `${url.pathname} imports ${specifier}, which the release job does not install`);
     }
   }
-  assert.ok(seen.size >= 4);
+  assert.ok(seen.size >= 6);
 });
