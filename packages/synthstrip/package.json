@@ -6,6 +6,7 @@
   "description": "Runtime-independent SynthStrip brain extraction",
   "exports": {
     ".": "./src/index.js",
+    "./model": "./src/model.js",
     "./browser": "./src/browser.js"
   },
   "files": [
