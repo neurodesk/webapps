@@ -84,7 +84,12 @@ function correspondingDistance(a, b) {
     sum += distances[i];
   }
   distances.sort();
-  return { mean: sum / distances.length, p95: distances[Math.floor(distances.length * 0.95)], max: distances.at(-1) };
+  // numpy.quantile(..., method='linear'), as validation/compare.py computes the release p95.
+  const position = (distances.length - 1) * 0.95;
+  const lower = Math.floor(position);
+  const upper = Math.min(lower + 1, distances.length - 1);
+  const p95 = distances[lower] + (distances[upper] - distances[lower]) * (position - lower);
+  return { mean: sum / distances.length, p95, max: distances.at(-1) };
 }
 
 // A closed surface without handles: every edge joins two triangles and V - E + F = 2.
@@ -169,12 +174,13 @@ test('full reconstruction exports every actual surface, QC and processing manife
       expect(Buffer.from(surfaces[name].faces.buffer).equals(Buffer.from(reference.faces.buffer)), `${name} faces differ from the reference topology`).toBe(true);
       const distance = correspondingDistance(surfaces[name].vertices, reference.vertices);
       console.log(`${name}: mean ${distance.mean.toFixed(3)} mm, p95 ${distance.p95.toFixed(3)} mm, max ${distance.max.toFixed(3)} mm from the PyTorch reference`);
-      // The release gate (0.25, 0.5 and 2 mm) was measured with the package's fallback conformer.
-      // The app conforms with niimath, which currently lands 0.8 to 1.6 mm (mean) from this
-      // reference; these bounds hold that, and fail on a misplaced or collapsed surface.
-      expect(distance.mean, name).toBeLessThan(2);
-      expect(distance.p95, name).toBeLessThan(4);
-      expect(distance.max, name).toBeLessThan(8);
+      // The release gate of packages/topofit/validation/results/ds000001-end-to-end.json
+      // (thresholds.py): the app's cubic conformer measures 0.046 to 0.068 mm mean, 0.164 mm
+      // p95 and 0.467 mm max. niimath's conform measured 0.80 to 1.56 mm mean and fails it
+      // (ds000001-niimath-baseline.json, docs/architecture/topofit-parity.md).
+      expect(distance.mean, name).toBeLessThanOrEqual(0.25);
+      expect(distance.p95, name).toBeLessThanOrEqual(0.5);
+      expect(distance.max, name).toBeLessThanOrEqual(2);
     }
   }
 });
