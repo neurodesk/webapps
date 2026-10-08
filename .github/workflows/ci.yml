@@ -196,7 +196,7 @@ jobs:
             echo '::notice::Agent interactions not run: configure the NEURODESK_API_KEY repository secret.'
             exit 0
           fi
-          args=(--skip-build --output .e2e/agent)
+          args=(--skip-build --site-dir dist --output .e2e/agent)
           if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
           pnpm test:e2e:agent "${args[@]}"
       - name: Run requested Neurodesk processing workflows
@@ -209,7 +209,7 @@ jobs:
             echo '::error::Processing workflows require the NEURODESK_API_KEY repository secret.'
             exit 1
           fi
-          args=(--skip-build --target desktop --no-cache --output .e2e/pipeline)
+          args=(--skip-build --site-dir dist --target desktop --no-cache --output .e2e/pipeline)
           if [ -n "$AGENTIC_APPS" ]; then args+=(--app "$AGENTIC_APPS"); fi
           pnpm test:e2e:pipeline "${args[@]}"
       - uses: actions/upload-artifact@v7
