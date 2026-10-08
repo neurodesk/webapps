@@ -25,6 +25,17 @@ const fixture = {
   } },
 };
 
+test('the contract hash is the SHA-256 of key-sorted compact JSON, whatever the key order', async () => {
+  // hashlib.sha256(json.dumps(fixture, sort_keys=True, separators=(',', ':'), ensure_ascii=False))
+  const expected = '601215ceb425d7eff0ce81423de07b41dcab3d10abe95c480c192609eb53483b';
+  assert.equal(contractHash(fixture), expected);
+  const reordered = Object.fromEntries(Object.entries(fixture).reverse());
+  assert.equal(contractHash(reordered), expected);
+  const [tool] = generateTools(reordered);
+  assert.equal(tool.extensions['neurodesk/automation'].contractSha256, expected);
+  assert.notEqual(contractHash({ ...fixture, appVersion: '0.1.20261001' }), expected);
+});
+
 test('the entire catalog generates deterministic upstream-schema-valid tools with lossless bindings', async () => {
   const ids = new Set();
   for (const app of (await loadAppsRegistry()).apps) {

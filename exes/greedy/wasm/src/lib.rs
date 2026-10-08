@@ -1,7 +1,7 @@
 use greedy_rs_core::{
-    AffineMetric, Interpolation, Transform, decode_image, decode_vector_field, encode_image,
-    encode_vector_field, read_matrix, register_affine, register_nmi_svf, reslice,
-    reslice_with_background,
+    AffineMetric, DEFAULT_AFFINE_JITTER, Interpolation, Transform, decode_image,
+    decode_vector_field, encode_image, encode_vector_field, read_matrix, register_affine,
+    register_nmi_svf, reslice, reslice_with_background,
 };
 use wasm_bindgen::prelude::*;
 
@@ -59,6 +59,7 @@ pub fn register_affine_wasm(
         parse_metric(metric)?,
         parse_iterations(iterations)?,
         false,
+        DEFAULT_AFFINE_JITTER,
     )
     .map_err(wasm_error)?;
     Ok(matrix

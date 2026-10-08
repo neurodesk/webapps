@@ -1,10 +1,10 @@
 use greedy_rs_core::{
-    AffineMetric, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries, ScalarType, Transform,
-    VectorField, affine_matrix, affine_parameters, decode_image, decode_series,
-    decode_vector_field, downsample_grid, encode_image, encode_series, encode_vector_field,
-    gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine, register_affine,
-    register_nmi_svf, register_rigid, reslice, reslice_with_background, reslice_with_interpolation,
-    score_affine, ssd_score_gradient,
+    AffineMetric, DEFAULT_AFFINE_JITTER, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries,
+    ScalarType, Transform, VectorField, affine_matrix, affine_parameters, decode_image,
+    decode_series, decode_vector_field, downsample_grid, encode_image, encode_series,
+    encode_vector_field, gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine,
+    register_affine, register_nmi_svf, register_rigid, reslice, reslice_with_background,
+    reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
 fn grid(dims: [usize; 3]) -> Grid {
@@ -392,6 +392,7 @@ fn affine_ssd_search_reduces_a_shifted_image_cost() {
         AffineMetric::Ssd,
         [0, 0, 1],
         false,
+        0.0,
     )
     .unwrap();
     let final_score = score_affine(&fixed, &moving, transform, AffineMetric::Ssd).unwrap();
@@ -430,6 +431,7 @@ fn rigid_search_stays_rigid_and_reduces_cost() {
         AffineMetric::Ssd,
         [0, 0, 10],
         false,
+        0.0,
     )
     .unwrap();
     let final_score = score_affine(&fixed, &moving, transform, AffineMetric::Ssd).unwrap();
@@ -445,6 +447,124 @@ fn rigid_search_stays_rigid_and_reduces_cost() {
             assert!((dot - if row == other { 1.0 } else { 0.0 }).abs() < 1e-10);
         }
     }
+}
+
+/// Asymmetric phantom of smooth blobs on a 1 mm grid whose voxel and LPS
+/// coordinates coincide.
+fn phantom(voxel: [f64; 3]) -> f32 {
+    let blobs = [
+        ([36.0, 33.0, 30.0], [13.5, 9.0, 10.5], 1.0),
+        ([24.0, 45.0, 33.0], [6.0, 7.5, 6.0], 0.8),
+        ([46.5, 22.5, 25.5], [7.5, 4.5, 9.0], 0.6),
+        ([30.0, 21.0, 40.5], [4.5, 6.0, 4.5], 0.5),
+    ];
+    let mut value = 0.0;
+    for (centre, width, weight) in blobs {
+        let distance: f64 = (0..3)
+            .map(|axis| ((voxel[axis] - centre[axis]) / width[axis]).powi(2))
+            .sum();
+        value += weight * (-0.5 * distance).exp();
+    }
+    value as f32
+}
+
+/// Fixed and moving share one grid and the moving image is the fixed one
+/// rotated 8 degrees about z through the centre and shifted by (3, -2, 2)
+/// voxels: moving(v) = fixed(R (v - c) + c + t), zero outside. Partial-volume
+/// NMI has a spurious peak at the identity on a shared grid (samples land on
+/// voxel centres): without Greedy's sample jitter the optimizer stays there.
+#[test]
+fn nmi_affine_recovers_a_known_rigid_displacement_on_a_shared_grid() {
+    let dims = [60, 66, 60];
+    let fixed = NiftiImage {
+        grid: grid(dims),
+        data: (0..dims[0] * dims[1] * dims[2])
+            .map(|index| {
+                let voxel = [
+                    (index % dims[0]) as f64,
+                    ((index / dims[0]) % dims[1]) as f64,
+                    (index / (dims[0] * dims[1])) as f64,
+                ];
+                phantom(voxel)
+            })
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let angle = 8.0_f64.to_radians();
+    let (sin, cos) = angle.sin_cos();
+    let centre = dims.map(|n| (n as f64 - 1.0) / 2.0);
+    let translation = [3.0, -2.0, 2.0];
+    let sample = |voxel: [f64; 3]| {
+        let offset = [voxel[0] - centre[0], voxel[1] - centre[1]];
+        [
+            cos * offset[0] - sin * offset[1] + centre[0] + translation[0],
+            sin * offset[0] + cos * offset[1] + centre[1] + translation[1],
+            voxel[2] + translation[2],
+        ]
+    };
+    let mut moving = fixed.clone();
+    for (index, value) in moving.data.iter_mut().enumerate() {
+        let voxel = [
+            (index % dims[0]) as f64,
+            ((index / dims[0]) % dims[1]) as f64,
+            (index / (dims[0] * dims[1])) as f64,
+        ];
+        let source = sample(voxel);
+        let inside =
+            (0..3).all(|axis| source[axis] >= 0.0 && source[axis] <= (dims[axis] - 1) as f64);
+        *value = if inside { phantom(source) } else { 0.0 };
+    }
+    // The anatomy at fixed voxel p sits at moving voxel S^-1 p, and RAS is
+    // LPS with x and y negated, so fixed RAS q maps to moving RAS
+    // (Rz^T(-q_xy - c - t) + c) negated in x and y.
+    let expected = |ras: [f64; 3]| {
+        let voxel = [-ras[0], -ras[1], ras[2]];
+        let shifted = [
+            voxel[0] - centre[0] - translation[0],
+            voxel[1] - centre[1] - translation[1],
+        ];
+        [
+            -(cos * shifted[0] + sin * shifted[1] + centre[0]),
+            -(-sin * shifted[0] + cos * shifted[1] + centre[1]),
+            voxel[2] - translation[2],
+        ]
+    };
+    let transform = register_affine(
+        fixed.clone(),
+        moving.clone(),
+        AffineMetric::Nmi,
+        [100, 50, 10],
+        false,
+        DEFAULT_AFFINE_JITTER,
+    )
+    .unwrap();
+    // Worst point error over the corners of the grid's central half, in mm
+    // (= voxels here). The identity is 7.0 mm off; measured 0.82 mm with
+    // Greedy's default jitter and 4.26 mm without. Smooth blobs bound how
+    // well an affine can be pinned down, hence 1 mm rather than less.
+    let mut worst = 0.0_f64;
+    for corner in 0..8 {
+        let voxel: [f64; 3] = std::array::from_fn(|axis| {
+            let fraction = if (corner >> axis) & 1 == 1 {
+                0.75
+            } else {
+                0.25
+            };
+            (dims[axis] - 1) as f64 * fraction
+        });
+        let ras = [-voxel[0], -voxel[1], voxel[2]];
+        let recovered = transform.apply(ras);
+        let truth = expected(ras);
+        let distance = (0..3)
+            .map(|axis| (recovered[axis] - truth[axis]).powi(2))
+            .sum::<f64>()
+            .sqrt();
+        worst = worst.max(distance);
+    }
+    assert!(
+        worst < 1.0,
+        "affine is {worst} mm from the known displacement: {transform:?}"
+    );
 }
 
 #[test]

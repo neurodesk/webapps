@@ -47,7 +47,7 @@ for (const entry of catalog) {
         await agent.act(`Open the ${action} dialog using the application bar. Leave the dialog open.`);
         await expect(browser.locator(infoDialog)).toHaveCount(1);
         await expect(browser.locator(infoDialog)).toContainText(action === 'About' ? entry.title : /cit|reference/i);
-        await agent.act('Close the open dialog using its close control.');
+        await agent.act('Close the open dialog by clicking its close button, labelled Close or ×. Return as soon as the dialog closes.');
         await expect(browser.locator(infoDialog)).toHaveCount(0);
         await expect(browser.locator('.nd-app-bar:visible')).toHaveCount(1);
       }

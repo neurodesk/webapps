@@ -2,14 +2,10 @@ import assert from 'node:assert/strict';
 import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
+import { JSDOM } from 'jsdom';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 
 const legacyWebappsUrl = 'https://neurodesk.org/getting-started/hosted/webapps/';
-
-test('the start page omits the scientific-assets footer', async () => {
-  const builder = await readFile(join(repoRoot, 'scripts/build-site.mjs'), 'utf8');
-  assert.ok(!builder.includes('Models and large scientific assets are delivered from Hugging Face'));
-});
 
 test('static app More Apps links return to the composite start page', async () => {
   const registry = await loadAppsRegistry();
@@ -26,15 +22,16 @@ test('static app More Apps links return to the composite start page', async () =
     assert.ok(file, `${app.id} must expose a source index.html`);
     const html = await readFile(join(repoRoot, file), 'utf8');
     assert.ok(!html.includes(legacyWebappsUrl), `${file} must not link to the old catalog`);
-    assert.match(
-      html,
-      /<a href="\.\.\/" class="header-link"[^>]*title="More Neurodesk web apps">/,
-      `${file} must link back to the composite start page in the current tab`,
-    );
+    const links = new JSDOM(html).window.document.querySelectorAll('a[title="More Neurodesk web apps"]');
+    assert.equal(links.length, 1, `${file} must offer one More Apps link`);
+    assert.equal(links[0].getAttribute('href'), '../', `${file} must link back to the composite start page`);
+    assert.equal(links[0].hasAttribute('target'), false, `${file} must navigate in the current tab`);
   }
 });
 
-test('shared imaging-workspace apps return to the composite start page', async () => {
+// The link the shared shell renders is asserted in packages/components/test/imaging-workspace.test.js
+// and clicked in every app by test/composite-site.smoke.mjs.
+test('shared imaging-workspace apps mount the shared shell', async () => {
   const registry = await loadAppsRegistry();
   for (const app of registry.apps.filter(({ shell }) => shell === 'imaging-workspace')) {
     const appRoot = join(repoRoot, 'apps', app.id);
@@ -50,13 +47,6 @@ test('shared imaging-workspace apps return to the composite start page', async (
     await visit(appRoot);
     assert.ok(sources.some(source => source.includes('mountImagingWorkspace({')), `${app.id} must use shared imaging chrome`);
   }
-
-  const shell = await readFile(
-    join(repoRoot, 'packages/components/src/core/mountImagingWorkspace.js'),
-    'utf8',
-  );
-  assert.ok(shell.includes("href: config.moreAppsHref || '../'"));
-  assert.ok(shell.includes("title: 'More Neurodesk web apps'"));
 });
 
 test('dicompare More Apps links use its deployment base and the current tab', async () => {

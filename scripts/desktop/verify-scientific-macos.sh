@@ -95,7 +95,7 @@ webgpu() {
   else
     make -C exes/synthseg check-model fetch-validation
   fi
-  SYNTHSEG_PROBE_ONLY= SYNTHSEG_E2E_FIXTURE=1 SYNTHSEG_VALIDATION_REPORT="$validation/webgpu.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/webgpu-tests.json" \
+  SYNTHSEG_PROBE_ONLY= SYNTHSEG_VALIDATION_REPORT="$validation/webgpu.json" PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/webgpu-tests.json" \
     pnpm --filter synthseg exec playwright test e2e/fixture.spec.js --headed --reporter=line,json --retries=0
   node "$evidence" check-playwright "$validation/webgpu-tests.json" \
     'records the WebGPU adapter and planned buffer limits' \
@@ -110,8 +110,8 @@ extraction() {
   BRAIN_EXTRACTION_REAL_MODELS=1 PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/extraction.json" \
     pnpm --filter brain-extraction exec playwright test --grep 'real model' --reporter=line,json --retries=0
   node "$evidence" check-playwright "$validation/extraction.json" \
-    'mindgrab real model returns a nonempty binary mask in input geometry' \
-    'synthstrip real model returns a nonempty binary mask in input geometry'
+    'mindgrab real model agrees with the FreeSurfer SynthSeg brain mask in input geometry' \
+    'synthstrip real model agrees with the FreeSurfer SynthSeg brain mask in input geometry'
 }
 
 catalog() {

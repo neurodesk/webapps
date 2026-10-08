@@ -152,11 +152,28 @@ describe('Config Module', () => {
       expect(defaults.ismv_radius).toBe(2);
     });
 
-    test('should handle anisotropic voxels', () => {
+    test('anisotropic voxels follow QSM.jl: largest radius from the smallest voxel, smallest from the largest', () => {
+      // QSM.jl sharp.jl: vsharp r = 18*minimum(vsz):-2*maximum(vsz):2*maximum(vsz),
+      // sharp r = 18*minimum(vsz); ismv.jl r = 2*maximum(vsz).
       const defaults = getVoxelBasedDefaults([0.5, 0.5, 2]);
 
-      // min = 0.5, max = 2
-      expect(defaults.vsharpMaxRadius).toBe(Math.round(18 * 0.5));  // 9
+      expect(defaults.vsharpMaxRadius).toBe(9);
+      expect(defaults.vsharpMinRadius).toBe(4);
+      expect(defaults.sharpRadius).toBe(9);
+      expect(defaults.ismv_radius).toBe(4);
+    });
+
+    test('the smallest V-SHARP radius never exceeds the largest', () => {
+      // 18 * 0.3 = 5.4 mm is below 2 * 5 mm: one kernel at the largest radius remains.
+      const defaults = getVoxelBasedDefaults([0.3, 0.3, 5]);
+
+      expect(defaults.vsharpMaxRadius).toBe(5);
+      expect(defaults.vsharpMinRadius).toBe(5);
+    });
+
+    test('LBV iterations default to the longest mask dimension', () => {
+      expect(getVoxelBasedDefaults([1, 1, 1], [64, 192, 128]).lbvMaxit).toBe(192);
+      expect(getVoxelBasedDefaults([1, 1, 1]).lbvMaxit).toBe(256);
     });
 
     test('should calculate PDF maxit from mask dimensions', () => {
@@ -170,8 +187,8 @@ describe('Config Module', () => {
     test('should use default mask size when not provided', () => {
       const defaults = getVoxelBasedDefaults([1, 1, 1], null);
 
-      // Default: 100000 -> sqrt = ~316
-      expect(defaults.pdfMaxit).toBe(Math.ceil(Math.sqrt(100000)));
+      // Default mask of 100000 voxels: sqrt is 316.2, rounded up.
+      expect(defaults.pdfMaxit).toBe(317);
     });
 
     test('should use default voxel size when not provided', () => {

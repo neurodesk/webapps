@@ -11,7 +11,7 @@
     "pretest": "bash tools/generate_test_fixtures.sh",
     "test": "node --test tools/test/*.test.mjs",
     "pretest:e2e": "node ../../scripts/vendor-components.mjs && bash tools/generate_test_fixtures.sh",
-    "test:e2e": "node tools/browser/smoke.mjs",
+    "test:e2e": "node tools/browser/smoke.mjs && playwright test",
     "serve": "python3 -m http.server 8000 --directory web",
     "test:examples": "node --test tools/test/examples.test.mjs",
     "predev": "node ../../scripts/vendor-components.mjs"

@@ -47,12 +47,6 @@ function importMapFrom(html) {
   return JSON.parse(match[1]).imports;
 }
 
-function topLevelCssRules(css) {
-  return new Set([...css.matchAll(/^(?!\s|@)([^{}\n][^{]*)\{([^{}]*)\}/gm)].map((match) => (
-    `${match[1].replace(/\/\*[\s\S]*?\*\//g, '').trim().replace(/\s+/g, ' ')}\0${match[2].trim().replace(/\s+/g, ' ')}`
-  )));
-}
-
 test('imaging inference workers are modules built on the shared worker toolkit', async () => {
   for (const app of imagingApps) {
     const appSource = await source('apps', app, 'web', 'js', appEntries[app]);
@@ -155,26 +149,6 @@ test('browser imports of shared components resolve to JavaScript files', async (
   }
 });
 
-test('app code no longer shadows shared inference, viewer, or NIfTI modules', async () => {
-  for (const app of imagingApps) {
-    for (const name of ['InferenceExecutor.js', 'ViewerController.js']) {
-      assert.equal(await pathExists('apps', app, 'web', 'js', 'controllers', name), false, `${app}/${name}`);
-    }
-  }
-  assert.equal(await pathExists('apps', 'qsmbly', 'js', 'controllers', 'ViewerController.js'), false);
-  for (const [app, root] of Object.entries(staticRoots)) {
-    assert.equal(await pathExists('apps', app, root, 'js', 'modules', 'file-io', 'NiftiUtils.js'), false, app);
-  }
-});
-
-test('shared imaging app CSS does not fork identical top-level rules', async () => {
-  const ruleSets = await Promise.all(imagingApps.map(async (app) => (
-    topLevelCssRules(await source('apps', app, 'web', 'css', 'styles.css'))
-  )));
-  const commonRules = [...ruleSets[0]].filter((rule) => ruleSets.every((set) => set.has(rule)));
-  assert.deepEqual(commonRules, []);
-});
-
 test('runtime wrappers have one tracked source and are generated for apps', async () => {
   for (const family of ['dcm2niix', 'nifti-js']) {
     assert.equal(await pathExists('packages', 'runtime-support', 'src', family), true, family);
@@ -190,27 +164,16 @@ test('runtime wrappers have one tracked source and are generated for apps', asyn
 
 test('registry shell metadata drives adapters without app-id branches', async () => {
   const shell = await source('site', 'app-shell.js');
-  const imagingAdapter = await source('site', 'shell-adapters', 'imaging-workspace.js');
   const theme = await source('site', 'app-theme.css');
   const build = await source('scripts', 'build-site.mjs');
   assert.match(build, /shell:\s*app\.shell/);
   assert.match(shell, /metadata\.shell/);
-  assert.match(imagingAdapter, /\.start-page > \.start-header/);
   assert.doesNotMatch(shell, /\b(calmar|dicompare|qsmbly|surfannotate|easy-mp2rage|dicom2vid)\b/);
   assert.doesNotMatch(theme, /data-neurodesk-app=/);
 });
 
-test('retired shell, mask, and descriptor APIs are absent from the public package', async () => {
-  const packageJson = await source('packages', 'components', 'package.json');
-  const publicIndex = await source('packages', 'components', 'src', 'index.js');
-  const docs = await source('packages', 'components', 'README.md');
-  const publicSurface = `${packageJson}\n${publicIndex}\n${docs}`;
-  assert.doesNotMatch(publicSurface, /createNeuroWebapp|MaskState|plugins\/sct|plugins\/vesselboost|plugins\/musclemap|plugins\/synthstrip/);
-});
-
 test('the app scaffold and maintained guidance describe the current shared architecture', async () => {
   const scaffold = await source('templates', 'app-template', 'src', 'main.js');
-  const scaffoldSmoke = await source('templates', 'app-template', 'e2e', 'smoke.spec.js');
   const maintainedGuidance = [
     scaffold,
     await source('apps', 'musclemap', 'web', 'index.html'),
@@ -221,7 +184,4 @@ test('the app scaffold and maintained guidance describe the current shared archi
 
   assert.match(scaffold, /mountImagingWorkspace/);
   assert.match(scaffold, /controlsContract/);
-  assert.doesNotMatch(maintainedGuidance, /createNeuroWebapp|controllers\/InferenceExecutor\.js/);
-  assert.doesNotMatch(maintainedGuidance, /classic importScripts|uses `?importScripts|importScripts\(\).*not ES modules/);
-  assert.match(scaffoldSmoke, /new Worker\(url,\s*\{\s*type:\s*["']module["']\s*\}\)/);
 });

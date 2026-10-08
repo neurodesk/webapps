@@ -7,11 +7,11 @@ use std::{
 use flate2::{Compression, write::GzEncoder};
 
 use greedy_rs_core::{
-    AffineMetric, Error, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries, ScalarType, Transform,
-    build_pyramid, decode_image, decode_series, decode_vector_field, encode_image,
-    encode_series_header, encode_vector_field, image_centers, nmi_score_gradient_affine,
-    read_matrix, register_affine, register_nmi_svf, register_rigid, reslice,
-    reslice_with_background, score_affine, ssd_score_gradient, write_scalars,
+    AffineMetric, DEFAULT_AFFINE_JITTER, Error, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries,
+    ScalarType, Transform, build_pyramid, decode_image, decode_series, decode_vector_field,
+    encode_image, encode_series_header, encode_vector_field, image_centers,
+    nmi_score_gradient_affine, read_matrix, register_affine, register_nmi_svf, register_rigid,
+    reslice, reslice_with_background, score_affine, ssd_score_gradient, write_scalars,
 };
 
 #[derive(Clone, Copy)]
@@ -155,6 +155,7 @@ fn print_help() {
          Common options:\n\
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
            -dof 6|12       Rigid or affine registration (default: 12)\n\
+           -jitter SIGMA   Affine sample jitter in moving voxels (default: 0.5)\n\
            -threads N      Limit the Rayon worker pool\n\
            -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
            -rb VALUE|AUTO  Reslice outside value (default: 0)\n\
@@ -201,7 +202,7 @@ fn iterations(value: &str) -> [usize; 3] {
         .unwrap_or_else(|_| fail("-n must contain exactly three levels"))
 }
 
-fn run_affine(args: &[String]) {
+fn run_affine(args: &[String], jitter: f64) {
     let mut fixed = None;
     let mut moving = None;
     let mut output = None;
@@ -277,8 +278,8 @@ fn run_affine(args: &[String]) {
         }
     }
     let matrix = match dof {
-        6 => register_rigid(fixed, moving, metric, levels, verbose),
-        _ => register_affine(fixed, moving, metric, levels, verbose),
+        6 => register_rigid(fixed, moving, metric, levels, verbose, jitter),
+        _ => register_affine(fixed, moving, metric, levels, verbose, jitter),
     }
     .unwrap_or_else(|e| fail(e));
     let mut text = String::new();
@@ -500,13 +501,16 @@ fn main() {
         print_help();
         return;
     }
-    // Greedy's randomness (-seed, affine -jitter) has no Rust equivalent, so
-    // only the deterministic settings are accepted; -double would double
-    // image memory for no measured benefit.
+    // Affine sample jitter in moving voxels, Greedy's default 0.5. greedy-rs
+    // draws it from a fixed seed, so -seed is not needed; -double would
+    // double image memory for no measured benefit.
+    let mut jitter = DEFAULT_AFFINE_JITTER;
     if let Some(at) = args.iter().position(|arg| arg == "-jitter") {
-        if args.get(at + 1).map(String::as_str) != Some("0") {
-            fail("only -jitter 0 is supported");
-        }
+        jitter = args
+            .get(at + 1)
+            .and_then(|value| value.parse::<f64>().ok())
+            .filter(|value| value.is_finite() && *value >= 0.0)
+            .unwrap_or_else(|| fail("-jitter requires a non-negative number"));
         args.drain(at..at + 2);
     }
     if let Some(at) = args.iter().position(|arg| arg == "-threads") {
@@ -535,7 +539,7 @@ fn main() {
         return;
     }
     if args.iter().any(|arg| arg == "-a") {
-        run_affine(&args);
+        run_affine(&args, jitter);
         return;
     }
     if args.iter().any(|arg| arg == "-sv") {

@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "tsc --noEmit",
-    "test:e2e": "npm run build && node test/smoke.mjs"
+    "test:e2e": "npm run build && node test/smoke.mjs && playwright test"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",

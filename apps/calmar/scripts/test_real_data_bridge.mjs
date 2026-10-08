@@ -13,10 +13,13 @@
 //   3. Build the prealign destination affine via computePrealignAffine
 //      (centroid -> MNI160 voxel (80, 80, 96)).
 //   4. Resample the lesion onto MNI160 1mm via resampleAffine + nearest.
-//   5. Resample again onto the Yeo7 99x117x95 2mm grid with its
-//      canonical FSL affine (cite of MNI152NLin2009cAsym 2mm).
+//   5. Resample again onto the Yeo7 99x117x95 2mm grid, using the affine
+//      in the atlas file's own header (as the app does).
 //   6. Assert each step preserves a non-trivial fraction of the source
 //      lesion (real strokes shouldn't vanish under resample).
+//   7. Compare every count with an independent reference computed by
+//      nibabel + nilearn + numpy on the same two files
+//      (tests/fixtures/ds004884-mini/reference_yeo_overlap.py).
 //
 // Note: the lesion centroid is biased toward the stroke territory (left
 // hemisphere) — using it as the prealign anchor is not anatomically
@@ -145,14 +148,12 @@ assert.ok(Math.abs(cy - 80) < 1, `MNI160 cy ${cy}`);
 assert.ok(Math.abs(cz - 96) < 1, `MNI160 cz ${cz}`);
 
 // ---- Step 5: lesion MNI160 -> Yeo grid ----
-// Canonical Yeo7 99x117x95 2mm affine (FSL MNI152NLin2009cAsym 2mm).
-const yeoDims = [99, 117, 95];
-const yeoAffine = [
-  [-2, 0, 0, 98],
-  [0, 2, 0, -134],
-  [0, 0, 2, -72],
-  [0, 0, 0, 1]
-];
+// The grid is the committed atlas file's own: its dims and the affine in its
+// header. (This test used to hardcode an x-flipped affine, [-2,0,0,98], which
+// mirrored the lesion left-right relative to the atlas labels.)
+const atlas = await decodeFile(YEO7_PATH);
+const yeoDims = atlas.dims;
+const yeoAffine = atlas.affine;
 const lesionYeo = resampleAffine(
   lesionMni, mniDims, mniAffine, yeoDims, yeoAffine, 'nearest'
 );
@@ -168,13 +169,17 @@ assert.ok(yeoCount > expectedYeo * 0.5 && yeoCount < expectedYeo * 1.5,
 // ---- Step 6: Yeo7 parcel overlap on the real-shaped lesion ----
 // Loads the committed Yeo7 atlas fixture so this stage runs in CI
 // without a network round-trip.
-const atlas = await decodeFile(YEO7_PATH);
 console.log(
   `\nYeo7 atlas: dims=${atlas.dims.join('x')}, ` +
   `dtype=${atlas.data.constructor.name}`
 );
 assert.deepEqual(atlas.dims, [99, 117, 95],
   'Yeo7 atlas fixture must be 99x117x95 (MNI152 2mm)');
+assert.deepEqual(
+  yeoAffine.slice(0, 3).map(row => Array.from(row)),
+  [[2, 0, 0, -98], [0, 2, 0, -134], [0, 0, 2, -72]],
+  'Yeo7 atlas fixture is stored RAS at 2 mm'
+);
 
 // computeParcelOverlap expects a Uint8 lesion mask. lesionYeo is already
 // Uint8 by construction (resampleAffine on a Uint8 source + nearest mode).
@@ -212,48 +217,57 @@ assert.equal(networksTotal + parcelResult.voxelsOutsideAtlas, yeoCount,
   `network voxels (${networksTotal}) + outsideAtlas (${parcelResult.voxelsOutsideAtlas}) ` +
   `should equal yeoCount (${yeoCount})`);
 
-// Phase 30: parity gate against the pinned JSON fixture. Catches a
-// silent regression in resampleAffine / computePrealignAffine /
-// computeParcelOverlap that shifts overlaps without crashing.
+// Reference gate. expected_yeo_overlap.json is NOT a recording of this
+// test's output: it is written by
+//   python3 tests/fixtures/ds004884-mini/reference_yeo_overlap.py
+// which redoes the bridge with nibabel + nilearn.resample_img (nearest) and
+// counts labels with numpy.bincount. Nearest-neighbour resampling and label
+// counting are integer operations, so the two implementations must agree
+// exactly; there is no tolerance to hide a shifted or mirrored overlap in.
 const expectedPath = path.join(ROOT, 'tests/fixtures/ds004884-mini/expected_yeo_overlap.json');
 const expected = JSON.parse(await fs.readFile(expectedPath, 'utf8'));
-const tol = expected.tolerance;
 
-function assertWithinAbs(name, actual, expectedVal, allowed) {
-  const diff = Math.abs(actual - expectedVal);
-  assert.ok(diff <= allowed,
-    `${name} drifted: actual=${actual}, expected=${expectedVal}, diff=${diff} > ${allowed}`);
-}
-
-assertWithinAbs('totals.sourceLesionVoxels', srcCount, expected.totals.sourceLesionVoxels, tol.totalsAbsDiff);
-assertWithinAbs('totals.mniLesionVoxels', mniCount, expected.totals.mniLesionVoxels, tol.totalsAbsDiff);
-assertWithinAbs('totals.yeoLesionVoxels', yeoCount, expected.totals.yeoLesionVoxels, tol.totalsAbsDiff);
-assertWithinAbs('totals.voxelsOutsideAtlas', parcelResult.voxelsOutsideAtlas,
-  expected.totals.voxelsOutsideAtlas, tol.totalsAbsDiff);
-
-const expCentroid = expected.centroidMni160Voxel;
-const actCentroid = [cx, cy, cz];
-for (let i = 0; i < 3; i++) {
-  assertWithinAbs(`centroidMni160Voxel[${i}]`, actCentroid[i], expCentroid[i], tol.centroidAxisDiff);
-}
-
-// Per-network voxel counts. Tolerance is max(absFloor, relDiff * expected)
-// — proportional rather than flat-absolute, so a small network like Visual
-// (~125 voxels) doesn't get 20% slack while Limbic (~1900) gets 1.3%.
-const actNetworks = Object.fromEntries(
-  summary.networks.map(n => [n.network, n.voxelsInLesion])
+assert.deepEqual(
+  yeoAffine.map(row => Array.from(row)),
+  expected.atlasAffine,
+  'the atlas affine read by nifti-reader-js equals the one nibabel reads'
 );
-for (const [name, expectedVoxels] of Object.entries(expected.networks)) {
-  const actualVoxels = actNetworks[name] || 0;
-  const allowed = Math.max(tol.networkAbsFloor, Math.ceil(tol.networkRelDiff * expectedVoxels));
-  assertWithinAbs(`networks.${name}`, actualVoxels, expectedVoxels, allowed);
-}
+assert.deepEqual(
+  {
+    sourceLesionVoxels: srcCount,
+    mniLesionVoxels: mniCount,
+    yeoLesionVoxels: yeoCount,
+    voxelsOutsideAtlas: parcelResult.voxelsOutsideAtlas
+  },
+  expected.totals,
+  'voxel totals match the nibabel/nilearn reference exactly'
+);
+
+const actualNetworks = Object.fromEntries(
+  summary.networks
+    .filter(row => row.network !== 'Unassigned')
+    .map(row => [row.network, row.voxelsInLesion])
+);
+assert.deepEqual(actualNetworks, expected.networks, 'per-network voxel counts match numpy.bincount exactly');
+
+// Centroids are means over tens of thousands of voxels; the reference is
+// rounded to 4 decimals.
+const closeTo = (name, actual, reference) => {
+  for (let i = 0; i < 3; i++) {
+    assert.ok(
+      Math.abs(actual[i] - reference[i]) < 1e-3,
+      `${name}[${i}]: got ${actual[i]}, reference ${reference[i]}`
+    );
+  }
+};
+closeTo('centroidSourceVoxel', centroidVox, expected.centroidSourceVoxel);
+closeTo('centroidSourceWorld', centroidWorld, expected.centroidSourceWorld);
+closeTo('centroidMni160Voxel', [cx, cy, cz], expected.centroidMni160Voxel);
 
 console.log(
   `\nreal-data bridge OK: lesion ${srcCount.toLocaleString()} src ` +
   `-> ${mniCount.toLocaleString()} MNI160 ` +
   `-> ${yeoCount.toLocaleString()} Yeo7 ` +
   `-> ${networksHit} Yeo networks hit. ` +
-  `Centroid round-trip within 1 voxel. ` +
-  `Phase 30 parity gate (Dice-style absolute-diff thresholds) passed.`
+  `Counts equal the nibabel/nilearn reference exactly.`
 );

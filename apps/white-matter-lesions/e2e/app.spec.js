@@ -1,12 +1,26 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { readVolume } from "@neurodesk/synthsr";
+import { dice, maskVoxels } from "../../../test-utils/dice.mjs";
 import { compareWithBrowser, measure } from "../validation/browser-reference.mjs";
 
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const manifest = JSON.parse(await readFile(new URL("../../../models/white-matter-lesions.manifest.json", import.meta.url), "utf8"));
 const modelUrl = manifest.base_url + manifest.assets[0].filename;
 const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+// Reference: validation/reference.py (nnU-Net's own resampling, native ONNX Runtime, fold 0) on the
+// example inside the app's SynthStrip mask; validation/fixtures/README.md has the commands. It is
+// independent of src/pipeline.js and ONNX Runtime Web, not of the SynthStrip port or the ONNX export.
+const reference = {
+  url: new URL("../validation/fixtures/MSLesSeg_P57_T1_FLAIR_reference-fold0_lesions.nii.gz", import.meta.url),
+  sha256: "e8305ef1bb0fa4260cc9a434fec1bf65e171e6c929e67b6c446c1a3935fea905",
+  lesionVoxels: 12631,
+};
+// Measured 2026-10-03 (WebAssembly): Dice 0.9989, 12 623 app voxels against 12 631, 90 lesions,
+// 31.5 ml. validation/README.md reports 0.998 for the same port check on another scan. The gate
+// leaves 0.009 for floating-point differences between runtimes.
+const MIN_REFERENCE_DICE = 0.99;
 
 async function download(page, index) {
   if (!await page.locator("#outputSection").evaluate((element) => element.open)) {
@@ -64,6 +78,15 @@ for (const folds of [1, 5]) {
     const lesions = readVolume(bytesOf(mask.bytes));
     expect(lesions.dims).toEqual(input.dims);
     expect(lesions.affine).toEqual(input.affine);
+    if (folds === 1) {
+      // Fold 0 against the nnU-Net-resampling reference (validation/reference.py), not a browser recording.
+      const referenceBytes = await readFile(reference.url);
+      expect(createHash("sha256").update(referenceBytes).digest("hex")).toBe(reference.sha256);
+      const expected = readVolume(bytesOf(referenceBytes));
+      expect(expected.dims).toEqual(lesions.dims);
+      expect(maskVoxels(expected.data)).toBe(reference.lesionVoxels);
+      expect(dice(lesions.data, expected.data)).toBeGreaterThanOrEqual(MIN_REFERENCE_DICE);
+    }
     const measured = measure({
       mask: lesions,
       probability: readVolume(bytesOf(probability.bytes)),

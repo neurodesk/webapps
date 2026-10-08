@@ -53,6 +53,10 @@ test('app-facing GitHub links use the monorepo as the current source home', asyn
   ];
 
   for (const path of await browserSourceFiles(join(repoRoot, 'apps'))) {
+    // Upstream-synced apps (apps/<id>/upstream.json) keep their upstream repository as the
+    // source (AGENTS.md); their README credits it, which is provenance, not a stale home.
+    const [, appId, file] = relative(join(repoRoot, 'apps'), path).match(/^([^/]+)\/(.+)$/) ?? [];
+    if (file === 'README.md' && await readFile(join(repoRoot, 'apps', appId, 'upstream.json')).then(() => true, () => false)) continue;
     const source = await readFile(path, 'utf8');
     for (const repositoryUrl of repositoryUrls) {
       for (const match of source.matchAll(repositoryUrl)) {

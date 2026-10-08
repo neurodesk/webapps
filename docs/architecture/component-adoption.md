@@ -6,81 +6,208 @@ Real `@neurodesk/webapp-components` imports per app (import-map aliases excluded
 Apps absent from a column ship their own code for that concern or do not need it;
 the fork ratchet in `test/component-forks.test.mjs` lists which of those are forks.
 
-| App | (root) | core | core/mount-imaging-workspace | example-images | file-io | pipeline | styles/imaging-workspace.css | ui | viewer | volume | worker |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| musclemap | ✓ |  |  |  | ✓ |  |  | ✓ |  |  |  |
-| vesselboost | ✓ |  |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  |
-| spinalcordtoolbox | ✓ |  |  |  | ✓ |  |  | ✓ | ✓ | ✓ |  |
-| calmar | ✓ |  |  |  | ✓ |  |  | ✓ | ✓ |  |  |
-| qsmbly | ✓ |  |  |  | ✓ |  |  | ✓ |  | ✓ | ✓ |
-| seedseg | ✓ |  |  |  | ✓ |  |  | ✓ |  |  |  |
-| dicompare |  |  |  |  |  |  |  | ✓ |  |  |  |
-| deface |  |  | ✓ |  |  |  | ✓ |  |  |  |  |
-| easy-mp2rage |  |  |  |  |  |  |  |  |  |  |  |
-| niimath |  |  | ✓ | ✓ |  |  | ✓ |  |  |  |  |
-| dicom2vid |  |  |  |  |  |  |  |  |  |  |  |
-| browserqc |  |  | ✓ |  |  |  | ✓ |  |  |  |  |
-| surfannotate |  |  | ✓ |  |  |  | ✓ |  |  |  |  |
-| zarro |  |  | ✓ |  |  |  | ✓ |  |  |  |  |
-| synthsr |  |  | ✓ | ✓ |  |  |  | ✓ |  |  |  |
-| syncro |  | ✓ | ✓ |  |  |  |  | ✓ |  |  |  |
+| App | (root) | automation | automation/freesurfer-lut | compute | core | core/mount-imaging-workspace | fetch | file-io | pipeline | styles/imaging-workspace.css | styles/imaging-workspace.css. | ui | viewer | volume | worker |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| musclemap | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  | ✓ |  |  |  |
+| vesselboost | ✓ | ✓ |  |  |  |  |  | ✓ | ✓ |  |  | ✓ |  | ✓ |  |
+| spinalcordtoolbox | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  | ✓ | ✓ | ✓ |  |
+| calmar | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  | ✓ | ✓ |  |  |
+| qsmbly | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  | ✓ |  | ✓ | ✓ |
+| seedseg | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  | ✓ |  |  |  |
+| dicompare |  | ✓ |  |  |  |  |  |  |  | ✓ |  | ✓ |  |  |  |
+| deface |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
+| easy-mp2rage |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| niimath |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
+| dicom2vid |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| browserqc |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| surfannotate |  | ✓ |  |  |  | ✓ |  |  |  | ✓ |  | ✓ |  |  |  |
+| zarro |  | ✓ |  |  |  | ✓ | ✓ |  |  | ✓ |  | ✓ |  |  |  |
+| synthsr |  | ✓ |  |  |  | ✓ |  |  |  |  |  | ✓ |  |  |  |
+| synthseg |  | ✓ | ✓ |  |  | ✓ |  | ✓ |  |  |  | ✓ |  |  |  |
+| syncro |  | ✓ |  |  | ✓ | ✓ |  |  |  |  |  | ✓ |  |  |  |
+| dwi2trx |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| edgereg |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| disconnectome |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  | ✓ |
+| greedy |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| ants |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| brain2print |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| topofit |  | ✓ |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  | ✓ |
+| fireants |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  |  |
+| brain-extraction |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  | ✓ |
+| carotid-flow |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |
+| lcmodel |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  | ✓ |
+| white-matter-lesions |  | ✓ |  |  |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  |  | ✓ |
+| nesvor |  | ✓ |  | ✓ |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ |  |  |  |
 
 ## Import sites
 
 - **musclemap**
-  - `(root)`: test/ui-progress-parity.test.js, web/index.html, web/js/controllers/MuscleMapPipeline.js, web/js/controllers/MuscleMapViewer.js
+  - `(root)`: web/index.html, web/js/controllers/MuscleMapPipeline.js, web/js/controllers/MuscleMapViewer.js
+  - `automation`: web/js/automation.js
   - `file-io`: web/harness.html, web/js/controllers/MuscleMapDicomInput.js, web/js/controllers/MuscleMapInputSet.js, web/js/controllers/MuscleMapViewer.js, web/js/modules/ui/MuscleMapMetricsPanel.js, web/js/musclemap-app.js
-  - `ui`: e2e/progress.spec.js, web/harness.html, web/js/musclemap-app.js
+  - `ui`: e2e/progress.spec.js, web/harness.html, web/js/musclemap-app.js, web/js/offline.js
 - **vesselboost**
   - `(root)`: web/index.html, web/js/controllers/VesselBoostPipeline.js, web/js/controllers/VesselBoostViewer.js
-  - `file-io`: web/harness.html, web/js/vesselboost-app.js
+  - `automation`: web/js/automation.js
+  - `file-io`: web/harness.html, web/js/automation.js, web/js/vesselboost-app.js
   - `pipeline`: scripts/test_pipeline_graph.mjs
   - `ui`: web/harness.html, web/js/vesselboost-app.js
   - `volume`: web/js/vesselboost-app.js
 - **spinalcordtoolbox**
   - `(root)`: web/index.html, web/js/controllers/SctPipeline.js, web/js/spinalcordtoolbox-app.js
-  - `file-io`: web/harness.html, web/js/controllers/SctInputSessions.js, web/js/spinalcordtoolbox-app.js
+  - `automation`: web/js/automation.js
+  - `file-io`: web/harness.html, web/js/automation.js, web/js/controllers/SctInputSessions.js, web/js/spinalcordtoolbox-app.js
   - `ui`: web/harness.html, web/js/spinalcordtoolbox-app.js
   - `viewer`: scripts/test_viewer_controller.mjs
   - `volume`: web/js/spinalcordtoolbox-app.js
 - **calmar**
-  - `(root)`: web/index.html, web/js/controllers/CalmarPipeline.js, web/js/lnm-app.js
-  - `file-io`: web/harness.html, web/js/lnm-app.js
+  - `(root)`: scripts/test_index_html.mjs, web/index.html, web/js/controllers/CalmarPipeline.js, web/js/lnm-app.js
+  - `automation`: web/js/automation.js
+  - `file-io`: web/harness.html, web/js/automation.js, web/js/lnm-app.js
   - `ui`: web/harness.html, web/js/lnm-app.js
   - `viewer`: scripts/test_viewer_controller.mjs
 - **qsmbly**
   - `(root)`: index.html, js/controllers/QsmDicomInput.js, js/controllers/QsmEchoViewer.js
-  - `file-io`: js/controllers/MaskController.js, js/controllers/QsmDicomInput.js, js/controllers/QsmInputSet.js, js/modules/file-io/NiftiUtils.test.js, js/modules/file-io/index.js, js/qsm-app-romeo.js
+  - `automation`: js/automation.js
+  - `file-io`: js/automation.js, js/controllers/MaskController.js, js/controllers/QsmDicomInput.js, js/controllers/QsmInputSet.js, js/modules/file-io/NiftiUtils.test.js, js/modules/file-io/index.js, js/qsm-app-romeo.js
   - `ui`: js/qsm-app-romeo.js
   - `volume`: js/controllers/MaskController.js, js/qsm-app-romeo.js
   - `worker`: js/controllers/QsmPipelineController.js
 - **seedseg**
   - `(root)`: web/js/controllers/SeedSegPipeline.js, web/js/seedseg-app.js
-  - `file-io`: web/js/controllers/SeedSegDicomInput.js, web/js/seedseg-app.js
+  - `automation`: web/js/automation.js
+  - `file-io`: web/js/automation.js, web/js/controllers/SeedSegDicomInput.js, web/js/seedseg-app.js
   - `ui`: web/js/seedseg-app.js
 - **dicompare**
-  - `ui`: public/embed/DicompareReportRenderer.js
+  - `automation`: src/automation.ts, src/components/viewer/NiivueViewer.tsx
+  - `styles/imaging-workspace.css`: src/components/workspace/ExampleInput.tsx
+  - `ui`: public/embed/DicompareReportRenderer.js, src/components/common/DropZone.tsx, src/components/common/TechnicalLog.tsx, src/components/workspace/ExampleInput.tsx
 - **deface**
+  - `automation`: src/main.ts
   - `core/mount-imaging-workspace`: src/main.ts
   - `styles/imaging-workspace.css`: src/main.ts
+  - `ui`: src/main.ts
 - **niimath**
+  - `automation`: main.js
   - `core/mount-imaging-workspace`: main.js
-  - `example-images`: main.js
   - `styles/imaging-workspace.css`: main.js
+  - `ui`: main.js
 - **browserqc**
+  - `automation`: src/main.ts, src/segmentation.ts
   - `core/mount-imaging-workspace`: src/main.ts
+  - `file-io`: src/main.ts
   - `styles/imaging-workspace.css`: src/main.ts
+  - `ui`: src/main.ts
 - **surfannotate**
+  - `automation`: src/main.js
   - `core/mount-imaging-workspace`: src/main.js
   - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
 - **zarro**
+  - `automation`: src/viewer.ts
   - `core/mount-imaging-workspace`: src/viewer.ts
+  - `fetch`: src/viewer.ts
   - `styles/imaging-workspace.css`: src/viewer.ts
+  - `ui`: src/viewer.ts
 - **synthsr**
+  - `automation`: src/main.js
   - `core/mount-imaging-workspace`: src/main.js
-  - `example-images`: e2e/interface.spec.js, src/main.js
+  - `ui`: src/main.js
+- **synthseg**
+  - `automation`: src/main.js
+  - `automation/freesurfer-lut`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
   - `ui`: src/main.js
 - **syncro**
+  - `automation`: src/main.js
   - `core`: src/main.js
   - `core/mount-imaging-workspace`: src/main.js
+  - `ui`: src/main.js
+- **dwi2trx**
+  - `automation`: src/main.ts
+  - `core/mount-imaging-workspace`: src/main.ts
+  - `file-io`: src/dwi2trx/input.ts, src/main.ts
+  - `styles/imaging-workspace.css`: src/main.ts
+  - `ui`: src/main.ts
+- **edgereg**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+- **disconnectome**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+  - `worker`: src/disconnect-worker.js, src/main.js
+- **greedy**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+- **ants**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+- **brain2print**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+- **topofit**
+  - `automation`: src/main.js
+  - `core`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/freebrowse-viewer.js, src/main.js
+  - `ui`: src/main.js
+  - `worker`: src/analysis-worker.js, src/inference-worker.js
+- **fireants**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+- **brain-extraction**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+  - `worker`: src/synthstrip.js
+- **carotid-flow**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: e2e/smoke.spec.js, src/main.js, test/carotid.test.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+  - `volume`: src/carotid.js
+- **lcmodel**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+  - `worker`: src/lcmodel-worker.js
+- **white-matter-lesions**
+  - `automation`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `ui`: src/main.js
+  - `worker`: src/worker.js
+- **nesvor**
+  - `automation`: src/main.js
+  - `compute`: src/main.js
+  - `core/mount-imaging-workspace`: src/main.js
+  - `file-io`: src/main.js, src/stacks.js
+  - `styles/imaging-workspace.css`: src/main.js
+  - `styles/imaging-workspace.css.`: index.html
   - `ui`: src/main.js

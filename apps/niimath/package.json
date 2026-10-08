@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "node ../../scripts/check-app-js.mjs .",
     "test": "node ../../scripts/check-app-js.mjs .",
-    "test:e2e": "node ../../test/examples.smoke.mjs --app niimath"
+    "test:e2e": "node ../../test/examples.smoke.mjs --app niimath && playwright test"
   },
   "devDependencies": {
     "vite": "^5.4.6"

@@ -124,3 +124,36 @@ test('real structural example produces an unconfirmed native lesion candidate', 
   expect(candidate.data.every(value => value === 0 || value === 1)).toBe(true);
   await writeFile(join(directory, 'candidate-report.json'), JSON.stringify(snapshot.report, null, 2));
 });
+
+test('the inference worker and its module imports load in the browser', async ({ page }) => {
+  const failures = [];
+  page.on('pageerror', error => failures.push(error.message));
+  page.on('response', response => {
+    if (response.status() >= 400 && /\/(js|vendor|wasm|nifti-js)\//.test(response.url())) {
+      failures.push(`${response.status()} ${response.url()}`);
+    }
+  });
+  const workerScripts = [];
+  page.on('request', request => {
+    if (/\/js\/(inference-worker|inference-pipeline|modules\/)/.test(request.url())) workerScripts.push(new URL(request.url()).pathname);
+  });
+  await page.goto('/');
+  await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
+  // 'init' is answered only after the module worker has resolved every
+  // static import, including js/modules/inference-numerics.js.
+  await page.evaluate(() => globalThis.app.executor.initialize());
+  expect(await page.evaluate(() => globalThis.app.executor.isReady())).toBe(true);
+  expect(workerScripts).toContain('/js/modules/inference-numerics.js');
+  // A stage that needs a loaded volume answers over the worker protocol.
+  const error = await page.evaluate(() => new Promise(resolve => {
+    const executor = globalThis.app.executor;
+    const previous = executor.onError;
+    executor.onError = message => {
+      executor.onError = previous;
+      resolve(message);
+    };
+    executor.runWarpMask({ maskBuffer: new ArrayBuffer(8) });
+  }));
+  expect(error).toBe('No displacement available. Run Register first.');
+  expect(failures).toEqual([]);
+});

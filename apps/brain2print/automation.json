@@ -34,6 +34,15 @@
           ],
           "description": "Published model variant"
         },
+        "backend": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "cpu"
+          ],
+          "description": "Segmentation backend"
+        },
         "simplify": {
           "type": "number",
           "default": 20,

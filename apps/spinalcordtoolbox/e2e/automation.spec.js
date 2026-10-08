@@ -1,13 +1,44 @@
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
+import { diceCoefficient } from '../scripts/lib/dice.mjs';
+
+const require = createRequire(import.meta.url);
+const { loadNifti } = require('../scripts/batch-parity-lib.cjs');
 
 const sha256 = '97638eee6df7c75b4de8921163e708420587de28b03eefb3fb1efbcdad659506';
 const filename = 'sct_T2_spinalcord.nii.gz';
 const parameters = { task: 'spinalcord' };
 
 const directory = join(process.env.TMPDIR || process.env.RUNNER_TEMP, 'neurodesk-sct-automation');
+
+// Native SCT reference for this exact input: `sct_deepseg spinalcord` run by SCT's
+// batch_processing.sh on t2.nii.gz. The example is byte-identical to the nightly fixture
+// batch_t2_deepseg_spinalcord/input.nii.gz, so that fixture's nightly gate applies here
+// (scripts/test_fixture_parity_outputs.cjs: Dice >= 0.95, foreground within 10 %).
+// Measured 2026-10-04 on ONNX Runtime Web WASM: Dice 0.9685, 23 597 voxels against 23 369.
+const reference = {
+  url: 'https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/test_data/batch_t2_deepseg_spinalcord/batch_output.nii.gz',
+  sha256: '9bde73cd25d7f03a8ecebb09f14414f7213d3d016438b6efb948daebdf26bdb0',
+  filename: 'sct_T2_spinalcord_native_sct_seg.nii.gz',
+};
+const gate = { minDice: 0.95, foregroundRatioTolerance: 0.1 };
+
+async function referencePath() {
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, reference.filename);
+  let bytes = await readFile(path).catch(() => null);
+  if (!bytes || createHash('sha256').update(bytes).digest('hex') !== reference.sha256) {
+    const response = await fetch(reference.url);
+    expect(response.ok).toBe(true);
+    bytes = Buffer.from(await response.arrayBuffer());
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(reference.sha256);
+    await writeFile(path, bytes);
+  }
+  return path;
+}
 
 async function fixturePath() {
   await mkdir(directory, { recursive: true });
@@ -59,22 +90,35 @@ async function downloadRow(page, row) {
   return { name: download.suggestedFilename(), bytes: await readFile(await download.path()) };
 }
 
-test('typed automation completes the real SCT T2 workflow and downloads its cord mask', async ({ page }) => {
+test('typed automation completes the real SCT T2 workflow and its cord mask matches native SCT', async ({ page }) => {
   test.setTimeout(600000);
   const snapshot = await segment(page);
   expect(snapshot.error).toBeUndefined();
   expect(snapshot.state).toBe('succeeded');
   expect(snapshot.report.inputs.image[0].sha256).toBe(sha256);
-  const cord = snapshot.report.measurements.segmentation.labels.find(label => label.id === 1);
-  expect(cord.voxels).toBeGreaterThan(0);
-  expect(cord.volumeMl).toBeGreaterThan(0);
   expect(snapshot.report.provenance.executionProvider).toBe('wasm');
   const [id, artifact] = Object.entries(snapshot.report.artifacts).find(([, value]) => value.role === 'segmentation');
   const waiting = page.waitForEvent('download');
   await page.evaluate(artifactId => neurodeskAutomation.dispatch('download', { artifactId }), id);
-  const output = await readFile(await (await waiting).path());
+  const download = await waiting;
+  const output = await readFile(await download.path());
   expect(output.length).toBe(artifact.bytes);
   expect(createHash('sha256').update(output).digest('hex')).toBe(artifact.sha256);
+
+  // Compare the downloaded mask with native SCT, voxel for voxel.
+  const outputPath = join(directory, download.suggestedFilename().endsWith('.gz') ? 'app_seg.nii.gz' : 'app_seg.nii');
+  await writeFile(outputPath, output);
+  const produced = loadNifti(outputPath);
+  const expected = loadNifti(await referencePath());
+  expect(produced.header.dims.slice(1, 4)).toEqual(expected.header.dims.slice(1, 4));
+  expect(produced.header.datatypeCode).toBe(2);
+  const overlap = diceCoefficient(expected.data, produced.data);
+  expect(overlap.dice).toBeGreaterThanOrEqual(gate.minDice);
+  expect(overlap.candidateCount).toBeGreaterThanOrEqual(overlap.referenceCount * (1 - gate.foregroundRatioTolerance));
+  expect(overlap.candidateCount).toBeLessThanOrEqual(overlap.referenceCount * (1 + gate.foregroundRatioTolerance));
+  const cord = snapshot.report.measurements.segmentation.labels.find(label => label.id === 1);
+  expect(cord.voxels).toBe(overlap.candidateCount);
+  expect(cord.volumeMl).toBeGreaterThan(0);
   await writeFile(join(directory, 'report.json'), JSON.stringify(snapshot.report, null, 2));
 
   // The run is described in the analysis log; machinery stays in the technical log.

@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -34,7 +35,7 @@ test('output gate checks numerical sanity, affine spacing and actual upstream se
 });
 
 test('locked example cache rejects corruption and only returns verified bytes', async () => {
-  const cache = await mkdtemp(join(process.env.TMPDIR, 'nesvor-cache-test-'));
+  const cache = await mkdtemp(join(process.env.TMPDIR || tmpdir(), 'nesvor-cache-test-'));
   try {
     const bytes = Buffer.from('public fixture');
     const lock = { sha256: createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length };
@@ -53,7 +54,7 @@ test('locked example cache rejects corruption and only returns verified bytes', 
 
 test('missing infrastructure fails and simulated info prevents any example transfer', async () => {
   await assert.rejects(runScientificValidation(), /never skips/);
-  const directory = await mkdtemp(join(process.env.TMPDIR, 'nesvor-gate-test-'));
+  const directory = await mkdtemp(join(process.env.TMPDIR || tmpdir(), 'nesvor-gate-test-'));
   try {
     const requests = [];
     await assert.rejects(runScientificValidation({ baseUrl: 'http://127.0.0.1:9999', credential: 'owner-secret', thicknesses: [3], reportDirectory: join(directory, 'report'), cacheDirectory: join(directory, 'cache'), fetch: async (url, init) => {

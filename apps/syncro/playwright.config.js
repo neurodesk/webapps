@@ -7,6 +7,9 @@ const port=Number(process.env.SYNCRO_TEST_PORT||4176),baseURL=`http://127.0.0.1:
 export default defineConfig({
   testDir: "./e2e",
   workers: 1,
+  // The viewer and the real pipeline both run on software rendering in CI; allow for a busy machine.
+  timeout: 120000,
+  expect: { timeout: 20000 },
   webServer: {
     timeout: 120000,
     command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
