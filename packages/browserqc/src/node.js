@@ -1,4 +1,5 @@
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { access, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -35,8 +36,13 @@ async function loadAirTemplate({ cacheDir = defaultCacheDir(), offline = offline
   if (!response.ok) throw new Error(`Download of ${AIR_TEMPLATE.url} failed: HTTP ${response.status}`);
   const bytes = new Uint8Array(await checkAirTemplate(new Uint8Array(await response.arrayBuffer())));
   await mkdir(cacheDir, { recursive: true });
-  await writeFile(`${path}.part`, bytes);
-  await rename(`${path}.part`, path);
+  const partial = `${path}.${randomUUID()}.partial`;
+  try {
+    await writeFile(partial, bytes, { flag: 'wx' });
+    await rename(partial, path);
+  } finally {
+    await rm(partial, { force: true });
+  }
   return bytes;
 }
 
@@ -50,7 +56,19 @@ async function packageVersion(url) {
   return JSON.parse(await readFile(new URL(url), 'utf8')).version;
 }
 
+// Every MindGrab CPU module a model needs, and a niimath instance that runs.
+async function checkEngines() {
+  const modules = ['mindgrab', ...new Set(Object.entries(MODELS).map(([id, model]) => model.pve ?? id))];
+  for (const name of modules) {
+    for (const extension of ['js', 'wasm']) await access(new URL(`dist/brainchop-${name}.${extension}`, MINDGRAB_PACKAGE));
+  }
+  const { log } = await runNiimath(createNiimath, ['--version']);
+  if (!/^v\d/.test(log[0] ?? '')) throw new Error(`The niimath WebAssembly module did not report its version: ${log.join(' ')}`);
+  return log[0];
+}
+
 export async function checkInstallation() {
+  const niimathEngine = await checkEngines();
   const report = {
     platform: process.platform,
     arch: process.arch,
@@ -59,6 +77,7 @@ export async function checkInstallation() {
     browserqc: packageJson.version,
     mindgrab: await packageVersion(MINDGRAB_PACKAGE),
     niimath: await packageVersion(NIIMATH_PACKAGE),
+    niimathEngine,
     models: Object.keys(MODELS),
   };
   if (process.env.NEURODESK_BROWSERQC_MODEL_DIR) {
@@ -131,7 +150,8 @@ function artifactFiles(segmentation, report) {
   return [
     { name: 'brain-mask.nii', bytes: bytesOf(segmentation.mask) },
     ...images,
-    { name: 'qc.json', bytes: new TextEncoder().encode(`${JSON.stringify(report, null, 2)}\n`) },
+    // The app's automation download: two-space JSON, no trailing newline.
+    { name: 'qc.json', bytes: new TextEncoder().encode(JSON.stringify(report, null, 2)) },
   ];
 }
 

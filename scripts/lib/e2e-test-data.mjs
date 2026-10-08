@@ -42,6 +42,9 @@ export const provisioners = {
   // The browser reference registers the 1 mm example once, about 3 min on a 4-core runner.
   ants: { env: ['ANTS_LIVE_DATA', 'ANTS_BROWSER_REFERENCE'], provision: async () => ({ ANTS_LIVE_DATA: '1', ANTS_BROWSER_REFERENCE: 'check' }) },
   'brain-extraction': flag('BRAIN_EXTRACTION_REAL_MODELS'),
+  // The browser reference runs quality control of the pinned example with each of the four models
+  // on the CPU backend, about 12 min on eight cores.
+  browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),

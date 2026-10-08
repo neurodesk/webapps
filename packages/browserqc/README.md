@@ -78,7 +78,9 @@ The command line always segments on the CPU. The app's `auto` backend uses
 WebGPU when it can, and the release check compares only with the app's CPU
 backend.
 
-`download-models` fetches the air template. The MindGrab models are compiled
+`self-check` checks that every MindGrab CPU module is present and that the
+niimath module starts, and in a release that the bundled air template has its
+pinned SHA-256. `download-models` fetches the air template. The MindGrab models are compiled
 into the `@brainchop/mindgrab` WebAssembly modules, so they ship with the
 package. The template is SHA-256 checked on every load.
 
@@ -107,15 +109,17 @@ worker thread with one thread per logical core.
 ### Release check
 
 `validation/cli-check.mjs --executable PATH` runs a command line on the app's
-pinned example (`t1_crop.nii.gz` and its sidecar) with `mindmap-pve` and
-`16chan18cls`. It compares every download with the app's own, recorded in
+pinned example (`t1_crop.nii.gz` and its sidecar) with each of the four models,
+then with `16chan18cls` on a decompressed `.nii` copy without a sidecar. It
+compares every download with the app's own, recorded in
 `validation/reference.json` by `apps/browserqc/e2e/reference.spec.js` from the
 built app's automation on its CPU backend in Chromium. Images must lie on the
-input grid, have the reference's header, datatype and value domain, and match
-its voxel sum, label counts and bytes. The QC report must have the same
-metrics with the same values, the same provenance, and the sidecar as
-`bids_meta`. Both runtimes run the same WebAssembly, so every comparison is
-exact. `.github/workflows/browserqc-native.yml` first reruns the browser side
+input grid, have the reference's header, datatype, compression and value
+domain, and match its voxel sum, label counts and bytes. The QC report must
+have the same metrics with the same values, the same provenance, the sidecar
+as `bids_meta` (or none), and the same bytes. Both runtimes run the same
+WebAssembly, so every comparison is exact.
+`.github/workflows/browserqc-native.yml` first reruns the browser side
 against the reference, then builds and checks every archive.
 
 To record a new reference after changing the pipeline or a pinned package:

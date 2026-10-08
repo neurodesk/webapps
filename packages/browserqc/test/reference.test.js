@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { gzipSync } from 'node:zlib';
-import { compare, summarize } from '../validation/reference.mjs';
+import { compare, summarize, withoutSidecar } from '../validation/reference.mjs';
 
 const SIZE = 6;
 const VOXELS = SIZE ** 3;
@@ -35,7 +35,7 @@ const report = (edit = (r) => r) => Buffer.from(JSON.stringify(edit({
   fber: -1,
   provenance: { software: 'niimath --qc', air_template: 'avg152T1.nii.gz', segmentation: 'brainchop mindmap-pve (GM/WM/CSF fractions, 24ch)' },
   bids_meta: SIDECAR,
-})));
+}), null, 2));
 
 function downloads(change = {}) {
   return {
@@ -48,7 +48,7 @@ function downloads(change = {}) {
 
 const reference = summarize(downloads(), input);
 // Each failing check as "<download> <kind>", e.g. "gm.nii voxel sum".
-const KIND = / (lies|header|values|voxel sum|bytes|non-zero|has the|metrics|cjv|provenance|bids_meta)/;
+const KIND = / (lies|header|values|voxel sum|is|bytes|non-zero|has the|metrics|cjv|provenance|bids_meta)/;
 const failing = (files) => compare('test', summarize(files, input), reference, 'browser', SIDECAR)
   .filter(([passed]) => !passed)
   .map(([, line]) => `${line.split(' ')[1]} ${line.match(KIND)[1]}`);
@@ -85,24 +85,41 @@ test('a changed datatype with the same values fails the header and the bytes', (
 });
 
 test('a metric differing in its last digit fails the metrics check', () => {
-  assert.deepEqual(failing(downloads({ qc: report((r) => ({ ...r, cnr: 1.7000000000000002 })) })), ['qc.json metrics']);
+  assert.deepEqual(failing(downloads({ qc: report((r) => ({ ...r, cnr: 1.7000000000000002 })) })), ['qc.json metrics', 'qc.json bytes']);
 });
 
 test('a missing or extra metric fails, and a non-finite headline metric fails on its own', () => {
-  assert.deepEqual(failing(downloads({ qc: report((r) => ({ ...r, extra: 1 })) })), ['qc.json has the']);
+  assert.deepEqual(failing(downloads({ qc: report((r) => ({ ...r, extra: 1 })) })), ['qc.json has the', 'qc.json bytes']);
   const { cjv, ...rest } = JSON.parse(report().toString());
   assert.ok(cjv);
-  assert.deepEqual(failing(downloads({ qc: Buffer.from(JSON.stringify(rest)) })), ['qc.json has the', 'qc.json metrics', 'qc.json cjv']);
+  assert.deepEqual(failing(downloads({ qc: Buffer.from(JSON.stringify(rest)) })), ['qc.json has the', 'qc.json metrics', 'qc.json cjv', 'qc.json bytes']);
 });
 
 test('other provenance or a missing sidecar fails', () => {
   const provenance = report((r) => ({ ...r, provenance: { ...r.provenance, segmentation: 'brainchop 16chan18cls' } }));
-  assert.deepEqual(failing(downloads({ qc: provenance })), ['qc.json provenance']);
-  assert.deepEqual(failing(downloads({ qc: report(({ bids_meta, ...r }) => r) })), ['qc.json bids_meta']);
+  assert.deepEqual(failing(downloads({ qc: provenance })), ['qc.json provenance', 'qc.json bytes']);
+  assert.deepEqual(failing(downloads({ qc: report(({ bids_meta, ...r }) => r) })), ['qc.json bids_meta', 'qc.json bytes']);
 });
 
 test('a missing image fails', () => {
   const { 'gm.nii': gm, ...rest } = downloads();
   assert.ok(gm);
   assert.deepEqual(compare('test', summarize(rest, input), reference, 'browser', SIDECAR).filter(([passed]) => !passed).map(([, line]) => line), ['test gm.nii was written']);
+});
+
+test('a gzip-compressed image with the same voxels fails its compression and bytes', () => {
+  const { 'gm.nii': gm } = downloads();
+  assert.deepEqual(failing(downloads({ gm: gzipSync(gm) })), ['gm.nii is', 'gm.nii bytes']);
+});
+
+test('a report written with other whitespace fails only its bytes', () => {
+  const text = Buffer.from(`${JSON.stringify(JSON.parse(report().toString()), null, 2)}\n`);
+  assert.deepEqual(failing(downloads({ qc: text })), ['qc.json bytes']);
+});
+
+test('without a sidecar, the reference minus bids_meta is matched byte for byte', () => {
+  const plain = report(({ bids_meta, ...r }) => r);
+  const results = compare('test', summarize(downloads({ qc: plain }), input), withoutSidecar(reference), 'browser', undefined);
+  assert.deepEqual(results.filter(([passed]) => !passed), []);
+  assert.ok(results.some(([, line]) => line === 'test qc.json bids_meta is absent'));
 });

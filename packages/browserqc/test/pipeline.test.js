@@ -10,6 +10,12 @@ test('the model catalog is the web app\'s, which upstream BrowserQC owns', async
   assert.deepEqual(MODELS, await json('../../../apps/browserqc/src/models.json'));
 });
 
+test('the command line pins the web app\'s MindGrab and niimath builds', async () => {
+  const app = await json('../../../apps/browserqc/package.json');
+  const cli = await json('../package.json');
+  for (const name of ['@brainchop/mindgrab', '@niivue/niimath']) assert.equal(cli.dependencies[name], app.dependencies[name], name);
+});
+
 test('the air template pin is the BrowserQC asset manifest\'s', async () => {
   const manifest = await json('../../../models/browserqc.manifest.json');
   const asset = manifest.assets.find((entry) => entry.filename === AIR_TEMPLATE.name);

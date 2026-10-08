@@ -14,11 +14,14 @@ export const EXAMPLE_SHA256 = Object.freeze({
   't1_crop.nii.gz': '1a91502c8997981a1103cc5f2a3ada12c79dfb0498047f9e931fa358bb953886',
   't1_crop.json': '5201efd81abd53a7adc5b698517894ed8b9ca1cb5ed57b30a075ba1010bb4da8',
 });
-// The default model and the label model of neurodesk/webapps#166.
-export const CASES = Object.freeze(['mindmap-pve', '16chan18cls']);
+// Every model the app and the command line offer.
+export const CASES = Object.freeze(['mindmap-pve', '16chan18cls', 'mindmap', 'mindsnap']);
+const LABELS = ['brain-mask.nii', 'labels.nii', 'qc.json'];
 export const ARTIFACTS = Object.freeze({
   'mindmap-pve': ['brain-mask.nii', 'csf.nii', 'gm.nii', 'wm.nii', 'qc.json'],
-  '16chan18cls': ['brain-mask.nii', 'labels.nii', 'qc.json'],
+  '16chan18cls': LABELS,
+  mindmap: LABELS,
+  mindsnap: LABELS,
 });
 // Both runtimes run the same WebAssembly on the CPU, so outputs are compared exactly. These limits
 // only report how far a differing value is.
@@ -68,6 +71,7 @@ const plain = (bytes) => (bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(by
 const floats = (bytes, offset, count) => Array.from({ length: count }, (_, i) => bytes.readFloatLE(offset + 4 * i));
 
 function summarizeImage(file, input) {
+  const compressed = file[0] === 0x1f && file[1] === 0x8b;
   const bytes = Buffer.from(plain(file));
   const header = parseNiftiHeader(bytes);
   const { data } = readNiftiImageData(bytes, Float64Array);
@@ -86,7 +90,8 @@ function summarizeImage(file, input) {
     else if (counts.size <= 256) counts.set(value, (counts.get(value) ?? 0) + 1);
   }
   return {
-    sha256: sha256(bytes),
+    sha256: sha256(file),
+    compressed,
     geometry: {
       dims: header.dims.slice(0, header.dims[0] + 1),
       pixdim: header.pixDims.slice(1, 4),
@@ -111,7 +116,9 @@ export function summarize(files, input) {
   const raw = Buffer.from(plain(input));
   const summary = {};
   for (const [name, bytes] of Object.entries(files)) {
-    summary[name] = name.endsWith('.json') ? JSON.parse(Buffer.from(bytes).toString('utf8')) : summarizeImage(bytes, raw);
+    summary[name] = name.endsWith('.json')
+      ? { sha256: sha256(bytes), report: JSON.parse(Buffer.from(bytes).toString('utf8')) }
+      : summarizeImage(bytes, raw);
   }
   return summary;
 }
@@ -129,7 +136,7 @@ function inDomain(name, image) {
 const relative = (actual, expected) => (actual === expected ? 0 : Math.abs(actual - expected) / Math.abs(expected));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-function compareReport(label, actual, expected, source, sidecar) {
+function compareReport(label, { sha256: actualSha256, report: actual = {} }, { sha256: expectedSha256, report: expected }, source, sidecar) {
   const checks = [];
   const numeric = (report) => Object.keys(report).filter((key) => typeof report[key] === 'number').sort();
   const keys = numeric(expected);
@@ -152,7 +159,8 @@ function compareReport(label, actual, expected, source, sidecar) {
     ]);
   }
   checks.push([same(actual.provenance, expected.provenance), `${label} qc.json provenance equals the ${source} reference's (${actual.provenance?.segmentation})`]);
-  checks.push([same(actual.bids_meta, sidecar), `${label} qc.json bids_meta is the example's sidecar`]);
+  checks.push([same(actual.bids_meta, sidecar), `${label} qc.json bids_meta is ${sidecar ? 'the example\'s sidecar' : 'absent'}`]);
+  checks.push([actualSha256 === expectedSha256, `${label} qc.json bytes ${actualSha256?.slice(0, 12)} identical to the ${source} reference's ${expectedSha256.slice(0, 12)}`]);
   return checks;
 }
 
@@ -184,7 +192,16 @@ export function compare(label, actual, expected, source, sidecar) {
       difference <= TOLERANCES.voxelSum,
       `${label} ${name} voxel sum ${is.sum.toPrecision(8)} vs ${source} ${was.sum.toPrecision(8)}, relative diff ${difference.toExponential(1)} <= ${TOLERANCES.voxelSum}`,
     ]);
+    checks.push([is.compressed === was.compressed, `${label} ${name} is ${is.compressed ? 'gzip' : 'uncompressed'} like the ${source} reference's`]);
     checks.push([is.sha256 === was.sha256, `${label} ${name} bytes ${is.sha256.slice(0, 12)} identical to the ${source} reference's ${was.sha256.slice(0, 12)}`]);
   }
   return checks;
+}
+
+// The reference downloads as they would be without a sidecar: the app writes its report as
+// JSON.stringify(report, null, 2), so dropping bids_meta fixes the expected bytes too.
+export function withoutSidecar(artifacts) {
+  const { bids_meta: sidecar, ...report } = artifacts['qc.json'].report;
+  const text = JSON.stringify(report, null, 2);
+  return { ...artifacts, 'qc.json': { sha256: sha256(Buffer.from(text)), report } };
 }
