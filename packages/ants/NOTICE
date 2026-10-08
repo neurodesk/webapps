@@ -1,0 +1,11 @@
+ANTs command line
+Apache-2.0
+
+Registration runs Advanced Normalization Tools (ANTs) 2.6.2 compiled to
+WebAssembly by @neurodesk/registration, with the ANTsPy 0.6.1
+type_of_transform='SyN' schedule. ANTs and ITK are Apache-2.0; see
+app/node_modules/@neurodesk/registration/NOTICE in a portable archive.
+
+Please cite: Tustison NJ, Cook PA, Holbrook AJ, et al. The ANTsX ecosystem for
+quantitative biological and medical imaging. Scientific Reports. 2021;11:9068.
+doi:10.1038/s41598-021-87564-6

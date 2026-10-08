@@ -38,7 +38,8 @@ function synthsrModels() {
 const flag = (name) => ({ env: [name], provision: async () => ({ [name]: '1' }) });
 
 export const provisioners = {
-  ants: flag('ANTS_LIVE_DATA'),
+  // The browser reference registers the 1 mm example once, about 3 min on a 4-core runner.
+  ants: { env: ['ANTS_LIVE_DATA', 'ANTS_BROWSER_REFERENCE'], provision: async () => ({ ANTS_LIVE_DATA: '1', ANTS_BROWSER_REFERENCE: 'check' }) },
   'brain-extraction': flag('BRAIN_EXTRACTION_REAL_MODELS'),
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },

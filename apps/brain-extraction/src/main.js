@@ -6,6 +6,7 @@ import { createResultList, createInfoDialog, createConsole, createFileField, cre
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { readVolume } from '@neurodesk/synthsr';
+import { outputNames } from '@neurodesk/brain-extraction/outputs';
 import examples from '../examples.json';
 import { editedResult, extractionOutputs } from './outputs.js';
 import appPackage from '../package.json';
@@ -302,7 +303,7 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   if (method === 'bet') effective.threshold = threshold;
   if (method === 'mindgrab') effective.backend = requestedBackend;
   const job = start('running', { inputs: { image: source }, parameters: effective });
-  const stem = source.name.replace(/\.nii(\.gz)?$/i, '');
+  const names = outputNames(source.name, method);
   status(`Starting ${method}…`);
   const abort = () => cancel();
   signal?.addEventListener('abort', abort, { once: true });
@@ -338,8 +339,8 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
             fail(new Error(data.message));
           } else if (data.type === 'result') {
             try {
-              const brain = new File([data.brain], `${stem}_${method}_brain.nii`);
-              const mask = new File([data.mask], `${stem}_${method}_mask.nii`);
+              const brain = new File([data.brain], names.brain);
+              const mask = new File([data.mask], names.mask);
               const succeeded = await job.run.succeed({
                 artifacts: {
                   brain: { file: brain, type: 'neuro:volume', mediaType: 'application/x-nifti', space: 'input' },

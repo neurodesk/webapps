@@ -1,11 +1,12 @@
 {
   "name": "@neurodesk/synthstrip",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "license": "Apache-2.0",
   "description": "Runtime-independent SynthStrip brain extraction",
   "exports": {
     ".": "./src/index.js",
+    "./model": "./src/model.js",
     "./browser": "./src/browser.js"
   },
   "files": [

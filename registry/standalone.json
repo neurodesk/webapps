@@ -472,8 +472,8 @@
           "platform": "macos-arm64",
           "version": "0.6.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-macos-arm64.pkg",
-          "sha256": "3c6f558c66b6246b71eb206057ac7093beecdc86c592069308d97dde5c55b224",
-          "bytes": 127645390,
+          "sha256": "ec6f96092feea8708dd4cca2782620845a5f60f6a4fa4c7e37849d83852e8ed1",
+          "bytes": 127645462,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg syncro-0.6.20261007-macos-arm64.pkg -target /\nsyncro self-check\nsyncro input.nii.gz results --threads 4"
@@ -483,8 +483,8 @@
           "platform": "windows-x64",
           "version": "0.6.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-windows-x64.zip",
-          "sha256": "b11f8427c1cd13f4e15aed7163a0261bb36d2c2a59893f308048e1019808e4aa",
-          "bytes": 127145770,
+          "sha256": "9743562a25bf48cdc4bd65649c82a05d5dba2ce4413ded3ac72c506b0404076a",
+          "bytes": 127145769,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/syncro-v0.6.20261007/syncro-0.6.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\syncro-0.6.20261007-windows-x64.zip -DestinationPath .\n.\\syncro-0.6.20261007-windows-x64\\syncro.exe input.nii.gz results --threads 4"
@@ -587,35 +587,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.13.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-linux-x64.tar.gz",
-          "sha256": "70e7020243b3e11081f91ad881a5d815b992ab6d6f55ecccfcf36e61eaa76f84",
-          "bytes": 91529132,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-linux-x64.tar.gz.validation.txt",
+          "version": "0.14.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-linux-x64.tar.gz",
+          "sha256": "d45ca389967dd5561ead1358846df4a33a1e51bc30cfaa0d4982a4139948dfbd",
+          "bytes": 91529223,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf topofit-0.13.20261007-linux-x64.tar.gz\n./topofit-0.13.20261007-linux-x64/topofit input.nii.gz results"
+          "command": "tar -xzf topofit-0.14.20261007-linux-x64.tar.gz\n./topofit-0.14.20261007-linux-x64/topofit input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.13.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-macos-arm64.pkg",
-          "sha256": "25399c19b572067f5fcf1d5f8fbbbf6eb084dfdb482d1c8ad44d59479265ac47",
-          "bytes": 92853512,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-macos-arm64.pkg.validation.txt",
+          "version": "0.14.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-macos-arm64.pkg",
+          "sha256": "c5af4c1395c4e35985ed7579cb9ec99cde7c3c0ce89bf38e5af4ed95cd859b07",
+          "bytes": 92853564,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg topofit-0.13.20261007-macos-arm64.pkg -target /\ntopofit self-check\ntopofit input.nii.gz results"
+          "command": "sudo installer -pkg topofit-0.14.20261007-macos-arm64.pkg -target /\ntopofit self-check\ntopofit input.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.13.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-windows-x64.zip",
-          "sha256": "0382a1251c49d988cb09a3b0438ef58199c40ae9669293267af778856efe2c6b",
-          "bytes": 92353943,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.13.20261007/topofit-0.13.20261007-windows-x64.zip.validation.txt",
+          "version": "0.14.20261007",
+          "url": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-windows-x64.zip",
+          "sha256": "7bd7d29d593fdcab7bb17856915ef90504a932c6c698c7b61006f4e49f482582",
+          "bytes": 92353941,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/topofit-v0.14.20261007/topofit-0.14.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\topofit-0.13.20261007-windows-x64.zip -DestinationPath .\n.\\topofit-0.13.20261007-windows-x64\\topofit.exe input.nii.gz results"
+          "command": "Expand-Archive -Path .\\topofit-0.14.20261007-windows-x64.zip -DestinationPath .\n.\\topofit-0.14.20261007-windows-x64\\topofit.exe input.nii.gz results"
         }
       ],
       "containers": [
@@ -658,8 +658,8 @@
           "platform": "macos-arm64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg",
-          "sha256": "4e39afc6822cda831df304f9c818bfe22079434e98421618e2942d33cdd41d66",
-          "bytes": 37155036,
+          "sha256": "74961c4f2e1c12245164ed2297528abcd0e1a435346b0b56ce4f607e43952cbe",
+          "bytes": 37155009,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg fireants-0.3.20261007-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
@@ -669,8 +669,8 @@
           "platform": "windows-x64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip",
-          "sha256": "b705d29dbac504b7c8ba509152d9231ab66b3a37ac530732fd1b19f28cf48f8a",
-          "bytes": 33382087,
+          "sha256": "58d0e1c58372f92bbac61fcf1044115e4d40df79a8d50e3c6a69b30568cbd8fd",
+          "bytes": 33382085,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\fireants-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\fireants-0.3.20261007-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
@@ -706,8 +706,8 @@
           "platform": "macos-arm64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg",
-          "sha256": "f50e4338913b8610f8f8b403dad6bb81c66805cdba28c49f07f3de3078a9404b",
-          "bytes": 66442438,
+          "sha256": "d63d14e4317db62a0b9655730469cdb3ff8fcf0ba206f7dffb0d5013c2513955",
+          "bytes": 66442398,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg disconnectome-0.3.20261007-macos-arm64.pkg -target /\ndisconnectome self-check\ndisconnectome lesion.nii.gz results"
@@ -717,8 +717,8 @@
           "platform": "windows-x64",
           "version": "0.3.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip",
-          "sha256": "960e4521c280e224b3f0f1c5a2d55db04df3d6e2c920efbfef401c5c98763fd5",
-          "bytes": 62658167,
+          "sha256": "40bf60ae80814084b13d69e46db65819b5eb699caf409f6ad79d775e7decf3e1",
+          "bytes": 62658161,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/disconnectome-v0.3.20261007/disconnectome-0.3.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\disconnectome-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\disconnectome-0.3.20261007-windows-x64\\disconnectome.exe lesion.nii.gz results"
@@ -788,8 +788,8 @@
           "platform": "macos-arm64",
           "version": "0.2.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.2.20261007/flames-0.2.20261007-macos-arm64.pkg",
-          "sha256": "613c5a7f093a2e45472e687b0bcc655feb280b369d3c89e762fe161b73161399",
-          "bytes": 262609643,
+          "sha256": "49b22a6c8131431182251e1843cb8ab0dffd8f96349f5ad1afc46eae92fb3d01",
+          "bytes": 262609327,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.2.20261007/flames-0.2.20261007-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
           "command": "sudo installer -pkg flames-0.2.20261007-macos-arm64.pkg -target /\nflames self-check\nflames flair.nii.gz results"
@@ -799,8 +799,8 @@
           "platform": "windows-x64",
           "version": "0.2.20261007",
           "url": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.2.20261007/flames-0.2.20261007-windows-x64.zip",
-          "sha256": "9e4f0ff38d66afc699b1170a70a3857b40771a115a20c1bb2407a87025a87dd5",
-          "bytes": 266080622,
+          "sha256": "0086c80232acd7c0639949fbd144b05aa3a754be50064259131d8c09852b0809",
+          "bytes": 266080619,
           "validationUrl": "https://github.com/neurodesk/webapps/releases/download/white-matter-lesions-v0.2.20261007/flames-0.2.20261007-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
           "command": "Expand-Archive -Path .\\flames-0.2.20261007-windows-x64.zip -DestinationPath .\n.\\flames-0.2.20261007-windows-x64\\flames.exe flair.nii.gz results"

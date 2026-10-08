@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "ants-v",
+  "displayName": "ANTs",
+  "app": "ants",
+  "run": "moving.nii.gz fixed.nii.gz results",
+  "readme": {
+    "run": "Register a moving image to a fixed image",
+    "notes": [
+      "Runs ANTs 2.6.2 SyN with the ANTsPy 0.6.1 schedule and seed 42, as the web app does.",
+      "Writes the registered image, the affine and both warps. No network connection is required.",
+      "Brain extract both images first, for example with SynthStrip: MindGrab is",
+      "not included until neurodesk/webapps#162.",
+      "",
+      "The WebAssembly kernel is limited to 4 GiB of memory. Use the native ANTs",
+      "container for larger images. Please cite: Tustison NJ, Cook PA, Holbrook AJ,",
+      "et al. The ANTsX ecosystem for quantitative biological and medical imaging.",
+      "Scientific Reports. 2021;11:9068."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "ants"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "ants.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "ants"
+    }
+  }
+}

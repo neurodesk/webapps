@@ -1,5 +1,20 @@
 # topofit
 
+## 0.14.20261007
+
+### Minor Changes
+
+- f470c7b: Reconstruct cortical surfaces about twice as fast with byte-identical results: 73 s instead of 153 s on the validation scan. ONNX Runtime uses a fixed two threads, the conformer and intensity quantiles do the same arithmetic with less work, and both hemispheres reconstruct at once. Parallel hemispheres need about 3 GB more memory; an Advanced setting runs one hemisphere at a time, and TopoFit switches to it after a failed or crashed parallel run. Mesh models download once per run. The parity gate now also requires every output to match the pinned production bytes.
+
+### Patch Changes
+
+- 273fab7: Make the deployed app cross-origin isolated through the shared service-worker fallback, as the other threaded apps are. GitHub Pages cannot send isolation headers, so TopoFit had always run ONNX Runtime on one thread there; it now gets the two-thread speedup. The processing manifest reports one thread when a browser cannot isolate the page.
+- Updated dependencies [f470c7b]
+- Updated dependencies [22aa4bf]
+  - @neurodesk/topofit@0.14.20261007
+  - @neurodesk/webapp-components@0.11.1
+  - @neurodesk/runtime-support@0.2.1
+
 ## 0.13.20261007
 
 ### Minor Changes

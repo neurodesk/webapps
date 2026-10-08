@@ -28,6 +28,22 @@ pnpm --filter ants test:e2e   # ANTS_LIVE_DATA=1 additionally registers the real
 Example data comes from the `reg/` folder of the `neurodeskorg/webapps` Hugging
 Face dataset at a pinned revision, shared with Greedy.
 
+## Command line
+
+`ants` from `packages/ants` runs the same registration with Node, on the same
+WebAssembly kernel and schedule:
+
+```bash
+ants moving.nii.gz fixed.nii.gz results
+```
+
+It writes the four downloads under the web app's names. It registers the given
+images as they are: brain extract them beforehand, for example with SynthStrip,
+until MindGrab has a Node runtime
+([#162](https://github.com/neurodesk/webapps/issues/162)). It has no DICOM
+import. Portable archives for Linux x64, Windows x64 and macOS arm64 bundle
+their own Node runtime. See [packages/ants/README.md](../../packages/ants/README.md).
+
 ## Agent automation
 
 The published `automation.json` describes the typed browser operation. Desktop

@@ -1,0 +1,25 @@
+[package]
+name = "bet-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "qsm-core's BET behind a glue-free WebAssembly ABI, for the brain-extraction command line"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+# Must stay the qsm-core QSMbly's browser bundle locks (apps/qsmbly/rust-wasm/Cargo.lock);
+# packages/brain-extraction/test/bet-wasm.test.js fails when the two differ.
+qsm-core = { git = "https://github.com/stebo85/QSM.rs.git", rev = "30df24f8e2c4892bacf6e1be8c4c85ae1d772dd4" }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[workspace]
