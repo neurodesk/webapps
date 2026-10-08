@@ -65,7 +65,7 @@ Keep preview servers bound to loopback. Use a different path and port for anothe
 
 ## Data-gated browser tests
 
-An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run in CI. Add a provisioner to `scripts/lib/e2e-test-data.mjs` that downloads pinned, checksummed data and sets `X`, or list `X` under `unpublished` with the reason no public data exists; `test/e2e-test-data.test.mjs` fails otherwise. `browser-e2e` provisions on Linux; apps with `ci.hardware_gpu` run their whole suite on the free `macos-15` runner (`browser-e2e-gpu`, full Chromium on Metal, `NEURODESK_HARDWARE_GPU=1`). Locally: `node scripts/e2e-test-data.mjs <app>` prints the variables to export.
+An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run in CI. Add a provisioner to `scripts/lib/e2e-test-data.mjs` that downloads pinned, checksummed data and sets `X`, or list `X` under `unpublished` with the reason no public data exists; `test/e2e-test-data.test.mjs` fails otherwise. `browser-e2e` provisions on Linux; apps with `ci.hardware_gpu` run their whole suite on the free `macos-15` runner (`browser-e2e-gpu`, full Chromium on Metal, `NEURODESK_HARDWARE_GPU=1`). A hardware-GPU app can also declare a `cpu` subset: the variables whose tests run without a GPU; `browser-e2e` provisions it with `--cpu` on Linux so those tests run on every PR too. Locally: `node scripts/e2e-test-data.mjs <app>` (add `--cpu` for the subset) prints the variables to export.
 
 ## dwi2trx
 

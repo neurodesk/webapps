@@ -122,28 +122,24 @@ test.describe("touch", () => {
     viewport: { width: 390, height: 844 },
     permissions: ['accelerometer', 'gyroscope'],
   });
-  const orient = (page, beta, gamma) =>
-    page.evaluate(
-      ([beta, gamma]) =>
-        window.dispatchEvent(
-          new DeviceOrientationEvent("deviceorientation", { alpha: 0, beta, gamma }),
-        ),
-      [beta, gamma],
-    );
+  const orient = (client, beta, gamma) =>
+    client.send("DeviceOrientation.setDeviceOrientationOverride", { alpha: 0, beta, gamma });
   test("tilting the phone steers, a tap recentres, and the hold buttons brake", async ({
     page,
   }) => {
     test.setTimeout(120000);
     await openGame(page);
+    const client = await page.context().newCDPSession(page);
+    await orient(client, 40, 0);
     await page.locator("#play").tap();
     await expect(page.locator("#ocean")).toHaveAttribute("data-state", "running");
     await expect(page.locator("#touch")).toBeVisible();
     // Neutral pose, then a roll to the right.
-    await orient(page, 40, 0);
+    await orient(client, 40, 0);
     await expect(page.locator("#ocean")).toHaveAttribute("data-tilt", "on");
     const before = await heading(page);
     for (let i = 0; i < 6; i++) {
-      await orient(page, 40, 30);
+      await orient(client, 40, 30);
       await page.waitForTimeout(80);
     }
     await expect
@@ -152,11 +148,10 @@ test.describe("touch", () => {
     // Back to neutral holds the heading; a tap makes the current pose neutral.
     // Brake meanwhile so the lumen assist does not steer along the vessel.
     await page.keyboard.down("Shift");
-    await orient(page, 40, 0);
+    await orient(client, 40, 0);
     const level = await settle(page);
     await page.waitForTimeout(250);
     expect(dot(await heading(page), level)).toBeGreaterThan(0.999);
-    const client = await page.context().newCDPSession(page);
     const touch = (type, x, y) =>
       client.send("Input.dispatchTouchEvent", {
         type,
@@ -164,13 +159,13 @@ test.describe("touch", () => {
       });
     // Release the brake first: the braking hint would overwrite the message.
     await page.keyboard.up("Shift");
-    await orient(page, 40, 30);
+    await orient(client, 40, 30);
     await touch("touchStart", 120, 600);
     await touch("touchEnd", 120, 600);
     await expect(page.locator("#ocean")).toHaveAttribute("data-tilt-recentres", "1");
     await expect(page.locator("#stick")).toBeHidden();
     await page.keyboard.down("Shift");
-    await orient(page, 40, 30);
+    await orient(client, 40, 30);
     const recentred = await settle(page);
     await page.waitForTimeout(250);
     expect(dot(await heading(page), recentred)).toBeGreaterThan(0.999);

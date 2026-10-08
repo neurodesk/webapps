@@ -7,6 +7,9 @@ import { readVolume } from '../../../packages/synthsr/src/index.js';
 import { sameGeometry } from '../../../packages/syncro/src/pipeline.js';
 
 const inferenceTimeout = Number(process.env.SYNCRO_AUTOMATION_TIMEOUT_MS || 1_800_000);
+// Measured on the pinned sub-101 T1 with WASM SynthSR, SynthStrip and Greedy (issue #211):
+// brain Dice 0.974, correlations 0.944 (normalized) and 0.950 (synthetic), from 0.554 unregistered.
+const PINNED_FLOOR = { overlap: 0.95, correlation: 0.9, gain: 0.2 };
 const image = gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
 const shifted = Buffer.from(image);
 shifted.fill(0, 352);
@@ -46,8 +49,8 @@ test('automation rejects an explicitly paired lesion on the wrong grid before in
   await expect(page.locator('#input')).toBeEnabled();
 });
 
+// The fixture ships with the repository and runs entirely on the CPU, so every browser job runs it.
 test('cropped brain fails normalization without exporting nearly empty images', async ({ page }) => {
-  test.skip(!process.env.SYNCRO_AUTOMATION_IMAGE, 'Enable the full inference suite with SYNCRO_AUTOMATION_IMAGE.');
   test.setTimeout(inferenceTimeout);
   await page.goto('./');
   await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'cropped-head.nii', mimeType: 'application/nifti', buffer: image });
@@ -61,7 +64,7 @@ test('cropped brain fails normalization without exporting nearly empty images', 
   await expect(page.locator('#download')).toBeDisabled();
 });
 
-test('full normalization exports all required MNI images and the real pipeline manifest', async ({ page }) => {
+test('the pinned T1 example normalizes onto the MNI152 template with WASM SynthSR', async ({ page }) => {
   test.skip(!process.env.SYNCRO_AUTOMATION_IMAGE, 'Set SYNCRO_AUTOMATION_IMAGE to a suitable anatomical scan for full inference.');
   test.setTimeout(inferenceTimeout);
   await page.goto('./');
@@ -113,6 +116,21 @@ test('full normalization exports all required MNI images and the real pipeline m
   expect(overlap / templateSupport, 'positive synthetic brain overlaps the template').toBeGreaterThanOrEqual(0.01);
   expect(primaryTissue / templateSupport, 'primary tissue survives inside the brain, excluding minimum-intensity background').toBeGreaterThanOrEqual(0.01);
   expect(tissueMax, 'brain contains varying primary tissue intensities').toBeGreaterThan(tissueMin);
+
+  // Independent of anything SYNcro reports: the FSL template is the reference. The pinned
+  // example is a stroke patient, so its brain cannot match the template as closely as the
+  // displaced healthy head below.
+  const reference = await readNifti(templateBytes);
+  const original = await readNifti(await readFile(process.env.SYNCRO_AUTOMATION_IMAGE));
+  const unregistered = correlation(onGrid(original, reference), reference.data);
+  const registeredBrain = correlation(brain.data, reference.data);
+  const syntheticBrain = correlation(synthetic.data, reference.data);
+  const brainDice = dice(synthetic.data, reference.data);
+  console.log(`pinned example template correlation: unregistered ${unregistered.toFixed(3)}, normalized brain ${registeredBrain.toFixed(3)}, synthetic brain ${syntheticBrain.toFixed(3)}; brain Dice ${brainDice.toFixed(3)}`);
+  expect(brainDice).toBeGreaterThan(PINNED_FLOOR.overlap);
+  expect(syntheticBrain).toBeGreaterThan(PINNED_FLOOR.correlation);
+  expect(registeredBrain).toBeGreaterThan(PINNED_FLOOR.correlation);
+  expect(registeredBrain).toBeGreaterThan(unregistered + PINNED_FLOOR.gain);
 });
 
 // The real pipeline on the CPU: SynthSR and SynthStrip on ONNX Runtime WebAssembly, Greedy on

@@ -2,7 +2,8 @@
 // environment that enables them. Every file is pinned: examples by the offline
 // asset lock, models and goldens by their manifests. Apps whose tests need a
 // hardware GPU (ci.hardware_gpu) are provisioned on the macOS runner; the rest
-// on Linux.
+// on Linux. A hardware-GPU app's optional `cpu` provisioner is the subset of its
+// tests that a CPU-only browser can finish; Linux runs that subset with `--cpu`.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -75,6 +76,14 @@ export const provisioners = {
       const [image] = await exampleFiles(cache, 'syncro', 'trace-t1', ['primary']);
       return { SYNCRO_SCIENTIFIC_TESTS: '1', SYNCRO_AUTOMATION_IMAGE: image, SYNTHSR_MODEL: join(synthsrModels(), 'synthsr-v2.onnx') };
     },
+    // The pinned T1 through WASM SynthSR, SynthStrip and Greedy needs no GPU (issue #211).
+    cpu: {
+      env: ['SYNCRO_AUTOMATION_IMAGE'],
+      provision: async (cache) => {
+        const [image] = await exampleFiles(cache, 'syncro', 'trace-t1', ['primary']);
+        return { SYNCRO_AUTOMATION_IMAGE: image };
+      },
+    },
   },
   synthseg: {
     env: ['SYNTHSEG_E2E_FIXTURE', 'SYNTHSEG_ASSET_DIR', 'SYNTHSEG_REFERENCE_DIR'],
@@ -114,8 +123,9 @@ export const unpublished = {
   TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',
 };
 
-export async function provisionTestData(app, cache) {
-  const provisioner = provisioners[app];
+// With `cpu`, only the app's CPU subset; for an app without one, nothing.
+export async function provisionTestData(app, cache, { cpu = false } = {}) {
+  const provisioner = cpu ? provisioners[app]?.cpu : provisioners[app];
   if (!provisioner) return {};
   const environment = await provisioner.provision(cache);
   const keys = Object.keys(environment).sort();

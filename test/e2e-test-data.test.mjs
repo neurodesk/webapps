@@ -76,7 +76,27 @@ test('both browser jobs download the data their apps need', async () => {
     const tests = steps.findIndex((step) => step.run?.includes('test:e2e'));
     assert.ok(download >= 0 && download < tests, `${name} downloads test data before its tests`);
   }
-  // Linux cannot finish the hardware-GPU workloads, so it leaves them to macOS.
+  // Linux cannot finish the hardware-GPU workloads, so it leaves them to macOS
+  // and provisions only their CPU subset.
   const linux = workflow.jobs['browser-e2e'].steps.find((step) => step.run?.includes('scripts/e2e-test-data.mjs'));
-  assert.match(linux.if, /!matrix\.hardware_gpu/);
+  assert.equal(linux.if, undefined);
+  assert.equal(linux.env.CPU_ONLY, "${{ matrix.hardware_gpu && '--cpu' || '' }}");
+  assert.match(linux.run, /\$CPU_ONLY/);
+  const macos = workflow.jobs['browser-e2e-gpu'].steps.find((step) => step.run?.includes('scripts/e2e-test-data.mjs'));
+  assert.doesNotMatch(macos.run, /--cpu|CPU_ONLY/);
+});
+
+test('a CPU subset provisions only variables its full provisioner declares', async () => {
+  const registry = await loadAppsRegistry();
+  for (const [app, { env, cpu }] of Object.entries(provisioners)) {
+    if (!cpu) continue;
+    assert.ok(registry.apps.find(({ id }) => id === app).ci.hardware_gpu, `${app}: only hardware-GPU apps need a CPU subset`);
+    assert.ok(cpu.env.length > 0, `${app}: an empty CPU subset is no subset`);
+    for (const variable of cpu.env) assert.ok(env.includes(variable), `${app}: ${variable} is not in its full provisioner`);
+  }
+});
+
+// SYNcro's pinned example runs through WASM SynthSR on Linux, not only on the macOS GPU job (issue #211).
+test('Linux provisions SYNcro\'s pinned example for its CPU normalization', () => {
+  assert.deepEqual(provisioners.syncro.cpu?.env, ['SYNCRO_AUTOMATION_IMAGE']);
 });
