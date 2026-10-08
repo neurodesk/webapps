@@ -568,6 +568,9 @@ importers:
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+      zarrita:
+        specifier: 0.7.5
+        version: 0.7.5
 
   apps/fireants:
     dependencies:
@@ -9043,7 +9046,7 @@ snapshots:
       earcut: 3.2.3
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
-      zarrita: 0.7.4
+      zarrita: 0.7.5
 
   '@niivue/niivue@1.0.0-rc.14':
     dependencies:
@@ -9052,7 +9055,7 @@ snapshots:
       earcut: 3.2.3
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
-      zarrita: 0.7.4
+      zarrita: 0.7.5
 
   '@niivue/niivue@1.0.0-rc.16':
     dependencies:
@@ -9061,7 +9064,7 @@ snapshots:
       earcut: 3.2.3
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
-      zarrita: 0.7.4
+      zarrita: 0.7.5
 
   '@niivue/niivue@1.0.0-rc.9':
     dependencies:

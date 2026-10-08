@@ -10,6 +10,7 @@ test("output names drop every format extension of the moving image", () => {
     nifti: "t1_brain_registered.nii.gz",
     omeZarr: "t1_brain_registered.ome.zarr.ozx",
     transform: "t1_brain_transform.h5",
+    transformOmeZarr: "t1_brain_transform.ome.zarr.ozx",
   });
 });
 

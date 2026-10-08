@@ -16,6 +16,7 @@ export function outputNames(movingName) {
     nifti: `${stem}_registered.nii.gz`,
     omeZarr: `${stem}_registered.ome.zarr.ozx`,
     transform: `${stem}_transform.h5`,
+    transformOmeZarr: `${stem}_transform.ome.zarr.ozx`,
   };
 }
 

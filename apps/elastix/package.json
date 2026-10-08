@@ -28,6 +28,7 @@
   "devDependencies": {
     "@playwright/test": "^1.44.0",
     "eslint": "^9.0.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "zarrita": "0.7.5"
   }
 }

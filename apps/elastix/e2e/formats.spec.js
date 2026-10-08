@@ -5,6 +5,7 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { ncc, readVolume } from "../../../test-utils/registration-similarity.mjs";
 import { fixedPixels, movingPixels, pyramidalTiff, SHIFT_PX, SPACING, syntheticPair, totalTranslation } from "./fixtures.mjs";
+import { readTransformArchive } from "./ome-zarr-transform.mjs";
 
 const pair = await syntheticPair();
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
@@ -65,11 +66,18 @@ async function registerRigidAndCheck(page) {
   expect(before).toBeLessThan(0.8);
   expect(after).toBeGreaterThan(0.98);
   const texts = [];
-  for (const label of ["TransformParameters.0.txt", "TransformParameters.1.txt"]) texts.push((await download(page, label)).toString("utf8"));
+  for (const label of ["TransformParameters.0.toml", "TransformParameters.1.toml"]) texts.push((await download(page, label)).toString("utf8"));
   const [tx, ty] = totalTranslation(texts);
   test.info().annotations.push({ type: "translation", description: `${tx.toFixed(3)}, ${ty.toFixed(3)}` });
   expect(Math.abs(tx - SHIFT_PX[0] * SPACING)).toBeLessThan(0.5 * SPACING);
   expect(Math.abs(ty - SHIFT_PX[1] * SPACING)).toBeLessThan(0.5 * SPACING);
+  // The OME-Zarr transform is one affine on (y, x): identity plus the shift.
+  const { transformation } = await readTransformArchive(await download(page, "Transform (OME-Zarr)"));
+  expect(transformation.type).toBe("affine");
+  const [[a, b, y], [c, d, x]] = transformation.affine;
+  [a - 1, b, c, d - 1].forEach((value) => expect(Math.abs(value)).toBeLessThan(0.01));
+  expect(Math.abs(x - SHIFT_PX[0] * SPACING)).toBeLessThan(0.5 * SPACING);
+  expect(Math.abs(y - SHIFT_PX[1] * SPACING)).toBeLessThan(0.5 * SPACING);
 }
 
 test("local OME-Zarr archives register and the result reopens as OME-Zarr", async ({ page }) => {

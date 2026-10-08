@@ -37,7 +37,7 @@ test("every stage's default map gets the resolutions and grid spacing, on one wo
 test("written TransformParameters files chain to their predecessors", () => {
   const optimized = [{ Transform: ["TranslationTransform"] }, { Transform: ["EulerTransform"] }, { Transform: ["AffineTransform"], InitialTransformParameterFileName: ["NoInitialTransform"] }];
   const { maps, names } = chainParameterFiles(optimized, "t1");
-  assert.deepEqual(names, ["t1_TransformParameters.0.txt", "t1_TransformParameters.1.txt", "t1_TransformParameters.2.txt"]);
+  assert.deepEqual(names, ["t1_TransformParameters.0.toml", "t1_TransformParameters.1.toml", "t1_TransformParameters.2.toml"]);
   assert.deepEqual(maps.map((map) => map.InitialTransformParameterFileName[0]), ["NoInitialTransform", names[0], names[1]]);
   assert.equal(optimized[2].InitialTransformParameterFileName[0], "NoInitialTransform", "the optimized maps are not modified");
 });

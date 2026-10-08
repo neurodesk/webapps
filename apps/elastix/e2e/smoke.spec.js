@@ -2,6 +2,7 @@ import { affineDifference, downsampledExamplePair, ncc, readVolume, resampleToGr
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { readTransformArchive, resampleThroughArchive } from "./ome-zarr-transform.mjs";
 
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
@@ -68,27 +69,45 @@ test("affine registration aligns the example T1 with the MNI template and writes
   await selectExample(page);
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 480_000 });
-  for (const label of ["Registered NIfTI", "Registered OME-Zarr", "Transform (ITK HDF5)", "TransformParameters.2.txt"]) {
+  for (const label of ["Registered NIfTI", "Registered OME-Zarr", "Transform (ITK HDF5)", "Transform (OME-Zarr)", "TransformParameters.2.toml"]) {
     await expect(page.locator("#resultList")).toContainText(label);
   }
   const nifti = await downloadResult(page, "Registered NIfTI");
   expect(nifti.suggestedFilename()).toBe("t1_brain_registered.nii.gz");
-  expectAligned(await readVolume(await readFile(await nifti.path())), moving, fixed);
+  const registered = await readVolume(await readFile(await nifti.path()));
+  expectAligned(registered, moving, fixed);
 
   const transform = await downloadResult(page, "Transform (ITK HDF5)");
   expect(transform.suggestedFilename()).toBe("t1_brain_transform.h5");
   expect((await readFile(await transform.path())).subarray(0, 8).toString("latin1")).toBe("\x89HDF\r\n\x1a\n");
 
-  const last = await downloadResult(page, "TransformParameters.2.txt");
-  expect(last.suggestedFilename()).toBe("t1_brain_TransformParameters.2.txt");
+  const last = await downloadResult(page, "TransformParameters.2.toml");
+  expect(last.suggestedFilename()).toBe("t1_brain_TransformParameters.2.toml");
   const parameters = await readFile(await last.path(), "utf8");
-  expect(parameters).toContain('(Transform "AffineTransform")');
-  expect(parameters).toContain('(InitialTransformParameterFileName "t1_brain_TransformParameters.1.txt")');
+  expect(parameters).toMatch(/^Transform = "AffineTransform"$/m);
+  expect(parameters).toMatch(/^InitialTransformParameterFileName = "t1_brain_TransformParameters.1.toml"$/m);
 
   const zarr = await downloadResult(page, "Registered OME-Zarr");
   expect(zarr.suggestedFilename()).toBe("t1_brain_registered.ome.zarr.ozx");
   expect((await readFile(await zarr.path())).subarray(0, 2).toString("latin1")).toBe("PK");
+
+  const archive = await downloadResult(page, "Transform (OME-Zarr)");
+  expect(archive.suggestedFilename()).toBe("t1_brain_transform.ome.zarr.ozx");
+  await expectTransformArchiveReproduces(await readFile(await archive.path()), "affine", registered, moving, fixed);
 });
+
+// Resampling the moving image through the downloaded OME-Zarr transform, with
+// nothing but the archive and the NIfTI affines, must reproduce elastix's own
+// registered image (which uses cubic rather than linear interpolation).
+async function expectTransformArchiveReproduces(bytes, type, registered, moving, fixed) {
+  const archive = await readTransformArchive(bytes);
+  expect(archive.transformation).toMatchObject({ type, name: "fixed_to_moving", input: { name: "fixed" }, output: { name: "moving" } });
+  const resampled = resampleThroughArchive(archive, moving, fixed);
+  const agreement = ncc(resampled, registered.data);
+  test.info().annotations.push({ type: "transform archive", description: `${type}: NCC with elastix's result ${agreement.toFixed(4)}` });
+  expect(agreement).toBeGreaterThan(0.99);
+  return archive;
+}
 
 test("affine + B-spline registration adds a deformable stage that keeps the alignment", async ({ page }) => {
   test.setTimeout(600_000);
@@ -100,10 +119,17 @@ test("affine + B-spline registration adds a deformable stage that keeps the alig
   await page.locator("#gridSpacing").fill("20");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 480_000 });
-  const parameters = (await readFile(await (await downloadResult(page, "TransformParameters.3.txt")).path(), "utf8"));
-  expect(parameters).toContain('(Transform "BSplineTransform")');
-  expect(parameters).toContain('(InitialTransformParameterFileName "t1_brain_TransformParameters.2.txt")');
-  expectAligned(await readVolume(await readFile(await (await downloadResult(page, "Registered NIfTI")).path())), moving, fixed);
+  const parameters = (await readFile(await (await downloadResult(page, "TransformParameters.3.toml")).path(), "utf8"));
+  expect(parameters).toMatch(/^Transform = "BSplineTransform"$/m);
+  expect(parameters).toMatch(/^InitialTransformParameterFileName = "t1_brain_TransformParameters.2.toml"$/m);
+  const registered = await readVolume(await readFile(await (await downloadResult(page, "Registered NIfTI")).path()));
+  expectAligned(registered, moving, fixed);
+  const bytes = await readFile(await (await downloadResult(page, "Transform (OME-Zarr)")).path());
+  const archive = await expectTransformArchiveReproduces(bytes, "displacements", registered, moving, fixed);
+  expect(archive.transformation.path).toBe("displacements");
+  expect(archive.field.shape).toEqual([3, ...fixed.dims.slice().reverse()]);
+  expect(archive.multiscales.datasets).toHaveLength(1);
+  expect(archive.multiscales.type).toBeUndefined();
 });
 
 test("the hosted example registers rigidly in the browser", async ({ page }) => {
@@ -112,8 +138,8 @@ test("the hosted example registers rigidly in the browser", async ({ page }) => 
   await page.locator("#method").selectOption("rigid");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 840_000 });
-  await expect(page.locator("#resultList")).toContainText("TransformParameters.1.txt");
-  await expect(page.locator("#resultList")).not.toContainText("TransformParameters.2.txt");
+  await expect(page.locator("#resultList")).toContainText("TransformParameters.1.toml");
+  await expect(page.locator("#resultList")).not.toContainText("TransformParameters.2.toml");
 });
 
 test("cancelling a registration releases the controls and a new run still completes", async ({ page }) => {
@@ -144,8 +170,8 @@ test("elastix parameter files replace the method preset", async ({ page }) => {
   await expect(page.locator("#method")).toBeDisabled();
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 480_000 });
-  await expect(page.locator("#resultList")).toContainText("TransformParameters.0.txt");
-  await expect(page.locator("#resultList")).not.toContainText("TransformParameters.1.txt");
+  await expect(page.locator("#resultList")).toContainText("TransformParameters.0.toml");
+  await expect(page.locator("#resultList")).not.toContainText("TransformParameters.1.toml");
   await page.locator("#parameterClear").click();
   await expect(page.locator("#method")).toBeEnabled();
   await expect(page.locator("#resultList")).toBeEmpty();

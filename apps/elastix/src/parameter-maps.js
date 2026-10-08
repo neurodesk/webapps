@@ -54,9 +54,9 @@ export function sortParameterFiles(files) {
   return Array.from(files).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
-/** Download names for a run's TransformParameters files. */
+/** Download names for a run's TransformParameters files, in elastix's TOML format. */
 export function parameterFileNames(stem, count) {
-  return Array.from({ length: count }, (_, index) => `${stem}_TransformParameters.${index}.txt`);
+  return Array.from({ length: count }, (_, index) => `${stem}_TransformParameters.${index}.toml`);
 }
 
 /**

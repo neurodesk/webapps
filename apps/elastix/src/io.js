@@ -9,12 +9,35 @@
 import { createWebWorker, castImage, FloatTypes } from "itk-wasm";
 import { readImage, writeImage } from "@itk-wasm/image-io";
 import { writeTransform } from "@itk-wasm/transform-io";
-import { readParameterFiles, writeParameterFiles } from "@itk-wasm/elastix";
-import { fromOmeZarr, ngffImageToItkImage, itkImageToNgffImage, toMultiscales, toOmeZarrOzx } from "@fideus-labs/ngff-zarr/browser";
+import { readParameterFiles, transformix, writeParameterFiles } from "@itk-wasm/elastix";
+import {
+  fromOmeZarr,
+  itkDisplacementFieldToNgffTransform,
+  itkImageToNgffImage,
+  itkTransformToNgffTransform,
+  ngffImageToItkImage,
+  storeToZip,
+  toMultiscales,
+  toOmeZarr,
+  toOmeZarrOzx,
+} from "@fideus-labs/ngff-zarr/browser";
 import { TiffStore } from "@fideus-labs/fiff";
 import ZipFileStore from "@zarrita/storage/zip";
 import { chooseLevel, classifySource, squeezeSingletons, urlName, voxelCount, VOXEL_BUDGET, zarrFolderEntries } from "./sources.js";
 import { outputStem, plainBytes, withTypedParameterArrays } from "./outputs.js";
+import {
+  affineTransform,
+  coordinateImage,
+  coordinateParameterObject,
+  coordinateRadius,
+  cornerGrid,
+  displacementFieldImage,
+  displacementVectors,
+  fitAffine,
+  isLinearTransform,
+  namedTransformation,
+  spatialDims,
+} from "./transform-export.js";
 
 let ioWorker = null;
 let queue = Promise.resolve();
@@ -164,10 +187,17 @@ export async function readCustomParameters(files) {
   return parameterObject;
 }
 
-export async function writeOmeZarrFile(image, name) {
-  const ngffImage = await itkImageToNgffImage(image);
+// One scale and nothing downsampled, so drop the downsampling method that
+// toMultiscales records by default.
+async function singleScale(ngffImage) {
   const multiscales = await toMultiscales(ngffImage, { scaleFactors: [] });
-  return toFile(await toOmeZarrOzx(multiscales), name, "application/zip");
+  delete multiscales.metadata.type;
+  delete multiscales.metadata.metadata;
+  return multiscales;
+}
+
+export async function writeOmeZarrFile(image, name) {
+  return toFile(await toOmeZarrOzx(await singleScale(await itkImageToNgffImage(image))), name, "application/zip");
 }
 
 export async function writeTransformFile(transform, name) {
@@ -175,8 +205,63 @@ export async function writeTransformFile(transform, name) {
   return toFile(serializedTransform.data, name);
 }
 
-export async function writeParameterTextFiles(maps, names) {
+/** TransformParameters files; elastix picks the format, TOML here, from each name's extension. */
+export async function writeTransformParameterFiles(maps, names) {
   const { parameterFiles } = await onIoWorker((webWorker) => writeParameterFiles(maps, names, { webWorker }));
   if (parameterFiles.some((file) => !file.data)) throw new Error("elastix wrote an empty parameter file.");
-  return parameterFiles.map((file, index) => new File([file.data], names[index], { type: "text/plain" }));
+  return parameterFiles.map((file, index) => new File([file.data], names[index], { type: "application/toml" }));
+}
+
+// The images' RFC-4 orientation and origin are all the RFC-5 frames need, so
+// a one-voxel image with the same geometry stands in for each.
+function frameImage(image) {
+  const dimension = image.imageType.dimension;
+  return itkImageToNgffImage({
+    imageType: { dimension, componentType: "float32", pixelType: "Scalar", components: 1 },
+    name: image.name || "frame",
+    origin: Array.from(image.origin),
+    spacing: Array.from(image.spacing),
+    direction: new Float64Array(image.direction),
+    size: Array(dimension).fill(1),
+    metadata: new Map(),
+    data: new Float32Array(1),
+  });
+}
+
+// elastix's own transformix maps each coordinate image; see transform-export.js.
+async function mappedCoordinates(transformParameterObject, dimension, radius, componentType, grid = {}) {
+  const maps = coordinateParameterObject(transformParameterObject);
+  const mapped = [];
+  for (let axis = 0; axis < dimension; axis += 1) {
+    const moving = coordinateImage(dimension, axis, radius, componentType);
+    const { result } = await onIoWorker((webWorker) => transformix(moving, { transformParameterObject: maps, ...grid, webWorker }));
+    mapped.push(result.data);
+  }
+  return mapped;
+}
+
+/**
+ * The stationary-to-moving transform as an RFC-5 OME-Zarr archive: one
+ * affine when every stage is linear, else a displacement field sampled on
+ * the stationary grid. Coordinates are the images' intrinsic systems.
+ */
+export async function writeTransformOmeZarrFile({ transform, transformParameterObject, fixed, moving }, name) {
+  const dimension = fixed.imageType.dimension;
+  const dims = spatialDims(dimension);
+  const radius = coordinateRadius([fixed, moving]);
+  const frames = { fixed: await frameImage(fixed), moving: await frameImage(moving) };
+  if (isLinearTransform(transform)) {
+    const { grid, points } = cornerGrid(fixed);
+    const mapped = await mappedCoordinates(transformParameterObject, dimension, radius, "float64", grid);
+    const { matrix, offset } = fitAffine(points, points.map((_, corner) => mapped.map((axis) => axis[corner])));
+    const affine = itkTransformToNgffTransform([affineTransform(matrix, offset)], dims, true, frames);
+    return toFile(await toOmeZarrOzx(namedTransformation(affine)), name, "application/zip");
+  }
+  const mapped = await mappedCoordinates(transformParameterObject, dimension, radius, "float32");
+  const field = displacementFieldImage(displacementVectors(mapped, fixed), fixed);
+  const converted = await itkDisplacementFieldToNgffTransform(field, dims, { path: "displacements", ...frames });
+  const store = new Map();
+  await toOmeZarr(store, await singleScale(converted.field), { path: "displacements", version: "0.6" });
+  await toOmeZarr(store, namedTransformation(converted.transform), { overwrite: false });
+  return toFile(storeToZip(store), name, "application/zip");
 }

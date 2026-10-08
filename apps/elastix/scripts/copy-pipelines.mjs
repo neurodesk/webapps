@@ -6,7 +6,7 @@
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 const target = new URL("../public/pipelines/", import.meta.url);
 const packages = {
-  "@itk-wasm/elastix": ["default-parameter-map", "elastix", "read-parameter-files", "write-parameter-files"],
+  "@itk-wasm/elastix": ["default-parameter-map", "elastix", "read-parameter-files", "transformix", "write-parameter-files"],
   "@itk-wasm/image-io": null,
   "@itk-wasm/transform-io": ["hdf5-write-transform"],
 };

@@ -18,8 +18,18 @@ preset; they run in file-name order.
 Both images are cast to float32 before registration, so any pair of pixel types
 registers and the result is never wrapped into an integer range. The transform
 maps stationary points to moving points, as ITK and elastix define it. The
-TransformParameters downloads name their predecessors, so transformix given the
-last file applies every stage.
+TransformParameters downloads use elastix's TOML format and name their
+predecessors, so transformix given the last file applies every stage.
+
+The transform downloads as ITK HDF5 and as an OME-Zarr archive holding an RFC-5
+transformation from the `fixed` to the `moving` coordinate system, in the images'
+intrinsic (OME-Zarr) coordinates. elastix evaluates it for the archive: transformix
+resamples coordinate images, two voxels per axis whose values are their own
+physical coordinate, so with linear interpolation each output voxel is exactly
+that coordinate of the mapped point. A linear transform is fitted from the
+stationary image's corners and written as one `affine`; a B-spline, or any other
+non-linear stage from a parameter file, is sampled at every stationary voxel and
+written as a `displacements` field.
 
 ## Inputs
 
@@ -46,7 +56,10 @@ pnpm --filter elastix test
 pnpm --filter elastix test:e2e
 ```
 
-The browser tests register the example pair at 2 mm and the hosted 1 mm pair, a
-known rigid displacement through the automation contract, and a synthetic 2D pair
-with a known shift as local OME-Zarr, local OME-TIFF, a remote OME-Zarr folder
-and a remote TIFF served by range request, plus a two-level pyramidal OME-TIFF.
+The browser tests resample the moving image through each downloaded OME-Zarr
+transform, using only the archive and the NIfTI affines, and require it to match
+elastix's registered image. They also register the example pair at 2 mm and the
+hosted 1 mm pair, a known rigid displacement through the automation contract,
+and a synthetic 2D pair with a known shift as local OME-Zarr, local OME-TIFF, a
+remote OME-Zarr folder and a remote TIFF served by range request, plus a
+two-level pyramidal OME-TIFF.

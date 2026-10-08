@@ -27,8 +27,9 @@ import {
   resetIo,
   writeImageFile,
   writeOmeZarrFile,
-  writeParameterTextFiles,
   writeTransformFile,
+  writeTransformOmeZarrFile,
+  writeTransformParameterFiles,
 } from "./io.js";
 import { assertCompatiblePair, classifySource } from "./sources.js";
 import { chainParameterFiles, METHOD_LABELS, presetSettings, sortParameterFiles, stageNames } from "./parameter-maps.js";
@@ -405,8 +406,9 @@ function resultRows(names, parameterNames) {
     registered: { description: "Registered NIfTI", file: names.nifti },
     omeZarr: { description: "Registered OME-Zarr", file: names.omeZarr, viewable: false },
     transform: { description: "Transform (ITK HDF5)", file: names.transform, viewable: false },
+    transformOmeZarr: { description: "Transform (OME-Zarr)", file: names.transformOmeZarr, viewable: false },
     ...Object.fromEntries(parameterNames.map((name, index) => [`parameters${index}`, {
-      description: `TransformParameters.${index}.txt`,
+      description: `TransformParameters.${index}.toml`,
       file: name,
       viewable: false,
     }])),
@@ -414,7 +416,7 @@ function resultRows(names, parameterNames) {
 }
 
 async function writeParameters(signal) {
-  output.files.parameters ??= await abortable(writeParameterTextFiles(output.chained.maps, output.chained.names), signal);
+  output.files.parameters ??= await abortable(writeTransformParameterFiles(output.chained.maps, output.chained.names), signal);
   return output.files.parameters;
 }
 
@@ -423,6 +425,9 @@ async function outputFile(stage, signal) {
   if (stage === "registered") return files.nifti;
   if (stage === "omeZarr") return (files.omeZarr ??= await abortable(writeOmeZarrFile(output.result, names.omeZarr), signal));
   if (stage === "transform") return (files.transform ??= await abortable(writeTransformFile(output.transform, names.transform), signal));
+  if (stage === "transformOmeZarr") {
+    return (files.transformOmeZarr ??= await abortable(writeTransformOmeZarrFile(output, names.transformOmeZarr), signal));
+  }
   return (await writeParameters(signal))[Number(stage.replace("parameters", ""))];
 }
 
@@ -467,7 +472,7 @@ async function register({
   signal?.throwIfAborted();
   const chained = chainParameterFiles(run.transformParameterObject, names.stem);
   const rows = resultRows(names, chained.names);
-  output = { ...run, names, chained, rows, files: { nifti } };
+  output = { ...run, fixed: fixed.image, moving: moving.image, names, chained, rows, files: { nifti } };
   results.render(rows);
   $("outputSection").open = true;
   const elapsedMs = performance.now() - started;

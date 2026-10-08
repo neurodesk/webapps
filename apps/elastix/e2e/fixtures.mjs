@@ -109,12 +109,18 @@ export async function syntheticPair() {
   return pair;
 }
 
+/** One value of an elastix TOML parameter file: a string, a number, or an array of them. */
+export function tomlValue(text, key) {
+  const match = new RegExp(`^${key} = (.+)$`, "m").exec(text);
+  return match ? JSON.parse(match[1]) : undefined;
+}
+
 /** Sum of the translation parts of elastix TransformParameters files (rotation is ~0 for a pure shift). */
 export function totalTranslation(parameterTexts) {
   const total = [0, 0];
   for (const text of parameterTexts) {
-    const transform = /\(Transform "(\w+)"\)/.exec(text)[1];
-    const values = /\(TransformParameters ([^)]*)\)/.exec(text)[1].trim().split(/\s+/).map(Number);
+    const transform = tomlValue(text, "Transform");
+    const values = tomlValue(text, "TransformParameters");
     const translation = transform === "EulerTransform" ? values.slice(1) : values;
     total[0] += translation[0];
     total[1] += translation[1];
