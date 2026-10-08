@@ -20,8 +20,11 @@ const IMMUTABLE = [
   /^https:\/\/files\.pythonhosted\.org\/packages\//,
   // GitHub release asset.
   /^https:\/\/github\.com\/[^/]+\/[^/]+\/releases\/download\/[^/]+\/[^/]+$/,
-  // Any path pinned to a full commit, e.g. raw.githubusercontent.com/<owner>/<repo>/<sha>/.
-  /^https:\/\/[^/]+\/(?:[^/?#]+\/)*[0-9a-f]{40}\//,
+  // GitHub content at a full commit. Only hosts where that segment addresses a commit.
+  /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\//,
+  /^https:\/\/github\.com\/[^/]+\/[^/]+\/raw\/[0-9a-f]{40}\//,
+  /^https:\/\/codeload\.github\.com\/[^/]+\/[^/]+\/(?:tar\.gz|zip)\/[0-9a-f]{40}$/,
+  /^https:\/\/cdn\.jsdelivr\.net\/gh\/[^/]+\/[^/@]+@[0-9a-f]{40}\//,
   // Google Fonts file at a font version.
   /^https:\/\/fonts\.gstatic\.com\/s\/[^/]+\/v\d+\//,
 ];
@@ -49,6 +52,10 @@ test('the pin patterns reject mutable addresses', () => {
     'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap',
     'https://github.com/neurodesk/webapps/releases/latest/download/model.onnx',
     'https://example.org/model.onnx?revision=0123456789abcdef0123456789abcdef01234567',
+    'https://example.org/0123456789abcdef0123456789abcdef01234567/model.onnx',
+    'https://dicompare.neurodesk.org/assets/0123456789abcdef0123456789abcdef01234567/worker.js',
+    'https://raw.githubusercontent.com/owner/repo/main/0123456789abcdef0123456789abcdef01234567/file.nii.gz',
+    'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/main/0123456789abcdef0123456789abcdef01234567/a.nii.gz',
   ]) assert.equal(isPinned(url), false, url);
   for (const url of [
     'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0123456789abcdef0123456789abcdef01234567/examples/a.nii.gz',
@@ -57,6 +64,9 @@ test('the pin patterns reject mutable addresses', () => {
     'https://unpkg.com/@niivue/niivue@1.0.0-rc.14/dist/niivue.umd.js',
     'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js',
     'https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/README.md',
+    'https://github.com/niivue/niivue-demo-images/raw/f6f98294c1fa89a3a32e8a44eab92368374150a0/mni152.nii.gz',
+    'https://codeload.github.com/niivue/niivue-demo-images/tar.gz/f6f98294c1fa89a3a32e8a44eab92368374150a0',
+    'https://cdn.jsdelivr.net/gh/niivue/niivue-demo-images@f6f98294c1fa89a3a32e8a44eab92368374150a0/mni152.nii.gz',
     'https://github.com/neurodesk/webapps/releases/download/musclemap-model-v1.4-fp32/musclemap.onnx',
     'https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2',
   ]) assert.equal(isPinned(url), true, url);
