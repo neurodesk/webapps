@@ -2,10 +2,10 @@
 // Runs a brain-extraction command line on the app's pinned T1 example with each shipped method
 // and holds its files to the web app's results recorded in a browser
 // (apps/brain-extraction/validation/browser-reference.json): NIfTI headers, mask voxels, Dice and
-// brain intensities. The browser ran QSMbly's threaded BET bundle and ONNX Runtime Web, not the
-// command line's bet.wasm and native ONNX Runtime. A SynthStrip mask that is not the browser's bit
-// for bit gets its Dice against web-reference.mjs, after that reference reproduces the browser's
-// mask exactly.
+// brain intensities. The browser ran QSMbly's threaded BET bundle, ONNX Runtime Web and MindGrab's
+// CPU modules on browser Workers, not the command line's bet.wasm, native ONNX Runtime and Node
+// worker threads. A SynthStrip mask that is not the browser's bit for bit gets its Dice against
+// web-reference.mjs, after that reference reproduces the browser's mask exactly.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -19,7 +19,7 @@ import { browserReference, compareWithBrowser, dice, measure } from '../../../ap
 import { outputNames } from '../src/outputs.js';
 import { webReference } from './web-reference.mjs';
 
-const METHODS = ['bet', 'synthstrip'];
+const METHODS = ['bet', 'synthstrip', 'mindgrab'];
 const examples = JSON.parse(await readFile(new URL('../../../apps/brain-extraction/examples.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(await readFile(new URL('../../../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
 const { values } = parseArgs({ options: { executable: { type: 'string' } } });
@@ -101,6 +101,7 @@ try {
     check(report.provenance.method === method, `provenance names method ${report.provenance.method}`);
     if (method === 'synthstrip') check(report.provenance.modelHash === SYNTHSTRIP_MODEL.sha256, `SynthStrip model ${report.provenance.modelHash}`);
     if (method === 'bet') check(report.provenance.fractionalIntensity === 0.5, `BET fractional intensity ${report.provenance.fractionalIntensity}, the web app's default`);
+    if (method === 'mindgrab') check(report.provenance.version === expected.version && report.provenance.backend === 'cpu', `MindGrab ${report.provenance.version} on the ${report.provenance.backend} backend, browser ${expected.version} on cpu`);
     const outputs = await files(output);
     check(JSON.stringify([...outputs.keys()]) === JSON.stringify([names.brain, names.mask].sort()), `outputs ${[...outputs.keys()].join(', ')}`);
     if (!outputs.has(names.brain) || !outputs.has(names.mask)) continue;
