@@ -43,6 +43,8 @@ try {
   });
   const [command] = positionals;
   if (values['cache-dir'] !== undefined && command !== 'download-models') throw new Error('--cache-dir only applies to download-models.');
+  const given = Object.keys(PARAMETERS).filter((key) => values[optionName(key)] !== undefined);
+  if (['self-check', 'download-models'].includes(command) && given.length) throw new Error(`--${optionName(given[0])} does not apply to ${command}.`);
   if (values.help) {
     console.log(HELP);
   } else if (command === 'self-check') {

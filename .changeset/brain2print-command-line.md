@@ -3,6 +3,7 @@
 "@neurodesk/brain2print": minor
 "topofit": patch
 "@neurodesk/topofit": patch
+"@neurodesk/webapp-components": minor
 ---
 
 Add the `brain2print` command line: `brain2print IMAGE OUTPUT_DIR` runs the web app's create-mesh operation in Node, with MindGrab on the CPU and the same niimath WebAssembly, and writes the web app's three downloads under the same names. Its options are the app's automation parameters: `--model`, `--simplify`, `--smooth`, `--[no-]largest-only` and `--[no-]fill-bubbles`. Portable archives for Linux x64 and Windows x64 and a signed macOS installer run offline. Their release check runs the app's pinned example and the right- and left-handed test fixtures, and requires every file to match the web pipeline's output in Chromium byte for byte.

@@ -125,7 +125,7 @@ test('the command line refuses a non-empty output, non-NIfTI input and bad optio
 });
 
 test('the executable reports usage errors on stderr with a failing status', () => {
-  for (const args of [['only-one.nii'], ['a.nii', 'out', '--simplify', '200'], ['self-check', 'extra'], ['a.nii', 'out', '--cache-dir', 'x']]) {
+  for (const args of [['only-one.nii'], ['self-check', '--model', 'bogus'], ['download-models', '--smooth', '2'], ['a.nii', 'out', '--simplify', '200'], ['self-check', 'extra'], ['a.nii', 'out', '--cache-dir', 'x']]) {
     const run = spawnSync(process.execPath, [bin, ...args], { encoding: 'utf8' });
     assert.equal(run.status, 1, args.join(' '));
     assert.equal(run.stdout, '');

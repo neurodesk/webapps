@@ -62,6 +62,7 @@ jobs:
         run: node packages/brain2print/validation/browser-reference.mjs --check
 
   portable:
+    needs: browser-reference
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
