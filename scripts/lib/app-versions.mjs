@@ -12,6 +12,7 @@ export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/ants': 'ants',
   '@neurodesk/brain-extraction': 'brain-extraction',
+  '@neurodesk/brain2print': 'brain2print',
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',

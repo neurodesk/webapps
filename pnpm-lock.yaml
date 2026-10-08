@@ -142,20 +142,17 @@ importers:
   apps/brain2print:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260923
-        version: 0.1.20260923
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/brain2print':
+        specifier: workspace:*
+        version: link:../../packages/brain2print
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
-      '@neurodesk/topofit':
-        specifier: workspace:*
-        version: link:../../packages/topofit
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@niivue/niimath':
-        specifier: 1.4.20260909
-        version: 1.4.20260909
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -957,6 +954,28 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
 
+  packages/brain2print:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
+
   packages/carotid-flow:
     dependencies:
       '@neurodesk/webapp-components':
@@ -1100,6 +1119,9 @@ importers:
 
   packages/topofit:
     dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
