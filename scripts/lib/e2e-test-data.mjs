@@ -48,11 +48,12 @@ export const provisioners = {
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),
+  // The browser reference runs MindGrab on the CPU once, about 2 min and 3 GB.
   dwi2trx: {
-    env: ['DWI2TRX_FIXTURE_DIR'],
+    env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE'],
     provision: async (cache) => {
       await exampleFiles(cache, 'dwi2trx', 'dwi-gradients', ['image', 'bval', 'bvec']);
-      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx') };
+      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx'), DWI2TRX_BROWSER_REFERENCE: 'check' };
     },
   },
   // The browser reference registers the 1 mm example once, about 30 s.
