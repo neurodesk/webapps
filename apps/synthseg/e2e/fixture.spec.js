@@ -16,6 +16,7 @@ const gates = JSON.parse(readFileSync(new URL('../../../packages/synthseg/valida
 const fixtures = '../../exes/synthseg/test/fixtures';
 const references = process.env.SYNTHSEG_REFERENCE_DIR;
 const probeOnly = Boolean(process.env.SYNTHSEG_PROBE_ONLY);
+const parityRepeats = Number(process.env.SYNTHSEG_PARITY_REPEATS || 1);
 // Only the hardware benchmark run refreshes the committed validation/report.json.
 const reportPath = resolve(process.env.SYNTHSEG_VALIDATION_REPORT || (references ? 'validation/report.json' : 'test-results/validation-report.json'));
 const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -36,6 +37,9 @@ test.afterEach(async ({}, info) => {
     evidence.failure = { test: info.title, message: info.error?.message || info.status };
   }
   save();
+  if (info.status !== info.expectedStatus) {
+    await info.attach('validation-report', { path: reportPath, contentType: 'application/json' });
+  }
 });
 
 async function adapterEvidence(page) {
@@ -113,6 +117,41 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   const report = JSON.parse(readFileSync(await reportDownload.path(), 'utf8'));
   const inputDescriptor = Array.isArray(report.inputs.image) ? report.inputs.image[0] : report.inputs.image;
   const outputDescriptor = report.artifacts.labels || Object.values(report.artifacts).find(value => value.role === 'labels');
+  await test.info().attach(`${mode}-labels.nii.gz`, { path: await download.path(), contentType: 'application/gzip' });
+  await test.info().attach(`${mode}-report.json`, { path: await reportDownload.path(), contentType: 'application/json' });
+  const expectedCounts = countLabels(golden.data);
+  const producedCounts = countLabels(produced.data);
+  const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
+  let mismatches = 0;
+  const confusion = new Map();
+  for (let i = 0; i < golden.data.length; i++) {
+    if (produced.data[i] === golden.data[i]) continue;
+    mismatches++;
+    const pair = `${golden.data[i]}:${produced.data[i]}`;
+    confusion.set(pair, (confusion.get(pair) || 0) + 1);
+  }
+  Object.assign(result, {
+    mismatched_voxels: mismatches,
+    compared_voxels: produced.data.length,
+    mismatch_fraction: mismatches / produced.data.length,
+    max_affine_error_mm: affineError,
+    inputSha256: checksum(readFileSync(input)),
+    goldenSha256: checksum(goldenBytes),
+    outputSha256: checksum(producedBytes),
+    provenance: report.provenance,
+    hippocampi: report.measurements.labels.filter(label => [17, 53].includes(label.id)),
+    labelCounts: [...new Set([...expectedCounts.keys(), ...producedCounts.keys()])].sort((a, b) => a - b).map(id => ({
+      id,
+      reference: expectedCounts.get(id) || 0,
+      produced: producedCounts.get(id) || 0,
+      delta: (producedCounts.get(id) || 0) - (expectedCounts.get(id) || 0),
+    })),
+    confusion: [...confusion].map(([pair, voxels]) => {
+      const [reference, produced] = pair.split(':').map(Number);
+      return { reference, produced, voxels };
+    }),
+  });
+  save();
   expect(report.status).toBe('succeeded');
   expect(inputDescriptor.sha256).toBe(checksum(readFileSync(input)));
   expect(outputDescriptor.sha256).toBe(checksum(producedBytes));
@@ -120,7 +159,6 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // The report's measurements are checked against FreeSurfer's label map, not against the app's
   // own counting: every label FreeSurfer found is reported, within the voxels the gate allows.
   const allowed = Math.floor(limit * golden.data.length);
-  const expectedCounts = countLabels(golden.data);
   // FreeSurfer's sform defines voxel volume; pixdim rounds the oblique axes independently.
   const [a, b, c] = golden.header.affine;
   const voxelMl = Math.abs(
@@ -142,22 +180,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   }
   expect(produced.dims).toEqual(golden.dims);
   expect(produced.header.xyztUnits).toBe(golden.header.xyztUnits);
-  const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
   expect(affineError).toBeLessThanOrEqual(gates.maxAffineErrorMm);
-  let mismatches = 0;
-  for (let i = 0; i < golden.data.length; i++) if (produced.data[i] !== golden.data[i]) mismatches++;
-  Object.assign(result, {
-    mismatched_voxels: mismatches,
-    compared_voxels: produced.data.length,
-    mismatch_fraction: mismatches / produced.data.length,
-    max_affine_error_mm: affineError,
-    inputSha256: inputDescriptor.sha256,
-    goldenSha256: checksum(goldenBytes),
-    outputSha256: outputDescriptor.sha256,
-    provenance: report.provenance,
-    hippocampi: report.measurements.labels.filter(label => [17, 53].includes(label.id)),
-  });
-  save();
   expect(result.mismatch_fraction).toBeLessThanOrEqual(limit);
   result.pass = true;
   save();
@@ -192,7 +215,8 @@ if (references && !probeOnly) {
   test('segments the benchmark volumes within the native parity gate', async ({ page }) => {
     expect(hardwareGpu, 'The benchmark volumes need NEURODESK_HARDWARE_GPU=1').toBe(true);
     test.setTimeout(7200000);
-    for (const { input: stem, mode } of gates.fullVolumes) {
+    const cases = [...gates.fullVolumes, ...Array.from({ length: parityRepeats - 1 }, () => ({ input: 'T1_head', mode: 'default' }))];
+    for (const { input: stem, mode } of cases) {
       await checkCase(page, {
         input: `${references}/${stem}.nii.gz`,
         reference: `${references}/${stem}_${mode}.nii.gz`,
