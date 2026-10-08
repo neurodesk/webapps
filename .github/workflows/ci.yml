@@ -274,17 +274,17 @@ jobs:
           node node_modules/@playwright/test/cli.js install --with-deps chromium
       # Pinned examples and models for the data-gated tests. Hardware-GPU apps
       # get theirs on the macOS job: SwiftShader cannot finish those workloads.
+      # Here they get only their CPU subset (--cpu), if they declare one.
       - uses: actions/cache@v6
-        if: ${{ !matrix.hardware_gpu }}
         with:
           path: ~/.cache/neurodesk-e2e-test-data
           key: e2e-test-data-${{ runner.os }}-${{ matrix.app }}-${{ hashFiles('registry/offline-assets.lock.json', 'apps/*/examples.json', 'models/*.json', 'packages/*/model.manifest.json', 'packages/nesvor/src/masking/manifest.json') }}
       - name: Download ${{ matrix.app }} test data
-        if: ${{ !matrix.hardware_gpu }}
         shell: bash
         env:
           APP: ${{ matrix.app }}
-        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data | tee -a "$GITHUB_ENV"
+          CPU_ONLY: ${{ matrix.hardware_gpu && '--cpu' || '' }}
+        run: node scripts/e2e-test-data.mjs "$APP" ~/.cache/neurodesk-e2e-test-data $CPU_ONLY | tee -a "$GITHUB_ENV"
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} in a browser
