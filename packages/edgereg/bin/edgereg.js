@@ -36,6 +36,9 @@ try {
     },
   });
   const [command] = positionals;
+  const subcommand = command === 'self-check' || command === 'download-models';
+  if (subcommand && values['robust-fov']) throw new Error(`--robust-fov does not apply to ${command}.`);
+  if (values['cache-dir'] !== undefined && command !== 'download-models') throw new Error('--cache-dir applies only to download-models.');
   if (values.help || !command) {
     console.log(HELP);
   } else if (command === 'self-check') {
@@ -45,7 +48,6 @@ try {
     if (positionals.length !== 1) throw new Error('download-models does not accept positional arguments.');
     console.log('EdgeReg needs no model files; nothing to download.');
   } else {
-    if (values['cache-dir'] !== undefined) throw new Error('--cache-dir applies only to download-models.');
     if (positionals.length !== 3) throw new Error('Provide a moving image, a fixed image and a new output directory. Use --help for details.');
     const [moving, fixed, output] = positionals;
     const result = await register({ moving, fixed, output, robustFov: values['robust-fov'] ?? false });

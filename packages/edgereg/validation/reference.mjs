@@ -30,6 +30,9 @@ export const NATIVE_TOLERANCES = Object.freeze({
   intensity: 0.002,
   // Correlation with the fixed image, absolute.
   fixedCorrelation: 0.001,
+  // 99.9th percentile of the absolute voxel difference: twice the measured 12. A one-voxel shift
+  // of the WebAssembly output gives 80.
+  p999: 24,
 });
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -160,6 +163,11 @@ export function compareWithBrowser(label, is, was) {
   ];
 }
 
+function percentile(a, b, q) {
+  const differences = Float64Array.from(a, (value, i) => Math.abs(value - b[i])).sort();
+  return differences[Math.floor(q * (differences.length - 1))];
+}
+
 const relative = (actual, expected) => Math.abs(actual - expected) / Math.abs(expected);
 
 // Returns [passed, line] pairs comparing native niimath's output with the command line's.
@@ -172,8 +180,11 @@ export function compareWithNative(native, cli, fixed) {
       `native niimath header geometry and datatype ${is.datatype} equal the command line's`,
     ],
   ];
-  const r = correlation(readVolume(native).data, readVolume(cli).data);
+  const [nativeData, cliData] = [readVolume(native).data, readVolume(cli).data];
+  const r = correlation(nativeData, cliData);
   checks.push([1 - r <= NATIVE_TOLERANCES.decorrelation, `native niimath voxels correlate ${r.toFixed(6)} with the command line's, 1 - r <= ${NATIVE_TOLERANCES.decorrelation}`]);
+  const p999 = percentile(nativeData, cliData, 0.999);
+  checks.push([p999 <= NATIVE_TOLERANCES.p999, `native niimath 99.9th percentile |voxel difference| ${p999} <= ${NATIVE_TOLERANCES.p999}`]);
   for (const name of ['mean', 'std']) {
     const difference = relative(is[name], was[name]);
     checks.push([

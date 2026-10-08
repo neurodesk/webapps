@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createNiftiFromVolume, decodeNiftiBuffer, readNiftiImageData } from '@neurodesk/webapp-components/file-io/nifti';
 import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
 import { Niimath } from '@niivue/niimath';
@@ -37,14 +37,15 @@ async function assertNewOutput(directory) {
   if (entries.length) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
 }
 
-async function writeAtomically(path, bytes) {
-  const partial = `${path}.${randomUUID()}.partial`;
+// The complete file appears under its name at once, and never replaces a file a concurrent run
+// wrote there: link() fails when the name exists.
+async function publish(path, bytes) {
+  const partial = join(dirname(path), `.${randomUUID().slice(0, 8)}.partial`);
   try {
     await writeFile(partial, bytes, { flag: 'wx' });
-    await rename(partial, path);
-  } catch (error) {
+    await link(partial, path);
+  } finally {
     await rm(partial, { force: true });
-    throw error;
   }
 }
 
@@ -83,7 +84,7 @@ export async function register({ moving, fixed, output, robustFov = false } = {}
   const { bytes, args } = await registerFiles(movingFile, fixedFile, robustFov);
   const name = registeredName(movingFile.name);
   await mkdir(destination, { recursive: true });
-  await writeAtomically(join(destination, name), bytes);
+  await publish(join(destination, name), bytes);
   return {
     output: destination,
     files: [name],

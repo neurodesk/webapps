@@ -100,7 +100,8 @@ The output must lie on the fixed grid. Its header bytes and its voxels must
 hash identically to the web app's. Its value range, mean, standard deviation
 and correlation with the fixed image must be equal to the web app's. The
 command line also has to write exactly one file under the web app's name, and
-print only its path.
+print only its path. Its provenance must name the niimath build the browser
+reference was recorded with.
 
 With `--native PATH`, the check also runs native niimath with the same argv
 and holds it to limits instead of hashes. Native niimath rounds differently
@@ -113,6 +114,8 @@ are therefore:
 
 - 1 - r at most 0.004, a tenth of a one-voxel shift's (measured 4.7e-4)
 - voxel mean and std within 0.2 % (measured 5.4e-4 and 6.7e-5)
+- 99.9th percentile of the absolute voxel difference at most 24, twice the
+  measured 12 (a one-voxel shift gives 80)
 - correlation with the fixed image within 0.001 (measured 1.5e-4)
 
 ```bash

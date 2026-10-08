@@ -48,6 +48,7 @@ if (reference.browser?.artifact) {
     check(cli.stdout.trim() === join(output, name), 'standard output lists the written file and nothing else');
     const provenance = JSON.parse(cli.stderr.trim().split(/\r?\n/).at(-1));
     check(provenance.robustFov === reference.robustFov, `provenance records robustFov ${provenance.robustFov}, as the reference was run`);
+    check(provenance.niimath === `${reference.browser.niimath} WebAssembly`, `command line runs ${provenance.niimath}, the build the browser reference was recorded with`);
     if (files.includes(name)) {
       const registered = await readFile(join(output, name));
       const fixed = await readFile(example.fixed.path);

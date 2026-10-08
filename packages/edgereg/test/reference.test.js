@@ -49,7 +49,7 @@ test('native niimath passes within its tolerances and fails a shift, a rescale o
   const cli = volume();
   assert.deepEqual(failed(compareWithNative(volume({ value: (i) => blob(i, 0.02) }), cli, fixed)), []);
   const cases = [
-    ['shifted one voxel', volume({ value: (i) => blob(i, 1) }), [/correlate/]],
+    ['shifted one voxel', volume({ value: (i) => blob(i, 1) }), [/correlate/, /99.9th percentile/]],
     ['scaled by 1.01', volume({ value: (i) => 1.01 * blob(i) }), [/voxel mean/, /voxel std/]],
     ['written on another grid', volume({ edit: (bytes) => bytes.writeFloatLE(2, 280) }), [/header geometry/]],
   ];

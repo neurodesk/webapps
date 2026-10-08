@@ -64,7 +64,7 @@ test('a registration writes the web download, lists it on stdout and its setting
     const provenance = JSON.parse(run.stderr.trim());
     assert.equal(provenance.robustFov, robustFov);
     assert.equal(provenance.argv.includes('-robustfov'), robustFov);
-    assert.deepEqual(provenance.argv.slice(-3), ['registered.nii', '-odt', 'input']);
+    assert.deepEqual(provenance.argv, ['__nimi_subject.nii.gz', '-gz', '0', ...(robustFov ? ['-robustfov'] : []), '-allineate', '__nimx0_template.nii', 'registered.nii', '-odt', 'input']);
     const image = await readFile(join(output, 'subject_registered.nii'));
     assert.equal(image.readInt32LE(0), 348);
     assert.equal(image.readInt16LE(70), 16, 'keeps the moving image datatype');
@@ -93,6 +93,8 @@ test('invalid arguments and inputs fail before anything is written', async (t) =
     [[moving, fixed, output, '--robust-fov=yes'], /robust-fov/],
     [[moving, fixed, output, '--cost', 'nmi'], /Unknown option '--cost'/],
     [[moving, fixed, output, '--cache-dir', directory], /--cache-dir applies only to download-models/],
+    [['self-check', '--cache-dir', directory], /--cache-dir applies only to download-models/],
+    [['download-models', '--robust-fov'], /--robust-fov does not apply to download-models/],
     [[text, fixed, output], /moving image .* is not NIfTI/],
     [[moving, text, output], /fixed image .* is not NIfTI/],
     [[join(directory, 'missing.nii'), fixed, output], /ENOENT/],
