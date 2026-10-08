@@ -65,7 +65,16 @@ async function pinnedFile(file) {
   const partial = `${path}.${randomUUID()}.partial`;
   try {
     await writeFile(partial, bytes, { flag: 'wx' });
-    await rename(partial, path);
+    // Windows will not rename over an existing file, so drop a corrupt cached copy first.
+    if (cached) await rm(path, { force: true });
+    try {
+      await rename(partial, path);
+    } catch (error) {
+      if (!['EEXIST', 'EPERM', 'EACCES'].includes(error.code)) throw error;
+      // Another run cached the file first; keep it only if it is the pinned bytes.
+      const winner = await readFile(path).catch(() => null);
+      if (!winner || sha256(winner) !== expected) throw error;
+    }
   } finally {
     await rm(partial, { force: true });
   }
