@@ -94,8 +94,52 @@ function countLabels(data) {
   return counts;
 }
 
+function captureGpuPosteriors() {
+  const getMappedRange = globalThis.GPUBuffer.prototype.getMappedRange;
+  globalThis.GPUBuffer.prototype.getMappedRange = function (...args) {
+    const buffer = getMappedRange.apply(this, args);
+    if (this.label !== 'SynthSeg output readback') return buffer;
+    const values = new Float32Array(buffer);
+    const words = new Uint32Array(buffer);
+    const voxels = values.length / 33;
+    const channelSums = Array(33).fill(0);
+    let nonFinite = 0;
+    let outsideUnitInterval = 0;
+    let sampleHash = 2166136261;
+    for (let channel = 0; channel < 33; channel++) {
+      const end = (channel + 1) * voxels;
+      for (let i = channel * voxels; i < end; i++) {
+        const value = values[i];
+        if (!Number.isFinite(value)) nonFinite++;
+        if (value < 0 || value > 1) outsideUnitInterval++;
+        channelSums[channel] += value;
+      }
+    }
+    for (let i = 0; i < words.length; i += 101) {
+      sampleHash = Math.imul(sampleHash ^ words[i], 16777619) >>> 0;
+    }
+    console.info('SYNTHSEG_POSTERIOR_DIAGNOSTIC ' + JSON.stringify({
+      byteLength: buffer.byteLength, nonFinite, outsideUnitInterval, channelSums, sampleHash,
+    }));
+    return buffer;
+  };
+}
+
+async function instrumentPosteriors(route) {
+  const response = await route.fetch();
+  await route.fulfill({ response, body: `(${captureGpuPosteriors.toString()})();\n${await response.text()}` });
+}
+
 async function checkCase(page, { input, reference, mode, limit, pinned }) {
-  const result = { device: 'webgpu', input, mode, pass: false, limit };
+  const result = { device: 'webgpu', input, mode, pass: false, limit, gpuPosteriors: [] };
+  const onConsole = message => {
+    const prefix = 'SYNTHSEG_POSTERIOR_DIAGNOSTIC ';
+    if (!message.text().startsWith(prefix)) return;
+    result.gpuPosteriors.push(JSON.parse(message.text().slice(prefix.length)));
+    save();
+  };
+  page.on('console', onConsole);
+  await page.route('**/assets/inference-worker-*.js', instrumentPosteriors, { times: 1 });
   evidence.results.push(result);
   save();
   await page.goto('./');
@@ -108,6 +152,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // The state flips when the run succeeds; the text follows once the viewer has the labels.
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'succeeded');
   await expect(page.locator('#statusText')).toContainText('Labels ready', { timeout: 120000 });
+  page.removeListener('console', onConsole);
   const download = await Promise.all([page.waitForEvent('download'), page.locator('#saveBtn').click()]).then(([value]) => value);
   const reportDownload = await Promise.all([page.waitForEvent('download'), page.locator('#reportBtn').click()]).then(([value]) => value);
   const producedBytes = readFileSync(await download.path());
