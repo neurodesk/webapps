@@ -463,6 +463,7 @@ apps:
 
   dicompare:
     builders: dicompare is a collaboration between the Pestilli Lab (brainlife.io) and the Bollmann Lab (Neurodesk).
+    privacy: Your DICOM files and their metadata stay on your computer. On the website, dicompare downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI, and counts page views with Cloudflare Web Analytics, which sets no cookies. None of these requests contains data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
     about:
       - dicompare validates DICOM acquisitions against protocol schemas so that scan parameters can be checked, compared and shared before data leave the scanner site.
     packages:
