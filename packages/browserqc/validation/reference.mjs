@@ -1,8 +1,8 @@
 // The pinned example, the web app's recorded downloads and the comparison both release checks
 // apply: validation/cli-check.mjs for the command line and apps/browserqc/e2e/reference.spec.js
 // for the web app. reference.json holds what the built web app downloaded on its CPU backend.
-import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -62,8 +62,13 @@ async function pinnedFile(file) {
   const bytes = Buffer.from(await response.arrayBuffer());
   if (sha256(bytes) !== expected) throw new Error(`${file.url}: SHA-256 differs from its pin`);
   await mkdir(join(path, '..'), { recursive: true });
-  await writeFile(`${path}.partial`, bytes);
-  await rename(`${path}.partial`, path);
+  const partial = `${path}.${randomUUID()}.partial`;
+  try {
+    await writeFile(partial, bytes, { flag: 'wx' });
+    await rename(partial, path);
+  } finally {
+    await rm(partial, { force: true });
+  }
   return { name: file.name, path };
 }
 
