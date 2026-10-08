@@ -101,7 +101,7 @@ try {
     check(report.provenance.method === method, `provenance names method ${report.provenance.method}`);
     if (method === 'synthstrip') check(report.provenance.modelHash === SYNTHSTRIP_MODEL.sha256, `SynthStrip model ${report.provenance.modelHash}`);
     if (method === 'bet') check(report.provenance.fractionalIntensity === 0.5, `BET fractional intensity ${report.provenance.fractionalIntensity}, the web app's default`);
-    if (method === 'mindgrab') check(report.provenance.version === expected.version && report.provenance.backend === 'cpu', `MindGrab ${report.provenance.version} on the ${report.provenance.backend} backend, browser ${expected.version} on cpu`);
+    if (method === 'mindgrab') check(report.provenance.version === expected.version && report.provenance.model === 'mindgrab' && report.provenance.backend === 'cpu', `MindGrab ${report.provenance.version} model ${report.provenance.model} on the ${report.provenance.backend} backend, browser ${expected.version} mindgrab on cpu`);
     const outputs = await files(output);
     check(JSON.stringify([...outputs.keys()]) === JSON.stringify([names.brain, names.mask].sort()), `outputs ${[...outputs.keys()].join(', ')}`);
     if (!outputs.has(names.brain) || !outputs.has(names.mask)) continue;

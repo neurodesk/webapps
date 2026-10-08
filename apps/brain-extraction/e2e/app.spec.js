@@ -279,7 +279,7 @@ for (const method of ['bet', 'synthstrip', 'mindgrab']) {
       const reportDownload = page.waitForEvent('download');
       await page.locator('#reportBtn').click();
       const { provenance } = JSON.parse(await readFile(await (await reportDownload).path(), 'utf8'));
-      expect([provenance.version, provenance.backend]).toEqual([browserReference.methods.mindgrab.version, 'cpu']);
+      expect([provenance.version, provenance.model, provenance.backend]).toEqual([browserReference.methods.mindgrab.version, 'mindgrab', 'cpu']);
     }
   });
 }

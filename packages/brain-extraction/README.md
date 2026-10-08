@@ -51,7 +51,8 @@ The portable archives are built by `exes/node-cli` and
 example and holds the files to the browser run recorded in
 `apps/brain-extraction/validation/browser-reference.json`: NIfTI headers, mask
 voxels, mask Dice and brain intensities. BET and MindGrab must match the
-browser's mask bit for bit; the MindGrab reference ran the app's CPU backend.
+browser's mask and brain voxels bit for bit; the MindGrab reference ran the
+app's CPU backend.
 SynthStrip must reach Dice 0.99995; when its mask is not the browser's
 exactly, the Dice is taken against `validation/web-reference.mjs`, the app's
 ONNX Runtime Web path, after that reference reproduces the browser's mask.
