@@ -46,7 +46,7 @@ const PrivacyModal: React.FC<PrivacyModalProps> = ({ isOpen, onClose }) => {
           <div>
             <h4 className="text-sm font-semibold text-content-primary mb-2">Third-party services</h4>
             <p className="text-sm text-content-secondary leading-relaxed">
-              dicompare never sends your DICOM files or their metadata anywhere. To run, the page downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI, and it counts page views with Cloudflare Web Analytics, which sets no cookies. None of these requests contains data from your files.
+              dicompare never sends your DICOM files or their metadata anywhere. The website downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI, and counts page views with Cloudflare Web Analytics, which sets no cookies. None of these requests contains data from your files. The desktop app bundles Pyodide and its packages and makes none of these requests.
             </p>
           </div>
         </div>
