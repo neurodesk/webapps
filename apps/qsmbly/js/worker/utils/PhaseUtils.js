@@ -1,138 +1,11 @@
 /**
  * Phase Processing Utilities
  *
- * Pure functions for phase data manipulation, B0 computation,
- * and weighted echo fitting.
+ * QSMART's weighted echo fit and the ppm → phase conversion TGV needs. Phase scaling,
+ * field mapping and unit conversions are qsm-core's (see the worker).
  */
 
-/**
- * Scale phase to [-π, +π] range
- *
- * @param {Float64Array|Float32Array} phase - Input phase data
- * @returns {Float64Array} Scaled phase in radians
- */
-export function scalePhase(phase) {
-  let min = Infinity;
-  let max = -Infinity;
-  for (let i = 0; i < phase.length; i++) {
-    if (phase[i] < min) min = phase[i];
-    if (phase[i] > max) max = phase[i];
-  }
-
-  const range = max - min;
-  const pi = Math.PI;
-
-  // Check if phase needs scaling
-  if (range > 2 * pi * 1.1 || max > pi * 1.5 || min < -pi * 1.5) {
-    // Linear scale from [min, max] to [-π, +π]
-    const scaled = new Float64Array(phase.length);
-    for (let i = 0; i < phase.length; i++) {
-      scaled[i] = (phase[i] - min) / range * 2 * pi - pi;
-    }
-    return scaled;
-  }
-
-  // Wrap to ensure exactly [-π, +π]
-  const wrapped = new Float64Array(phase.length);
-  for (let i = 0; i < phase.length; i++) {
-    wrapped[i] = Math.atan2(Math.sin(phase[i]), Math.cos(phase[i]));
-  }
-  return wrapped;
-}
-
-/**
- * Compute B0 fieldmap from unwrapped phase
- *
- * @param {Float64Array} unwrappedPhase - Unwrapped phase data (interleaved for multi-echo)
- * @param {number[]} echoTimes - Echo times in milliseconds
- * @param {number} nx - X dimension
- * @param {number} ny - Y dimension
- * @param {number} nz - Z dimension
- * @param {string} method - 'ols' (through origin) or 'ols_offset' (estimates phase offset)
- * @returns {Float64Array} B0 fieldmap in Hz
- */
-export function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, method = 'ols') {
-  const nEchoes = echoTimes.length;
-  const voxelCount = nx * ny * nz;
-
-  // Convert echo times from ms to seconds
-  const teSec = echoTimes.map(t => t / 1000);
-
-  if (nEchoes === 1) {
-    // Single echo: B0 = phase / (2π * TE)
-    const b0 = new Float64Array(voxelCount);
-    const factor = 1 / (2 * Math.PI * teSec[0]);
-    for (let i = 0; i < voxelCount; i++) {
-      b0[i] = unwrappedPhase[i] * factor;
-    }
-    return b0;
-  }
-
-  const b0 = new Float64Array(voxelCount);
-
-  if (method === 'ols_offset') {
-    // OLS with phase offset estimation (matching QSM.jl _multi_echo_linear_fit! with α)
-    // Model: phase = α + β * TE
-    // Solve using centered data to avoid numerical issues
-
-    // Compute mean TE
-    let teMean = 0;
-    for (let e = 0; e < nEchoes; e++) {
-      teMean += teSec[e];
-    }
-    teMean /= nEchoes;
-
-    // Compute centered TE and sum of squared centered TEs
-    const teCentered = teSec.map(t => t - teMean);
-    let sumTeCenteredSq = 0;
-    for (let e = 0; e < nEchoes; e++) {
-      sumTeCenteredSq += teCentered[e] * teCentered[e];
-    }
-
-    for (let v = 0; v < voxelCount; v++) {
-      // Compute mean phase for this voxel
-      let phaseMean = 0;
-      for (let e = 0; e < nEchoes; e++) {
-        phaseMean += unwrappedPhase[e * voxelCount + v];
-      }
-      phaseMean /= nEchoes;
-
-      // Compute slope β = Σ((TE - TE_mean) * (phase - phase_mean)) / Σ((TE - TE_mean)²)
-      let sumTeCenteredPhase = 0;
-      for (let e = 0; e < nEchoes; e++) {
-        const phaseIdx = e * voxelCount + v;
-        sumTeCenteredPhase += teCentered[e] * (unwrappedPhase[phaseIdx] - phaseMean);
-      }
-
-      const b0RadPerSec = sumTeCenteredPhase / (sumTeCenteredSq + 1e-10);
-      b0[v] = b0RadPerSec / (2 * Math.PI);
-    }
-  } else {
-    // Simple OLS through origin (default, matching QSM.jl _multi_echo_linear_fit! without α)
-    // Model: phase = β * TE (assumes zero phase at TE=0)
-    // Slope: β = Σ(TE * phase) / Σ(TE²)
-
-    // Precompute sum of TE² (same for all voxels)
-    let sumTeSq = 0;
-    for (let e = 0; e < nEchoes; e++) {
-      sumTeSq += teSec[e] * teSec[e];
-    }
-
-    for (let v = 0; v < voxelCount; v++) {
-      let sumTePhase = 0;
-
-      for (let e = 0; e < nEchoes; e++) {
-        const phaseIdx = e * voxelCount + v;
-        sumTePhase += teSec[e] * unwrappedPhase[phaseIdx];
-      }
-
-      const b0RadPerSec = sumTePhase / (sumTeSq + 1e-10);
-      b0[v] = b0RadPerSec / (2 * Math.PI);
-    }
-  }
-
-  return b0;
-}
+import { boxFilter3dSeparable } from './FilterUtils.js';
 
 /**
  * Magnitude-weighted echo fitting with R_0 reliability map computation
@@ -149,7 +22,6 @@ export function computeB0FromUnwrapped(unwrappedPhase, echoTimes, nx, ny, nz, me
  * @param {Uint8Array} mask - Binary mask
  * @param {number} fitThreshold - Fixed threshold (default 40)
  * @param {number|null} fitThreshPercentile - Adaptive percentile (overrides fixed)
- * @param {Function} boxFilter3dFn - Box filter function to use
  * @returns {Object} { tfs: Float64Array, R_0: Uint8Array }
  */
 export function computeWeightedEchoFit(
@@ -160,8 +32,7 @@ export function computeWeightedEchoFit(
   voxelSize,
   mask,
   fitThreshold = 40,
-  fitThreshPercentile = null,
-  boxFilter3dFn = null
+  fitThreshPercentile = null
 ) {
   const nEchoes = echoTimes.length;
   const voxelCount = nx * ny * nz;
@@ -228,14 +99,7 @@ export function computeWeightedEchoFit(
   const kx = Math.round(1 / voxelSize[0]) * 2 + 1;
   const ky = Math.round(1 / voxelSize[1]) * 2 + 1;
   const kz = Math.round(1 / voxelSize[2]) * 2 + 1;
-
-  let blurredResidual;
-  if (boxFilter3dFn) {
-    blurredResidual = boxFilter3dFn(residual, nx, ny, nz, kx, ky, kz);
-  } else {
-    // Fallback: no blurring
-    blurredResidual = residual;
-  }
+  const blurredResidual = boxFilter3dSeparable(residual, nx, ny, nz, kx, ky, kz);
 
   // Compute statistics on blurred residuals within mask
   const nonZeroResiduals = [];
@@ -243,6 +107,15 @@ export function computeWeightedEchoFit(
     if (mask[i] && blurredResidual[i] > 0) nonZeroResiduals.push(blurredResidual[i]);
   }
   nonZeroResiduals.sort((a, b) => a - b);
+
+  if (nonZeroResiduals.length > 0) {
+    const minRes = nonZeroResiduals[0];
+    const maxRes = nonZeroResiduals[nonZeroResiduals.length - 1];
+    const medianRes = nonZeroResiduals[Math.floor(nonZeroResiduals.length / 2)];
+    const p90Res = nonZeroResiduals[Math.floor(nonZeroResiduals.length * 0.9)];
+    const p99Res = nonZeroResiduals[Math.floor(nonZeroResiduals.length * 0.99)];
+    console.log(`[EchoFit] Blurred residual stats: min=${minRes.toFixed(4)}, median=${medianRes.toFixed(4)}, p90=${p90Res.toFixed(4)}, p99=${p99Res.toFixed(4)}, max=${maxRes.toFixed(4)}`);
+  }
 
   // Threshold: fixed or adaptive percentile
   let threshold;
@@ -253,6 +126,7 @@ export function computeWeightedEchoFit(
   } else {
     threshold = fitThreshold;
   }
+  console.log(`[EchoFit] Using threshold=${threshold.toFixed(4)} (mode: ${fitThreshPercentile !== null ? 'adaptive p' + fitThreshPercentile : 'fixed'})`);
 
   // R_0: binary reliability map (only within mask)
   const R_0 = new Uint8Array(voxelCount);
@@ -286,11 +160,4 @@ export function ppmFieldToPhase(b0Ppm, fieldStrength, te, gyromagneticRatio) {
     phase[i] = b0Ppm[i] * scale;
   }
   return phase;
-}
-
-// Make available globally for non-module contexts (workers)
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  self.PhaseUtils = { scalePhase, computeB0FromUnwrapped, computeWeightedEchoFit, ppmFieldToPhase };
-} else if (typeof window !== 'undefined') {
-  window.PhaseUtils = { scalePhase, computeB0FromUnwrapped, computeWeightedEchoFit, ppmFieldToPhase };
 }

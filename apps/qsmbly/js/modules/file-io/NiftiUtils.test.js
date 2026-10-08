@@ -2,9 +2,11 @@
  * Tests for NiftiUtils module
  */
 
+import zlib from 'node:zlib';
 import {
   parseNiftiHeader,
   isGzipped,
+  gunzipNifti,
   isValidNifti1,
   readNiftiImageData,
   createMaskNifti,
@@ -104,6 +106,27 @@ describe('NiftiUtils', () => {
     it('should return false for non-gzip data', () => {
       const rawData = new Uint8Array([0x00, 0x00, 0x00, 0x00]);
       expect(isGzipped(rawData)).toBe(false);
+    });
+  });
+
+  describe('gunzipNifti', () => {
+    // Large and varied enough that the decompressor emits several chunks.
+    const original = new Uint8Array(1 << 20).map((_, i) => (i * 2654435761) >>> 24);
+    const gz = new Uint8Array(zlib.gzipSync(original));
+
+    it('returns uncompressed data unchanged', async () => {
+      expect(await gunzipNifti(original)).toBe(original);
+    });
+
+    it('decompresses the whole stream', async () => {
+      expect(Buffer.from(await gunzipNifti(gz)).equals(Buffer.from(original))).toBe(true);
+    });
+
+    it('stops early once maxBytes are decoded', async () => {
+      const head = await gunzipNifti(gz, 352);
+      expect(head.length).toBeGreaterThanOrEqual(352);
+      expect(head.length).toBeLessThan(original.length);
+      expect(Array.from(head.slice(0, 352))).toEqual(Array.from(original.slice(0, 352)));
     });
   });
 

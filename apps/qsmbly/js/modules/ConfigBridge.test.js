@@ -2,7 +2,8 @@
  * Tests for the mask-section string handed to qsmxt (`--mask <section>`).
  */
 
-import { maskSectionString, buildConfigJson } from './ConfigBridge.js';
+import { maskSectionString, buildConfigJson, buildQsmartInnerConfigJson } from './ConfigBridge.js';
+import { DL_TILING_DEFAULTS, PIPELINE_DEFAULTS, TGV_ALPHA_PRESETS } from '../app/config.js';
 
 describe('maskSectionString', () => {
   test('returns empty for no ops', () => {
@@ -23,6 +24,13 @@ describe('maskSectionString', () => {
       .toBe('magnitude,hd-bet:128x128x64');
     expect(maskSectionString(['hd-bet:128x128x64', 'signal-erode', 'erode:2'], 'combined'))
       .toBe('magnitude,hd-bet:128x128x64,signal-erode,erode:2');
+  });
+
+  test('keeps post-BET erosions in the BET mask section', () => {
+    // runBET records the BET modal's erosions after `bet:<fi>`; without them the exported
+    // command describes a larger mask than the one the run used.
+    expect(maskSectionString(['bet:0.5', 'erode:2'], 'combined'))
+      .toBe('magnitude,bet:0.5,erode:2');
   });
 
   test('passes signal-gated erosion through in order', () => {
@@ -176,5 +184,87 @@ describe('buildConfigJson linear-fit parameters', () => {
     )).field_mapping;
 
     expect(fm.linear_fit).toEqual({});
+  });
+});
+
+describe('buildConfigJson deep-learning tiling', () => {
+  const inversion = (overrides) => JSON.parse(buildConfigJson(settingsFixture(overrides))).inversion;
+
+  test('reports the default tile for every model the worker runs tiled', () => {
+    for (const id of DL_TILING_DEFAULTS.tileable) {
+      const inv = inversion({ dipole_inversion: id });
+      expect([id, inv.tile_size, inv.tile_halo])
+        .toEqual([id, DL_TILING_DEFAULTS.tile_core, DL_TILING_DEFAULTS.tile_halo]);
+    }
+  });
+
+  test('includes the off-design nets the worker also tiles', () => {
+    expect(inversion({ dipole_inversion: 'lpcnn' }).tile_size).toBe(DL_TILING_DEFAULTS.tile_core);
+  });
+
+  test('omits tiling for natively patch-based nets and when tiling is off', () => {
+    expect(inversion({ dipole_inversion: 'qsmgan' }).tile_size).toBeUndefined();
+    expect(inversion({ dipole_inversion: 'xqsm', dl_tiling: { enabled: false } }).tile_size)
+      .toBeUndefined();
+  });
+});
+
+describe('TGV export', () => {
+  const tgvOf = (tgv) => JSON.parse(buildConfigJson({ combined_method: 'tgv', tgv })).inversion.tgv;
+
+  test('exports the alphas the regularization level stands for', () => {
+    // What PipelineSettingsController.save() sends: a level, no alphas.
+    const tgv = tgvOf({ regularization: 3, iterations: 800, erosions: 3 });
+    expect([tgv.alpha0, tgv.alpha1]).toEqual(TGV_ALPHA_PRESETS[3]);
+    expect(tgv.iterations).toBe(800);
+  });
+
+  test('the default settings export the level-2 alphas, not a separate fixed pair', () => {
+    const tgv = tgvOf(PIPELINE_DEFAULTS.tgv);
+    expect([tgv.alpha0, tgv.alpha1]).toEqual(TGV_ALPHA_PRESETS[2]);
+  });
+
+  test('explicit alphas win over the level', () => {
+    const tgv = tgvOf({ regularization: 1, alpha0: 0.0015, alpha1: 0.0005 });
+    expect([tgv.alpha0, tgv.alpha1]).toEqual([0.0015, 0.0005]);
+  });
+});
+
+describe('QSMART inner inversion config', () => {
+  const settings = {
+    combined_method: 'qsmart',
+    tkd: { threshold: 0.2 },
+    qsmart: {
+      inversion_algorithm: 'tkd', ilsqr_tol: 0.02, ilsqr_max_iter: 40,
+      tkd: { threshold: 0.12 },
+    },
+  };
+
+  test('exports the QSMART panel\'s values for its inner algorithm', () => {
+    const config = JSON.parse(buildConfigJson(settings));
+    expect(config.inversion.algorithm).toBe('qsmart');
+    expect(config.inversion.qsmart.inversion).toBe('tkd');
+    expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
+  });
+
+  test('runs the inner algorithm with iLSQR pinned to QSMART\'s own limits', () => {
+    const config = JSON.parse(buildQsmartInnerConfigJson(settings));
+    expect(config.inversion.algorithm).toBe('tkd');
+    expect(config.inversion.tkd).toEqual({ threshold: 0.12 });
+    expect(config.inversion.ilsqr).toEqual({ tol: 0.02, max_iter: 40 });
+  });
+
+  test('defaults to iLSQR', () => {
+    const config = JSON.parse(buildQsmartInnerConfigJson({ combined_method: 'qsmart', qsmart: {} }));
+    expect(config.inversion.algorithm).toBe('ilsqr');
+  });
+});
+
+describe('NLTV export', () => {
+  test('maps the UI\'s newton_max_iter to qsmxt-config\'s newton_iter', () => {
+    const nltv = { lambda: 0.001, mu: 1, max_iter: 250, tol: 0.001, newton_max_iter: 7 };
+    const config = JSON.parse(buildConfigJson({ dipole_inversion: 'nltv', nltv }));
+    expect(config.inversion.nltv.newton_iter).toBe(7);
+    expect(config.inversion.nltv).not.toHaveProperty('newton_max_iter');
   });
 });

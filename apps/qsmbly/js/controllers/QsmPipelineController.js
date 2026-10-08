@@ -7,6 +7,9 @@
 import { WorkerSession } from '@neurodesk/webapp-components/worker';
 
 export class QsmPipelineController {
+  // Generous: the first load fetches and compiles several MB of WASM, possibly on a slow link.
+  static INIT_TIMEOUT_MS = 120000;
+
   constructor(options) {
     // Callbacks
     this.updateOutput = options.updateOutput || (() => {});
@@ -14,13 +17,17 @@ export class QsmPipelineController {
     this.onStageData = options.onStageData || (() => {});
     this.onPipelineComplete = options.onPipelineComplete || (() => {});
     this.onPipelineError = options.onPipelineError || (() => {});
-    this.onInitialized = options.onInitialized || (() => {});
     this.config = options.config;
+    // How long `initialize()` waits for the worker's 'initialized' reply before giving up.
+    this.initTimeoutMs = options.initTimeoutMs ?? QsmPipelineController.INIT_TIMEOUT_MS;
 
     // Worker state
     this.workerSession = null;
     this.workerReady = false;
     this.workerInitializing = false;
+    // Shared by concurrent `initialize()` callers; `_initSettle` settles it (see `_settleInit`).
+    this.initPromise = null;
+    this._initSettle = null;
 
     // Pipeline state
     this.pipelineRunning = false;
@@ -30,11 +37,6 @@ export class QsmPipelineController {
     this.cancelHandlers = new Set();
     this.results = {};
     this.stageOrder = [];
-    this.pendingStageResolve = null;
-
-    // Settings tracking for intelligent caching
-    this.lastRunSettings = null;
-    this.pipelineHasRun = false;
   }
 
   // ==================== State Accessors ====================
@@ -60,6 +62,7 @@ export class QsmPipelineController {
     return () => this.cancelHandlers.delete(fn);
   }
 
+<<<<<<< monorepo
   beginCancellableJob(onCancel) {
     this.pipelineRunning = true;
     const unregister = this.onCancel(onCancel);
@@ -80,20 +83,14 @@ export class QsmPipelineController {
     return this.results[stage] || null;
   }
 
+=======
+>>>>>>> upstream
   getResults() {
     return this.results;
   }
 
   getStageOrder() {
     return this.stageOrder;
-  }
-
-  getLastRunSettings() {
-    return this.lastRunSettings;
-  }
-
-  hasPipelineRun() {
-    return this.pipelineHasRun;
   }
 
   // ==================== Worker Management ====================
@@ -121,12 +118,17 @@ export class QsmPipelineController {
           break;
 
         case 'error':
-          this._handleError(data.message);
+          // An error during init means the WASM failed to load: fail the init, not a run.
+          if (this.workerInitializing) {
+            this._failInit(new Error(data.message));
+          } else {
+            this._handleError(data.message);
+          }
           break;
 
         case 'initialized':
           this.workerReady = true;
-          this.onInitialized();
+          this._settleInit(null);
           // Fetch default pipeline config from qsmxt-config WASM
           this.send('getDefaultConfig');
           break;
@@ -153,8 +155,50 @@ export class QsmPipelineController {
           this._handleStageData(data);
           break;
       }
+<<<<<<< monorepo
     });
     this.workerSession.start();
+=======
+    };
+
+    this.worker.onerror = (e) => {
+      console.error('Worker error:', e);
+      // A worker script that fails to load reports an ErrorEvent with no message.
+      const message = e.message || 'the worker script failed to load';
+      if (this.workerInitializing) {
+        this._failInit(new Error(`Worker error: ${message}`));
+        return;
+      }
+      this.updateOutput(`Worker error: ${message}`);
+      this._handleError(message);
+    };
+>>>>>>> upstream
+  }
+
+  /** Settle the pending init promise (resolve when `error` is null) and clear init state. */
+  _settleInit(error) {
+    const settle = this._initSettle;
+    this._initSettle = null;
+    this.initPromise = null;
+    this.workerInitializing = false;
+    if (!settle) return;
+    clearTimeout(settle.timer);
+    if (error) settle.reject(error);
+    else settle.resolve();
+  }
+
+  /**
+   * Fail initialization: discard the worker, whose WASM state is unknown, so the next
+   * `initialize()` starts from a fresh one, then reject everyone waiting on this attempt.
+   */
+  _failInit(error) {
+    if (this.worker) {
+      this.worker.terminate();
+      this.worker = null;
+    }
+    this.workerReady = false;
+    this.setProgress(0, 'Failed');
+    this._settleInit(error);
   }
 
   _handleError(message) {
@@ -166,17 +210,12 @@ export class QsmPipelineController {
 
   _handleComplete() {
     this.updateOutput("Pipeline completed successfully!");
-    this.pipelineHasRun = true;
     this.pipelineRunning = false;
     this.onPipelineComplete();
   }
 
   _handleStageData(data) {
-    // Handle both live stage updates and explicit requests
-    if (this.pendingStageResolve) {
-      this.pendingStageResolve(data);
-      this.pendingStageResolve = null;
-    } else if (this.pipelineRunning) {
+    if (this.pipelineRunning) {
       // Track stage order
       if (!this.stageOrder.includes(data.stage)) {
         this.stageOrder.push(data.stage);
@@ -196,6 +235,11 @@ export class QsmPipelineController {
     }
   }
 
+  /**
+   * Start the worker and load the WASM module, once. Concurrent callers share one attempt.
+   * Rejects if the worker reports an error, fails to load, is cancelled, or does not reply
+   * within `initTimeoutMs`; the failed worker is discarded, so calling again retries afresh.
+   */
   async initialize() {
     this._setupWorker();
 
@@ -203,57 +247,74 @@ export class QsmPipelineController {
     if (this.workerReady) return;
 
     // Already initializing - just wait for it
-    if (this.workerInitializing) {
-      return new Promise((resolve) => {
-        const checkReady = setInterval(() => {
-          if (this.workerReady) {
-            clearInterval(checkReady);
-            resolve();
-          }
-        }, 100);
-      });
-    }
+    if (this.initPromise) return this.initPromise;
 
     // Start initialization
     this.workerInitializing = true;
     this.updateOutput("Loading WASM module...");
 
+<<<<<<< monorepo
     // Send init message to worker
     this.send('init');
-
-    // Wait for initialization
-    return new Promise((resolve) => {
-      const checkReady = setInterval(() => {
-        if (this.workerReady) {
-          clearInterval(checkReady);
-          this.workerInitializing = false;
-          resolve();
-        }
-      }, 100);
+=======
+    this.initPromise = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this._failInit(new Error(
+          `WASM module did not load within ${Math.round(this.initTimeoutMs / 1000)} s`));
+      }, this.initTimeoutMs);
+      this._initSettle = { resolve, reject, timer };
     });
+    const promise = this.initPromise;
+
+    this.worker.postMessage({
+      type: 'init',
+      data: {}
+    });
+>>>>>>> upstream
+
+    return promise;
   }
 
   // ==================== Pipeline Execution ====================
 
-  async run(pipelineConfig) {
-    try {
-      await this.initialize();
+  /**
+   * @param {Object} pipelineConfig
+   * @param {Transferable[]} [transfer] - buffers in pipelineConfig to move to the worker rather
+   *   than copy; they are detached here, so pass only ones the caller no longer needs
+   */
+  async run(pipelineConfig, transfer = []) {
+    const inputMode = pipelineConfig.inputMode || 'raw';
+    const modeLabels = {
+      raw: 'QSM Pipeline',
+      totalField: 'Total Field Map Pipeline',
+      localField: 'Local Field Map Pipeline'
+    };
+    return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`, transfer);
+  }
 
-      const inputMode = pipelineConfig.inputMode || 'raw';
-      const modeLabels = {
-        raw: 'QSM Pipeline',
-        totalField: 'Total Field Map Pipeline',
-        localField: 'Local Field Map Pipeline'
-      };
-      this.updateOutput(`Starting ${modeLabels[inputMode] || 'Pipeline'}...`);
-      this.pipelineRunning = true;
+  async runSWI(data, transfer = []) {
+    return this._start('runSWI', data, 'Starting SWI pipeline...', transfer);
+  }
 
-      // Save settings for intelligent caching
-      this.lastRunSettings = JSON.parse(JSON.stringify(pipelineConfig.pipelineSettings));
-
+<<<<<<< monorepo
       // Pass through all pipeline config to the worker
       this.send('run', pipelineConfig);
+=======
+  async runT2starR2star(data, transfer = []) {
+    return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...', transfer);
+  }
+>>>>>>> upstream
 
+  /**
+   * Post a job to the worker and mark the executor running; the worker answers with stageData
+   * messages and a final 'complete' or 'error'. Resolves false if the worker could not start.
+   */
+  async _start(type, data, message, transfer) {
+    try {
+      await this.initialize();
+      this.updateOutput(message);
+      this.pipelineRunning = true;
+      this.worker.postMessage({ type, data }, transfer);
       return true;
     } catch (error) {
       this._handleError(error.message);
@@ -279,8 +340,9 @@ export class QsmPipelineController {
       this.workerSession.terminate();
       this.workerSession = null;
       this.workerReady = false;
-      this.workerInitializing = false;
     }
+    // A pending init can no longer complete; let its waiters fail rather than hang.
+    if (this.workerInitializing) this._settleInit(new Error('Cancelled'));
 
     // Reset state
     this.pipelineRunning = false;
@@ -296,6 +358,7 @@ export class QsmPipelineController {
     this.stageOrder = [];
   }
 
+<<<<<<< monorepo
   async downloadStage(stage) {
     if (!this.results[stage]?.file) {
       this.updateOutput(`${stage} not available - run the pipeline first`);
@@ -377,6 +440,9 @@ export class QsmPipelineController {
   subscribe(listener) {
     return this.workerSession?.subscribe(listener) || (() => {});
   }
+=======
+  // ==================== Worker Access (for mask controller) ====================
+>>>>>>> upstream
 
   getChannel() {
     return this.workerSession;

@@ -241,3 +241,50 @@ export const SIGNAL_ERODE_DEFAULTS = {
   "min_component": 1000,
   "threshold": 0.8
 };
+
+export const ILSQR_DEFAULTS = {
+  "tol": 0.01,
+  "max_iter": 50
+};
+
+export const DL_TILING_DEFAULTS = {
+  "native": [
+    "qsmgan",
+    "autoqsm"
+  ],
+  "off_design": [
+    "lpcnn",
+    "nextqsm",
+    "modl-qsm"
+  ],
+  "tile_core": 56,
+  "tile_halo": 4,
+  "tileable": [
+    "xqsm",
+    "qsmnet",
+    "qsmnet-plus",
+    "lpcnn",
+    "ir2qsm",
+    "nextqsm",
+    "modl-qsm"
+  ]
+};
+
+export const TGV_ALPHA_PRESETS = {
+  "1": [
+    0.0005,
+    0.0005
+  ],
+  "2": [
+    0.001,
+    0.001
+  ],
+  "3": [
+    0.002,
+    0.003
+  ],
+  "4": [
+    0.003,
+    0.005
+  ]
+};

@@ -61,10 +61,3 @@ export function findSeedPoint(mask, nx, ny, nz) {
     Math.floor(sumZ / count)
   ];
 }
-
-// Make available globally for non-module contexts (workers)
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  self.MaskUtils = { createThresholdMask, findSeedPoint };
-} else if (typeof window !== 'undefined') {
-  window.MaskUtils = { createThresholdMask, findSeedPoint };
-}

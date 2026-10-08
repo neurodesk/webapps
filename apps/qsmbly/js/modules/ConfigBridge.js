@@ -5,6 +5,9 @@
  * generate_command_wasm / generate_methods_wasm) — qsmbly no longer hand-rolls TOML.
  */
 
+import { DL_TILING_DEFAULTS, tgvAlphaPreset } from '../app/config.js';
+import { resolveTgvAlphas } from '../worker/utils/TgvParams.js';
+
 /**
  * A [f64; 3] the config can carry, or null if any element is missing/non-finite.
  * JSON.stringify writes NaN — and anything the null-dropping replacer removes — as
@@ -14,6 +17,12 @@
  */
 function finiteTriple(arr) {
   return Array.isArray(arr) && arr.length === 3 && arr.every(Number.isFinite) ? arr : null;
+}
+
+/** The UI calls NLTV's Newton iteration limit newton_max_iter; qsmxt-config calls it newton_iter. */
+function nltvConfig(nltv) {
+  const { newton_max_iter, ...rest } = nltv;
+  return newton_max_iter === undefined ? rest : { ...rest, newton_iter: newton_max_iter };
 }
 
 /**
@@ -82,12 +91,11 @@ export function buildConfig(settings, options = {}) {
   // Deep-learning overlap-tiling: qsmbly runs the tileable DL nets tiled (bounded wasm memory),
   // so reflect that in the generated `qsmxt run` command + methods. Only set for those algorithms
   // (qsmxt-config emits --tile-size/--tile-halo for them, and the methods note is DL-only).
-  const DL_TILEABLE = ['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm', 'lpcnn', 'modl-qsm', 'nextqsm'];
   const tiling = settings.dl_tiling || {};
-  if (tiling.enabled !== false && DL_TILEABLE.includes(config.inversion.algorithm)) {
-    config.inversion.tile_size = Number(tiling.tile_size) || 56;
+  if (tiling.enabled !== false && DL_TILING_DEFAULTS.tileable.includes(config.inversion.algorithm)) {
+    config.inversion.tile_size = Number(tiling.tile_size) || DL_TILING_DEFAULTS.tile_core;
     const halo = Number(tiling.tile_halo);
-    config.inversion.tile_halo = Number.isFinite(halo) ? halo : 4;
+    config.inversion.tile_halo = Number.isFinite(halo) ? halo : DL_TILING_DEFAULTS.tile_halo;
   }
 
   // Algorithm params
@@ -96,7 +104,7 @@ export function buildConfig(settings, options = {}) {
   if (settings.tkd) config.inversion.tkd = settings.tkd;
   if (settings.tsvd) config.inversion.tsvd = settings.tsvd;
   if (settings.tikhonov) config.inversion.tikhonov = settings.tikhonov;
-  if (settings.nltv) config.inversion.nltv = settings.nltv;
+  if (settings.nltv) config.inversion.nltv = nltvConfig(settings.nltv);
   if (settings.ndi) config.inversion.ndi = settings.ndi;
   if (settings.fansi) config.inversion.fansi = settings.fansi;
   if (settings.fansitgv) config.inversion.fansi = settings.fansitgv;
@@ -115,7 +123,9 @@ export function buildConfig(settings, options = {}) {
   if (settings.ilsqr) config.inversion.ilsqr = settings.ilsqr;
   if (settings.tgv) config.inversion.tgv = {
     iterations: settings.tgv.iterations, erosions: settings.tgv.erosions,
-    alpha0: settings.tgv.alpha0, alpha1: settings.tgv.alpha1,
+    // The UI picks alphas by regularization level, which TgvConfig has no field for, so
+    // export the pair the run resolves to; left unset, qsmxt-config would fill in its own.
+    ...resolveTgvAlphas(settings.tgv, tgvAlphaPreset),
     step_size: settings.tgv.step_size, tol: settings.tgv.tol,
   };
   if (settings.qsmart) config.inversion.qsmart = {
@@ -128,6 +138,13 @@ export function buildConfig(settings, options = {}) {
     frangi_scale_min: settings.qsmart.frangi_scale_min, frangi_scale_max: settings.qsmart.frangi_scale_max,
     frangi_scale_ratio: settings.qsmart.frangi_scale_ratio, frangi_c: settings.qsmart.frangi_c,
   };
+  // QSMART's inner inversion reads the top-level per-algorithm section (qsm-core run_qsmart),
+  // so the QSMART panel's own values for that algorithm go there.
+  if (isQsmart) {
+    const inner = settings.qsmart?.inversion_algorithm || 'ilsqr';
+    const panel = settings.qsmart?.[inner];
+    if (inner !== 'ilsqr' && panel) config.inversion[inner] = inner === 'nltv' ? nltvConfig(panel) : panel;
+  }
 
   // BG removal params
   if (settings.vsharp) config.bg_removal.vsharp = settings.vsharp;
@@ -158,10 +175,28 @@ export function buildConfig(settings, options = {}) {
  * default — mirroring how the old hand-rolled TOML serializer skipped such values.
  */
 export function buildConfigJson(settings, options = {}) {
+  return serializeConfig(buildConfig(settings, options));
+}
+
+function serializeConfig(config) {
   return JSON.stringify(
-    buildConfig(settings, options),
+    config,
     (_k, v) => (v === null || (typeof v === 'number' && !Number.isFinite(v))) ? undefined : v,
   );
+}
+
+/**
+ * The config for one of QSMART's two inner dipole inversions, run through the standard
+ * inversion stage: QSMART's inner algorithm with iLSQR pinned to QSMART's own tolerance
+ * and iteration limit, exactly as qsm-core's run_qsmart builds it.
+ */
+export function buildQsmartInnerConfigJson(settings) {
+  const config = buildConfig(settings);
+  config.inversion.algorithm = settings?.qsmart?.inversion_algorithm || 'ilsqr';
+  config.inversion.ilsqr = {
+    tol: settings?.qsmart?.ilsqr_tol, max_iter: settings?.qsmart?.ilsqr_max_iter,
+  };
+  return serializeConfig(config);
 }
 
 /**

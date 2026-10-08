@@ -5,56 +5,6 @@
  */
 
 /**
- * 3D box filter (mean filter) for smoothing
- * Used for R_0 reliability map computation
- *
- * @param {Float64Array} data - Input 3D data
- * @param {number} nx - X dimension
- * @param {number} ny - Y dimension
- * @param {number} nz - Z dimension
- * @param {number} radius - Filter radius
- * @returns {Float64Array} Filtered data
- */
-export function boxFilter3D(data, nx, ny, nz, radius) {
-  const voxelCount = nx * ny * nz;
-  const result = new Float64Array(voxelCount);
-
-  const idx = (i, j, k) => i + j * nx + k * nx * ny;
-
-  for (let k = 0; k < nz; k++) {
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i < nx; i++) {
-        let sum = 0;
-        let count = 0;
-
-        // Box neighborhood
-        for (let dk = -radius; dk <= radius; dk++) {
-          const kk = k + dk;
-          if (kk < 0 || kk >= nz) continue;
-
-          for (let dj = -radius; dj <= radius; dj++) {
-            const jj = j + dj;
-            if (jj < 0 || jj >= ny) continue;
-
-            for (let di = -radius; di <= radius; di++) {
-              const ii = i + di;
-              if (ii < 0 || ii >= nx) continue;
-
-              sum += data[idx(ii, jj, kk)];
-              count++;
-            }
-          }
-        }
-
-        result[idx(i, j, k)] = count > 0 ? sum / count : 0;
-      }
-    }
-  }
-
-  return result;
-}
-
-/**
  * 3D box filter using separable 1D passes
  * Matches MATLAB smooth3(data, 'box', [kx, ky, kz])
  * More efficient for large kernels
@@ -129,11 +79,4 @@ export function boxFilter3dSeparable(data, nx, ny, nz, kx, ky, kz) {
   }
 
   return dst;
-}
-
-// Make available globally for non-module contexts (workers)
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  self.FilterUtils = { boxFilter3D, boxFilter3dSeparable };
-} else if (typeof window !== 'undefined') {
-  window.FilterUtils = { boxFilter3D, boxFilter3dSeparable };
 }
