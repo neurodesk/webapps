@@ -12,6 +12,8 @@ on:
       - 'apps/brain2print/**'
       - 'packages/runtime-support/src/node/**'
       - 'packages/components/src/file-io/**'
+      - 'exes/synthseg/test/fixtures/small.nii.gz'
+      - 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'
       - 'test/independent-workflows.test.mjs'
   push:
     branches: [main]
@@ -25,6 +27,8 @@ on:
       - 'apps/brain2print/**'
       - 'packages/runtime-support/src/node/**'
       - 'packages/components/src/file-io/**'
+      - 'exes/synthseg/test/fixtures/small.nii.gz'
+      - 'apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
     inputs:

@@ -95,7 +95,7 @@ An e2e test that skips without data (`test.skip(!process.env.X, …)`) must run 
   export) and calls `callMain` directly instead of the fluent `Niimath`/`.mesh()` API: that API's `run()`
   always appends `-odt <type>` as the final argv, but niimath mesh mode reads the *last* argv as the
   output filename, so the fluent API cannot select mz3 output. The pinned `@niivue/niimath@1.4.20260909`
-  WASM build is also compiled without `HAVE_FORMATS`, so it can only write `.mz3`; `packages/topofit/src/results.js`
+  WASM build is also compiled without `HAVE_FORMATS`, so it can only write `.mz3`; `@neurodesk/webapp-components/file-io/mesh`
   round-trips mz3 and writes STL itself. Both are fixed upstream in `~/src/niimath` for the release after
   1.4.20260909 — once that ships, drop the direct `callMain` path and `writeMz3`/`readMz3` for the fluent
   API's own STL output.

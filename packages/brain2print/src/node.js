@@ -83,6 +83,8 @@ export async function createBrainMesh({ input, output, parameters = {}, onProgre
   const started = performance.now();
   const result = await createMesh({ input: bytes, settings, mindgrab, mesher: niimathMesh, onProgress });
   await mkdir(destination, { recursive: true });
+  // Segmentation takes a minute; refuse a directory that filled up meanwhile rather than mix outputs.
+  await assertNewOutput(destination);
   for (const file of result.files) await writeAtomically(join(destination, file.name), file.bytes);
   return {
     output: destination,

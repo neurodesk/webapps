@@ -224,6 +224,7 @@ async function mesh({ signal, progress = () => {} } = {}) {
     const artifacts = meshFiles(result).map(({ role, name, bytes }) => ({ role, file: new File([bytes], name) }))
     return { artifacts, measurements: result.measurements, provenance: result.provenance }
   } catch (error) {
+    niimath.dispose('mesh failed')
     status(error instanceof Error ? error.message : String(error), true)
     throw error
   } finally {

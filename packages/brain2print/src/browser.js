@@ -49,12 +49,16 @@ export function createNiimathMesher() {
       signal?.throwIfAborted();
       return new Uint8Array(await output.arrayBuffer());
     } catch (error) {
-      niimath.dispose('mesh failed');
-      ready = null;
+      dispose('mesh failed');
       throw error;
     } finally {
       signal?.removeEventListener('abort', cancel);
     }
   }
-  return { mesh, dispose: (reason) => niimath.dispose(reason) };
+  // A disposed worker is started afresh by the next mesh.
+  function dispose(reason) {
+    niimath.dispose(reason);
+    ready = null;
+  }
+  return { mesh, dispose };
 }
