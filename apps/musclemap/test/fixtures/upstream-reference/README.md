@@ -24,23 +24,22 @@ for every label upstream found. The app did not produce this file.
 
 `scripts/make_upstream_reference.sh` repeats all of it.
 
-## Measured 2026-10-03
+## Measured 2026-10-07
 
 App: ONNX Runtime Web 1.21.0, WebAssembly, whole-body v1.4 fp32, overlap 0, source chunk 5.
+The app's label map equals upstream's voxel for voxel: agreement 1, foreground Dice 1, all 26
+labels Dice 1. `e2e/full-pipeline.spec.js` enforces the full release gate.
 
-| Measure | App against upstream | Gate |
-| --- | --- | --- |
-| Voxel agreement | 0.9948 | 0.99 |
-| Foreground Dice | 0.9878 | 0.95 |
-| Labels below Dice 0.95 | 10 of 26 | 0 |
-| Lowest label Dice | 0.693 (label 7162, 60 upstream voxels) | 0.95 |
-
-The per-label gate fails, so `e2e/full-pipeline.spec.js` enforces agreement and foreground Dice
-at the gate and pins the per-label result where it was measured (at most 10 labels below 0.95,
-none below 0.69). That pin is a regression guard, not a pass of the release gate. Labels below it, with upstream voxel counts: 6121 0.930 (782),
-6122 0.930 (1 502), 7142 0.931 (329), 7161 0.862 (268), 7162 0.693 (60), 7171 0.950 (1 305),
-7172 0.941 (1 270), 7181 0.926 (771), 7182 0.906 (636), 7211 0.864 (837). 96 % of the 2 001
-differing voxels touch a label boundary in the upstream map.
+The first measurement (2026-10-03, on a branch without
+[#135](https://github.com/neurodesk/webapps/pull/135)) found agreement 0.9948, foreground
+Dice 0.9878 and 10 of 26 labels below Dice 0.95 (lowest 0.693, label 7162). The cause was the
+foreground crop: the app kept every nonzero voxel after z-scoring, where MONAI's
+`CropForegroundd` keeps positive ones. On this slab that widened the crop from 394 x 256 to
+410 x 299, so each slice ran as two Gaussian-blended 256 x 256 windows instead of one and the
+labels moved at their boundaries. Giving upstream's own `mm_segment.py` the nonzero rule
+reproduces the old app output exactly (agreement 0.9947995, the same 10 labels); restoring
+positive selection in the app alone takes it to agreement 1.
+`test/preprocessing-parity.test.js` checks the crop against MONAI on a small array.
 
 Upstream is itself sensitive to library versions on this slab: the same command under torch
 2.11.0 and monai 1.5.2 differs from the pinned run in 721 voxels (agreement 0.9981, three

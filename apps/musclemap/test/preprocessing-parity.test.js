@@ -45,6 +45,27 @@ test('source chunks crop positive normalized foreground and preserve negative in
   assert.equal(actual.data[0], actual.data[40]);
 });
 
+// Selecting nonzero rather than positive voxels widened the body slab's crop from 394 x 256 to
+// 410 x 299, which split it into two blended windows and cost 10 of 26 labels their Dice >= 0.95.
+test('foreground crop matches MONAI NormalizeIntensity(nonzero=True) then CropForeground(margin=1)', () => {
+  // x = np.zeros((1, 8, 1, 1), np.float32); x[0, 1:7, 0, 0] = [10, 20, 30, 40, 50, 60]
+  const data = new Float32Array([0, 10, 20, 30, 40, 50, 60, 0]);
+  const identity = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
+  ];
+  const actual = context.prepareSourceChunk(data, [8, 1, 1], identity, [1, 1, -1], 1);
+  // CropForeground(margin=1).compute_bounding_box(NormalizeIntensity(nonzero=True)(torch.tensor(x)))
+  // == ([3, 0, 0], [8, 1, 1]) under MONAI 1.3.2; the nonzero rule would give ([0, 0, 0], [8, 1, 1]).
+  assert.deepEqual(Array.from(actual.cropOrigin), [3, 0, 0]);
+  assert.deepEqual(Array.from(actual.dims), [5, 1, 1]);
+  // CropForeground(margin=1)(NormalizeIntensity(nonzero=True)(torch.tensor(x))).flatten().tolist()
+  const expected = [-0.29277002811431885, 0.29277002811431885, 0.8783100843429565, 1.4638501405715942, 0];
+  expected.forEach((value, index) => assert.ok(Math.abs(actual.data[index] - value) < 1e-6, `voxel ${index}`));
+});
+
 test('slices pad to the upstream 256 x 256 grid before 128 x 128 sliding windows', async () => {
   const tiles = [];
   const session = {
