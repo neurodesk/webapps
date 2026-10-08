@@ -1,29 +1,43 @@
 {
   "name": "@neurodesk/synthseg",
   "version": "0.5.20261007",
-  "description": "SynthSeg 2.0 brain segmentation for browsers",
+  "description": "SynthSeg 2.0 brain segmentation for browsers and the command line",
   "type": "module",
   "private": true,
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "synthseg": "./bin/synthseg.js"
+  },
   "exports": {
     ".": "./src/index.js",
     "./browser": "./src/browser.js",
+    "./node": "./src/node.js",
+    "./results": "./src/results.js",
     "./manifest": "./model.manifest.json",
     "./wasm": "./src/synthseg.wasm"
   },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/index.js && node --check src/pipeline.js && node --check src/wasm.js && node --check src/browser.js",
+    "lint": "node --check src/*.js && node --check bin/synthseg.js",
     "build:wasm": "make wasm"
   },
   "dependencies": {
-    "@neurodesk/runtime-support": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "onnxruntime-node": "1.29.0"
   },
   "devDependencies": {
-    "onnxruntime-node": "1.29.0"
+    "@neurodesk/runtime-support": "workspace:*"
   },
   "repository": {
     "type": "git",

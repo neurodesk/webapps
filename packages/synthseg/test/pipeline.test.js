@@ -7,6 +7,7 @@ import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { runSynthseg, loadSynthseg } from '../src/index.js';
 import manifest from '../model.manifest.json' with { type: 'json' };
+import gates from '../validation/gates.json' with { type: 'json' };
 
 const repo = new URL('../../../', import.meta.url);
 const modelPath = fileURLToPath(new URL('exes/synthseg/models/synthseg-2.0.onnx', repo));
@@ -30,7 +31,7 @@ function gate(actual, reference, limit) {
   const a = readLabels(actual), b = readLabels(reference);
   assert.deepEqual(a.dims, b.dims, 'shape');
   const affine = Math.max(...a.affine.flat().map((v, i) => Math.abs(v - b.affine.flat()[i])));
-  assert.ok(affine <= 1e-4, `affine differs by ${affine}`);
+  assert.ok(affine <= gates.maxAffineErrorMm, `affine differs by ${affine}`);
   assert.deepEqual([...a.codes], [...b.codes], 'qform/sform codes');
   assert.equal(a.units, b.units, 'xyzt_units');
   let mismatched = 0;
@@ -81,7 +82,7 @@ test('wasm preprocessing reports the fixture geometry', async () => {
   const golden = readLabels(await readFile(new URL('small_default.nii.gz', fixtures)));
   assert.deepEqual(seg.geometry.outputShape, golden.dims);
   const affine = Math.max(...seg.geometry.outputAffine.flat().map((v, i) => Math.abs(v - golden.affine.flat()[i])));
-  assert.ok(affine <= 1e-4, `affine differs by ${affine}`);
+  assert.ok(affine <= gates.maxAffineErrorMm, `affine differs by ${affine}`);
   seg.free();
 });
 
@@ -89,7 +90,7 @@ for (const fast of [true, false]) {
   test(`fixture parity (${fast ? 'fast' : 'default'})`, { timeout: 30 * 60_000, skip: existsSync(modelPath) ? false : `missing ${modelPath}` }, async () => {
     const golden = new URL(fast ? 'small_fast.nii.gz' : 'small_default.nii.gz', fixtures);
     const { bytes, provenance, seconds } = await segment(new URL('small.nii.gz', fixtures), { fast });
-    const diff = gate(bytes, await readFile(golden), 5e-6);
+    const diff = gate(bytes, await readFile(golden), gates.maxMismatchFraction.fixture);
     assert.equal(provenance.fast, fast);
     assert.deepEqual(provenance.paddedShape, [128, 128, 128]);
     console.log(`small ${fast ? 'fast' : 'default'}: ${seconds.toFixed(1)} s, ${diff.mismatched}/${diff.total} mismatched`);
@@ -101,7 +102,7 @@ for (const stem of ['T1_head_2mm', 'T1_head']) {
   for (const fast of [true, false]) {
     test(`${stem} parity (${fast ? 'fast' : 'default'})`, { timeout: 4 * 60 * 60_000, skip: references && existsSync(modelPath) ? false : 'set SYNTHSEG_REFERENCE_DIR' }, async () => {
       const { bytes, seconds } = await segment(`${references}/${stem}.nii.gz`, { fast });
-      const diff = gate(bytes, await readFile(`${references}/${stem}_${fast ? 'fast' : 'default'}.nii.gz`), 2e-6);
+      const diff = gate(bytes, await readFile(`${references}/${stem}_${fast ? 'fast' : 'default'}.nii.gz`), gates.maxMismatchFraction.fullVolume);
       console.log(`${stem} ${fast ? 'fast' : 'default'}: ${seconds.toFixed(1)} s, ${diff.mismatched}/${diff.total} mismatched (${diff.fraction})`);
     });
   }

@@ -11,6 +11,7 @@ import { planGpuGraph } from '../../../packages/runtime-support/src/gpu-unet/ses
 import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 
 const graph = JSON.parse(readFileSync(new URL('../../../packages/synthseg/src/gpu-model.json', import.meta.url), 'utf8'));
+const gates = JSON.parse(readFileSync(new URL('../../../packages/synthseg/validation/gates.json', import.meta.url), 'utf8'));
 
 const fixtures = '../../exes/synthseg/test/fixtures';
 const references = process.env.SYNTHSEG_REFERENCE_DIR;
@@ -142,7 +143,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   expect(produced.dims).toEqual(golden.dims);
   expect(produced.header.xyztUnits).toBe(golden.header.xyztUnits);
   const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
-  expect(affineError).toBeLessThanOrEqual(1e-4);
+  expect(affineError).toBeLessThanOrEqual(gates.maxAffineErrorMm);
   let mismatches = 0;
   for (let i = 0; i < golden.data.length; i++) if (produced.data[i] !== golden.data[i]) mismatches++;
   Object.assign(result, {
@@ -177,7 +178,7 @@ if (!probeOnly) {
         input: `${fixtures}/small.nii.gz`,
         reference: `${fixtures}/small_${mode}.nii.gz`,
         mode,
-        limit: 5e-6,
+        limit: gates.maxMismatchFraction.fixture,
         pinned: goldenVoxels[mode],
       });
     });
@@ -191,15 +192,13 @@ if (references && !probeOnly) {
   test('segments the benchmark volumes within the native parity gate', async ({ page }) => {
     expect(hardwareGpu, 'The benchmark volumes need NEURODESK_HARDWARE_GPU=1').toBe(true);
     test.setTimeout(7200000);
-    for (const stem of ['T1_head', 'T1_head_2mm']) {
-      for (const mode of ['fast', 'default']) {
-        await checkCase(page, {
-          input: `${references}/${stem}.nii.gz`,
-          reference: `${references}/${stem}_${mode}.nii.gz`,
-          mode,
-          limit: 2e-6,
-        });
-      }
+    for (const { input: stem, mode } of gates.fullVolumes) {
+      await checkCase(page, {
+        input: `${references}/${stem}.nii.gz`,
+        reference: `${references}/${stem}_${mode}.nii.gz`,
+        mode,
+        limit: gates.maxMismatchFraction.fullVolume,
+      });
     }
   });
 }

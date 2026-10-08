@@ -78,6 +78,8 @@ jobs:
       - name: Test Apple ARM installer
         if: runner.os == 'macOS'
         run: make -C exes/greedy macos-pkg-adhoc
+      - name: Check that each receipt records its archive's digest
+        run: node scripts/check-native-receipts.mjs exes/greedy/dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: greedy-${{ matrix.platform }}
@@ -268,6 +270,7 @@ jobs:
           done
           (cd release-bundle/greedy-npm-tarball && shasum -a 256 -c *.sha256)
           (cd release-bundle/greedy-signed-macos && shasum -a 256 -c *.sha256)
+          node scripts/check-native-receipts.mjs release-bundle/greedy-linux-x64 release-bundle/greedy-windows-x64 release-bundle/greedy-signed-macos
           gh release upload "$RELEASE_TAG" \
             release-bundle/greedy-linux-x64/* \
             release-bundle/greedy-windows-x64/* \
