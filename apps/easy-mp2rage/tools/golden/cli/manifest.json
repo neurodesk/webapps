@@ -1,0 +1,92 @@
+{
+  "numpy": "2.3.5",
+  "scipy": "1.16.3",
+  "nibabel": "5.3.3",
+  "mp2rage": {
+    "B0": 7.0,
+    "TR": 4.3,
+    "TIs": [
+      0.84,
+      2.37
+    ],
+    "FlipDegrees": [
+      5.0,
+      6.0
+    ],
+    "NZslices": [
+      64,
+      128
+    ],
+    "TRFLASH": 0.007,
+    "inv_eff": 0.96
+  },
+  "cases": {
+    "sa2rage": {
+      "b1_source": "sa2rage",
+      "args": [
+        "--sa2rage-params",
+        "2.4,0.15,1.5,6,6,24,24,0.005,1.5"
+      ],
+      "baseline": null
+    },
+    "sa2rage-fa12": {
+      "b1_source": "sa2rage",
+      "args": [
+        "--sa2rage-params",
+        "2.4,0.15,1.5,12,12,24,24,0.005,1.5"
+      ],
+      "baseline": "sa2rage"
+    },
+    "sa2rage-fa12-fallback": {
+      "b1_source": "sa2rage",
+      "args": [
+        "--sa2rage-params",
+        "2.4,0.15,1.5,12,12,24,24,0.005,1.5",
+        "--fallback-uncorrected"
+      ],
+      "baseline": "sa2rage-fa12"
+    },
+    "tfl": {
+      "b1_source": "tfl",
+      "args": [
+        "--reference-angle",
+        "80"
+      ],
+      "baseline": null
+    },
+    "tfl-reference-60": {
+      "b1_source": "tfl",
+      "args": [
+        "--reference-angle",
+        "60"
+      ],
+      "baseline": "tfl"
+    },
+    "tfl-extend-fov": {
+      "b1_source": "tfl",
+      "args": [
+        "--reference-angle",
+        "80",
+        "--extend-fov"
+      ],
+      "baseline": "tfl"
+    },
+    "tfl-reference-40": {
+      "b1_source": "tfl",
+      "args": [
+        "--reference-angle",
+        "40"
+      ],
+      "baseline": "tfl"
+    },
+    "tfl-reference-40-fallback": {
+      "b1_source": "tfl",
+      "args": [
+        "--reference-angle",
+        "40",
+        "--fallback-uncorrected"
+      ],
+      "baseline": "tfl-reference-40"
+    }
+  }
+}

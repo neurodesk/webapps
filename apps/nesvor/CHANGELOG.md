@@ -1,12 +1,49 @@
 # nesvor
 
+## 0.3.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
+  - @neurodesk/nesvor@0.3.20261007
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/nesvor@0.3.20261007
+
+## 0.3.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/nesvor@0.3.20261004
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/nesvor@0.3.20261004
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/nesvor@0.3.20261004
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/nesvor@0.3.20261004
+
+## 0.3.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/nesvor@0.3.20261003
+
 ## 0.3.20260930
 
 ### Patch Changes
 
 - Enable the shared cross-origin isolation fallback on static hosts such as GitHub Pages so N4 can use SharedArrayBuffer. Include NeSVoR in deployed isolation checks and verify its compute-server-first standalone download layout.
   - @neurodesk/nesvor@0.3.20260930
-
 
 ### Patch Changes
 

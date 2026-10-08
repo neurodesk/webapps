@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 
-export async function serveSite(dist, { isolationHeaders = true } = {}) {
+export async function serveSite(dist, { isolationHeaders = true, port = 0 } = {}) {
   const mimeTypes = new Map([
     ['.css', 'text/css; charset=utf-8'],
     ['.html', 'text/html; charset=utf-8'],
@@ -74,7 +74,10 @@ export async function serveSite(dist, { isolationHeaders = true } = {}) {
     }
   });
 
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, '127.0.0.1', resolve);
+  });
   const address = server.address();
   const origin = `http://127.0.0.1:${address.port}`;
   return { origin, close: () => new Promise(resolve => server.close(resolve)) };

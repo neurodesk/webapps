@@ -1,0 +1,78 @@
+name: easy-mp2rage-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/easy-mp2rage-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/easy-mp2rage/**'
+      - 'apps/easy-mp2rage/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/easy-mp2rage-native.yml'
+      - '.github/actions/setup-wasm-opt/**'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/easy-mp2rage/**'
+      - 'apps/easy-mp2rage/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing Easy MP2RAGE release
+        type: boolean
+        default: false
+
+concurrency:
+  group: easy-mp2rage-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  wasm-source:
+    name: committed WASM equals a rebuild from source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Install wasm-pack 0.13.1
+        run: cargo install wasm-pack --version 0.13.1 --locked
+      - name: Set up wasm-opt
+        uses: ./.github/actions/setup-wasm-opt
+      - name: Rebuild and compare
+        run: bash packages/easy-mp2rage/scripts/build-wasm.sh --check
+
+  portable:
+    needs: wasm-source
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/easy-mp2rage
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

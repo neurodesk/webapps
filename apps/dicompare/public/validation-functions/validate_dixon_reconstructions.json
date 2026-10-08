@@ -1,0 +1,35 @@
+{
+  "id": "validate_dixon_reconstructions",
+  "name": "Dixon Fat/Water Reconstructions",
+  "description": "Validates that Dixon imaging produced both fat-only and water-only reconstructions (detected via ImageType).",
+  "category": "Contrast Preparation",
+  "fields": [
+    "ImageType"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "image_types = value[\"ImageType\"].dropna()\nimage_type_strings = [str(it).upper() for it in image_types]\n\nhas_fat = any('F' in it or 'FAT' in it for it in image_type_strings)\nhas_water = any('W' in it or 'WATER' in it for it in image_type_strings)\nhas_in_phase = any('IN' in it for it in image_type_strings)\nhas_out_phase = any('OUT' in it or 'OPP' in it for it in image_type_strings)\n\nif not has_fat and not has_water:\n    raise ValidationWarning(\"Dixon fat-only and water-only images should be reconstructed. Could not identify fat/water images from ImageType.\")",
+  "testCases": [
+    {
+      "id": "test_dixon_images",
+      "name": "Dixon with fat/water",
+      "data": {
+        "ImageType": [
+          [
+            "ORIGINAL",
+            "PRIMARY",
+            "M",
+            "FAT"
+          ],
+          [
+            "ORIGINAL",
+            "PRIMARY",
+            "M",
+            "WATER"
+          ]
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Fat and water images present"
+    }
+  ]
+}

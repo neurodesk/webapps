@@ -30,7 +30,7 @@
               <div class="nd-field">
                 <label for="venc">Velocity encoding (VENC) <small>cm/s</small></label>
                 <input id="venc" type="number" min="1" max="999" step="1" placeholder="from the series" />
-                <p class="nd-hint">Only for raw ±4096 phase. Phase already scaled to cm/s needs none.</p>
+                <p class="nd-hint">Needed for raw ±4096 phase; decodes raw 0–4095 phase. cm/s phase needs none.</p>
               </div>
               <div class="nd-field">
                 <label for="candidatePercentile">Candidate percentile <small>%</small> <span class="nd-info-icon" tabindex="0" aria-label="About the candidate percentile">i<span class="nd-info-tooltip">Unsigned speed images only: candidates are pixels whose signal varies more over the cycle than this share of the head.</span></span></label>
@@ -111,7 +111,7 @@
     </footer>
 
     <template id="aboutContent">
-      <p>Carotid Flow finds both carotid arteries in a retrospectively gated phase-contrast slice through the neck and plots their flow over the cardiac cycle. Left and right are the patient’s, read from the image orientation; the downloaded carotid labels image codes the left carotid 1 and the right 2.</p>
+      <p>Carotid Flow finds both carotid arteries in a retrospectively gated phase-contrast slice through the neck and plots their flow over the cardiac cycle. Left and right are the patient’s, read from the image orientation; the downloaded carotid labels image codes the left carotid 1 and the right 2. Edit corrects the labels in the viewer. Edits change the downloaded labels only; the curves, metrics and CSV keep the detected vessels.</p>
       <p><strong>Signed velocity</strong> (phase scaled to cm/s, or raw phase with its VENC). Vessels are regions of fast mean flow in either direction. The arteries are the direction whose flow pulses more, since neck veins pulse far less, and each carotid is the artery carrying the most flow on its side of the neck. Curves are flow in ml/min through a fixed region, with mean velocity in the CSV. On the example, the right carotid’s flow is within 6 % of PCMCalculator’s manual measurement, with the same waveform.</p>
       <p><strong>Unsigned phase images</strong> go through the updated lab script, <code>standalone_automatic_carotid_flow.m</code>. Head symmetry estimates in-plane tilt in 0.5-degree steps. The search band and pair alignment follow that tilt. Candidate blobs must share the most pulsatile blob’s signal polarity relative to static tissue. Curves subtract the static-tissue baseline and orient arterial signal positively. They remain image intensities, not velocities. Amplitude and phase stay on the same stored grid; patient left and right come from the NIfTI affine.</p>
       <p>Advanced settings control the head and candidate thresholds, tilt search limit, search-band fractions and minimum pair separation. Posterior and anterior extents are fractions of the head height; lateral extent and midline exclusion are fractions of its width, measured from its centre after tilt correction. Defaults follow the supplied MATLAB script. Quality checks flag a tilt at the search limit, peaks more than one frame apart, or pair asymmetry or anterior–posterior offset above 0.3 of the pair separation. These checks prompt visual review; they do not establish accuracy.</p>

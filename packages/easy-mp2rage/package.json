@@ -1,0 +1,40 @@
+{
+  "name": "@neurodesk/easy-mp2rage",
+  "version": "0.7.20261007",
+  "description": "MP2RAGE T1 mapping, B1 correction and UNI denoising for browsers and the command line",
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "bin": {
+    "easy-mp2rage": "./bin/easy-mp2rage.js"
+  },
+  "exports": {
+    "./node": "./src/node.js",
+    "./nifti": "./src/nifti.js",
+    "./outputs": "./src/outputs.js",
+    "./wasm": "./wasm/mp2rage_wasm.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/node.js && node --check bin/easy-mp2rage.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/easy-mp2rage"
+  }
+}

@@ -1,6 +1,19 @@
 {
   "repository": "neurodesk/webapps",
   "tagPrefix": "syncro-v",
+  "displayName": "SYNcro",
+  "app": "syncro",
+  "run": "input.nii.gz results --threads 4",
+  "readme": {
+    "run": "Run normalization",
+    "notes": [
+      "Models and the MNI template are included and checked locally.",
+      "No network connection or previously populated cache is required.",
+      "",
+      "SYNcro is research software. Review the output alignment before use."
+    ]
+  },
+  "validation": "validation/package-check.mjs",
   "targets": {
     "windows-x64": {
       "label": "Windows x64",
@@ -10,6 +23,11 @@
     "linux-x64": {
       "label": "Linux x64",
       "archive": "tar.gz",
+      "executable": "syncro"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
       "executable": "syncro"
     }
   }

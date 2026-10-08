@@ -45,6 +45,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "neurodesk-nifti"
+version = "0.1.0"
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -55,6 +59,7 @@ name = "synthseg-wasm"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "neurodesk-nifti",
 ]
 
 [[package]]

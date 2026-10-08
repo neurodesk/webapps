@@ -50,7 +50,18 @@ pub fn app(config: Arc<ServeConfig>, store: Arc<JobStore>) -> io::Result<Router>
         submissions: Arc::new(api::SubmissionLocks::default()),
         config: config.clone(),
         store,
-        tools: Arc::new(tools::registry()),
+        tools: Arc::new(
+            tools::registry()
+                .into_iter()
+                .filter(|tool| {
+                    tool.id() != "sct"
+                        || matches!(
+                            config.runner,
+                            crate::config::RunnerKind::Docker | crate::config::RunnerKind::Simulate
+                        )
+                })
+                .collect(),
+        ),
     };
     let www_router = match &config.www {
         Some(dir) => www::router(dir),

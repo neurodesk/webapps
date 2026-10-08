@@ -93,6 +93,12 @@ export async function loadAppsRegistry(path = registryPath) {
     if (app.ci?.browser_test !== undefined && typeof app.ci.browser_test !== 'boolean') {
       errors.push(`ci.browser_test must be a boolean for ${app.id}`);
     }
+    if (app.ci?.hardware_gpu !== undefined && typeof app.ci.hardware_gpu !== 'boolean') {
+      errors.push(`ci.hardware_gpu must be a boolean for ${app.id}`);
+    }
+    if (app.ci?.hardware_gpu && app.ci.browser_test !== true) {
+      errors.push(`ci.hardware_gpu needs ci.browser_test for ${app.id}`);
+    }
     if (app.ci?.release_test !== undefined && !PACKAGE_SCRIPT.test(app.ci.release_test)) {
       errors.push(`invalid ci.release_test for ${app.id}: ${app.ci.release_test}`);
     }
@@ -132,7 +138,7 @@ export async function loadAppsRegistry(path = registryPath) {
     }),
     apps: Object.freeze(registry.apps.map((app) => Object.freeze({
       ...app,
-      ci: Object.freeze({ browser_test: false, ...app.ci }),
+      ci: Object.freeze({ browser_test: false, hardware_gpu: false, ...app.ci }),
       keywords: Object.freeze([...app.keywords]),
       categories: Object.freeze([...app.categories]),
       app_scoped_runtime_families: Object.freeze([...(app.app_scoped_runtime_families ?? [])]),

@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile, stat, readdir, rename, rm } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { readFile, stat } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { parseContract, validateRequest } from './contracts.js';
 import { describeFile, verifyRunReport } from './reports.js';
 
@@ -58,19 +58,9 @@ const readRun = selector => {
   return element ? JSON.parse(element.textContent) : null;
 };
 
-export async function runJob(contents, job, outputDirectory, { signal, onProgress = () => {} } = {}) {
-  const output = resolve(outputDirectory);
-  await mkdir(output, { recursive: true });
-  if ((await readdir(output)).length) throw new Error('Output directory must be empty');
-  const downloads = [];
-  const activeDownloads = new Set();
-  const names = new Set();
+export async function runJob(contents, job, { signal, onProgress = () => {}, artifacts }) {
   const contract = job.automation?.contract;
-  const reportPath = join(output, 'job-result.json');
-  const partialReportPath = join(output, '.job-result.json.partial');
   const inputs = {};
-  let downloadError;
-  let currentArtifact;
   let previousRunId;
   let currentRunId;
   let snapshot;
@@ -92,32 +82,9 @@ export async function runJob(contents, job, outputDirectory, { signal, onProgres
     }
   };
   const evaluate = (fn, value) => bounded(contents.executeJavaScript(`(${fn.toString()})(${JSON.stringify(value)})`));
-  const onDownload = (_event, item, owner) => {
-    if (owner !== contents) return;
-    const filename = basename(item.getFilename());
-    if (['job-result.json', '.job-result.json.partial', 'run.json'].includes(filename) || (contract && !currentArtifact)) {
-      downloadError = new Error(`Unexpected output: ${filename}`);
-      item.cancel();
-      return;
-    }
-    if (names.has(filename)) {
-      downloadError = new Error(`Duplicate output: ${filename}`);
-      item.cancel();
-      return;
-    }
-    names.add(filename);
-    const role = currentArtifact;
-    item.setSavePath(join(output, filename));
-    activeDownloads.add(item);
-    item.once('done', (_event, state) => {
-      activeDownloads.delete(item);
-      if (state !== 'completed') downloadError = new Error(`Output download ${filename}: ${state}`);
-      else downloads.push({ filename, bytes: item.getReceivedBytes(), ...(role ? { role } : {}) });
-    });
-  };
   const check = async (timeoutMessage = `Job timed out after ${job.timeoutMs ?? 900000} ms`) => {
     signal?.throwIfAborted();
-    if (downloadError) throw downloadError;
+    artifacts.assertHealthy();
     if (Date.now() > deadline) throw new Error(timeoutMessage);
     if (contract) {
       snapshot = await evaluate(readRun, contract.lifecycle.snapshotSelector);
@@ -151,8 +118,6 @@ export async function runJob(contents, job, outputDirectory, { signal, onProgres
       await pause();
     }
   };
-  contents.session.on('will-download', onDownload);
-  let success = false;
   try {
     signal?.throwIfAborted();
     contents.debugger.attach('1.3');
@@ -162,67 +127,49 @@ export async function runJob(contents, job, outputDirectory, { signal, onProgres
     if (contract) {
       for (const step of job.steps.filter(step => step.action === 'upload')) inputs[step.input] = await describeFile(step.paths[0]);
     }
-    for (const step of job.steps) {
-      console.error(`JOB ${step.action} ${step.selector}`);
-      if (step.optional && !await evaluate(inspectElement, step)) continue;
-      await wait({ ...step, condition: step.action === 'click' ? 'enabled' : step.condition });
-      if (step.action === 'wait') continue;
-      if (contract && (step.action === 'upload' || step.selector === contract.controls.run)) {
-        previousRunId = (await evaluate(readRun, contract.lifecycle.snapshotSelector))?.runId;
-        currentRunId = undefined;
-      }
-      if (step.action === 'upload') {
-        const { root } = await bounded(contents.debugger.sendCommand('DOM.getDocument'));
-        const { nodeId } = await bounded(contents.debugger.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: step.selector }));
-        await bounded(contents.debugger.sendCommand('DOM.setFileInputFiles', { nodeId, files: step.paths }));
-      } else {
-        currentArtifact = step.artifact;
-        await evaluate(step => {
-          const element = document.querySelector(step.selector);
-          if (step.action === 'click') element.click();
-          else {
-            if (step.action === 'check') element.checked = Boolean(step.value);
-            else element.value = step.value;
-            element.dispatchEvent(new Event('input', { bubbles: true }));
-            element.dispatchEvent(new Event('change', { bubbles: true }));
-          }
-        }, step);
-        if (step.artifact) {
-          while (!downloads.some(item => item.role === step.artifact)) {
-            await check();
-            await pause();
-          }
-          currentArtifact = undefined;
+    const performSteps = async () => {
+      for (const step of job.steps) {
+        console.error(`JOB ${step.action} ${step.selector}`);
+        if (step.optional && !await evaluate(inspectElement, step)) continue;
+        await wait({ ...step, condition: step.action === 'click' ? 'enabled' : step.condition });
+        if (step.action === 'wait') continue;
+        if (contract && (step.action === 'upload' || step.selector === contract.controls.run)) {
+          previousRunId = (await evaluate(readRun, contract.lifecycle.snapshotSelector))?.runId;
+          currentRunId = undefined;
+        }
+        if (step.action === 'upload') {
+          const { root } = await bounded(contents.debugger.sendCommand('DOM.getDocument'));
+          const { nodeId } = await bounded(contents.debugger.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: step.selector }));
+          await bounded(contents.debugger.sendCommand('DOM.setFileInputFiles', { nodeId, files: step.paths }));
+        } else {
+          const trigger = () => evaluate(step => {
+            const element = document.querySelector(step.selector);
+            if (step.action === 'click') element.click();
+            else {
+              if (step.action === 'check') element.checked = Boolean(step.value);
+              else element.value = step.value;
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+              element.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }, step);
+          if (step.artifact) {
+            await artifacts.download(step.artifact, trigger, check);
+          } else await trigger();
         }
       }
-    }
-    while (downloads.length < job.expectedDownloads) {
-      // Keep the historical diagnostic for a missing or stuck output.
-      if (Date.now() > deadline) throw new Error(`Expected ${job.expectedDownloads} outputs, received ${downloads.length}`);
-      await check();
-      await pause();
-    }
+    };
+    if (contract) await performSteps();
+    else await artifacts.collectUnlabelled(job.expectedDownloads, performSteps, received => {
+      if (Date.now() > deadline) throw new Error(`Expected ${job.expectedDownloads} outputs, received ${received}`);
+      return check();
+    });
     await check();
-    if (downloadError) throw downloadError;
-    if (names.size !== job.expectedDownloads || downloads.some(item => item.bytes === 0)) throw new Error('Batch output validation failed');
     if (contract && snapshot?.runId !== currentRunId) throw new Error('App run changed before its outputs were saved');
-    const report = contract
-      ? await verifyRunReport({ contract, snapshot, downloads, output, inputs })
-      : { app: job.app, downloads };
-    signal?.throwIfAborted();
-    await writeFile(partialReportPath, `${JSON.stringify(report, null, 2)}\n`, { signal });
-    signal?.throwIfAborted();
-    await rename(partialReportPath, reportPath);
-    signal?.throwIfAborted();
-    success = true;
-    return report;
+    return await artifacts.verify(({ output, downloads }) => {
+      if (downloads.length !== job.expectedDownloads) throw new Error('Batch output validation failed');
+      return contract ? verifyRunReport({ contract, snapshot, downloads, output, inputs }) : { app: job.app, downloads };
+    });
   } finally {
-    if (!success) {
-      for (const item of activeDownloads) item.cancel();
-      await rm(partialReportPath, { force: true });
-      await rm(reportPath, { force: true });
-    }
-    contents.session.off('will-download', onDownload);
-    if (contents.debugger.isAttached()) contents.debugger.detach();
+    if (!contents.isDestroyed() && contents.debugger.isAttached()) contents.debugger.detach();
   }
 }

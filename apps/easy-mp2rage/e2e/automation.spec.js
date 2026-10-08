@@ -89,3 +89,40 @@ test('SA2RAGE automation matches the pinned Python phantom golden', async ({ pag
   }
   expect(worst).toBeLessThan(0.1);
 });
+
+test('non-default B1-map options match the Python pipeline and are recorded in parameters.json', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
+  for (const [role, name] of [['uni', 'UNI'], ['inv2', 'INV2'], ['b1', 'B1map_tfl']]) {
+    await page.locator('#neurodesk-input-transfer').setInputFiles(new URL(`../tools/phantom/phantom_${name}.nii.gz`, import.meta.url).pathname);
+    await page.evaluate(role => neurodeskAutomation.dispatch('adopt', { role }), role);
+  }
+  const report = await finish(page, 'correct', {
+    mp2rage: [4.3, 0.840, 2.370, 5, 6, 64, 128, 0.007, 0.96],
+    b1Type: 'tfl',
+    referenceAngle: 40,
+    extendFov: false,
+    fallbackUncorrected: true,
+  }, 'tfl-reference-40-fallback');
+  const download = async (role) => {
+    const [id] = Object.entries(report.artifacts).find(([, artifact]) => artifact.role === role);
+    const waiting = page.waitForEvent('download');
+    await page.evaluate(artifactId => neurodeskAutomation.dispatch('download', { artifactId }), id);
+    return readFile(await (await waiting).path());
+  };
+  const result = await readNifti(await download('t1'));
+  const golden = await readNifti(await readFile(new URL('../tools/golden/cli/tfl-reference-40-fallback/T1map.nii.gz', import.meta.url)));
+  expect(result.dims).toEqual(golden.dims);
+  let worst = 0;
+  for (let i = 0; i < golden.data.length; i++) worst = Math.max(worst, Math.abs(result.data[i] - golden.data[i]));
+  expect(worst).toBeLessThan(0.1);
+  const parameters = JSON.parse((await download('parameters')).toString('utf8'));
+  expect(parameters).toMatchObject({
+    mode: 'b1map',
+    b1_map_type: 'tfl',
+    b1_reference_angle_deg: 40,
+    extend_fov: false,
+    fallback_uncorrected: true,
+    mask_source: 'INV2',
+  });
+});

@@ -54,12 +54,18 @@
         "enum": { "type": "array", "items": {} },
         "min": { "type": "number" },
         "max": { "type": "number" },
+        "formats": { "$ref": "common.schema.json#/$defs/formats" },
+        "space": { "$ref": "common.schema.json#/$defs/space" },
+        "resolution": { "$ref": "common.schema.json#/$defs/resolution" },
+        "density": { "$ref": "common.schema.json#/$defs/density" },
+        "labelSystem": { "$ref": "common.schema.json#/$defs/labelSystem" },
         "delivery": {
           "$ref": "#/$defs/outputDeliveryDef",
           "description": "How this output is produced and where the runtime should look for it. Overrides the tool-level outputDelivery default."
         },
         "extensions": { "$ref": "common.schema.json#/$defs/extensions" }
-      }
+      },
+      "allOf": [{ "$ref": "common.schema.json#/$defs/typeQualifierRules" }]
     },
     "outputDeliveryDef": {
       "type": "object",

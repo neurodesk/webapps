@@ -14,7 +14,7 @@ async function collectOwnedUiSources(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.isDirectory()) {
-      if (['vendor', 'dcm2niix', 'nifti-js', 'onnxruntime', 'wasm'].includes(entry.name)) continue;
+      if (['vendor', 'dcm2niix', 'nifti-js', 'freebrowse-viewer', 'onnxruntime', 'wasm'].includes(entry.name)) continue;
       files.push(...await collectOwnedUiSources(join(directory, entry.name)));
     } else if (/\.(?:css|html|js)$/.test(entry.name)) {
       files.push(join(directory, entry.name));

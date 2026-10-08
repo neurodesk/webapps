@@ -6,6 +6,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
+import { hardwareGpu } from "../../../test-utils/hardware-gpu.mjs";
 import { inspectStl, labels, voxelVolume } from "./mesh-geometry.js";
 
 const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
@@ -152,7 +153,7 @@ for (const [model, labelCount] of [["16chan18cls", 18], ["mindmap", 18], ["minds
 // On a machine with no GPU, Chromium offers only SwiftShader. MindGrab's own `auto` then took
 // software WebGL2 and did not finish in 9 minutes; the threaded CPU module needs about 25 s.
 test("the Segment button runs on the CPU when the only GPU is a software renderer", async ({ page }) => {
-  test.skip(Boolean(process.env.BRAIN2PRINT_HARDWARE_GPU), "a hardware GPU is expected to take WebGPU or WebGL2");
+  test.skip(hardwareGpu, "a hardware GPU is expected to take WebGPU or WebGL2");
   test.setTimeout(300_000);
   await page.goto("/");
   await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 60_000 });

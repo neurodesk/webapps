@@ -1,3 +1,41 @@
+/** Compare native voxel grids, allowing 1e-5 rounding error in each affine coefficient. */
+export function sameVoxelGrid(left, right) {
+  if (![left, right].every(header =>
+    header?.dims?.length >= 4
+    && [1, 2, 3].every(axis => Number.isInteger(header.dims[axis]) && header.dims[axis] > 0)
+    && header.affine?.length === 4
+    && Array.from(header.affine).every(row => row?.length === 4 && Array.from(row).every(Number.isFinite))
+  )) return false;
+  return [1, 2, 3].every(axis => left.dims[axis] === right.dims[axis])
+    && left.affine.every((row, r) => row.every((value, c) => Math.abs(value - right.affine[r][c]) <= 1e-5));
+}
+
+// NIfTI xyzt_units spatial codes: metres, millimetres, micrometres. Unspecified is read as mm.
+const SPATIAL_UNIT_MM = { 1: 1000, 2: 1, 3: 0.001 };
+
+/**
+ * Whether two NIfTI-1 headers place every voxel at the same physical location.
+ * Compares the eight corner voxels in millimetres (honouring xyzt_units), so an sform and an
+ * equivalent qform match, and float32 rounding up to `toleranceMm` is allowed.
+ */
+export function sameNiftiGrid(first, second, toleranceMm = 0.001) {
+  const a = parseNiftiHeader(first);
+  const b = parseNiftiHeader(second);
+  const dims = a.dims.slice(1, 4);
+  if (dims.some((dim, axis) => dim !== b.dims[axis + 1])) return false;
+  const scaleA = SPATIAL_UNIT_MM[a.xyztUnits & 7] || 1;
+  const scaleB = SPATIAL_UNIT_MM[b.xyztUnits & 7] || 1;
+  for (let corner = 0; corner < 8; corner++) {
+    const voxel = dims.map((dim, axis) => (corner & (1 << axis) ? dim - 1 : 0));
+    voxel.push(1);
+    for (let row = 0; row < 3; row++) {
+      const delta = voxel.reduce((sum, value, col) => sum + value * (a.affine[row][col] * scaleA - b.affine[row][col] * scaleB), 0);
+      if (!Number.isFinite(delta) || Math.abs(delta) > toleranceMm) return false;
+    }
+  }
+  return true;
+}
+
 export function parseNiftiHeader(headerBuffer) {
   const view = headerBuffer instanceof DataView ? headerBuffer : new DataView(toArrayBuffer(headerBuffer));
   const dims = [];

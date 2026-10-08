@@ -44,6 +44,17 @@ if ! command -v cargo &> /dev/null; then
     exit 1
 fi
 
+# wasm-pack installs the wasm-bindgen CLI matching Cargo.lock with `cargo install` when it is
+# missing, and that host build inherits the environment. The threaded build below exports wasm
+# target features and wasm-ld arguments (--shared-memory, ...) in RUSTFLAGS, which the host
+# linker rejects, so install the CLI here first, before those flags exist; wasm-pack then uses
+# the matching wasm-bindgen on PATH.
+BINDGEN_VERSION=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' "$RUST_DIR/Cargo.lock")
+if [[ -n "$BINDGEN_VERSION" ]] && ! wasm-bindgen --version 2>/dev/null | grep -qx "wasm-bindgen $BINDGEN_VERSION"; then
+    echo "Installing wasm-bindgen-cli $BINDGEN_VERSION (matches Cargo.lock)..."
+    env -u RUSTFLAGS -u CARGO_UNSTABLE_BUILD_STD cargo install wasm-bindgen-cli --version "$BINDGEN_VERSION" --locked
+fi
+
 # Threaded (multi-core) build via wasm-bindgen-rayon. Speeds up ALL rayon paths in qsm-core
 # (classical algorithms) plus the tiled deep-learning loop. Requires nightly + build-std (to
 # rebuild std with atomics) and a cross-origin-isolated page at runtime (COOP/COEP — see

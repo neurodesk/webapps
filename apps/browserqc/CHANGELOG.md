@@ -1,5 +1,42 @@
 # browserqc
 
+## 1.4.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
+## 1.4.20261006
+
+### Minor Changes
+
+- Update BrowserQC to upstream 30f385f. Use an independent brain mask with the default MindMap tissue fractions or three label models, update the QC engine and viewer, and add background-noise viewing, manual ratings and the native Python launcher. Preserve shared examples, local DICOM import and cancellable processing. Register BrowserQC in the weekly upstream pull-request workflow.
+
+## 1.3.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 1.3.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 1.3.20260930
 
 ### Patch Changes
@@ -7,7 +44,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

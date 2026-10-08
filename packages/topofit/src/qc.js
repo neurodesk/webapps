@@ -1,13 +1,12 @@
-import { applyAffine, inverseAffine } from './volume.js';
+import { applyAffine, inverseAffine, selectQuantile } from './volume.js';
 
 export function createQcVolume(volume, surfaces, thickness = 1) {
   if (!Number.isInteger(thickness) || thickness < 0 || thickness > 3) {
     throw new Error('QC overlay thickness must be an integer from 0 to 3.');
   }
-  const sorted = volume.data.slice();
-  sorted.sort();
-  const low = percentile(sorted, 0.01);
-  const high = percentile(sorted, 0.99);
+  const values = volume.data.slice();
+  const low = selectQuantile(values, 0.01);
+  const high = selectQuantile(values, 0.99);
   const output = new Int16Array(volume.data.length);
   if (high > low) {
     for (let i = 0; i < output.length; i += 1) {
@@ -76,13 +75,6 @@ export function writeInt16Nifti(volume, data, description) {
   bytes.fill(0, 348, 352);
   for (let i = 0; i < data.length; i += 1) view.setInt16(352 + i * 2, data[i], little);
   return output;
-}
-
-function percentile(sorted, probability) {
-  const position = (sorted.length - 1) * probability;
-  const lower = Math.floor(position);
-  const fraction = position - lower;
-  return sorted[lower] + fraction * (sorted[Math.min(sorted.length - 1, lower + 1)] - sorted[lower]);
 }
 
 export function roundEven(value) {

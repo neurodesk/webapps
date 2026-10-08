@@ -1,6 +1,6 @@
 {
   "name": "carotid-flow",
-  "version": "0.3.20260930",
+  "version": "0.4.20261007",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -13,6 +13,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@neurodesk/carotid-flow": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.14"

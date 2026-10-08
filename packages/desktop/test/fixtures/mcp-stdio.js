@@ -33,6 +33,29 @@ const contracts = [
     engines: ['browser', 'native'],
   },
 ];
+if (process.argv.includes('--parameters')) {
+  contracts.push({
+    schemaVersion: 2, app: 'settings', title: 'Settings', description: 'Parameter metadata fixture',
+    defaultOperation: 'run', operations: { run: {
+      title: 'Run', description: 'Inspect settings', mode: 'batch', inputs: {}, artifacts: {}, engines: ['browser'],
+      parameters: {
+        method: { type: 'string', description: 'Scientific method', enum: ['fast', 'normal'], default: 'normal' },
+        threshold: { type: 'number', description: 'Intensity threshold', minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.15 },
+        iterations: { type: 'integer', description: 'Iteration count' },
+        numeric: { type: 'number', description: 'Numeric choice', enum: [1, 2] },
+        flag: { type: 'boolean', description: 'Boolean choice', enum: [false] },
+        enabled: { type: 'boolean', description: 'Enable processing', default: false },
+        schedule: {
+          type: 'array', description: 'Resolution schedule', minimum: 1, maximum: 2, default: [[0.15]],
+          items: {
+            type: 'array', description: 'Resolution entries', minimum: 1, maximum: 3,
+            items: { type: 'number', description: 'Resolution weight', minimum: 0, maximum: 1, multipleOf: 0.01, default: 0.5 },
+          },
+        },
+      },
+    } },
+  });
+}
 const runs = new Map();
 const resources = new Map();
 const active = setInterval(() => {}, 1000);

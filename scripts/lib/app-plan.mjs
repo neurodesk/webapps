@@ -25,6 +25,7 @@ function matrixEntry(app) {
     python_reference: toolchains.has('python-reference'),
     shared_runtime: app.ci.shared_runtime,
     browser_test: app.ci.browser_test,
+    hardware_gpu: app.ci.hardware_gpu,
     app_scoped_runtime: app.app_scoped_runtime_families.length > 0,
     release_test: app.ci.release_test ?? 'test',
   };
@@ -63,11 +64,13 @@ export function createAppPlan(registry, changedPaths = []) {
   const selected = selectAffectedApps(registry, changedPaths);
   const releasable = selected.filter((app) => app.ci.release);
   const browserTested = selected.filter((app) => app.ci.browser_test);
+  const gpuTested = selected.filter((app) => app.ci.hardware_gpu);
   return Object.freeze({
     changedPaths: Object.freeze([...changedPaths]),
     selected: Object.freeze(selected),
     apps: Object.freeze({ include: Object.freeze(selected.map(matrixEntry)) }),
     browserApps: Object.freeze({ include: Object.freeze(browserTested.map(matrixEntry)) }),
+    gpuApps: Object.freeze({ include: Object.freeze(gpuTested.map(matrixEntry)) }),
     releaseApps: Object.freeze({ include: Object.freeze(releasable.map(matrixEntry)) }),
     allApps: selected.length === registry.apps.length,
   });

@@ -32,7 +32,53 @@ if (!Number.isFinite(workerTimeoutMinutes) || workerTimeoutMinutes <= 0) {
   throw new Error('SCT_WORKER_TIMEOUT_MINUTES must be a positive number');
 }
 
-const { prepareModuleWorkerSource, loadSharedWorkerBindings, installModuleLoader } = require('./worker-vm.cjs');
+function prepareModuleWorkerSource(source) {
+  return source
+    .replace(/^\s*import\s+(?:(?:[\s\S]*?)\s+from\s+)?['"][^'"]+['"];\s*$/gm, '')
+    .replace(/\bimport\(/g, 'importModule(');
+}
+
+async function loadSharedWorkerBindings() {
+  const components = path.resolve(ROOT, '../../packages/components/src');
+  const [worker, niftiUtils, geometry, layout] = await Promise.all([
+    import(pathToFileURL(path.join(components, 'worker/index.js')).href),
+    import(pathToFileURL(path.join(components, 'file-io/NiftiUtils.js')).href),
+    import(pathToFileURL(path.join(components, 'volume/geometry.js')).href),
+    import(pathToFileURL(path.join(components, 'volume/layout.js')).href)
+  ]);
+  return {
+    createWorkerEmitter: worker.createWorkerEmitter,
+    fetchModelAsset: worker.fetchModel,
+    getOptimalWasmThreads: worker.getOptimalWasmThreads,
+    installWorkerRouter: worker.installWorkerRouter,
+    localForageCache: worker.localForageCache,
+    prepareRasWorkerInput: worker.prepareRasWorkerInput,
+    createNiftiFromData: niftiUtils.createNiftiFromData,
+    parseNiftiVolume: niftiUtils.parseNiftiVolume,
+    getOrientationTransform: geometry.getOrientationTransform,
+    inverseOrient: geometry.inverseOrient,
+    orientToRAS: geometry.orientToRAS,
+    resampleLabelsNearest: geometry.resampleLabelsNearest,
+    resampleVolume: geometry.resampleVolume,
+    flipVolumeAxes: layout.flipVolumeAxes,
+    transposeXYZToZYX: layout.transposeXYZToZYX,
+    transposeZYXToXYZ: layout.transposeZYXToXYZ
+  };
+}
+
+function installModuleLoader(sandbox, selfObj, localforage) {
+  sandbox.importModule = async (specifier) => {
+    if (specifier.startsWith('https://')) return { default: localforage };
+    if (specifier.endsWith('/nifti-js/index.js')) return {};
+    const abs = path.resolve(path.dirname(WORKER_PATH), specifier);
+    const src = fs.readFileSync(abs, 'utf8');
+    vm.runInContext(src, sandbox, { filename: abs });
+    for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'TotalSpineSeg']) {
+      if (selfObj[name]) sandbox[name] = selfObj[name];
+    }
+    return {};
+  };
+}
 
 const FIXTURE_CASES = Object.freeze([
   {
@@ -230,7 +276,7 @@ async function runWorkerCase(testCase) {
     // worker modules we evaluate the file so each UMD bootstrap registers on `self`.
     importScripts: (relPath) => {
       if (typeof relPath !== 'string') return;
-      if (!/(inference-pipeline|modules\/lesion-analysis|modules\/vertebrae|modules\/totalspineseg)\.js$/.test(relPath)) return;
+      if (!/(inference-pipeline|modules\/lesion-analysis|modules\/totalspineseg)\.js$/.test(relPath)) return;
       const abs = path.resolve(path.dirname(WORKER_PATH), relPath);
       if (!fs.existsSync(abs)) return;
       const src = fs.readFileSync(abs, 'utf8');
@@ -239,7 +285,7 @@ async function runWorkerCase(testCase) {
       // where root === self in worker context. In our vm sandbox, `self` is a
       // sandbox property (not the global itself), so promote exports to
       // bare global so bare-name references in inference-worker.js resolve.
-      for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'VertebraeLabeling', 'TotalSpineSeg']) {
+      for (const name of ['SCTInferencePipeline', 'SCTLesionAnalysis', 'TotalSpineSeg']) {
         if (selfObj[name]) sandbox[name] = selfObj[name];
       }
     },

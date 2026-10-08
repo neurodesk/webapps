@@ -1,0 +1,166 @@
+{
+  "scope": "Fresh current production build versus pinned PyTorch CPU reference, one ds000001 scan, one run per implementation.",
+  "commit": "e1f189f8ad8abdcc48700d584f913d1709cff60d",
+  "container": "vnmd/topofit_0.5.1@sha256:dff22ad5577a1a7ba0530759e009f293271ea5ddfc3441fb35b61322bbd6ec29",
+  "inputSha256": "bdb7022ae229c5b8edd16425928c9243c562f84082b9b8e6f97cdba8b9354a98",
+  "thresholds": {
+    "surfaceMeanMm": 0.25,
+    "surfaceP95Mm": 0.5,
+    "surfaceMaxMm": 2.0,
+    "registrationMeanDegrees": 0.1,
+    "registrationP95Degrees": 0.25,
+    "registrationRadiusMaxMm": 0.01,
+    "qcWithinOneVoxel": 0.99
+  },
+  "runtime": {
+    "app": "TopoFit web 0.12.20261003",
+    "release": "topofit-0.5.1-onnx-20260911",
+    "conformer": "@niivue/niimath -conform -ras",
+    "assets": {
+      "trega-synth-random.onnx": "96165925caf6dfe324025d72a5bd5ec525965299c2c0cf685f0ed7899f9d50f8",
+      "topofit-t1w-1mm-features.onnx": "bd1d506bdf12eb48da57cd0ad8e77d65251ed4e096143108debe9f5a7b27de39",
+      "topofit-t1w-1mm-white-order-0.onnx": "10fea29ad85ac6ed332a90318ca783bb0bfb97ab979bca07025cf4c0e63b29fe",
+      "topofit-t1w-1mm-white-order-1.onnx": "c2ecafeacb4e14c1aad5beb0d470e940be1b476e27fbd0c3807b45731ae8f8d9",
+      "topofit-t1w-1mm-white-order-2.onnx": "c9a5fca47b3ed362b2508ca68695f2dcf157ac9fa676378db3ffd5e6cc05bd01",
+      "topofit-t1w-1mm-white-order-3.onnx": "674a1b74c629ca6cf7f8c8bb6b082d371b007edb645ed3a645548f2e450bb9ed",
+      "topofit-t1w-1mm-white-order-4.onnx": "194dcd24b4a8e23f4fca023bfd61d7295e1210c655a531e51493ec9038639993",
+      "topofit-t1w-1mm-white-order-5.onnx": "272001b7ed2d1ff120dd836ff1051b63f0e7e288f8caa9853754215213e3ecbb",
+      "topofit-t1w-1mm-white-order-6.onnx": "dfc1980ec250a8171a031c5dfb54407eaa73983310dff3ae8e80e7e097c5b207",
+      "topofit-t1w-1mm-pial.onnx": "85ab59a2a69b18757451d7dd6dabe843cdee09b89eb8089ad51aaec83b702699",
+      "topofit-synth-1mm-features.onnx": "5086e5094f2bbdb01550862419c2cad60338b8d37bbe257486dacc228ac73054",
+      "topofit-synth-1mm-white-order-0.onnx": "d2be2b02642f55047d3662bf76f5c74d62cf029394454a6494f4a7c01e9bfb7a",
+      "topofit-synth-1mm-white-order-1.onnx": "cc25c5f445feb5f6a3cb39d2b6b0ab1c8c59c676136997d6d2b50a7ffdc4797b",
+      "topofit-synth-1mm-white-order-2.onnx": "0ec5906b0846b5ff698ffba29900afc42fad24a7032256333aeeb2104bf9997c",
+      "topofit-synth-1mm-white-order-3.onnx": "e194453352e870afa5221126aae44fdeb6f109b3d0946cf7b1ce3c001bdba137",
+      "topofit-synth-1mm-white-order-4.onnx": "951a1ee1171805fa7c1420c31d3deb32c1535bc0d7adf9fff8a60f3178cde347",
+      "topofit-synth-1mm-white-order-5.onnx": "36a7139c6af2ff4ff5dc216c686c5412acdc85ba0cb22e169735988d22aae465",
+      "topofit-synth-1mm-white-order-6.onnx": "253e70b2c85dd44e5fcd2c96be00fbefa6b0c391f2bcf9162586f60871d5f1b9",
+      "topofit-synth-1mm-pial.onnx": "a3988d33d2753d763486c408a0f3776ac6c96a1c52f348b8be74dfadd132a229",
+      "faces-lh.i32": "3a573d25fa398ac1ebe5145c0528fe7d4c33bfbb5cb8bf636bac37e3a7bfd902",
+      "faces-rh.i32": "735860e9a36e5d090628259b780ef3980ef95a45ee1ff9374258bb3c21d8f34f",
+      "template-lh.f32": "6ed358bac79f459c218a1a74e0bac4ee2d5c268ede23d53245de16d672f07df7",
+      "template-rh.f32": "d088aa1e5f6dfc1f83379608b462b0f8d14da41f26a1295a3bdb885891c5d5ba",
+      "registration-lh.f32": "13ba9a4029c540e2a1a27d08941822e8ee2a67314aa8ba752eab3f3097828048",
+      "registration-rh.f32": "8ff8687cfcce85442bae6b482fdfb40f2a916adf2ca10efc01d863569f221042",
+      "subdivide-order-0-edges.i32": "4eefca9a6081eae5fda52fc1ef03650c6c2dbd796c115ff0938bab94c26c26d5",
+      "subdivide-order-1-edges.i32": "0408ebfd0663361b8ebc3f4df7a9d7d3112d233ab2ba33d006edc744b4037199",
+      "subdivide-order-2-edges.i32": "e18a855bfc1915bc45cc498a262d61304c8066af227e64dacc987554b2255479",
+      "subdivide-order-3-edges.i32": "44efb6edfc0555386ef6a71ca3637fac5f9fe9d572d1222485d049afdf2dc4f7",
+      "subdivide-order-4-edges.i32": "3326a5446a2e2e0c42f0c7b5c5e9e4020c80d16616cba097ecb7b5beffacee6b",
+      "subdivide-order-5-edges.i32": "22191eec450e13df65cd0fbd1058451fae77cfc32606b7c056a23ab985915d2d"
+    },
+    "inference": "ONNX Runtime Web WASM",
+    "onnxruntime": "1.29.0",
+    "threads": 1,
+    "graphOptimizationLevel": "all"
+  },
+  "surfaces": {
+    "lh.white": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.7954870954652455,
+      "p95_corresponding_distance_mm": 1.7602778928517175,
+      "max_corresponding_distance_mm": 4.22859188818168,
+      "browser_sha256": "661d55866ed9e7011a017dea9d4aa101e31ddcb341c105f0ff597936ab8b84c0",
+      "reference_sha256": "09540225f87552514235cbeaba115ad508092c7dd89ddb1dd12e5ef140757038"
+    },
+    "rh.white": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 1.4175408577240336,
+      "p95_corresponding_distance_mm": 2.6463964470155363,
+      "max_corresponding_distance_mm": 4.327938251263577,
+      "browser_sha256": "d1562de4087146d027c6a73b214cb6177734d8f6e002f47a5a6731d5270d631f",
+      "reference_sha256": "78e4c1815368828380e3a509ba3aa3a5cd0eb643e4a632e99da3cb6c4cca1089"
+    },
+    "lh.pial": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.8727368019528817,
+      "p95_corresponding_distance_mm": 1.9802499645320657,
+      "max_corresponding_distance_mm": 5.785778544164521,
+      "browser_sha256": "9932b0256c2b83333622b44b17941b771a127e66dea65e7363bb81cf2e9109dc",
+      "reference_sha256": "d576df9e2d76e1bbc8c506f429c5e24d99ecea559f8c2e810f94b99eef0b8a45"
+    },
+    "rh.pial": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 1.5639875560858192,
+      "p95_corresponding_distance_mm": 2.969055491631471,
+      "max_corresponding_distance_mm": 5.838292748244291,
+      "browser_sha256": "84ffef04df41e4fa8d536cdf330f4a470dea3ea7c47578cf389784be64cc6749",
+      "reference_sha256": "8ca474d9644cd2f6f424d30030929d5a67d3a58f8f174cd5f9e2219de8fc4ba3"
+    },
+    "lh.registration": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 0.7848294819079821,
+      "p95_corresponding_distance_mm": 1.6888431753819482,
+      "max_corresponding_distance_mm": 2.5378456505655493,
+      "browser_sha256": "746426208f56ecb73fd2ca07c2af8d778098f9967baddef1ddf1d046a0c27fc8",
+      "reference_sha256": "56e5bd990ae2d943f73708bbd51fcea6f3adec3054c853e2a735873711df9b87",
+      "mean_angular_error_degrees": 0.4496766609193265,
+      "p95_angular_error_degrees": 0.967647359367657,
+      "max_radius_error_mm": 1.7817377241158283e-05
+    },
+    "rh.registration": {
+      "vertices": 245762,
+      "faces": 491520,
+      "faces_identical": true,
+      "mean_corresponding_distance_mm": 1.5331445839718987,
+      "p95_corresponding_distance_mm": 3.107040783412552,
+      "max_corresponding_distance_mm": 5.651587214531605,
+      "browser_sha256": "47f937df13e189a5d79b4150c521a5e6987eafdd19c3aa94259c86053175abf0",
+      "reference_sha256": "4c083bde8dea047ed8cb0a12850db62b6caf267e73f99dc0de4123f6f2f5d77c",
+      "mean_angular_error_degrees": 0.8784443065650794,
+      "p95_angular_error_degrees": 1.7802748918992328,
+      "max_radius_error_mm": 1.6309645147316587e-05
+    }
+  },
+  "preprocessingHashChecks": {
+    "inferenceSha256": {
+      "actual": "e336986e5d5a2e358065d4a1533c7c6f248310dcfc1d40067e9addb9e62f1549",
+      "historicalCubicExpected": "63cb6de32f0ef41ee536c4d98bd826c0be82b7a3999ab50a3600562d5a802381",
+      "matches": false
+    },
+    "alignmentInputSha256": {
+      "actual": "5ce6f16c45837c158960ee6f4b84a76f459aac1654ad3587447d68262ad7cd8d",
+      "historicalCubicExpected": "dfe7f91f20904694784aece9f38c6a6e548806154ebb414ac0f00e01fdcb478e",
+      "matches": false
+    },
+    "modelInputSha256": {
+      "actual": "b2baad24692c000d30e459d98168907799872232ae32430f882f5981b71360d1",
+      "historicalCubicExpected": "01c640f9a27e12c8b0dacf3ca8c2d988e238403f7089a8de466db9c05c559ac3",
+      "matches": false
+    }
+  },
+  "browserRun": {
+    "seconds": 1005.051,
+    "browser": "149.0.7827.55",
+    "errors": [],
+    "crossOriginIsolated": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+    "status": "Surfaces ready \u00b7 245,762 vertices per hemisphere \u00b7 950 s"
+  },
+  "qc": {
+    "shape": [
+      160,
+      192,
+      192
+    ],
+    "max_affine_difference_mm": 0.0,
+    "white_dice": 0.917015897324462,
+    "pial_dice": 0.9083416557878269,
+    "white_within_one_voxel_symmetric_coverage": 0.9991675252983603,
+    "pial_within_one_voxel_symmetric_coverage": 0.9968713757855274,
+    "browser_sha256": "01e29c64cea5727330584c1127b8a2721953d20838c94d03af4f194a2a097f83",
+    "reference_sha256": "1c887cc5e0dc69b441e426f7e64d56b5bf767c3c945020c377287a12c083fd12"
+  },
+  "status": "measured-difference",
+  "verdict": "Reproduced: all four anatomical surfaces exceed the 0.25 mm mean release threshold; the measured 0.795\u20131.564 mm range matches the report."
+}

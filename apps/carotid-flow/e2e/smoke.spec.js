@@ -8,6 +8,22 @@ const examples = JSON.parse(readFileSync(new URL('../examples.json', import.meta
 const example = examples[0];
 const local = process.env.CAROTID_FLOW_EXAMPLE;
 
+/** The tilted phantom as one combined amplitude-then-phase NIfTI, for runs without the network. */
+async function tiltedSeries() {
+  const { tiltedPhantom } = await import('@neurodesk/carotid-flow/phantom');
+  const { createNiftiHeaderFromVolume, createFloat32Nifti } = await import('@neurodesk/webapp-components/file-io');
+  const series = tiltedPhantom();
+  const data = new Float32Array(series.amplitude.length * 2);
+  data.set(series.amplitude);
+  data.set(series.phase, series.amplitude.length);
+  const header = createNiftiHeaderFromVolume({ dims: [series.nx, series.ny, 1], hdr: { affine: series.affine } });
+  const buffer = createFloat32Nifti(data, header);
+  const view = new DataView(buffer);
+  view.setInt16(40, 4, true);
+  view.setInt16(48, series.phases * 2, true);
+  return { series, file: { name: 'tilted.nii', mimeType: 'application/octet-stream', buffer: Buffer.from(buffer) } };
+}
+
 async function ready(page) {
   await page.goto('./');
   await expect(page.locator('#statusText')).toHaveText('Ready · choose an example or drop a phase-contrast series', { timeout: 60000 });
@@ -145,19 +161,9 @@ test('cancelling during image reading prevents a late commit and permits retry',
 
 test('tilted unsigned input supports geometry edits, QC review and corrected CSV export', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const { tiltedPhantom } = await import('../test/tilted-phantom.js');
-  const { createNiftiHeaderFromVolume, createFloat32Nifti } = await import('@neurodesk/webapp-components/file-io');
-  const series = tiltedPhantom();
-  const data = new Float32Array(series.amplitude.length * 2);
-  data.set(series.amplitude);
-  data.set(series.phase, series.amplitude.length);
-  const header = createNiftiHeaderFromVolume({ dims: [series.nx, series.ny, 1], hdr: { affine: series.affine } });
-  const buffer = createFloat32Nifti(data, header);
-  const view = new DataView(buffer);
-  view.setInt16(40, 4, true);
-  view.setInt16(48, series.phases * 2, true);
+  const { file } = await tiltedSeries();
   await ready(page);
-  await page.locator('#imageInput').setInputFiles({ name: 'tilted.nii', mimeType: 'application/octet-stream', buffer: Buffer.from(buffer) });
+  await page.locator('#imageInput').setInputFiles(file);
   await expect(page.locator('#runButton')).toBeEnabled();
   await page.locator('#advancedSettings > summary').click();
   await page.locator('#candidatePercentile').fill('97');
@@ -184,4 +190,59 @@ test('tilted unsigned input supports geometry edits, QC review and corrected CSV
   await expect(page.locator('#statusText')).toContainText('Review flagged carotid pair');
   await page.locator('#advancedSettings > summary').click();
   await page.screenshot({ path: test.info().outputPath('tilted-result-phone.png'), fullPage: true });
+});
+
+test('carotid labels can be edited in the viewer and download edited', async ({ page }) => {
+  const { series, file } = await tiltedSeries();
+  await ready(page);
+  await page.locator('#imageInput').setInputFiles(file);
+  await page.locator('#advancedSettings > summary').click();
+  await page.locator('#candidatePercentile').fill('97');
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toContainText('Both carotids found');
+  const row = page.locator('#resultList .nd-volume-toggle').filter({ hasText: 'Carotid labels' });
+  const editor = page.locator('nd-mask-editor');
+  const download = async () => {
+    const pending = page.waitForEvent('download');
+    await row.getByRole('button', { name: 'Download' }).click();
+    const done = await pending;
+    return { name: done.suggestedFilename(), bytes: readFileSync(await done.path()) };
+  };
+  const original = await download();
+
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(editor).toBeVisible();
+  await expect(page.locator('#statusText')).toHaveText('Editing Carotid labels. Left-drag paints; Apply keeps the changes.');
+  await expect(row.getByRole('button', { name: 'Edit' })).toBeDisabled();
+  await editor.getByRole('button', { name: 'Cancel' }).click();
+  await expect(editor).toBeHidden();
+  await expect(page.locator('#statusText')).toHaveText('Edits discarded');
+  await expect(row).toContainText('Carotid labels');
+  await expect(row).not.toContainText('(edited)');
+
+  await row.getByRole('button', { name: 'Edit' }).click();
+  await expect(editor).toBeVisible();
+  const box = await page.locator('#gl1').boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.3, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.7, y, { steps: 20 });
+  await page.mouse.up();
+  await page.screenshot({ path: test.info().outputPath('labels-editing.png') });
+  await editor.getByRole('button', { name: 'Apply' }).click();
+  await expect(editor).toBeHidden();
+  await expect(row).toContainText('Carotid labels (edited)');
+  await expect(page.locator('#statusText')).toHaveText('Carotid labels edited · curves and metrics keep the detected vessels');
+  await expect(row.getByRole('button', { name: 'Edit' })).toBeEnabled();
+  await page.screenshot({ path: test.info().outputPath('labels-edited.png') });
+
+  const edited = await download();
+  expect(edited.name).toBe(original.name);
+  expect(edited.name).toBe('tilted_carotid_labels.nii');
+  const header = new DataView(edited.bytes.buffer, edited.bytes.byteOffset);
+  expect(header.getInt16(70, true)).toBe(2);
+  expect([1, 2, 3].map(index => header.getInt16(40 + index * 2, true))).toEqual([series.nx, series.ny, 1]);
+  const voxels = (bytes) => bytes.subarray(new DataView(bytes.buffer, bytes.byteOffset).getFloat32(108, true));
+  expect(voxels(edited.bytes).length).toBe(series.nx * series.ny);
+  expect(Buffer.compare(voxels(edited.bytes), voxels(original.bytes))).not.toBe(0);
 });

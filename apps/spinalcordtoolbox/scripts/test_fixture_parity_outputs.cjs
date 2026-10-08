@@ -14,7 +14,66 @@ const lesionAnalysis = loadClassicScript(path.join(__dirname, '../web/js/modules
 
 const ROOT = path.resolve(__dirname, '..');
 
-const CRITICAL_BROWSER_OUTPUTS = fixtures.CRITICAL_BROWSER_OUTPUTS;
+const CRITICAL_BROWSER_OUTPUTS = Object.freeze([
+  {
+    id: 'batch_t2_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.95,
+    foregroundRatioTolerance: 0.1
+  },
+  {
+    id: 'batch_t2_deepseg_lesion_sci_t2_sc',
+    fixtureId: 'batch_t2_deepseg_lesion_sci_t2',
+    stage: 'segmentation',
+    taskId: 'lesion_sci_t2',
+    minDice: 0.8,
+    foregroundRatioTolerance: 0.35
+  },
+  {
+    id: 'batch_t2_deepseg_lesion_sci_t2_lesion',
+    fixtureId: 'batch_t2_deepseg_lesion_sci_t2',
+    stage: 'lesion',
+    taskId: 'lesion_sci_t2',
+    minDice: 0.6,
+    foregroundRatioTolerance: 0.75
+  },
+  {
+    id: 'batch_dmri_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.8,
+    foregroundRatioTolerance: 0.5
+  },
+  {
+    id: 'batch_t2s_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.9,
+    foregroundRatioTolerance: 0.2
+  },
+  {
+    id: 'batch_t2s_deepseg_graymatter',
+    taskId: 'graymatter',
+    minDice: 0.7,
+    foregroundRatioTolerance: 0.15
+  },
+  {
+    id: 'batch_t1_deepseg_spinalcord_t1',
+    taskId: 'spinalcord',
+    minDice: 0.9,
+    foregroundRatioTolerance: 0.2
+  },
+  {
+    id: 'batch_t1_deepseg_spinalcord_t2',
+    taskId: 'spinalcord',
+    minDice: 0.95,
+    foregroundRatioTolerance: 0.1
+  },
+  {
+    id: 'batch_mt_deepseg_spinalcord',
+    taskId: 'spinalcord',
+    minDice: 0.85,
+    foregroundRatioTolerance: 0.2
+  }
+]);
 
 function fixtureForCheck(check) {
   return fixtures.FIXTURE_CASES.find(item => item.id === (check.fixtureId || check.id));
@@ -34,8 +93,7 @@ function expectedOutputPathForCheck(check, fixture) {
   return path.join(ROOT, fixture.expectedOutputPath);
 }
 
-function diceStats(expected, produced, mode = 'binary') {
-  if (mode === 'multilabel') return multilabelDiceStats(expected, produced);
+function diceStats(expected, produced) {
   let expectedNz = 0;
   let producedNz = 0;
   let intersection = 0;
@@ -51,46 +109,6 @@ function diceStats(expected, produced, mode = 'binary') {
     producedNz,
     intersection,
     dice: expectedNz + producedNz ? (2 * intersection) / (expectedNz + producedNz) : 1
-  };
-}
-
-function positiveLabels(data) {
-  const labels = new Set();
-  for (let i = 0; i < data.length; i++) {
-    const label = Math.round(data[i]);
-    if (label > 0) labels.add(label);
-  }
-  return labels;
-}
-
-function multilabelDiceStats(expected, produced) {
-  let expectedNz = 0;
-  let producedNz = 0;
-  const labels = new Set([...positiveLabels(expected.data), ...positiveLabels(produced.data)]);
-  let diceSum = 0;
-  for (const label of labels) {
-    let labelExpectedNz = 0;
-    let labelProducedNz = 0;
-    let labelIntersection = 0;
-    for (let i = 0; i < expected.data.length; i++) {
-      const e = Math.round(expected.data[i]) === label;
-      const p = Math.round(produced.data[i]) === label;
-      if (e) labelExpectedNz++;
-      if (p) labelProducedNz++;
-      if (e && p) labelIntersection++;
-    }
-    diceSum += labelExpectedNz + labelProducedNz ? (2 * labelIntersection) / (labelExpectedNz + labelProducedNz) : 1;
-  }
-  for (let i = 0; i < expected.data.length; i++) {
-    if (expected.data[i] > 0) expectedNz++;
-    if (produced.data[i] > 0) producedNz++;
-  }
-  return {
-    expectedNz,
-    producedNz,
-    intersection: null,
-    positiveLabels: labels.size,
-    dice: labels.size ? diceSum / labels.size : 1
   };
 }
 
@@ -146,7 +164,6 @@ function assertLesionMetricsFixture() {
 const supportedTasks = new Set(
   manifest.tasks
     .filter(task => task.supportStatus === 'supported' && task.validationStatus === 'passed')
-    .filter(task => task.id !== 'vertebrae' || task.browserParityRequired !== false)
     .map(task => task.id)
 );
 
@@ -166,11 +183,6 @@ function staleBrowserOutputs() {
     const producedPath = browserOutputPathForCheck(check, fixture);
     if (!fs.existsSync(producedPath)) continue;
     const produced = loadNifti(producedPath);
-    if ((check.mode || 'binary') === 'multilabel') {
-      const labels = positiveLabels(produced.data);
-      if (labels.size < (check.minPositiveLabels || 2)) stale.push(producedPath);
-      continue;
-    }
     let producedNz = 0;
     for (let i = 0; i < produced.data.length; i++) {
       if (produced.data[i] > 0) producedNz++;
@@ -227,13 +239,10 @@ function ensureBrowserOutputs() {
     const produced = loadNifti(producedPath);
     assertMetadataComparable(fixture, expected, produced);
 
-    const stats = diceStats(expected, produced, check.mode || 'binary');
+    const stats = diceStats(expected, produced);
     const lower = stats.expectedNz * (1 - check.foregroundRatioTolerance);
     const upper = stats.expectedNz * (1 + check.foregroundRatioTolerance);
     assert.ok(stats.producedNz >= lower && stats.producedNz <= upper, `${check.id}: foreground ${stats.producedNz} is within tolerance of ${stats.expectedNz}`);
-    if (check.minPositiveLabels) {
-      assert.ok(stats.positiveLabels >= check.minPositiveLabels, `${check.id}: ${stats.positiveLabels} positive labels >= ${check.minPositiveLabels}`);
-    }
     assert.ok(stats.dice >= check.minDice, `${check.id}: Dice ${stats.dice.toFixed(4)} >= ${check.minDice.toFixed(4)}`);
     results.push(`${check.id}: dice=${stats.dice.toFixed(4)} expectedNz=${stats.expectedNz} producedNz=${stats.producedNz}`);
   }

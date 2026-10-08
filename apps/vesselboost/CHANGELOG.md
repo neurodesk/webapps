@@ -1,5 +1,35 @@
 # vesselboost
 
+## 0.5.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
+## 0.5.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- 90d1665: Correct the vessel segmentation or the brain mask in the viewer before downloading it. Both result rows have an Edit button that opens the shared mask editor over the analysis image, with Draw, Erase and Fill tools, Undo, Apply and Cancel. Apply replaces the result, which is then labelled `(edited)`, and Download returns the edited mask as a uint8 NIfTI with the same name. Changing a setting or running a step again closes an open edit. The automation report keeps the masks the pipeline computed.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 0.5.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.5.20260930
 
 ### Patch Changes
@@ -7,7 +37,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

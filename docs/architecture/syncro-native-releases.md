@@ -14,20 +14,28 @@ WebAssembly files, and the MNI template beside the executable. SEA would add
 injection, signature mutation, CommonJS bootstrap, and Node-version-specific
 loader rules without removing that external application tree.
 
-Models remain outside the archives. The existing checksum-addressed model
-cache and `download-models` command continue to support first-run downloads and
-offline execution after an explicit prefetch.
+The macOS arm64 download is an installer package with the same directory,
+installed in `/usr/local/lib/neurodesk/syncro` with a `/usr/local/bin/syncro`
+symlink. Every Mach-O file is signed with the hardened runtime. A release
+installer is signed with a Developer ID and notarized by Apple.
+
+The packager runs `syncro download-models` into the directory, so every
+download includes the checksum-pinned models and runs offline from first use.
 
 ## Ownership
 
-- `packages/syncro` owns the CLI, scientific pipeline, model cache, and a small
-  public catalog of target names, artifact names, URLs, and user commands.
-- `exes/syncro` owns the launcher, private-runtime acquisition, dependency
+- `packages/syncro` owns the CLI, scientific pipeline, model cache, and
+  `release.json`, the target names and run command the packager reads.
+- `exes/node-cli` owns the launcher, private-runtime acquisition, dependency
   pruning, archive layout, checksums, manifests, and extracted-archive checks.
-- `.github/workflows/syncro-native.yml` owns target runners and release
+  It is shared with TopoFit and reads `packages/syncro/release.json`.
+- `.github/workflows/syncro-native.yml` calls the shared
+  `node-cli-portable.yml` workflow, which owns target runners and release
   permissions. Build jobs are read-only; only the final publisher may write.
-- `apps/syncro` renders the package-owned release catalog through the shell's
-  Standalone action. It does not know archive internals.
+- The shell's Standalone action renders SYNcro's downloads from
+  `registry/standalone.json`, into which the standalone catalog automation
+  imports each signed, verified release. `apps/syncro` has no download dialog
+  of its own.
 
 The version in `packages/syncro/package.json` is authoritative. Repository
 tests require `apps/syncro/package.json` to agree with it because the generic
@@ -68,19 +76,32 @@ native argument strings.
 
 Each target is packaged and tested on its target GitHub runner. Verification
 extracts the completed archive into a fresh path containing spaces and invokes
-the extracted executable, never the staging tree.
+the extracted executable, never the staging tree. On macOS it installs the
+package with `installer` and invokes `/usr/local/bin/syncro`. Every check runs
+with an empty temporary `HOME`, `USERPROFILE` and XDG directories, and fails if
+SYNcro writes there.
 
 `syncro self-check` loads `onnxruntime-node`, creates a small tensor, verifies
 the template and registration WebAssembly, imports the registration module,
 and reports the actual Node executable path. Portable verification requires
 that path to be inside the extracted private runtime. It also exercises help,
-argument validation, output preservation, and the empty offline-cache boundary
-without downloading models or running the multi-gigabyte scientific workflow.
-Numerical validation remains the responsibility of the existing shared
-pipeline validation.
+argument validation, output preservation, and the empty offline-cache boundary.
+
+`validation/package-check.mjs` then normalises OpenNeuro ds000001 sub-01's T1w
+scan offline through the installed command, with a synthetic 6 mm lesion 30 mm
+left of the head's centre. It judges the outputs against references that do
+not come from SYNcro: the FSL MNI152 1 mm brain template, pinned by SHA-256,
+and the lesion's hemisphere, fixed by construction. The warped synthetic brain
+must reach Dice 0.95 and correlation 0.78 with the template, the warped scan
+correlation 0.65 inside the template brain, and the lesion must land left of
+the midline with its centre at x between -42 and -18 mm. The archives measured
+Dice 0.9665 and correlations 0.815 and 0.701 on all three targets. The run
+takes about 4 minutes on the Linux and Windows runners and 6 on macOS arm64.
+The comparison with the Neurodesk container remains in
+[the validation report](../../packages/syncro/validation/README.md).
 
 Every build produces the archive, `<archive>.sha256`, and
-`<archive>.validation.txt`. The publisher requires both target sets, rechecks
+`<archive>.validation.txt`. The publisher requires every target's set, rechecks
 them, requires an existing `syncro-vVERSION` release whose tag points to the
 workflow commit, and uploads only the allowlisted files with replace semantics.
 The generic release workflow remains the sole creator of the release and web
@@ -88,11 +109,9 @@ archive; native publication is an idempotent follow-up.
 
 ## User interface
 
-The Standalone dialog leads with Windows and Linux cards containing the release
-download, checksum, extraction command, self-check, and shortest working run
-command. It states that models download on first use. The current npm package
-and HPC/cache guidance remain in a collapsed secondary section. Native archives
-stay on GitHub Releases and do not increase the web bundle.
+The bar's Standalone action lists the release downloads with their checksums
+and the extraction or `installer` command from the shared catalog. Native
+archives stay on GitHub Releases and do not increase the web bundle.
 
 ## Accepted tradeoffs
 
@@ -103,5 +122,7 @@ stay on GitHub Releases and do not increase the web bundle.
 - The initial Windows launcher may be unsigned. Published checksums establish
   integrity; Authenticode can be added later without changing the archive or
   runtime contracts.
-- macOS remains on the npm route for this release. The requested portable
-  targets are Windows x64 and Linux x64.
+- The macOS installer needs an administrator password because it writes to
+  `/usr/local`. The Windows and Linux archives run from any directory.
+- Only a signed run of `syncro-native.yml` (`sign_release`) publishes, so a
+  release never carries the ad hoc signed test installer.

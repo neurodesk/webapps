@@ -1,5 +1,64 @@
 # topofit
 
+## 0.13.20261007
+
+### Minor Changes
+
+- 6be20aa: Add the `topofit` command line: CPU reconstruction with ONNX Runtime Node, offline model installation with SHA-256 checks on every load, portable Linux x64 and Windows x64 archives, and a Developer ID signed, notarized macOS arm64 installer package that installs `/usr/local/bin/topofit`. Each bundles Node and the T1-weighted models, and each must match the OpenRecon end-to-end reference before release. SYNcro's portable archives are now built by the shared `exes/node-cli` packager; their contents and behaviour are unchanged apart from the launcher binary.
+
+### Patch Changes
+
+- SpinalCordToolbox now uses the FreeBrowse viewer (NiiVue 1.0) that TopoFit uses, through one shared mount helper in `@neurodesk/runtime-support/freebrowse-viewer`. Zoom and pan work in 2D and 3D with the wheel, right-drag and two-finger pinch, and a reset restores the view. FreeBrowse supplies layout, intensity window, opacity, colormap and image download, so SCT's duplicate toolbar controls are gone; the viewer is served from the app, not a CDN.
+
+  The log below the viewer can be enlarged by dragging its top edge or from the keyboard, and keeps an Analysis log (tasks, parameters, result summaries, warnings) apart from the Technical log. The shared `nd-console` gained `resizable` and `channels`.
+
+  Compare shows up to four loaded images side by side with linked layout, zoom, pan and crosshair (matched in scanner millimetres), which can be unlinked for unregistered follow-up scans. Each image keeps its own results, edits and analysis inputs when you switch between them.
+
+  The shared mask editor now edits results on the FreeBrowse viewer; edited files are named `_edited` and the approximate browser lesion metrics are withdrawn when a mask they used is edited. The vertebral-labeling port and its PAM50 templates are removed; TotalSpineSeg provides disc labels. The SCT app is prepared for the MS lesion model (`lesion_ms`), which stays unavailable until the converted model is hosted.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
+  - @neurodesk/topofit@0.13.20261007
+- Updated dependencies [70f2770]
+- Updated dependencies [6be20aa]
+  - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/topofit@0.13.20261007
+
+## 0.12.20261005
+
+### Patch Changes
+
+- Load every output surface into FreeBrowse when results arrive. Keep surfaces loaded and preserve their visibility when selecting other surfaces or QC images, so FreeBrowse can control visibility.
+  - @neurodesk/topofit@0.12.20261005
+
+## 0.12.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/topofit@0.12.20261004
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/topofit@0.12.20261004
+- Restore upstream-compatible cubic preprocessing for cortical reconstruction. Preserve oblique rotation and shear, bypass identity 1 mm grids, and require passing numerical evidence when activating model releases. The production comparison improves mean anatomical vertex distance from 0.795–1.564 mm to 0.046–0.068 mm, below the 0.25 mm gate.
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/topofit@0.12.20261004
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/topofit@0.12.20261004
+
+## 0.12.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/topofit@0.12.20261003
+
 ## 0.12.20260930
 
 ### Patch Changes
@@ -8,7 +67,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/topofit@0.12.20260930
-
 
 ### Patch Changes
 

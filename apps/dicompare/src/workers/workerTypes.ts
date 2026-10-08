@@ -42,4 +42,8 @@ export interface PendingRequest<T = any> {
   resolve: (value: T) => void;
   reject: (error: Error) => void;
   onProgress?: (progress: ProgressPayload) => void;
+  /** Inactivity-timeout handle; reset on every message for this request. */
+  timer?: ReturnType<typeof setTimeout>;
+  /** Reject if no message arrives for this many ms (silence, not total time). */
+  inactivityTimeoutMs?: number;
 }

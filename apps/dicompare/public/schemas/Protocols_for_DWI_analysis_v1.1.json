@@ -1,0 +1,1067 @@
+{
+  "name": "Protocols for DWI analysis",
+  "description": "**Overview:** Diffusion-weighted MRI enable the quantification of brain microstructure and structural connectivity in the living human brain using various modeling and analysis approaches. Each of such modeling and analysis approaches have specific requirements in terms of b-values, diffusion-weighting gradients, and others. Here we provide an overview of minimum and/or recommended protocol settings.\n\n**Imaging hardware:** The definition of number of b-values, gradient directions, and others generalize across scanners, but settings such as echo time or repetition time might require customization depending on the available hardware. Therefore the ***intended use*** is primarily the evaluation of compatibility of users' data with modeling and analysis approaches.\n\n**Modeling approaches:**\n- Diffusion Tensor Imaging (DTI)\n- Diffusion Kurtosis Imaging (DKI)\n- Standard Model Imaging (SMI)\n- Neurite Orientation Dispersion and Density Imaging (NODDI)\n- Axon diameter mapping\n\n**Supplementary data:** Diffusion-weighted MRI is impacted by imaging artifacts and thermal noise. Subject motion, noise, and numerous imaging artifacts reduce image quality, degrade anatomical reliability, and lower the accuracy, precision, and robustness of modeling. These artifacts can be mitigated through preprocessing if supplementary data is available using [widely adopted pipelines](https://neurodesk.org/edu/examples/diffusion_imaging/qsiprep.html). Supplementary data might include reverse-phase encoded data or structural MRI data.\n\n\n**References:**\n1. Basser PJ. Inferring microstructural features and the physiological state of tissues from diffusion-weighted images. NMR Biomed. 1995;8:333\u201344.\n2. Jensen JH, Helpern JA, Ramani A, Lu H, Kaczynski K. Diffusional kurtosis imaging: The quantification of non-gaussian water diffusion by means of magnetic resonance imaging. Magn Reson Med. 2005;53:1432\u201340.\n3. Novikov DS, Veraart J, Jelescu IO, Fieremans E. Rotationally-invariant mapping of scalar and orientational metrics of neuronal microstructure with diffusion MRI. Neuroimage. 2018;174:518\u201338.\n4. Zhang H, Schneider T, Wheeler-Kingshott CA, Alexander DC. NODDI: practical in vivo neurite orientation dispersion and density imaging of the human brain. Neuroimage. 2012;61:1000\u201316.\n5. Palombo M, Ianus A, Guerreri M, Nunes D, Alexander DC, Shemesh N, et al. SANDI: A compartment-based model for non-invasive apparent soma and neurite imaging by diffusion MRI. Neuroimage. 2020;215:116835.\n6. Veraart J, Raven EP, Edwards LJ, Weiskopf N, Jones DK. The variability of MR axon radii estimates in the human white matter. Hum Brain Mapp. 2021;42:2201\u201313.\n7. Coelho S, Liao Y, Szczepankiewicz F, Veraart J, Chung S, Lui YW, Novikov DS, Fieremans E. Assessment of precision and accuracy of brain white matter microstructure using combined diffusion MRI and relaxometry. Hum Brain Mapp. 2024 Jun 15;45(9):e26725.\n\n**Disclaimer:** This list is not exhaustive. Please contact authors to suggest additional models or modeling approaches and we can update accordingly.\n\n",
+  "version": "1.1",
+  "authors": [
+    "Jelle Veraart",
+    "Santiago Coelho"
+  ],
+  "acquisitions": {
+    "Diffusion Tensor Imaging": {
+      "description": "Validation protocol for DTI",
+      "detailed_description": "**Diffusion Tensor Imaging**\nDiffusion tensor imaging (DTI) requires the acquisition of minimally two distinct *b*-values, typically including *b*=0 and *b* in the range of 500 to 1500 s/mm\u00b2. While technically only six diffusion-weighted gradients are required for *b*>0 data, it is recommended to acquire many more, e.g. 30, to improve precision of DTI analyses. Note that scan parameters such as spatial resolution, echo time, and repetition time will depend on the imaging hardware, but common ranges are listed.\n\n**Supplementary data:** Diffusion-weighted MRI is impacted by imaging artifacts and thermal noise. Subject motion, noise, and numerous imaging artifacts reduce image quality, degrade anatomical reliability, and lower the accuracy, precision, and robustness of modeling. These artifacts can be mitigated through preprocessing if supplementary data is available using [widely adopted pipelines](https://neurodesk.org/edu/examples/diffusion_imaging/qsiprep.html). Supplementary data might include reverse-phase encoded data or structural MRI data.\n\n**Reference:** Basser PJ. Inferring microstructural features and the physiological state of tissues from diffusion-weighted images. NMR Biomed. 1995;8:333\u201344.",
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "contains": "DIFF"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "min": 3000,
+          "max": 7500
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "min": 45,
+          "max": 110
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 90,
+          "tolerance": 2.0
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "min": 500,
+          "max": 1500
+        },
+        {
+          "field": "AccelerationFactorPE",
+          "tag": "derived",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5,
+          "max": 7
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body",
+          "severity": "warning"
+        },
+        {
+          "field": "CoilCombinationMethod",
+          "tag": "derived",
+          "value": "Adaptive Combine",
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            1000
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            5,
+            30
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 30,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 5,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:diffusion",
+        "DTI",
+        "brain"
+      ],
+      "rules": [
+        {
+          "id": "dwi_compat_dti",
+          "name": "DWI data compatibility: DTI",
+          "description": "Evaluates compatibility of DWI data with diffusion tensor imaging based on b-values and gradient directions",
+          "implementation": "import ast\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse b-values safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    # --- Parse directions safely ---\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Rule 1 ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 1:\n            errors.append(prefix + \"At least two distinct b-values (including b=0) must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2 ---\n    if len(bvals) < 2 or len([b for b in bvals if 500 <= b <= 1500]) < 1:\n        errors.append(prefix + \"Data with a b-value between 500 and 1500 must be acquired\")\n\n    # --- Rule 3 ---\n    try:\n        if float(value[\"NumberOfB0Volumes\"][i]) < 5:\n            errors.append(prefix + \"[warning] While one non-diffusion-weighted image is sufficient for DTI analysis, it is recommended to acquire minimally 5\")\n    except Exception:\n        errors.append(prefix + \"NumberOfB0Volumes could not be read\")\n\n    # --- Rule 4 ---\n    for j, b in enumerate(bvals):\n        if 500 <= b <= 1500 and j < len(dirs_per_shell):\n            n_dirs = dirs_per_shell[j]\n            if n_dirs < 6:\n                errors.append(prefix + \"Fewer than 6 diffusion directions for b-value [500-1500]; at least 6 are required\")\n            elif n_dirs < 30:\n                errors.append(prefix + \"[warning] Recommended to acquire minimally 30 gradient directions for b-value [500-1500]\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+          "parameters": {},
+          "fields": [
+            "NumberOfDiffusionShells",
+            "DiffusionBValues",
+            "DirectionsPerShell",
+            "NumberOfB0Volumes"
+          ],
+          "testCases": [
+            {
+              "id": "test_dti_recommended",
+              "name": "Recommended DTI protocol",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "1"
+                ],
+                "DiffusionBValues": [
+                  "[0, 1000]"
+                ],
+                "DirectionsPerShell": [
+                  "[5, 30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "5"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "The schema's own recommended protocol must pass its rule."
+            },
+            {
+              "id": "test_dti_wrong_bvalue",
+              "name": "No shell in 500-1500",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "5"
+                ],
+                "DiffusionBValues": [
+                  "[0,1600]"
+                ],
+                "DirectionsPerShell": [
+                  "[4,30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "4"
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "No b-value in the required 500-1500 range."
+            }
+          ],
+          "parameterDefinitions": []
+        }
+      ]
+    },
+    "Diffusion Kurtosis Imaging": {
+      "description": "validation protocol for DKI",
+      "detailed_description": "**Diffusion Kurtosis Imaging**\nDiffusion kurtosis imaging (DKI) requires the acquisition of minimally three distinct *b*-values, typically including *b*=0 and, one *b*-value in the range of 500 to 1000 s/mm\u00b2, and one *b*-value in the range of 2000 to 3000 s/mm\u00b2. While technically only 15 diffusion-weighted gradients are required for the largest *b*-value, and 21 in total, it is recommended to acquire many more, e.g. 30 per *b*-value, to improve precision of DKI analyses. Note that scan parameters such as spatial resolution, echo time, and repetition time will depend on the imaging hardware, but common ranges are listed.\n\n**Supplementary data:** Diffusion-weighted MRI is impacted by imaging artifacts and thermal noise. Subject motion, noise, and numerous imaging artifacts reduce image quality, degrade anatomical reliability, and lower the accuracy, precision, and robustness of modeling. These artifacts can be mitigated through preprocessing if supplementary data is available using [widely adopted pipelines](https://neurodesk.org/edu/examples/diffusion_imaging/qsiprep.html). Supplementary data might include reverse-phase encoded data or structural MRI data.\n\n**Reference:** Jensen JH, Helpern JA, Ramani A, Lu H, Kaczynski K. Diffusional kurtosis imaging: The quantification of non-gaussian water diffusion by means of magnetic resonance imaging. Magn Reson Med. 2005;53:1432\u201340.",
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "contains": "DIFF"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "min": 3000,
+          "max": 7500
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "min": 45,
+          "max": 110
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 90,
+          "tolerance": 2.0
+        },
+        {
+          "field": "AccelerationFactorPE",
+          "tag": "derived",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5,
+          "max": 7
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body",
+          "severity": "warning"
+        },
+        {
+          "field": "CoilCombinationMethod",
+          "tag": "derived",
+          "value": "Adaptive Combine",
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            1000,
+            2500
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            5,
+            30,
+            30
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 65,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 5,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "min": 0,
+          "max": 3000
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "DKI"
+      ],
+      "rules": [
+        {
+          "id": "dwi_compat_dki",
+          "name": "DWI data compatibility: DKI",
+          "description": "Evaluates compatibility of DWI data with diffusion kurtosis imaging based on b-values and gradient directions",
+          "implementation": "import ast\n\n# Custom validation logic for Diffusion Kurtosis Imaging (DKI)\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures; recommendation-level items tagged [warning]\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse array-valued fields safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Rule 1: NumberOfDiffusionShells must be >= 2 ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 2:\n            errors.append(prefix + \"At least two b-shells must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2: at least 3 b-values (including b=0) must be < 3000 ---\n    if len([b for b in bvals if b < 3000]) < 3:\n        errors.append(prefix + \"At least 3 b-values below 3000 s/mm2 (including b=0) must be acquired for DKI\")\n\n    # --- Build shell -> directions mapping (by index alignment) ---\n    shells = []\n    for j, b in enumerate(bvals):\n        n_dirs = dirs_per_shell[j] if j < len(dirs_per_shell) else None\n        shells.append((b, n_dirs))\n\n    # --- Rule 3: maximal b-value shell must have >= 15 directions (fail), 30 preferred (warning) ---\n    if bvals:\n        max_b = max(bvals)\n        max_dirs = next((n for b, n in shells if b == max_b and n is not None), None)\n        if max_dirs is None:\n            errors.append(prefix + \"Could not determine gradient directions for the maximal b-value\")\n        elif max_dirs < 15:\n            errors.append(prefix + \"The maximal b-value must have at least 15 gradient directions for DKI\")\n        elif max_dirs < 30:\n            errors.append(prefix + \"[warning] The maximal b-value has fewer than 30 gradient directions; 30 is recommended for DKI\")\n\n    # --- Rule 4: total directions for b>0 data must be >= 21 (fail), 60 preferred (warning) ---\n    total_nonzero_dirs = sum(n for b, n in shells if b > 0 and n is not None)\n    if total_nonzero_dirs < 21:\n        errors.append(prefix + \"The total number of gradient directions for b>0 data must be at least 21 for DKI\")\n    elif total_nonzero_dirs < 60:\n        errors.append(prefix + \"[warning] The total number of gradient directions for b>0 data is fewer than 60; 60 is recommended for DKI\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+          "parameters": {},
+          "fields": [
+            "NumberOfDiffusionShells",
+            "DiffusionBValues",
+            "DirectionsPerShell",
+            "NumberOfB0Volumes"
+          ],
+          "testCases": [
+            {
+              "id": "test_dki_recommended",
+              "name": "Recommended DKI protocol",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "2"
+                ],
+                "DiffusionBValues": [
+                  "[0, 1000, 2500]"
+                ],
+                "DirectionsPerShell": [
+                  "[5, 30, 30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "5"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "The schema's own recommended protocol must pass its rule."
+            },
+            {
+              "id": "test_dki_single_shell",
+              "name": "Single-shell data",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "2"
+                ],
+                "DiffusionBValues": [
+                  "[0, 1000]"
+                ],
+                "DirectionsPerShell": [
+                  "[5, 30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "5"
+                ]
+              },
+              "expectedResult": "fail",
+              "description": "Fewer than 3 b-values below 3000 s/mm2."
+            }
+          ],
+          "parameterDefinitions": []
+        }
+      ]
+    },
+    "Axon Diameter Mapping": {
+      "description": "Multi-shell diffusion MRI protocol for axon diameter mapping",
+      "detailed_description": "**Overview:** Multi-shell diffusion-weighted MRI of the human brain that was optimized for axon diameter mapping using the power-law approach of Veraart et al. (2020)\n\n**Hardware requirements:** The modeling approach leverages (a) high b-values to suppress extra-axonal signal, and (b) strong diffusion-weighted strengths to maximize the sensitivity of diffusion-weighted MRI signal to restricted diffusion within micrometer-thin axons. Therefore, axon diameter mapping is currently limited to MRI scanners that are equipped with ultra-strong diffusion-weighting gradients, i.e. 300mT/m. Examples include Siemens 3T Connectom, Siemens 3T Connectom.X, and GE 3T Magnus. The protocol was optimized and tested on Siemens 3T Connectom.\n\n**Code:** Code to analyze the data is provided in https://github.com/NYU-DiffusionMRI/AxonRadiusMapping.\n\n**Diffusion-weighting gradients:** Diffusion-weighting gradients are provided in a .dvs file (Siemens format). Diffusion-weighting gradients are scaled to result in two distinct b-values, i.e. *b*=6,000 and 30,450 s/mm\u00b2. By selecting *b*=30,450 s/mm\u00b2 on the scanner, the *b*=6,000 s/mm^2 will be acquired automatically.\n\n**Supporting data:** \n1. Rician signal biases impact the accuracy of Axon Diameter Mapping. Therefore it is important to collect data from which a corresponding noise map can be derived.  \n2. Reverse-phase encoded b=0 data would advance distortion correction as part of data preprocessing.\n\n**References:**\n\n*Model:* Veraart J, Nunes D, Rudrapatna U, Fieremans E, Jones DK, Novikov DS, Shemesh N. Noninvasive quantification of axon radii using diffusion MRI. Elife. 2020 Feb 12;9:e49855. doi: 10.7554/eLife.49855.\n\n*Reproducibility and protocol:* Veraart J, Raven EP, Edwards LJ, Weiskopf N, Jones DK. The variability of MR axon radii estimates in the human white matter. Hum Brain Mapp. 2021 May;42(7):2201-2213. doi: 10.1002/hbm.25359.\n\n*Interpretation:* Karat BG, Wren-Jarvis J, Raven EP, Khan AR, Jones DK, Palombo M, Veraart J. Revisiting the interpretation of axon diameter mapping using higher-order signal representations. Imaging Neurosci (Camb). 2026 Jan 9;4:IMAG.a.1080. doi: 10.1162/IMAG.a.1080.",
+      "fields": [
+        {
+          "field": "ManufacturerModelName",
+          "tag": "0008,1090",
+          "contains_any": [
+            "Connectom",
+            "Magnus"
+          ]
+        },
+        {
+          "field": "ProtocolName",
+          "tag": "0018,1030",
+          "value": "Axon Diameter Mapping",
+          "severity": "warning"
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "value": 3500,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "value": 66,
+          "tolerance": 1.0,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "value": 2.5,
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "Rows",
+          "tag": "0028,0010",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "Columns",
+          "tag": "0028,0011",
+          "value": 88,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "value": [
+            2.5,
+            2.5
+          ],
+          "tolerance": 0.1,
+          "severity": "warning"
+        },
+        {
+          "field": "PixelBandwidth",
+          "tag": "0018,0095",
+          "value": 2272,
+          "tolerance": 50.0,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoTrainLength",
+          "tag": "0018,0091",
+          "value": 77,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfSlices",
+          "tag": "0054,0081",
+          "value": 54,
+          "severity": "warning"
+        },
+        {
+          "field": "InPlanePhaseEncodingDirection",
+          "tag": "0018,1312",
+          "value": "COL",
+          "severity": "warning"
+        },
+        {
+          "field": "PhaseEncodingDirectionPositive",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "ReceiveCoilName",
+          "tag": "0018,1250",
+          "value": "HEA;HEP",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "value": 30450
+        },
+        {
+          "field": "BigDelta",
+          "tag": "derived",
+          "value": 30,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionDirectionSet",
+          "tag": "derived",
+          "value": "Custom",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionMode",
+          "tag": "derived",
+          "value": "Free",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionWeightings",
+          "tag": "derived",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "EchoSpacing",
+          "tag": "derived",
+          "value": 0.52,
+          "tolerance": 0.05,
+          "severity": "warning"
+        },
+        {
+          "field": "GradientMode",
+          "tag": "derived",
+          "value": "Fast",
+          "severity": "warning"
+        },
+        {
+          "field": "MaxDiffGradient",
+          "tag": "derived",
+          "value": 280
+        },
+        {
+          "field": "MultibandFactor",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelAcquisitionTechnique",
+          "tag": "0018,9078",
+          "value": "GRAPPA",
+          "severity": "warning"
+        },
+        {
+          "field": "ParallelReductionFactorInPlane",
+          "tag": "0018,9069",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "PercentPhaseFieldOfView",
+          "tag": "0018,0094",
+          "value": 100,
+          "tolerance": 10.0,
+          "severity": "warning"
+        },
+        {
+          "field": "SmallDelta",
+          "tag": "derived",
+          "value": 15,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            5990,
+            30450
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            10,
+            60,
+            120
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 190,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 10,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "axon diameter mapping",
+        "analysis:diffusion",
+        "brain"
+      ],
+      "rules": [
+        {
+          "id": "dwi_compat_axon",
+          "name": "DWI data compatibility: Axon diameter mapping",
+          "description": "Evaluates compatibility with axon diameter mapping from Veraart et al. (2020)",
+          "implementation": "# Axon diameter mapping needs ultra-strong gradients and multi-shell data.\nfor row in ctx.rows:\n    if float(row[\"MaxDiffGradient\"]) < 250:\n        ctx.error(\"MaxDiffGradient too low for axon diameter mapping (need >= 250 mT/m)\")\n    if float(row[\"NumberOfDiffusionShells\"]) < 2:\n        ctx.error(\"At least two diffusion shells are required for axon diameter mapping\")",
+          "fields": [
+            "MaxDiffGradient",
+            "NumberOfDiffusionShells"
+          ],
+          "testCases": [
+            {
+              "id": "test_dwiaxon_pass",
+              "name": "Connectom axon protocol",
+              "data": {
+                "MaxDiffGradient": [
+                  "280"
+                ],
+                "NumberOfDiffusionShells": [
+                  "2"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": ""
+            },
+            {
+              "id": "test_dwiaxon_fail",
+              "name": "Clinical gradients",
+              "data": {
+                "MaxDiffGradient": [
+                  "80"
+                ],
+                "NumberOfDiffusionShells": [
+                  "2"
+                ]
+              },
+              "expectedResult": "fail",
+              "description": ""
+            }
+          ]
+        }
+      ]
+    },
+    "Neurite orientation dispersion and density imaging": {
+      "description": "Validation protocol for NODDI",
+      "detailed_description": "**Neurite orientation dispersion and density imaging**\nNeurite orientation dispersion and density imaging (NODDI) requires the acquisition of minimally three distinct *b*-values, typically including *b*=0 and, one *b*-value in the range of 500 to 1000 s/mm\u00b2, and one *b*-value in the range of 2000 to 3000 s/mm\u00b2. It is recommended to acquire 30 and 60 gradient direction for the *b*-value, respectively, to improve precision of NODDI analyses. Note that scan parameters such as spatial resolution, echo time, and repetition time will depend on the imaging hardware, but common ranges are listed.\n\n**Supplementary data:** Diffusion-weighted MRI is impacted by imaging artifacts and thermal noise. Subject motion, noise, and numerous imaging artifacts reduce image quality, degrade anatomical reliability, and lower the accuracy, precision, and robustness of modeling. These artifacts can be mitigated through preprocessing if supplementary data is available using [widely adopted pipelines](https://neurodesk.org/edu/examples/diffusion_imaging/qsiprep.html). Supplementary data might include reverse-phase encoded data or structural MRI data.\n\n**Reference:** Zhang H, Schneider T, Wheeler-Kingshott CA, Alexander DC. NODDI: practical in vivo neurite orientation dispersion and density imaging of the human brain. Neuroimage. 2012;61:1000\u201316.",
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "contains": "DIFF"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "min": 3000,
+          "max": 7500
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "min": 45,
+          "max": 110
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 90,
+          "tolerance": 2.0
+        },
+        {
+          "field": "AccelerationFactorPE",
+          "tag": "derived",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5,
+          "max": 7
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body",
+          "severity": "warning"
+        },
+        {
+          "field": "CoilCombinationMethod",
+          "tag": "derived",
+          "value": "Adaptive Combine",
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 2,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            700,
+            2800
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            5,
+            30,
+            60
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 95,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 5,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "NODDI"
+      ],
+      "rules": [
+        {
+          "id": "dwi_compat_noddi",
+          "name": "DWI data compatibility: NODDI",
+          "description": "Evaluates compatibility of DWI data with NODDI based on b-values and gradient directions",
+          "implementation": "import ast\n\n# Custom validation logic for NODDI (Neurite Orientation Dispersion and Density Imaging)\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures; recommendation-level items tagged [warning]\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse array-valued fields safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Build shell -> directions mapping (by index alignment) ---\n    shells = []\n    for j, b in enumerate(bvals):\n        n_dirs = dirs_per_shell[j] if j < len(dirs_per_shell) else None\n        shells.append((b, n_dirs))\n\n    # --- Rule 1: NumberOfDiffusionShells must be >= 2 (FAIL) ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 2:\n            errors.append(prefix + \"At least two b-shells must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2: at least 1 b-value in [500, 1000] recommended (WARNING) ---\n    if len([b for b in bvals if 500 <= b <= 1000]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 500 and 1000 s/mm2 is recommended for NODDI\")\n\n    # --- Rule 3: at least 1 b-value in [2000, 3000] recommended (WARNING) ---\n    if len([b for b in bvals if 2000 <= b <= 3000]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 2000 and 3000 s/mm2 is recommended for NODDI\")\n\n    # --- Rule 4: b-value in [500, 1000] must have >= 15 directions (FAIL), 30 preferred (WARNING) ---\n    low_shell_dirs = [n for b, n in shells if 500 <= b <= 1000 and n is not None]\n    if low_shell_dirs:\n        total_low = sum(low_shell_dirs)\n        if total_low < 15:\n            errors.append(prefix + \"The b-value between 500 and 1000 must have at least 15 gradient directions for NODDI\")\n        elif total_low < 30:\n            errors.append(prefix + \"[warning] The b-value between 500 and 1000 has fewer than 30 gradient directions; 30 is recommended for NODDI\")\n\n    # --- Rule 5: b-value in [2000, 3000] must have >= 15 directions (FAIL), 60 preferred (WARNING) ---\n    high_shell_dirs = [n for b, n in shells if 2000 <= b <= 3000 and n is not None]\n    if high_shell_dirs:\n        total_high = sum(high_shell_dirs)\n        if total_high < 15:\n            errors.append(prefix + \"The b-value between 2000 and 3000 must have at least 15 gradient directions for NODDI\")\n        elif total_high < 60:\n            errors.append(prefix + \"[warning] The b-value between 2000 and 3000 has fewer than 60 gradient directions; 60 is recommended for NODDI\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+          "parameters": {},
+          "fields": [
+            "NumberOfDiffusionShells",
+            "DiffusionBValues",
+            "DirectionsPerShell",
+            "NumberOfB0Volumes"
+          ],
+          "testCases": [
+            {
+              "id": "test_noddi_recommended",
+              "name": "Recommended NODDI protocol",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "2"
+                ],
+                "DiffusionBValues": [
+                  "[0, 700, 2800]"
+                ],
+                "DirectionsPerShell": [
+                  "[5, 30, 60]"
+                ],
+                "NumberOfB0Volumes": [
+                  "5"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "The schema's own recommended protocol must pass its rule."
+            },
+            {
+              "id": "test_noddi_wrong_bvalues",
+              "name": "Shells outside recommended ranges",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "5"
+                ],
+                "DiffusionBValues": [
+                  "[0,1600]"
+                ],
+                "DirectionsPerShell": [
+                  "[4,30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "4"
+                ]
+              },
+              "expectedResult": "warning",
+              "description": "No shell in 500-1000 or 2000-3000: recommendation-level warnings."
+            }
+          ],
+          "parameterDefinitions": []
+        }
+      ]
+    },
+    "Standard Model Imaging": {
+      "description": "Validation protocol for SMI",
+      "detailed_description": "**Standard Model Imaging**\nStandard Modeling Imaging (SMI) requires the acquisition of minimally three distinct *b*-values, typically including *b*=0 and two distinct *b*-values in the range of 500 to 3000 s/mm\u00b2.  It is recommended to acquire minimally 20 and 60 directions per b-shell, respectively, to improve precision of SMI analyses. However, to improve precision of some modeling parameters, e.g. intra-axonal diffusivity, the acquisition of an additional shell with higher *b*-value is strongly recommended (b=6000 s/mm\u00b2, 60 directions). Similarly, when interested in the free water fraction, an additional shell with low *b*-value is required (b=250-500 s/mm\u00b2, 6 directions). Note that scan parameters such as spatial resolution, echo time, and repetition time will depend on the imaging hardware, but common ranges are listed.\n\n**Code:** Analysis code is [available](https://cai2r.net/resources/standard-model-of-diffusion-in-white-matter-the-smi-toolbox/). \n\n**Supplementary data:** Diffusion-weighted MRI is impacted by imaging artifacts and thermal noise. Subject motion, noise, and numerous imaging artifacts reduce image quality, degrade anatomical reliability, and lower the accuracy, precision, and robustness of modeling. These artifacts can be mitigated through preprocessing if supplementary data is available using [widely adopted pipelines](https://neurodesk.org/edu/examples/diffusion_imaging/qsiprep.html). Supplementary data might include reverse-phase encoded data or structural MRI data.\n\n**References:** \n*Model:* Novikov DS, Veraart J, Jelescu IO, Fieremans E. Rotationally-invariant mapping of scalar and orientational metrics of neuronal microstructure with diffusion MRI. Neuroimage. 2018;174:518\u201338.\n\n*Optimization:* Coelho S, Liao Y, Szczepankiewicz F, Veraart J, Chung S, Lui YW, Novikov DS, Fieremans E. Assessment of precision and accuracy of brain white matter microstructure using combined diffusion MRI and relaxometry. Hum Brain Mapp. 2024 Jun 15;45(9):e26725\n\n*Validation and Interpretation:* \n1. Coronado-Leija R, Abdollahzadeh A, Lee HH, Coelho S, Ades-Aron B, Liao Y, et al. Volume electron microscopy in injured rat brain validates white matter microstructure metrics from diffusion MRI. Imaging Neurosci (Camb). 2024;2:imag\u20132\u201300212.\n2. Liao Y, Coelho S, Chen J, Ades-Aron B, Pang M, Stepanov V, et al. Mapping tissue microstructure of brain white matter in vivo in health and disease using diffusion MRI. Imaging Neurosci (Camb). 2024;2:imag\u20132\u201300102.\n3. Abdollahzadeh A, Coronado-Leija R, Lee HH, Sierra A, Fieremans E, Novikov DS. Scattering approach to diffusion quantifies axonal damage in brain injury. Nat Commun. 2025;16:9808.\n",
+      "fields": [
+        {
+          "field": "SeriesDescription",
+          "tag": "0008,103E",
+          "contains": "DIFF"
+        },
+        {
+          "field": "MRAcquisitionType",
+          "tag": "0018,0023",
+          "value": "2D"
+        },
+        {
+          "field": "SliceThickness",
+          "tag": "0018,0050",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "PixelSpacing",
+          "tag": "0028,0030",
+          "min": 1.5,
+          "max": 3
+        },
+        {
+          "field": "RepetitionTime",
+          "tag": "0018,0080",
+          "min": 3000,
+          "max": 7500
+        },
+        {
+          "field": "EchoTime",
+          "tag": "0018,0081",
+          "min": 45,
+          "max": 110
+        },
+        {
+          "field": "FlipAngle",
+          "tag": "0018,1314",
+          "value": 90,
+          "tolerance": 2.0
+        },
+        {
+          "field": "DiffusionBValue",
+          "tag": "0018,9087",
+          "min": 0,
+          "max": 10000
+        },
+        {
+          "field": "AccelerationFactorPE",
+          "tag": "derived",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "field": "MagneticFieldStrength",
+          "tag": "0018,0087",
+          "min": 1.5,
+          "max": 7
+        },
+        {
+          "field": "ImagedNucleus",
+          "tag": "0018,0085",
+          "value": "1H"
+        },
+        {
+          "field": "TransmitCoilName",
+          "tag": "0018,1251",
+          "value": "Body",
+          "severity": "warning"
+        },
+        {
+          "field": "CoilCombinationMethod",
+          "tag": "derived",
+          "value": "Adaptive Combine",
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfAverages",
+          "tag": "0018,0083",
+          "value": 1,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionShells",
+          "tag": "derived",
+          "value": 3,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionBValues",
+          "tag": "derived",
+          "value": [
+            0,
+            1000,
+            2000,
+            6000
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "DirectionsPerShell",
+          "tag": "derived",
+          "value": [
+            5,
+            20,
+            60,
+            60
+          ],
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfDiffusionVolumes",
+          "tag": "derived",
+          "value": 145,
+          "severity": "warning"
+        },
+        {
+          "field": "NumberOfB0Volumes",
+          "tag": "derived",
+          "value": 0,
+          "severity": "warning"
+        },
+        {
+          "field": "DiffusionHemisphereCoverage",
+          "tag": "derived",
+          "value": "full-sphere",
+          "severity": "warning"
+        }
+      ],
+      "series": [],
+      "tags": [
+        "analysis:diffusion",
+        "brain",
+        "SMI"
+      ],
+      "rules": [
+        {
+          "id": "dwi_compat_smi",
+          "name": "DWI data compatibility: SMI",
+          "description": "Evaluates compatibility of DWI data with standard model imaging based on b-values and gradient directions",
+          "implementation": "import ast\n\n# Custom validation logic for SMI (Standard Model Imaging)\n# Access field data with value[\"FieldName\"]\n# Raise ValidationError for failures; recommendation-level items tagged [warning]\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse array-valued fields safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Build shell -> directions mapping (by index alignment) ---\n    shells = []\n    for j, b in enumerate(bvals):\n        n_dirs = dirs_per_shell[j] if j < len(dirs_per_shell) else None\n        shells.append((b, n_dirs))\n\n    # --- Rule 1: NumberOfDiffusionShells >= 2 (FAIL), >= 3 preferred (WARNING) ---\n    try:\n        n_shells = float(value[\"NumberOfDiffusionShells\"][i])\n        if n_shells < 2:\n            errors.append(prefix + \"At least two b-shells must be acquired\")\n        elif n_shells < 3:\n            errors.append(prefix + \"[warning] At least three b-shells are recommended for SMI\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n        n_shells = None\n\n    # --- Rule 2: at least 1 b-value in [500, 1250] recommended (WARNING) ---\n    if len([b for b in bvals if 500 <= b <= 1250]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 500 and 1250 s/mm2 is recommended for SMI\")\n\n    # --- Rule 3: at least 1 b-value in [1500, 2500] recommended (WARNING) ---\n    if len([b for b in bvals if 1500 <= b <= 2500]) < 1:\n        errors.append(prefix + \"[warning] At least one b-value between 1500 and 2500 s/mm2 is recommended for SMI\")\n\n    # --- Rule 4: if 3 shells, maximal b-value recommended > 5000 (WARNING) ---\n    if n_shells is not None and n_shells >= 3 and bvals:\n        if max(bvals) <= 5000:\n            errors.append(prefix + \"[warning] With three shells, a maximal b-value above 5000 s/mm2 is recommended for SMI\")\n\n    # --- Rule 5: b-value in [500, 1250] must have >= 15 directions (FAIL), 20 preferred (WARNING) ---\n    low_shell_dirs = [n for b, n in shells if 500 <= b <= 1250 and n is not None]\n    if low_shell_dirs:\n        total_low = sum(low_shell_dirs)\n        if total_low < 15:\n            errors.append(prefix + \"The b-value between 500 and 1250 must have at least 15 gradient directions for SMI\")\n        elif total_low < 20:\n            errors.append(prefix + \"[warning] The b-value between 500 and 1250 has fewer than 20 gradient directions; 20 is recommended for SMI\")\n\n    # --- Rule 6: b-value > 1500 must have >= 28 directions (FAIL), 60 preferred (WARNING) ---\n    high_shell_dirs = [n for b, n in shells if b > 1500 and n is not None]\n    if high_shell_dirs:\n        total_high = sum(high_shell_dirs)\n        if total_high < 28:\n            errors.append(prefix + \"The b-value above 1500 must have at least 28 gradient directions for SMI\")\n        elif total_high < 60:\n            errors.append(prefix + \"[warning] The b-value above 1500 has fewer than 60 gradient directions; 60 is recommended for SMI\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+          "parameters": {},
+          "fields": [
+            "NumberOfDiffusionShells",
+            "DiffusionBValues",
+            "DirectionsPerShell",
+            "NumberOfB0Volumes"
+          ],
+          "testCases": [
+            {
+              "id": "test_smi_recommended",
+              "name": "Recommended SMI protocol",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "3"
+                ],
+                "DiffusionBValues": [
+                  "[0, 1000, 2000, 6000]"
+                ],
+                "DirectionsPerShell": [
+                  "[5, 20, 60, 60]"
+                ],
+                "NumberOfB0Volumes": [
+                  "0"
+                ]
+              },
+              "expectedResult": "pass",
+              "description": "The schema's own recommended protocol must pass its rule."
+            },
+            {
+              "id": "test_smi_low_max_b",
+              "name": "Low b-values, few directions",
+              "data": {
+                "NumberOfDiffusionShells": [
+                  "5"
+                ],
+                "DiffusionBValues": [
+                  "[0,1600]"
+                ],
+                "DirectionsPerShell": [
+                  "[4,30]"
+                ],
+                "NumberOfB0Volumes": [
+                  "4"
+                ]
+              },
+              "expectedResult": "warning",
+              "description": "Recommendation-level warnings only (b-value coverage and direction counts)."
+            }
+          ],
+          "parameterDefinitions": []
+        }
+      ]
+    }
+  }
+}

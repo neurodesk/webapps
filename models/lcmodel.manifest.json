@@ -173,7 +173,8 @@
         "GSH",
         "NAA",
         "NAAG"
-      ]
+      ],
+      "coEditedMM": true
     },
     {
       "id": "press-1.5t-te35",
@@ -266,6 +267,273 @@
         "bandwidth_Hz": 6000,
         "linewidth_Hz": 1.5
       }
+    },
+    {
+      "id": "slaser-3t-te30-shaped",
+      "label": "semi-LASER, 3 T, TE 30 ms, shaped pulses",
+      "sequence": "sLASER",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 30,
+      "file": "basis/slaser-3t-te30-shaped.basis.gz",
+      "simulation": {
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleAFPpulse_HS2_R15.RF",
+          "type": "inv",
+          "tp_ms": 3.5,
+          "resample": 100,
+          "w1max_kHz": 1.5
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "slaser-3t-te35-shaped",
+      "label": "semi-LASER, 3 T, TE 35 ms, shaped pulses",
+      "sequence": "sLASER",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 35,
+      "file": "basis/slaser-3t-te35-shaped.basis.gz",
+      "simulation": {
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleAFPpulse_HS2_R15.RF",
+          "type": "inv",
+          "tp_ms": 3.5,
+          "resample": 100,
+          "w1max_kHz": 1.5
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "press-3t-te30-shaped",
+      "label": "PRESS, 3 T, TE 30 ms, shaped pulses",
+      "sequence": "PRESS",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 30,
+      "file": "basis/press-3t-te30-shaped.basis.gz",
+      "simulation": {
+        "te1_ms": 10,
+        "te2_ms": 20,
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleRefocPulse.pta",
+          "type": "ref",
+          "tp_ms": 3.5,
+          "resample": 100
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "press-3t-te35-shaped",
+      "label": "PRESS, 3 T, TE 35 ms, shaped pulses",
+      "sequence": "PRESS",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 35,
+      "file": "basis/press-3t-te35-shaped.basis.gz",
+      "simulation": {
+        "te1_ms": 10,
+        "te2_ms": 25,
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleRefocPulse.pta",
+          "type": "ref",
+          "tp_ms": 3.5,
+          "resample": 100
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "press-3t-te80-shaped",
+      "label": "PRESS, 3 T, TE 80 ms, shaped pulses",
+      "sequence": "PRESS",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 80,
+      "file": "basis/press-3t-te80-shaped.basis.gz",
+      "simulation": {
+        "te1_ms": 10,
+        "te2_ms": 70,
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleRefocPulse.pta",
+          "type": "ref",
+          "tp_ms": 3.5,
+          "resample": 100
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "press-3t-te144-shaped",
+      "label": "PRESS, 3 T, TE 144 ms, shaped pulses",
+      "sequence": "PRESS",
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 144,
+      "file": "basis/press-3t-te144-shaped.basis.gz",
+      "simulation": {
+        "te1_ms": 10,
+        "te2_ms": 134,
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleRefocPulse.pta",
+          "type": "ref",
+          "tp_ms": 3.5,
+          "resample": 100
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "slaser-7t-te28-shaped",
+      "label": "semi-LASER, 7 T, TE 28 ms, shaped pulses",
+      "sequence": "sLASER",
+      "fieldT": 7.0,
+      "hzpppm": 298.039,
+      "teMs": 28,
+      "file": "basis/slaser-7t-te28-shaped.basis.gz",
+      "simulation": {
+        "points": 8192,
+        "bandwidth_Hz": 8000,
+        "linewidth_Hz": 2.0,
+        "simulation": "shaped",
+        "pulse": {
+          "file": "sampleAFPpulse_HS2_R15.RF",
+          "type": "inv",
+          "tp_ms": 3.5,
+          "resample": 100,
+          "w1max_kHz": 1.5
+        },
+        "centre_ppm": 3.0,
+        "thk_cm": 2,
+        "fov_cm": 3,
+        "grid": 32
+      },
+      "pulses": "shaped"
+    },
+    {
+      "id": "megapress-3t-te80-diff",
+      "label": "MEGA-PRESS difference, 3 T, TE 80 ms",
+      "sequence": "MEGA-PRESS",
+      "edited": true,
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 80,
+      "file": "basis/megapress-3t-te80-diff.basis.gz",
+      "simulation": {
+        "edit": "diff",
+        "taus_ms": [
+          5,
+          20,
+          20,
+          20,
+          15
+        ],
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "edit_on_ppm": 1.9,
+        "edit_off_ppm": 7.5,
+        "edit_tp_ms": 20,
+        "simulation": "shaped-central",
+        "refoc_tp_ms": 5
+      },
+      "metabolites": [
+        "GABA",
+        "Glu",
+        "Gln",
+        "GSH",
+        "NAA",
+        "NAAG"
+      ],
+      "coEditedMM": true
+    },
+    {
+      "id": "megapress-3t-te80-mmsup-diff",
+      "label": "MEGA-PRESS difference, MM-suppressed (edit-OFF 1.5 ppm), 3 T, TE 80 ms",
+      "sequence": "MEGA-PRESS",
+      "edited": true,
+      "fieldT": 3.0,
+      "hzpppm": 127.731,
+      "teMs": 80,
+      "file": "basis/megapress-3t-te80-mmsup-diff.basis.gz",
+      "simulation": {
+        "edit": "diff",
+        "taus_ms": [
+          5,
+          20,
+          20,
+          20,
+          15
+        ],
+        "points": 8192,
+        "bandwidth_Hz": 6000,
+        "linewidth_Hz": 1.5,
+        "edit_on_ppm": 1.9,
+        "edit_off_ppm": 1.5,
+        "edit_tp_ms": 20,
+        "simulation": "shaped-central",
+        "refoc_tp_ms": 5
+      },
+      "metabolites": [
+        "GABA",
+        "Glu",
+        "Gln",
+        "GSH",
+        "NAA",
+        "NAAG"
+      ],
+      "mmSuppressed": true
     }
   ],
   "metabolites": [
@@ -291,7 +559,7 @@
     "Tau"
   ],
   "source": {
-    "tool": "FID-A (https://github.com/CIC-methods/FID-A) ideal-pulse simulations",
+    "tool": "FID-A (https://github.com/CIC-methods/FID-A) simulations: ideal pulses, shaped refocusing pulses across the voxel (-shaped), shaped editing pulses (MEGA-PRESS)",
     "generator": "exes/lcmodel/basis/make_basis.py",
     "citation": "Simpson R, Devenyi GA, Jezzard P, Hennessy TJ, Near J. Advanced processing and simulation of MRS data using the FID appliance (FID-A)-An open source, MATLAB-based toolkit. Magn Reson Med. 2017;77:23-33."
   },
@@ -375,6 +643,51 @@
       "filename": "basis/slaser-3t-te35.basis.gz",
       "bytes": 1019840,
       "sha256": "7b7d5cb6173b6f45bb57ba2613039e727d8534a2fc2e191a41b2da3152ae651d"
+    },
+    {
+      "filename": "basis/slaser-3t-te30-shaped.basis.gz",
+      "bytes": 969741,
+      "sha256": "563621aa4e5ca86b29be981f7f3a7ed63819789150e408867bc799003ecee768"
+    },
+    {
+      "filename": "basis/slaser-3t-te35-shaped.basis.gz",
+      "bytes": 999547,
+      "sha256": "9775d5e3142305b5c96ec793903ec94150bd1c444f570feb201ac82c6192cddb"
+    },
+    {
+      "filename": "basis/press-3t-te30-shaped.basis.gz",
+      "bytes": 1030140,
+      "sha256": "cd1da294d6036f819238df540d4f6d896a60c8f90d9bb4742b3b47ac89921772"
+    },
+    {
+      "filename": "basis/press-3t-te35-shaped.basis.gz",
+      "bytes": 1045568,
+      "sha256": "bd5791a9a96de4b68714107fba1d72f7a0a94b16d86493f8949b19bd7764dade"
+    },
+    {
+      "filename": "basis/press-3t-te80-shaped.basis.gz",
+      "bytes": 1102785,
+      "sha256": "de33389ad528b01dc9c667d82004f03a093810a262045dd81f9eceabf46e1187"
+    },
+    {
+      "filename": "basis/press-3t-te144-shaped.basis.gz",
+      "bytes": 1068495,
+      "sha256": "7fd85efc0274c1dca0323e0c15dc9d2f4200ecdcb80a237060789febc40e34d6"
+    },
+    {
+      "filename": "basis/slaser-7t-te28-shaped.basis.gz",
+      "bytes": 989842,
+      "sha256": "260ed56a34a52f5d6f730a326408a08ddda32c33957d8b244a395def9b513e7c"
+    },
+    {
+      "filename": "basis/megapress-3t-te80-diff.basis.gz",
+      "bytes": 363529,
+      "sha256": "0be27ebab1c4745fbd93c176a9237457ac14e0d701ac484d0cbefcf04aa1eade"
+    },
+    {
+      "filename": "basis/megapress-3t-te80-mmsup-diff.basis.gz",
+      "bytes": 332555,
+      "sha256": "b3ab20bc2a8b3a13dbac8b76739387999243d2cd083151285b63f671ccaa93e4"
     }
   ],
   "examples": [
@@ -412,10 +725,113 @@
       "filename": "examples/siemens-megapress/megapressDLPFC.dat",
       "bytes": 86369696,
       "sha256": "d29c2a2b181873f66615433de0d7ff369af17d252202e6447c0624cfc7712e70"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_act.sdat",
+      "bytes": 5242880,
+      "sha256": "8d62c50e7b71f4babcecd0d24254059fa4874d522b668753b47b9c462c18ad26"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_act.spar",
+      "bytes": 3085,
+      "sha256": "90d05989a05e69996f68cc0a436f82d63083137ffe369d7dd89d288c8fd21698"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_ref.sdat",
+      "bytes": 5242880,
+      "sha256": "b0e1f8186bfe4353aaf543b6b3a7aea978424c5bcbbfb09e197f6465678d3766"
+    },
+    {
+      "filename": "examples/philips-megapress/sub-01_megapress_ref.spar",
+      "bytes": 3085,
+      "sha256": "e311b2b2c08116010c7c1ea29a29e91b1a414f146fd71213245ebd26c9e3bfda"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-01_PRESS_35_act.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.sdat",
+      "bytes": 16384,
+      "sha256": "fd14521b8b7e9f1fa4d1fd8930e6e4b7a4e26d535f71eab9e922d4a40c7759b0"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-01_PRESS_35_act.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.spar",
+      "bytes": 3080,
+      "sha256": "78b78cb9ec4d5b509563384629390702cc2caf1cc133df529beb56e4d7ae1f4f"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-01_PRESS_35_ref.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.sdat",
+      "bytes": 16384,
+      "sha256": "996ddb02f55c4bb65204e92f25d5a112dd72b300659a13d0aacb28040af3b59d"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-01_PRESS_35_ref.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.spar",
+      "bytes": 3080,
+      "sha256": "7cf63c7064d481a9330ef25b42bf012b605e62936428de5b2eed4e3438eceb34"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-02_PRESS_35_act.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.sdat",
+      "bytes": 16384,
+      "sha256": "d556e5226843df34e5700b1d2b41b3705154acd3a145bf22712dbd3b6ac0a28e"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-02_PRESS_35_act.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.spar",
+      "bytes": 3091,
+      "sha256": "8be05e3dc8a5c82d51ad28f8ace87ddff95da126a07a57aa37d6a63925fd3d52"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-02_PRESS_35_ref.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.sdat",
+      "bytes": 16384,
+      "sha256": "76bffbd98a104b0c759deca10cb15c8f2b6652a0c9e7ae336c8c71b15bc07cc0"
+    },
+    {
+      "filename": "examples/philips-press-group/sub-02_PRESS_35_ref.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.spar",
+      "bytes": 3091,
+      "sha256": "e12e4d4bb83fcaf5c993c3a7b76fc25eb7675b0f1d722b346b51933a85dbd558"
+    },
+    {
+      "filename": "examples/philips-press-t1/sub-01_PRESS_35_act.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.sdat",
+      "bytes": 16384,
+      "sha256": "fd14521b8b7e9f1fa4d1fd8930e6e4b7a4e26d535f71eab9e922d4a40c7759b0",
+      "license": "MIT"
+    },
+    {
+      "filename": "examples/philips-press-t1/sub-01_PRESS_35_act.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.spar",
+      "bytes": 3080,
+      "sha256": "78b78cb9ec4d5b509563384629390702cc2caf1cc133df529beb56e4d7ae1f4f",
+      "license": "MIT"
+    },
+    {
+      "filename": "examples/philips-press-t1/sub-01_PRESS_35_ref.sdat",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.sdat",
+      "bytes": 16384,
+      "sha256": "996ddb02f55c4bb65204e92f25d5a112dd72b300659a13d0aacb28040af3b59d",
+      "license": "MIT"
+    },
+    {
+      "filename": "examples/philips-press-t1/sub-01_PRESS_35_ref.spar",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.spar",
+      "bytes": 3080,
+      "sha256": "7cf63c7064d481a9330ef25b42bf012b605e62936428de5b2eed4e3438eceb34",
+      "license": "MIT"
+    },
+    {
+      "filename": "examples/philips-press-t1/sub-01_T1w_defaced.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz",
+      "bytes": 4438531,
+      "sha256": "15f4f19fef726947de2cdf53e86be76bb9fe6539630e382aca0b042b04fc23a5",
+      "license": "MIT"
     }
   ],
   "repository": "neurodeskorg/webapps",
-  "revision": "91f69629415335ef6fcb88a8b8a05677328b916f",
+  "revision": "fdd562269124c0465a3e6ac25180db51d1695e0f",
   "prefix": "lcmodel/",
-  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/91f69629415335ef6fcb88a8b8a05677328b916f/lcmodel/"
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/"
 }

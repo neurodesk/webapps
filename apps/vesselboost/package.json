@@ -1,13 +1,14 @@
 {
   "scripts": {
     "lint": "node ../../scripts/check-app-js.mjs web",
-    "test": "npm run lint && npm run test:analytics && npm run test:spatial-file && npm run test:pipeline-graph && npm run test:viewer-controller && npm run test:result-display && npm run test:n4-shrink-policy && npm run test:upstream-reference",
+    "test": "npm run lint && npm run test:analytics && npm run test:spatial-file && npm run test:pipeline-graph && npm run test:viewer-controller && npm run test:result-display && npm run test:mask-edit && npm run test:n4-shrink-policy && npm run test:upstream-reference",
     "test:upstream-reference": "node --test test/upstream-reference.test.mjs",
     "test:analytics": "node --no-warnings scripts/test_analytics.mjs",
     "test:spatial-file": "node --no-warnings scripts/test_spatial_file.mjs",
     "test:pipeline-graph": "node --no-warnings scripts/test_pipeline_graph.mjs",
     "test:viewer-controller": "node --no-warnings scripts/test_viewer_controller.mjs",
     "test:result-display": "node --no-warnings scripts/test_result_display.mjs",
+    "test:mask-edit": "node --no-warnings scripts/test_mask_edit.mjs",
     "test:n4-shrink-policy": "node --no-warnings scripts/test_n4_shrink_policy.mjs",
     "vendor": "node ../../scripts/vendor-components.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
@@ -33,7 +34,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "vesselboost",
-  "version": "0.5.20260930",
+  "version": "0.5.20261007",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

@@ -73,7 +73,7 @@
           <div class="file-upload-group">
             <div class="upload-group">
               <div class="file-upload-zone file-drop" id="inputDropZone">
-                <input type="file" data-neurodesk-input="image" id="fileInput" aria-label="Input image files" multiple>
+                <input type="file" data-neurodesk-input="image" id="fileInput" multiple>
                 <svg class="upload-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 <p class="upload-text file-drop-label"><span>Drop NIfTI or DICOM files</span></p>
               </div>
@@ -124,29 +124,6 @@
         </div>
       </section>
 
-      <!-- SCT Processing Utilities -->
-      <section class="sidebar-section step-section step-disabled collapsed" id="stepProcessingSection" data-disclosure>
-        <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/></svg>
-          <span>SCT Processing</span>
-          <span class="step-badge" id="stepProcessingBadge"></span>
-        </button></h2>
-        <div class="section-content" data-disclosure-panel>
-          <div class="param-group">
-            <label class="param-label" for="processingOperationSelect">Operation</label>
-            <select id="processingOperationSelect">
-              <option value="vertebrae">Vertebral labeling</option>
-            </select>
-          </div>
-          <div class="step-buttons">
-            <button class="btn btn-secondary btn-sm" id="runProcessingBtn" disabled>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Run
-            </button>
-          </div>
-        </div>
-      </section>
-
       <!-- Results Section -->
       <section class="sidebar-section hidden" id="resultsSection" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
@@ -176,73 +153,15 @@
         <button class="view-tab" id="compareViewButton" type="button" data-viewer-mode="compare" disabled>Compare</button>
       </div>
 
-      <div class="view-tabs">
-        <button class="view-tab active" data-view="multiplanar">3-Plane</button>
-        <button class="view-tab" data-view="axial">Axial</button>
-        <button class="view-tab" data-view="coronal">Coronal</button>
-        <button class="view-tab" data-view="sagittal">Sagittal</button>
-        <button class="view-tab" data-view="render">3D</button>
-      </div>
-
       <div class="viewer-actions">
-        <!-- Window/Range Controls -->
-        <div class="window-controls">
-          <input type="number" id="windowMin" class="window-input" placeholder="min" step="any" title="Window minimum">
-          <div class="range-slider-container">
-            <input type="range" id="rangeMin" class="range-slider range-min" min="0" max="100" value="0" aria-label="Window minimum">
-            <input type="range" id="rangeMax" class="range-slider range-max" min="0" max="100" value="100" aria-label="Window maximum">
-            <div class="range-track"></div>
-            <div class="range-selected" id="rangeSelected"></div>
-          </div>
-          <input type="number" id="windowMax" class="window-input" placeholder="max" step="any" title="Window maximum">
-          <button class="btn btn-sm" id="resetWindow" title="Reset to full range">Auto</button>
-        </div>
-
-        <!-- Overlay opacity -->
-        <div class="opacity-control hidden" id="overlayControl">
-          <label for="overlayOpacity">Overlay</label>
-          <input type="range" id="overlayOpacity" min="0" max="1" step="0.05" value="0.7">
-          <span id="overlayOpacityValue">70%</span>
-        </div>
-
-        <!-- Input visibility -->
-        <label class="viewer-checkbox" title="Show input image">
-          <input type="checkbox" id="inputVisibilityToggle" checked>
-          <span>Input</span>
-        </label>
-
-        <!-- Interpolation -->
-        <label class="viewer-checkbox">
-          <input type="checkbox" id="interpolation">
-          <span>Interp</span>
-        </label>
-
-        <!-- Colorbar -->
-        <label class="viewer-checkbox">
-          <input type="checkbox" id="colorbarToggle">
-          <span>Colorbar</span>
-        </label>
-
-        <!-- Crosshair -->
-        <label class="viewer-checkbox">
-          <input type="checkbox" id="crosshairToggle" checked>
-          <span>Crosshair</span>
-        </label>
-
-        <!-- Colormap -->
-        <select class="colormap-select" id="colormapSelect">
-          <option value="gray">Gray</option>
-          <option value="hot">Hot</option>
-          <option value="cool">Cool</option>
-          <option value="viridis">Viridis</option>
-          <option value="plasma">Plasma</option>
+        <!-- Compare only: layout of every panel, and whether panels follow each other -->
+        <select class="colormap-select" id="compareLayoutSelect" aria-label="Comparison layout" title="Layout of every comparison panel" hidden>
+          <option value="0">Axial</option>
+          <option value="1">Coronal</option>
+          <option value="2">Sagittal</option>
+          <option value="3">Multiplanar</option>
         </select>
-
-        <!-- Download -->
-        <button class="btn btn-sm btn-icon" id="downloadCurrentVolume" title="Download current image as NIfTI" disabled>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-
+        <button class="view-tab active" id="compareLinkButton" type="button" aria-pressed="true" title="Linked panels share slice, zoom and pan by world position" hidden>Link views</button>
         <!-- Screenshot -->
         <button class="btn btn-sm btn-icon" id="screenshotViewer" title="Save screenshot as PNG">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -250,11 +169,11 @@
       </div>
     </div>
 
-    <!-- NiiVue canvas -->
+    <!-- FreeBrowse viewer (layout, zoom/pan, window, opacity, colormap, drawing) -->
     <div class="viewer-canvas-wrapper">
-      <canvas id="gl1"></canvas>
+      <div id="freebrowseViewer" class="nd-viewer-embed"></div>
       <canvas id="fallbackCanvas2d" class="fallback-canvas"></canvas>
-      <div class="comparison-grid" id="comparisonGrid" data-count="0" aria-label="Loaded image comparison grid"></div>
+      <div class="nd-compare-grid" id="comparisonGrid" data-count="0" role="group" aria-label="Loaded images side by side" hidden></div>
       <div class="viewer-unavailable-message" id="viewerUnavailableMessage" hidden>
         No preview: WebGL2 failed. Enable hardware acceleration (see chrome://gpu), then reload.
       </div>
@@ -266,15 +185,9 @@
       <span class="viewer-info-label" id="viewerInfoLabel"></span>
     </div>
 
-    <!-- Console -->
-    <div data-disclosure class="collapsed console-container" id="spinalcordtoolbox-log">
-      <div class="console-header">
-        <button type="button" class="console-title" data-disclosure-toggle>Technical log</button>
-        <button class="console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
-        <button class="console-clear" id="clearConsole">Clear</button>
-      </div>
-      <div class="console-output" id="consoleOutput" data-disclosure-panel></div>
-    </div>
+    <!-- Console: the shared nd-console builds the toggle, the Analysis and Technical tabs,
+         Copy, Clear and the resize separator. -->
+    <nd-console id="spinalcordtoolbox-log" collapsed resizable label="Log" channels="analysis:Analysis,technical:Technical"></nd-console>
   </main>
 
   <footer id="status" class="nd-imaging-status">
@@ -303,7 +216,7 @@
       </div>
 
       <p>Spinal Cord Toolbox is a browser-based tool for SCT stable spinal cord MRI segmentation workflows.</p>
-      <p>All image computation runs locally in your browser using ONNX Runtime Web. Patient image data is not uploaded to any server.</p>
+      <p>Segmentation runs locally using ONNX Runtime Web. Morphometry and lesion analysis run SCT Python in your browser, or the pinned SCT CLI on your chosen compute server. Uploaded masks and generated masks can be analyzed without an anatomy image.</p>
       <p>Long runs can continue if this site is allowed to stay active in your browser.</p>
 
       <h4>Version</h4>
@@ -330,24 +243,25 @@
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
         <div>
-          <strong>Your data never leaves your device.</strong>
-          <p>Spinal Cord Toolbox runs entirely in your web browser using WebAssembly and ONNX Runtime. All processing occurs locally on your machine.</p>
+          <strong>You choose where analysis runs.</strong>
+          <p>Segmentation and browser SCT analysis keep your images and masks on this device. Selecting compute-server execution sends chosen masks only after you press Run analysis.</p>
         </div>
       </div>
 
       <h4>What this means</h4>
       <ul class="privacy-list">
-        <li>No patient image data, metadata, masks, segmentations, or outputs are uploaded to any server or cloud service</li>
-        <li>No internet connection is required after the page loads</li>
-        <li>Sensitive patient data remains on your computer at all times</li>
-        <li>There is no need to anonymise or de-identify your data before use</li>
+        <li>Browser execution does not upload patient images. Compute-server execution uploads selected masks, including their NIfTI headers, to your chosen server.</li>
+        <li>Browser analysis requires no compute-server connection. Native analysis requires your server.</li>
+        <li>The compute server retains masks, results and logs until its retention period expires or you delete the job.</li>
+        <li>Use a server and network suitable for your data. Previous analysis jobs lets you download results and delete server files.</li>
       </ul>
 
       <h4>How it works</h4>
-      <p>Spinal Cord Toolbox uses ONNX Runtime Web to run browser-compatible deep learning models directly in the browser via WebAssembly. Your NIfTI or DICOM files are read into browser memory, processed locally, and results are displayed without patient-data network transfer.</p>
+      <p>Spinal Cord Toolbox uses ONNX Runtime Web to run browser-compatible deep learning models directly in the browser via WebAssembly. Local segmentation reads NIfTI or DICOM images into browser memory. Browser SCT analysis runs Python in an isolated WebAssembly worker with local masks and exports. Native analysis uploads the selected NIfTI masks unchanged, runs the pinned SCT container, and downloads its original CSV or XLSX, pickle and labeled NIfTI artifacts.</p>
 
       <h4>Third-party services</h4>
       <p>The Neurodesk hosting layer records page views only, unless your browser sends Do Not Track or Global Privacy Control. It does not send custom events, patient image data, DICOM metadata, filenames, voxel values, masks, segmentations, screenshots, free-text patient-derived logs, or downloaded outputs to Google Analytics.</p>
+      <p>Browser SCT analysis downloads the pinned Pyodide Python runtime and scientific libraries from jsDelivr (cdn.jsdelivr.net) when it runs. These requests fetch fixed files and carry no images, masks, filenames or results.</p>
     </div>
   </div>
 </div>
@@ -417,9 +331,6 @@
 
 <!-- COOP/COEP service worker for cross-origin isolation (enables multi-threaded WASM) -->
 <script src="coi-serviceworker.js"></script>
-
-<!-- NiiVue -->
-<script src="https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js"></script>
 
 <!-- NIfTI parsing for non-WebGL preview fallback -->
 <script src="nifti-js/index.js"></script>

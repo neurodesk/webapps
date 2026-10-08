@@ -1,5 +1,50 @@
 # brain2print
 
+## 0.4.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
+  - @neurodesk/topofit@0.13.20261007
+- Updated dependencies [70f2770]
+- Updated dependencies [6be20aa]
+  - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/topofit@0.13.20261007
+
+## 0.4.20261005
+
+### Patch Changes
+
+- @neurodesk/topofit@0.12.20261005
+
+## 0.4.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/topofit@0.12.20261004
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/topofit@0.12.20261004
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
+  - @neurodesk/topofit@0.12.20261004
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/topofit@0.12.20261004
+
+## 0.4.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+  - @neurodesk/topofit@0.12.20261003
+
 ## 0.4.20260930
 
 ### Patch Changes
@@ -8,7 +53,6 @@
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/topofit@0.12.20260930
-
 
 ### Patch Changes
 

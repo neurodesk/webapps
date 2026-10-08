@@ -4,10 +4,24 @@ TopoFit reconstructs left and right white, pial, and spherical-registration surf
 
 Use a desktop browser with cross-origin isolation and several gigabytes of available memory. The complete order-6 reconstruction contains 245,762 vertices and 491,520 faces per hemisphere.
 
-The browser uses the pinned npm `@niivue/niimath` WebAssembly worker to apply
-`-conform -ras`, resampling axis-aligned and oblique NIfTI geometry onto a
-centred 256³ 1 mm RAS grid. The original image and affine remain available for
-the source-grid QC volume.
+By default the left and right hemispheres reconstruct at the same time, each in its
+own worker. On the validation scan this takes 73 s instead of 100 s one after the
+other, and peak memory in Chrome rises from about 4.6 GB to 7.5 GB. Results are
+byte-identical either way. Turn off **Reconstruct hemispheres in parallel** in
+Advanced settings (automation: `parallelHemispheres: false`) to run one hemisphere
+at a time. The option is unchecked by default on devices that report less than 8 GB
+of memory, and the app remembers the choice; an automation request that omits the
+parameter keeps it. If a hemisphere worker fails during a parallel
+run, TopoFit retries the whole reconstruction one hemisphere at a time. If the
+browser closes the tab instead (an out-of-memory crash), the next visit switches
+the option off and says so in the status bar. Each model is downloaded and verified
+once per run and shared with both hemisphere workers.
+
+The reconstruction pipeline uses the package's OpenRecon-compatible cubic
+B-spline conformer, preserving the reference grid center, orientation, and
+effective scalar dtype. Oblique grids retain their normalized rotation and
+shear. Inputs already on an identity 1 mm grid bypass conforming, as in BrainNet.
+The original image and affine remain available for source-grid QC.
 
 ```bash
 pnpm --filter topofit dev
@@ -19,8 +33,10 @@ pnpm --filter topofit test:e2e
 For offline model development, set `TOPOFIT_ASSET_DIR` to the exported release directory and `VITE_TOPOFIT_ASSET_BASE=/model-assets/`. See [`packages/topofit/validation/README.md`](../../packages/topofit/validation/README.md) for the pinned-container comparison.
 
 The browser offers six anatomical FreeSurfer triangular surface files, a source-grid QC
-NIfTI. The processing manifest is recorded in the technical log. Each surface's View button selects it alone
-without changing the current layout. Slice views show its boundaries, while Render
+NIfTI. The processing manifest is recorded in the technical log. All output surfaces
+are loaded into FreeBrowse, initially hidden. Each surface's View button shows it
+without unloading other surfaces or changing the current layout. FreeBrowse owns
+surface visibility, and switching to QC preserves the loaded surfaces. Slice views show its boundaries, while Render
 shows it in 3D with the MRI clipped away so the skull cannot obscure it. White,
 mid-surface and pial checkboxes combine surfaces for comparison or STL export.
 The 2D slices show thin surface boundaries. FreeBrowse provides axial, coronal,

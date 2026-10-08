@@ -140,6 +140,20 @@ try {
           result.failures.push(`Mouse-only disclosure headings: ${result.legacyDisclosureCount}; use native disclosures or the shared button binding`);
         }
         if (result.clippedNavigation.length) result.failures.push(`Clipped navigation: ${result.clippedNavigation.join(', ')}`);
+        if (viewport.width >= 600) {
+          // The bar must keep the app title and version readable at every desktop width, not just the audit width.
+          for (const width of [1280, 1024, 900]) {
+            await page.setViewportSize({ width, height: viewport.height });
+            await page.waitForTimeout(150);
+            const clipped = await page.evaluate(() => [...document.querySelectorAll('.nd-app-bar__identity')]
+              .filter(node => node.checkVisibility())
+              .flatMap(identity => [...identity.querySelectorAll('.nd-app-bar__title, .nd-app-bar__version')]
+                .filter(node => node.getBoundingClientRect().right > identity.getBoundingClientRect().right + 1 || node.scrollWidth > node.clientWidth + 1)
+                .map(node => node.textContent.trim())));
+            if (clipped.length) result.failures.push(`App bar clips ${clipped.join(', ')} at ${width}px`);
+          }
+          await page.setViewportSize(viewport);
+        }
         if (result.duplicates.length) result.failures.push(`Duplicate navigation: ${result.duplicates.join(', ')}`);
         const selector = page.locator('select[data-neurodesk-example]');
         if (examples.length === 0) {

@@ -32,7 +32,7 @@ const workspace = mountImagingWorkspace({
 // 2. Viewer chrome: layout tabs above the canvas, technical log below it.
 const toolbar = createViewerToolbar({ window: false, overlay: false, colormap: false, download: false, screenshot: false });
 $("viewer").prepend(toolbar);
-const log = createConsole({ id: "technicalLog" });
+const log = createConsole({ id: "technicalLog", resizable: true });
 $("viewer").append(log);
 // Status footer: message, progress, elapsed time and the × that shows only while cancellable.
 const progress = new ProgressManager();

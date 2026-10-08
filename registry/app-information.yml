@@ -115,8 +115,14 @@ apps:
         url: https://github.com/niivue/niivue
 
   spinalcordtoolbox:
+    execution: Segmentation and SCT mask analysis can run in your browser. Selecting compute-server execution sends chosen masks to your Neurodesk server only when you run analysis. The server retains inputs and results until deletion or expiry.
+    about:
+      - Native sct_process_segmentation and sct_analyze_lesion execute the pinned SCT container with upstream numerical behavior for the exposed options. Browser analysis runs the same SCT Python methods in WebAssembly with SCT export formats, while floating-point results may differ from native execution. Morphometry exports CSV; lesion analysis exports XLSX, pickle and labeled NIfTI. Automatic SCIseg browser metrics remain an approximate subset.
     packages:
+      - { name: Spinal Cord Toolbox, url: https://spinalcordtoolbox.com, role: morphometry and lesion analysis in the browser or on your compute server }
+      - { name: Pyodide, url: https://pyodide.org, role: runs SCT Python and scientific libraries in WebAssembly }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation models in the browser }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive viewer with zoom, pan, layers and drawing }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -141,14 +147,14 @@ apps:
         title: TotalSpineSeg
         reference: "Warszawer Y, Molinier N, Valošek J, et al. TotalSpineSeg: Robust spine segmentation and labeling across multiple MRI contrasts. Proceedings of the ISMRM. 2025."
         url: https://github.com/neuropoly/totalspineseg
-      - group: Vertebral labeling
-        title: Vertebral level labeling
-        reference: "Ullmann E, Pelletier Paquette JF, Thong WE, Cohen-Adad J. Automatic labeling of vertebral levels using a robust template-based approach. International Journal of Biomedical Imaging. 2014;2014:719520."
-        doi: 10.1155/2014/719520
-      - group: Template
-        title: PAM50
-        reference: "De Leener B, Fonov VS, Collins DL, Callot V, Stikov N, Cohen-Adad J. PAM50: Unbiased multimodal template of the brainstem and spinal cord aligned with the ICBM152 space. NeuroImage. 2018;165:170–179."
-        doi: 10.1016/j.neuroimage.2017.10.041
+      - group: Lesion analysis
+        title: Midsagittal tissue bridges
+        reference: "Huber E, Lachappelle P, Sutter R, Curt A, Freund P. Are midsagittal tissue bridges predictive of outcome after cervical spinal cord injury? Annals of Neurology. 2017;81(5):740–748."
+        doi: 10.1002/ana.24932
+      - group: Lesion analysis
+        title: Axial damage ratio
+        reference: "Smith AC, Albin SR, O'Dell DR, et al. Axial MRI biomarkers of spinal cord damage to predict future walking and motor function: a retrospective study. Spinal Cord. 2021;59(6):693–699."
+        doi: 10.1038/s41393-020-00561-w
       - group: Deep learning framework
         title: PyTorch
         reference: "Paszke A, Gross S, Massa F, et al. PyTorch: An imperative style, high-performance deep learning library. Advances in Neural Information Processing Systems. 2019;32."
@@ -302,6 +308,11 @@ apps:
         reference: "Smith SM. Fast robust automated brain extraction. Human Brain Mapping. 2002;17(3):143–155."
         doi: 10.1002/hbm.10062
         code: https://github.com/Bostrix/FSL-BET2
+      - group: Brain extraction
+        title: RS2-Net (rodent brain extraction)
+        reference: "Lin Y, Ding Y, Chang S, Ge X, Sui X, Jiang Y. RS2-Net: An end-to-end deep learning framework for rodent skull stripping in multi-center brain MRI. NeuroImage. 2024;298:120769."
+        doi: 10.1016/j.neuroimage.2024.120769
+        code: https://github.com/VitoLin21/Rodent-Skull-Stripping
       - group: Phase unwrapping
         title: ROMEO
         reference: "Dymerska B, Eckstein K, Bachrata B, et al. Phase unwrapping with a rapid opensource minimum spanning tree algorithm (ROMEO). Magnetic Resonance in Medicine. 2021;85(4):2294–2308."
@@ -582,7 +593,7 @@ apps:
 
   browserqc:
     packages:
-      - { name: brainchop (TensorFlow.js), url: https://github.com/neuroneural/brainchop, role: deep-learning tissue segmentation on the GPU }
+      - { name: MindGrab (brainchop C11/WebAssembly), url: https://github.com/neuroneural/brainchop, role: brain mask, label segmentation and tissue fractions }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: MRIQC-style image-quality metrics }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
@@ -599,10 +610,6 @@ apps:
         title: niimath
         reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."
         doi: 10.52294/001c.94384
-      - group: Deep learning framework
-        title: TensorFlow.js
-        reference: "Smilkov D, Thorat N, Assogba Y, et al. TensorFlow.js: machine learning for the web and beyond. arXiv. 2019."
-        url: https://arxiv.org/abs/1901.05350
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
@@ -917,7 +924,7 @@ apps:
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
       - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive volume and surface viewer }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
-      - { name: niimath, url: https://github.com/rordenlab/niimath, role: 1 mm RAS conforming }
+      - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh simplification and smoothing for STL export }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
       - group: Cortical ribbon geometry
@@ -1127,10 +1134,16 @@ apps:
   lcmodel:
     about:
       - This app quantifies metabolites in single-voxel MR spectroscopy. Raw data are preprocessed with FID-A's automatic pipelines (coil combination, removal of bad averages, spectral registration, ISIS combination for SPECIAL, phasing and referencing) and fitted with LCModel. Both are Rust ports compiled to WebAssembly and run locally. On LCModel's own test case the port writes the same .TABLE and .COORD numbers as the Fortran; the FID-A port agrees with FID-A in GNU Octave to within 10^-5 Hz in drift estimates.
-      - The included basis sets were simulated with FID-A for PRESS, STEAM, semi-LASER and SPECIAL at 1.5, 3 and 7 T; the app recommends the one that matches the data's field strength, sequence and echo time, and accepts your own .BASIS file.
+      - The included basis sets were simulated with FID-A for PRESS, STEAM, semi-LASER, SPECIAL and MEGA-PRESS at 1.5, 3 and 7 T, some with real refocusing pulse shapes across the voxel; the app recommends the one that matches the data's field strength, sequence and echo time, and accepts your own .BASIS file.
+      - Unedited fits widen LCModel's line-broadening prior (DESDT2 2, RFWBAS 80). With the narrow-line simulated basis sets, LCModel's defaults scale water-referenced concentrations 8-15 % low; the widened prior recovers synthetic spectra of known concentration and agrees with an independent fitter (spant). LCModel's own priors stay one setting away.
+      - In GABA-edited MEGA-PRESS the fit separates GABA from co-edited macromolecules (MM3co) with a soft constraint to the macromolecule peak at 0.915 ppm, following Zöllner et al. (2022). GABA+ (GABA + MM3co) is robust; the split between GABA and MM3co rests on the model's assumptions.
+      - With a T1 image from the same session, MindMap segments it in the browser, the voxel is placed from the spectroscopy header and drawn on the T1, and concentrations are corrected for the voxel's grey matter, white matter and CSF as in Gasparovic et al. 2006, with Osprey's constants.
     packages:
       - { name: LCModel 6.3-1N (Rust port), url: https://github.com/schorschinho/LCModel, role: linear-combination model fitting }
       - { name: FID-A (Rust port), url: https://github.com/CIC-methods/FID-A, role: preprocessing, file readers and basis-set simulation }
+      - { name: MindMap (@brainchop/mindgrab), url: https://www.npmjs.com/package/@brainchop/mindgrab, role: grey matter, white matter and CSF partial-volume maps of the T1 }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: T1 viewer with the voxel overlay }
+      - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: T1 DICOM to NIfTI conversion }
     citations:
       - group: Quantification
         title: LCModel
@@ -1149,6 +1162,52 @@ apps:
         reference: "Near J, Edden R, Evans CJ, Paquin R, Harris A, Jezzard P. Frequency and phase drift correction of magnetic resonance spectroscopy data by spectral registration in the time domain. Magn Reson Med. 2015;73(1):44-50."
         doi: 10.1002/mrm.25094
         url: https://pubmed.ncbi.nlm.nih.gov/24436292/
+      - group: Preprocessing and simulation
+        title: Fast shaped-pulse simulation across the voxel
+        reference: "Zhang Y, An L, Shen J. Fast computation of full density matrix of multispin systems for spatially localized in vivo magnetic resonance spectroscopy. Med Phys. 2017;44(8):4169-4178."
+        doi: 10.1002/mp.12375
+      - group: Edited spectroscopy
+        title: MEGA-PRESS
+        reference: "Mescher M, Merkle H, Kirsch J, Garwood M, Gruetter R. Simultaneous in vivo spectral editing and water suppression. NMR Biomed. 1998;11(6):266-272."
+        doi: "10.1002/(SICI)1099-1492(199810)11:6<266::AID-NBM530>3.0.CO;2-J"
+      - group: Edited spectroscopy
+        title: Co-edited macromolecule model (GABA, MM3co, GABA+)
+        reference: "Zöllner HJ, Tapper S, Hui SCN, Barker PB, Edden RAE, Oeltzschner G. Comparison of linear combination modeling strategies for edited magnetic resonance spectroscopy at 3 T. NMR Biomed. 2022;35(1):e4618."
+        doi: 10.1002/nbm.4618
+      - group: Edited spectroscopy
+        title: Macromolecule-suppressed GABA editing
+        reference: "Edden RAE, Puts NAJ, Barker PB. Macromolecule-suppressed GABA-edited magnetic resonance spectroscopy at 3T. Magn Reson Med. 2012;68(3):657-661."
+        doi: 10.1002/mrm.24391
+      - group: Tissue correction
+        title: Water-referenced tissue correction
+        reference: "Gasparovic C, Song T, Devier D, Bockholt HJ, Caprihan A, Mullins PG, Posse S, Jung RE, Morrison LA. Use of tissue water as a concentration reference for proton spectroscopic imaging. Magn Reson Med. 2006;55(6):1219-1226."
+        doi: 10.1002/mrm.20901
+      - group: Tissue correction
+        title: Alpha correction for GABA
+        reference: "Harris AD, Puts NAJ, Edden RAE. Tissue correction for GABA-edited MRS: considerations of voxel composition, tissue segmentation, and tissue relaxations. J Magn Reson Imaging. 2015;42(5):1431-1440."
+        doi: 10.1002/jmri.24903
+      - group: Tissue correction
+        title: Osprey
+        reference: "Oeltzschner G, Zöllner HJ, Hui SCN, Mikkelsen M, Saleh MG, Tapper S, Edden RAE. Osprey: Open-source processing, reconstruction & estimation of magnetic resonance spectroscopy data. J Neurosci Methods. 2020;343:108827."
+        doi: 10.1016/j.jneumeth.2020.108827
+        code: https://github.com/schorschinho/osprey
+      - group: Tissue correction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, Fedorov A, Hoffmann M, Rorden C, Plis S. MindGrab: A spectrally-motivated architecture for accessible deep learning in neuroimaging. NeuroImage. 2026;338:122074."
+        doi: 10.1016/j.neuroimage.2026.122074
+      - group: Tissue correction
+        title: NIfTI-MRS and spec2nii voxel geometry
+        reference: "Clarke WT, Bell TK, Emir UE, Mikkelsen M, Oeltzschner G, Shamaei A, Soher BJ, Wilson M. NIfTI-MRS: A standard data format for magnetic resonance spectroscopy. Magn Reson Med. 2022;88(6):2358-2370."
+        doi: 10.1002/mrm.29418
+        code: https://github.com/wtclarke/spec2nii
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47-56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
   white-matter-lesions:
     packages:
       - { name: FLAMeS, url: https://doi.org/10.5281/zenodo.17955359, role: lesion segmentation network (fold 0) }

@@ -133,7 +133,8 @@ body.viewer-fallback-2d .viewer-canvas-wrapper #gl1 {
 
 .segmentation-result-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: var(--nd-space-xs);
   padding: var(--nd-space-xs);
@@ -146,6 +147,7 @@ body.viewer-fallback-2d .viewer-canvas-wrapper #gl1 {
   min-width: 0;
   overflow: hidden;
   word-break: break-word;
+  white-space: normal;
 }
 
 .segmentation-result-label input {

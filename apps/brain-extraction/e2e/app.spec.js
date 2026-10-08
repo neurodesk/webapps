@@ -63,6 +63,65 @@ test('BET agrees with the FreeSurfer SynthSeg brain mask and downloads images wi
   expect(JSON.parse(await readFile(await (await reportDownload).path(), 'utf8'))).toEqual(report);
 });
 
+test('editing the BET mask in the viewer replaces its download', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#imageInput').setInputFiles(fixture);
+  await page.locator('#method').selectOption('bet');
+  await page.locator('#runButton').click();
+  await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready');
+  const maskRow = page.locator('#resultList .nd-volume-toggle').filter({ hasText: 'Brain mask' });
+  await expect(page.locator('#resultList .nd-edit-btn')).toHaveCount(1);
+  const downloadMask = async () => {
+    const pending = page.waitForEvent('download');
+    await maskRow.getByRole('button', { name: 'Download', exact: true }).click();
+    const download = await pending;
+    return { name: download.suggestedFilename(), bytes: await readFile(await download.path()) };
+  };
+  const original = await downloadMask();
+  const editor = page.locator('nd-mask-editor');
+  const strokeAcrossCentre = async () => {
+    await page.getByRole('button', { name: 'Axial', exact: true }).click();
+    await editor.getByRole('button', { name: 'Erase', exact: true }).click();
+    const box = await page.locator('#gl1').boundingBox();
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width * 0.35, y);
+    await page.mouse.down();
+    for (let step = 1; step <= 10; step++) await page.mouse.move(box.x + box.width * (0.35 + 0.03 * step), y);
+    await page.mouse.up();
+  };
+  await maskRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(editor).toBeVisible();
+  await expect(page.locator('#statusText')).toContainText('Editing Brain mask');
+  await expect(maskRow.getByRole('button', { name: 'Edit', exact: true })).toBeDisabled();
+  await strokeAcrossCentre();
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(maskRow.locator('.nd-stage-label')).toHaveText('Brain mask');
+  expect((await downloadMask()).bytes.equals(original.bytes)).toBe(true);
+  await maskRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(editor).toBeVisible();
+  await strokeAcrossCentre();
+  await editor.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(maskRow.locator('.nd-stage-label')).toHaveText('Brain mask (edited)');
+  await expect(maskRow.getByRole('button', { name: 'Edit', exact: true })).toBeEnabled();
+  const edited = await downloadMask();
+  expect(edited.name).toBe(original.name);
+  expect(edited.bytes.readInt16LE(70)).toBe(2);
+  const before = readVolume(bytesOf(original.bytes));
+  const after = readVolume(bytesOf(edited.bytes));
+  expect(after.dims).toEqual(readVolume(bytesOf(await readFile(fixture))).dims);
+  expect(after.affine).toEqual(before.affine);
+  const changed = after.data.reduce((count, value, index) => count + (value !== before.data[index]), 0);
+  expect(changed).toBeGreaterThan(0);
+  expect(after.data.reduce((sum, value) => sum + value, 0)).toBeLessThan(before.data.reduce((sum, value) => sum + value, 0));
+  await maskRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(editor).toBeVisible();
+  await page.locator('#imageInput').setInputFiles(fixture);
+  await expect(editor).toBeHidden();
+  await expect(page.locator('#resultList .nd-volume-toggle')).toHaveCount(1);
+});
+
 test('examples load through the picker and BET downloads a brain mask (regression pin on the MNI152 fixture)', async ({ page }) => {
   for (const example of examples) await page.route(example.files[0].url, route => route.fulfill({ path: fixture }));
   await page.goto('./');

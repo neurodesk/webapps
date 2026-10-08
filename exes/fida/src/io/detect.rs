@@ -16,6 +16,7 @@
 //!   (CMRR / Columbia sLASER) their own water scans.
 
 use super::common::{maybe_gunzip, Res};
+use super::geometry::{self, Voxel};
 use crate::spectra::Spectra;
 
 /// One input file.
@@ -238,6 +239,12 @@ fn water_base(stem: &str) -> Option<String> {
     None
 }
 
+/// Leading directory components two paths share.
+fn shared_dirs(a: &str, b: &str) -> usize {
+    let parts = |p: &str| p.trim_start_matches("./").split(['/', '\\']).filter(|c| !c.is_empty()).map(str::to_ascii_lowercase).collect::<Vec<_>>();
+    parts(a).iter().zip(parts(b).iter()).take_while(|(x, y)| x == y).count()
+}
+
 fn bruker_file(file: &str) -> bool {
     matches!(file, "acqp" | "method" | "fid" | "fid.raw" | "rawdata.job0" | "fid.ref" | "fid.refscan" | "fid_refscan.64" | "acqus")
 }
@@ -353,14 +360,17 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         }
     }
 
-    // pairing
+    // pairing: when several water datasets match by name (subjects in
+    // separate folders with the same file names), the one closest in the
+    // directory tree wins, so a folder of subjects pairs within each subject.
     let key = |ds: &Dataset| -> (Format, String) { (ds.format, ds.name.to_ascii_lowercase()) };
     let (water, metab): (Vec<Dataset>, Vec<Dataset>) = datasets.into_iter().partition(|d| d.is_water);
     let mut water: Vec<Option<Dataset>> = water.into_iter().map(Some).collect();
     for m in metab {
         let (fmt, mname) = key(&m);
-        let mdir = split_path(split_path(files[m.files[0]].name).0).1.to_ascii_lowercase();
-        let mut best: Option<usize> = None;
+        let mpath = split_path(files[m.files[0]].name).0;
+        let mdir = split_path(mpath).1.to_ascii_lowercase();
+        let mut best: Option<(usize, usize)> = None;
         for (wi, w) in water.iter().enumerate() {
             let Some(w) = w else { continue };
             if w.format != fmt {
@@ -381,11 +391,13 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                 }
             };
             if hit {
-                best = Some(wi);
-                break;
+                let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
+                if best.is_none_or(|(_, s)| shared > s) {
+                    best = Some((wi, shared));
+                }
             }
         }
-        let w = best.and_then(|k| water[k].take());
+        let w = best.and_then(|(k, _)| water[k].take());
         det.pairs.push(Pairing { metabolite: m, water: w });
     }
     let mut unpaired: Vec<Dataset> = water.into_iter().flatten().collect();
@@ -413,31 +425,43 @@ impl Default for LoadOptions {
     }
 }
 
-/// A loaded dataset: the FID-A structure and any water reference the file
+/// A loaded dataset: the FID-A structure, any water reference the file
 /// itself carries (GE water frames, embedded twix water scans, Bruker
-/// reference scans).
+/// reference scans) and the voxel geometry when the header records it.
 #[derive(Clone, Debug)]
 pub struct Loaded {
     pub out: Spectra,
     pub embedded_water: Option<Spectra>,
+    pub voxel: Option<Voxel>,
 }
 
 /// Read one dataset with its reader.
 pub fn load_dataset(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Loaded> {
     let f = |k: usize| -> Res<&NamedFile> { ds.files.get(k).and_then(|&i| files.get(i)).ok_or_else(|| "internal error: dataset file index".to_string()) };
-    let one = |s: Spectra| Loaded { out: s, embedded_water: None };
+    let one = |s: Spectra, voxel: Option<Voxel>| Loaded { out: s, embedded_water: None, voxel };
     match ds.format {
         Format::Twix => {
             let r = super::twix::load(f(0)?.bytes)?;
-            Ok(Loaded { out: r.out, embedded_water: r.out_w })
+            let voxel = geometry::twix(&r.header);
+            Ok(Loaded { out: r.out, embedded_water: r.out_w, voxel })
         }
         Format::GePfile => {
             let r = super::ge::load(f(0)?.bytes, opts.subspecs)?;
-            Ok(Loaded { out: r.out, embedded_water: Some(r.out_w) })
+            Ok(Loaded { out: r.out, embedded_water: Some(r.out_w), voxel: None })
         }
-        Format::SiemensRda => Ok(one(super::rda::load(f(0)?.bytes)?)),
-        Format::NiftiMrs => Ok(one(super::niimrs::load(f(0)?.bytes)?)),
-        Format::PhilipsSdat => Ok(one(super::sdat::load(f(0)?.bytes, f(1)?.bytes, opts.subspecs)?)),
+        Format::SiemensRda => {
+            let b = f(0)?.bytes;
+            Ok(one(super::rda::load(b)?, geometry::rda(b)))
+        }
+        Format::NiftiMrs => {
+            let b = f(0)?.bytes;
+            Ok(one(super::niimrs::load(b)?, geometry::nifti(b)))
+        }
+        Format::PhilipsSdat => {
+            let spar = f(1)?.bytes;
+            let voxel = geometry::spar(&String::from_utf8_lossy(spar));
+            Ok(one(super::sdat::load(f(0)?.bytes, spar, opts.subspecs)?, voxel))
+        }
         Format::LcModelRaw => {
             let b = f(0)?.bytes;
             let t = text_prefix(b, 8192);
@@ -448,7 +472,7 @@ pub fn load_dataset(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Re
             } else {
                 super::lcmraw::RawType::Sim
             };
-            Ok(one(super::lcmraw::load(b, kind)?))
+            Ok(one(super::lcmraw::load(b, kind)?, None))
         }
         Format::SiemensDicom => load_dicom(ds, files, opts),
         Format::Bruker => load_bruker(ds, files),
@@ -462,7 +486,10 @@ fn load_dicom(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Load
         .map(|&i| (split_path(files[i].name).1.to_string(), files[i].bytes))
         .collect();
     match super::dicom_siemens::load_folder(&list) {
-        Ok((s, _)) => Ok(Loaded { out: s, embedded_water: None }),
+        Ok((s, _)) => {
+            let voxel = list.first().and_then(|(_, b)| geometry::siemens_dicom(&super::dicom_siemens::protocol_text(b)));
+            Ok(Loaded { out: s, embedded_water: None, voxel })
+        }
         Err(e) => {
             // IMA files without a Phoenix protocol: io_loadspec_IMA needs the
             // acquisition parameters from the user
@@ -471,6 +498,7 @@ fn load_dicom(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Load
                     return Ok(Loaded {
                         out: super::dicom_siemens::load_ima(list[0].1, bo, sw, opts.ima_te, opts.ima_tr)?,
                         embedded_water: None,
+                        voxel: None,
                     });
                 }
             }
@@ -493,7 +521,7 @@ fn load_bruker(ds: &Dataset, files: &[NamedFile]) -> Res<Loaded> {
         })
         .collect();
     let r = super::bruker::load(&scan, true, 68)?;
-    Ok(Loaded { out: r.out, embedded_water: r.ref_scan })
+    Ok(Loaded { out: r.out, embedded_water: r.ref_scan, voxel: None })
 }
 
 /// Everything in one call: the detected pairs, each loaded (metabolite and
@@ -546,6 +574,37 @@ mod tests {
         assert_eq!(d.ignored.len(), 1);
         let lcm = d.pairs.iter().find(|p| p.metabolite.format == Format::LcModelRaw).unwrap();
         assert_eq!(files[lcm.water.as_ref().unwrap().files[0]].name, "sub/metab.H2O");
+    }
+
+    #[test]
+    fn subjects_in_folders_pair_within_each_subject() {
+        let raw = b" $NMID\n $END\n 1 2\n".to_vec();
+        let rda = b">>> Begin of header <<<\r\n".to_vec();
+        // The same file names in every subject's folder, listed so that a
+        // name-only match would pair sub-02's spectrum with sub-01's water.
+        let files = [
+            nf("group/sub-01/svs_w.rda", &rda),
+            nf("group/sub-02/svs_w.rda", &rda),
+            nf("group/sub-02/svs.rda", &rda),
+            nf("group/sub-01/svs.rda", &rda),
+            nf("group/sub-01/ses-1/mrs/press/metab.RAW", &raw),
+            nf("group/sub-02/ses-1/mrs/press/metab.RAW", &raw),
+            nf("group/sub-02/ses-1/mrs/press_ref/metab.H2O", &raw),
+            nf("group/sub-01/ses-1/mrs/press_ref/metab.H2O", &raw),
+            nf("group/sub-01/svs_dicom/a.IMA", &raw),
+            nf("group/sub-01/svs_dicom_w/a.IMA", &raw),
+            nf("group/sub-02/svs_dicom/a.IMA", &raw),
+            nf("group/sub-02/svs_dicom_w/a.IMA", &raw),
+        ];
+        let d = detect(&files);
+        assert_eq!(d.pairs.len(), 6, "{d:#?}");
+        assert!(d.unpaired_water.is_empty(), "{d:#?}");
+        for p in &d.pairs {
+            let m = files[p.metabolite.files[0]].name;
+            let w = files[p.water.as_ref().expect("paired").files[0]].name;
+            let subject = |path: &str| path.split('/').nth(1).unwrap().to_string();
+            assert_eq!(subject(m), subject(w), "{m} paired with {w}");
+        }
     }
 
     #[test]

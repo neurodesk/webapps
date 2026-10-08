@@ -183,9 +183,19 @@ test('the shared stylesheet defines the whole vocabulary the template and docs r
     '.nd-message', '.nd-info-icon', '.nd-info-tooltip', '.nd-viewer-toolbar', '.nd-view-tabs', '.nd-view-tab', '.nd-viewer-actions',
     '.nd-viewer-canvas-wrapper', '.nd-viewer-empty', '.nd-viewer-info', '.nd-console-container', '.nd-console-title', '.nd-console-output',
     '.nd-status-label', '.nd-status-text', 'dialog.nd-dialog', '.nd-dialog-header', '.nd-dialog-body', '.nd-command', '.nd-volume-toggle', '.nd-result-visibility',
+    '.nd-mask-editor', '.nd-tool-group', '.nd-tool-btn', '.nd-brush-control', '.nd-edit-btn',
   ]) {
     assert.ok(css.includes(selector), `imaging-workspace.css must define ${selector}`);
   }
+});
+
+test('an Edit button is styled in any result row, not only the shared result list', async () => {
+  const css = await readFile(join(repoRoot, 'packages', 'components', 'src', 'styles', 'imaging-workspace.css'), 'utf8');
+  const topLevel = (list) => list.replace(/\([^()]*\)/g, '()').split(',').map(item => item.trim());
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selectors, body]) => ({ selectors: topLevel(selectors), body }));
+  const bare = rules.filter(rule => rule.selectors.includes('.nd-edit-btn'));
+  assert.ok(bare.some(rule => /border:/.test(rule.body) && /background:/.test(rule.body)), 'a bare .nd-edit-btn rule must give the button its border and background');
+  assert.ok(rules.some(rule => rule.selectors.includes('.nd-edit-btn:disabled')), 'a disabled Edit button must look disabled outside .nd-volume-toggle');
 });
 
 // ---------------------------------------------------------------------------
@@ -249,6 +259,20 @@ test('every app shows status in the shared footer and keeps a collapsed technica
     if (!hasConsole) failures.push(`${label}: add a technical log (createConsole() or .nd-console-container.collapsed) below the viewer, collapsed by default`);
     const sidebarStatus = /class="[^"]*\bsidebar-status\b/.test(text);
     if (sidebarStatus) failures.push(`${label}: .sidebar-status is retired; status lives in the footer`);
+  }
+  assert.deepEqual(failures, []);
+});
+
+test('console header actions sit in the shared, spaced action group', async () => {
+  const failures = [];
+  for (const app of registry.apps) {
+    for (const source of await appSources(app, ['.html'])) {
+      const { document } = new JSDOM(source.text).window;
+      for (const button of document.querySelectorAll('[class*="console-header"] button:not([data-disclosure-toggle])')) {
+        const grouped = button.matches('.nd-console-clear') && button.parentElement.matches('.nd-console-actions');
+        if (!grouped) failures.push(`${source.path}: put console button "${button.textContent.trim()}" in .nd-console-actions as .nd-console-clear`);
+      }
+    }
   }
   assert.deepEqual(failures, []);
 });

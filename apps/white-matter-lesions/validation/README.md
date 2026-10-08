@@ -75,8 +75,8 @@ replace those measurements.
 
 ## Port checks
 
-- `parity.mjs` runs `src/pipeline.js` with ONNX Runtime Web (WebAssembly) against
-  `reference.py` on the same skull-stripped input and model. Utrecht 9: Dice 0.998, 111 of about
+- `parity.mjs` runs `packages/white-matter-lesions/src/pipeline.js` with ONNX Runtime Web
+  (WebAssembly) against `reference.py` on the same skull-stripped input and model. Utrecht 9: Dice 0.998, 111 of about
   34 500 lesion voxels differ, from float rounding between runtimes. The port's resampling matches
   nnunetv2's `resample_data_or_seg_to_shape` to 2.4 × 10⁻⁷ on anisotropic and isotropic volumes,
   and on the 22 MS scans its five-fold masks agree with `nnUNetv2_predict`'s at Dice 0.97 to 0.99.
@@ -87,6 +87,8 @@ replace those measurements.
 - The shipped example (MSLesSeg P57, clinical 2.3 mm FLAIR) runs in the built app on eight
   WebAssembly threads in 3 minutes with one fold (90 lesions, 31.5 ml) and 10 minutes with the
   ensemble (77 lesions, 29.6 ml). The expert mask for that patient, in MNI space, holds 42.1 ml.
+  `browser-reference.json` pins these results; the end-to-end test re-measures them in Chromium,
+  and the `flames` command line's release check must reproduce them.
 
 ## Reproduce
 

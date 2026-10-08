@@ -82,12 +82,12 @@ export class PipelineSettingsController {
     this._setEl('tfiPrecond', TFI_DEFAULTS.precond);
 
     // SWI defaults
-    this._setEl('swiScaling', SWI_DEFAULTS.scaling);
-    this._setEl('swiStrength', SWI_DEFAULTS.strength);
-    this._setEl('swiHpSigmaX', SWI_DEFAULTS.hp_sigma[0]);
-    this._setEl('swiHpSigmaY', SWI_DEFAULTS.hp_sigma[1]);
-    this._setEl('swiHpSigmaZ', SWI_DEFAULTS.hp_sigma[2]);
-    this._setEl('swiMipWindow', SWI_DEFAULTS.mip_window);
+    this._setEl('sidebarSwiScaling', SWI_DEFAULTS.scaling);
+    this._setEl('sidebarSwiStrength', SWI_DEFAULTS.strength);
+    this._setEl('sidebarSwiHpSigmaX', SWI_DEFAULTS.hp_sigma[0]);
+    this._setEl('sidebarSwiHpSigmaY', SWI_DEFAULTS.hp_sigma[1]);
+    this._setEl('sidebarSwiHpSigmaZ', SWI_DEFAULTS.hp_sigma[2]);
+    this._setEl('sidebarSwiMipWindow', SWI_DEFAULTS.mip_window);
 
     // QSMART defaults
     this._setEl('qsmartSdfSigma1Stage1', QSMART_DEFAULTS.sdf_sigma1_stage1);
@@ -139,7 +139,7 @@ export class PipelineSettingsController {
     this._setEl('mcpc3dsSigmaZ', MCPC3DS_DEFAULTS.sigma[2]);
 
     // Bipolar correction
-    this._setChecked('bipolar_correctionEnabled', false);
+    this._setChecked('bipolar_correction_enabled', false);
 
     // Unwrap method
     this._setEl('unwrapping_algorithm', D.unwrapping_algorithm);
@@ -163,7 +163,7 @@ export class PipelineSettingsController {
     this._setEl('b0_weight_type', D.b0_weight_type);
 
     // Linear fit defaults
-    this._setChecked('linear_fit_estimate_offset', LINEAR_FIT_DEFAULTS.estimate_offset);
+    this._setEl('linear_fit_reliability_percentile', LINEAR_FIT_DEFAULTS.reliability_threshold_percentile);
 
     // Background removal
     this._setEl('bf_algorithm', D.bf_algorithm);
@@ -181,7 +181,7 @@ export class PipelineSettingsController {
     this._setEl('vsharpThreshold', VSHARP_DEFAULTS.threshold);
     this._setEl('sharpRadius', defaults.sharpRadius);
     this._setEl('sharpThreshold', SHARP_DEFAULTS.threshold);
-    this._setEl('ismv_radius', defaults.ismv_radius);
+    this._setEl('ismvRadius', defaults.ismv_radius);
     this._setEl('ismvTol', ISMV_DEFAULTS.tol);
     this._setEl('ismvMaxit', ISMV_DEFAULTS.max_iter);
     this._setEl('pdfTol', PDF_DEFAULTS.tol);
@@ -286,8 +286,35 @@ export class PipelineSettingsController {
     this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
     this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    this._setEl('ilsqr_tol', QSMART_DEFAULTS.ilsqr_tol);
-    this._setEl('ilsqr_max_iter', QSMART_DEFAULTS.ilsqr_max_iter);
+    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqr_tol);
+    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
+  }
+
+  /**
+   * SWI parameters, read from the SWI settings modal — the sidebar's SWI section owns
+   * those controls, so this modal reads and repopulates them rather than keeping a
+   * second copy that could disagree with what "Start SWI" actually runs.
+   *
+   * Every field falls back to its default: a blank input parses as NaN, and a NaN inside
+   * hp_sigma's fixed-size array serializes to JSON null, which serde rejects outright
+   * ("invalid type: null, expected f64") — that kills the whole pipeline run, not just SWI.
+   */
+  swiSettings() {
+    const num = (id, fallback) => {
+      const v = parseFloat(this._getEl(id));
+      return Number.isFinite(v) ? v : fallback;
+    };
+    const [dx, dy, dz] = SWI_DEFAULTS.hp_sigma;
+    return {
+      hp_sigma: [
+        num('sidebarSwiHpSigmaX', dx),
+        num('sidebarSwiHpSigmaY', dy),
+        num('sidebarSwiHpSigmaZ', dz),
+      ],
+      scaling: this._getEl('sidebarSwiScaling') || SWI_DEFAULTS.scaling,
+      strength: num('sidebarSwiStrength', SWI_DEFAULTS.strength),
+      mip_window: num('sidebarSwiMipWindow', SWI_DEFAULTS.mip_window),
+    };
   }
 
   /**
@@ -298,9 +325,9 @@ export class PipelineSettingsController {
   save(nEchoes) {
     const isMultiEcho = nEchoes > 1;
 
-    const unwrapping_algorithm = isMultiEcho
-      ? this._getEl('unwrapping_algorithm')
-      : this._getEl('single_echo_unwrapping_algorithm');
+    // One unwrapping select serves both single- and multi-echo data (index.html has no
+    // separate single-echo control), so read the same id either way.
+    const unwrapping_algorithm = this._getEl('unwrapping_algorithm');
     const isLaplacian = unwrapping_algorithm === 'laplacian';
 
     // Phase offset: disabled for Laplacian (inherently removes offsets)
@@ -317,16 +344,7 @@ export class PipelineSettingsController {
     return {
       combined_method: this._getEl('combined_method'),
       reference_mean: this._getChecked('qsm_reference_mean') ?? true,
-      swi: {
-        hp_sigma: [
-          parseFloat(this._getEl('swiHpSigmaX')),
-          parseFloat(this._getEl('swiHpSigmaY')),
-          parseFloat(this._getEl('swiHpSigmaZ'))
-        ],
-        scaling: this._getEl('swiScaling') || 'tanh',
-        strength: parseFloat(this._getEl('swiStrength')),
-        mip_window: parseInt(this._getEl('swiMipWindow'))
-      },
+      swi: this.swiSettings(),
       tgv: {
         regularization: parseInt(this._getEl('tgvRegularization')),
         iterations: parseInt(this._getEl('tgvIterations')),
@@ -387,7 +405,7 @@ export class PipelineSettingsController {
       },
       unwrapping_algorithm: unwrapping_algorithm,
       phase_offset_method: phase_offset_method,
-      bipolar_correction: !isLaplacian && isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolar_correctionEnabled') ?? false),
+      bipolar_correction: !isLaplacian && isMultiEcho && nEchoes >= 3 && (this._getChecked('bipolar_correction_enabled') ?? false),
       b0_estimation: this._getEl('b0_estimation') || 'weighted_avg',
       mcpc3ds: {
         sigma: [
@@ -398,7 +416,9 @@ export class PipelineSettingsController {
       },
       b0_weight_type: this._getEl('b0_weight_type') || 'phase_snr',
       linearFit: {
-        estimate_offset: this._getChecked('linear_fit_estimate_offset') ?? true
+        // estimate_offset is not exposed: qsmxt-config's LinearFitConfig carries only the
+        // percentile, and its bridge pins estimate_offset to qsm-core's default (true).
+        reliability_threshold_percentile: parseFloat(this._getEl('linear_fit_reliability_percentile'))
       },
       romeo: {
         phase_gradient_coherence: romeoPhaseGradientCoherence,
@@ -419,7 +439,7 @@ export class PipelineSettingsController {
         threshold: parseFloat(this._getEl('sharpThreshold'))
       },
       ismv: {
-        radius: parseFloat(this._getEl('ismv_radius')),
+        radius: parseFloat(this._getEl('ismvRadius')),
         tol: parseFloat(this._getEl('ismvTol')),
         max_iter: parseInt(this._getEl('ismvMaxit'))
       },
@@ -543,8 +563,8 @@ export class PipelineSettingsController {
         data_weighting: 1
       },
       ilsqr: {
-        tol: parseFloat(this._getEl('ilsqr_tol')),
-        max_iter: parseInt(this._getEl('ilsqr_max_iter'))
+        tol: parseFloat(this._getEl('ilsqrTol')),
+        max_iter: parseInt(this._getEl('ilsqrMaxIter'))
       }
     };
   }
@@ -606,14 +626,14 @@ export class PipelineSettingsController {
 
 
     // Bipolar correction — disabled for Laplacian
-    const bipolarCheckbox = document.getElementById('bipolar_correctionEnabled');
+    const bipolarCheckbox = document.getElementById('bipolar_correction_enabled');
     if (bipolarCheckbox) bipolarCheckbox.disabled = isLaplacian;
-    const bipolarEnabled = !isLaplacian && (this._getChecked('bipolar_correctionEnabled') ?? false);
-    this._showWarning('bipolar_correctionEnabled', 'bipolarWarning',
+    const bipolarEnabled = !isLaplacian && (this._getChecked('bipolar_correction_enabled') ?? false);
+    this._showWarning('bipolar_correction_enabled', 'bipolarWarning',
       bipolarEnabled && nEchoes >= 1 && nEchoes < 3,
       nEchoes === 1 ? 'Requires multi-echo data (3+ echoes)' : 'Requires 3+ echoes',
       'error');
-    this._showWarning('bipolar_correctionEnabled', 'bipolarLaplacianNote',
+    this._showWarning('bipolar_correction_enabled', 'bipolarLaplacianNote',
       isLaplacian,
       'Not applicable with Laplacian unwrapping',
       'info');
@@ -737,14 +757,14 @@ export class PipelineSettingsController {
     // Combined method
     this._setEl('combined_method', settings.combined_method || 'none');
 
-    // SWI settings
+    // SWI settings (the controls live in the SWI settings modal — see swiSettings)
     const swiSettings = settings.swi || {};
-    this._setEl('swiScaling', swiSettings.scaling || 'tanh');
-    this._setEl('swiStrength', swiSettings.strength ?? 4);
-    this._setEl('swiHpSigmaX', swiSettings.hp_sigma?.[0] ?? 4);
-    this._setEl('swiHpSigmaY', swiSettings.hp_sigma?.[1] ?? 4);
-    this._setEl('swiHpSigmaZ', swiSettings.hp_sigma?.[2] ?? 0);
-    this._setEl('swiMipWindow', swiSettings.mip_window ?? 7);
+    this._setEl('sidebarSwiScaling', swiSettings.scaling || SWI_DEFAULTS.scaling);
+    this._setEl('sidebarSwiStrength', swiSettings.strength ?? SWI_DEFAULTS.strength);
+    this._setEl('sidebarSwiHpSigmaX', swiSettings.hp_sigma?.[0] ?? SWI_DEFAULTS.hp_sigma[0]);
+    this._setEl('sidebarSwiHpSigmaY', swiSettings.hp_sigma?.[1] ?? SWI_DEFAULTS.hp_sigma[1]);
+    this._setEl('sidebarSwiHpSigmaZ', swiSettings.hp_sigma?.[2] ?? SWI_DEFAULTS.hp_sigma[2]);
+    this._setEl('sidebarSwiMipWindow', swiSettings.mip_window ?? SWI_DEFAULTS.mip_window);
 
     // TGV settings
     this._setEl('tgvRegularization', settings.tgv.regularization);
@@ -786,7 +806,8 @@ export class PipelineSettingsController {
     this._setEl('b0_weight_type', settings.b0_weight_type ?? 'phase_snr');
 
     // Linear fit settings
-    this._setChecked('linear_fit_estimate_offset', settings.linearFit?.estimate_offset ?? true);
+    this._setEl('linear_fit_reliability_percentile',
+      settings.linearFit?.reliability_threshold_percentile ?? LINEAR_FIT_DEFAULTS.reliability_threshold_percentile);
 
     // Background removal method
     const bgMethod = settings.bf_algorithm;
@@ -826,7 +847,7 @@ export class PipelineSettingsController {
     }
 
     // iSMV settings
-    this._setEl('ismv_radius', settings.ismv.radius ?? defaults.ismv_radius);
+    this._setEl('ismvRadius', settings.ismv.radius ?? defaults.ismv_radius);
     this._setEl('ismvTol', settings.ismv.tol);
     this._setEl('ismvMaxit', settings.ismv.max_iter);
 
@@ -957,8 +978,8 @@ export class PipelineSettingsController {
     this._setChecked('mediMerit', settings.medi.merit);
 
     // iLSQR settings
-    this._setEl('ilsqr_tol', settings.ilsqr?.tol || 0.01);
-    this._setEl('ilsqr_max_iter', settings.ilsqr?.max_iter || 50);
+    this._setEl('ilsqrTol', settings.ilsqr?.tol || 0.01);
+    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || 50);
   }
 
   _setupEventListeners() {
@@ -969,7 +990,7 @@ export class PipelineSettingsController {
     this._on('phase_offset_enabled', 'change', () => this._onCombinedMethodChange());
 
     // Bipolar correction checkbox
-    this._on('bipolar_correctionEnabled', 'change', () => this._onCombinedMethodChange());
+    this._on('bipolar_correction_enabled', 'change', () => this._onCombinedMethodChange());
 
     // Unwrap method dropdown
     this._on('unwrapping_algorithm', 'change', () => this._onCombinedMethodChange());

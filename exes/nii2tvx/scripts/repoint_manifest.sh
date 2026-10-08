@@ -20,4 +20,6 @@ m['revision'] = rev
 m['base_url'] = f'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/{rev}/disconnectome/'
 json.dump(m, open(path, 'w'), indent=2); open(path, 'a').write('\n')
 PY
-echo "pinned models/disconnectome.manifest.json to $rev"
+# The disconnectome command line ships its own copy; packages/nii2tvx/test fails if they differ.
+cp "$root/models/disconnectome.manifest.json" "$root/packages/nii2tvx/disconnectome.manifest.json"
+echo "pinned models/disconnectome.manifest.json and its packages/nii2tvx copy to $rev"

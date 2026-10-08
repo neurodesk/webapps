@@ -19,6 +19,10 @@ concurrency:
   group: neurodesk-webapps-release
   cancel-in-progress: false
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   app-plan:
     runs-on: ubuntu-latest
@@ -98,7 +102,7 @@ jobs:
         if: matrix.browser_test
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Test app in a browser
         if: matrix.browser_test
         run: pnpm --filter ${{ matrix.app }} test:e2e
@@ -127,6 +131,9 @@ jobs:
     needs: [app-plan, verify]
     if: needs.app-plan.outputs.has_release_apps == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.app-plan.outputs.release_apps) }}
@@ -138,6 +145,13 @@ jobs:
         with:
           name: release-${{ matrix.app }}
           path: release-bundle
+      # dispatch-native-release.mjs reads the app registry, which imports the yaml package.
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Create app release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -155,3 +169,10 @@ jobs:
               --generate-notes \
               "$ARCHIVE"
           fi
+      - name: Start the signed native build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP: ${{ matrix.app }}
+        run: |
+          VERSION="$(node -p "require('./apps/${APP}/package.json').version")"
+          node scripts/dispatch-native-release.mjs "$APP" "${APP}-v${VERSION}"

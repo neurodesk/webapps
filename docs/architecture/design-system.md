@@ -60,12 +60,16 @@ impact:
 | Equal columns | `<div class="nd-row">…</div>` | |
 | Scan picker | `<label class="nd-file"><input type="file" data-neurodesk-input="image" multiple><svg…/><span>Drop NIfTI or DICOM files or folder</span></label>` + `<p class="nd-file-info">` | `createFileField()`, `bindFileDrop()` |
 | Buttons | `.nd-btn.nd-btn-primary` (one per workspace), `.nd-btn.nd-btn-secondary`, `.nd-btn-sm`, `.nd-btn-icon`, `.nd-btn-danger` | |
-| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-download-btn">Download</button></div>` | `createResultList` |
+| Result rows | `<div class="nd-volume-toggle"><button class="nd-view-btn active">View</button><span class="nd-stage-label">Name</span><button class="nd-edit-btn">Edit</button><button class="nd-download-btn">Download</button></div>` | `createResultList` (Edit only for `editable: true` results) |
 | Message | `<p class="nd-message error|warning|success|info">` | |
 | Help icon | `<span class="nd-info-icon" tabindex="0" aria-label="…">i<span class="nd-info-tooltip">…</span></span>` | `bindInfoTooltips()`, `renderInfoIcon()` |
 | Viewer toolbar | `.nd-viewer-toolbar > .nd-view-tabs > .nd-view-tab` (layout) + `.nd-viewer-actions` (opacity, colormap, window) | `createViewerToolbar({ views, window, overlay, colormap, download, screenshot, actions })` |
+| Mask editing | `.nd-mask-editor` (second toolbar row under the viewer toolbar) `> .nd-viewer-label + .nd-tool-group > .nd-tool-btn[aria-pressed]`, a Label `select`, `.nd-brush-control`, Undo/Apply/Cancel `.nd-btn-sm`; `.nd-edit-btn` in result rows | `createMaskEditor({ nv, onApply, onCancel, labelNames })`, `createResultList({ onEdit })`; see [mask editing](mask-editing.md) |
 | Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, then `.nd-viewer-info` | |
+| Image comparison | `.nd-compare-grid[data-count] > .nd-compare-panel[aria-current] > button.nd-compare-title[aria-pressed] + canvas`, over the viewer wrapper; two columns, the active panel outlined | |
 | Technical log | `.nd-console-container[data-disclosure].collapsed` with header, Copy, Clear | `createConsole()` |
+| Resizable log | `.nd-console-resizer[role=separator]` as the console's first child; the height is `--nd-console-height` on the container | `createConsole({ resizable: true })`, `<nd-console resizable>`, `bindConsoleResize()` for legacy `.console-container` markup |
+| Analysis and technical logs | `.nd-console-tabs[role=tablist] > .nd-console-tab[role=tab]` in the header, `.nd-console-panels > .nd-console-output[role=tabpanel]` | `createConsole({ channels: [{ id, label }, …] })`, `<nd-console channels="analysis:Analysis,technical:Technical">` |
 | Status (the only place for live progress) | `<footer id="status"><span class="nd-status-label">Status</span><span id="statusText" class="nd-status-text">…</span><span class="nd-status-elapsed"></span><progress></progress><button class="nd-btn-cancel" hidden>×</button></footer>` | |
 | Dialog | `dialog.nd-dialog` with `.nd-dialog-header`, `.nd-dialog-close`, `.nd-dialog-body`; `.nd-dialog-highlight`, `.nd-citation`, `.nd-command` inside | `createInfoDialog()`, `renderCommand()` |
 
@@ -82,6 +86,10 @@ dark come from the hosted theme's tokens; apps never set `color-scheme`.
   the sidebar: About, Cite, Privacy and Standalone are hidden buttons wired
   through `controlsContract`, and the shared app bar shows them.
 - The viewer is toolbar, canvas, one-line info bar, collapsed technical log.
+  The log opens at 120px. A resizable log grows from its top edge by drag or
+  keyboard up to the point where the canvas still has 160px, and keeps its
+  size while collapsed. The canvas takes the rest; never give the log a fixed
+  larger height in app CSS.
   Before import the canvas shows one sentence in `.nd-viewer-empty`. No hero
   copy, feature chips, logos or eyebrow labels.
 - Every result is a row in the Output section with View and Download. Which

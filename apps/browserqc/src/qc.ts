@@ -1,22 +1,3 @@
-/**
- * MRIQC-style quality-control metrics for the segmentation result.
- *
- * niimath's `--qc` reads the input T1 + a matching integer segmentation and emits
- * anatomical IQMs (CJV, CNR, SNRd, FBER, SNR, WM2MAX, EFC, ICV fractions,
- * per-tissue volume/intensity summaries). It classifies every voxel as CSF / GM /
- * WM: we pass the CSF and WM label values, and every other non-zero label is GM.
- *
- * The label→tissue mapping is FIXED for the "Subcortical + GWM" model
- * (16chan18cls) — the model always emits the same 18 labels, so
- * we hard-code the grouping rather than parse names at runtime:
- *   CSF = ventricles          → 3 Lateral, 4 Inferior-Lateral, 11 3rd, 12 4th
- *   WM  = white matter        → 1 Cerebral-WM, 5 Cerebellum-WM
- *   GM  = everything else non-zero (cortex + deep-GM nuclei + brainstem, etc.)
- */
-
-export const CSF_LABELS = [3, 4, 11, 12]
-export const WM_LABELS = [1, 5]
-
 /** Column-keyed numeric values in niimath's `--qc` JSON report. */
 export type QcMetrics = Record<string, number>
 
@@ -86,7 +67,7 @@ const esc = (s: string): string => s.replace(/"/g, '&quot;')
  */
 export function renderQc(body: HTMLElement, metrics: QcMetrics | null): void {
   if (!metrics) {
-    body.innerHTML = `<p class="qc-empty">No QC values yet — metrics appear automatically once an image loads.</p>`
+    body.innerHTML = `<p class="qc-empty">Metrics appear here after processing finishes.</p>`
     return
   }
 
@@ -115,6 +96,5 @@ export function renderQc(body: HTMLElement, metrics: QcMetrics | null): void {
     <div class="qc-group">${quality}</div>
     <h4 class="qc-subtitle">Tissue composition <span class="qc-subnote">(% intracranial)</span></h4>
     <div class="qc-group">${tissues}</div>
-    <p class="qc-note">A fast MRIQC-style approximation (deep-learning parcellation, raw
-      intensities). Same ballpark and ranking as MRIQC, not the same values.</p>`
+    <p class="qc-note">MRIQC-style estimates, not MRIQC normative values.</p>`
 }

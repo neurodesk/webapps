@@ -1,0 +1,93 @@
+{
+  "id": "bvalue_ranges_present",
+  "name": "B-value Ranges Present",
+  "description": "Validates that at least one b-value falls within each configured range. Required ranges produce errors when missing; recommended ranges produce warnings. E.g. required '0-50, 800-1000' plus recommended '500-600'.",
+  "category": "Diffusion",
+  "fields": [
+    "DiffusionBValue"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "b = sorted(float(x) for x in value[\"DiffusionBValue\"].dropna().unique())\nif not b:\n    raise ValidationError(\"No DiffusionBValue found \u2014 is this a diffusion series?\")\n\ndef parse_ranges(spec):\n    ranges = []\n    for part in [p.strip() for p in str(spec or \"\").split(\",\") if p.strip()]:\n        lo_str, _, hi_str = part.partition(\"-\")\n        ranges.append((float(lo_str), float(hi_str) if hi_str else float(lo_str)))\n    return ranges\n\nfound = [int(round(x)) for x in b]\nmissing = [f\"{lo:g}-{hi:g}\" for lo, hi in parse_ranges(params.get(\"required_ranges\"))\n           if not any(lo <= x <= hi for x in b)]\nif missing:\n    raise ValidationError(f\"Missing required b-value range(s) {', '.join(missing)} s/mm\u00b2. Found: {found}\")\nrecommended = [f\"{lo:g}-{hi:g}\" for lo, hi in parse_ranges(params.get(\"recommended_ranges\"))\n              if not any(lo <= x <= hi for x in b)]\nif recommended:\n    raise ValidationWarning(f\"Missing recommended b-value range(s) {', '.join(recommended)} s/mm\u00b2. Found: {found}\")\n",
+  "testCases": [
+    {
+      "id": "default_pass",
+      "name": "b=0 plus diffusion shell passes default",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          1000
+        ]
+      }
+    },
+    {
+      "id": "no_b0_fail",
+      "name": "Missing b=0 fails default",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [
+          1000
+        ]
+      }
+    },
+    {
+      "id": "custom_required_fail",
+      "name": "Missing low shell fails a low+high requirement",
+      "expectedResult": "fail",
+      "data": {
+        "DiffusionBValue": [
+          0,
+          900
+        ]
+      },
+      "params": {
+        "required_ranges": "50-100, 800-1000"
+      }
+    },
+    {
+      "id": "custom_required_pass",
+      "name": "Low and high shells pass",
+      "expectedResult": "pass",
+      "data": {
+        "DiffusionBValue": [
+          80,
+          900
+        ]
+      },
+      "params": {
+        "required_ranges": "50-100, 800-1000"
+      }
+    },
+    {
+      "id": "recommended_warns",
+      "name": "Missing recommended intermediate shell warns",
+      "expectedResult": "warning",
+      "data": {
+        "DiffusionBValue": [
+          80,
+          900
+        ]
+      },
+      "params": {
+        "required_ranges": "50-100, 800-1000",
+        "recommended_ranges": "500-600"
+      }
+    }
+  ],
+  "parameterDefinitions": [
+    {
+      "name": "required_ranges",
+      "label": "Required ranges",
+      "type": "string",
+      "default": "0-50, 500-50000",
+      "description": "Comma-separated 'lo-hi' b-value ranges (s/mm\u00b2) that must each contain at least one b-value"
+    },
+    {
+      "name": "recommended_ranges",
+      "label": "Recommended ranges",
+      "type": "string",
+      "default": null,
+      "description": "Ranges that produce a warning when no b-value falls within them"
+    }
+  ]
+}

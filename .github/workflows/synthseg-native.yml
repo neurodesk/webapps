@@ -5,6 +5,9 @@ on:
     paths:
       - '.github/workflows/synthseg-native.yml'
       - 'exes/synthseg/**'
+      - 'exes/nifti/**'
+      - 'exes/native-publish/**'
+      - 'test-utils/native-nifti/**'
       - 'packages/synthseg/**'
       - 'exes/synthsr/scripts/ci_macos_release.sh'
   workflow_dispatch:
@@ -76,6 +79,7 @@ jobs:
           test "$(gh release view "$tag" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true
           test "$(git rev-parse "$tag^{commit}")" = "$GITHUB_SHA"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release=synthseg@$version" >> "$GITHUB_OUTPUT"
       - name: Sign and notarize installer
         env:
           APPLEID: ${{ secrets.APPLEID }}
@@ -99,3 +103,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.target.outputs.tag }}
         run: gh release upload "$RELEASE_TAG" exes/synthseg/dist/*.pkg exes/synthseg/dist/*.sha256 exes/synthseg/dist/*.validation.txt --clobber
+      - name: Publish to the Standalone catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ steps.target.outputs.release }}
+          RELEASE_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          if [ "$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = true ]; then
+            echo "::notice::$RELEASE_TAG is a draft or prerelease; publishing it adds its downloads to the Standalone catalog"
+          else
+            gh api "repos/$GITHUB_REPOSITORY/dispatches" -f event_type=standalone-catalog -f "client_payload[releases]=$RELEASE"
+          fi

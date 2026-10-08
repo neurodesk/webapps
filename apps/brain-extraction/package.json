@@ -1,13 +1,13 @@
 {
   "name": "brain-extraction",
-  "version": "0.3.20260930",
+  "version": "0.3.20261007",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build && node ../../scripts/theme-app-dist.mjs --app brain-extraction",
     "preview": "vite preview",
-    "test": "pnpm --filter @neurodesk/brain-extraction test",
+    "test": "pnpm --filter @neurodesk/brain-extraction test && node --test test/*.test.js",
     "test:e2e": "pnpm build && playwright test",
     "lint": "eslint ."
   },

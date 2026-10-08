@@ -56,9 +56,89 @@ error with a negative index panics.
 ## Basis sets
 
 `basis/` holds the library the app offers: `library.json` (sequence, field, TE,
-sampling), `simulate_library.m` (FID-A ideal-pulse simulations in Octave;
-`sim_slaser_ideal.m` adds semi-LASER) and `make_basis.py`, which writes `.BASIS`
+sampling, pulses), `simulate_library.m` (FID-A simulations in Octave),
+`simulate_mega.m` (MEGA-PRESS) and `make_basis.py`, which writes `.BASIS`
 files: FID-A's FID conjugated as `io_writelcm` does, transformed with LCModel's
-forward FFT scaled by 1/sqrt(N). The files are published gzipped in the Hugging
-Face dataset `neurodeskorg/webapps` under `lcmodel/basis/`, pinned in
-`models/lcmodel.manifest.json`.
+forward FFT scaled by 1/sqrt(N). The files are published gzipped (`gzip -9n`)
+in the Hugging Face dataset `neurodeskorg/webapps` under `lcmodel/basis/`,
+pinned in `models/lcmodel.manifest.json`. Rebuilding the existing sets from
+their simulations reproduces the published `.BASIS` files byte for byte.
+
+```bash
+cd exes/lcmodel/basis
+FIDA=<FID-A> OUT=<sim> SET=<id> octave-cli simulate_library.m   # or simulate_mega.m; METABOLITE= limits it further
+python3 make_basis.py <sim> <out> <id> ...                       # all sets when no id is given
+```
+
+Three kinds of simulation:
+
+* **Ideal pulses** (the sets without a `simulation` field): instantaneous
+  pulses, FID-A's `sim_press`, `sim_steam`, `sim_spinecho` and
+  `sim_slaser_ideal.m`.
+* **Shaped pulses** (`"simulation": "shaped"`, ids ending in `-shaped`):
+  `sim_shaped.m`, real refocusing pulses applied across the voxel with
+  FID-A's `sim_shapedRF`, after `run_simPressShaped_fast.m` and
+  `run_simSemiLASERShaped_fast.m`. Excitation stays instantaneous, as in
+  FID-A. Pulses are FID-A's samples, not one scanner's: PRESS uses
+  `sampleRefocPulse.pta` (Mao 4-lobe refocusing pulse) for 3.5 ms;
+  semi-LASER uses `sampleAFPpulse_HS2_R15.RF` (HS2 adiabatic full passage,
+  R = 15, so 4.3 kHz at 3.5 ms) with B1max 1.5 kHz at its 5 ms reference
+  duration (2.1 kHz at 3.5 ms), 1.5 times the adiabatic threshold (Mz < -0.99
+  from 1.0 kHz). `w1max-input/input.m` answers the B1 question FID-A's loader
+  asks of adiabatic pulses. Transmitter at 3.0 ppm, so slices of other
+  resonances shift by the chemical-shift displacement. Spatial grid: 32
+  positions per refocusing axis over 1.5 times the slice thickness (2 cm
+  slices, 3 cm field), FID-A's defaults; the result does not depend on the
+  slice thickness, because the gradient scales with it. Against a 96-point
+  grid (Glu) the 32-point spectrum differs by 0.16 % in shape (PRESS TE 144 ms; under 1e-4 % for semi-LASER TE 30 ms)
+  and 4 % in overall amplitude, which every metabolite shares. Zhang et al.'s
+  factorisation (Med Phys 2017;44:4169) averages the density matrix over x
+  before the y pulses: nX + nY pulse simulations instead of nX × nY.
+  FID-A's readout (one matrix product per point, 8192 points) costs more
+  than all the pulses and is linear in the density matrix, so `sim_shaped.m`
+  and `sim_megapress_central.m` sum density matrices (over y positions, over
+  the phase cycle) and read out once. Re-simulating the published TE 68 ms
+  GABA difference spectrum this way agrees with the per-step readout to
+  1.3e-13 of its maximum, in 46 s instead of hours.
+* **MEGA-PRESS** (`mega` in `library.json`): `simulate_mega.m`. Difference
+  sets use FID-A's shaped editing and refocusing pulses at the voxel centre
+  with the 16-step phase cycle (`sim_megapress_central.m`); slice profiles are
+  not simulated. TE 68 ms: taus 5/17/17/17/12 ms, 14 ms editing pulses at
+  1.88/7.5 ppm. TE 80 ms: taus 5/20/20/20/15 ms, 20 ms editing pulses at
+  1.9 ppm (ON) and 7.5 ppm (OFF), or 1.5 ppm for macromolecule-suppressed
+  (symmetric) editing (Edden et al., MRM 2012;68:657). With FID-A's sample
+  editing pulse, the 1.5 ppm edit-OFF pulse still touches GABA's 1.89 ppm
+  protons, which adds a central line to the 3.0 ppm GABA multiplet of the
+  MM-suppressed set; a scanner's own pulse may differ.
+
+Shaped against ideal pulses. There are no in-vivo PRESS or semi-LASER
+examples at these echo times, so each shaped set was summed at typical brain
+concentrations into a synthetic spectrum (4 Hz lines at 3 T, 8 Hz at 7 T,
+2048 points, light noise) and fitted by LCModel with the shaped set and with
+the ideal set of the same parameters. Ratios to Cr+PCr from the ideal fit,
+relative to the shaped fit:
+
+| set | NAA+NAAG | GPC+PCh | Ins | Glu | Gln | GABA | GSH | Lac |
+|---|---|---|---|---|---|---|---|---|
+| PRESS 3 T TE 30 | -0.1 % | +1.7 % | +2.6 % | +2.9 % | -11 % | -11 % | +17 % | -16 % |
+| PRESS 3 T TE 35 | -1.9 % | +3.4 % | +2.7 % | -0.8 % | -10 % | +0.7 % | +6.1 % | -23 % |
+| PRESS 3 T TE 80 | -4.7 % | +7.6 % | -14 % | -4.5 % | +31 % | +8.1 % | -55 % | -29 % |
+| PRESS 3 T TE 144 | -9.0 % | +4.0 % | -20 % | -25 % | -57 % | -53 % | +19 % | -37 % |
+| semi-LASER 3 T TE 30 | -0.7 % | +1.1 % | +1.4 % | +2.3 % | -8.3 % | -25 % | +9.0 % | -6.3 % |
+| semi-LASER 3 T TE 35 | +0.4 % | +2.9 % | +3.0 % | +4.9 % | -3.9 % | -29 % | +7.3 % | -15 % |
+| semi-LASER 7 T TE 28 | +0.4 % | 0.0 % | +1.2 % | +5.2 % | +22 % | +5.5 % | +12 % | +25 % |
+
+At short echo times the main metabolites agree within 5 %. At long-TE PRESS
+the ideal set is wrong by tens of percent: the Mao pulses' slice profiles and
+the chemical-shift displacement of the coupled partners leave less coupled
+signal than ideal pulses predict (relative to the Cr singlet, the shaped set's
+lactate is 0.55 at TE 144 ms and 0.67 at TE 80 ms; Glu and GABA about 0.8),
+the known anomalous J-modulation of PRESS. Semi-LASER's adiabatic pulses keep
+amplitudes within 3.5 % of the ideal ones, but the multiplet shapes of GABA, Gln
+and Asp differ by 4 to 15 % (norm of the difference). The shaped set is closer to a real scan; the
+pulses are FID-A's examples, so it is closer, not exact.
+
+A MEGA-PRESS difference basis has no macromolecule spectra. The app adds
+them as LCModel simulated components (CHSIMU, `apps/lcmodel/src/lcmodel-io.js`):
+MM09 at 0.915 ppm and MM3co at 3.0 ppm, tied by CHRATO, after Zöllner et al.
+(NMR Biomed 2022;35:e4618). MM-suppressed sets get no MM3co.

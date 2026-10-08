@@ -1,21 +1,25 @@
 {
   "name": "@neurodesk/topofit",
-  "version": "0.12.20260930",
-  "description": "BrainNet TopoFit cortical surface reconstruction for browsers",
+  "version": "0.13.20261007",
+  "description": "BrainNet TopoFit cortical surface reconstruction for browsers and the command line",
   "type": "module",
   "license": "GPL-3.0-only",
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "topofit": "./bin/topofit.js"
+  },
   "exports": {
     ".": "./src/index.js",
-    "./browser": "./src/browser.js",
+    "./node": "./src/node.js",
     "./results": "./src/results.js",
     "./normal-arrows": "./src/normal-arrows.js",
     "./manifest": "./model.manifest.json",
     "./cortex-atlas-manifest": "./cortex-atlas.manifest.json"
   },
   "files": [
+    "bin",
     "src",
     "model.manifest.json",
     "cortex-atlas.manifest.json",
@@ -25,12 +29,12 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/*.js"
+    "test:validation": "python3 -m unittest discover -s test -p '*_test.py'",
+    "lint": "node --check src/*.js && node --check bin/topofit.js"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*",
     "nifti-reader-js": "0.8.0",
-    "onnxruntime-web": "1.29.0"
+    "onnxruntime-node": "1.29.0"
   },
   "repository": {
     "type": "git",

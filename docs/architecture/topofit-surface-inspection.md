@@ -50,8 +50,15 @@ TopoFit mounts the published `freebrowse@2.5.0-next.1` from the
 at commit `1e6c35ca5d529f999d9537f2b220573f038c84e6`. Its NiiVue peer is pinned
 to `1.0.0-rc.13`; other apps retain their existing versions.
 
-`mountViewer(element, options)` in `apps/topofit/src/freebrowse-viewer.js` returns
-`{ nv, ready, destroy }`. FreeBrowse owns the React UI and canvas attachment;
+`mountViewer(element, options, embed)` in
+`packages/runtime-support/src/freebrowse-viewer/index.js`
+(`@neurodesk/runtime-support/freebrowse-viewer`) returns
+`{ nv, ready, setDrawingLocked, destroy }`. `setDrawingLocked(true)` makes
+FreeBrowse's Drawing tab and Edit as drawing buttons inert (still visible,
+dimmed) while a host edits the drawing layer with its own tools; Spinal Cord
+Toolbox does so while the shared `nd-mask-editor` is open. The helper is shared: Spinal Cord Toolbox mounts the
+same viewer, and bundler-less apps receive it as a prebuilt ES module (see
+"Sharing the viewer" below). FreeBrowse owns the React UI and canvas attachment;
 TopoFit owns the source image, reconstruction outputs and selected patch.
 Callers await `ready` before loading files into the same NiiVue instance. A small
 NiiVue subclass observes the actual attachment promise because FreeBrowse's
@@ -88,6 +95,29 @@ contract covered by browser tests. No FreeBrowse bundle or internal store is
 patched or imported. Backend access, URL loading and canvas drop imports are
 disabled; TopoFit's input flow remains responsible for reconstruction inputs.
 The renderer retains WebGL2 for the verified two-sided patch intersections.
+
+### Sharing the viewer
+
+FreeBrowse is React and ESM, and NiiVue 1.0 ships bare-specifier ESM, so an app
+without a bundler cannot import either. `packages/runtime-support/scripts/build-freebrowse-viewer.mjs`
+builds `src/freebrowse-viewer/static.js` into one self-contained ES module
+(FreeBrowse, NiiVue, both stylesheets). An app that sets
+`neurodeskWebapp.static.freebrowseViewer` in its `package.json` gets that module
+in `web/freebrowse-viewer/` from `pnpm runtime-support`, beside dcm2niix and
+nifti-js. The bundle is generated, ignored by version control, cached on a hash
+of its inputs, and served from the app's origin; the static build copies it into
+`dist/`, so the deployed site and the offline desktop package need no CDN. It
+also exports `NiiVue`, `SLICE_TYPE`, `SHOW_RENDER` and `DRAG_MODE`, so a static
+app's extra canvases use the NiiVue build FreeBrowse is pinned to.
+
+NiiVue 1.0.0-rc.13 tracks one pointer, so a phone could neither zoom nor pan.
+`touch-gestures.js` maps a two-finger gesture onto NiiVue's own zoom and pan:
+a pinch sets `pan2Dxyzmm[3]` on a slice or `scaleMultiplier` on the render,
+and a two-finger drag is replayed to NiiVue as a pan drag at the midpoint. It
+uses public properties and DOM pointer events only; remove it when NiiVue
+handles multi-touch. In draw mode the first finger has already started a pen
+stroke when the second lands, so the adapter undoes that stroke (when
+`currentDrawUndoBitmap` moved) and a pinch leaves no dot.
 
 Two design candidates compared the public mount API with the public React
 component. The independent comparison favored mount because React exposes the

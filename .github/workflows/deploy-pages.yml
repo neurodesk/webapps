@@ -16,6 +16,10 @@ concurrency:
   group: neurodesk-webapps-pages
   cancel-in-progress: true
 
+env:
+  # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
+  ONNXRUNTIME_NODE_INSTALL: skip
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -51,7 +55,7 @@ jobs:
       - name: Install runtime startup test browser
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Verify threaded model loading before deployment
         run: |
           node --test test/runtime-assets.test.mjs
@@ -81,7 +85,7 @@ jobs:
       - name: Install browser
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          pnpm exec playwright install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Verify deployed cross-origin isolation
         run: pnpm test:deployed
         env:

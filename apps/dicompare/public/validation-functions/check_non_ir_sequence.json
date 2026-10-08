@@ -1,0 +1,46 @@
+{
+  "id": "check_non_ir_sequence",
+  "name": "Non-IR Sequence Required",
+  "description": "Validates that the sequence does NOT use inversion recovery preparation (e.g. post-contrast T1, where IR preparation can mask contrast enhancement).",
+  "category": "Sequence",
+  "fields": [
+    "ScanningSequence"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "scanning_seq = value[\"ScanningSequence\"].iloc[0]\nif isinstance(scanning_seq, str):\n    sequences = [s.strip() for s in scanning_seq.split('\\\\')]\nelse:\n    sequences = list(scanning_seq) if hasattr(scanning_seq, '__iter__') else [str(scanning_seq)]\n\nif 'IR' in sequences:\n    raise ValidationWarning(\"Post-contrast T1 uses IR (inversion recovery) preparation. Guidelines recommend non-IR sequences (FLASH, VIBE, or spin-echo) as IR can mask contrast enhancement.\")",
+  "testCases": [
+    {
+      "id": "test_gradient_echo",
+      "name": "Gradient echo - passes",
+      "data": {
+        "ScanningSequence": [
+          "GR"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Gradient echo without IR is acceptable"
+    },
+    {
+      "id": "test_spin_echo",
+      "name": "Spin echo - passes",
+      "data": {
+        "ScanningSequence": [
+          "SE"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "Spin echo without IR is acceptable"
+    },
+    {
+      "id": "test_ir_prep",
+      "name": "IR prepared - warning",
+      "data": {
+        "ScanningSequence": [
+          "GR\\IR"
+        ]
+      },
+      "expectedResult": "warning",
+      "description": "IR preparation may mask enhancement"
+    }
+  ]
+}

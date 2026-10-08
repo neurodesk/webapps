@@ -1,0 +1,56 @@
+{
+  "id": "dwi_compat_dti",
+  "name": "DWI data compatibility: DTI",
+  "description": "Evaluates compatibility of DWI data with diffusion tensor imaging based on b-values and gradient directions.",
+  "category": "Diffusion",
+  "fields": [
+    "NumberOfDiffusionShells",
+    "DiffusionBValues",
+    "DirectionsPerShell",
+    "NumberOfB0Volumes"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "import ast\n\nerrors = []\nfor i in range(len(value[\"DiffusionBValues\"])):\n    prefix = \"Entry \" + str(i) + \": \"\n\n    # --- Parse b-values safely ---\n    try:\n        bvals = as_list(value[\"DiffusionBValues\"][i])\n    except Exception:\n        bvals = []\n        errors.append(prefix + \"DiffusionBValues could not be parsed\")\n\n    # --- Parse directions safely ---\n    try:\n        dirs_per_shell = as_list(value[\"DirectionsPerShell\"][i])\n    except Exception:\n        dirs_per_shell = []\n\n    # --- Rule 1 ---\n    try:\n        if float(value[\"NumberOfDiffusionShells\"][i]) < 1:\n            errors.append(prefix + \"At least two distinct b-values (including b=0) must be acquired\")\n    except Exception:\n        errors.append(prefix + \"NumberOfDiffusionShells could not be read\")\n\n    # --- Rule 2 ---\n    if len(bvals) < 2 or len([b for b in bvals if 500 <= b <= 1500]) < 1:\n        errors.append(prefix + \"Data with a b-value between 500 and 1500 must be acquired\")\n\n    # --- Rule 3 ---\n    try:\n        if float(value[\"NumberOfB0Volumes\"][i]) < 5:\n            errors.append(prefix + \"[warning] While one non-diffusion-weighted image is sufficient for DTI analysis, it is recommended to acquire minimally 5\")\n    except Exception:\n        errors.append(prefix + \"NumberOfB0Volumes could not be read\")\n\n    # --- Rule 4 ---\n    for j, b in enumerate(bvals):\n        if 500 <= b <= 1500 and j < len(dirs_per_shell):\n            n_dirs = dirs_per_shell[j]\n            if n_dirs < 6:\n                errors.append(prefix + \"Fewer than 6 diffusion directions for b-value [500-1500]; at least 6 are required\")\n            elif n_dirs < 30:\n                errors.append(prefix + \"[warning] Recommended to acquire minimally 30 gradient directions for b-value [500-1500]\")\n\nwarns = [m for m in errors if \"[warning]\" in m]\nfails = [m for m in errors if \"[warning]\" not in m]\nif fails:\n    raise ValidationError(chr(10).join(\"\u2022 \" + m for m in fails + warns))\nif warns:\n    raise ValidationWarning(chr(10).join(\"\u2022 \" + m for m in warns))",
+  "testCases": [
+    {
+      "id": "test_dti_recommended",
+      "name": "Recommended DTI protocol",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "1"
+        ],
+        "DiffusionBValues": [
+          "[0, 1000]"
+        ],
+        "DirectionsPerShell": [
+          "[5, 30]"
+        ],
+        "NumberOfB0Volumes": [
+          "5"
+        ]
+      },
+      "expectedResult": "pass",
+      "description": "The schema's own recommended protocol must pass its rule."
+    },
+    {
+      "id": "test_dti_wrong_bvalue",
+      "name": "No shell in 500-1500",
+      "data": {
+        "NumberOfDiffusionShells": [
+          "5"
+        ],
+        "DiffusionBValues": [
+          "[0,1600]"
+        ],
+        "DirectionsPerShell": [
+          "[4,30]"
+        ],
+        "NumberOfB0Volumes": [
+          "4"
+        ]
+      },
+      "expectedResult": "fail",
+      "description": "No b-value in the required 500-1500 range."
+    }
+  ]
+}

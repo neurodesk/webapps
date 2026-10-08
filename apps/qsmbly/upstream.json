@@ -10,5 +10,20 @@
     "Fetch model weights through the shared downloader with upstream hashes and a pinned Hugging Face revision.",
     "Build both WASM bundles with the repository's pinned nightly toolchain and shared cross-origin isolation support.",
     "Keep monorepo date-based release versions and deployment workflows."
+  ],
+  "branch": "main",
+  "rewrite": {
+    "PipelineExecutor": "QsmPipelineController"
+  },
+  "ignore": [
+    ".github/**",
+    ".gitignore",
+    "package-lock.json",
+    "assets/qsmbly-app.png",
+    "coi-serviceworker.js",
+    "css/landing.css",
+    "css/modern-styles.css",
+    "scripts/capture-landing-shot.mjs",
+    "serve.py"
   ]
 }

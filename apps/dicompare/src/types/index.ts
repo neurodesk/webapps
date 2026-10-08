@@ -1,4 +1,11 @@
+import type { GradedConstraint } from '../components/common/constraintModel';
+
 // DICOM Field Types
+// Compliance severity when a field constraint is not met. 'error' (default)
+// marks it a requirement; 'warning' records it as reference information —
+// the value describes what the reference used, but differing is still compliant.
+export type FieldSeverity = 'error' | 'warning';
+
 export interface DicomField {
   tag: string | null;  // null for custom/derived fields without DICOM tags
   name: string;
@@ -7,6 +14,20 @@ export interface DicomField {
   vr: string; // Value Representation
   level: 'acquisition' | 'series';
   validationRule?: ValidationRule;
+  severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  // Scalar numeric fields carry a graded constraint (the number-line editor's
+  // model); it is the source of truth for those and supersedes validationRule/
+  // severity. Non-numeric fields leave it undefined and use validationRule.
+  graded?: GradedConstraint;
+  // Free-text rationale for this constraint — why this value, or what the
+  // consequence of deviating is. Documentation only; never affects validation.
+  notes?: string;
+  // Custom compliance messages shown when this field warns / fails, overriding
+  // the auto-generated text. '%V' is replaced with the actual value(s) found.
+  // Only the applicable one(s) are offered: a required (error) constraint takes
+  // an errorMessage, an advisory/graded warn outcome takes a warningMessage.
+  warningMessage?: string;
+  errorMessage?: string;
   seriesName?: string; // For series-level fields, which series they belong to
   fieldType?: 'standard' | 'derived' | 'private' | 'custom'; // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
@@ -31,6 +52,14 @@ export interface SeriesField {
   keyword?: string;  // DICOM keyword (e.g. "EchoTime" vs full name "Echo Time")
   value: any;
   validationRule?: ValidationRule;
+  severity?: FieldSeverity; // omitted = 'error' (a requirement)
+  graded?: GradedConstraint; // scalar numeric series fields (see DicomField.graded)
+  // Custom warn/fail compliance messages (see DicomField). '%V' → value(s) found.
+  warningMessage?: string;
+  errorMessage?: string;
+  // Deliberately no `notes` here. Rationale on a series is recorded once
+  // against the series (see Series.notes) — the series is the unit a reader
+  // reasons about, and per-field notes across a wide table were unreadable.
   fieldType?: 'standard' | 'derived' | 'private' | 'custom';  // standard=known DICOM tag, derived=calculated/metadata, private=unknown DICOM tag format, custom=user-defined name
   // dataType inferred from value type - no longer stored
 }
@@ -39,16 +68,39 @@ export interface Series {
   name: string;
   fields: SeriesField[];
   images?: SchemaImage[];
+  // Rationale for this series as a whole, shown under the series name.
+  notes?: string;
 }
 
 // Validation Functions Types (imported from validation components)
+export type ValidationParameterType = 'number' | 'string' | 'boolean' | 'enum';
+
+// Typed declaration of a rule parameter (library format). The implementation
+// reads the configured value via params["name"] / ctx.params["name"].
+export interface ValidationParameterDefinition {
+  name: string;
+  label?: string;
+  type: ValidationParameterType;
+  description?: string;
+  default?: any;
+  min?: number;
+  max?: number;
+  options?: any[];
+  unit?: string;
+}
+
 export interface ValidationFunction {
   id: string;
   name: string;
   description: string;
   category: string;
   fields: string[];
-  parameters?: Record<string, any>;
+  // Fields made available to the rule when present but whose absence is not an
+  // error (e.g. vendor-specific tags in a rule that branches on Manufacturer)
+  optional_fields?: string[];
+  // Typed parameter declarations; configured VALUES live in configuredParams
+  // (UI) / the schema rule's `parameters` dict (serialized)
+  parameterDefinitions?: ValidationParameterDefinition[];
   implementation: string;
   testCases?: any[];
   requiredSystemFields?: string[];
@@ -108,6 +160,7 @@ export interface ValidationRule {
   max?: number;
   pattern?: string;
   tolerance?: number;
+  errorTolerance?: number; // graded tolerance for list_number fields (warn band)
   contains?: string;
   substring?: string; // Alias for contains
   contains_any?: any[]; // Array of values for contains_any constraint (substrings for strings, elements for lists)

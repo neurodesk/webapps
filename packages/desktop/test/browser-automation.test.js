@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import vm from 'node:vm';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { runBrowserOperation } from '../src/browser-automation.js';
+import { completeBrowserArtifacts } from '../src/artifact-completion.js';
 import { generateJob, operationFor, parseContract, validateRequest } from '../src/contracts.js';
 import { readJob } from '../src/jobs.js';
 import { describeFile } from '../src/reports.js';
@@ -26,9 +28,10 @@ async function fixture(t, { tamperInput = false, tamperOutput = false, failure }
   const root = await mkdtemp(join(tmpdir(), 'desktop-browser-operation-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const inputs = {};
+  const image = gunzipSync(await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url)));
   for (const role of ['moving', 'fixed']) {
     const file = join(root, `${role}.nii`);
-    await writeFile(file, role);
+    await writeFile(file, image);
     inputs[role] = [file];
   }
   const request = await validateRequest(contract, { inputs });
@@ -42,6 +45,7 @@ async function fixture(t, { tamperInput = false, tamperOutput = false, failure }
     filename: 'registered.nii', bytes: data.length, sha256: createHash('sha256').update(data).digest('hex') };
   const contents = {
     session,
+    isDestroyed: () => false,
     debugger: {
       attach() { attached = true; }, isAttached: () => attached, detach() { attached = false; },
       async sendCommand(command, args) {
@@ -78,7 +82,14 @@ async function fixture(t, { tamperInput = false, tamperOutput = false, failure }
       item.emit('done', {}, 'completed');
     }
   }
-  const run = () => runBrowserOperation(contents, { contract, operation: operationFor(contract), request, outputDirectory: join(root, 'outputs') });
+  const run = async ({ signal, assertHostHealthy = () => {}, accept = async () => {} } = {}) => {
+    const { report } = await completeBrowserArtifacts(contents, { outputDirectory: join(root, 'outputs'), signal, assertHostHealthy }, async artifacts => {
+      const report = await runBrowserOperation(contents, { contract, operation: operationFor(contract), request, artifacts, signal });
+      await accept(report);
+      return { report };
+    });
+    return report;
+  };
   return { root, request, run, contents, adopted };
 }
 
@@ -110,4 +121,19 @@ test('ambiguous DICOM series returns actionable candidates immediately', async t
   const { run, contents } = await fixture(t, { failure: { code: 'SERIES_SELECTION_REQUIRED', message: 'Choose a series', candidates } });
   await assert.rejects(run(), error => error.code === 'SERIES_SELECTION_REQUIRED' && assert.deepEqual(error.candidates, candidates) === undefined);
   assert.equal(contents.session.listenerCount('will-download'), 0);
+});
+
+test('host rejection after an operation verifies preserves downloads without publishing completion', async t => {
+  const { root, run } = await fixture(t);
+  let blocked = false;
+  await assert.rejects(run({
+    accept: async report => {
+      assert.equal(report.runId, 'run-one');
+      await assert.rejects(readFile(join(root, 'outputs/job-result.json')), { code: 'ENOENT' });
+      blocked = true;
+    },
+    assertHostHealthy() { if (blocked) throw new Error('Offline asset missing'); },
+  }), /Offline asset missing/);
+  assert.equal(await readFile(join(root, 'outputs/registered.nii'), 'utf8'), 'registered-image');
+  await assert.rejects(readFile(join(root, 'outputs/job-result.json')), { code: 'ENOENT' });
 });

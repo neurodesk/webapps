@@ -1,0 +1,419 @@
+{
+  "image": "vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83",
+  "sctVersion": "7.3",
+  "pyodideVersion": "0.26.4",
+  "loadPackages": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "scikit-image",
+    "scikit-learn",
+    "tqdm"
+  ],
+  "assets": [
+    {
+      "file": "pyodide.mjs",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs",
+      "sha256": "7f24c6655a79eacf0061d3d4e6a60dc0b1938812d15c52d7ff8b37d9e0689e51",
+      "bytes": 13779
+    },
+    {
+      "file": "pyodide.asm.js",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.asm.js",
+      "sha256": "919560652ed3dad3707cb3a394785da1e046fb13dc0defa162058ff230cb7eed",
+      "bytes": 1229099
+    },
+    {
+      "file": "pyodide.asm.wasm",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.asm.wasm",
+      "sha256": "b7e66a19427a55010ac3367c1b6c64b893f9826f783412945fdf0c3337f3bc94",
+      "bytes": 10088051
+    },
+    {
+      "file": "python_stdlib.zip",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/python_stdlib.zip",
+      "sha256": "72894522b791858b9d613ac786b951d8b5094035dcf376313ea24a466810f336",
+      "bytes": 2341872
+    },
+    {
+      "file": "pyodide-lock.json",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide-lock.json",
+      "sha256": "cd50b49de944c579045e122fe8628b31f9ce446379f032f36c05e273d38766e0",
+      "bytes": 106335
+    },
+    {
+      "file": "numpy-1.26.4-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/numpy-1.26.4-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "4a2f5303a88a0747c5e6c80701e0ff4ff5667e487c0c9f9c73875e4d88f4cf9a",
+      "bytes": 11959269
+    },
+    {
+      "file": "scipy-1.12.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/scipy-1.12.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "1a081410432367ee43f52a280961df4ba7e9bb65d8b9862b3cd2e3727e84d873",
+      "bytes": 47107789
+    },
+    {
+      "file": "openblas-0.3.26.zip",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/openblas-0.3.26.zip",
+      "sha256": "3c0afcaaabec774f5fa739b908ae08672eacf3c8fe265328da2d632a04ba3cd3",
+      "bytes": 6117592
+    },
+    {
+      "file": "pandas-2.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pandas-2.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "ae979af0f0be1e8c482408d838ea1366d187f3f057f47b429910e66dbba60673",
+      "bytes": 23759073
+    },
+    {
+      "file": "python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/python_dateutil-2.9.0.post0-py2.py3-none-any.whl",
+      "sha256": "302d74af893af51ee8b52e2c06a1fc2bc73cfe645eed3f35a17f082cdf101c7d",
+      "bytes": 444927
+    },
+    {
+      "file": "six-1.16.0-py2.py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/six-1.16.0-py2.py3-none-any.whl",
+      "sha256": "f359c3850331f250d1a5e394aae58193774c6358676340aba992718589b9dcf1",
+      "bytes": 38737
+    },
+    {
+      "file": "pytz-2024.1-py2.py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pytz-2024.1-py2.py3-none-any.whl",
+      "sha256": "561652a008b98ef7b66a6acf816e3f4d1c0e17e8ed9eb8dbb993037413cda597",
+      "bytes": 1083571
+    },
+    {
+      "file": "scikit_image-0.23.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/scikit_image-0.23.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "4e2d05e9dbe7c8c75086196cb6b88de1f7330b4ac723a6748a39a6f695b794aa",
+      "bytes": 21719542
+    },
+    {
+      "file": "packaging-23.2-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/packaging-23.2-py3-none-any.whl",
+      "sha256": "3c30fe6689a35520f2040f4963eae8dbdf6aaa8e326674a13bca3f11514c674a",
+      "bytes": 194236
+    },
+    {
+      "file": "networkx-3.3-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/networkx-3.3-py3-none-any.whl",
+      "sha256": "400d2b991047cd91d35b7a9cf83ea850fcaa8b4074ee260a570a5f5277a4cca5",
+      "bytes": 3815439
+    },
+    {
+      "file": "decorator-5.1.1-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/decorator-5.1.1-py3-none-any.whl",
+      "sha256": "b6acb853119a0f8d8e596041c121742b2e580af03c682d83d10941bd4eacf7e3",
+      "bytes": 23716
+    },
+    {
+      "file": "setuptools-69.5.1-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/setuptools-69.5.1-py3-none-any.whl",
+      "sha256": "f847dc7eb5de53fa8299e22ab4ff49835f2c0f5317f3c5c0b6ec227ce9893a70",
+      "bytes": 3059220
+    },
+    {
+      "file": "pyparsing-3.1.2-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyparsing-3.1.2-py3-none-any.whl",
+      "sha256": "346cc485c0fb067121825224c5bfe258991f4f2509e1c56adbe7237ea58bb16b",
+      "bytes": 394748
+    },
+    {
+      "file": "matplotlib-3.5.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/matplotlib-3.5.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "7321e0aa4dcd53cc7826fb558bed79ec6624a6430b00fa048b21fbe21fa0cc2e",
+      "bytes": 15742868
+    },
+    {
+      "file": "cycler-0.12.1-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/cycler-0.12.1-py3-none-any.whl",
+      "sha256": "decbe5b1367b9890a30d8b1f0d5d5a062af628d3b3ccc59112cf3c53f7c6b84b",
+      "bytes": 23552
+    },
+    {
+      "file": "fonttools-4.51.0-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/fonttools-4.51.0-py3-none-any.whl",
+      "sha256": "02bfb3707f47724672e28951be5a47e8669edc556bc79873cb1b96c8f83fc15b",
+      "bytes": 4266602
+    },
+    {
+      "file": "kiwisolver-1.4.5-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/kiwisolver-1.4.5-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "7cb47be55135cfb57f65be10d173b09c162097e3242ff120306d7b55f887d634",
+      "bytes": 133464
+    },
+    {
+      "file": "pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pillow-10.2.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "9f3ae58c481ade2a88f794a5aa130b9514d315ef549f254e474f9593a73428cf",
+      "bytes": 3042026
+    },
+    {
+      "file": "matplotlib_pyodide-0.2.2-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/matplotlib_pyodide-0.2.2-py3-none-any.whl",
+      "sha256": "41e8016ed2f586b99b8e4e506b511fd324a466e7c1d01ebd6c47fdbf158ccc16",
+      "bytes": 77772
+    },
+    {
+      "file": "imageio-2.34.1-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/imageio-2.34.1-py3-none-any.whl",
+      "sha256": "182e3a229df6e42f85457b4a065a93fcbf0045c4324d77e2f02ece03645ee371",
+      "bytes": 1159951
+    },
+    {
+      "file": "pywavelets-1.6.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pywavelets-1.6.0-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "77d588578dea513785c36a5333c7ee553b063d29c5286dac4ee95ee93ba6b2c1",
+      "bytes": 2042575
+    },
+    {
+      "file": "lazy_loader-0.4-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/lazy_loader-0.4-py3-none-any.whl",
+      "sha256": "b3556f997457027f3b5071aaf93c91f590e794df7506001ffb2308ba3fd208ff",
+      "bytes": 21544
+    },
+    {
+      "file": "scikit_learn-1.4.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/scikit_learn-1.4.2-cp312-cp312-pyodide_2024_0_wasm32.whl",
+      "sha256": "5caa3a4c5db74333edf116811547e60a7ee88fd290bffd830a9a8b0cd026f865",
+      "bytes": 22387446
+    },
+    {
+      "file": "joblib-1.4.0-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/joblib-1.4.0-py3-none-any.whl",
+      "sha256": "34ae79a8896884f6f9c7b474ce46e13565f7fd26e20bb09a89b4f54a97d1266b",
+      "bytes": 580318
+    },
+    {
+      "file": "threadpoolctl-3.4.0-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/threadpoolctl-3.4.0-py3-none-any.whl",
+      "sha256": "a277aca80917770919f03f9220458cb80c324f68a345d6a621aa4a68c0e66133",
+      "bytes": 65709
+    },
+    {
+      "file": "tqdm-4.66.2-py3-none-any.whl",
+      "url": "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/tqdm-4.66.2-py3-none-any.whl",
+      "sha256": "1cc5d2e5a5ebfcce4977794ce1da9302c2400c7ac60fceb895b58ecf4d747b38",
+      "bytes": 229445
+    }
+  ],
+  "pureWheels": [
+    {
+      "file": "nibabel-5.4.2-py3-none-any.whl",
+      "sha256": "553482c5f1e1034fc312edf6fb7f32236c0056439845d1c29293b7e8c98d4854",
+      "bytes": 3300985,
+      "url": "https://files.pythonhosted.org/packages/3b/d7/601b6396b33536811668935faa790112266c70661be94555999be431f86f/nibabel-5.4.2-py3-none-any.whl"
+    },
+    {
+      "file": "xlsxwriter-3.2.9-py3-none-any.whl",
+      "sha256": "9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3",
+      "bytes": 175315,
+      "url": "https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/xlsxwriter-3.2.9-py3-none-any.whl"
+    },
+    {
+      "file": "transforms3d-0.4.2-py3-none-any.whl",
+      "sha256": "1c70399d9e9473ecc23311fd947f727f7c69ed0b063244828c383aa1aefa5941",
+      "bytes": 1376759,
+      "url": "https://files.pythonhosted.org/packages/61/7a/f38385f1b2d5f54221baf1db3d6371dc6eef8041d95abff39576c694e9d9/transforms3d-0.4.2-py3-none-any.whl"
+    },
+    {
+      "file": "typing_extensions-4.15.0-py3-none-any.whl",
+      "sha256": "f0fa19c6845758ab08074a0cfa8b7aecb71c999ca73d62883bc25cc018c4e548",
+      "bytes": 44614,
+      "url": "https://files.pythonhosted.org/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl"
+    },
+    {
+      "file": "wquantiles-0.6-py3-none-any.whl",
+      "sha256": "1b90d68fa05251bb96f8806a346e8d7dec9a9bb99f381ad5094707b46ab85218",
+      "bytes": 3291,
+      "url": "https://files.pythonhosted.org/packages/f7/75/3cce30508bf46121b7cabce57b9cacbf8d935fa555cb3c5fca43f8dd0414/wquantiles-0.6-py3-none-any.whl"
+    }
+  ],
+  "sourceFiles": [
+    {
+      "file": "LICENSE",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "file": "contrib/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "contrib/fslhd.py",
+      "sha256": "21292b8b5cd12a9eb5c388a53142458079e07be6c01b3641f16b55bf687c3466"
+    },
+    {
+      "file": "contrib/tensorflow/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "contrib/tensorflow/lazy_loader.py",
+      "sha256": "aee1c288a5a60a0c5df64b9e35f4c755f9c524c8caa4a010893e38dcf3c5b31d"
+    },
+    {
+      "file": "spinalcordtoolbox/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/aggregate_slicewise.py",
+      "sha256": "cb3f5de9021a751396e67f6b22cda50a316bffb69074dbef9885c1a98fd31ab3"
+    },
+    {
+      "file": "spinalcordtoolbox/centerline/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/centerline/core.py",
+      "sha256": "c40e7e50493608e350eea5f7c533f1c1b19f9389d59fd8e4cf9f00d3b85d8ea9"
+    },
+    {
+      "file": "spinalcordtoolbox/centerline/curve_fitting.py",
+      "sha256": "cac77fd4f7fe9909b0beaf00d68bd599ae8a71781ff67dfbbd37502abcd00810"
+    },
+    {
+      "file": "spinalcordtoolbox/cropping.py",
+      "sha256": "96e3d121526200ed744153d3a2c312ae4f86dd18c44ad800ff021f5e17dc486f"
+    },
+    {
+      "file": "spinalcordtoolbox/csa_pmj.py",
+      "sha256": "8e03a81c44914d0877d7a37a66b656b7e21a538c7f49b9e68133282fd3e57254"
+    },
+    {
+      "file": "spinalcordtoolbox/image.py",
+      "sha256": "1df05bf50bd1bb0da9da81358317f089e09186280f7b7948fbf30f2277667bbf"
+    },
+    {
+      "file": "spinalcordtoolbox/labels.py",
+      "sha256": "55b9c7acd292a12e6d231d53526b2bab4cccb940bd88616b832c04da1e771ee3"
+    },
+    {
+      "file": "spinalcordtoolbox/math.py",
+      "sha256": "590b8431b74eec5e545d4566e4738602cc1c2628f07589c372e428ea4c57c061"
+    },
+    {
+      "file": "spinalcordtoolbox/metadata.py",
+      "sha256": "e10ba5ab24f78fa9de4e993bf1b1736e6022b4ea1ee70333d2ac27c4ea4de60a"
+    },
+    {
+      "file": "spinalcordtoolbox/metrics_to_PAM50.py",
+      "sha256": "0bfc518b5ad8ad190d0c5b26d1f37b7e19265a34356893adeb948b8cf936035e"
+    },
+    {
+      "file": "spinalcordtoolbox/process_seg.py",
+      "sha256": "f13068faad31941e3f2de05754eb40130ac1c7afa793a2a2558485d614ed0076"
+    },
+    {
+      "file": "spinalcordtoolbox/process_seg_debug.py",
+      "sha256": "2c662c74d34da255e77834748bc3807066f7ea241007f1f9c63fafba49d0c62b"
+    },
+    {
+      "file": "spinalcordtoolbox/registration/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/registration/algorithms.py",
+      "sha256": "2a89d20b32e68e642e29f82392ede7c1b27f811ec95cc9d4aea93698e8011f02"
+    },
+    {
+      "file": "spinalcordtoolbox/registration/core.py",
+      "sha256": "6ac992ddacc956d2110b6b530faccd4c84263f2da414dc7051a3cafd285ffc3d"
+    },
+    {
+      "file": "spinalcordtoolbox/registration/landmarks.py",
+      "sha256": "5fcc9652835875464a4441f629ef7e1def7e92c6c2a9f62bca5dfdca64fb3610"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/assets/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/assets/py/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/assets/py/refresh_qc_entries.py",
+      "sha256": "e015df2f56df843eb138e3aee4d79bacbf270d9a3f22c420abc2123d902b0dba"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/qc.py",
+      "sha256": "8dff6a41a0d8e3b0a4a1e82a43150b2dd9d7fc013ea8a355365a9d9f41e14e32"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/qc2.py",
+      "sha256": "6398cbf5d39a0c5dea84de315b36b942938494eb3912a09f20064d5c949bf8fb"
+    },
+    {
+      "file": "spinalcordtoolbox/reports/slice.py",
+      "sha256": "29c4a1c998f0d24fde4713855d755fa0386c355a641c6bac9f85928002ec1859"
+    },
+    {
+      "file": "spinalcordtoolbox/resampling.py",
+      "sha256": "d66985ead27c614f6dd5ffa17d55c42d70f7ff152ce06471ec0a34c2e28347e8"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_analyze_lesion.py",
+      "sha256": "9da33e8e6da4da092a16d6f914115d0571eeedf27ea58afa46c30cc65d97f3b9"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_apply_transfo.py",
+      "sha256": "60f8807c92dbe904fde3a46873c4b31d25ea6a40c4ce4d315fdf2bf1c905bf74"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_image.py",
+      "sha256": "ab69d470f40e991277dbd9bea854bce164cb73eddfa470c2428eeabb50716fc8"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_maths.py",
+      "sha256": "06b063da07c1a54e3a1b9afa8f51ccab953def7c6158971199c4feb87d88d633"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_process_segmentation.py",
+      "sha256": "e6ca779e60d3a4ac7e2453c64985a11612e4cc4043ff7c3ccf6c49a0e7695901"
+    },
+    {
+      "file": "spinalcordtoolbox/scripts/sct_resample.py",
+      "sha256": "2e87d983a33ddec4cb12b964b72c20306b868f60fd6367c0b04d5387e5e16f07"
+    },
+    {
+      "file": "spinalcordtoolbox/template.py",
+      "sha256": "0aea413521655f360a60583a230e0d894a76bbcb05c526aa02a0230fc1bb0239"
+    },
+    {
+      "file": "spinalcordtoolbox/types.py",
+      "sha256": "9087583a53840a65e649321b880dd953dbf4000463735eec31216c26f8229e88"
+    },
+    {
+      "file": "spinalcordtoolbox/utils/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "spinalcordtoolbox/utils/fs.py",
+      "sha256": "3f8f8814d4f4e32023f6a5609c56e67f2e962adcf57ed46a781716f0768761fb"
+    },
+    {
+      "file": "spinalcordtoolbox/utils/profiling.py",
+      "sha256": "9e1c89f4403158cb6684083d7b90349fbd4bb935b7de396f9638a1e42df3eed1"
+    },
+    {
+      "file": "spinalcordtoolbox/utils/shell.py",
+      "sha256": "807b03e9919deb47e78bb4ce62796f6c60bac69d2fc046a1425852e426a43f77"
+    },
+    {
+      "file": "spinalcordtoolbox/utils/sys.py",
+      "sha256": "e7dfb5b04445e329130113ac400e52b0f0a3b2a9caf3312d5d5ea51956f6bc97"
+    },
+    {
+      "file": "spinalcordtoolbox/version.txt",
+      "sha256": "304f9e34c09458f86567d79ef7b4c6d17cf3a2c117300bef245219953b50e72e"
+    }
+  ]
+}

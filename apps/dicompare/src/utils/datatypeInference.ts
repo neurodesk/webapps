@@ -1,4 +1,5 @@
 import { FieldDataType, ValidationRule } from '../types';
+import { fromSchemaField } from '../components/common/constraintModel';
 import { getDataTypeFromVR } from './vrMapping';
 import { searchDicomFields, suggestDataType } from '../services/dicomFieldService';
 
@@ -57,6 +58,41 @@ export function inferDataTypeFromValue(value: any): FieldDataType {
   }
 
   return 'string';
+}
+
+/**
+ * Infers the data type for a schema field, considering its constraint keys when
+ * no concrete `value` is present (constraint-only fields such as those using
+ * `contains_any` / `contains_all` / `contains` / `min` / `max`).
+ *
+ * This is why `vr` and `dataType` are optional in schema files: when a `value`
+ * exists the type is inferred from it, and when only constraints exist the type
+ * is inferred from the constraint shape instead.
+ */
+export function inferDataTypeFromField(schemaField: any): FieldDataType {
+  const hasValue = schemaField.value !== null
+    && schemaField.value !== undefined
+    && schemaField.value !== '';
+  if (hasValue) {
+    return inferDataTypeFromValue(schemaField.value);
+  }
+
+  // Constraint-only fields: infer from the constraint keys.
+  const listConstraint = schemaField.contains_all ?? schemaField.contains_any;
+  if (listConstraint !== undefined) {
+    const allNumbers = Array.isArray(listConstraint)
+      && listConstraint.length > 0
+      && listConstraint.every((item: any) => typeof item === 'number' && !isNaN(item));
+    return allNumbers ? 'list_number' : 'list_string';
+  }
+  if (schemaField.contains !== undefined) {
+    return 'string';
+  }
+  if (schemaField.min !== undefined || schemaField.max !== undefined) {
+    return 'number';
+  }
+
+  return inferDataTypeFromValue(schemaField.value);
 }
 
 /**
@@ -153,15 +189,18 @@ export function processSchemaFieldForUI(schemaField: any): any {
     } else if (knownListStringFields.includes(normalizedTag)) {
       dataType = 'list_string';
     } else {
-      // Fallback to value-based inference
-      dataType = inferDataTypeFromValue(schemaField.value);
+      // Fallback to value/constraint-based inference
+      dataType = inferDataTypeFromField(schemaField);
     }
   } else {
-    // Fallback to value-based inference
-    dataType = inferDataTypeFromValue(schemaField.value);
+    // Fallback to value/constraint-based inference
+    dataType = inferDataTypeFromField(schemaField);
   }
 
   const validationRule = buildValidationRuleFromSchema(schemaField);
+  // Scalar numeric fields carry a graded constraint (number-line editor model).
+  // list_number / strings return null from fromSchemaField and keep validationRule.
+  const graded = dataType === 'number' ? fromSchemaField(schemaField) : null;
 
   // Determine fieldType: use explicit fieldType if provided, otherwise infer from tag value
   // Tag values can be: standard DICOM format (XXXX,XXXX), or special values: "derived", "private", "custom"
@@ -186,6 +225,11 @@ export function processSchemaFieldForUI(schemaField: any): any {
     level: schemaField.level || 'acquisition',
     dataType,
     validationRule,
+    ...(graded ? { graded } : {}),
+    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
+    ...(schemaField.notes ? { notes: schemaField.notes as string } : {}),
+    ...(schemaField.warningMessage ? { warningMessage: schemaField.warningMessage as string } : {}),
+    ...(schemaField.errorMessage ? { errorMessage: schemaField.errorMessage as string } : {}),
     fieldType  // Preserve explicit field type or infer from tag
   };
 }
@@ -194,13 +238,19 @@ export function processSchemaFieldForUI(schemaField: any): any {
  * Process series field value for schema data
  */
 export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: string, tag?: string): any {
-  const dataType = inferDataTypeFromValue(schemaField.value);
+  const dataType = inferDataTypeFromField(schemaField);
   const validationRule = buildValidationRuleFromSchema(schemaField);
+
+  const graded = dataType === 'number' ? fromSchemaField(schemaField) : null;
 
   return {
     value: schemaField.value,
     field: fieldName || schemaField.field || schemaField.name,
     dataType,
-    validationRule
+    validationRule,
+    ...(graded ? { graded } : {}),
+    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
+    ...(schemaField.warningMessage ? { warningMessage: schemaField.warningMessage as string } : {}),
+    ...(schemaField.errorMessage ? { errorMessage: schemaField.errorMessage as string } : {})
   };
 }

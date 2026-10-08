@@ -5,8 +5,9 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { COMPUTE_PORT, COMPUTE_TOKEN } from "../playwright.config.js";
+import { gpuBrowser } from "../../../test-utils/hardware-gpu.mjs";
 
-test.use({ launchOptions: { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'] } });
+test.use(gpuBrowser);
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const example = examples[0];
@@ -71,7 +72,7 @@ test("automation opens stacks in the real viewer and replaces previous inputs", 
     await page.locator('#neurodesk-input-transfer').setInputFiles({ name, mimeType: 'application/gzip', buffer: syntheticNifti({ dims: [5, 5, 5] }) });
     await dispatch('adopt', { role: 'stacks' });
     await dispatch('start');
-    await expect.poll(async () => (await dispatch('snapshot')).state).toBe('succeeded');
+    await expect.poll(async () => (await dispatch('snapshot')).state, { timeout: 60000 }).toBe('succeeded');
     const { report } = await dispatch('snapshot');
     expect(report.summary.stacks).toHaveLength(1);
     expect(report.summary.stacks[0].name).toBe(name);
@@ -238,7 +239,8 @@ test('remote run locks patient inputs and a reload can recover the owned job', a
   await page.locator('#previousJobs').evaluate(element => { element.open = true; });
   await expect(page.locator('#previousJob option')).toHaveCount(1);
   await page.locator('#resumeJob').click();
-  await expect(page.locator('#statusText')).toContainText('Simulated result ready');
+  // The simulated job runs its remaining stages in real time; slow runners need more than 5 s.
+  await expect(page.locator('#statusText')).toContainText('Simulated result ready', { timeout: 30000 });
   expect((await download(page, 0)).filename).toMatch(/^job-[a-f0-9]+_nesvor\.nii\.gz$/);
 });
 

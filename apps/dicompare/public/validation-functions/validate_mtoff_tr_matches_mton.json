@@ -1,0 +1,24 @@
+{
+  "id": "validate_mtoff_tr_matches_mton",
+  "name": "MToff TR Must Match MTon",
+  "description": "TR for MToff acquisition MUST match MTon acquisition for valid MTR calculation. This cannot be automatically verified across acquisitions.",
+  "category": "Contrast Preparation",
+  "fields": [
+    "RepetitionTime"
+  ],
+  "requiredSystemFields": [],
+  "implementation": "raise ValidationWarning(\"MToff TR must match MTon TR for valid MTR calculation. Please manually verify that TR values are identical between MTon and MToff acquisitions.\")",
+  "testCases": [
+    {
+      "id": "test_mtoff_tr_reminder",
+      "name": "Always warns to check TR",
+      "data": {
+        "RepetitionTime": [
+          35
+        ]
+      },
+      "expectedResult": "warning",
+      "description": ""
+    }
+  ]
+}

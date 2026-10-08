@@ -76,7 +76,8 @@ self.onmessage = async ({ data: job }) => {
     }
     self.postMessage({ id: job.id, type: "done", result });
   } catch (error) {
-    self.postMessage({ id: job.id, type: "error", message: error?.message ?? String(error) });
+    // A RuntimeError is a WebAssembly trap: the page starts a fresh worker.
+    self.postMessage({ id: job.id, type: "error", message: error?.message ?? String(error), name: error?.name });
   }
 };
 

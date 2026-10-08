@@ -15,7 +15,10 @@
      Messages   .nd-message.(error|warning|success|info), .nd-info-icon
      Viewer     .nd-viewer-toolbar, .nd-view-tabs/.nd-view-tab, .nd-viewer-actions,
                 .nd-viewer-canvas-wrapper, .nd-viewer-empty, .nd-viewer-info
-     Console    .nd-console-container / -header / -title / -actions / -clear / -output
+     Editing    .nd-mask-editor > .nd-tool-group/.nd-tool-btn, .nd-brush-control;
+                .nd-edit-btn in result rows
+     Console    .nd-console-container / -header / -title / -actions / -clear / -output,
+                .nd-console-resizer, .nd-console-tabs / -tab, .nd-console-panels
      Status     .nd-imaging-status > .nd-status-label / .nd-status-text / progress
      Dialogs    dialog.nd-dialog > .nd-dialog-header + .nd-dialog-body, .nd-command
 
@@ -399,7 +402,8 @@ nd-imaging-brand {
    4. Buttons (QSMbly .btn family)
    -------------------------------------------------------------------------- */
 .nd-btn,
-.nd-view-tab {
+.nd-view-tab,
+.nd-tool-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -447,7 +451,7 @@ nd-imaging-brand {
 
 /* Inside a section every button is a full-width block, as in QSMbly. */
 .nd-imaging-controls .nd-section-content .nd-btn,
-.nd-imaging-controls .nd-section-content button:not(.nd-btn):not(.nd-btn-icon):not(.nd-view-btn):not(.nd-download-btn) {
+.nd-imaging-controls .nd-section-content button:not(.nd-btn):not(.nd-btn-icon):not(.nd-view-btn):not(.nd-download-btn):not(.nd-edit-btn) {
   width: 100%;
   min-height: 34px;
   margin: 0;
@@ -512,17 +516,18 @@ nd-imaging-brand {
 /* --------------------------------------------------------------------------
    6. Viewer chrome (QSMbly toolbar: 34px, 0.75rem tabs, mono info bar)
    -------------------------------------------------------------------------- */
-.nd-viewer-toolbar { display: flex; align-items: center; gap: var(--nd-space-md); min-height: 34px; padding: var(--nd-space-xs) var(--nd-space-md); background: var(--nd-color-surface); border-bottom: 1px solid var(--nd-color-border); flex-wrap: wrap; flex-shrink: 0; }
+.nd-viewer-toolbar, .nd-mask-editor { display: flex; align-items: center; gap: var(--nd-space-md); min-height: 34px; padding: var(--nd-space-xs) var(--nd-space-md); background: var(--nd-color-surface); border-bottom: 1px solid var(--nd-color-border); flex-wrap: wrap; flex-shrink: 0; }
 .nd-view-tabs, .nd-viewer-actions { display: flex; align-items: center; gap: var(--nd-space-sm); flex-wrap: wrap; }
 .nd-view-tabs { gap: 2px; }
+.nd-tool-group { display: flex; align-items: center; gap: 2px; }
 .nd-viewer-actions { margin-left: auto; }
-.nd-view-tab { padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text-muted); background: transparent; font: inherit; font-size: 0.75rem; font-weight: 500; }
-.nd-view-tab:hover:not(:disabled) { color: var(--nd-color-text); background: var(--nd-color-surface-elevated); }
-.nd-view-tab.active, .nd-view-tab[aria-selected="true"] { color: var(--nd-color-primary); background: var(--nd-color-primary-glow); }
-.nd-view-tab:disabled { opacity: 0.4; cursor: not-allowed; }
-.nd-viewer-toolbar label, .nd-viewer-label { color: var(--nd-color-text-muted); font-size: 0.7rem; }
-.nd-viewer-toolbar select, .nd-colormap-select { width: auto; min-height: 26px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; }
-.nd-viewer-toolbar .nd-btn-sm { min-height: 26px; }
+.nd-view-tab, .nd-tool-btn { padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text-muted); background: transparent; font: inherit; font-size: 0.75rem; font-weight: 500; }
+.nd-view-tab:hover:not(:disabled), .nd-tool-btn:hover:not(:disabled) { color: var(--nd-color-text); background: var(--nd-color-surface-elevated); }
+.nd-view-tab.active, .nd-view-tab[aria-selected="true"], .nd-tool-btn.active, .nd-tool-btn[aria-pressed="true"] { color: var(--nd-color-primary); background: var(--nd-color-primary-glow); }
+.nd-view-tab:disabled, .nd-tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.nd-viewer-toolbar label, .nd-mask-editor label, .nd-viewer-label { color: var(--nd-color-text-muted); font-size: 0.7rem; }
+.nd-viewer-toolbar select, .nd-mask-editor select, .nd-colormap-select { width: auto; min-height: 26px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; }
+.nd-viewer-toolbar .nd-btn-sm, .nd-mask-editor .nd-btn-sm { min-height: 26px; }
 .nd-window-controls { display: flex; align-items: center; gap: 6px; }
 .nd-window-input { width: 80px; padding: 3px; color: var(--nd-color-text); background: var(--nd-color-surface); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.7rem; text-align: center; }
 .nd-range-slider-container { position: relative; width: 135px; height: 20px; }
@@ -531,9 +536,9 @@ nd-imaging-brand {
 .nd-range-selected { background: var(--nd-color-primary); }
 .nd-range-slider { position: absolute; width: 100%; height: 20px; margin: 0; background: transparent; pointer-events: none; appearance: none; }
 .nd-range-slider::-webkit-slider-thumb { pointer-events: auto; appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--nd-color-primary); border: 2px solid white; }
-.nd-opacity-control { display: flex; align-items: center; gap: var(--nd-space-xs); margin: 0; color: var(--nd-color-text-muted); font-size: 0.75rem; font-weight: 400; }
-.nd-opacity-control input[type="range"] { width: 80px; margin: 0; accent-color: var(--nd-color-primary); }
-.nd-opacity-control output, .nd-opacity-control span:last-child { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
+.nd-opacity-control, .nd-brush-control { display: flex; align-items: center; gap: var(--nd-space-xs); margin: 0; color: var(--nd-color-text-muted); font-size: 0.75rem; font-weight: 400; }
+.nd-opacity-control input[type="range"], .nd-brush-control input[type="range"] { width: 80px; margin: 0; accent-color: var(--nd-color-primary); }
+.nd-opacity-control output, .nd-opacity-control span:last-child, .nd-brush-control span:last-child { min-width: 3ch; text-align: right; font-variant-numeric: tabular-nums; }
 .nd-viewer-checkbox { display: flex; align-items: center; gap: 4px; color: var(--nd-color-text-muted); font-size: 0.7rem; cursor: pointer; white-space: nowrap; }
 .nd-viewer-checkbox input[type="checkbox"] { width: 12px; height: 12px; margin: 0; cursor: pointer; accent-color: var(--nd-color-primary); }
 
@@ -542,6 +547,20 @@ nd-imaging-brand {
 .nd-viewer-panel-grid { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; background: var(--nd-color-border); }
 .nd-viewer-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #000; }
 .nd-viewer-panel-title { position: absolute; top: var(--nd-space-sm); left: var(--nd-space-sm); z-index: 1; padding: 2px var(--nd-space-xs); color: var(--nd-color-text); background: var(--nd-color-surface); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.7rem; font-weight: 600; pointer-events: none; }
+/* Session comparison: one canvas per loaded image, side by side. The title is the
+   button that makes its image the active one; aria-current marks that panel. */
+.nd-compare-grid { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); gap: 1px; overflow: hidden; background: var(--nd-color-border); }
+.nd-compare-grid[hidden] { display: none; }
+.nd-compare-grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.nd-compare-panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #000; }
+.nd-compare-panel::after { content: ""; position: absolute; inset: 0; border: 2px solid transparent; pointer-events: none; }
+.nd-compare-panel[aria-current="true"]::after { border-color: var(--nd-color-primary); }
+.nd-compare-panel canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; }
+.nd-compare-title { position: absolute; top: var(--nd-space-sm); left: var(--nd-space-sm); z-index: 1; max-width: calc(100% - 2 * var(--nd-space-sm)); padding: 2px var(--nd-space-xs); overflow: hidden; color: var(--nd-color-text); background: var(--nd-color-surface); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.7rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.nd-compare-title:hover { border-color: var(--nd-color-border-light); }
+.nd-compare-title[aria-pressed="true"] { color: var(--nd-color-primary); border-color: var(--nd-color-primary); }
+.nd-compare-title:focus-visible { outline: 2px solid var(--nd-color-primary); outline-offset: 1px; }
+@media (pointer: coarse) { .nd-compare-title { min-height: 44px; } }
 .nd-viewer-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: var(--nd-space-lg); color: var(--nd-color-text-dim); font-size: 0.85rem; text-align: center; pointer-events: none; }
 .nd-viewer-empty[hidden] { display: none; }
 .nd-viewer-notice { position: absolute; left: var(--nd-space-md); right: var(--nd-space-md); bottom: var(--nd-space-md); margin: 0; padding: var(--nd-space-sm) var(--nd-space-md); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font-size: 0.75rem; }
@@ -558,6 +577,8 @@ nd-imaging-brand {
 .nd-console-header { display: flex; align-items: center; justify-content: space-between; gap: var(--nd-space-sm); min-height: 28px; padding: var(--nd-space-xs) var(--nd-space-md); border-bottom: 1px solid var(--nd-color-border); flex-shrink: 0; }
 .nd-console-container.collapsed > .nd-console-header { border-bottom: 0; }
 .nd-console-title { margin: 0; padding: 0; color: var(--nd-color-text-muted); background: none; border: 0; font: inherit; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; }
+/* Outranks the generic [data-disclosure-toggle] reset, which base.css applies again when an app also loads inference-workspace.css. */
+.nd-console-header > .nd-console-title { color: var(--nd-color-text-muted); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 .nd-console-actions { display: flex; gap: var(--nd-space-sm); margin-left: auto; }
 .nd-console-clear { padding: 0 var(--nd-space-xs); color: var(--nd-color-text-dim); background: none; border: 0; font: inherit; font-size: 0.7rem; cursor: pointer; transition: color var(--nd-transition-fast); }
 .nd-console-clear:hover { color: var(--nd-color-text-muted); }
@@ -568,6 +589,26 @@ nd-imaging-brand {
 .nd-console-success .nd-console-message { color: var(--nd-color-success); }
 .nd-console-error .nd-console-message { color: var(--nd-color-error); }
 .nd-console-warning .nd-console-message { color: var(--nd-color-warning); }
+
+/* Resizable log (bindConsoleResize / createConsole({ resizable })): the user's height is kept in
+   --nd-console-height, so it survives collapse; the viewer above keeps the rest of the column. */
+:is(.console-container, .nd-console-container)[data-console-resizable] { position: relative; height: var(--nd-console-height, 120px); min-height: 120px; max-height: max(120px, calc(100% - 200px)); }
+:is(.console-container, .nd-console-container)[data-console-resizable].collapsed { height: auto; min-height: 0; }
+.nd-console-resizer { position: absolute; top: -4px; left: 0; right: 0; z-index: 2; height: 8px; cursor: ns-resize; touch-action: none; }
+.nd-console-resizer::after { content: ''; position: absolute; top: 3px; left: 50%; width: 32px; height: 2px; border-radius: 1px; background: var(--nd-color-border-light); transform: translateX(-50%); transition: background var(--nd-transition-fast); }
+.nd-console-resizer:is(:hover, .dragging)::after { background: var(--nd-color-primary); }
+.nd-console-resizer:focus-visible { outline: none; }
+.nd-console-resizer:focus-visible::after { width: 64px; background: var(--nd-color-primary); }
+.collapsed > .nd-console-resizer { display: none; }
+
+/* Several logs in one console (createConsole({ channels })): tabs beside the title, one panel each. */
+.nd-console-tabs { display: flex; align-items: center; gap: 2px; margin-right: auto; }
+.nd-console-header:has(> .nd-console-tabs) > .nd-console-title { flex: 0 0 auto; }
+.nd-console-tab { padding: 0 var(--nd-space-sm); color: var(--nd-color-text-dim); background: none; border: 0; border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.7rem; cursor: pointer; transition: color var(--nd-transition-fast), background var(--nd-transition-fast); }
+.nd-console-tab:hover { color: var(--nd-color-text-muted); }
+.nd-console-tab[aria-selected="true"] { color: var(--nd-color-primary); background: var(--nd-color-primary-glow); }
+.nd-console-tab:focus-visible { outline: 2px solid var(--nd-color-primary); outline-offset: 1px; }
+.nd-console-panels { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* --------------------------------------------------------------------------
    8. Status bar (QSMbly sidebar status: label, value, cancel, 4px bar)
@@ -655,10 +696,19 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 @media (pointer: coarse), (max-width: 780px) {
   :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 44px; }
   :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
-  .nd-viewer-toolbar :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
-  .nd-viewer-toolbar select { font-size: 16px; }
+  :is(.nd-viewer-toolbar, .nd-mask-editor) :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
+  :is(.nd-viewer-toolbar, .nd-mask-editor) select { font-size: 16px; }
   .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }
-  .nd-console-title, .nd-console-clear { min-height: 44px; }
+  .nd-btn-sm,
+  .nd-viewer-checkbox {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .nd-console-title, .nd-console-clear, .nd-console-tab { min-height: 44px; }
+  .nd-console-header :is(.nd-console-title, .nd-console-clear, .nd-console-tab) { min-width: 44px; }
+  /* The 44px grab area extends up over the info bar so it never covers the header buttons. */
+  .nd-console-resizer { top: -36px; height: 44px; }
+  .nd-console-resizer::after { top: 35px; }
   .nd-dialog-body .nd-btn, .nd-command .nd-btn { min-height: 44px; }
   .nd-imaging-status .nd-btn-cancel { width: 44px; height: 44px; }
 }
@@ -680,7 +730,7 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
   .nd-imaging-viewer { grid-column: 1; grid-row: 3; }
   .nd-imaging-status { grid-column: 1; grid-row: 4; flex-wrap: wrap; }
   .nd-imaging-status progress { width: 100%; max-width: none; order: 10; }
-  .nd-viewer-toolbar { gap: var(--nd-space-xs); padding: var(--nd-space-xs) var(--nd-space-sm); }
+  .nd-viewer-toolbar, .nd-mask-editor { gap: var(--nd-space-xs); padding: var(--nd-space-xs) var(--nd-space-sm); }
   /* Three NiiVue panels need more height than a phone's share of 100vh, and the canvases
      swallow touch gestures, so the page scrolls instead of the grid: square panels stacked
      in portrait, side by side in landscape; the status bar stays pinned. The :has() chains
@@ -770,25 +820,29 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 }
 
 /* --------------------------------------------------------------------------
-   12. Result rows (nd-result-list / QSMbly stage list): View/visibility · label · Download
+   12. Result rows (nd-result-list / QSMbly stage list): View/visibility · label · Edit · Download
    -------------------------------------------------------------------------- */
 .nd-volume-toggle { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .nd-volume-toggle .nd-stage-label { flex: 1; min-width: 0; color: var(--nd-color-text); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nd-volume-toggle:has(.nd-result-visibility):has(.nd-view-btn) .nd-stage-label {
+.nd-volume-toggle:has(.nd-result-visibility):has(.nd-view-btn) .nd-stage-label,
+.nd-volume-toggle:has(.nd-edit-btn) .nd-stage-label {
   white-space: normal;
   overflow-wrap: anywhere;
 }
 .nd-result-visibility { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; min-height: 28px; cursor: pointer; flex-shrink: 0; }
 .nd-result-visibility input { width: 16px; height: 16px; margin: 0; cursor: pointer; accent-color: var(--nd-color-primary); }
-.nd-imaging-controls .nd-section-content .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn),
-.nd-volume-toggle :is(.nd-view-btn, .nd-download-btn) { width: auto; min-height: 28px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer; flex-shrink: 0; }
+.nd-imaging-controls .nd-section-content .nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn),
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn),
+.nd-edit-btn { width: auto; min-height: 28px; margin: 0; padding: var(--nd-space-xs) var(--nd-space-sm); color: var(--nd-color-text); background: var(--nd-color-surface-elevated); border: 1px solid var(--nd-color-border); border-radius: var(--nd-radius-sm); font: inherit; font-size: 0.75rem; font-weight: 500; cursor: pointer; flex-shrink: 0; }
 .nd-volume-toggle .nd-view-btn { min-width: 52px; }
 .nd-volume-toggle .nd-view-btn.active { color: white; background: var(--nd-color-primary); border-color: var(--nd-color-primary); }
-.nd-volume-toggle :is(.nd-view-btn, .nd-download-btn):hover:not(:disabled) { border-color: var(--nd-color-border-light); background: var(--nd-color-border); }
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):hover:not(:disabled),
+.nd-edit-btn:hover:not(:disabled) { border-color: var(--nd-color-border-light); background: var(--nd-color-border); }
 .nd-volume-toggle .nd-view-btn.active:hover:not(:disabled) { background: var(--nd-color-primary-hover); border-color: var(--nd-color-primary-hover); }
-.nd-volume-toggle :is(.nd-view-btn, .nd-download-btn):disabled { opacity: 0.45; cursor: not-allowed; }
+.nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn):disabled,
+.nd-edit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .nd-empty-state { margin: 0; color: var(--nd-color-text-dim); font-size: 0.75rem; }
-@media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-download-btn, .nd-result-visibility) { min-height: 44px; } }
+@media (pointer: coarse) { .nd-volume-toggle :is(.nd-view-btn, .nd-edit-btn, .nd-download-btn, .nd-result-visibility), .nd-edit-btn { min-height: 44px; } }
 
 /* Light-DOM component hosts retain the block layout of their former containers. */
 nd-console,

@@ -1,5 +1,68 @@
 # spinalcordtoolbox
 
+## 0.7.20261007
+
+### Minor Changes
+
+- SpinalCordToolbox now uses the FreeBrowse viewer (NiiVue 1.0) that TopoFit uses, through one shared mount helper in `@neurodesk/runtime-support/freebrowse-viewer`. Zoom and pan work in 2D and 3D with the wheel, right-drag and two-finger pinch, and a reset restores the view. FreeBrowse supplies layout, intensity window, opacity, colormap and image download, so SCT's duplicate toolbar controls are gone; the viewer is served from the app, not a CDN.
+
+  The log below the viewer can be enlarged by dragging its top edge or from the keyboard, and keeps an Analysis log (tasks, parameters, result summaries, warnings) apart from the Technical log. The shared `nd-console` gained `resizable` and `channels`.
+
+  Compare shows up to four loaded images side by side with linked layout, zoom, pan and crosshair (matched in scanner millimetres), which can be unlinked for unregistered follow-up scans. Each image keeps its own results, edits and analysis inputs when you switch between them.
+
+  The shared mask editor now edits results on the FreeBrowse viewer; edited files are named `_edited` and the approximate browser lesion metrics are withdrawn when a mask they used is edited. The vertebral-labeling port and its PAM50 templates are removed; TotalSpineSeg provides disc labels. The SCT app is prepared for the MS lesion model (`lesion_ms`), which stays unavailable until the converted model is hosted.
+
+### Patch Changes
+
+- Updated dependencies [22aa4bf]
+  - @neurodesk/webapp-components@0.11.1
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+
+## 0.6.20261007
+
+### Patch Changes
+
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
+## 0.6.20261004
+
+### Minor Changes
+
+- Add SCT cord morphometry and standalone lesion analysis for uploaded, generated or manually edited masks, without an anatomy image. Analysis runs in the browser by default, executing the pinned, unchanged SCT 7.3 Python in a Pyodide worker, or optionally on a paired Neurodesk compute server in the pinned SCT Docker image. Both keep SCT's CSV, XLSX, pickle and labeled NIfTI outputs and show where results were computed, because WebAssembly floating-point results can differ from native SCT. Server jobs can be recovered, cancelled and deleted; browser runs cancel by terminating their worker. Automatic browser lesion metrics stay labelled approximate. Shared compute connections support selected tools and explicit HTTPS reverse-proxy addresses.
+
+### Patch Changes
+
+- a866951: Remove the obsolete vertebral labeling controls. TotalSpineSeg remains available for disc labeling.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+
+## 0.5.20261004
+
+### Patch Changes
+
+- a928230: Correct segmentation and label results by hand before downloading them. Every mask and label-map row in Results (cord, lesion, TotalSpineSeg labels and disc markers) now has an Edit button that opens the shared mask editor under the viewer toolbar, with the input image as the base. Apply replaces the result with the edited uint8 NIfTI under the same file name and labels the row `(edited)`; Download then returns the edit. Cancel, a new run, Clear results, a new input or hiding the edited overlay discard unapplied strokes. Lesion statistics and automation reports keep the values the pipeline computed.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+
+### Patch Changes
+
+- Give the viewer Zoom and Fit controls 44-pixel touch targets through the shared workspace stylesheet.
+- 0e90fbf: Add a Zoom control to the viewer toolbar. With Zoom ticked the mouse wheel zooms 2D views and right-drag pans them; untick it to scroll slices again at the same zoom, and use Fit to restore the full view.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 0.5.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.5.20260930
 
 ### Patch Changes
@@ -7,7 +70,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

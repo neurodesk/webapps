@@ -13,9 +13,25 @@ test('normalizeBaseUrl accepts what a clinician types', () => {
   assert.equal(normalizeBaseUrl('https://compute.clinic.local:9000/'), 'https://compute.clinic.local:9000');
   assert.equal(normalizeBaseUrl('http://localhost:8765/api/v1/'), 'http://localhost:8765');
   assert.equal(normalizeBaseUrl('localhost'), 'http://localhost:8765');
-  assert.equal(normalizeBaseUrl('https://example.org/compute/'), 'https://example.org:8765/compute');
+  assert.equal(normalizeBaseUrl('https://example.org/compute/'), 'https://example.org/compute');
   assert.throws(() => normalizeBaseUrl(''), /Enter the address/);
   assert.throws(() => normalizeBaseUrl('ftp://x'), /http/);
+});
+
+test('explicit reverse proxy URLs keep their standard port through repeated normalization', async () => {
+  for (const address of ['https://example.org/compute/', 'https://example.org:443/compute/api/v1/', 'http://example.org:80/compute/']) {
+    const expected = `${new URL(address).protocol}//example.org/compute`;
+    const normalized = normalizeBaseUrl(address);
+    assert.equal(normalized, expected);
+    const client = createComputeClient({
+      baseUrl: normalized,
+      fetch: async url => {
+        assert.equal(url, `${expected}/api/v1/info`);
+        return response(200, { service: 'neurodesk-compute', tools: [] });
+      },
+    });
+    await client.info();
+  }
 });
 
 test('the client sends the bearer token and multipart job submissions', async () => {

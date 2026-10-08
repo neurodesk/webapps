@@ -1,39 +1,12 @@
 import { downloadFile } from '../file-io/download.js';
 import { convertsDicom, describeFile, prepareImageInput } from './files.js';
 import { createViewerRegistry } from './viewers.js';
+import { operationParametersSchema } from './parameters.js';
 
 let pageRegistration;
 const copy = value => structuredClone(value);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const terminal = new Set(['idle', 'succeeded', 'failed', 'cancelled']);
-
-function parameter(value, field, key) {
-  if (field.type === 'array') {
-    if (!Array.isArray(value)) throw new Error(`${key} must be an array`);
-    if (field.minimum !== undefined && value.length < field.minimum) throw new Error(`${key} has too few items`);
-    if (field.maximum !== undefined && value.length > field.maximum) throw new Error(`${key} has too many items`);
-    return value.map((entry, index) => parameter(entry, field.items, `${key}[${index}]`));
-  }
-  const type = field.type === 'integer' ? 'number' : field.type;
-  if (typeof value !== type || (type === 'number' && !Number.isFinite(value))) throw new Error(`${key} must be ${field.type}`);
-  if (field.type === 'integer' && !Number.isInteger(value)) throw new Error(`${key} must be an integer`);
-  if (field.enum && !field.enum.includes(value)) throw new Error(`${key} is not an allowed value`);
-  if (field.minimum !== undefined && value < field.minimum) throw new Error(`${key} is below its minimum`);
-  if (field.maximum !== undefined && value > field.maximum) throw new Error(`${key} is above its maximum`);
-  if (field.multipleOf !== undefined && Math.abs(value / field.multipleOf - Math.round(value / field.multipleOf)) > 1e-8) throw new Error(`${key} is not a multiple of ${field.multipleOf}`);
-  return value;
-}
-
-function parametersFor(operation, values = {}) {
-  if (!object(values)) throw new Error('Parameters must be an object');
-  const result = {};
-  for (const key of Object.keys(values)) if (!Object.hasOwn(operation.parameters, key)) throw new Error(`Unknown parameter: ${key}`);
-  for (const [key, field] of Object.entries(operation.parameters)) {
-    const value = Object.hasOwn(values, key) ? values[key] : field.default;
-    if (value !== undefined) result[key] = parameter(copy(value), field, key);
-  }
-  return result;
-}
 
 function validateRegistration(contract, app, operations, convertDicom) {
   if (contract.schemaVersion !== 2 || contract.app !== app || !object(contract.operations)) throw new Error('Invalid application automation contract');
@@ -216,7 +189,8 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
         if (request[field] !== undefined && !object(request[field])) throw new Error(`${field} must be an object`);
         for (const role of Object.keys(request[field] ?? {})) if (!Object.hasOwn(operation.inputs, role)) throw new Error(`Unknown input role: ${role}`);
       }
-      const run = { id: crypto.randomUUID(), operation: name, controller: new AbortController(), parameters: parametersFor(operation, request.parameters) };
+      const parameters = operationParametersSchema(operation.parameters).parse(request.parameters);
+      const run = { id: crypto.randomUUID(), operation: name, controller: new AbortController(), parameters };
       active = run;
       artifacts.clear();
       snapshot = { schemaVersion: 2, app, appVersion: contract.appVersion, runId: run.id, operation: name, state: 'running' };

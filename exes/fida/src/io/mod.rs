@@ -8,6 +8,7 @@ pub mod common;
 pub mod detect;
 pub mod dicom_siemens;
 pub mod ge;
+pub mod geometry;
 pub mod lcm;
 pub mod lcmraw;
 pub mod niimrs;

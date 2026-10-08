@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, relative, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
+import { stageOperationParameters } from './operation-parameters-runtime.mjs';
 
 const TEXT_EXTENSIONS = new Set(['.html', '.js', '.mjs']);
 
@@ -49,7 +50,7 @@ async function copyVerifiedFamily({ family, repoRoot, siteDist, registry }) {
 
 async function rewriteFile(file, runtimeRoot, app, relativePath) {
   const ortDir = join(runtimeRoot, 'ort-web', '1.21.0');
-  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1', 'index.js');
+  const dcm2niix = join(runtimeRoot, 'dcm2niix', '1.3.20260724', 'index.js');
   const niftiReader = join(runtimeRoot, 'nifti-reader', '0.8.0', 'index.js');
   const sharedSource = join(runtimeRoot, 'webapp-components', '0.1.2', 'src');
   let source = await readFile(file, 'utf8');
@@ -140,6 +141,7 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
     join(runtimeRoot, 'webapp-components', '0.1.2', 'src'),
     { recursive: true },
   );
+  await stageOperationParameters({ repoRoot, componentsSrc: join(runtimeRoot, 'webapp-components', '0.1.2', 'src') });
 
   const files = await walk(siteDist);
   for (const file of files) {

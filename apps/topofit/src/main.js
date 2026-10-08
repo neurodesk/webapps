@@ -1,7 +1,7 @@
 import examples from '../examples.json';
 import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import { SLICE_TYPE } from '@niivue/niivue';
-import { mountViewer } from './freebrowse-viewer.js';
+import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { runDcm2niix, readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
@@ -60,6 +60,7 @@ let viewerBusy = false;
 let normalArrowWorker;
 let normalArrowKey = '';
 const visibleMeshes = new Set();
+const loadedSurfaces = new Map();
 const surfaceStages = new Set(['lh-white', 'rh-white', 'lh-mid', 'rh-mid', 'lh-pial', 'rh-pial']);
 const stageLabels = {
   qc: 'Source-grid QC overlay',
@@ -322,7 +323,7 @@ async function ensureViewer() {
         backgroundColor: [0.04, 0.06, 0.08, 1],
         meshXRay: Number(xrayInput.value),
         backend: 'webgl2',
-      });
+      }, { canvasLabel: 'Brain image and cortical surface viewer' });
       viewer = await embeddedViewer.ready;
       toolbar.hidden = false;
       viewer.addEventListener('change', (event) => {
@@ -399,6 +400,7 @@ async function resetMeshes(nv) {
   displayedResult = null;
   showPatchMeasurements(null);
   await nv.removeAllMeshes();
+  loadedSurfaces.clear();
   normalArrowKey = '';
   $('normalArrowStatus').textContent = 'Select a mid-surface to plot its normals.';
   visibleMeshes.clear();
@@ -407,10 +409,46 @@ async function resetMeshes(nv) {
   for (const input of $('resultList').querySelectorAll('.nd-result-visibility input')) input.checked = false;
 }
 
-async function showSource() {
+async function loadResultSurfaces() {
   const nv = await ensureViewer();
-  anatomyIn3D = false;
-  await resetMeshes(nv);
+  setViewerBusy(true);
+  try {
+    const surfaceFiles = new Map([...outputs.values()]
+      .filter((file) => file.type === 'application/vnd.freesurfer.surface')
+      .map((file) => [file.name, file]));
+    for (let index = nv.meshes.length - 1; index >= 0; index -= 1) {
+      const name = nv.meshes[index].name;
+      if (loadedSurfaces.has(name) && loadedSurfaces.get(name) !== surfaceFiles.get(name)) {
+        await nv.removeMesh(index);
+        loadedSurfaces.delete(name);
+      }
+    }
+    nv.meshThicknessOn2D = 1;
+    for (const [stage, file] of outputs) {
+      if (file.type !== 'application/vnd.freesurfer.surface' || nv.meshes.some((mesh) => mesh.name === file.name)) continue;
+      await nv.addMesh({
+        url: file,
+        name: file.name,
+        opacity: 0,
+        sliceShaderType: 'crosscut',
+        color: meshColors[stage] || [1, 0.85, 0, 1],
+      });
+      loadedSurfaces.set(file.name, file);
+    }
+  } catch (error) {
+    $('viewerError').hidden = false;
+    $('viewerError').textContent = `Visualization unavailable: ${error.message}. Downloads remain available.`;
+  } finally {
+    setViewerBusy(false);
+  }
+}
+
+async function showSource({ reset = false } = {}) {
+  const nv = await ensureViewer();
+  if (reset) {
+    anatomyIn3D = false;
+    await resetMeshes(nv);
+  }
   nv.setClipPlane([2, 0, 0]);
   await nv.loadVolumes([{ url: source, name: source.name }]);
   nv.drawScene();
@@ -427,15 +465,14 @@ async function setMeshVisible(stage, visible, input) {
   setViewerBusy(true);
   try {
     const nv = await ensureViewer();
-    if (visible && !meshSceneReady) {
+    if (visible) {
+      if (displayedResult === 'qc' || displayedResult === 'patch-qc') {
+        await nv.loadVolumes([{ url: source, name: source.name }]);
+      }
       displayedResult = null;
       showPatchMeasurements(null);
       nv.meshThicknessOn2D = 1;
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
-      await nv.removeAllMeshes();
-      normalArrowKey = '';
-      await nv.loadVolumes([{ url: source, name: source.name }]);
-      visibleMeshes.clear();
       meshSceneReady = true;
     }
     const index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
@@ -471,7 +508,7 @@ async function showResult(stage, { duringRun = false } = {}) {
   setViewerBusy(true);
   try {
     const nv = await ensureViewer();
-    await resetMeshes(nv);
+    showPatchMeasurements(null);
     if (stage === 'qc' || stage === 'patch-qc') {
       nv.setClipPlane([2, 0, 0]);
       const overlay = stage === 'patch-qc' ? { colormap: 'hot', calMin: 1, calMax: 4095, isTransparentBelowCalMin: true } : {};
@@ -490,17 +527,22 @@ async function showResult(stage, { duringRun = false } = {}) {
       // Hide the MRI in 3D until the user explicitly shows it in FreeBrowse.
       nv.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       await nv.loadVolumes([{ url: source, name: source.name }]);
-      await nv.loadMeshes([{
-        url: file,
-        name: file.name,
-        sliceShaderType: 'crosscut',
-        ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
-        ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
-      }]);
+      let index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      if (index < 0) {
+        await nv.addMesh({
+          url: file,
+          name: file.name,
+          sliceShaderType: 'crosscut',
+          ...(meshColors[stage] ? { color: meshColors[stage] } : {}),
+          ...(patch ? { color: [1, 0.85, 0, 1] } : {}),
+        });
+        index = nv.meshes.findIndex((mesh) => mesh.name === file.name);
+      }
+      await nv.setMesh(index, { opacity: 1 });
       meshSceneReady = surfaceStages.has(stage);
       displayedResult = surfaceStages.has(stage) ? null : stage;
       if (surfaceStages.has(stage)) {
-        const mesh = nv.meshes[0];
+        const mesh = nv.meshes[index];
         nv.setCrosshairPos([0, 1, 2].map((axis) => (mesh.extentsMin[axis] + mesh.extentsMax[axis]) / 2));
       }
       $('imageLabel').textContent = resultLabel(stage);
@@ -540,7 +582,7 @@ async function load(file) {
     $('fileInfo').textContent = file.name;
     $('dropZone').classList.add('has-files');
     $('progress').value = 0;
-    await showSource();
+    await showSource({ reset: true });
     status('Image loaded · ready to reconstruct');
     return true;
   } catch (error) {
@@ -591,6 +633,68 @@ $('exampleControl').replaceWith(exampleControl);
 
 $('findPatches').onchange = () => { $('patchSettings').hidden = !$('findPatches').checked; };
 $('patchRegion').onchange = () => { $('patchRoiField').hidden = $('patchRegion').value !== 'roi'; };
+
+// localStorage may be unavailable (privacy modes); the app then keeps defaults.
+const stored = {
+  get: (key) => { try { return localStorage.getItem(key); } catch { return null; } },
+  set: (key, value) => { try { localStorage.setItem(key, value); } catch { /* unavailable */ } },
+  remove: (key) => { try { localStorage.removeItem(key); } catch { /* unavailable */ } },
+};
+const PARALLEL_PREFERENCE = 'topofit.parallelHemispheres';
+// Every running parallel reconstruction writes its own key and holds a Web Lock of the
+// same id. An out-of-memory crash kills the tab before anything in-page can react, but
+// the browser then releases its locks: a key whose lock nobody holds belongs to a crashed
+// run, while one whose lock is held is still running in another tab. One key per run
+// keeps every write a single set or remove, so tabs never overwrite each other's runs.
+const PARALLEL_RUN_PREFIX = 'topofit.parallelRun.';
+const parallelRunLock = (id) => `topofit-parallel-run-${id}`;
+let parallelRun = null;
+
+function listedParallelRuns() {
+  try {
+    return Object.keys(localStorage).filter((key) => key.startsWith(PARALLEL_RUN_PREFIX)).map((key) => key.slice(PARALLEL_RUN_PREFIX.length));
+  } catch {
+    return [];
+  }
+}
+
+// The lock is taken before the key is written and released after it is removed, so a
+// tab that sees a key without a held lock is looking at a run that cannot finish.
+async function startParallelRun() {
+  const id = crypto.randomUUID();
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  if (navigator.locks) await new Promise((acquired) => navigator.locks.request(parallelRunLock(id), () => { acquired(); return held; }));
+  stored.set(PARALLEL_RUN_PREFIX + id, String(Date.now()));
+  parallelRun = { id, release };
+}
+
+function endParallelRun() {
+  if (!parallelRun) return;
+  stored.remove(PARALLEL_RUN_PREFIX + parallelRun.id);
+  parallelRun.release();
+  parallelRun = null;
+}
+
+async function recoverFromCrashedParallelRun(option) {
+  const listed = listedParallelRuns();
+  if (!listed.length) return;
+  const held = new Set(navigator.locks ? (await navigator.locks.query()).held.map((lock) => lock.name) : []);
+  const crashed = listed.filter((id) => !held.has(parallelRunLock(id)) && stored.get(PARALLEL_RUN_PREFIX + id) !== null);
+  if (!crashed.length) return;
+  for (const id of crashed) stored.remove(PARALLEL_RUN_PREFIX + id);
+  option.checked = false;
+  stored.set(PARALLEL_PREFERENCE, 'false');
+  status('The last parallel reconstruction did not finish; hemispheres now run one at a time (Advanced settings).');
+}
+
+{
+  const option = $('parallelHemispheres');
+  const saved = stored.get(PARALLEL_PREFERENCE);
+  option.checked = saved === null ? !(navigator.deviceMemory < 8) : saved === 'true';
+  option.onchange = () => stored.set(PARALLEL_PREFERENCE, String(option.checked));
+  void recoverFromCrashedParallelRun(option);
+}
 
 async function run(analysisOnly = false, { signal, progress = () => {}, roiFile } = {}) {
   signal?.throwIfAborted();
@@ -646,7 +750,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
     $('elapsed').textContent = `${Math.round((performance.now() - started) / 1000)} s`;
   }, 1000);
   try {
-    if (!analysisOnly) await showSource();
+    if (!analysisOnly) await showSource({ reset: true });
   } catch (error) {
     $('viewerError').hidden = false;
     $('viewerError').textContent = `Visualization unavailable: ${error.message}. Reconstruction can continue.`;
@@ -656,7 +760,8 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
     setBusy(false);
     signal.throwIfAborted();
   }
-  return new Promise((resolve, reject) => {
+  const hemispheres = $('parallelHemispheres').checked ? 'parallel' : 'sequential';
+  const attempt = (mode) => new Promise((resolve, reject) => {
     worker = analysisOnly
       ? new Worker(new URL('./analysis-worker.js', import.meta.url), { type: 'module' })
       : new Worker(new URL('./inference-worker.js', import.meta.url), { type: 'module' });
@@ -669,7 +774,6 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       if (worker === active) worker = null;
       signal?.removeEventListener('abort', cancel);
       cancelRun = null;
-      setBusy(false);
       if (error) reject(error);
       else resolve(data);
     };
@@ -689,7 +793,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
         }
         if (data.type === 'error') {
           status(data.message, true);
-          finish(new Error(data.message));
+          finish(Object.assign(new Error(data.message), { hemisphereFailure: Boolean(data.hemisphereFailure) }));
         }
         if (data.type === 'result') {
           showPatchMeasurements(null);
@@ -722,6 +826,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
           $('progress').value = 1;
           status(analysisOnly ? `Surface analysis ready · ${Math.round(data.elapsedSeconds)} s` : `Surfaces ready · ${data.provenance.surfaceVertices.toLocaleString()} vertices per hemisphere · ${Math.round(data.elapsedSeconds)} s`);
           if (surfaceAnalysis?.flat_patch_status === 'NO_PATCH_MEETS_CRITERIA') status('Surfaces ready · no cortical patch meets the selected criteria');
+          await loadResultSurfaces();
           await showResult(outputs.has('patch-qc') ? 'patch-qc' : 'qc', { duringRun: true });
           finish(null, { artifacts: automationArtifacts(data.files), provenance: data.provenance, measurements: { elapsedSeconds: data.elapsedSeconds, ...(data.provenance.surfaceAnalysis ? { surfaceAnalysis: data.provenance.surfaceAnalysis } : {}) } });
         }
@@ -741,6 +846,7 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       ...(analysisOnly ? { surfaces: reconstruction.surfaces, provenance: reconstruction.provenance } : {}),
       model: $('model').value,
       conform: $('conform').checked,
+      hemispheres: mode,
       overlayThickness: Number($('thickness').value),
       estimateNormals: $('estimateNormals').checked,
       patches: $('findPatches').checked ? {
@@ -754,6 +860,24 @@ async function run(analysisOnly = false, { signal, progress = () => {}, roiFile 
       assetBase,
     });
   });
+  try {
+    try {
+      if (!analysisOnly && hemispheres === 'parallel') await startParallelRun();
+      return await attempt(hemispheres);
+    } catch (error) {
+      // A hemisphere worker died mid-run (typically a wasm allocation failure). The
+      // saved preference is left alone because the failure may be transient.
+      if (!error.hemisphereFailure || hemispheres !== 'parallel' || preparation !== currentPreparation) throw error;
+      signal?.throwIfAborted();
+      endParallelRun();
+      $('progress').value = 0;
+      status('Parallel reconstruction failed; retrying one hemisphere at a time…');
+      return await attempt('sequential');
+    }
+  } finally {
+    endParallelRun();
+    setBusy(false);
+  }
 }
 
 $('runButton').onclick = () => void run().catch((error) => { if (error.name !== 'AbortError') status(error.message, true); });
@@ -771,6 +895,7 @@ $('cancelButton').onclick = () => {
 };
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) return;
+  endParallelRun();
   cancelRun?.();
   normalArrowWorker?.terminate();
   exampleControl.destroy();
@@ -790,6 +915,7 @@ registerAppAutomation({
       if (!await load(inputs.image[0])) throw new Error('The image could not be loaded.');
       signal.throwIfAborted();
       for (const id of ['conform', 'estimateNormals', 'findPatches']) $(id).checked = parameters[id];
+      if (parameters.parallelHemispheres !== undefined) $('parallelHemispheres').checked = parameters.parallelHemispheres;
       for (const id of ['model', 'thickness', 'patchCount', 'patchRadius', 'patchHemisphere', 'patchMaxRms', 'patchMinArea']) $(id).value = String(parameters[id]);
       $('patchRegion').value = inputs.roi.length ? 'roi' : 'cortex';
       $('patchSettings').hidden = !parameters.findPatches;

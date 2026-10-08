@@ -1,5 +1,38 @@
 # musclemap
 
+## 1.4.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+- dd05e46: Ship whole-body v1.3 and the regional models as FP32 exports, which match upstream MuscleMap voxel for voxel on public parity cases. The previous Q8 exports could drop a whole label on partial-coverage scans. Each regional model download grows from about 39 MB to 104 MB.
+- 03a9e8c: Run every model, including whole-body v1.3 and the regional models, through the upstream MONAI pipeline, and pad slices to upstream's 256 x 256 before 128 x 128 sliding windows. Remove the slice-thickness and low-res controls and their automation parameters, which only that older path used.
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
+## 1.4.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- e6baa09: Correct a segmentation in the viewer before downloading it. Generated, consolidated and uploaded label maps whose display copy shares their voxel grid show Edit in the Results list, which opens the shared mask editor with the muscle names in its Label select. Apply replaces the result, labels it `(edited)`, reloads the overlay and makes Download return the edited uint8 class-index map under the same file name; Calculate Metrics then reads the edited labels. A new run, new input, consolidation or Clear All closes an open edit without applying it.
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage with MONAI float64 decoding. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons, prevent stale passing reports, and use portable CI scratch directories. Document the isolated inference-runtime boundary differences.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 1.4.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 1.4.20260930
 
 ### Patch Changes
@@ -7,7 +40,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

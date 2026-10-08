@@ -18,7 +18,7 @@ const COMMAND_FEATURES = Object.freeze([
   [/^sct_(deepseg spinalcord|deepseg_gm)\b/, { status: 'browser-task', feature: 'segmentation' }],
   [/^sct_get_centerline\b/, { status: 'browser-capability', feature: 'centerline' }],
   [/^sct_label_utils\b/, { status: 'browser-capability', feature: 'labelUtils' }],
-  [/^sct_label_vertebrae\b/, { status: 'browser-capability', feature: 'vertebralLabeling' }],
+  [/^sct_label_vertebrae\b/, { status: 'not-applicable', feature: 'totalSpineSegLabels', replacedByTask: 'spine' }],
   [/^sct_(register_to_template|register_multimodal|warp_template|apply_transfo)\b/, { status: 'browser-capability', feature: 'templateRegistration' }],
   [/^sct_process_segmentation\b/, { status: 'browser-capability', feature: 'morphometry' }],
   [/^sct_detect_pmj\b/, { status: 'browser-capability', feature: 'pmjDetection' }],
@@ -35,7 +35,7 @@ const COMMAND_FEATURES = Object.freeze([
   [/^sct_qc\b/, { status: 'browser-capability', feature: 'qcReport' }]
 ]);
 
-const ARTIFACT_COMMAND_RE = /^sct_(deepseg|deepseg_gm|label_vertebrae)\b/;
+const ARTIFACT_COMMAND_RE = /^sct_(deepseg|deepseg_gm)\b/;
 
 function parseActiveBatchSteps(scriptText, options = {}) {
   const source = options.source || BATCH_PROCESSING_SOURCE;

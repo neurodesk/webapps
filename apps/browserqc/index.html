@@ -29,6 +29,10 @@
     <details class="nd-sidebar-section" id="processingSection" open>
       <summary class="nd-section-title">2. Quality control</summary>
       <div class="nd-section-content">
+      <div class="nd-field">
+        <label for="modelPick">Segmentation</label>
+        <select id="modelPick"></select>
+      </div>
       <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run quality control</button>
     </div>
     </details>
@@ -43,6 +47,32 @@
       <p class="qc-empty">Metrics appear here after processing finishes.</p>
     </div>
       <button id="saveBtn" class="nd-btn nd-btn-secondary" type="button" disabled>Download QC report</button>
+      </div>
+    </details>
+    <details class="nd-sidebar-section" id="ratingSection">
+      <summary class="nd-section-title">Manual rating</summary>
+      <div class="nd-section-content">
+        <form id="rateForm">
+          <div class="nd-field">
+            <label for="rating">Quality, 1 exclude to 4 excellent</label>
+            <input id="rating" type="range" min="1" max="4" step="0.1" value="3" />
+            <output id="ratingValue" for="rating">3.0 · Acceptable</output>
+          </div>
+          <div class="nd-field">
+            <label for="rateConfidence">Confidence, 1 doubtful to 3 confident</label>
+            <input id="rateConfidence" type="range" min="1" max="3" step="0.1" value="2" />
+            <output id="confidenceValue" for="rateConfidence">2.0 · Confident</output>
+          </div>
+          <details>
+            <summary>Artifacts</summary>
+            <div id="rateArtifacts"></div>
+          </details>
+          <div class="nd-field">
+            <label for="rateComments">Comments</label>
+            <textarea id="rateComments" rows="3"></textarea>
+          </div>
+          <button id="rateSave" class="nd-btn nd-btn-secondary" type="button" disabled>Download rating</button>
+        </form>
       </div>
     </details>
     <button id="aboutBtn" type="button" hidden>About</button>
@@ -60,17 +90,16 @@
   <footer id="status">
     <span class="nd-status-label">Status</span>
     <span id="statusMsg" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+    <span id="elapsed" class="nd-status-elapsed"></span>
+    <button id="cancelButton" type="button" class="nd-btn-cancel" aria-label="Cancel quality control" hidden>×</button>
     <progress id="loadingCircle" aria-label="Processing progress" max="1" value="0"></progress>
   </footer>
 
   <template id="aboutContent"><p>Automated MRI quality control, <strong>entirely in your browser</strong> — no upload, no server.
         Open a NIfTI image or a folder of DICOM files, then run quality control.</p>
       <ul>
-        <li><strong>Segmentation</strong> — a
-          <a href="https://github.com/neuroneural/brainchop" target="_blank" rel="noopener">brainchop</a>
-          deep-learning model (MindGrab) parcellates the brain into 17 gray/white-matter and
-          subcortical regions, shown as a colour overlay on your scan (adjust with the <strong>Opacity</strong>
-          slider)</li>
+        <li>Segmentation uses an independent MindGrab brain mask and GM/WM/CSF fractions by default.
+          Three label models are also available. Adjust the tissue overlay with Opacity.</li>
         <li><strong>Quality metrics</strong> — <a href="https://github.com/rordenlab/niimath" target="_blank"
             rel="noopener">niimath</a> computes MRIQC-style image-quality metrics (CJV, CNR, SNR, WM2MAX, EFC,
           tissue composition) from the scan and its segmentation</li>

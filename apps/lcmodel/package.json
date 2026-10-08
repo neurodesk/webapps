@@ -1,19 +1,23 @@
 {
   "name": "lcmodel",
-  "version": "0.3.20261002",
+  "version": "0.5.20261007",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app lcmodel",
+    "dev": "node scripts/copy-brainchop.mjs && vite",
+    "build": "node scripts/copy-brainchop.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app lcmodel",
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260923",
+    "@neurodesk/lcmodel": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@neurodesk/lcmodel": "workspace:*"
+    "@niivue/niivue": "1.0.0-rc.14",
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

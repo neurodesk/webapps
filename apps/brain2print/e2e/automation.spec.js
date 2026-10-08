@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 import { inspectMz3, inspectStl, voxelVolume } from './mesh-geometry.js';
 
 const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
@@ -90,12 +91,8 @@ test('CPU inference returns a watertight STL enclosing the segmented brain volum
 // The hardware variant: scripts/desktop/verify-scientific-macos.sh selects it by title and
 // launches Chromium on Metal. The software adapter has no shader-f16, so it cannot run there.
 test('hardware inference returns corrected STL, matching MZ3 and the segmented image', async ({ page }) => {
+  test.skip(!hardwareGpu, 'Hardware variant: needs a WebGPU adapter with shader-f16 (NEURODESK_HARDWARE_GPU=1 on macOS).');
   await page.goto('/');
-  const software = await page.evaluate(async () => {
-    const adapter = await navigator.gpu?.requestAdapter();
-    return !adapter || adapter.info.isFallbackAdapter || !adapter.features.has('shader-f16');
-  });
-  test.skip(software, 'Hardware variant: needs a WebGPU adapter with shader-f16 (BRAIN2PRINT_HARDWARE_GPU=1 on macOS).');
   test.setTimeout(600_000);
   await start(page, brain);
   const { report, files } = await finished(page);

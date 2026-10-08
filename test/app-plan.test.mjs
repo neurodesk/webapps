@@ -60,6 +60,16 @@ test('shared module changes select the complete app catalog', async () => {
     plan.browserApps.include.map(({ app }) => app),
     registry.apps.filter((app) => app.ci.browser_test).map((app) => app.id),
   );
+  assert.deepEqual(
+    plan.gpuApps.include.map(({ app }) => app),
+    registry.apps.filter((app) => app.ci.hardware_gpu).map((app) => app.id),
+  );
+});
+
+test('an app change selects the macOS GPU job only for hardware-GPU apps', async () => {
+  const registry = await loadAppsRegistry();
+  assert.deepEqual(createAppPlan(registry, ['apps/brain2print/src/main.js']).gpuApps.include.map(({ app }) => app), ['brain2print']);
+  assert.deepEqual(createAppPlan(registry, ['apps/niimath/index.html']).gpuApps.include, []);
 });
 
 test('toolchain facts are carried into generated matrices', async () => {
@@ -73,6 +83,7 @@ test('toolchain facts are carried into generated matrices', async () => {
     python_reference: false,
     shared_runtime: false,
     browser_test: true,
+    hardware_gpu: false,
     app_scoped_runtime: true,
     release_test: 'test',
   }]);

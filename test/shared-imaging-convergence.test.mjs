@@ -31,9 +31,6 @@ test('the workspace and static pages expose one typed shell-control contract', a
   assert.match(qsm, /data-neurodesk-shell-link=["']more-apps["']/);
   assert.match(qsm, /data-neurodesk-shell-link=["']github["']/);
 
-  const syncro = await source('apps', 'syncro', 'index.html');
-  assert.match(syncro, /data-neurodesk-control=["']standalone["']/);
-
   const theme = await source('site', 'app-theme.css');
   assert.doesNotMatch(theme, /href\*?=["'][^"']*qsmbly|QSMbly|QSMxT/i);
 });

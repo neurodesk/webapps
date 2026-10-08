@@ -1,0 +1,45 @@
+{
+  "name": "@neurodesk/white-matter-lesions",
+  "version": "0.2.20261007",
+  "description": "FLAMeS white matter lesion segmentation for browsers and the command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "flames": "./bin/flames.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./assets": "./src/assets.js",
+    "./results": "./src/results.js",
+    "./node": "./src/node.js",
+    "./manifest": "./model.manifest.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/flames.js"
+  },
+  "dependencies": {
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/synthstrip": "workspace:*",
+    "onnxruntime-node": "1.29.0"
+  },
+  "devDependencies": {
+    "onnxruntime-web": "1.29.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/white-matter-lesions"
+  }
+}

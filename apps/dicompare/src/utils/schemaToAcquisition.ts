@@ -4,6 +4,32 @@ import { inferDataTypeFromValue, processSchemaFieldForUI } from './datatypeInfer
 import { buildValidationRuleFromField } from './fieldFormatters';
 
 /**
+ * Normalizes a raw schema rule into the SelectedValidationFunction shape used
+ * by the UI: declarations (parameterDefinitions) land in `parameters`,
+ * configured values (schema `parameters` dict) land in `configuredParams`.
+ */
+export const schemaRuleToValidationFunction = (rule: any) => ({
+  id: rule.id,
+  name: rule.name,
+  description: rule.description,
+  implementation: rule.implementation,
+  fields: rule.fields || [],
+  optional_fields: rule.optional_fields || [],
+  category: 'Custom',
+  testCases: rule.testCases || [],
+  parameterDefinitions: Array.isArray(rule.parameterDefinitions) ? rule.parameterDefinitions : undefined,
+  configuredParams: (rule.parameters && typeof rule.parameters === 'object' && !Array.isArray(rule.parameters))
+    ? rule.parameters
+    : undefined,
+  customName: rule.name,
+  customDescription: rule.description,
+  customFields: rule.fields || [],
+  customImplementation: rule.implementation,
+  customTestCases: [],
+  enabledSystemFields: []
+});
+
+/**
  * Converts a UnifiedSchema and specific acquisition to a full Acquisition object
  * that can be used with AcquisitionTable
  */
@@ -88,12 +114,17 @@ export const convertSchemaToAcquisition = async (
             tag: processedField.tag,
             value: processedField.value ?? field.defaultValue ?? '',
             validationRule: processedField.validationRule || { type: 'exact' as const },
+            severity: processedField.severity,
+            // No notes: rationale on a series is carried by series.notes below.
             fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
         }),
         images: series.images || [],
+        notes: series.notes,
       })) || [],
-      validationFunctions: acquisitionData.rules || acquisitionData.validationFunctions || [],
+      validationFunctions: Array.isArray(acquisitionData.rules)
+        ? acquisitionData.rules.map(schemaRuleToValidationFunction)
+        : (acquisitionData.validationFunctions || []),
       tags: acquisitionData.tags || [],
       images: acquisitionData.images || [],
       metadata: {
@@ -198,6 +229,8 @@ export const convertRawAcquisitionToContext = (
             name: f.field || f.name,
             value: f.value,
             validationRule,
+            severity: f.severity === 'warning' ? 'warning' : undefined,
+            // No notes: rationale on a series is carried by series.notes below.
             fieldType: f.fieldType
           });
         });
@@ -207,27 +240,14 @@ export const convertRawAcquisitionToContext = (
         name: series.name,
         fields: seriesFields,
         images: series.images || [],
+        notes: series.notes,
       };
     });
   }
 
   // Process validation rules
   if (targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
-    newAcquisition.validationFunctions = targetAcquisition.rules.map((rule: any) => ({
-      id: rule.id,
-      name: rule.name,
-      description: rule.description,
-      implementation: rule.implementation,
-      fields: rule.fields || [],
-      category: 'Custom',
-      testCases: rule.testCases || [],
-      customName: rule.name,
-      customDescription: rule.description,
-      customFields: rule.fields || [],
-      customImplementation: rule.implementation,
-      customTestCases: [],
-      enabledSystemFields: []
-    }));
+    newAcquisition.validationFunctions = targetAcquisition.rules.map(schemaRuleToValidationFunction);
   }
 
   return newAcquisition;

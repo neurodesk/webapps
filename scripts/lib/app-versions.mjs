@@ -10,13 +10,17 @@ import { repoRoot } from './apps-registry.mjs';
 
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
+  '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
+  '@neurodesk/easy-mp2rage': 'easy-mp2rage',
+  '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });
 
 export function releaseDate(now = new Date()) {
@@ -122,15 +126,36 @@ export async function applyRelease({ plan, workspace, config, packages, embedded
     if (release.newVersion === release.oldVersion) {
       const path = join(pkg.directory, 'CHANGELOG.md');
       const text = await readFile(path, 'utf8');
-      const heading = `## ${release.newVersion}\n`;
-      const first = text.indexOf(heading);
-      const duplicate = text.indexOf(heading, first + heading.length);
-      if (duplicate !== -1) {
-        await writeFile(path, text.slice(0, duplicate) + text.slice(duplicate + heading.length));
-      }
+      const merged = mergeSameVersionSections(text, release.newVersion);
+      if (merged !== text) await writeFile(path, merged);
     }
   }
   return written;
+}
+
+const CHANGE_TYPES = ['Major Changes', 'Minor Changes', 'Patch Changes'];
+
+/** Merge the section Changesets prepends for a same-day release into the existing one. */
+export function mergeSameVersionSections(text, version) {
+  const heading = `## ${version}\n`;
+  const first = text.indexOf(heading);
+  const second = first === -1 ? -1 : text.indexOf(heading, first + heading.length);
+  if (second === -1) return text;
+  const next = text.indexOf('\n## ', second + heading.length);
+  const end = next === -1 ? text.length : next + 1;
+  const groups = new Map();
+  for (const body of [text.slice(first + heading.length, second), text.slice(second + heading.length, end)]) {
+    const parts = body.split(/^### (.+)\n/m);
+    for (let index = 1; index < parts.length; index += 2) {
+      const entries = parts[index + 1].trim();
+      if (entries) groups.set(parts[index], [...(groups.get(parts[index]) ?? []), entries]);
+    }
+  }
+  const rank = (title) => (CHANGE_TYPES.includes(title) ? CHANGE_TYPES.indexOf(title) : CHANGE_TYPES.length);
+  const sections = [...groups].sort(([a], [b]) => rank(a) - rank(b)).map(([title, entries]) => `### ${title}\n\n${entries.join('\n')}\n`);
+  const rest = text.slice(end);
+  const body = sections.length ? `\n${sections.join('\n')}` : '';
+  return `${text.slice(0, first)}${heading}${body}${rest ? `\n${rest}` : ''}`;
 }
 
 /**

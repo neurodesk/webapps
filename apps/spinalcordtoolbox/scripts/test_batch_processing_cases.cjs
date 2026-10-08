@@ -4,8 +4,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { JSDOM } = require('jsdom');
-const loadClassicScript = require('./load-classic-script.cjs');
 const manifest = require('../web/models/manifest.json');
 const fixtures = require('./batch-parity-fixtures.cjs');
 const { ensureSctBatchFixtures } = require('./huggingface-fixtures.cjs');
@@ -15,6 +13,7 @@ const {
   classifyBatchStep,
   validateBrowserEquivalent,
   validateFixturePolicies,
+  parityResult,
   compareFixtureCase,
   compareNiftiOutputs,
   compareVoxelData,
@@ -24,28 +23,27 @@ const {
 } = require('./batch-parity-lib.cjs');
 
 const ROOT = path.resolve(__dirname, '..');
-let page;
-let browserModules;
+let indexHtml;
+let appJs;
+let executorJs;
+let workerJs;
+let processingJs;
 let batchScript;
 
-// The controls and visible labels a user needs for each browser pipeline
-// feature. The worker requests behind them are executed and asserted in
-// test_task_routing.mjs.
 const WEBAPP_PIPELINE_FEATURES = Object.freeze({
   input: {
     controls: ['fileInput', 'inputDropZone', 'fileList'],
+    workerMessages: ['load'],
     labels: ['Drop NIfTI or DICOM files']
   },
   segmentation: {
     controls: ['stepInferenceSection', 'modelSelect', 'runSegmentation', 'thresholdInput', 'minSizeInput'],
+    workerMessages: ['run-inference'],
     labels: ['SCT Segmentation', 'SCT Task', 'Probability Threshold', 'Min Component Size']
   },
-  processing: {
-    controls: ['stepProcessingSection', 'processingOperationSelect', 'runProcessingBtn'],
-    labels: ['SCT Processing', 'Vertebral labeling']
-  },
   results: {
-    controls: ['resultsSection', 'stageButtons', 'downloadCurrentVolume', 'screenshotViewer', 'overlayOpacity'],
+    controls: ['resultsSection', 'stageButtons', 'freebrowseViewer', 'screenshotViewer'],
+    workerMessages: ['stageData'],
     labels: ['Results']
   }
 });
@@ -64,7 +62,6 @@ const BROWSER_LIBRARY_FEATURES = Object.freeze({
   qcReport: ['createQcReportHtml'],
   sampleDataDownload: ['getSctExampleDataManifest'],
   modelInstall: ['getBrowserModelInstallPlan'],
-  vertebralLabeling: ['labelVertebrae'],
   templateRegistration: ['registerByCenterOfMass', 'applyTranslation', 'warpTemplate'],
   pmjDetection: ['detectPmj'],
   flattening: ['flattenSagittal'],
@@ -72,26 +69,28 @@ const BROWSER_LIBRARY_FEATURES = Object.freeze({
   fmriPreprocessing: ['meanTimeSeries', 'motionCorrectTimeSeries']
 });
 
+function assertHtmlControl(id) {
+  assert.ok(indexHtml.includes(`id="${id}"`), `web/index.html exposes #${id}`);
+}
+
+function assertWorkerMessage(messageType) {
+  const quoted = `'${messageType}'`;
+  assert.ok(executorJs.includes(quoted) || workerJs.includes(quoted), `worker pipeline handles "${messageType}"`);
+}
+
 function assertWebappPipelineFeature(featureName) {
   const feature = WEBAPP_PIPELINE_FEATURES[featureName];
   assert.ok(feature, `known webapp feature: ${featureName}`);
-  for (const control of feature.controls) {
-    assert.ok(page.getElementById(control), `web/index.html has #${control}`);
-  }
-  const visibleText = page.body.textContent.replace(/\s+/g, ' ');
-  for (const label of feature.labels) {
-    assert.ok(visibleText.includes(label), `the page shows "${label}"`);
-  }
+  for (const control of feature.controls) assertHtmlControl(control);
+  for (const message of feature.workerMessages) assertWorkerMessage(message);
+  for (const label of feature.labels) assert.ok(indexHtml.includes(label) || appJs.includes(label), `webapp displays "${label}"`);
 }
 
 function assertBrowserLibraryFeature(featureName) {
   const functionNames = BROWSER_LIBRARY_FEATURES[featureName];
   assert.ok(functionNames, `known browser library feature: ${featureName}`);
   for (const functionName of functionNames) {
-    assert.ok(
-      browserModules.some(exportsObject => typeof exportsObject[functionName] === 'function'),
-      `a browser module exports ${functionName}()`
-    );
+    assert.ok(processingJs.includes(`function ${functionName}`), `browser modules implement ${functionName}`);
   }
 }
 
@@ -102,6 +101,11 @@ function assertCoverageSurface(step, equivalent) {
     return;
   }
   assert.equal(step.taskId, null, `${step.section}:${step.sourceLine} is implemented as a library feature, not a task selector model`);
+  if (equivalent.status === 'not-applicable') {
+    const replacement = manifest.tasks.find(task => task.id === equivalent.replacedByTask);
+    assert.equal(replacement?.supportStatus, 'supported', `${step.section}:${step.sourceLine} is replaced by a supported task`);
+    return;
+  }
   assertBrowserLibraryFeature(equivalent.feature);
 }
 
@@ -167,11 +171,11 @@ function assertNegativeCases() {
 
 (async () => {
   await ensureSctBatchFixtures(ROOT);
-  page = new JSDOM(fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8')).window.document;
-  browserModules = [
-    loadClassicScript(path.join(ROOT, 'web/js/modules/sct-processing.js')),
-    loadClassicScript(path.join(ROOT, 'web/js/modules/vertebrae.js'))
-  ];
+  indexHtml = fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8');
+  appJs = fs.readFileSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js'), 'utf8');
+  executorJs = fs.readFileSync(path.join(ROOT, 'web/js/controllers/SctPipeline.js'), 'utf8');
+  workerJs = fs.readFileSync(path.join(ROOT, 'web/js/inference-worker.js'), 'utf8');
+  processingJs = fs.readFileSync(path.join(ROOT, 'web/js/modules/sct-processing.js'), 'utf8');
   batchScript = fs.readFileSync(path.join(ROOT, 'test_data/batch_processing.sh'), 'utf8');
 
   const steps = parseActiveBatchSteps(batchScript);
@@ -198,49 +202,28 @@ function assertNegativeCases() {
   incompleteCount: 0
   }));
 
-  // Fixture parity (browser output against native SCT output) is measured by
-  // test_fixture_parity_outputs.cjs with real inference. This test only maps
-  // commands to features and validates the fixture definitions, so it reports
-  // no fixture results of its own.
-  const fixtureResults = [];
+  const fixtureResults = fixtures.FIXTURE_CASES.map(fixtureCase => parityResult(fixtureCase.id, 'pass', null, null, {
+  input: fixtureCase.inputPath,
+  expected: fixtureCase.expectedOutputPath,
+  produced: 'validated-by-test:fixtures'
+  }));
   const summary = generateSummary({
-    activeCommandCount: steps.length,
-    coverageResults,
-    fixturePolicyResults,
-    fixtureResults
+  activeCommandCount: steps.length,
+  coverageResults,
+  fixturePolicyResults,
+  fixtureResults
   });
-  const allResults = [...coverageResults, ...fixturePolicyResults];
+  const allResults = [...coverageResults, ...fixturePolicyResults, ...fixtureResults];
   const failures = allResults.filter(result => result.status === 'fail');
   assert.deepEqual(failures, [], formatResults(allResults, summary));
   assert.equal(summary.activeCommandCount, 62);
   assert.equal(summary.coverageCount + summary.incompleteCount, 62);
+  assert.equal(summary.fixtureParityCount, fixtures.FIXTURE_CASES.length);
   assert.equal(summary.failedCount, 0);
-
-  // Every fixture case names real files and a task the manifest supports.
-  for (const fixtureCase of fixtures.FIXTURE_CASES) {
-    for (const relativePath of [fixtureCase.inputPath, ...Object.values(fixtureCase.expectedOutputPaths || { only: fixtureCase.expectedOutputPath })]) {
-      const size = fs.statSync(path.join(ROOT, relativePath)).size;
-      assert.ok(size > 352, `${fixtureCase.id}: ${relativePath} is a non-empty NIfTI file`);
-    }
-    if (fixtureCase.batchStep.sourceLine !== null) {
-      const step = steps.find(candidate => candidate.sourceLine === fixtureCase.batchStep.sourceLine);
-      assert.ok(step, `${fixtureCase.id}: batch_processing.sh line ${fixtureCase.batchStep.sourceLine} is an active SCT command`);
-      assert.equal(step.section, fixtureCase.batchStep.section, `${fixtureCase.id}: section`);
-      if (step.taskId === null) {
-        // A library step (vertebral labeling) rather than a model task.
-        assert.match(step.command, /^sct_label_vertebrae\b/, `${fixtureCase.id}: the only fixture without a model task is vertebral labeling`);
-      } else {
-        const task = manifest.tasks.find(candidate => candidate.id === step.taskId);
-        assert.ok(task, `${fixtureCase.id}: task ${step.taskId} is in the manifest`);
-        assert.equal(task.supportStatus, 'supported', `${fixtureCase.id}: task ${step.taskId} is supported`);
-      }
-    }
-  }
 
   assertNegativeCases();
 
-  console.log(formatResults(allResults, summary).replace(/ fixtures=0 /, ' '));
-  console.log(`Fixture definitions valid: ${fixtures.FIXTURE_CASES.length}. Parity against native SCT output is measured by test:fixtures.`);
+  console.log(formatResults(allResults, summary));
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

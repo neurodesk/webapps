@@ -1,0 +1,27 @@
+import * as ort from 'onnxruntime-web/wasm';
+import wasmURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
+import wasmModuleURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
+
+ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
+// A fixed count keeps every machine on the same arithmetic. Two threads reproduce the
+// single-thread outputs bit for bit; four or more change rounding in trega and white orders 1-3.
+ort.env.wasm.numThreads = 2;
+
+export const Tensor = ort.Tensor;
+
+export function createBrowserSession(bytes) {
+  return ort.InferenceSession.create(bytes, {
+    executionProviders: ['wasm'],
+    graphOptimizationLevel: 'all',
+  });
+}
+
+export function browserRuntime() {
+  return {
+    inference: 'ONNX Runtime Web WASM',
+    onnxruntime: ort.env.versions?.web || '1.29.0',
+    // Without cross-origin isolation ONNX Runtime has no SharedArrayBuffer and runs on one thread.
+    threads: self.crossOriginIsolated ? ort.env.wasm.numThreads : 1,
+    graphOptimizationLevel: 'all',
+  };
+}

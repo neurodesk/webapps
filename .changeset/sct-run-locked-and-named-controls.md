@@ -2,4 +2,4 @@
 "spinalcordtoolbox": patch
 ---
 
-Keep Run disabled until an image is loaded: startup re-enabled it, so the keyboard could start a segmentation with no input. Give the window sliders, the overlay opacity slider and the file input accessible names.
+Keep Run segmentation disabled until an input is loaded. The section's styling blocked the mouse but not the keyboard, so Enter could start a segmentation with no image.

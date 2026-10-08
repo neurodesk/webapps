@@ -1,5 +1,39 @@
 # zarro
 
+## 0.4.20261007
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+- Updated dependencies [70f2770]
+  - @neurodesk/webapp-components@0.10.2
+
+## 0.4.20261005
+
+### Patch Changes
+
+- Fix duplicate crosshairs in the NVSlide viewer by hiding the NiiVue overlay inside the shared canvas wrapper. Preserve crosshair toggling and layout switching.
+
+## 0.4.20261004
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.10.1
+- Updated dependencies [0204fe1]
+- Updated dependencies [ec85a09]
+  - @neurodesk/webapp-components@0.10.0
+- Updated dependencies
+  - @neurodesk/webapp-components@0.9.0
+
+## 0.4.20261003
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.8.0
+
 ## 0.4.20260930
 
 ### Patch Changes
@@ -8,7 +42,6 @@
 - Updated dependencies
 - Updated dependencies
   - @neurodesk/webapp-components@0.7.0
-
 
 ### Patch Changes
 

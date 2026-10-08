@@ -295,43 +295,6 @@
     "spinalcordtoolbox": {
       "assets": [
         {
-          "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_levels.nii.gz",
-          "kind": "atlas-template",
-          "sources": [
-            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/5/templateAssets/1"
-          ],
-          "sha256": "5e5b27aee46837abfdb85bffb01d5eb6c20f41ed7d308f5388fc86fd251942b6",
-          "bytes": 129677,
-          "id": "pam50-levels",
-          "support_status": "supported",
-          "filename": "templates/PAM50/PAM50_levels.nii.gz"
-        },
-        {
-          "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/templates/PAM50/PAM50_t2.nii.gz",
-          "kind": "atlas-template",
-          "sources": [
-            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/5/templateAssets/0"
-          ],
-          "sha256": "3e98b3275454e783a2683af0a6c895a9fa40c5c8da7eac9d6d478516fe85f0a8",
-          "bytes": 24057343,
-          "id": "pam50-t2",
-          "support_status": "supported",
-          "filename": "templates/PAM50/PAM50_t2.nii.gz"
-        },
-        {
-          "url": "./models/c2c3_disc_models/t2_model.yml",
-          "kind": "model",
-          "sources": [
-            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/5/templateAssets/2"
-          ],
-          "id": "c2c3-t2-hog-svm",
-          "support_status": "supported",
-          "filename": "c2c3_disc_models/t2_model.yml",
-          "bytes": 10899,
-          "sha256": "3d61521d10a4e7634bdbdfbe49c0cd2b8d8845f8f00731ff45e81e9f0ce20882",
-          "local_source": "apps/spinalcordtoolbox/web/models/c2c3_disc_models/t2_model.yml"
-        },
-        {
           "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-graymatter.onnx",
           "kind": "model",
           "sources": [
@@ -347,7 +310,7 @@
           "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-lesion-sci-t2.onnx",
           "kind": "model",
           "sources": [
-            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/10/modelAssets/0"
+            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/9/modelAssets/0"
           ],
           "sha256": "3b28b46ac85345fd33f0ce393c6538370794fe9b5d1ffedeb5df88891bfa1cdb",
           "bytes": 123451938,
@@ -371,7 +334,7 @@
           "url": "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx",
           "kind": "model",
           "sources": [
-            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/17/modelAssets/0"
+            "apps/spinalcordtoolbox/web/models/manifest.json#/tasks/16/modelAssets/0"
           ],
           "sha256": "22f2e6e0b7a028a80ddd8b211d5c732da8c23a6dbb059fb9d379a67b3f9ce74c",
           "bytes": 564385004,
@@ -384,14 +347,6 @@
           "kind": "runtime-cdn",
           "sources": [
             "apps/spinalcordtoolbox/web/js/inference-worker.js"
-          ],
-          "verification": "source reference; production bundling may rewrite it"
-        },
-        {
-          "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
-          "kind": "runtime-cdn",
-          "sources": [
-            "apps/spinalcordtoolbox/web/index.html"
           ],
           "verification": "source reference; production bundling may rewrite it"
         }
@@ -416,7 +371,6 @@
         "apps/spinalcordtoolbox/web/js/app/config.js",
         "apps/spinalcordtoolbox/web/js/app/sct-tasks.js",
         "apps/spinalcordtoolbox/web/js/inference-worker.js",
-        "apps/spinalcordtoolbox/web/js/modules/vertebrae.js",
         "apps/spinalcordtoolbox/web/js/spinalcordtoolbox-app.js"
       ]
     },
@@ -902,7 +856,7 @@
           "verification": "source reference; production bundling may rewrite it"
         },
         {
-          "url": "https://unpkg.com/@niivue/niivue@0.44.0/dist/niivue.umd.js",
+          "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
           "kind": "runtime-cdn",
           "sources": [
             "apps/seedseg/web/index.html"
@@ -3261,7 +3215,8 @@
         "@neurodesk/topofit": "workspace:*",
         "@neurodesk/webapp-components": "workspace:*",
         "@niivue/niimath": "1.4.20260909",
-        "@niivue/niivue": "1.0.0-rc.11"
+        "@niivue/niivue": "1.0.0-rc.11",
+        "onnxruntime-web": "1.29.0"
       },
       "notes": [
         "All assets in packages/topofit/model.manifest.json plus cortex atlas are listed. Runtime appends ?sha256= to model/geometry requests. Preserve SHA-256 query alias."

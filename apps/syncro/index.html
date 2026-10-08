@@ -61,13 +61,13 @@
     <summary class="nd-section-title">Results</summary>
     <div class="nd-section-content">
       <button id="downloadSelected" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" disabled>Download shown image</button>
+      <button id="editLesion" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" title="Edit in the viewer" disabled>Edit lesion</button>
       <button id="download" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" disabled>Download all results (.zip)</button>
       <p class="nd-hint">Output names match command-line SYNcro. Processing details are included in the archive.</p>
     </div>
   </details>
 
   <button id="aboutBtn" type="button" hidden>About</button>
-  <button id="standaloneBtn" type="button" data-neurodesk-control="standalone" hidden>Standalone</button>
   <button id="privacyBtn" type="button" hidden>Privacy</button>
 </header>
 
@@ -97,24 +97,6 @@
 <template id="privacyContent">
   <p>Your images are processed locally in this browser. Models, the MNI template and optional tutorial images are downloaded from Hugging Face; MindGrab ships with the app. Model bytes may be cached on this device. Your own images are not uploaded to a processing service.</p>
 </template>
-
-<template id="standaloneContent">
-  <div class="nd-dialog-highlight"><div><strong>Run SYNcro from a terminal</strong><p>Download a portable build for Windows or Linux. No Node.js installation or administrator access is required. Models download and verify on first use.</p></div></div>
-  <div >
-    <section><h3>Windows x64</h3><p>Extract the zip in PowerShell, then run the included executable.</p><p><a id="nativeWindowsDownload" class="nd-btn nd-btn-secondary nd-btn-sm">Download for Windows</a> <a id="nativeWindowsChecksum" class="nd-btn nd-btn-secondary nd-btn-sm">SHA-256</a></p><div class="nd-command"><code id="nativeWindowsCommands"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="nativeWindowsCommands" aria-label="Copy Windows commands">Copy</button></div></section>
-    <section><h3>Linux x64</h3><p>Built and tested on Ubuntu 22.04. Keep the extracted directory intact.</p><p><a id="nativeLinuxDownload" class="nd-btn nd-btn-secondary nd-btn-sm">Download for Linux</a> <a id="nativeLinuxChecksum" class="nd-btn nd-btn-secondary nd-btn-sm">SHA-256</a></p><div class="nd-command"><code id="nativeLinuxCommands"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="nativeLinuxCommands" aria-label="Copy Linux commands">Copy</button></div></section>
-  </div>
-  <p class="nd-hint">Replace <code>input.nii.gz</code> with your scan. Add <code>--ct</code> for CT. Run <code>download-models</code> first to prepare an offline cache.</p>
-  <details id="nodePackageDetails" class="nd-sidebar-section"><summary class="nd-section-title">Node.js package for other systems and HPC</summary>
-    <p>Install with Node.js 22 or later. This route supports managed clusters and shared model caches.</p>
-    <a id="packageLink" class="nd-btn nd-btn-secondary nd-btn-sm" download>Download npm package</a>
-    <h3>Download</h3><div class="nd-command"><code id="downloadCommand"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="downloadCommand" aria-label="Copy npm download command">Copy</button></div>
-    <h3>Install</h3><div class="nd-command"><code id="installCommand"></code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="installCommand" aria-label="Copy npm install command">Copy</button></div>
-    <h3>Run</h3><div class="nd-command"><code id="runCommand">"$HOME/.local/bin/syncro" input.nii.gz results --threads 4</code><button class="nd-btn nd-btn-secondary nd-btn-sm" type="button" data-copy-target="runCommand" aria-label="Copy npm run command">Copy</button></div>
-  </details>
-  <span id="copyStatus" class="nd-sr-only" role="status" aria-live="polite"></span>
-</template>
-
 
 <script type="module" src="/src/main.js"></script>
 </body>

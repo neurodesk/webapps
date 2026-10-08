@@ -59,6 +59,48 @@ const pipeline = loadClassicScript(path.join(__dirname, '../web/js/inference-pip
   }
 
   {
+    // lesion_ms: one channel holding logit(lesion) - logit(background), nnU-Net
+    // style centred padding for an axis shorter than the patch, and a Gaussian
+    // whose sigma scales with the patch.
+    const seenPatches = [];
+    const result = await pipeline.runRegionInferencePipeline(
+      {
+        data: new Float32Array([5, 5, 5]),
+        dims: [3, 1, 1],
+        patchSize: [5, 1, 1]
+      },
+      async (patch) => {
+        seenPatches.push([...patch]);
+        return new Float32Array([10, 10, -10, 10, 10]);
+      },
+      {
+        normalizeInput: false,
+        minComponentSize: 1,
+        channelCount: 1,
+        paddingMode: 'center-min-patch',
+        gaussianSigmaScale: 0.125,
+        regions: [
+          { name: 'lesion', stage: 'lesion', channel: 0, sourceLabels: [1], outputLabel: 1, threshold: 0.5 }
+        ]
+      }
+    );
+    assert.deepEqual(seenPatches, [[0, 5, 5, 5, 0]], 'short axes are zero-padded on both sides');
+    assert.deepEqual(result.regions.map(region => region.stage), ['lesion']);
+    assert.deepEqual(result.dims, [3, 1, 1]);
+    assert.deepEqual([...result.regions[0].labels], [1, 0, 1], 'the centred padding is cropped from the recorded offset');
+  }
+
+  {
+    const weights = pipeline.computeScaledGaussianWeightMap3D(8, 4, 2, 0.125);
+    const at = (i0, i1, i2) => weights[i0 * 4 * 2 + i1 * 2 + i2];
+    assert.equal(weights.length, 64);
+    assert.ok(Math.abs(at(0, 1, 0) - at(7, 2, 1)) < 1e-7, 'weights are symmetric about the patch centre');
+    // sigma = dim / 8 on each axis, so the corner sits 3.5 sigma out on every axis.
+    assert.ok(Math.abs(at(0, 1, 0) / at(3, 1, 0) - Math.exp(-(3.5 * 3.5 - 0.5 * 0.5) / 2)) < 1e-6, 'sigma scales with the patch dimension');
+    assert.ok(at(0, 0, 0) > 0, 'patch corners keep a non-zero weight');
+  }
+
+  {
     const result = await pipeline.runMulticlassInferencePipeline(
       {
         data: new Float32Array([0, 0]),

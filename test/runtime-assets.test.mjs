@@ -30,7 +30,7 @@ test('only declared app-scoped runtime families remain in composite app copies',
     if (app.app_scoped_runtime_families.includes('dcm2niix')) {
       for (const file of ['index.js', 'worker.js', 'dcm2niix.js', 'dcm2niix.wasm']) {
         assert.deepEqual(await readFile(join(appDist, 'dcm2niix', file)),
-          await readFile(join(dist, '_runtime', 'dcm2niix', '1', file)), `${app.id}: scoped ${file}`);
+          await readFile(join(dist, '_runtime', 'dcm2niix', '1.3.20260724', file)), `${app.id}: scoped ${file}`);
       }
     } else await assert.rejects(access(join(appDist, 'dcm2niix')));
     await assert.rejects(access(join(appDist, 'nifti-js')));

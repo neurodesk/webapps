@@ -48,7 +48,12 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
     }, 10000);
     page.on('console', message => console.log(`${app.id} ${message.type()}: ${message.text()}`));
     page.on('pageerror', error => { console.error(`${app.id} pageerror: ${error.stack || error.message}`); errors.push(error.stack || error.message); });
-    page.on('response', response => { if (response.status() >= 400 && !new URL(response.url()).pathname.startsWith('/_local/')) missing.push(`${response.status()} ${response.url()}`); });
+    // nd-compute-connection probes the page's own origin for a compute server that serves the app; the desktop never is one.
+    const computeProbe = (response, url) => response.status() === 404 && url.origin === new URL(page.url()).origin && url.pathname === '/api/v1/info';
+    page.on('response', response => {
+      const url = new URL(response.url());
+      if (response.status() >= 400 && !url.pathname.startsWith('/_local/') && !computeProbe(response, url)) missing.push(`${response.status()} ${response.url()}`);
+    });
     await page.waitForLoadState('domcontentloaded');
     if (bundle.modelsIncluded === false && !modelDownloadTested && process.env.NEURODESK_CONTAINER !== '1') {
       const [url, model] = Object.entries(bundle.assets).filter(([url, asset]) => asset.remote && url.endsWith('.onnx')).sort((a, b) => a[1].bytes - b[1].bytes)[0];

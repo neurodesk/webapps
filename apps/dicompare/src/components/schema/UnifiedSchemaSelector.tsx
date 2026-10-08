@@ -29,7 +29,7 @@ interface UnifiedSchemaSelectorProps {
   // Callbacks
   onSchemaSelect?: (schemaId: string) => void;
   onAcquisitionSelect?: (schemaId: string, acquisitionIndex: number) => void;
-  onSchemaUpload?: (file: File) => void;
+  onSchemaUpload?: (file: File) => void | Promise<string | null | void>;
   onSchemaDownload?: (schemaId: string) => void;
 
   // Multi-select mode (for selecting multiple acquisitions)
@@ -104,6 +104,33 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const [urlImporting, setUrlImporting] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
+  // Track the most recently uploaded schema so we can confirm it, surface it to
+  // the top of the list, and highlight it for easy selection.
+  const [recentUpload, setRecentUpload] = useState<{ id: string; fallbackName: string } | null>(null);
+  const listScrollRef = useRef<HTMLDivElement | null>(null);
+
+  // Shared upload flow: run the caller's upload, then confirm + surface the result.
+  const processUpload = async (file: File): Promise<string | null> => {
+    if (!onSchemaUpload) return null;
+    const result = await onSchemaUpload(file);
+    const newId = typeof result === 'string' ? result : null;
+    if (newId) {
+      // Make sure the new (custom) schema is visible and unobstructed by filters.
+      setShowCustom(true);
+      setSearchQuery('');
+      setSelectedTags([]);
+      setRecentUpload({ id: newId, fallbackName: file.name.replace(/\.json$/i, '') });
+    }
+    return newId;
+  };
+
+  // Scroll the list back to the top when a fresh upload is surfaced there.
+  useEffect(() => {
+    if (recentUpload && listScrollRef.current) {
+      listScrollRef.current.scrollTop = 0;
+    }
+  }, [recentUpload]);
+
   const handleUrlImport = async () => {
     const url = urlInput.trim();
     if (!url || !onSchemaUpload) return;
@@ -113,7 +140,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       const text = await fetchExternalSchema(url);
       const base = url.split('/').pop()?.split('?')[0] || 'schema.json';
       const filename = base.endsWith('.json') ? base : `${base}.json`;
-      await onSchemaUpload(new File([text], filename, { type: 'application/json' }));
+      await processUpload(new File([text], filename, { type: 'application/json' }));
       setUrlInput('');
     } catch (e) {
       logError('Schema import from URL failed', e);
@@ -213,8 +240,20 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       });
     }
 
+    // Alphabetical by schema name
+    schemas = [...schemas].sort((a, b) =>
+      (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase())
+    );
+
+    // Surface a just-uploaded schema to the top of the list.
+    if (recentUpload?.id) {
+      schemas = [...schemas].sort((a, b) =>
+        (a.id === recentUpload.id ? 0 : 1) - (b.id === recentUpload.id ? 0 : 1)
+      );
+    }
+
     return schemas;
-  }, [allSchemas, showLibrary, showCustom, searchQuery, selectedTags]);
+  }, [allSchemas, showLibrary, showCustom, searchQuery, selectedTags, recentUpload]);
 
   // Get all unique tags with counts (counting acquisitions, not schemas)
   const tagsWithCounts = useMemo(() => {
@@ -416,6 +455,12 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         .filter(item => item.matchesTag && item.matchesKeywords);
     });
 
+    // Alphabetical by acquisition name (base order for the flat view)
+    result.sort((a, b) =>
+      (a.acquisition.protocolName || '').toLowerCase()
+        .localeCompare((b.acquisition.protocolName || '').toLowerCase())
+    );
+
     // Sort by score if acquisitionScores is provided
     // Primary: score descending, Secondary: passCount descending (more constraints = better match)
     if (acquisitionScores) {
@@ -432,8 +477,16 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       });
     }
 
+    // Surface a just-uploaded schema's acquisitions to the top (stable sort keeps
+    // the rest of the order intact).
+    if (recentUpload?.id) {
+      result.sort((a, b) =>
+        (a.schema.id === recentUpload.id ? 0 : 1) - (b.schema.id === recentUpload.id ? 0 : 1)
+      );
+    }
+
     return result;
-  }, [viewMode, allSchemas, showLibrary, showCustom, schemaAcquisitions, selectedTags, searchQuery, acquisitionScores]);
+  }, [viewMode, allSchemas, showLibrary, showCustom, schemaAcquisitions, selectedTags, searchQuery, acquisitionScores, recentUpload]);
 
   // Check if flat view is still loading acquisitions
   const isFlatViewLoading = viewMode === 'flat' && loadingSchemas.size > 0;
@@ -580,14 +633,16 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.name.endsWith('.json')) {
-        onSchemaUpload?.(file);
+        processUpload(file);
       }
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      onSchemaUpload?.(e.target.files[0]);
+      processUpload(e.target.files[0]);
+      // Reset so re-uploading the same file still fires onChange.
+      e.target.value = '';
     }
   };
 
@@ -1284,7 +1339,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
           </div>
 
           {/* Schema list */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div ref={listScrollRef} className="flex-1 overflow-y-auto p-4">
             {/* Upload Area - always show when onSchemaUpload is provided */}
             {onSchemaUpload && (
               <div className="mb-4" data-tutorial="schema-upload">
@@ -1342,6 +1397,29 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
               </div>
             )}
 
+            {/* Confirmation banner for a just-uploaded schema */}
+            {recentUpload && (
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3">
+                <Check className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0 text-sm">
+                  <p className="font-medium text-green-800 dark:text-green-300">
+                    Added “{allSchemas.find(s => s.id === recentUpload.id)?.name || recentUpload.fallbackName}”
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
+                    It's highlighted and moved to the top — select its acquisitions, then click “Add”.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRecentUpload(null)}
+                  className="p-1 text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-200 flex-shrink-0"
+                  title="Dismiss"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
             {viewMode === 'nested' ? (
               <>
                 <div className="text-sm text-content-secondary mb-3">
@@ -1384,6 +1462,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                   <div className="space-y-2">
                     {flattenedAcquisitions.map(({ schema, acquisition, index }) => {
                       const isAcqSelected = multiSelectMode && isAcquisitionSelected(schema.id, index);
+                      const isRecentUpload = recentUpload?.id === schema.id;
                       const flatAcqSelection: AcquisitionSelection = {
                         schemaId: schema.id,
                         acquisitionIndex: index,
@@ -1407,6 +1486,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               isAcqSelected
                                 ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20'
                                 : 'border-border-secondary hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700'
+                            } ${
+                              isRecentUpload && !isAcqSelected
+                                ? 'ring-2 ring-green-400 dark:ring-green-600 ring-offset-1 ring-offset-surface-primary'
+                                : ''
                             }`}
                           >
                           <div className="flex items-start space-x-3">
@@ -1431,6 +1514,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
+                                {isRecentUpload && (
+                                  <span className="text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40 px-2 py-0.5 rounded flex-shrink-0">
+                                    New
+                                  </span>
+                                )}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">
@@ -1507,7 +1595,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                         <button
                           key={`${schema.id}-${index}`}
                           onClick={() => onAcquisitionSelect?.(schema.id, index)}
-                          className="w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700"
+                          className={`w-full text-left border border-border-secondary rounded-lg p-3 bg-surface-primary transition-all hover:bg-brand-50 dark:hover:bg-brand-900/20 hover:border-brand-300 dark:hover:border-brand-700 ${
+                            isRecentUpload
+                              ? 'ring-2 ring-green-400 dark:ring-green-600 ring-offset-1 ring-offset-surface-primary'
+                              : ''
+                          }`}
                         >
                           <div className="flex items-start space-x-3">
                             <FileText className="h-5 w-5 text-content-tertiary mt-0.5 flex-shrink-0" />
@@ -1519,6 +1611,11 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                                 <span className="text-xs text-content-tertiary bg-surface-tertiary px-2 py-0.5 rounded flex-shrink-0">
                                   {schema.name}
                                 </span>
+                                {isRecentUpload && (
+                                  <span className="text-xs font-medium text-green-700 dark:text-green-300 bg-green-100 dark:bg-green-900/40 px-2 py-0.5 rounded flex-shrink-0">
+                                    New
+                                  </span>
+                                )}
                               </div>
                               {acquisition.seriesDescription && (
                                 <div className="text-xs text-content-secondary mt-1">

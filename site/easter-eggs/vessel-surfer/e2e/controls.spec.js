@@ -117,7 +117,11 @@ test("keys steer while braking, a held mouse drag steers, and a resting mouse re
 });
 
 test.describe("touch", () => {
-  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test.use({
+    hasTouch: true,
+    viewport: { width: 390, height: 844 },
+    permissions: ['accelerometer', 'gyroscope'],
+  });
   const orient = (page, beta, gamma) =>
     page.evaluate(
       ([beta, gamma]) =>

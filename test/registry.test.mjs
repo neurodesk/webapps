@@ -83,6 +83,35 @@ test('every Playwright spec an app ships is run by its browser command', async (
   assert.deepEqual(unreached, []);
 });
 
+test('hardware-GPU apps run their browser suite on a macOS runner with Metal', async () => {
+  const registry = await loadAppsRegistry();
+  assert.ok(registry.apps.some((app) => app.ci.hardware_gpu), 'at least one app needs hardware GPU coverage');
+  const workflow = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
+  const job = workflow.jobs['browser-e2e-gpu'];
+  assert.equal(job.needs, 'app-plan');
+  assert.match(job.if, /has_gpu_apps/);
+  assert.match(job['runs-on'], /^macos-/);
+  assert.match(job.strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.gpu_apps\)/);
+  assert.equal(job.env.NEURODESK_HARDWARE_GPU, '1');
+  assert.ok(job.steps.some((step) => step.run?.includes('scripts/e2e-test-data.mjs')), 'the job downloads test data');
+});
+
+test('the SynthSeg registry manifest stays identical to the package copy', async () => {
+  // exes/synthseg/scripts/repoint_model_manifest.sh pins both; the registry reads models/.
+  const registryCopy = await readFile(join(repoRoot, 'models/synthseg.manifest.json'), 'utf8');
+  const packageCopy = await readFile(join(repoRoot, 'packages/synthseg/model.manifest.json'), 'utf8');
+  assert.equal(registryCopy, packageCopy);
+});
+
+test('registry validation rejects ci.hardware_gpu without a browser suite', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  raw.apps[0].ci.browser_test = false;
+  raw.apps[0].ci.hardware_gpu = true;
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-registry-')), 'apps.yml');
+  await writeFile(path, stringify(raw));
+  await assert.rejects(loadAppsRegistry(path), /ci\.hardware_gpu needs ci\.browser_test/);
+});
+
 test('registry validation rejects a non-boolean ci.browser_test', async () => {
   const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
   raw.apps[0].ci.browser_test = 'sometimes';
@@ -112,7 +141,7 @@ test('SpinalCordToolbox routine releases exclude generated batch parity and work
     await readFile(join(repoRoot, 'apps', 'spinalcordtoolbox', 'package.json'), 'utf8'),
   );
   const releaseTest = packageJson.scripts['test:release'];
-  assert.match(releaseTest, /test:vertebrae:unit/);
+  assert.match(releaseTest, /test:totalspineseg/);
   assert.match(releaseTest, /test:batch:webapp/);
   assert.doesNotMatch(releaseTest, /test:fixtures(?:\s|$)/);
   assert.doesNotMatch(releaseTest, /test:inference:e2e/);

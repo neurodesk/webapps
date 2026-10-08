@@ -172,6 +172,7 @@ async function loadModel(releaseModel, release) {
       orientation: 'RAS',
       targetSpacing: config.parameters.pix_dim,
       cropForegroundMargin: 20,
+      spatialPad: [256, 256],
       padding: 'end',
       overlapDefault: releaseModel.overlapDefault,
       normalization: 'nonzero-zscore'

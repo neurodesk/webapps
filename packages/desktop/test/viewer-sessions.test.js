@@ -78,6 +78,28 @@ test('a window closed before retention cannot occupy a session slot', () => {
   sessions.assertCapacity();
 });
 
+test('pending completion occupies capacity but hides its viewer and rejects commands', async () => {
+  const sessions = createViewerSessions({ maximum: 1 });
+  let ready = false;
+  let calls = 0;
+  let closed = 0;
+  const session = sessions.add({ app: 'viewer', runId: 'run', isReady: () => ready, adapter: {
+    command() { calls++; return 'state'; }, close() { closed++; },
+  } });
+  assert.deepEqual(sessions.list(), []);
+  assert.throws(() => sessions.assertCapacity(), /limit/);
+  assert.throws(() => sessions.command(session.id, 'viewers.state'), /Unknown or closed/);
+  ready = true;
+  assert.deepEqual(sessions.list(), [session]);
+  const queued = sessions.command(session.id, 'viewers.state');
+  ready = false;
+  await assert.rejects(queued, /Unknown or closed/);
+  assert.equal(calls, 0);
+  await sessions.close(session.id);
+  assert.equal(closed, 1);
+  sessions.assertCapacity();
+});
+
 test('invalid viewer actions preserve a usable session, while connection close releases it', async () => {
   const sessions = createViewerSessions();
   let closed = 0;

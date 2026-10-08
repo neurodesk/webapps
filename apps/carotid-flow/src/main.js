@@ -8,23 +8,19 @@ import {
   createConsole,
   createExampleSelector,
   createInfoDialog,
+  createMaskEditor,
   createResultList,
   createViewerToolbar,
 } from '@neurodesk/webapp-components/ui';
-import {
-  createFloat32Nifti,
-  createUint8Nifti,
-  decodeNiftiBuffer,
-  downloadBlob,
-  downloadFile,
-  extractNiftiHeader,
-  readNiftiFrames,
-} from '@neurodesk/webapp-components/file-io';
+import { createFloat32Nifti, downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
-import { curvesCsv, detectCarotids, meanFrames, splitSeries } from './carotid.js';
+import { detectCarotids, meanFrames, phaseEncoding } from '@neurodesk/carotid-flow';
+import { curvesTable, measurements, stem, variabilityImage } from '@neurodesk/carotid-flow/outputs';
+import { readSeries, readVolume } from '@neurodesk/carotid-flow/series';
 import { flowChartSvg } from './chart.js';
-import { APP, assignSeries, stem } from './config.js';
+import { APP, assignSeries } from './config.js';
+import { labelFiles, niftiFile, resultRows, withEditedLabels } from './outputs.js';
 import examples from '../examples.json';
 import './styles.css';
 
@@ -64,11 +60,38 @@ function colormapMiddle(name) {
   const low = high - 1;
   const mix = (position - map.I[low]) / (map.I[high] - map.I[low]);
   const channel = (values) => Math.round(values[low] + (values[high] - values[low]) * mix);
-  return `rgb(${channel(map.R)} ${channel(map.G)} ${channel(map.B)})`;
+  return [channel(map.R), channel(map.G), channel(map.B)];
 }
-for (const side of Object.values(SIDES)) side.color = colormapMiddle(side.colormap);
+for (const side of Object.values(SIDES)) {
+  side.rgb = colormapMiddle(side.colormap);
+  side.color = `rgb(${side.rgb.join(' ')})`;
+}
 
 const viewer = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] });
+// The label map and its drawing take each side's overlay colour: 1 is left, 2 is right.
+const LABEL_COLORMAP = viewer.addColormap('carotidLabels', {
+  R: [0, SIDES.left.rgb[0], SIDES.right.rgb[0]],
+  G: [0, SIDES.left.rgb[1], SIDES.right.rgb[1]],
+  B: [0, SIDES.left.rgb[2], SIDES.right.rgb[2]],
+  A: [0, 255, 255],
+  I: [0, 1, 2],
+});
+const editor = createMaskEditor({
+  nv: viewer,
+  labelNames: { 1: 'Left carotid', 2: 'Right carotid' },
+  onApply: applyLabelEdit,
+  onCancel: () => {
+    results.setEditingEnabled(editor.session.state === 'idle');
+    // A load or run that cancelled the session redraws the viewer itself.
+    if (busy) return;
+    status('Edits discarded');
+    return showImages().catch((error) => status(error.message, true));
+  },
+  onError: (_stage, error) => status(error instanceof Error ? error.message : String(error), true),
+});
+toolbar.after(editor);
+editor.addEventListener('nd-mask-edit-end', () => results.setEditingEnabled(true));
+editor.addEventListener('nd-mask-edit-start', ({ detail }) => status(detail.message));
 let ready = false;
 let busy = false;
 let loading = null;
@@ -105,54 +128,22 @@ function setBusy(value) {
   refreshActions();
 }
 
-/** One stored NIfTI, every frame, checked to be a single slice. */
-async function readVolume(file) {
-  const buffer = await decodeNiftiBuffer(await file.arrayBuffer());
-  const volume = readNiftiFrames(buffer);
-  if (volume.dims[2] !== 1) {
-    throw new Error(`${file.name} has ${volume.dims[2]} slices; Carotid Flow reads one gated slice.`);
-  }
-  return { ...volume, headerBytes: extractNiftiHeader(buffer) };
+/** The series with its mean amplitude, the background the carotids are drawn on. */
+async function loadSeries(chosen) {
+  const loaded = await readSeries(chosen);
+  const meanAmplitude = Float32Array.from(meanFrames(loaded.amplitude, loaded.nx * loaded.ny, loaded.phases));
+  const amplitudeName = `${stem(loaded.name)}_mean_amplitude.nii`;
+  return { ...loaded, amplitudeFile: niftiFile(createFloat32Nifti(meanAmplitude, loaded.headerBytes), amplitudeName) };
 }
 
-async function readSeries(chosen) {
-  if (chosen.error) throw new Error(chosen.error);
-  let volume;
-  let split;
-  if (chosen.combined) {
-    volume = await readVolume(chosen.combined);
-    split = splitSeries(volume.data, volume.dims[0] * volume.dims[1], volume.frames);
-  } else {
-    volume = await readVolume(chosen.amplitude);
-    const phase = await readVolume(chosen.phase);
-    if (phase.dims[0] !== volume.dims[0] || phase.dims[1] !== volume.dims[1] || phase.frames !== volume.frames) {
-      throw new Error(`${chosen.amplitude.name} and ${chosen.phase.name} differ in size or frame count.`);
-    }
-    split = { phases: volume.frames, amplitude: volume.data, phase: phase.data };
-  }
-  const [nx, ny] = volume.dims;
-  const name = (chosen.combined ?? chosen.amplitude).name;
-  const meanAmplitude = Float32Array.from(meanFrames(split.amplitude, nx * ny, split.phases));
-  return {
-    ...split,
-    name,
-    nx,
-    ny,
-    affine: volume.header.affine.map((row) => Array.from(row)),
-    voxelSize: volume.header.voxelSize,
-    headerBytes: volume.headerBytes,
-    amplitudeFile: niftiFile(createFloat32Nifti(meanAmplitude, volume.headerBytes), `${stem(name)}_mean_amplitude.nii`),
-  };
-}
-
-function niftiFile(buffer, name) {
-  return new File([buffer], name, { type: 'application/octet-stream' });
+function baseImage(state) {
+  return state.result && state.background === 'variability' ? state.result.files.variability : state.series.amplitudeFile;
 }
 
 /** The chosen background under both carotids. Takes state explicitly so a failed load can
  *  redraw the previous inputs. */
 async function showImages(state = { series, result, background }) {
-  const base = state.result && state.background === 'variability' ? state.result.files.variability : state.series.amplitudeFile;
+  const base = baseImage(state);
   const volumes = [{ url: base, name: base.name }];
   if (state.result) {
     for (const side of ['left', 'right']) {
@@ -192,10 +183,11 @@ async function loadFiles(files, { signal, assertCurrent = () => {}, label, chose
     const images = await readImageFiles(await files, { signal: controller.signal });
     controller.signal.throwIfAborted();
     assertCurrent();
-    const next = await readSeries(chosen ?? assignSeries(images));
+    const next = await loadSeries(chosen ?? assignSeries(images));
     controller.signal.throwIfAborted();
     assertCurrent();
     try {
+      await editor.cancel();
       await showImages({ series: next, result: null, background: 'mask' });
       controller.signal.throwIfAborted();
       assertCurrent();
@@ -253,16 +245,47 @@ $('exampleControl').replaceWith(exampleControl);
 const results = createResultList({
   element: $('resultList'),
   onView: (stage) => {
-    if (!result || busy) return;
+    if (!result || busy || editor.session.state !== 'idle') return;
     background = stage;
     void showImages().catch((error) => status(error.message, true));
   },
   onDownload: (_stage, entry) => downloadFile(entry.file),
+  onEdit: () => { void editLabels(); },
 });
+
+async function editLabels() {
+  if (!result || busy) return;
+  results.setEditingEnabled(false);
+  const base = baseImage({ series, result, background });
+  const mask = result.files.mask;
+  try {
+    await viewer.loadVolumes([
+      { url: base, name: base.name },
+      { url: mask, name: mask.name, colormap: LABEL_COLORMAP, calMin: 0, calMax: 2, opacity: overlayOpacity, isColorbarVisible: false },
+    ]);
+    const opened = await editor.start({ stage: 'mask', file: mask, label: 'Carotid labels', overlayIndex: 1, colormap: LABEL_COLORMAP });
+    if (!opened) results.setEditingEnabled(editor.session.state === 'idle');
+  } catch (error) {
+    results.setEditingEnabled(editor.session.state === 'idle');
+    status(error instanceof Error ? error.message : String(error), true);
+    await showImages().catch(() => {});
+  }
+}
+
+async function applyLabelEdit(_stage, file, { original }) {
+  results.setEditingEnabled(editor.session.state === 'idle');
+  const edited = result;
+  const labels = (await readVolume(file)).data;
+  if (result !== edited) return;
+  result = withEditedLabels(result, file, labels, original);
+  results.render(resultRows(result));
+  await showImages();
+  status('Carotid labels edited · curves and metrics keep the detected vessels');
+}
 
 toolbar.addEventListener('nd-overlay-change', ({ detail }) => {
   overlayOpacity = detail.value;
-  if (!result) return;
+  if (!result || editor.session.state !== 'idle') return;
   for (const index of [1, 2]) void viewer.setVolume(index, { opacity: overlayOpacity });
 });
 
@@ -276,7 +299,7 @@ function readSetting(id, low, high) {
   return value;
 }
 
-/** The VENC is optional: only raw ±4096 phase needs it. */
+/** The VENC is optional: raw ±4096 phase needs it, and raw 0–4095 phase is decoded with it. */
 function readVenc() {
   if (!$('venc').value.trim()) return undefined;
   return readSetting('venc', 0, 1000);
@@ -347,10 +370,7 @@ function renderOutputs() {
     return row;
   }));
   $('metricsTable').hidden = false;
-  results.render({
-    mask: { description: 'Carotid labels', file: result.files.mask },
-    variability: { description: result.found.method === 'velocity' ? 'Velocity temporal SD' : 'Phase temporal SD', file: result.files.variability },
-  });
+  results.render(resultRows(result));
 }
 
 async function runDetection({ options: explicitOptions, signal, throwOnError = false } = {}) {
@@ -375,6 +395,7 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
     return;
   }
   setBusy(true);
+  await editor.cancel();
   clearOutputs();
   progress.begin('Detecting carotids…', { cancellable: false });
   status('Detecting carotids…');
@@ -384,16 +405,13 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
     await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
     signal?.throwIfAborted();
     const found = detectCarotids(source, options);
-    const base = stem(source.name);
-    const perSide = (value) => found.mask.map((label) => (label === value ? 1 : 0));
+    const variability = variabilityImage(found, source);
     result = {
       found,
       source,
       files: {
-        mask: niftiFile(createUint8Nifti(found.mask, source.headerBytes), `${base}_carotid_labels.nii`),
-        variability: niftiFile(createFloat32Nifti(found.variability, source.headerBytes), `${base}_phase_sd.nii`),
-        left: niftiFile(createUint8Nifti(perSide(1), source.headerBytes), `${base}_carotid_left.nii`),
-        right: niftiFile(createUint8Nifti(perSide(2), source.headerBytes), `${base}_carotid_right.nii`),
+        ...labelFiles(found.mask, source),
+        variability: niftiFile(variability.bytes, variability.name),
       },
     };
     background = 'mask';
@@ -408,6 +426,9 @@ async function runDetection({ options: explicitOptions, signal, throwOnError = f
       : `left ${left.pixels.length} px, right ${right.pixels.length} px`;
     status(`Both carotids found · ${summary} · systolic peak at frame ${right.peakFrame + 1}`);
     if (found.qc?.flag) status('Review flagged carotid pair · see quality checks in Flow curves');
+    if (options.venc === undefined && phaseEncoding(source.phase) === 'raw-offset') {
+      status('Looks like raw 0–4095 phase; enter the VENC to measure flow');
+    }
     log.log(`Detection took ${Math.round(performance.now() - started)} ms`);
     return result;
   } catch (error) {
@@ -425,7 +446,8 @@ $('runButton').onclick = () => { void runDetection(); };
 
 $('saveButton').onclick = () => {
   if (!result) return;
-  downloadBlob(new Blob([curvesCsv(result.found)], { type: 'text/csv' }), `${stem(result.source.name)}_carotid_curves.csv`);
+  const curves = curvesTable(result.found, result.source);
+  downloadBlob(new Blob([curves.text], { type: 'text/csv' }), curves.name);
 };
 
 async function init() {
@@ -452,19 +474,6 @@ window.addEventListener('pagehide', () => {
 });
 const initialized = init();
 
-function measurements(found) {
-  return {
-    method: found.method,
-    ...(found.qc ? { qc: found.qc, baseline: found.baseline, arterialSign: found.arterialSign } : {}),
-    curveUnit: found.method === 'velocity' ? 'ml/min' : 'a.u.',
-    vessels: Object.fromEntries(['left', 'right'].map(side => {
-      const vessel = found[side];
-      return [side, { areaMm2: vessel.areaMm2, pixelCount: vessel.pixels.length, mean: vessel.mean,
-        peak: vessel.peak, peakFrame: vessel.peakFrame, pulsatility: vessel.pulsatility, curve: Array.from(vessel.curve) }];
-    })),
-  };
-}
-
 async function detectOperation({ inputs, parameters, signal, progress }) {
   await initialized;
   if (!ready) throw new Error('Carotid Flow viewer could not initialize.');
@@ -473,7 +482,8 @@ async function detectOperation({ inputs, parameters, signal, progress }) {
   await loadFiles(Object.values(chosen), { signal, chosen });
   progress('Detecting carotids');
   const completed = await runDetection({ options: parameters, signal, throwOnError: true });
-  const csv = new File([curvesCsv(completed.found)], `${stem(completed.source.name)}_carotid_curves.csv`, { type: 'text/csv' });
+  const curves = curvesTable(completed.found, completed.source);
+  const csv = new File([curves.text], curves.name, { type: 'text/csv' });
   return {
     artifacts: [
       { role: 'labels', file: completed.files.mask },

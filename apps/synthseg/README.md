@@ -19,6 +19,9 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
   topological correction); `fast` is a single pass.
 - **CT** — auto-checked when the loaded image contains negative intensities.
 - **Output** — label-overlay opacity, `<stem>_synthseg.nii.gz`, `<stem>_synthseg.json`.
+- **Edit** — corrects the labels in the viewer with the shared mask editor. Download then
+  saves the edited labels (uint8, same name and grid); the JSON report keeps the pipeline's.
+  An input off SynthSeg's 1 mm grid is shown resampled to that grid while editing.
 
 ## Automation limits
 
@@ -63,7 +66,7 @@ it is never bundled.
 and gates the labels against FreeSurfer's (mismatch ≤ 5e-6). It needs no GPU: Chromium's software
 WebGPU adapter (SwiftShader) is enough, at a few minutes per mode.
 
-`SYNTHSEG_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
+`NEURODESK_HARDWARE_GPU=1 SYNTHSEG_ASSET_DIR=../../exes/synthseg/models SYNTHSEG_REFERENCE_DIR=~/src/synthseg-references pnpm --filter synthseg test:e2e`
 adds both benchmark volumes on the real GPU (SwiftShader cannot hold their buffers) and
 gates them like the native CLI (mismatch ≤ 2e-6, identical geometry). The last run is in
 `validation/report.json`: 0–1 of 5.6 M voxels differ from FreeSurfer, 6–10 s per volume on an

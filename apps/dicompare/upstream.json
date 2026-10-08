@@ -1,0 +1,12 @@
+{
+  "branch": "main",
+  "ignore": [
+    ".github/**",
+    "package-lock.json"
+  ],
+  "integration": [
+    "Keep the offline Pyodide path in public/embed/dicompare-worker.js; the standalone build serves this copy.",
+    "Keep the shared Neurodesk shell in place of upstream's landing page and Pyodide notification.",
+    "When DICOMPARE_PACKAGE changes, replace the dicompare wheel, and any wheel its Requires-Dist now pins (pydicom), in registry/offline-assets.sources.json and registry/offline-assets.lock.json, then verify with `node scripts/desktop/assets.mjs`."
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "fireants-v",
+  "displayName": "FireANTs",
+  "app": "fireants",
+  "run": "moving.nii.gz fixed.nii.gz results",
+  "readme": {
+    "run": "Register a moving image to a fixed image",
+    "notes": [
+      "Add --transform syn for SyN instead of Greedy, and --help for every option.",
+      "Registration runs on the CPU. No network connection is required.",
+      "Brain extract both images first, for example with SynthStrip: MindGrab is",
+      "not included until neurodesk/webapps#162.",
+      "",
+      "This build uses @fireants/fireants, a C/WebAssembly reimplementation of",
+      "FireANTs that is not endorsed by the FireANTs authors. Please cite:",
+      "Jena R, Chaudhari P, Gee JC. Adaptive Riemannian optimization for",
+      "multi-scale diffeomorphic matching. Nature Communications. 2026;17:4774."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "fireants"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "fireants.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "fireants"
+    }
+  }
+}

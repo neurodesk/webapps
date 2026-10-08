@@ -28,4 +28,11 @@ if (manifest.neurodeskWebapp?.static?.coiServiceWorker) {
   });
   console.log(`Generated COI service worker for ${manifest.name}`);
 }
+// Bundler-less apps that embed FreeBrowse get its prebuilt bundle on their own
+// origin, next to the other generated runtime files; nothing is fetched from a CDN.
+if (manifest.neurodeskWebapp?.static?.freebrowseViewer) {
+  const { vendorFreebrowseViewer } = await import('../packages/runtime-support/scripts/build-freebrowse-viewer.mjs');
+  await vendorFreebrowseViewer(join(destinationRoot, 'freebrowse-viewer'));
+  console.log(`Generated FreeBrowse viewer bundle for ${manifest.name}`);
+}
 console.log(`Generated imaging runtime wrappers for ${manifest.name}`);

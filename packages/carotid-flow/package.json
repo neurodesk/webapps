@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/carotid-flow",
+  "version": "0.4.20261007",
+  "description": "Carotid detection and flow curves from phase-contrast MRI for browsers and the command line",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "carotid-flow": "./bin/carotid-flow.js"
+  },
+  "exports": {
+    ".": "./src/carotid.js",
+    "./series": "./src/series.js",
+    "./outputs": "./src/outputs.js",
+    "./phantom": "./src/phantom.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js && node --check bin/carotid-flow.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/carotid-flow"
+  }
+}

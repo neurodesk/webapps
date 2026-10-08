@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Play, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
 import { python } from '@codemirror/lang-python';
-import { linter, lintGutter } from '@codemirror/lint';
+import { linter, lintGutter, Diagnostic } from '@codemirror/lint';
+import Modal from '../common/Modal';
 import { SelectedFunction, TestCase, TestCaseExpectation } from './ValidationFunctionLibraryModal';
 import { dicompareWorkerAPI as dicompareAPI } from '../../services/DicompareWorkerAPI';
 import { useTheme } from '../../contexts/ThemeContext';
 import DicomFieldAutocompleteInput from '../common/DicomFieldAutocompleteInput';
+import { parseCellInput, formatCellValue } from '../../utils/testCaseCells';
+import { getParameterDefinitions, getEffectiveParams, coerceParamValue, formatParamValue } from '../../utils/validationParams';
+import { ValidationParameterDefinition } from '../../types';
 
 interface ValidationFunctionEditorModalProps {
   isOpen: boolean;
@@ -37,6 +41,10 @@ const ValidationFunctionEditorModal: React.FC<ValidationFunctionEditorModalProps
   const [testResults, setTestResults] = useState<Record<string, { passed: boolean; error?: string; warning?: string; stdout?: string; loading?: boolean }>>({});
   const [activeTestDataTabs, setActiveTestDataTabs] = useState<Record<string, 'table' | 'code'>>({});
   const [testDataCode, setTestDataCode] = useState<Record<string, string>>({});
+  // Raw in-progress text per test-data cell (keyed by testCaseId:field:row). While
+  // a cell is being edited we show this verbatim so the field never reformats
+  // mid-keystroke; on blur we drop it and fall back to the formatted stored value.
+  const [cellDrafts, setCellDrafts] = useState<Record<string, string>>({});
   const [codeExecutionResults, setCodeExecutionResults] = useState<Record<string, { loading?: boolean; error?: string; data?: any }>>({});
 
   const getDefaultCodeTemplate = (fields: string[]) => {
@@ -116,7 +124,7 @@ return test_data`;
 
   // Simple Python linter for basic syntax checking
   const pythonLinter = linter((view) => {
-    const diagnostics = [];
+    const diagnostics: Diagnostic[] = [];
     const code = view.state.doc.toString();
 
     // Basic Python syntax checks
@@ -157,7 +165,7 @@ return test_data`;
             from: view.state.doc.line(lineIndex + 1).from,
             to: view.state.doc.line(lineIndex + 1).to,
             severity: 'warning',
-            message: 'Validation functions should not return anything - raise ValidationError for failures or ValidationWarning for warnings'
+            message: 'Validation functions should not return anything — report findings with ctx.error()/ctx.warn(), or raise ValidationError/ValidationWarning'
           });
         }
       });
@@ -300,7 +308,7 @@ output
     } catch (error) {
       setCodeExecutionResults(prev => ({
         ...prev,
-        [testCaseId]: { error: `Execution failed: ${error.message}` }
+        [testCaseId]: { error: `Execution failed: ${error instanceof Error ? error.message : String(error)}` }
       }));
     }
   };
@@ -505,6 +513,117 @@ output
     });
   };
 
+  const updateConfiguredParam = (decl: ValidationParameterDefinition, raw: string | boolean) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const configured = { ...(prev.configuredParams || {}) };
+      if (raw === '') {
+        delete configured[decl.name]; // blank = fall back to the declaration default
+      } else {
+        configured[decl.name] = coerceParamValue(decl, raw);
+      }
+      return { ...prev, configuredParams: configured };
+    });
+    // Parameter values change rule behaviour, so cached test results are stale
+    setTestResults({});
+  };
+
+  const addParameterDefinition = () => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = prev.parameterDefinitions || [];
+      const taken = new Set(decls.map(d => d.name));
+      let i = decls.length + 1;
+      let name = `param${i}`;
+      while (taken.has(name)) { i++; name = `param${i}`; }
+      return { ...prev, parameterDefinitions: [...decls, { name, type: 'number' as const, default: null }] };
+    });
+    setTestResults({});
+  };
+
+  const updateParameterDefinition = (index: number, patch: Partial<ValidationParameterDefinition>) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = [...(prev.parameterDefinitions || [])];
+      const old = decls[index];
+      if (!old) return prev;
+      decls[index] = { ...old, ...patch };
+      // Renaming a parameter migrates its configured value to the new key
+      let configured = prev.configuredParams;
+      if (patch.name && patch.name !== old.name && configured && old.name in configured) {
+        configured = { ...configured, [patch.name]: configured[old.name] };
+        delete configured[old.name];
+      }
+      return { ...prev, parameterDefinitions: decls, configuredParams: configured };
+    });
+    setTestResults({});
+  };
+
+  const removeParameterDefinition = (index: number) => {
+    setEditedFunc(prev => {
+      if (!prev) return null;
+      const decls = [...(prev.parameterDefinitions || [])];
+      const [removed] = decls.splice(index, 1);
+      let configured = prev.configuredParams;
+      if (removed && configured && removed.name in configured) {
+        configured = { ...configured };
+        delete configured[removed.name];
+      }
+      return { ...prev, parameterDefinitions: decls, configuredParams: configured };
+    });
+    setTestResults({});
+  };
+
+  const updateTestCaseParamOverride = (testIndex: number, testCase: TestCase, decl: ValidationParameterDefinition, raw: string | boolean) => {
+    const overrides = { ...(testCase.params || {}) };
+    if (raw === '' || raw === undefined) {
+      delete overrides[decl.name]; // blank = inherit the configured value
+    } else {
+      overrides[decl.name] = coerceParamValue(decl, raw);
+    }
+    updateTestCase(testIndex, { params: overrides });
+  };
+
+  const renderParamInput = (
+    decl: ValidationParameterDefinition,
+    value: any,
+    onChange: (raw: string | boolean) => void,
+    placeholder?: string
+  ) => {
+    const baseClass = "w-full px-2 py-1 text-sm border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500";
+    if (decl.type === 'boolean') {
+      return (
+        <input
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => onChange(e.target.checked)}
+          className="rounded border-border-secondary text-brand-600 focus:ring-brand-500"
+        />
+      );
+    }
+    if (decl.type === 'enum') {
+      return (
+        <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} className={baseClass}>
+          <option value="">{placeholder || '(not set)'}</option>
+          {(decl.options || []).map(opt => (
+            <option key={String(opt)} value={String(opt)}>{String(opt)}</option>
+          ))}
+        </select>
+      );
+    }
+    return (
+      <input
+        type={decl.type === 'number' ? 'number' : 'text'}
+        value={value ?? ''}
+        min={decl.min}
+        max={decl.max}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={baseClass}
+      />
+    );
+  };
+
   const runTestCase = async (testCase: TestCase, liveImplementation?: string, liveFields?: string[], liveSystemFields?: string[]) => {
     if (!editedFunc) return;
 
@@ -562,142 +681,60 @@ output
         }
       }
 
-      // Properly indent the implementation - only add base indentation if not present
-      let indentedImplementation = implementation.split('\n').map(line => {
-        // If line is empty or already has indentation, keep it as is
-        if (line.trim() === '' || line.startsWith(' ') || line.startsWith('\t')) {
-          return '    ' + line;
-        }
-        // Otherwise add 4 spaces for function body indentation
-        return '    ' + line;
-      }).join('\n');
+      // Route the test through the SAME pip execution path as real validation
+      // (dicompare.interface.run_rule_test_case). This guarantees the sandbox,
+      // allowed imports, and list-cell types (tuples) match production, so a
+      // passing test means the rule actually works on real data. The payload is
+      // base64-encoded JSON to avoid any Python string-escaping issues.
+      // Effective params = declaration defaults <- configured values <- this
+      // test case's overrides. Sent as rule.parameters, which the pip
+      // execution path injects into the implementation as `params`.
+      const effectiveParams = { ...getEffectiveParams(editedFunc), ...(testCase.params || {}) };
+      const rulePayload = {
+        rule: {
+          id: editedFunc.id,
+          name: editedFunc.customName || editedFunc.name || editedFunc.id,
+          fields,
+          implementation,
+          parameters: effectiveParams,
+        },
+        test_data: testCase.data,
+        expected_result: testCase.expectedResult,
+      };
+      const payloadB64 = btoa(unescape(encodeURIComponent(JSON.stringify(rulePayload))));
 
-      // Check if the implementation is effectively empty (only comments/whitespace)
-      const hasNonCommentCode = implementation.split('\n').some(line => {
-        const trimmed = line.trim();
-        return trimmed.length > 0 && !trimmed.startsWith('#');
-      });
-
-      // If there's no actual code, add a pass statement to avoid syntax errors
-      if (!hasNonCommentCode) {
-        indentedImplementation += '\n    pass';
-      }
-
-      // Create DataFrame-like structure for the test
       const testData = `
-import pandas as pd
-import math
-import sys
-from io import StringIO
-from dicompare.validation import ValidationError, ValidationWarning, BaseValidationModel, validator
-
-# Capture stdout
-captured_output = StringIO()
-sys.stdout = captured_output
-
-# Create test data
-test_data = {${Object.entries(testCase.data).map(([field, values]) =>
-  `"${field}": [${values.filter(v => v !== '' && v != null).map(v => {
-    if (Array.isArray(v)) {
-      // Handle arrays - automatically detected from comma-separated input
-      return `[${v.map(item => typeof item === 'string' ? `"${item}"` : item).join(', ')}]`;
-    } else if (typeof v === 'string') {
-      return `"${v}"`;
-    } else {
-      // Numbers are already parsed
-      return v;
-    }
-  }).join(', ')}]`
-).join(', ')}}
-
-# Try to create DataFrame with better error handling
-try:
-    value = pd.DataFrame(test_data)
-    # Compute smart Count if not already provided
-    # Count = actual slice count (handles mosaic/enhanced DICOM)
-    if "Count" not in value.columns:
-        if "SliceLocation" in value.columns:
-            value["Count"] = value["SliceLocation"].nunique()
-        else:
-            value["Count"] = len(value)
-except ValueError as e:
-    if "All arrays must be of the same length" in str(e):
-        # Provide more helpful error message
-        field_lengths = {${Object.entries(testCase.data).map(([field, values]) =>
-          `"${field}": ${values.filter(v => v !== '' && v != null).length}`
-        ).join(', ')}}
-        error_msg = f"Test data error: All fields must have the same number of values. Found: {field_lengths}"
-        raise ValueError(error_msg)
-    else:
-        raise
-
-# Initialize test results
-test_passed = False
-error_message = None
-
-# Try to compile the function first to catch syntax errors
-function_code = '''def ${editedFunc.id}(cls, value):
-${indentedImplementation}
-'''
+import json, base64
 
 try:
-    # First compile the function
-    compiled_code = compile(function_code, '<string>', 'exec')
+    from dicompare.interface import run_rule_test_case
+except ImportError:
+    run_rule_test_case = None
 
-    # Create a namespace for execution
-    exec_namespace = {
-        'pd': pd,
-        'math': math,
-        'ValidationError': ValidationError,
-        'ValidationWarning': ValidationWarning,
-        'value': value
+_payload = json.loads(base64.b64decode("${payloadB64}").decode("utf-8"))
+
+if run_rule_test_case is None:
+    _out = {
+        "passed": False,
+        "error": "This dicompare build is out of date — please update it to test validation functions (run_rule_test_case is unavailable).",
+        "warning": None,
+        "result": "fail",
+        "expected_result": _payload.get("expected_result"),
+        "stdout": "",
+    }
+else:
+    _res = run_rule_test_case(_payload["rule"], _payload["test_data"])
+    _result = _res.get("result")
+    _out = {
+        "passed": _result != "fail",
+        "error": _res.get("message") if _result == "fail" else None,
+        "warning": _res.get("message") if _result == "warning" else None,
+        "result": _result,
+        "expected_result": _payload.get("expected_result"),
+        "stdout": "",
     }
 
-    # Execute the function definition
-    exec(compiled_code, exec_namespace)
-
-    # Now try to call the function
-    exec_namespace['${editedFunc.id}'](None, value)
-
-    # If we reach here without exception, the function passed
-    test_passed = True
-    error_message = None
-    warning_message = None
-
-except SyntaxError as e:
-    test_passed = False
-    error_message = f"Syntax error in function: {str(e)}"
-    warning_message = None
-except ValidationError as e:
-    test_passed = False
-    error_message = str(e)
-    warning_message = None
-except ValidationWarning as e:
-    test_passed = True  # Warning means it passed but with issues
-    error_message = None
-    warning_message = str(e)
-except Exception as e:
-    test_passed = False
-    error_message = f"Unexpected error: {str(e)}"
-    warning_message = None
-
-# Get captured output
-stdout_content = captured_output.getvalue()
-
-# Restore stdout
-sys.stdout = sys.__stdout__
-
-# Return result
-import json
-
-# Return result as JSON
-json.dumps({
-    "passed": test_passed,
-    "error": error_message,
-    "warning": warning_message,
-    "expected_result": "${testCase.expectedResult}",
-    "stdout": stdout_content
-})
+json.dumps(_out)
 `;
 
       let result;
@@ -761,7 +798,7 @@ json.dumps({
     } catch (error) {
       setTestResults(prev => ({
         ...prev,
-        [testCase.id]: { passed: false, error: `Test execution failed: ${error.message}`, loading: false }
+        [testCase.id]: { passed: false, error: `Test execution failed: ${error instanceof Error ? error.message : String(error)}`, loading: false }
       }));
     }
   };
@@ -775,20 +812,13 @@ json.dumps({
   if (!isOpen || !editedFunc) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-surface-primary rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col">
-        <div className="px-6 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-content-primary">Edit Validation Function</h3>
-            <button
-              onClick={onClose}
-              className="text-content-tertiary hover:text-content-secondary"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Edit Validation Function"
+      size="3xl"
+      closeOnBackdrop={false}
+    >
         <div className="flex-1 p-6 min-h-0 overflow-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-full">
             {/* Left Panel - Function Details */}
@@ -811,6 +841,111 @@ json.dumps({
                   rows={3}
                   className="w-full px-3 py-2 border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-content-secondary">Parameters</label>
+                  <button
+                    onClick={addParameterDefinition}
+                    className="flex items-center px-2 py-1 text-xs text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-md hover:bg-amber-500/10"
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Add Parameter
+                  </button>
+                </div>
+                {getParameterDefinitions(editedFunc).length === 0 ? (
+                  <p className="text-xs text-content-tertiary">
+                    No parameters. Add one to make thresholds configurable — the code reads them via <code className="font-mono">params["name"]</code>.
+                  </p>
+                ) : (
+                  <div className="space-y-3 border border-amber-500/30 bg-amber-500/5 rounded-md p-3">
+                    {getParameterDefinitions(editedFunc).map((decl, declIndex) => {
+                      const configured = editedFunc.configuredParams?.[decl.name];
+                      const value = configured !== undefined ? configured : decl.default;
+                      const smallInput = "px-2 py-1 text-xs border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500";
+                      return (
+                        <div key={declIndex} className="space-y-1.5 pb-2 border-b border-amber-500/20 last:border-b-0 last:pb-0">
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={decl.name}
+                              onChange={(e) => updateParameterDefinition(declIndex, { name: e.target.value })}
+                              placeholder="name"
+                              className={`${smallInput} w-32 font-mono`}
+                              title="Parameter name — read in code as params[name]"
+                            />
+                            <select
+                              value={decl.type}
+                              onChange={(e) => updateParameterDefinition(declIndex, { type: e.target.value as ValidationParameterDefinition['type'] })}
+                              className={smallInput}
+                            >
+                              <option value="number">number</option>
+                              <option value="string">string</option>
+                              <option value="boolean">boolean</option>
+                              <option value="enum">enum</option>
+                            </select>
+                            <div className="flex-1 flex items-center space-x-1">
+                              <span className="text-xs text-content-tertiary">Value:</span>
+                              <div className="flex-1">
+                                {renderParamInput(decl, value, (raw) => updateConfiguredParam(decl, raw))}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeParameterDefinition(declIndex)}
+                              className="p-1 text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                              title="Remove parameter"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="text"
+                              value={decl.default ?? ''}
+                              onChange={(e) => updateParameterDefinition(declIndex, { default: coerceParamValue(decl, e.target.value) })}
+                              placeholder="default"
+                              className={`${smallInput} w-24`}
+                              title="Default value used when no value is configured"
+                            />
+                            {decl.type === 'number' && (
+                              <input
+                                type="text"
+                                value={decl.unit ?? ''}
+                                onChange={(e) => updateParameterDefinition(declIndex, { unit: e.target.value || undefined })}
+                                placeholder="unit"
+                                className={`${smallInput} w-16`}
+                                title="Unit shown next to the value (e.g. ms)"
+                              />
+                            )}
+                            {decl.type === 'enum' && (
+                              <input
+                                type="text"
+                                value={(decl.options || []).join(', ')}
+                                onChange={(e) => updateParameterDefinition(declIndex, {
+                                  options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                                })}
+                                placeholder="option1, option2"
+                                className={`${smallInput} w-40`}
+                                title="Allowed values, comma-separated"
+                              />
+                            )}
+                            <input
+                              type="text"
+                              value={decl.description ?? ''}
+                              onChange={(e) => updateParameterDefinition(declIndex, { description: e.target.value || undefined })}
+                              placeholder="description"
+                              className={`${smallInput} flex-1`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    <div className="text-xs text-content-tertiary pt-1">
+                      Values are available to the code as <code className="font-mono">params["name"]</code>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -966,6 +1101,29 @@ json.dumps({
                           </select>
                         </div>
                       </div>
+                      {getParameterDefinitions(editedFunc).length > 0 && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-content-tertiary font-medium" title="Override parameter values for this test case only. Blank = use the configured value.">
+                            Param overrides:
+                          </span>
+                          {getParameterDefinitions(editedFunc).map(decl => {
+                            const effective = getEffectiveParams(editedFunc)[decl.name];
+                            return (
+                              <div key={decl.name} className="flex items-center space-x-1">
+                                <span className="text-xs text-content-tertiary font-mono">{decl.name}</span>
+                                <div className="w-24">
+                                  {renderParamInput(
+                                    decl,
+                                    testCase.params?.[decl.name],
+                                    (raw) => updateTestCaseParamOverride(testIndex, testCase, decl, raw),
+                                    formatParamValue(effective)
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-2">
@@ -1073,59 +1231,44 @@ json.dumps({
                                 const isExtraField = extraFields.includes(field);
                                 return (
                                 <div key={field} className={`flex-1 border-r border-border-secondary last:border-r-0 ${isSystemField ? 'bg-purple-500/5' : ''} ${isExtraField ? 'bg-orange-500/5' : ''}`}>
+                                  {(() => {
+                                    const cellKey = `${testCase.id}:${field}:${rowIndex}`;
+                                    const draft = cellDrafts[cellKey];
+                                    const displayValue = draft !== undefined
+                                      ? draft
+                                      : formatCellValue(testCase.data[field]?.[rowIndex]);
+                                    return (
                                   <input
                                     type="text"
-                                    value={(() => {
-                                      const value = testCase.data[field]?.[rowIndex];
-                                      if (Array.isArray(value)) {
-                                        // Convert array back to comma-separated string for editing
-                                        return value.join(',');
-                                      }
-                                      // Convert all values to strings for editing
-                                      return value != null ? String(value) : '';
-                                    })()}
+                                    value={displayValue}
                                     onChange={(e) => {
+                                      const inputValue = e.target.value;
+                                      // Keep the raw text for display so the field doesn't reformat
+                                      // (e.g. re-add brackets) while the user is mid-edit.
+                                      setCellDrafts(prev => ({ ...prev, [cellKey]: inputValue }));
+
                                       const newData = { ...testCase.data };
                                       if (!newData[field]) newData[field] = [];
-
-                                      // Ensure array is long enough
                                       while (newData[field].length <= rowIndex) {
                                         newData[field].push('');
                                       }
-
-                                      const inputValue = e.target.value;
-                                      console.log(`Input for ${field}: "${inputValue}"`);
-
-                                      // Smart value parsing - automatically detect type
-                                      let parsedValue;
-                                      if (inputValue.trim() === '') {
-                                        parsedValue = '';
-                                      } else if (inputValue.includes(',')) {
-                                        // Comma-separated values - parse as array
-                                        const arrayValues = inputValue.split(',').map(v => {
-                                          // Only trim for number parsing, preserve original value
-                                          const trimmed = v.trim();
-                                          if (trimmed === '') return ''; // Keep empty strings for incomplete arrays
-                                          const num = parseFloat(trimmed);
-                                          // Return number if it's a valid number, otherwise return original (with spaces)
-                                          return isNaN(num) ? v : num;
-                                        });
-                                        parsedValue = arrayValues;
-                                      } else {
-                                        // Single value - try to parse as number
-                                        const trimmed = inputValue.trim();
-                                        const num = parseFloat(trimmed);
-                                        // Return number if it's a valid number, otherwise return original (with spaces)
-                                        parsedValue = isNaN(num) ? inputValue : num;
-                                      }
-
-                                      console.log(`Parsed value for ${field}:`, parsedValue);
-                                      newData[field][rowIndex] = parsedValue;
+                                      newData[field][rowIndex] = parseCellInput(inputValue);
                                       updateTestCase(testIndex, { data: newData });
                                     }}
+                                    onBlur={() => {
+                                      // Drop the draft so the cell shows the canonical formatted value.
+                                      setCellDrafts(prev => {
+                                        if (prev[cellKey] === undefined) return prev;
+                                        const next = { ...prev };
+                                        delete next[cellKey];
+                                        return next;
+                                      });
+                                    }}
                                     className={`w-full px-2 py-1 text-xs border-none bg-transparent text-content-primary focus:outline-none ${isSystemField ? 'focus:bg-purple-500/10' : 'focus:bg-blue-500/10'}`}
-                                    placeholder={`${field} value (e.g., "1,1" for lists)`}
+                                    placeholder={`${field} value (e.g. 3 or [0, 1000, 3000])`}
                                   />
+                                    );
+                                  })()}
                                 </div>
                                 );
                               })}
@@ -1330,8 +1473,7 @@ json.dumps({
             Save Changes
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 
