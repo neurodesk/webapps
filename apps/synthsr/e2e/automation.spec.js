@@ -15,7 +15,9 @@ test('automation cancellation stops the real inference worker before it publishe
   await page.route('**/synthsr-v2.onnx*', () => {});
   await page.goto('./');
   await adopt(page);
+  const modelRequested = page.waitForRequest('**/synthsr-v2.onnx*');
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'synthesize' }));
+  await modelRequested;
   await expect(page.locator('#cancelBtn')).toBeVisible();
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('cancel'));
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state).toBe('cancelled');
