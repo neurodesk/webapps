@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>elastix — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Images</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="movingDropZone">
+            <input id="movingInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose the moving image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop moving image file or folder</span>
+          </label>
+          <p id="movingInfo" class="nd-file-info" hidden></p>
+          <div id="movingSeriesField" class="nd-field" hidden>
+            <label for="movingSeries">Moving series</label>
+            <select id="movingSeries"></select>
+          </div>
+          <label class="nd-file" id="stationaryDropZone">
+            <input id="stationaryInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose the stationary image" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop stationary image file or folder</span>
+          </label>
+          <p id="stationaryInfo" class="nd-file-info" hidden></p>
+          <div id="stationarySeriesField" class="nd-field" hidden>
+            <label for="stationarySeries">Stationary series</label>
+            <select id="stationarySeries"></select>
+          </div>
+          <p class="nd-hint">NIfTI, DICOM, OME-Zarr (.ozx or .zarr folder), TIFF, NRRD, MetaImage
+            <span class="nd-info-icon" tabindex="0" aria-label="About supported images">i<span class="nd-info-tooltip">Any format ITK reads works too. Color images, time series and channels are reduced to the first scalar volume. Large OME-Zarr and TIFF pyramids register at the finest level that fits in memory.</span></span>
+          </p>
+          <details class="nd-sidebar-section" id="urlSection">
+            <summary class="nd-section-title">Open from URL</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="movingUrl">Moving image URL
+                  <span class="nd-info-icon" tabindex="0" aria-label="About image URLs">i<span class="nd-info-tooltip">An OME-Zarr folder, an .ozx archive or a TIFF is read in pieces by HTTP range request; other files download whole. The server must allow cross-origin requests.</span></span>
+                </label>
+                <input id="movingUrl" type="url" placeholder="https://…/image.ome.zarr" />
+              </div>
+              <div class="nd-field">
+                <label for="stationaryUrl">Stationary image URL</label>
+                <input id="stationaryUrl" type="url" placeholder="https://…/image.ome.tif" />
+              </div>
+              <button id="urlButton" class="nd-btn nd-btn-secondary" type="button">Open URLs</button>
+            </div>
+          </details>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Registration</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="method">Method
+              <span class="nd-info-icon" tabindex="0" aria-label="About the methods">i<span class="nd-info-tooltip">Each method chains elastix's default parameter maps: translation and rigid, then affine, then a B-spline deformation. Mattes mutual information suits images of different contrasts.</span></span>
+            </label>
+            <select id="method">
+              <option value="rigid">Rigid</option>
+              <option value="affine" selected>Affine</option>
+              <option value="bspline">Affine + B-spline</option>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="resolutions">Resolutions <small>1–6</small></label>
+                <input id="resolutions" type="number" min="1" max="6" step="1" value="3" />
+              </div>
+              <div class="nd-field">
+                <label for="gridSpacing">B-spline grid spacing
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the grid spacing">i<span class="nd-info-tooltip">Final control-point spacing in physical units: millimetres for MRI, micrometres for most microscopy. Smaller spacing allows finer deformation.</span></span>
+                </label>
+                <input id="gridSpacing" type="number" min="0.001" step="any" value="10" />
+              </div>
+              <label class="nd-file" id="parameterDropZone">
+                <input id="parameterInput" type="file" data-neurodesk-input="protocol" accept=".txt,.toml" multiple aria-label="Choose elastix parameter files" />
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <span>Drop elastix parameter files (.txt, .toml)</span>
+              </label>
+              <p id="parameterInfo" class="nd-file-info" hidden></p>
+              <button id="parameterClear" class="nd-btn nd-btn-secondary nd-btn-sm" type="button" hidden>Use the method preset</button>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Register images</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content"><div id="resultList"></div></div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <div class="nd-viewer-panel-grid">
+          <section class="nd-viewer-panel" aria-label="Moving image panel">
+            <span class="nd-viewer-panel-title">Moving</span>
+            <canvas id="glMoving" aria-label="Moving image viewer"></canvas>
+          </section>
+          <section class="nd-viewer-panel" aria-label="Stationary image panel">
+            <span class="nd-viewer-panel-title">Stationary</span>
+            <canvas id="glStationary" aria-label="Stationary image viewer"></canvas>
+          </section>
+          <section class="nd-viewer-panel" aria-label="Registered image panel">
+            <span class="nd-viewer-panel-title">Registered</span>
+            <canvas id="glRegistered" aria-label="Registered image viewer"></canvas>
+          </section>
+        </div>
+        <p id="emptyState" class="nd-viewer-empty">Choose an example or drop moving and stationary images to begin.</p>
+        <p id="viewerError" class="nd-viewer-notice" hidden></p>
+      </div>
+      <div class="nd-viewer-info"><span class="nd-viewer-info-primary">Stationary and registered crosshairs are linked</span><span id="location"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Ready</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Registration progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel" aria-label="Cancel" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>elastix registers a moving image to a stationary image with a chain of parametric transforms: translation and rigid, then affine, then optionally a B-spline deformation. Each stage uses elastix's default parameter map, which optimizes Mattes mutual information with adaptive stochastic gradient descent over a multi-resolution pyramid, so the images may have different contrasts. Your own elastix parameter files can replace the preset chain. The registered image is the moving image resampled onto the stationary grid as 32-bit float. The transform maps points of the stationary image to the moving image, as ITK and elastix define it; transformix applies the last TransformParameters file, which names the earlier ones. MRI, OME-Zarr and TIFF images are read here, and large pyramids register at the finest level of about 16 million voxels. Brain MRI registers best brain-extracted, as in the example.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. An image you open from a URL is fetched by this browser directly from that server.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

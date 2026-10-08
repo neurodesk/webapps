@@ -1287,3 +1287,34 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  elastix:
+    packages:
+      - { name: elastix (ITK-Wasm), url: https://github.com/InsightSoftwareConsortium/ITKElastix, role: rigid, affine and B-spline registration }
+      - { name: ITK-Wasm image-io and transform-io, url: https://github.com/InsightSoftwareConsortium/ITK-Wasm, role: ITK image formats and the HDF5 transform }
+      - { name: ngff-zarr, url: https://github.com/fideus-labs/ngff-zarr, role: OME-Zarr reading and writing }
+      - { name: fiff, url: https://github.com/fideus-labs/fiff, role: TIFF and OME-TIFF read as OME-Zarr }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
+    citations:
+      - group: Registration
+        title: elastix
+        reference: "Klein S, Staring M, Murphy K, Viergever MA, Pluim JPW. elastix: a toolbox for intensity-based medical image registration. IEEE Transactions on Medical Imaging. 2010;29(1):196–205."
+        doi: 10.1109/TMI.2009.2035616
+        code: https://github.com/SuperElastix/elastix
+      - group: Registration
+        title: elastix parallel and multi-threaded registration
+        reference: "Shamonin DP, Bron EE, Lelieveldt BPF, Smits M, Klein S, Staring M. Fast parallel image registration on CPU and GPU for diagnostic classification of Alzheimer's disease. Frontiers in Neuroinformatics. 2014;7:50."
+        doi: 10.3389/fninf.2013.00050
+      - group: Data format
+        title: OME-NGFF
+        reference: "Moore J, Allan C, Besson S, et al. OME-NGFF: a next-generation file format for expanding bioimaging data-access strategies. Nature Methods. 2021;18(12):1496–1498."
+        doi: 10.1038/s41592-021-01326-w
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 2,
+  "app": "elastix",
+  "title": "elastix",
+  "description": "Register a moving image to a fixed image with elastix.",
+  "defaultOperation": "register",
+  "operations": {
+    "register": {
+      "title": "Register images",
+      "description": "Run an elastix preset and resample the moving image onto the fixed grid.",
+      "mode": "batch",
+      "inputs": {
+        "moving": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "Moving image to register",
+          "space": "moving",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "fixed": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "Fixed reference image",
+          "space": "fixed",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "rigid",
+            "affine",
+            "bspline"
+          ],
+          "default": "affine",
+          "description": "Rigid, affine, or affine followed by a B-spline deformation"
+        },
+        "resolutions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 3,
+          "description": "Number of multi-resolution pyramid levels"
+        },
+        "gridSpacing": {
+          "type": "number",
+          "minimum": 0.001,
+          "default": 10,
+          "description": "Final B-spline control-point spacing in physical units"
+        }
+      },
+      "artifacts": {
+        "registered": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "fixed",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "transform": {
+          "type": "neuro:transform",
+          "mediaType": "application/x-hdf5",
+          "space": "fixed-to-moving",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "parameters": {
+          "type": "neuro:transform",
+          "mediaType": "text/plain",
+          "space": "fixed-to-moving",
+          "minimum": 1,
+          "maximum": 4
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

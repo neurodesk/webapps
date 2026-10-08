@@ -267,3 +267,16 @@ About and Privacy dialog, with no app CSS, and meets the full vocabulary contrac
 The shared example selector now shows one short line once an example loads, such as
 "T1-weighted head MRI loaded." Its description and expected result sit in a tooltip
 beside the Example label, and apps' status bars receive the same short line.
+
+## elastix, 8 October 2026
+
+The new elastix app follows the registration family's layout: moving, stationary
+and registered panels with linked stationary and registered crosshairs, one Register
+action, and the shared example selector, footer, console and dialogs. Unlike the
+other registration apps it needs no WebGPU, because the viewers use NiiVue's WebGL2
+backend. Image URLs sit in a collapsed "Open from URL" section. Resolutions, B-spline
+grid spacing and elastix parameter files sit under Advanced settings. Parameter files
+use the `protocol` input kind. A 2D stationary image switches the layout to Axial.
+`pnpm audit:interfaces` (desktop and phone) and `pnpm test:mobile` pass for elastix on
+its production build, and the desktop workflow was reviewed after registering the
+hosted example.

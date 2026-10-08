@@ -18,6 +18,8 @@ minimumReleaseAgeExclude:
   - '@fireants/fireants@0.1.20260913'
   - '@brainchop/mindgrab@0.1.20260923'
   - '@niivue/niivue@1.0.0-rc.14'
+  - '@fideus-labs/ngff-zarr@0.38.0'
+  - '@fideus-labs/fiff@0.8.2'
 overrides:
   '@playwright/test': 1.63.0
   playwright: 1.63.0
