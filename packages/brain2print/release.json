@@ -1,0 +1,41 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "brain2print-v",
+  "displayName": "Brain2Print",
+  "app": "brain2print",
+  "run": "t1.nii.gz results",
+  "readme": {
+    "run": "Segment a T1-weighted brain MRI and write a printable mesh",
+    "notes": [
+      "Writes brain-fraction.nii (or segmentation.nii), brain2print.stl and brain2print.mz3.",
+      "MindGrab's weights are inside its WebAssembly; no network connection is required.",
+      "Add --help for the model, simplification, smoothing and component settings.",
+      "Segmentation runs on the CPU and takes about a minute and up to 4 GB of memory.",
+      "Input is NIfTI only: convert DICOM with dcm2niix first, or use the web app.",
+      "",
+      "Brain2Print is research software. Check the mesh before printing. Please cite:",
+      "Rorden C, McCormick M, Hanayik T, Masoud M, Plis SM. brain2print AI powered web",
+      "tool for creating 3D printable brain models. Scientific Reports. 2025;15:15664.",
+      "Fani A, Doan M, Le I, et al. MindGrab: A spectrally-motivated architecture for",
+      "accessible deep learning in neuroimaging. NeuroImage. 2026;338:122074."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "brain2print"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "brain2print.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "brain2print"
+    }
+  }
+}

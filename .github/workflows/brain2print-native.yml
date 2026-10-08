@@ -1,0 +1,83 @@
+name: brain2print-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/brain2print-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/brain2print/**'
+      - 'apps/brain2print/**'
+      - 'packages/runtime-support/src/node/**'
+      - 'packages/components/src/file-io/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/brain2print-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/brain2print/**'
+      - 'apps/brain2print/**'
+      - 'packages/runtime-support/src/node/**'
+      - 'packages/components/src/file-io/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing Brain2Print release
+        type: boolean
+        default: false
+
+concurrency:
+  group: brain2print-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  browser-reference:
+    name: browser reference still holds
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Rerun the web pipeline on MindGrab's browser CPU backend
+        run: node packages/brain2print/validation/browser-reference.mjs --check
+
+  portable:
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/brain2print
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}

@@ -1,0 +1,324 @@
+{
+  "browser": "chromium 153.0.8010.12",
+  "mindgrab": "0.1.20260925",
+  "niimath": "1.4.20260909",
+  "backend": "cpu",
+  "cases": {
+    "example-pve": {
+      "input": "example",
+      "inputName": "t1_crop.nii.gz",
+      "settings": {
+        "model": "pve",
+        "simplify": 20,
+        "smooth": 0,
+        "largestOnly": true,
+        "fillBubbles": true
+      },
+      "seconds": 107.258,
+      "report": {
+        "measurements": {
+          "manifold": true,
+          "consistent": true,
+          "signedVolume": 1141888.4402923305,
+          "windingCorrected": false,
+          "triangles": 113736
+        },
+        "meshing": {
+          "algorithm": "niimath mesh",
+          "options": {
+            "i": 0.5,
+            "l": 1,
+            "b": 1,
+            "r": 0.2,
+            "s": 0
+          }
+        }
+      },
+      "files": [
+        "brain-fraction.nii",
+        "brain2print.mz3",
+        "brain2print.stl"
+      ],
+      "sha256": {
+        "brain-fraction.nii": "d0b2211cb4ff7a2e918e54304ce3daff330153afe80ef16775f2ebbed59319b1",
+        "brain2print.mz3": "a766054bc0aac60c1f7c106130dbc55162b88e9699f615029bafa6bd67b1f7f1",
+        "brain2print.stl": "256d86a2aecc97a561f7b9bc4bc284ce0bcc621fd7df35c36e9c392e8b6ca034"
+      },
+      "segmentation": {
+        "dims": [
+          192,
+          256,
+          201
+        ],
+        "datatype": 16,
+        "headerSha256": "13c4aa6b327bc366746e809224ebc94920ab466b130d2087ac243cad16f5443f",
+        "inside": 1440903,
+        "sum": 1385143.497,
+        "minimum": 0,
+        "maximum": 1.0000001192092896
+      },
+      "stl": {
+        "triangles": 113736,
+        "volumeMl": 1141.888,
+        "contradicting": 0,
+        "bounds": [
+          [
+            -65.784,
+            -99.255,
+            -82.261
+          ],
+          [
+            66.333,
+            78.239,
+            55.234
+          ]
+        ]
+      },
+      "mz3": {
+        "vertices": 56686,
+        "faces": 113736,
+        "edges": 170604,
+        "euler": -182,
+        "nonManifoldEdges": 0,
+        "inconsistentEdges": 0
+      }
+    },
+    "small-pve-smooth5": {
+      "input": "small",
+      "inputName": "small.nii.gz",
+      "settings": {
+        "model": "pve",
+        "simplify": 20,
+        "smooth": 5,
+        "largestOnly": true,
+        "fillBubbles": true
+      },
+      "seconds": 58.724,
+      "report": {
+        "measurements": {
+          "manifold": true,
+          "consistent": true,
+          "signedVolume": 335183.1760848922,
+          "windingCorrected": false,
+          "triangles": 8662
+        },
+        "meshing": {
+          "algorithm": "niimath mesh",
+          "options": {
+            "i": 0.5,
+            "l": 1,
+            "b": 1,
+            "r": 0.2,
+            "s": 5
+          }
+        }
+      },
+      "files": [
+        "brain-fraction.nii",
+        "brain2print.mz3",
+        "brain2print.stl"
+      ],
+      "sha256": {
+        "brain-fraction.nii": "1c214190894da48dc2874c36ef46b325c83645f37d63e77c0eda66fcdad39075",
+        "brain2print.mz3": "8a17ee4916699c14ff301f0c28cc8d9313218bdef2c9e0b4c4abd8960b96e1e5",
+        "brain2print.stl": "51737ecb946e69bad6e0b9228405e13249d72b9dcdcc22f98eba143881e0e49b"
+      },
+      "segmentation": {
+        "dims": [
+          44,
+          52,
+          44
+        ],
+        "datatype": 16,
+        "headerSha256": "3ccd005f85293fbcc8fc129824f773dac0a912c268a014554dbc43215f4a686a",
+        "inside": 43656,
+        "sum": 41733.54,
+        "minimum": 0,
+        "maximum": 1.0000001192092896
+      },
+      "stl": {
+        "triangles": 8662,
+        "volumeMl": 335.183,
+        "contradicting": 0,
+        "bounds": [
+          [
+            -49.593,
+            -64.177,
+            -73.004
+          ],
+          [
+            39.048,
+            45.432,
+            32.664
+          ]
+        ]
+      },
+      "mz3": {
+        "vertices": 4309,
+        "faces": 8662,
+        "edges": 12993,
+        "euler": -22,
+        "nonManifoldEdges": 0,
+        "inconsistentEdges": 0
+      }
+    },
+    "small-left-handed-pve-smooth5": {
+      "input": "small-left-handed",
+      "inputName": "small_lh.nii",
+      "settings": {
+        "model": "pve",
+        "simplify": 20,
+        "smooth": 5,
+        "largestOnly": true,
+        "fillBubbles": true
+      },
+      "seconds": 87.223,
+      "report": {
+        "measurements": {
+          "manifold": true,
+          "consistent": true,
+          "signedVolume": 335155.3177524354,
+          "windingCorrected": false,
+          "triangles": 8656
+        },
+        "meshing": {
+          "algorithm": "niimath mesh",
+          "options": {
+            "i": 0.5,
+            "l": 1,
+            "b": 1,
+            "r": 0.2,
+            "s": 5
+          }
+        }
+      },
+      "files": [
+        "brain-fraction.nii",
+        "brain2print.mz3",
+        "brain2print.stl"
+      ],
+      "sha256": {
+        "brain-fraction.nii": "d56a980468d6c5bc505aa352b2ba4ee632f3325b7dea1f26ce65e934e3db7ed5",
+        "brain2print.mz3": "89dba02e9490fdc674f7530376ada0df0ed2201de56463c4f449447e602451a5",
+        "brain2print.stl": "b6149220cf24aa12eec06387ed80c6b6f565642539c9c249770861c8f0f70692"
+      },
+      "segmentation": {
+        "dims": [
+          44,
+          52,
+          44
+        ],
+        "datatype": 16,
+        "headerSha256": "0934cb0422e5c033d3fcac4feea2a8ea436b085ca03dd870622e4c204409aeb2",
+        "inside": 43624,
+        "sum": 41726.591,
+        "minimum": 0,
+        "maximum": 1.0000001192092896
+      },
+      "stl": {
+        "triangles": 8656,
+        "volumeMl": 335.155,
+        "contradicting": 0,
+        "bounds": [
+          [
+            -49.669,
+            -63.902,
+            -72.899
+          ],
+          [
+            39.668,
+            45.353,
+            32.024
+          ]
+        ]
+      },
+      "mz3": {
+        "vertices": 4304,
+        "faces": 8656,
+        "edges": 12984,
+        "euler": -24,
+        "nonManifoldEdges": 0,
+        "inconsistentEdges": 0
+      }
+    },
+    "small-16chan18cls": {
+      "input": "small",
+      "inputName": "small.nii.gz",
+      "settings": {
+        "model": "16chan18cls",
+        "simplify": 20,
+        "smooth": 0,
+        "largestOnly": true,
+        "fillBubbles": true
+      },
+      "seconds": 25.475,
+      "report": {
+        "measurements": {
+          "manifold": true,
+          "consistent": true,
+          "signedVolume": 608384.4434733833,
+          "windingCorrected": false,
+          "triangles": 7920
+        },
+        "meshing": {
+          "algorithm": "niimath mesh",
+          "options": {
+            "i": 0.5,
+            "l": 1,
+            "b": 1,
+            "r": 0.2,
+            "s": 0
+          }
+        }
+      },
+      "files": [
+        "brain2print.mz3",
+        "brain2print.stl",
+        "segmentation.nii"
+      ],
+      "sha256": {
+        "brain2print.mz3": "a3d29f2ed4c8d153bf4e4eafb45158c4f53c0818644ad2e64ed17c269c30c5e7",
+        "brain2print.stl": "d9fca0a9e6bbca7056c8b82dfc72dde816fce619a53ffe11c0337e924fd0052a",
+        "segmentation.nii": "906a59c993e9be504bd887b19211cac22c64b80b74a74ad4d6538e9b11f6746d"
+      },
+      "segmentation": {
+        "dims": [
+          44,
+          52,
+          44
+        ],
+        "datatype": 2,
+        "headerSha256": "bdfe7117aabf20acda3ac4d8dda0e2eff85a55328dde5003088798b604801e30",
+        "inside": 64580,
+        "sum": 156817,
+        "minimum": 0,
+        "maximum": 17
+      },
+      "stl": {
+        "triangles": 7920,
+        "volumeMl": 608.384,
+        "contradicting": 0,
+        "bounds": [
+          [
+            -50.734,
+            -69.63,
+            -77.383
+          ],
+          [
+            42.476,
+            52.514,
+            40.471
+          ]
+        ]
+      },
+      "mz3": {
+        "vertices": 3940,
+        "faces": 7920,
+        "edges": 11880,
+        "euler": -20,
+        "nonManifoldEdges": 0,
+        "inconsistentEdges": 0
+      }
+    }
+  }
+}
