@@ -120,7 +120,8 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // own counting: every label FreeSurfer found is reported, within the voxels the gate allows.
   const allowed = Math.floor(limit * golden.data.length);
   const expectedCounts = countLabels(golden.data);
-  expect(report.measurements.voxelVolumeMl).toBeCloseTo(0.001, 9);
+  // 1 mm voxels; NIfTI stores spacing as float32, so the product is 1 mm^3 to about 1e-9 ml.
+  expect(report.measurements.voxelVolumeMl).toBeCloseTo(0.001, 7);
   expect(report.measurements.labels.map(label => label.id)).toEqual([...expectedCounts.keys()].sort((a, b) => a - b));
   for (const label of report.measurements.labels) {
     expect(Math.abs(label.voxels - expectedCounts.get(label.id)), `${label.name} voxels`).toBeLessThanOrEqual(allowed);
