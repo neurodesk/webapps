@@ -122,3 +122,26 @@ test('self-check registers a phantom with the pinned niimath build', () => {
   assert.equal(report.niimath, '1.4.20260909');
   assert.equal(report.node, process.version);
 });
+
+test('publishing falls back to an exclusive copy where the filesystem has no hard links', async (t) => {
+  const { publish } = await import('../src/node.js');
+  const directory = await mkdtemp(join(tmpdir(), 'edgereg-publish-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const noLinks = async () => { throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' }); };
+  const path = join(directory, 'moving_registered.nii');
+  await publish(path, Uint8Array.of(1, 2, 3), { linkFile: noLinks });
+  assert.deepEqual([...await readFile(path)], [1, 2, 3]);
+  await assert.rejects(publish(path, Uint8Array.of(9), { linkFile: noLinks }), { code: 'EEXIST' }, 'an existing result is never replaced');
+  assert.deepEqual([...await readFile(path)], [1, 2, 3]);
+  assert.deepEqual((await readdir(directory)).sort(), ['moving_registered.nii'], 'no partial file is left behind');
+});
+
+test('a moving image whose output name would exceed 255 bytes is refused before registering', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'edgereg-long-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { register } = await import('../src/node.js');
+  const long = join(directory, `${'m'.repeat(251)}.nii`);
+  const image = createNiftiFromVolume({ dims: [4, 4, 4], pixDims: [1, 1, 1], data: new Float32Array(64) });
+  await writeFile(long, new Uint8Array(image));
+  await assert.rejects(register({ moving: long, fixed: long, output: join(directory, 'out') }), /would exceed 255 bytes/);
+});

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { copyFile, link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createNiftiFromVolume, decodeNiftiBuffer, readNiftiImageData } from '@neurodesk/webapp-components/file-io/nifti';
 import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
@@ -37,17 +38,29 @@ async function assertNewOutput(directory) {
   if (entries.length) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
 }
 
+// Filesystems without hard links (FAT and exFAT removable drives) refuse link() with one of these.
+const NO_HARD_LINKS = new Set(['EPERM', 'ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EXDEV', 'EINVAL']);
+
 // The complete file appears under its name at once, and never replaces a file a concurrent run
-// wrote there: link() fails when the name exists.
-async function publish(path, bytes) {
+// wrote there: link() fails when the name exists. Where hard links are unsupported an exclusive
+// copy keeps the no-replace guarantee, though a reader may see the copy grow.
+export async function publish(path, bytes, { linkFile = link } = {}) {
   const partial = join(dirname(path), `.${randomUUID().slice(0, 8)}.partial`);
   try {
     await writeFile(partial, bytes, { flag: 'wx' });
-    await link(partial, path);
+    try {
+      await linkFile(partial, path);
+    } catch (error) {
+      if (!NO_HARD_LINKS.has(error.code)) throw error;
+      await copyFile(partial, path, constants.COPYFILE_EXCL);
+    }
   } finally {
     await rm(partial, { force: true });
   }
 }
+
+// Most filesystems cap one path component at 255 bytes.
+const MAX_NAME_BYTES = 255;
 
 /**
  * The niimath argv and staged files `ImageProcessor.run` would hand its worker, so the command
@@ -80,6 +93,9 @@ export async function register({ moving, fixed, output, robustFov = false } = {}
   const destination = resolve(output);
   await assertNewOutput(destination);
   const [movingFile, fixedFile] = await Promise.all([readNiftiFile(moving, 'moving'), readNiftiFile(fixed, 'fixed')]);
+  if (Buffer.byteLength(registeredName(movingFile.name)) > MAX_NAME_BYTES) {
+    throw new Error(`The output name ${registeredName(movingFile.name)} would exceed ${MAX_NAME_BYTES} bytes; rename the moving image.`);
+  }
   const started = performance.now();
   const { bytes, args } = await registerFiles(movingFile, fixedFile, robustFov);
   const name = registeredName(movingFile.name);
