@@ -52,7 +52,7 @@ jobs:
         env:
           DESKTOP_RELEASE_DATE: ${{ steps.date.outputs.release_date }}
       - name: Test package contracts
-        run: node --test test/standalone.test.mjs test/new-app.test.mjs packages/desktop/test/*.test.js
+        run: node --test test/standalone.test.mjs test/new-app.test.mjs test/offline-asset-pins.test.mjs packages/desktop/test/*.test.js
       - uses: actions/cache@v6
         with:
           path: .turbo

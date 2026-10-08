@@ -2,6 +2,8 @@
 
 This repository stores source code only. Large validation datasets and models belong on [https://huggingface.co/datasets/neurodeskorg/webapps](https://huggingface.co/datasets/neurodeskorg/webapps). Every app is versioned `MAJOR.MINOR.YYYYMMDD`: the patch is the UTC release date (e.g. `0.1.20260808`). Describe changes in a changeset (`pnpm changeset`), then run `pnpm release`, which sets the date versions, writes changelogs and synchronises embedded version strings (`scripts/lib/app-versions.mjs`); `test/app-versions.test.mjs` rejects any other scheme. Keep scratch files off `/tmp`: `TMPDIR` points at the storage volume and turbo passes it through.
 
+Every remote URL the apps or the offline bundle fetch (`registry/offline-assets.sources.json` and its lock, `models/*.manifest.json`, `apps/*/examples.json`) must be immutable: a Hugging Face commit, an exact npm version, a release asset or a commit URL. Mirror anything else to the dataset and pin it; `test/offline-asset-pins.test.mjs` rejects the rest.
+
 ## Interface changes and new applications
 
 Before changing UI, adding controls, or scaffolding an app, read [the design system](docs/architecture/design-system.md) and [the interface standard](docs/architecture/interface-standard.md). QSMbly is the visual reference; the design system is its metrics expressed as one shared vocabulary.
