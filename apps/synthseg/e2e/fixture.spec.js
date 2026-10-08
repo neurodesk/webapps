@@ -16,7 +16,7 @@ const gates = JSON.parse(readFileSync(new URL('../../../packages/synthseg/valida
 const fixtures = '../../exes/synthseg/test/fixtures';
 const references = process.env.SYNTHSEG_REFERENCE_DIR;
 const probeOnly = Boolean(process.env.SYNTHSEG_PROBE_ONLY);
-const parityRepeats = Number(process.env.SYNTHSEG_PARITY_REPEATS || 1);
+const parityRepeats = Number(process.env.SYNTHSEG_PARITY_REPEATS || 12);
 // Only the hardware benchmark run refreshes the committed validation/report.json.
 const reportPath = resolve(process.env.SYNTHSEG_VALIDATION_REPORT || (references ? 'validation/report.json' : 'test-results/validation-report.json'));
 const checksum = bytes => createHash('sha256').update(bytes).digest('hex');

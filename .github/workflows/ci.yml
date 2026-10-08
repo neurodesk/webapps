@@ -354,8 +354,6 @@ jobs:
       - name: Build ${{ matrix.app }} browser runtime
         run: pnpm --filter ${{ matrix.app }} build
       - name: Test ${{ matrix.app }} on the hardware GPU
-        env:
-          SYNTHSEG_PARITY_REPEATS: ${{ matrix.app == 'synthseg' && '12' || '1' }}
         run: pnpm --filter ${{ matrix.app }} test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
