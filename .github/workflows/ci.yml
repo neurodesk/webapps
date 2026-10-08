@@ -74,8 +74,8 @@ jobs:
         # needs the built site, the easter egg needs a browser.
         run: pnpm test:contracts
       - name: Test the shared packages every app is built from
-        # Unit tests only: the components' browser checks run in composite-site and
-        # the desktop suite in the standalone workflow.
+        # Node tests of every package, the desktop suite included. The components'
+        # browser checks (elements and showcase) run in composite-site.
         run: pnpm test:packages
       - name: Check native tract conversion and WebAssembly parity
         run: |
@@ -166,6 +166,8 @@ jobs:
         run: pnpm --filter @neurodesk/webapp-components test:elements:browser
         env:
           ELEMENT_ARTIFACTS: ${{ github.workspace }}/interface-artifacts/elements
+      - name: Check the component showcase boots in a browser
+        run: pnpm --filter @neurodesk/webapp-components test:showcase:browser
       - name: Build the composite site
         run: pnpm build
       - name: Enforce scientific-asset and hosting budgets
