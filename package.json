@@ -17,7 +17,7 @@
     "generate:mirrors": "node scripts/generate-distribution-mirrors.mjs",
     "test": "node --test test/*.test.mjs && turbo run test",
     "test:contracts": "ls test/*.test.mjs | grep -v -e /runtime-assets.test.mjs -e /easter-egg.test.mjs | xargs node --test",
-    "test:packages": "pnpm --filter './packages/*' --filter '!@neurodesk/webapp-components' --filter '!@neurodesk/desktop' run test && pnpm --filter @neurodesk/webapp-components run test:unit",
+    "test:packages": "pnpm --filter './packages/*' --filter '!@neurodesk/webapp-components' run test && pnpm --filter @neurodesk/webapp-components run test:unit",
     "test:examples": "node --test test/app-examples.test.mjs",
     "test:registry": "node --test test/registry.test.mjs",
     "app-plan": "node scripts/app-plan.mjs",

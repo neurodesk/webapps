@@ -8,19 +8,18 @@ import {assets} from './assets.js';
 import {runSynthsr,readVolume,writeVolume} from '../../synthsr/src/index.js';
 import {runSynthstrip} from '../../synthstrip/src/index.js';
 import {createRegistration} from '../../registration/src/index.js';
+import {REGISTRATION_WASM_SHA256 as registrationWasmSha256,readRegistrationWasm} from '../../registration/src/node.js';
 const hash=b=>createHash('sha256').update(b).digest('hex');
 export const defaultCacheDir=()=>process.env.NEURODESK_SYNCRO_MODEL_DIR||join(process.env.XDG_CACHE_HOME||join(homedir(),'.cache'),'neurodesk','syncro');
 const templateURL=new URL('../data/MNI152_T1_1mm_brain.nii.gz',import.meta.url);
 const templateSha256='32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212';
-const registrationWasmSha256='23cb91e0a9363cce16581d459ee52dabbf35538a2ad4ed565d2d83cd4a116348';
 export async function checkInstallation({
   registrationModule=new URL('./registration/syncro-registration.mjs',import.meta.url),
   registrationWasm=new URL('./registration/syncro-registration.wasm',import.meta.url),
 }={}) {
-  const template=await readFile(templateURL),wasm=await readFile(registrationWasm);
+  const template=await readFile(templateURL);
   if(hash(template)!==templateSha256)throw new Error('Template checksum mismatch.');
-  if(hash(wasm)!==registrationWasmSha256)throw new Error('Registration WebAssembly checksum mismatch.');
-  if(wasm.subarray(0,4).toString('hex')!=='0061736d')throw new Error('Registration asset is not WebAssembly.');
+  await readRegistrationWasm(registrationWasm);
   const [{default:createModule},ort]=await Promise.all([import(registrationModule),import('onnxruntime-node')]);
   if(typeof createModule!=='function')throw new Error('Registration module did not load.');
   const tensor=new ort.Tensor('float32',Float32Array.of(0),[1]);
@@ -63,7 +62,7 @@ export async function normalize({input,output,additional=[],ct=false,threads=Num
   const template=await readFile(templateURL);
   if(hash(template)!==templateSha256)throw new Error('Template checksum mismatch.');
   const registrationURL=new URL('./registration/syncro-registration.mjs',import.meta.url);
-  const wasm=await readFile(new URL('./registration/syncro-registration.wasm',import.meta.url));
+  const wasm=await readRegistrationWasm(new URL('./registration/syncro-registration.wasm',import.meta.url));
   const fingerprint=hash(JSON.stringify({input:hash(inputBytes),ct,code:hash(await readFile(new URL(import.meta.url))),wasm:hash(wasm),template:hash(template),models:Object.values(assets).map(a=>a.sha256)}));
   let exists=false;try{await stat(out);exists=true;}catch(e){if(e.code!=='ENOENT')throw e;}
   if(exists) {

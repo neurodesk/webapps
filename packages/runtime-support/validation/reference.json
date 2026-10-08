@@ -1,0 +1,129 @@
+{
+  "browser": "chromium 153.0.8010.12",
+  "mindgrab": {
+    "package": "@brainchop/mindgrab",
+    "version": "0.1.20260925",
+    "input": {
+      "name": "T1_head.nii.gz",
+      "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+      "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416"
+    },
+    "cases": {
+      "mindgrab-mask": {
+        "call": "segment",
+        "options": {
+          "model": "mindgrab",
+          "mask": true
+        },
+        "seconds": 48.047,
+        "outputs": {
+          "image": "46ff261d39117963997fa2bc5956984d99e1697eaeaa00eec1f74562537ae1bb",
+          "mask": "95324ad19feee867641d219727edec53a8d53f041a9b1365654dff7e287bca74"
+        }
+      },
+      "mindmap-tissues": {
+        "call": "segmentTissues",
+        "options": {
+          "model": "mindmap"
+        },
+        "seconds": 68.413,
+        "outputs": {
+          "gm": "1c860e3d798381b814d082515bbb9c6c7b786b0cee1d7f2793868987583a8f6a",
+          "wm": "a5be6062b19e7553c2f0830fa9bc4f72071dcff465866c215a9c5d2d8a5ce50e",
+          "csf": "a919c7d8d73be8b3922f73b2a7c40808130db5e5e097e57bd9e99683a70258bc",
+          "brain": "70f2d79b52a67032aaaa308a821e5c95b29d3be87e1c79598e2fe2abb4ced467"
+        }
+      },
+      "mindsnap-labels": {
+        "call": "segment",
+        "options": {
+          "model": "mindsnap"
+        },
+        "seconds": 54.522,
+        "outputs": {
+          "image": "01f318e2df7429edf80f021660b7b19ae163c38819fd7f0fa0d15f4b897f2209"
+        }
+      },
+      "16chan18cls-labels": {
+        "call": "segment",
+        "options": {
+          "model": "16chan18cls"
+        },
+        "seconds": 25.926,
+        "outputs": {
+          "image": "28f1032d39a7e2b9493e68f2fdfe3c4325f1471f82d333b0b6f86cf31c10366d"
+        }
+      }
+    }
+  },
+  "niimath": {
+    "package": "@niivue/niimath",
+    "version": "1.4.20260928",
+    "cases": {
+      "smooth": {
+        "args": [
+          "in.nii",
+          "-s",
+          "2",
+          "out.nii.gz"
+        ],
+        "outputs": {
+          "out.nii.gz": "43ee2e8c9d448e2efddb19a8a07606c7844ac06e8e313eef273dae6364d20dcf"
+        }
+      },
+      "threshold-binarize": {
+        "args": [
+          "in.nii",
+          "-thr",
+          "50",
+          "-bin",
+          "out.nii.gz",
+          "-odt",
+          "char"
+        ],
+        "outputs": {
+          "out.nii.gz": "27dfb61c7f8c5fd52c0bd761bd1f6447ed814f62615b135eceb04fbab88737f1"
+        }
+      },
+      "dilate": {
+        "args": [
+          "in.nii",
+          "-kernel",
+          "boxv",
+          "3",
+          "-dilM",
+          "out.nii.gz"
+        ],
+        "outputs": {
+          "out.nii.gz": "125f2511986956bafab6f1f62ac53aa2f9f9a4e7d96ac539c5669b8a7bfd04a7"
+        }
+      },
+      "mask": {
+        "args": [
+          "in.nii",
+          "-mas",
+          "mask.nii",
+          "-mul",
+          "2",
+          "-add",
+          "10",
+          "out.nii.gz"
+        ],
+        "outputs": {
+          "out.nii.gz": "5e41239b0d3e78744f732e3346c1cb650e3c03656b8af6d4f397ce317a5b6049"
+        }
+      },
+      "otsu": {
+        "args": [
+          "in.nii",
+          "-otsu",
+          "3",
+          "out.nii.gz"
+        ],
+        "outputs": {
+          "out.nii.gz": "9cf7174b16741c2ae2a3d857e5889d652b51ebdde0f91e10adce375e1da1aaac"
+        }
+      }
+    }
+  }
+}

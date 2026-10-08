@@ -120,11 +120,19 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // own counting: every label FreeSurfer found is reported, within the voxels the gate allows.
   const allowed = Math.floor(limit * golden.data.length);
   const expectedCounts = countLabels(golden.data);
-  expect(report.measurements.voxelVolumeMl).toBeCloseTo(0.001, 9);
+  // FreeSurfer's sform defines voxel volume; pixdim rounds the oblique axes independently.
+  const [a, b, c] = golden.header.affine;
+  const voxelMl = Math.abs(
+    a[0] * (b[1] * c[2] - b[2] * c[1])
+    - a[1] * (b[0] * c[2] - b[2] * c[0])
+    + a[2] * (b[0] * c[1] - b[1] * c[0]),
+  ) / 1000;
+  expect(voxelMl).toBeCloseTo(0.001, 7);
+  expect(Math.abs(report.measurements.voxelVolumeMl / voxelMl - 1)).toBeLessThan(1e-6);
   expect(report.measurements.labels.map(label => label.id)).toEqual([...expectedCounts.keys()].sort((a, b) => a - b));
   for (const label of report.measurements.labels) {
     expect(Math.abs(label.voxels - expectedCounts.get(label.id)), `${label.name} voxels`).toBeLessThanOrEqual(allowed);
-    expect(Math.abs(label.volumeMl / (label.voxels / 1000) - 1), `${label.name} volume`).toBeLessThan(1e-6);
+    expect(Math.abs(label.volumeMl / (label.voxels * voxelMl) - 1), `${label.name} volume`).toBeLessThan(1e-6);
   }
   for (const [name, voxels] of Object.entries(pinned ?? {})) {
     const label = report.measurements.labels.find(entry => entry.name === name);

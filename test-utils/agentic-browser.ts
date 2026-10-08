@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { web, type BrowserProvider, type WebOptions } from '@e2e-dev/web';
 import { defineEngine } from 'e2e/engine';
+import { waitForChromiumEndpoint } from './chromium-cdp.mjs';
 
 // Downloads are relative to the current attempt, rather than the working directory.
 export function catalogEngine(options: WebOptions) {
@@ -69,9 +70,9 @@ export function catalogBrowser(): BrowserProvider {
       }
       const id = `${request.runId}-${request.targetName}-${request.slot}`;
       try {
-        const [port, endpoint] = (await readFile(join(directory, 'DevToolsActivePort'), 'utf8')).trim().split('\n');
+        const cdpEndpoint = await waitForChromiumEndpoint(directory, { signal: request.signal });
         servers.set(id, { context, directory });
-        return { id, cdpEndpoint: `ws://127.0.0.1:${port}${endpoint}` };
+        return { id, cdpEndpoint };
       } catch (error) {
         await context.close();
         await rm(directory, { recursive: true, force: true });

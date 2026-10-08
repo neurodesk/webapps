@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/runtime-support",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Canonical browser runtime wrappers and generated host support shared by Neurodesk webapps.",
@@ -13,7 +13,9 @@
     },
     "./gpu-unet": "./src/gpu-unet/index.js",
     "./freebrowse-viewer": "./src/freebrowse-viewer/index.js",
-    "./streamed-onnx": "./src/streamed-onnx/session.js"
+    "./streamed-onnx": "./src/streamed-onnx/session.js",
+    "./node/niimath": "./src/node/niimath.js",
+    "./node/mindgrab": "./src/node/mindgrab.js"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*",
@@ -23,9 +25,13 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "build:freebrowse-viewer": "node scripts/build-freebrowse-viewer.mjs"
+    "build:freebrowse-viewer": "node scripts/build-freebrowse-viewer.mjs",
+    "validate:browser": "node validation/browser-reference.mjs --check"
   },
   "devDependencies": {
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@niivue/niimath": "1.4.20260928",
+    "@playwright/test": "1.63.0",
     "vite": "^6.3.2"
   }
 }

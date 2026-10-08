@@ -1,0 +1,81 @@
+name: node-drivers
+
+# The Node drivers in @neurodesk/runtime-support (MindGrab CPU, niimath) must
+# reproduce the browser outputs pinned in validation/reference.json on every
+# operating system a portable command line ships for.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/node-drivers.yml'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/node/**'
+      - 'packages/runtime-support/test/node-*.test.js'
+      - 'packages/runtime-support/validation/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/node-drivers.yml'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/node/**'
+      - 'packages/runtime-support/test/node-*.test.js'
+      - 'packages/runtime-support/validation/**'
+  workflow_dispatch:
+
+concurrency:
+  group: node-drivers-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # rordenlab/niimath main after v1.0.20260924 (npm 1.4.20260924); later commits change only the Python wrapper.
+  NIIMATH_NATIVE_COMMIT: 95645c2447ae4c5853d23c3e449a5b32e8aafe23
+
+jobs:
+  node:
+    name: Node parity (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build native niimath
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          git clone --quiet https://github.com/rordenlab/niimath.git "$RUNNER_TEMP/niimath"
+          git -C "$RUNNER_TEMP/niimath" checkout --quiet "$NIIMATH_NATIVE_COMMIT"
+          make -C "$RUNNER_TEMP/niimath/src" -j4
+          echo "NIIMATH_NATIVE=$RUNNER_TEMP/niimath/src/niimath" >> "$GITHUB_ENV"
+      - name: Compare the Node drivers with the browser references
+        env:
+          MINDGRAB_PARITY: '1'
+        run: pnpm --filter @neurodesk/runtime-support test
+
+  browser:
+    name: Browser references still hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Rerun the browser CPU backend and niimath WebAssembly
+        run: pnpm --filter @neurodesk/runtime-support validate:browser
