@@ -101,6 +101,27 @@ export function summarize(files) {
   return digests;
 }
 
+// The tissue correction's inputs print every double in full, and Chromium's and
+// Node's JavaScript engines differ in the last bit of a few exp() results
+// (PE's corrected concentration in philips-press-tissue differs by 1.2e-16
+// relative). These files are kept whole and compared number by number.
+const FULL_PRECISION = /_tissue_correction\.json$/;
+const RELATIVE_TOLERANCE = 1e-12;
+
+/** The full-precision JSON files of a run, parsed. */
+export function documents(files) {
+  return Object.fromEntries([...files].filter(([name]) => FULL_PRECISION.test(name)).map(([name, bytes]) => [name, JSON.parse(bytes.toString("utf8"))]));
+}
+
+/** The largest relative difference between two JSON values, or Infinity when they differ in anything but rounding. */
+function largestDifference(a, b) {
+  if (typeof a === "number" && typeof b === "number") return a === b ? 0 : Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b));
+  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return a === b ? 0 : Infinity;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  if (Array.isArray(a) !== Array.isArray(b) || Object.keys(a).length !== keys.size || Object.keys(b).length !== keys.size) return Infinity;
+  return Math.max(0, ...[...keys].map((key) => largestDifference(a[key], b[key])));
+}
+
 /** Every file in a directory. */
 export async function readOutputs(directory) {
   const files = new Map();
@@ -127,8 +148,16 @@ export function headline(files) {
 export function compare(caseId, actual, expected) {
   const checks = [];
   for (const [name, digest] of Object.entries(expected.files)) {
-    if (!(name in actual.files)) checks.push([false, `${caseId}: ${name} missing (the web app wrote it)`]);
-    else checks.push([actual.files[name] === digest, `${caseId}: ${name} ${actual.files[name] === digest ? "identical to" : "differs from"} the web app's`]);
+    if (!(name in actual.files)) {
+      checks.push([false, `${caseId}: ${name} missing (the web app wrote it)`]);
+    } else if (actual.files[name] === digest) {
+      checks.push([true, `${caseId}: ${name} identical to the web app's`]);
+    } else if (expected.documents?.[name] && actual.documents?.[name]) {
+      const largest = largestDifference(actual.documents[name], expected.documents[name]);
+      checks.push([largest <= RELATIVE_TOLERANCE, `${caseId}: ${name} equal to the web app's to ${largest.toPrecision(2)} relative (limit ${RELATIVE_TOLERANCE}, the last bit of a double)`]);
+    } else {
+      checks.push([false, `${caseId}: ${name} differs from the web app's`]);
+    }
   }
   const extra = Object.keys(actual.files).filter((name) => !(name in expected.files));
   const group = CASES.find((c) => c.id === caseId)?.operation === "fit-group";

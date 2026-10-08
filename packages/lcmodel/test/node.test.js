@@ -103,6 +103,16 @@ test("LCModel's test case with its own basis set reproduces native LCModel and w
   await assert.rejects(fit({ inputs: testCase, output, basis: join(native, "3t.basis"), offline: true }), /is not empty/);
 });
 
+test("several .RAW files, or a .RAW with scanner files, are refused rather than partly fitted", async (t) => {
+  const directory = await scratch(t);
+  const second = join(directory, "second");
+  await mkdir(second);
+  await writeFile(join(second, "data.raw"), await readFile(testCase[0]));
+  await assert.rejects(fit({ inputs: [...testCase, second], output: join(directory, "out"), offline: true }), /Give one LCModel .RAW/);
+  await writeFile(join(directory, "meas.dat"), "not a .RAW");
+  await assert.rejects(fit({ inputs: [...testCase, join(directory, "meas.dat")], output: join(directory, "out"), offline: true }), /an LCModel .RAW or scanner files, not both: meas.dat/);
+});
+
 test("tissue fractions need a header and water-scaled concentrations", async (t) => {
   const directory = await scratch(t);
   const parameters = { fractionGM: 0.6, fractionWM: 0.3, fractionCSF: 0.1 };

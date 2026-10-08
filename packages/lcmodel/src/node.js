@@ -18,6 +18,7 @@ import { lcmodelError } from "./lcmodel-io.js";
 import { basisLibrary } from "./library.js";
 import {
   CUSTOM,
+  applyEditing,
   chooseBasis,
   datasetLabel,
   failedEntry,
@@ -245,7 +246,13 @@ async function assertNewOutput(directory) {
   if (entries.length) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
 }
 
+/** Write every file, after checking that no two share a name (dataset names can meet once made safe for files). */
 async function writeTexts(directory, texts) {
+  const seen = new Set();
+  for (const { name } of texts) {
+    if (seen.has(name)) throw new Error(`Two datasets would both be saved as ${name}; rename one of their folders.`);
+    seen.add(name);
+  }
   const written = [];
   for (const item of texts) {
     await writeFile(join(directory, item.name), item.body ?? item.make(), { flag: "wx" });
@@ -294,6 +301,9 @@ export async function fit({
   const engineOptions = { basisOptions: { cacheDir, offline, onProgress: (message) => report(undefined, message) }, onProgress: (text, fraction) => report(fraction, text) };
   let input;
   let engine;
+  // The app fits the first .RAW of a drop; a command line given more must not quietly drop the rest.
+  if (sorted.raw.length > 1 || sorted.water.length > 1) throw new Error("Give one LCModel .RAW (and one .H2O) per run; fit several with one run each.");
+  if (sorted.raw.length && sorted.other.length) throw new Error(`Give an LCModel .RAW or scanner files, not both: ${sorted.other.map((f) => f.name).join(", ")}.`);
   if (sorted.raw.length) {
     const water = sorted.water[0];
     input = rawInput({ name: sorted.raw[0].name, text: decode(sorted.raw[0]), waterName: water?.name ?? null, water: water ? decode(water) : null, control });
@@ -315,9 +325,7 @@ export async function fit({
   } else {
     throw new Error("No spectroscopy data found among the files.");
   }
-  if (typeof p.edited === "boolean" && input.kind === "fida") {
-    for (const ds of input.datasets) if (ds.header.editing) ds.editOverride = p.edited;
-  }
+  applyEditing(input, p.edited);
   const acquisition = input.kind === "raw" ? rawAcquisition(input, p) : null;
   if (acquisition && !(acquisition.hzpppm && acquisition.deltat)) {
     throw new Error(`${input.name} records no ${acquisition.hzpppm ? "dwell time" : "spectrometer frequency"}; give --frequency-mhz and --dwell-time-ms.`);

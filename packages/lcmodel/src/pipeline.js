@@ -4,7 +4,7 @@
 // LCModel run behind an injected engine: the app's worker, or the module
 // loaded in Node. Everything else here is pure.
 import packageJson from "../package.json" with { type: "json" };
-import { assessBasis, parseBasisHeader, recommendBasis } from "./basis-select.js";
+import { assessBasis, parseBasisHeader, recommendBasis, sequenceFamily } from "./basis-select.js";
 import { STATUS, fileStem, groupRecord, planBases, uniqueNames } from "./group.js";
 import { FILES, buildControl, concentrationsCsv, fillGaps, parseCoord, parseTable, presentRows } from "./lcmodel-io.js";
 import { parseRaw } from "./inputs.js";
@@ -107,13 +107,25 @@ export function rawAcquisition(input, { frequencyMHz, dwellTimeMs } = {}) {
 /**
  * Edited MEGA-PRESS data: LCModel fits their difference spectrum. GE and
  * Philips files do not say; FID-A compares alternate transients
- * (header.editing), and `editOverride` holds the user's reading.
+ * (header.editing), and `editOverride` holds the user's reading. A .RAW is a
+ * difference spectrum when its $SEQPAR names MEGA-PRESS or the user says so.
  */
 export function isEdited(input, k) {
+  if (input?.kind === "raw") return input.editOverride ?? sequenceFamily(input.header.sequence) === "MEGA-PRESS";
   if (input?.kind !== "fida") return false;
   const ds = input.datasets[k];
   if (ds.header.editing) return ds.editOverride ?? ds.header.editing.detected;
   return ds.header.family === "MEGA-PRESS";
+}
+
+/**
+ * The automation's `edited` parameter: the reading of GE and Philips
+ * transients, and whether a .RAW is a difference spectrum.
+ */
+export function applyEditing(input, edited) {
+  if (typeof edited !== "boolean") return;
+  if (input.kind === "raw") input.editOverride = edited;
+  else for (const ds of input.datasets) if (ds.header.editing) ds.editOverride = edited;
 }
 
 export function datasetLabel(input, k) {
@@ -128,7 +140,11 @@ export function describeDataset(input, k) {
 
 /** What the basis set is matched against, for dataset `k`. */
 export function headerFor(input, k, acquisition) {
-  if (input.kind === "raw") return { hzpppm: acquisition.hzpppm, teMs: input.header.teMs, sequence: input.header.sequence };
+  if (input.kind === "raw") {
+    const named = input.header.sequence;
+    const sequence = isEdited(input, k) ? "MEGA-PRESS" : sequenceFamily(named) === "MEGA-PRESS" ? null : named;
+    return { hzpppm: acquisition.hzpppm, teMs: input.header.teMs, sequence };
+  }
   const ds = input.datasets[k];
   const sequence = isEdited(input, k) ? "MEGA-PRESS" : ds.header.family || ds.header.sequence;
   return { hzpppm: ds.header.hzpppm, teMs: ds.header.teMs, sequence };
@@ -280,7 +296,7 @@ export async function fitDataset(engine, { input, index: k, choice, range, setti
     log(`FID-A, ${name}: ${summarizeReport(fida.report)}`);
     lcm = fida.lcmodel;
   } else {
-    lcm = { raw: input.text, h2o: input.water, nunfil: input.points, deltat: acquisition.deltat, hzpppm: acquisition.hzpppm, teMs: input.header.teMs };
+    lcm = { raw: input.text, h2o: input.water, nunfil: input.points, deltat: acquisition.deltat, hzpppm: acquisition.hzpppm, teMs: input.header.teMs, edited: isEdited(input, k) };
   }
   const water = settings.scaleWater && Boolean(lcm.h2o);
   const mmModel = lcm.edited ? macromoleculeModel(choice, settings.mmModel, bases) : null;
@@ -362,7 +378,7 @@ export function reportHtml(entry, input, versions) {
   const ds = input.kind === "fida" ? input.datasets[entry.index] : null;
   const dataset = ds
     ? { name: ds.label, file: ds.path ?? ds.name, waterFile: ds.water ? (ds.waterPath ?? ds.water) : null, format: ds.format, header: ds.header, edited: Boolean(f.lcm.edited) }
-    : { name: input.name, file: input.name, waterFile: input.waterName, format: "LCModel .RAW", header: { hzpppm: f.lcm.hzpppm, teMs: input.header.teMs, sequence: input.header.sequence, points: input.points }, edited: false };
+    : { name: input.name, file: input.name, waterFile: input.waterName, format: "LCModel .RAW", header: { hzpppm: f.lcm.hzpppm, teMs: input.header.teMs, sequence: input.header.sequence, points: input.points }, edited: Boolean(f.lcm.edited) };
   const p = entry.processed;
   return buildReport({
     generated: `${entry.generated.toISOString().slice(0, 16).replace("T", " ")} UTC`,

@@ -33,6 +33,7 @@ import { STATUS, fileStem, groupCsvLong, groupCsvWide } from "@neurodesk/lcmodel
 import { formatConc } from "@neurodesk/lcmodel/report";
 import {
   CUSTOM,
+  applyEditing,
   RANGES,
   checkBasis,
   datasetLabel as labelOf,
@@ -1091,8 +1092,8 @@ async function prepareAutomation({ inputs, parameters: p, signal, progress: repo
     await loadT1Files(inputs.t1, signal);
   }
   if (given.length) tissue.setFractions({ gm: p.fractionGM, wm: p.fractionWM, csf: p.fractionCSF });
-  if (typeof p.edited === "boolean" && input.kind === "fida") {
-    for (const ds of input.datasets) if (ds.header.editing) ds.editOverride = p.edited;
+  if (typeof p.edited === "boolean") {
+    applyEditing(input, p.edited);
     showDataset();
   }
   $("mmModel").value = p.macromoleculeModel ?? "co-edited";

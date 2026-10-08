@@ -23,7 +23,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import manifest from "../model.manifest.json" with { type: "json" };
-import { CASES, cliArguments, compare, exampleFiles, headline, readOutputs, readReference, summarize } from "./reference.mjs";
+import { CASES, cliArguments, compare, documents, exampleFiles, headline, readOutputs, readReference, summarize } from "./reference.mjs";
 import { assessSynthetic, syntheticSpectrum, tableConcentration } from "./synthetic.mjs";
 
 // mega_tests in packages/lcmodel/wasm/src/session.rs: ratio to NAA+NAAG and
@@ -126,7 +126,7 @@ try {
     const expected = reference.cases[entry.id];
     console.log(`INFO ${entry.id}: lcmodel ${cliArguments(entry.parameters).join(" ") || "(defaults)"}, ${seconds.toFixed(1)} s (web app ${expected.seconds} s)`);
     const produced = await readOutputs(output);
-    for (const [passed, line] of compare(entry.id, { files: summarize(produced), headline: headline(produced) }, expected)) check(passed, line);
+    for (const [passed, line] of compare(entry.id, { files: summarize(produced), headline: headline(produced), documents: documents(produced) }, expected)) check(passed, line);
     const table = [...produced].find(([name]) => name.endsWith(".table"))?.[1]?.toString("utf8") ?? "";
     megaChecks(entry.id, table);
     if (entry.id === "lcmodel-test") {

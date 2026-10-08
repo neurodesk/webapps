@@ -21,6 +21,7 @@ on:
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
+      - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'test/independent-workflows.test.mjs'
   push:
@@ -34,6 +35,7 @@ on:
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
+      - 'models/lcmodel.manifest.json'
       - 'apps/lcmodel/**'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
@@ -136,10 +138,10 @@ jobs:
           LCMODEL_BROWSER_REFERENCE: check
         run: pnpm --filter lcmodel exec playwright test e2e/reference.spec.js --reporter=line
 
-  # Archives are built, and published, only once the web app still matches the reference they are
-  # held to.
+  # Archives are built, and published, only once the ports pass their tests and the web app still
+  # matches the reference they are held to.
   portable:
-    needs: web-app-reference
+    needs: [test, fida-reference, web-app-reference]
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write

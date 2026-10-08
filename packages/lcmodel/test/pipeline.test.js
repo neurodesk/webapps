@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import { basisLibrary } from "../src/library.js";
 import {
   CUSTOM,
+  applyEditing,
   chooseBasis,
   fidaInput,
   fitPlanned,
@@ -134,6 +135,25 @@ test("a .RAW takes the given frequency and dwell time over its own, and keeps it
   const data = rawInput({ name: "a.raw", text: " $SEQPAR\n hzpppm=123.2\n dwellTime=0.000166666666\n $END\n $NMID\n $END\n 1 0\n 1 0\n" });
   assert.deepEqual(rawAcquisition(data), { hzpppm: 123.2, deltat: 0.000166667 });
   assert.deepEqual(rawAcquisition(data, { frequencyMHz: 127.7, dwellTimeMs: 0.25 }), { hzpppm: 127.7, deltat: 0.00025 });
+});
+
+test("a .RAW that names MEGA-PRESS is fitted as a difference spectrum, unless the user says it is not", async () => {
+  const text = " $SEQPAR\n hzpppm=123.2\n echot=68\n seq='MEGA-PRESS'\n dwellTime=0.0005\n $END\n" + raw;
+  const fitRaw = async (edited) => {
+    const data = rawInput({ name: "diff.raw", text });
+    applyEditing(data, edited);
+    const acquisition = rawAcquisition(data);
+    const basisId = chooseBasis(data, 0, { bases: bases(), acquisition });
+    return fitPlanned(fakeEngine(), { input: data, index: 0, basisId, settings: settingsFrom(), bases: bases(), acquisition });
+  };
+  const edited = await fitRaw(undefined);
+  assert.equal(edited.basis.id, "megapress-3t-te68-diff");
+  assert.match(edited.fit.control, /sptype='mega-press-3'/);
+  assert.match(edited.fit.control, /MM3co/);
+  const plain = await fitRaw(false);
+  assert.doesNotMatch(plain.fit.control, /sptype|MM3co/);
+  assert.match(plain.fit.control, /desdt2=2/);
+  assert.notEqual(plain.basis.id, "megapress-3t-te68-diff");
 });
 
 test("a group run fits each dataset with its recommended basis unless a choice suits them all", () => {

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { CASES, compare, exampleFiles, headline, readReference, summarize, writeReference } from "../../../packages/lcmodel/validation/reference.mjs";
+import { CASES, compare, documents, exampleFiles, headline, readReference, summarize, writeReference } from "../../../packages/lcmodel/validation/reference.mjs";
 
 // Runs every case of packages/lcmodel/validation/reference.mjs through the
 // built app (its automation, worker, served WebAssembly and basis sets),
@@ -41,7 +41,7 @@ for (const entry of CASES) {
       const download = await downloaded;
       downloads.set(download.suggestedFilename(), await readFile(await download.path()));
     }
-    const actual = { files: summarize(downloads), headline: headline(downloads) };
+    const actual = { files: summarize(downloads), headline: headline(downloads), documents: documents(downloads) };
     const reference = await readReference().catch(() => ({ cases: {} }));
     if (mode === "write") {
       reference.browser = {

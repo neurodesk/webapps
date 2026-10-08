@@ -73,7 +73,9 @@ lcmodel --help
 
 Give the files the app reads: Siemens twix `.dat`, RDA and DICOM, GE P-files,
 Philips SDAT/SPAR, NIfTI-MRS, Bruker, or an LCModel `.RAW` with its `.H2O` and
-an LCMODL control file. A folder counts as its files, named by their path
+an LCMODL control file. A `.RAW` whose `$SEQPAR` names MEGA-PRESS is fitted
+as a difference spectrum; `--edited` or `--no-edited` overrides that. One run
+fits one `.RAW`. A folder counts as its files, named by their path
 inside it, so each subject's spectrum pairs with its own water reference as in
 a folder drop. The last argument is the output directory, which must be new or
 empty.
@@ -138,6 +140,10 @@ line to three references that do not run its code path:
   records it again, and the `web-app-reference` job of `lcmodel-native.yml`
   reruns it with `check` before any archive is built. Every download must be
   byte for byte the same, the report apart from its program-and-time line.
+  The tissue correction's inputs (`_tissue_correction.json`) print every
+  double in full, and Chromium's and Node's JavaScript engines round a few
+  `exp()` results differently in the last bit; that file is compared number
+  by number to 1e-12 relative. Its rounded table is compared byte for byte.
 - Native gfortran LCModel 6.3-1N on LCModel's test case: the concentration,
   misc and diagnostics tables must be identical.
 - The GABA+ fit of the Siemens MEGA-PRESS example pinned natively in
@@ -145,6 +151,7 @@ line to three references that do not run its code path:
   of `validation/synthetic.mjs` (Cr+PCr 8 and NAA+NAAG 10 within 1 %, and
   0.872 of the creatine with LCModel's prior).
 
-On Linux x64 every one of the 14 cases wrote the browser's files byte for
-byte. The examples download once into the system temporary directory and are
+On Linux x64 the command line wrote the browser's files byte for byte in all
+14 cases, apart from one value of the tissue correction's inputs, which
+differed by 1.2e-16 relative. The examples download once into the system temporary directory and are
 checked against `registry/offline-assets.lock.json`.
