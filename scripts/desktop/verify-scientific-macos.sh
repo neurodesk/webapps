@@ -110,8 +110,8 @@ extraction() {
   BRAIN_EXTRACTION_REAL_MODELS=1 PLAYWRIGHT_JSON_OUTPUT_NAME="$validation/extraction.json" \
     pnpm --filter brain-extraction exec playwright test --grep 'real model' --reporter=line,json --retries=0
   node "$evidence" check-playwright "$validation/extraction.json" \
-    'mindgrab real model returns a nonempty binary mask in input geometry' \
-    'synthstrip real model returns a nonempty binary mask in input geometry'
+    'mindgrab real model agrees with the FreeSurfer SynthSeg brain mask in input geometry' \
+    'synthstrip real model agrees with the FreeSurfer SynthSeg brain mask in input geometry'
 }
 
 catalog() {

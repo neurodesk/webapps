@@ -3,7 +3,7 @@ import wasmURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 import wasmModuleURL from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
-import { browserSynthstrip } from '../../../packages/syncro/src/assets.js';
+import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
 
 export async function extractSynthstrip({ volume, onProgress }) {
   ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
@@ -18,7 +18,7 @@ export async function extractSynthstrip({ volume, onProgress }) {
   return runSynthstrip({
     volume,
     async loadModel() {
-      const { url, bytes, sha256 } = browserSynthstrip;
+      const { url, bytes, sha256 } = SYNTHSTRIP_MODEL;
       onProgress(0, 'Downloading SynthStrip model…');
       const model = await fetchModel({ url, integrity: { bytes, sha256 } }, {
         cache,

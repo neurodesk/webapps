@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "brain-extraction-v",
+  "displayName": "Brain extraction",
+  "app": "brain-extraction",
+  "run": "head.nii.gz results",
+  "readme": {
+    "run": "Extract the brain with SynthStrip",
+    "notes": [
+      "Add --method bet for BET; --fractional-intensity sets its threshold.",
+      "The SynthStrip model is included and checked locally. BET needs no model.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for options. MindGrab, DICOM input and mask editing need the web app.",
+      "",
+      "Brain extraction is research software. Review the masks before use. Please cite",
+      "the method you use: Hoopes A et al. SynthStrip: skull-stripping for any brain",
+      "image. NeuroImage 2022. Smith SM. Fast robust automated brain extraction.",
+      "Human Brain Mapping 2002."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "brain-extraction"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "brain-extraction.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "brain-extraction"
+    }
+  }
+}

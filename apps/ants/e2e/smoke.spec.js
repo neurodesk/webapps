@@ -58,6 +58,9 @@ function expectAligned(warped, moving, fixed) {
   expect(affineDifference(warped.affine, fixed.affine)).toBeLessThan(1e-3);
   expect(before).toBeLessThan(0.7);
   expect(after).toBeGreaterThan(0.9);
+  // A different subject cannot match the template exactly (measured 0.88-0.96), while returning
+  // the stationary image itself would score 1 and pass every check above.
+  expect(after).toBeLessThan(0.99);
 }
 
 test("live data examples download and SyN registration aligns the 1 mm pair", async ({ page }) => {

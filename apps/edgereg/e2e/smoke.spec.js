@@ -64,6 +64,9 @@ test("affine registration aligns the example T1 with the MNI template on the tem
   expect(affineDifference(warped.affine, fixed.affine)).toBeLessThan(1e-3);
   expect(before).toBeLessThan(0.8);
   expect(after).toBeGreaterThan(0.85);
+  // A different subject cannot match the template exactly (measured 0.88-0.96), while returning
+  // the stationary image itself would score 1 and pass every check above.
+  expect(after).toBeLessThan(0.99);
 });
 
 test("cancellation keeps controls locked until registration exits", async ({ page }) => {

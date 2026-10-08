@@ -20,13 +20,28 @@ export const BET_MIN_DICE = 0.93;
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const arrayBuffer = bytes => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
+// Hugging Face throttles and occasionally drops requests: retry transient failures a few times,
+// each attempt bounded, so one hiccup does not fail an unrelated pull request.
+async function download(url, attempts = 4) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+      if (response.ok) return Buffer.from(await response.arrayBuffer());
+      if (attempt >= attempts || (response.status !== 429 && response.status < 500)) {
+        throw new Error(`Brain extraction reference ${url} is unavailable: HTTP ${response.status}`);
+      }
+    } catch (error) {
+      if (attempt >= attempts || error.message.startsWith('Brain extraction reference')) throw error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+  }
+}
+
 async function pinned({ name, sha256: expected }, directory) {
   const path = join(directory, name);
   const cached = await readFile(path).catch(() => null);
   if (cached && sha256(cached) === expected) return { path, bytes: cached };
-  const response = await fetch(BASE_URL + name);
-  if (!response.ok) throw new Error(`Brain extraction reference ${name} is unavailable: HTTP ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = await download(BASE_URL + name);
   if (sha256(bytes) !== expected) throw new Error(`Brain extraction reference ${name} failed SHA-256 verification`);
   const partial = `${path}.${process.pid}.partial`;
   await writeFile(partial, bytes);

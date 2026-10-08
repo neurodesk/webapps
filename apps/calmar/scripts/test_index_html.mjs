@@ -371,7 +371,7 @@ assert.deepEqual(
     const toggle = element.querySelector('.console-header [data-disclosure-toggle]');
     assert.equal(text(toggle), title);
     assert.equal(element.querySelector('[data-disclosure-panel]').id, outputId);
-    const actions = Array.from(element.querySelectorAll('.console-header .console-actions button'));
+    const actions = Array.from(element.querySelectorAll('.console-header .nd-console-actions button'));
     assert.deepEqual(ids(actions), actionIds, 'Copy and Clear live in the console header');
     assert.deepEqual(actions.map(text), ['Copy', 'Clear']);
   });
