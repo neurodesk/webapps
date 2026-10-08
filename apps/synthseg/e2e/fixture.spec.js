@@ -197,6 +197,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
     }),
   });
   save();
+  expect(result.gpuPosteriors).toHaveLength(mode === 'default' ? 2 : 1);
   expect(report.status).toBe('succeeded');
   expect(inputDescriptor.sha256).toBe(checksum(readFileSync(input)));
   expect(outputDescriptor.sha256).toBe(checksum(producedBytes));
