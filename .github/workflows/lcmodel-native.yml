@@ -1,46 +1,67 @@
 name: lcmodel-native
 
-# The Rust ports behind apps/lcmodel: LCModel (exes/lcmodel) must keep
-# writing the same .TABLE/.COORD numbers as the Fortran on LCModel's test
-# case, FID-A (exes/fida) its unit and synthetic tests, and the committed
-# WebAssembly module (packages/lcmodel) the same table as native LCModel.
-# The fida-reference job compares the FID-A port with FID-A's own outputs
-# (exes/fida/validation/README.md), fetched from the pinned Hugging Face
-# revision in exes/fida/validation/reference.manifest.json, and checks that the
-# app's default control file recovers synthetic water-scaled concentrations
-# with the basis set fetched there.
+# The Rust ports behind apps/lcmodel and the lcmodel command line. LCModel
+# (exes/lcmodel) must keep writing the same .TABLE/.COORD numbers as the
+# Fortran on LCModel's test case, FID-A (exes/fida) its unit and synthetic
+# tests, and the committed WebAssembly module (packages/lcmodel) the same table
+# as native LCModel. The fida-reference job compares the FID-A port with
+# FID-A's own outputs (exes/fida/validation/README.md), fetched from the pinned
+# Hugging Face revision in exes/fida/validation/reference.manifest.json, and
+# checks that the app's default control file recovers synthetic water-scaled
+# concentrations with the basis set fetched there. The portable archives are
+# built and checked against the web app's own results on its examples.
 on:
   pull_request:
     paths:
+      - '.github/workflows/lcmodel-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
-      - '.github/workflows/lcmodel-native.yml'
+      - 'apps/lcmodel/**'
+      - 'test/independent-workflows.test.mjs'
   push:
     branches: [main]
     paths:
+      - '.github/workflows/lcmodel-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'exes/lcmodel/**'
       - 'exes/fida/**'
       - 'packages/lcmodel/**'
-      - '.github/workflows/lcmodel-native.yml'
+      - 'apps/lcmodel/**'
+      - 'test/independent-workflows.test.mjs'
   workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing LCModel release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: lcmodel-native-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
       - name: LCModel port (parity with the Fortran on its test case)
@@ -59,13 +80,17 @@ jobs:
     env:
       DATA: ${{ github.workspace }}/../fida-reference
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: stable
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
       - name: Cache the reference downloads
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ github.workspace }}/../fida-reference/.download
           key: fida-reference-${{ hashFiles('exes/fida/validation/reference.manifest.json') }}
@@ -82,3 +107,55 @@ jobs:
         env:
           FIDA_REQUIRE_REFERENCE: '1'
         run: LCMODEL_BASIS_DIR="$DATA/basis" node --test packages/lcmodel/test/water-scaling.test.js
+
+  # Runs every case of packages/lcmodel/validation/reference.mjs through the built web app and
+  # compares its downloads with packages/lcmodel/validation/browser-reference.json, the reference
+  # the archives are held to.
+  web-app-reference:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install frozen dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+        run: pnpm install --frozen-lockfile
+      - name: Install browser
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          node node_modules/@playwright/test/cli.js install --with-deps chromium
+      - name: Fit every example in the web app
+        env:
+          LCMODEL_BROWSER_REFERENCE: check
+        run: pnpm --filter lcmodel exec playwright test e2e/reference.spec.js --reporter=line
+
+  # Archives are built, and published, only once the web app still matches the reference they are
+  # held to.
+  portable:
+    needs: web-app-reference
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/lcmodel
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
