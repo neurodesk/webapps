@@ -63,7 +63,8 @@ The settings are the app's automation parameters:
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `--model pve\|16chan18cls\|mindmap\|mindsnap` | `pve` | `pve` meshes MindMap's grey plus white matter fraction at 0.5, a sub-voxel surface. The others mesh a label map at its boundary. |
+| `--model pve\|16chan18cls\|mindmap\|mindsnap` | `pve` | `pve` meshes MindMap's grey plus white matter fraction at 0.5, a sub-voxel surface. The others mesh the 0/1 mask of their labels at 0.5. |
+| `--backend auto\|cpu` | `auto` | Accepted for parity with the app; the command line always runs MindGrab's CPU module. |
 | `--simplify N` | 20 | Percentage of mesh faces to keep, 5 to 100. |
 | `--smooth N` | 0 | Mesh smoothing iterations, 0 to 20. |
 | `--[no-]largest-only` | on | Keep only the largest connected component. |
@@ -95,10 +96,11 @@ Segmentation takes about a minute on eight cores and up to 4 GB of memory.
 
 ### Accuracy
 
-The release check, `validation/cli-check.mjs`, runs the command line on four
-cases: the app's pinned example with the default settings, the e2e fixture
-as stored and mirrored into left-handed storage (`pve`, smoothing 5), and the
-fixture with `16chan18cls`. It holds every file to
+The release check, `validation/cli-check.mjs`, runs the command line on five
+cases: the app's pinned example and the MNI152 template the app's CPU e2e test
+meshes, both with the default settings; the e2e fixture as stored and mirrored
+into left-handed storage (`pve`, smoothing 5); and the fixture with
+`16chan18cls`. It holds every file to
 `validation/browser-reference.json`, which records what the web app's pipeline
 wrote in Chromium. In the browser, MindGrab ran in its published wrapper on its
 CPU backend and niimath ran in its WebAssembly worker. The check measures the
@@ -109,5 +111,8 @@ identical bytes. The command line reproduces the browser byte for byte, so the
 check allows no tolerance.
 
 `validation/browser-reference.mjs --check` reruns the browser side. Without
-`--check` it rewrites the reference. The app's hardware-GPU e2e tests run
-MindGrab on WebGPU and are not held to these CPU numbers.
+`--check` it rewrites the reference. The app's CPU e2e test
+(`apps/brain2print/e2e/automation.spec.js`) runs the real app on the template
+and requires its three downloads to match the same pinned hashes. The
+hardware-GPU e2e tests run MindGrab on WebGPU and are not held to these CPU
+numbers.

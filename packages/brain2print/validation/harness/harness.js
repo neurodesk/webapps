@@ -13,7 +13,7 @@ globalThis.runCase = async ({ id, input, settings }) => {
     settings,
     mindgrab,
     mesher: (segmentation, options) => niimath.mesh(segmentation, options),
-    mindgrabOptions: { worker: true, backend: 'cpu', assetPath: '/brainchop/' },
+    mindgrabOptions: { worker: true, assetPath: '/brainchop/' },
   });
   for (const file of result.files) {
     const response = await fetch(`/result/${id}/${file.name}`, { method: 'POST', body: file.bytes });

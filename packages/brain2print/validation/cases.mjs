@@ -11,12 +11,16 @@ export const REFERENCE_URL = new URL('./browser-reference.json', import.meta.url
 const examples = JSON.parse(await readFile(new URL('../../../apps/brain2print/examples.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(await readFile(new URL('../../../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
 const SMALL = new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url);
-const DEFAULTS = { model: 'pve', simplify: 20, smooth: 0, largestOnly: true, fillBubbles: true };
+// The MNI152 2 mm template the app's CPU e2e test meshes (apps/brain2print/e2e/automation.spec.js).
+const MNI = new URL('../../../apps/calmar/tests/fixtures/synthstrip-mini/T1.nii.gz', import.meta.url);
+// The browser can only be held to the CPU backend; the command line has no other.
+const DEFAULTS = { model: 'pve', backend: 'cpu', simplify: 20, smooth: 0, largestOnly: true, fillBubbles: true };
 
-// The app's pinned example with its defaults; the e2e fixture as stored and mirrored, smoothed
-// as its e2e test does; and one label model.
+// The app's pinned example with its defaults; the template the app's CPU e2e test meshes; the
+// e2e fixture as stored and mirrored, smoothed as its e2e test does; and one label model.
 export const CASES = [
   { id: 'example-pve', input: 'example', settings: DEFAULTS },
+  { id: 'mni152-pve', input: 'mni152', settings: DEFAULTS },
   { id: 'small-pve-smooth5', input: 'small', settings: { ...DEFAULTS, smooth: 5 } },
   { id: 'small-left-handed-pve-smooth5', input: 'small-left-handed', settings: { ...DEFAULTS, smooth: 5 } },
   { id: 'small-16chan18cls', input: 'small', settings: { ...DEFAULTS, model: '16chan18cls' } },
@@ -74,6 +78,7 @@ export function leftHanded(nifti) {
 /** The bytes a case segments, with the file name they are given. */
 export async function caseInput(input) {
   if (input === 'example') return pinnedExample();
+  if (input === 'mni152') return { name: 'brain.nii.gz', bytes: await readFile(MNI) };
   const small = await readFile(SMALL);
   if (input === 'small-left-handed') return { name: 'small_lh.nii', bytes: leftHanded(small) };
   return { name: 'small.nii.gz', bytes: small };

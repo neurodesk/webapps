@@ -16,7 +16,7 @@ const HELP = `Usage: brain2print IMAGE.nii[.gz] OUTPUT_DIR [options]
 Segments a T1-weighted brain MRI with MindGrab on the CPU, meshes it with niimath
 and writes a printable surface. The default model, pve, is MindMap's grey plus
 white matter fraction meshed at 0.5, a sub-voxel surface; the other models are
-label maps meshed at their boundary. The mesh is checked for a closed,
+label maps whose 0/1 brain mask is meshed. The mesh is checked for a closed,
 consistently wound manifold and its winding is flipped when its normals face
 inward, whatever the image's handedness.
 

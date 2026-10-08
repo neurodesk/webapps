@@ -4,6 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 import { inspectMz3, inspectStl, voxelVolume } from './mesh-geometry.js';
 
+// The web pipeline's files on this template with the CPU backend, which the brain2print command line's
+// release check is also held to (packages/brain2print/validation/browser-reference.json).
+const reference = JSON.parse(await readFile(new URL('../../../packages/brain2print/validation/browser-reference.json', import.meta.url), 'utf8')).cases['mni152-pve'];
+const ROLE_FILES = { segmentation: 'brain-fraction.nii', mesh: 'brain2print.stl', geometry: 'brain2print.mz3' };
+
 const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
 const small = await readFile(new URL('../../../exes/synthseg/test/fixtures/small.nii.gz', import.meta.url));
 // The MNI152 2 mm template: a whole brain, so the mesh volume can be held to an anatomical range.
@@ -85,6 +90,10 @@ test('CPU inference returns a watertight STL enclosing the segmented brain volum
   const { report, files } = await finished(page);
   expect(report.provenance.segmentation.backend).toBe('cpu');
   const { stl, fraction } = expectPrintableBrain(files, brain);
+  expect(reference.settings).toEqual({ model: 'pve', backend: 'cpu', simplify: 20, smooth: 0, largestOnly: true, fillBubbles: true });
+  for (const [role, name] of Object.entries(ROLE_FILES)) {
+    expect(createHash('sha256').update(files[role]).digest('hex'), `${name} as pinned in browser-reference.json`).toBe(reference.sha256[name]);
+  }
   console.log(`cpu: ${stl.triangles} triangles, mesh ${stl.volume.toFixed(0)} mm^3, voxels ${fraction.volume.toFixed(0)} mm^3`);
 });
 

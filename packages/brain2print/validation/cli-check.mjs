@@ -29,6 +29,7 @@ function check(passed, line) {
 
 const flags = (settings) => [
   '--model', settings.model,
+  '--backend', settings.backend,
   '--simplify', String(settings.simplify),
   '--smooth', String(settings.smooth),
   settings.largestOnly ? '--largest-only' : '--no-largest-only',
