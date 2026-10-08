@@ -147,8 +147,12 @@ test('an app release starts every portable command line build, which then publis
   const shared = await workflow('node-cli-portable.yml');
   assert.equal(shared.jobs.release.steps.at(-1).run, CATALOG_DISPATCH);
   assert.ok(shared.jobs.release.steps.find((step) => step.id === 'target').run.includes('echo "release='));
+  // CI runs this file through `pnpm test:contracts`, which takes every test/*.test.mjs it does not exclude.
   const ci = await workflow('ci.yml');
-  assert.ok(Object.values(ci.jobs).some((job) => job.steps?.some((step) => step.run?.includes('test/standalone-release-automation.test.mjs'))));
+  const contracts = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).scripts['test:contracts'];
+  assert.match(contracts, /test\/\*\.test\.mjs/);
+  assert.doesNotMatch(contracts, /standalone-release-automation/);
+  assert.ok(Object.values(ci.jobs).some((job) => job.steps?.some((step) => step.run === 'pnpm test:contracts')));
 });
 
 test('the catalog workflow computes without write access and publishes without running dependencies', async () => {
