@@ -1,0 +1,135 @@
+{
+  "basisSet": {
+    "type": "string",
+    "description": "Library basis set, or auto for the recommendation.",
+    "enum": [
+      "auto",
+      "press-3t-te30",
+      "press-3t-te35",
+      "press-3t-te144",
+      "steam-3t-te20",
+      "slaser-3t-te30",
+      "special-3t-te8.5",
+      "press-1.5t-te30",
+      "slaser-7t-te28",
+      "steam-7t-te8",
+      "megapress-3t-te68-diff",
+      "press-1.5t-te35",
+      "press-1.5t-te144",
+      "steam-1.5t-te20",
+      "press-3t-te80",
+      "steam-3t-te8",
+      "slaser-3t-te35",
+      "slaser-3t-te30-shaped",
+      "slaser-3t-te35-shaped",
+      "press-3t-te30-shaped",
+      "press-3t-te35-shaped",
+      "press-3t-te80-shaped",
+      "press-3t-te144-shaped",
+      "slaser-7t-te28-shaped",
+      "megapress-3t-te80-diff",
+      "megapress-3t-te80-mmsup-diff"
+    ],
+    "default": "auto"
+  },
+  "edited": {
+    "type": "boolean",
+    "description": "GE and Philips: alternate transients are edit-ON/OFF MEGA-PRESS pairs; an LCModel .RAW is a MEGA-PRESS difference spectrum. Detected from the data (a .RAW from its $SEQPAR seq) when absent."
+  },
+  "macromoleculeModel": {
+    "type": "string",
+    "description": "MEGA-PRESS: co-edited fits MM09 and MM3co to 0.5 ppm (1.2-1.95 ppm excluded, as Osprey) and reports GABA, MM3co and GABA+; none is LCModel's mega-press-3 as before (GABA+ only, to 1.95 ppm). MM-suppressed basis sets always use none.",
+    "enum": [
+      "co-edited",
+      "none"
+    ],
+    "default": "co-edited"
+  },
+  "lineBroadening": {
+    "type": "string",
+    "description": "LCModel's line-broadening prior for unedited spectra: widened (DESDT2 2, RFWBAS 80) recovers synthetic concentrations with the library's narrow-line basis sets, where LCModel's defaults (lcmodel: DESDT2 0.4, RFWBAS 10) scale 8-15 % low. MEGA-PRESS difference fits always use LCModel's values.",
+    "enum": [
+      "widened",
+      "lcmodel"
+    ],
+    "default": "widened"
+  },
+  "removeBadAverages": {
+    "type": "boolean",
+    "description": "Remove bad averages (FID-A op_rmbadaverages).",
+    "default": true
+  },
+  "badAverageSd": {
+    "type": "number",
+    "description": "Bad-average threshold in standard deviations; FID-A's default when absent.",
+    "minimum": 1,
+    "maximum": 10
+  },
+  "driftCorrection": {
+    "type": "boolean",
+    "description": "Correct frequency and phase drift.",
+    "default": true
+  },
+  "phaseAndReference": {
+    "type": "boolean",
+    "description": "Phase and reference to creatine.",
+    "default": true
+  },
+  "waterScaling": {
+    "type": "boolean",
+    "description": "Scale to the water reference when there is one.",
+    "default": true
+  },
+  "eddyCurrentCorrection": {
+    "type": "boolean",
+    "description": "Eddy-current correction with the water reference.",
+    "default": true
+  },
+  "ppmStart": {
+    "type": "number",
+    "description": "Upper end of the fit range in ppm; 4.0 (4.2 for MEGA-PRESS) when absent.",
+    "minimum": 0,
+    "maximum": 10
+  },
+  "ppmEnd": {
+    "type": "number",
+    "description": "Lower end of the fit range in ppm; 0.2 when absent (MEGA-PRESS: 0.5 with the co-edited MM model, 1.95 without).",
+    "minimum": -1,
+    "maximum": 10
+  },
+  "frequencyMHz": {
+    "type": "number",
+    "description": "Spectrometer frequency for a .RAW without one.",
+    "minimum": 10,
+    "maximum": 1000
+  },
+  "dwellTimeMs": {
+    "type": "number",
+    "description": "Dwell time for a .RAW without one.",
+    "minimum": 0.001,
+    "maximum": 10
+  },
+  "fractionGM": {
+    "type": "number",
+    "description": "Grey matter volume fraction in the voxel, instead of segmenting a T1; give all three.",
+    "minimum": 0,
+    "maximum": 1
+  },
+  "fractionWM": {
+    "type": "number",
+    "description": "White matter volume fraction in the voxel; give all three.",
+    "minimum": 0,
+    "maximum": 1
+  },
+  "fractionCSF": {
+    "type": "number",
+    "description": "CSF volume fraction in the voxel; give all three.",
+    "minimum": 0,
+    "maximum": 1
+  },
+  "metaboliteRelaxation": {
+    "type": "boolean",
+    "description": "Tissue correction: also correct metabolite T1 and T2 (literature values at 3 T and 7 T).",
+    "default": true
+  }
+}

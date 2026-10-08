@@ -247,3 +247,53 @@ export function correctedCsv(result, ratioTo) {
   ]);
   return [header, ...lines].map((row) => row.map(csvCell).join(",")).join("\n") + "\n";
 }
+
+/**
+ * The tissue correction of one fit, or why it does not apply.
+ * @param rows LCModel's rows (presentRows)
+ * @param {{
+ *   fractions: {gm: number, wm: number, csf: number}|null,
+ *   header: {fieldT: number, teMs: number, trMs: number, waterTeMs?: number, waterTrMs?: number}|null,
+ *   waterScaled: boolean, edited: boolean, metaboliteRelaxation: boolean,
+ * }} options  `header` is the spectroscopy dataset's (null for a .RAW file).
+ * @returns null without fractions, `{reason}` when it does not apply, else correctConcentrations' result
+ */
+export function correctionFor(rows, { fractions, header, waterScaled, edited, metaboliteRelaxation }) {
+  if (!fractions) return null;
+  if (!waterScaled) return { reason: "Tissue correction needs water-scaled concentrations (a water reference)." };
+  if (!header) return { reason: "Tissue correction needs the acquisition header (not a .RAW file)." };
+  if (!fieldKey(header.fieldT)) return { reason: `Relaxation constants are tabulated for 3 T and 7 T, not ${Number(header.fieldT).toFixed(2)} T.` };
+  try {
+    return correctConcentrations(rows, {
+      fractions,
+      fieldT: header.fieldT,
+      metabolite: { teMs: header.teMs, trMs: header.trMs },
+      water: { teMs: header.waterTeMs ?? header.teMs, trMs: header.waterTrMs ?? header.trMs },
+      metaboliteRelaxation,
+      alpha: edited,
+    });
+  } catch (error) {
+    return { reason: error.message };
+  }
+}
+
+/**
+ * The tissue correction's downloads: the corrected table and every input
+ * behind it. `fractionSource` is "entered" or a description of the segmentation.
+ */
+export function tissueTexts(result, stem, ratioTo, { fractionSource = "entered", voxel = null, voxelInT1Mm3 = null } = {}) {
+  const report = {
+    fractions: result.fractions,
+    molalFractions: result.molalFractions,
+    fractionSource,
+    voxel,
+    voxelInT1Mm3,
+    waterAttenuation: result.waterAttenuation,
+    ...result.constants,
+    concentrations: result.rows.map((r) => ({ name: r.name, lcmodel: r.concentration, corrected: r.corrected, alphaCorrected: r.alphaCorrected ?? null, t1Ms: r.t1 * 1000, t2Ms: r.t2 * 1000 })),
+  };
+  return {
+    tissueConcentrations: { description: "Tissue-corrected concentrations (.csv)", name: `${stem}_tissue_corrected.csv`, type: "text/csv", body: correctedCsv(result, ratioTo), viewable: false },
+    tissueReport: { description: "Tissue correction inputs (.json)", name: `${stem}_tissue_correction.json`, type: "application/json", body: JSON.stringify(report, null, 2), viewable: false },
+  };
+}

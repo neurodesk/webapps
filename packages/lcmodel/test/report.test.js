@@ -15,7 +15,7 @@ async function input(overrides = {}) {
   coord.metabolites = [{ name: "NAA", concentration: 1.91e-6, curve: coord.fit }];
   return {
     generated: "2026-10-03 12:00 UTC",
-    versions: { app: "0.4.20261003", lcmodel: "6.3-1N (Rust port)", fida: "Rust port 0.1.0" },
+    versions: { app: "LCModel web app 0.4.20261003", lcmodel: "6.3-1N (Rust port)", fida: "Rust port 0.1.0" },
     dataset: {
       name: "sub-01 <scan>",
       file: "study/sub-01/sub-01_PRESS_35_act.sdat",

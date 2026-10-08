@@ -56,7 +56,8 @@ export const provisioners = {
   // matches GitHub's Linux runners.
   fireants: { env: ['FIREANTS_BROWSER_REFERENCE'], provision: async () => ({ FIREANTS_BROWSER_REFERENCE: 'check' }) },
   greedy: flag('GREEDY_LIVE_DATA'),
-  lcmodel: flag('LCMODEL_E2E_LARGE'),
+  // The browser reference fits all 14 cases of packages/lcmodel/validation/reference.mjs, about 5 min.
+  lcmodel: { env: ['LCMODEL_E2E_LARGE', 'LCMODEL_BROWSER_REFERENCE'], provision: async () => ({ LCMODEL_E2E_LARGE: '1', LCMODEL_BROWSER_REFERENCE: 'check' }) },
   nesvor: {
     env: ['NESVOR_MASK_FIXTURE_DIR'],
     provision: async (cache) => {

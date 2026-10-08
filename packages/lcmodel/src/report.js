@@ -184,7 +184,7 @@ function preprocessingPlot(spectra) {
  * The report for one fit.
  * @param {{
  *   generated: string,
- *   versions: {app: string, lcmodel: string, fida: string},
+ *   versions: {app: string, lcmodel: string, fida: string},  `app` names the program and its version
  *   dataset: {name: string, file?: string, waterFile?: string|null, format?: string, header?: object, edited?: boolean},
  *   basis: {id: string, label: string, sha256?: string|null, file?: string|null},
  *   control: string,
@@ -238,7 +238,7 @@ export function buildReport({ generated, versions, dataset, basis, control, prep
 <body>
 <header>
 <h1>${escapeHtml(title)}</h1>
-<p class="meta">${escapeHtml(generated)} · LCModel web app ${escapeHtml(versions.app)} · LCModel ${escapeHtml(versions.lcmodel)} · FID-A ${escapeHtml(versions.fida)}</p>
+<p class="meta">${escapeHtml(generated)} · ${escapeHtml(versions.app)} · LCModel ${escapeHtml(versions.lcmodel)} · FID-A ${escapeHtml(versions.fida)}</p>
 </header>
 <section class="top">
 <figure>${fitPlot}<figcaption>Data (black), LCModel fit (red), baseline (dashed) and residual (top), as in LCModel's own page.</figcaption></figure>

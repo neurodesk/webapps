@@ -3,6 +3,7 @@
 // terminates the worker. Loaded datasets stay in the module between messages.
 import wasmUrl from "@neurodesk/lcmodel/wasm?url";
 import { loadLcmodel } from "@neurodesk/lcmodel";
+import { lcmodelError } from "@neurodesk/lcmodel/lcmodel-io";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 
 const CACHE = "neurodesk-lcmodel-basis-v1";
@@ -80,17 +81,3 @@ self.onmessage = async ({ data: job }) => {
     self.postMessage({ id: job.id, type: "error", message: error?.message ?? String(error), name: error?.name });
   }
 };
-
-// LCModel stops with codes such as "FATAL ERROR MYBASI 3"; name the common ones.
-function lcmodelError(code, outputs) {
-  const hints = {
-    "MYBASI 9": "The basis set was simulated for a different field strength.",
-    "MYBASI 2": "The basis set's bandwidth is too narrow for these data.",
-    "MYDATA 1": "The spectrum file could not be read.",
-    "INITIA 4": "The fit range lies outside the spectrum.",
-  };
-  const key = Object.keys(hints).find((k) => code.includes(k));
-  const detail = key ? ` ${hints[key]}` : "";
-  const diag = Object.entries(outputs ?? {}).find(([name]) => name.endsWith(".table"))?.[1]?.split("$$DIAG")[1]?.split("$$")[0]?.trim();
-  return `LCModel stopped (${code}).${detail}${diag ? ` Diagnostics: ${diag.replace(/\s+/g, " ")}` : ""}`;
-}

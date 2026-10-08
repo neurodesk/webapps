@@ -1,0 +1,1140 @@
+{
+  "cases": {
+    "ge-press-phantom": {
+      "files": {
+        "P17920.H2O": "db5d79489e5644f7bda712c83e221a5b2a7707f71b8ee9afa7946b5376c2acf9",
+        "P17920.RAW": "e4d8fbf1b2b2b7b5cee785368a07d56a88f1d38f3319fe5767b0fc043e1c0ea7",
+        "P17920.control": "10fa17a5d29c86e537f8f05c60dc3306451d719d9c5cb18705fa94f894c3d31b",
+        "P17920.coord": "8c99369247b16b5070b19a1ab149ef55b791a1397fd977651430ec1532cecb1f",
+        "P17920.table": "7fe0b33d1f7a4f70f5f92b14bf1661e58f6860d44d7948d622f0b0f4aeafa293",
+        "P17920_concentrations.csv": "89cf61a475b82493405a99cf742645587a10b48441845919d94e594f6e6faf72",
+        "P17920_fida.json": "c46a1cf86f92d2b481994cb82c484d0d00b00328ad8315c23cc61ed218a0ed53",
+        "P17920_report.html": "02cc0574b83312742dc88852aecc84a48e7e70e020a4309b65fa4b8020126844"
+      },
+      "headline": {
+        "P17920_concentrations.csv": [
+          "GABA,0.301,64,0.043",
+          "Ins,3.775,10,0.538",
+          "GPC+PCh,2.356,2,0.336",
+          "NAA+NAAG,8.466,2,1.207",
+          "Cr+PCr,7.013,2,1",
+          "Glu+Gln,6.594,7,0.94"
+        ]
+      },
+      "seconds": 22.2
+    },
+    "ge-press-phantom-options": {
+      "files": {
+        "P17920.RAW": "53035997851f3d7833a4e1a42d529e60a54e039c4a516ea799391f3acca5f0ab",
+        "P17920.control": "c2ae241e038962c646a4af0a37e29ca21723388e16bf8c7b9077fa04236d5aa3",
+        "P17920.coord": "29ae2774ec303652aec27c5b4fd612e44f5d8a038f55c9607dab6a86abc60679",
+        "P17920.table": "38fbfea386b63732ef42d131511eebbc8080bb609105a4d5ce52cf4d1d7808b2",
+        "P17920_concentrations.csv": "203a99971136827ffc7dbcb61046b62e3a3163c9b470f3ada88492228e7e767a",
+        "P17920_fida.json": "345c542facb75015b8a54196960991fa2f47c28d057b53cc6f7dc45b4bd1be6d",
+        "P17920_report.html": "dacd0adcb7a73522f64919ddeae65ebc1b2a3521930a099ae12f6f3440deb7ba"
+      },
+      "headline": {
+        "P17920_concentrations.csv": [
+          "GABA,72.905,187,0.02",
+          "Ins,2220,19,0.598",
+          "GPC+PCh,1130,4,0.305",
+          "NAA+NAAG,4250,3,1.146",
+          "Cr+PCr,3710,3,1",
+          "Glu+Gln,3580,16,0.965"
+        ]
+      },
+      "seconds": 22.2
+    },
+    "ge-press-phantom-preprocessing": {
+      "files": {
+        "P17920.H2O": "21dbfd5ba853026260fcb9317f7d2dda85f899074fe64b8bf4cefb6a6c9f0270",
+        "P17920.RAW": "ec955b20ebbc46a6a91eee679b9bd6ed1e9b55b12e207502214ffee82348a150",
+        "P17920.control": "d705cf96e38f280dd3bcc85e26bf1c7c30b31824e0ba0cef1bc546a094775ec0",
+        "P17920.coord": "3528274587b21839aa139924de6cc69e80483936196c9cdc6e4d052fa907166f",
+        "P17920.table": "394852cc211375794810f859a40465048b8d4dd96a556aa9fa6fe3d1683158d1",
+        "P17920_concentrations.csv": "1ecb3081642835045f9d56afd3cdd1820a2693a0696a7c9df99ed921b7fb3a81",
+        "P17920_fida.json": "a6d476a499e53186fad1b2218554a505f9512b3faf5d7f4b2c44fde890b4a2e0",
+        "P17920_report.html": "6fd9adc09b5596f9a022851c31ed8c05d6313d06c00f58005cdecdb2e1c42987"
+      },
+      "headline": {
+        "P17920_concentrations.csv": [
+          "GABA,0.255,75,0.037",
+          "Ins,3.278,10,0.478",
+          "GPC+PCh,2.161,3,0.315",
+          "NAA+NAAG,8.502,2,1.24",
+          "Cr+PCr,6.857,2,1",
+          "Glu+Gln,5.617,9,0.819"
+        ]
+      },
+      "seconds": 18.2
+    },
+    "philips-press-tissue": {
+      "files": {
+        "sub-01_PRESS_35_act.H2O": "1df7a942b9a424fe50674aaff182a2002fc02c983cd4ecded626854db8076956",
+        "sub-01_PRESS_35_act.RAW": "f274068c7dd067ab2c055f04ce11c1ff36e68e6a78192ea25c61829710cce631",
+        "sub-01_PRESS_35_act.control": "fda252ab586844b3b3bfb15d27a93b261ee29884aa2f66be3240c1f23f445005",
+        "sub-01_PRESS_35_act.coord": "5dbb5e1705e0f9292f17d79ec76f9d0c23e45f2c52125639aa483bfbdbd2c3d8",
+        "sub-01_PRESS_35_act.table": "0075334d8be055d59a3424e67af12a9e08acaf93c667d3548537843d41aa8f1e",
+        "sub-01_PRESS_35_act_concentrations.csv": "43c44349fe3ddced0d9e8e30042311d94c94265aa23c602eb212579df8aec3db",
+        "sub-01_PRESS_35_act_fida.json": "e53f9cc1a052060b370c3965015afa2b31342d35a1b41c68344f284e13896bdd",
+        "sub-01_PRESS_35_act_report.html": "20e46d5a961d8124c9f0978cec9c3c58c6b7404c7e62c0d33d990d45342cf738",
+        "sub-01_PRESS_35_act_tissue_corrected.csv": "8edab64f80fedf0972995e779c99445cb71a1fc618e0f889c1d6833eb92371f7",
+        "sub-01_PRESS_35_act_tissue_correction.json": "94e038875d436cb673b7aca56ab848dfa4e45377f65628e270cbfd7ce6711dfc"
+      },
+      "headline": {
+        "sub-01_PRESS_35_act_concentrations.csv": [
+          "GABA,0.303,59,0.047",
+          "Ins,4.769,11,0.744",
+          "GPC+PCh,0.775,6,0.121",
+          "NAA+NAAG,7.991,3,1.246",
+          "Cr+PCr,6.414,2,1",
+          "Glu+Gln,7.886,8,1.23"
+        ]
+      },
+      "documents": {
+        "sub-01_PRESS_35_act_tissue_correction.json": {
+          "fractions": {
+            "gm": 0.6,
+            "wm": 0.27,
+            "csf": 0.13
+          },
+          "molalFractions": {
+            "gm": 0.6081346791258592,
+            "wm": 0.22802943765098035,
+            "csf": 0.16383588322316062
+          },
+          "fractionSource": "entered",
+          "voxel": {
+            "affine": [
+              [
+                30,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                29.913668208474796,
+                -2.2743030390175263,
+                -45.03344727
+              ],
+              [
+                0,
+                2.2743030390175263,
+                29.913668208474796,
+                37.66220856
+              ],
+              [
+                0,
+                0,
+                0,
+                1
+              ]
+            ],
+            "centerMm": [
+              0,
+              -45.03344727,
+              37.66220856
+            ],
+            "sizeMm": [
+              30,
+              30,
+              30
+            ],
+            "source": "Philips SPAR off_center, angulation, size",
+            "space": "RAS"
+          },
+          "voxelInT1Mm3": null,
+          "waterAttenuation": {
+            "gm": 0.5655761756981438,
+            "wm": 0.5847117859718276,
+            "csf": 0.38042258498124965
+          },
+          "method": "Gasparovic et al. 2006 (Osprey quantTiss)",
+          "unit": "mmol/kg tissue water",
+          "lcmodel": {
+            "wconc": 35880,
+            "atth2o": 0.7,
+            "attmet": 1
+          },
+          "waterConcentration": {
+            "gm": 43300,
+            "wm": 36080,
+            "csf": 53840,
+            "pure": 55510
+          },
+          "waterRelaxation": {
+            "gm": {
+              "t1": 1.331,
+              "t2": 0.11
+            },
+            "wm": {
+              "t1": 0.832,
+              "t2": 0.0792
+            },
+            "csf": {
+              "t1": 3.817,
+              "t2": 0.503
+            }
+          },
+          "metaboliteRelaxation": true,
+          "alpha": null,
+          "metabolite": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "water": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "concentrations": [
+            {
+              "name": "Ala",
+              "lcmodel": 0.00454,
+              "corrected": 0.005010615165057415,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Asc",
+              "lcmodel": 0.68,
+              "corrected": 0.763634829702752,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143.5
+            },
+            {
+              "name": "Asp",
+              "lcmodel": 2.59,
+              "corrected": 3.020560718924034,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 124.25
+            },
+            {
+              "name": "Cr",
+              "lcmodel": 1.149,
+              "corrected": 1.3006143124445457,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "GABA",
+              "lcmodel": 0.303,
+              "corrected": 0.401766995352571,
+              "alphaCorrected": null,
+              "t1Ms": 1310,
+              "t2Ms": 88.5
+            },
+            {
+              "name": "Glc",
+              "lcmodel": 1.096,
+              "corrected": 1.2656759342312964,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 128.75
+            },
+            {
+              "name": "Gln",
+              "lcmodel": 0.796,
+              "corrected": 0.9005810364393926,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 139.25
+            },
+            {
+              "name": "Glu",
+              "lcmodel": 7.09,
+              "corrected": 8.112760049413136,
+              "alphaCorrected": null,
+              "t1Ms": 1220,
+              "t2Ms": 126.25
+            },
+            {
+              "name": "Gly",
+              "lcmodel": 0.724,
+              "corrected": 0.849255591571941,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 121.75
+            },
+            {
+              "name": "GPC",
+              "lcmodel": 0.775,
+              "corrected": 0.773479031804427,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 233
+            },
+            {
+              "name": "GSH",
+              "lcmodel": 0.541,
+              "corrected": 0.6424568225138063,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 116.75
+            },
+            {
+              "name": "Ins",
+              "lcmodel": 4.769,
+              "corrected": 4.775471349410063,
+              "alphaCorrected": null,
+              "t1Ms": 1120,
+              "t2Ms": 198.75
+            },
+            {
+              "name": "Lac",
+              "lcmodel": 0.312,
+              "corrected": 0.35807852390997036,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 131.75
+            },
+            {
+              "name": "NAA",
+              "lcmodel": 7.953,
+              "corrected": 8.239459401943462,
+              "alphaCorrected": null,
+              "t1Ms": 1410,
+              "t2Ms": 300.5
+            },
+            {
+              "name": "NAAG",
+              "lcmodel": 0.0376,
+              "corrected": 0.04170009784427198,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 151.25
+            },
+            {
+              "name": "PCh",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 230.25
+            },
+            {
+              "name": "PCr",
+              "lcmodel": 5.265,
+              "corrected": 5.9597339904443265,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "PE",
+              "lcmodel": 6.214,
+              "corrected": 7.153582560284705,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 130.25
+            },
+            {
+              "name": "Scyllo",
+              "lcmodel": 0.308,
+              "corrected": 0.346176753831513,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143
+            },
+            {
+              "name": "Tau",
+              "lcmodel": 0.38,
+              "corrected": 0.45640329154927656,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 112.5
+            },
+            {
+              "name": "-CrCH2",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "GPC+PCh",
+              "lcmodel": 0.775,
+              "corrected": 0.7605540986417324,
+              "alphaCorrected": null,
+              "t1Ms": 1135,
+              "t2Ms": 231.625
+            },
+            {
+              "name": "NAA+NAAG",
+              "lcmodel": 7.991,
+              "corrected": 8.404925735673102,
+              "alphaCorrected": null,
+              "t1Ms": 1337.5,
+              "t2Ms": 225.875
+            },
+            {
+              "name": "Ins+Gly",
+              "lcmodel": 5.493,
+              "corrected": 6.062402885828279,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Cr+PCr",
+              "lcmodel": 6.414,
+              "corrected": 7.260348302888873,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "Glu+Gln",
+              "lcmodel": 7.886,
+              "corrected": 8.967002861063072,
+              "alphaCorrected": null,
+              "t1Ms": 1242.5,
+              "t2Ms": 132.75
+            },
+            {
+              "name": "Lip13a",
+              "lcmodel": 15.131,
+              "corrected": 16.69947534415942,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13b",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip09",
+              "lcmodel": 4.337,
+              "corrected": 4.7865722402762145,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09",
+              "lcmodel": 3.634,
+              "corrected": 4.010699451501905,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip20",
+              "lcmodel": 2.554,
+              "corrected": 2.8187469452767933,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20",
+              "lcmodel": 5.101,
+              "corrected": 5.6297682724576825,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM12",
+              "lcmodel": 2.214,
+              "corrected": 2.4435026377614797,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14",
+              "lcmodel": 6.936,
+              "corrected": 7.654983873312387,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM17",
+              "lcmodel": 3.977,
+              "corrected": 4.389254738201177,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13a+Lip13b",
+              "lcmodel": 15.131,
+              "corrected": 16.69947534415942,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14+Lip13a+Lip13b+MM12",
+              "lcmodel": 24.281,
+              "corrected": 26.797961855233282,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09+Lip09",
+              "lcmodel": 7.97,
+              "corrected": 8.796168032050133,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20+Lip20",
+              "lcmodel": 7.655,
+              "corrected": 8.448515217734476,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            }
+          ]
+        }
+      },
+      "seconds": 18.1
+    },
+    "philips-press-tissue-water-only": {
+      "files": {
+        "sub-01_PRESS_35_act.H2O": "1df7a942b9a424fe50674aaff182a2002fc02c983cd4ecded626854db8076956",
+        "sub-01_PRESS_35_act.RAW": "f274068c7dd067ab2c055f04ce11c1ff36e68e6a78192ea25c61829710cce631",
+        "sub-01_PRESS_35_act.control": "fda252ab586844b3b3bfb15d27a93b261ee29884aa2f66be3240c1f23f445005",
+        "sub-01_PRESS_35_act.coord": "5dbb5e1705e0f9292f17d79ec76f9d0c23e45f2c52125639aa483bfbdbd2c3d8",
+        "sub-01_PRESS_35_act.table": "0075334d8be055d59a3424e67af12a9e08acaf93c667d3548537843d41aa8f1e",
+        "sub-01_PRESS_35_act_concentrations.csv": "43c44349fe3ddced0d9e8e30042311d94c94265aa23c602eb212579df8aec3db",
+        "sub-01_PRESS_35_act_fida.json": "e53f9cc1a052060b370c3965015afa2b31342d35a1b41c68344f284e13896bdd",
+        "sub-01_PRESS_35_act_report.html": "7c7c87551dcfdc7dae07afa4ee19adffcadd18c2952f3fda5f48f723bf138036",
+        "sub-01_PRESS_35_act_tissue_corrected.csv": "db02686e276057779dde108cd0f7bc7cbee2366fc09f8620ae7afc7b9c3d49c7",
+        "sub-01_PRESS_35_act_tissue_correction.json": "ed06a9c62e396f8c057a121f833ea70c46a487041e8745166c17797296d7d0b1"
+      },
+      "headline": {
+        "sub-01_PRESS_35_act_concentrations.csv": [
+          "GABA,0.303,59,0.047",
+          "Ins,4.769,11,0.744",
+          "GPC+PCh,0.775,6,0.121",
+          "NAA+NAAG,7.991,3,1.246",
+          "Cr+PCr,6.414,2,1",
+          "Glu+Gln,7.886,8,1.23"
+        ]
+      },
+      "documents": {
+        "sub-01_PRESS_35_act_tissue_correction.json": {
+          "fractions": {
+            "gm": 0.6,
+            "wm": 0.27,
+            "csf": 0.13
+          },
+          "molalFractions": {
+            "gm": 0.6081346791258592,
+            "wm": 0.22802943765098035,
+            "csf": 0.16383588322316062
+          },
+          "fractionSource": "entered",
+          "voxel": {
+            "affine": [
+              [
+                30,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                29.913668208474796,
+                -2.2743030390175263,
+                -45.03344727
+              ],
+              [
+                0,
+                2.2743030390175263,
+                29.913668208474796,
+                37.66220856
+              ],
+              [
+                0,
+                0,
+                0,
+                1
+              ]
+            ],
+            "centerMm": [
+              0,
+              -45.03344727,
+              37.66220856
+            ],
+            "sizeMm": [
+              30,
+              30,
+              30
+            ],
+            "source": "Philips SPAR off_center, angulation, size",
+            "space": "RAS"
+          },
+          "voxelInT1Mm3": null,
+          "waterAttenuation": {
+            "gm": 0.5655761756981438,
+            "wm": 0.5847117859718276,
+            "csf": 0.38042258498124965
+          },
+          "method": "Gasparovic et al. 2006 (Osprey quantTiss)",
+          "unit": "mmol/kg tissue water",
+          "lcmodel": {
+            "wconc": 35880,
+            "atth2o": 0.7,
+            "attmet": 1
+          },
+          "waterConcentration": {
+            "gm": 43300,
+            "wm": 36080,
+            "csf": 53840,
+            "pure": 55510
+          },
+          "waterRelaxation": {
+            "gm": {
+              "t1": 1.331,
+              "t2": 0.11
+            },
+            "wm": {
+              "t1": 0.832,
+              "t2": 0.0792
+            },
+            "csf": {
+              "t1": 3.817,
+              "t2": 0.503
+            }
+          },
+          "metaboliteRelaxation": false,
+          "alpha": null,
+          "metabolite": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "water": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "concentrations": [
+            {
+              "name": "Ala",
+              "lcmodel": 0.00454,
+              "corrected": 0.003172904560687973,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Asc",
+              "lcmodel": 0.68,
+              "corrected": 0.4752368064466568,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143.5
+            },
+            {
+              "name": "Asp",
+              "lcmodel": 2.59,
+              "corrected": 1.8100931304365309,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 124.25
+            },
+            {
+              "name": "Cr",
+              "lcmodel": 1.149,
+              "corrected": 0.8030104273635422,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "GABA",
+              "lcmodel": 0.303,
+              "corrected": 0.21175992993137793,
+              "alphaCorrected": null,
+              "t1Ms": 1310,
+              "t2Ms": 88.5
+            },
+            {
+              "name": "Glc",
+              "lcmodel": 1.096,
+              "corrected": 0.7659699115669646,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 128.75
+            },
+            {
+              "name": "Gln",
+              "lcmodel": 0.796,
+              "corrected": 0.5563066146052041,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 139.25
+            },
+            {
+              "name": "Glu",
+              "lcmodel": 7.09,
+              "corrected": 4.9550425848629365,
+              "alphaCorrected": null,
+              "t1Ms": 1220,
+              "t2Ms": 126.25
+            },
+            {
+              "name": "Gly",
+              "lcmodel": 0.724,
+              "corrected": 0.5059874233343816,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 121.75
+            },
+            {
+              "name": "GPC",
+              "lcmodel": 0.775,
+              "corrected": 0.5416301838178809,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 233
+            },
+            {
+              "name": "GSH",
+              "lcmodel": 0.541,
+              "corrected": 0.3780928121877078,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 116.75
+            },
+            {
+              "name": "Ins",
+              "lcmodel": 4.769,
+              "corrected": 3.33294754403545,
+              "alphaCorrected": null,
+              "t1Ms": 1120,
+              "t2Ms": 198.75
+            },
+            {
+              "name": "Lac",
+              "lcmodel": 0.312,
+              "corrected": 0.21804982884023072,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 131.75
+            },
+            {
+              "name": "NAA",
+              "lcmodel": 7.953,
+              "corrected": 5.5581740024562665,
+              "alphaCorrected": null,
+              "t1Ms": 1410,
+              "t2Ms": 300.5
+            },
+            {
+              "name": "NAAG",
+              "lcmodel": 0.0376,
+              "corrected": 0.026277799885873962,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 151.25
+            },
+            {
+              "name": "PCh",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 230.25
+            },
+            {
+              "name": "PCr",
+              "lcmodel": 5.265,
+              "corrected": 3.6795908616788937,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "PE",
+              "lcmodel": 6.214,
+              "corrected": 4.342825757734596,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 130.25
+            },
+            {
+              "name": "Scyllo",
+              "lcmodel": 0.308,
+              "corrected": 0.21525431821407393,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143
+            },
+            {
+              "name": "Tau",
+              "lcmodel": 0.38,
+              "corrected": 0.2655735094848964,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 112.5
+            },
+            {
+              "name": "-CrCH2",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "GPC+PCh",
+              "lcmodel": 0.775,
+              "corrected": 0.5416301838178809,
+              "alphaCorrected": null,
+              "t1Ms": 1135,
+              "t2Ms": 231.625
+            },
+            {
+              "name": "NAA+NAAG",
+              "lcmodel": 7.991,
+              "corrected": 5.584731353404756,
+              "alphaCorrected": null,
+              "t1Ms": 1337.5,
+              "t2Ms": 225.875
+            },
+            {
+              "name": "Ins+Gly",
+              "lcmodel": 5.493,
+              "corrected": 3.8389349673698314,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Cr+PCr",
+              "lcmodel": 6.414,
+              "corrected": 4.482601289042436,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "Glu+Gln",
+              "lcmodel": 7.886,
+              "corrected": 5.511349199468141,
+              "alphaCorrected": null,
+              "t1Ms": 1242.5,
+              "t2Ms": 132.75
+            },
+            {
+              "name": "Lip13a",
+              "lcmodel": 15.131,
+              "corrected": 10.574717821094653,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13b",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip09",
+              "lcmodel": 4.337,
+              "corrected": 3.0310323964105153,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09",
+              "lcmodel": 3.634,
+              "corrected": 2.539721403863457,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip20",
+              "lcmodel": 2.554,
+              "corrected": 1.7849335348011195,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20",
+              "lcmodel": 5.101,
+              "corrected": 3.5649749260064647,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM12",
+              "lcmodel": 2.214,
+              "corrected": 1.5473151315777909,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14",
+              "lcmodel": 6.936,
+              "corrected": 4.847415425755899,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM17",
+              "lcmodel": 3.977,
+              "corrected": 2.779436440056403,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13a+Lip13b",
+              "lcmodel": 15.131,
+              "corrected": 10.574717821094653,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14+Lip13a+Lip13b+MM12",
+              "lcmodel": 24.281,
+              "corrected": 16.96944837842834,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09+Lip09",
+              "lcmodel": 7.97,
+              "corrected": 5.570054922617432,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20+Lip20",
+              "lcmodel": 7.655,
+              "corrected": 5.349908460807584,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            }
+          ]
+        }
+      },
+      "seconds": 16.1
+    },
+    "siemens-special": {
+      "files": {
+        "specialDLPFC.H2O": "659c9133e32387f1af8f738c11ddd5c1c076c42d80510da8de56d0a908bd9873",
+        "specialDLPFC.RAW": "0080eb5048022a5f871e41c4f0a20ff04ab414af51da39e59104df5fbd323856",
+        "specialDLPFC.control": "fab6081eeed388c767286dd8625df56f4426a10d4efcad96397e2e57731ed231",
+        "specialDLPFC.coord": "ccfb71bb796924d66e9c3c9e59e8dc75fc4736ad6490e3e559d9b34224b4a44e",
+        "specialDLPFC.table": "c548c1de56224a974a7cc182e332adf12cdba9f8fbef484602fa13518c18d63e",
+        "specialDLPFC_concentrations.csv": "9be2a27a31a62505d2112c09af611d30137e9ea0adcca405ab7a6eb0f3e07fa8",
+        "specialDLPFC_fida.json": "d845418604935041f7434d6d96f2c16e5aaca25459f5b0be794b16f7c736bb83",
+        "specialDLPFC_report.html": "8cc8a1f3a15fa07a83f9545d32316fefbfe11a2b13f1ed227f6b4ae6f2073f7a"
+      },
+      "headline": {
+        "specialDLPFC_concentrations.csv": [
+          "GABA,0.822,11,0.149",
+          "Ins,5.029,2,0.91",
+          "GPC+PCh,1.281,2,0.232",
+          "NAA+NAAG,6.989,1,1.265",
+          "Cr+PCr,5.525,1,1",
+          "Glu+Gln,5.737,3,1.039"
+        ]
+      },
+      "seconds": 18.1
+    },
+    "siemens-megapress": {
+      "files": {
+        "megapressDLPFC.RAW": "f00a273f54f9dbcf7edb81bcc1074413aad72f1ac15b5537373334b41f18ea10",
+        "megapressDLPFC.control": "1c8b5d28396f0e4b2f349de293aecf823a119655d8112960a97ffc5f466f4b83",
+        "megapressDLPFC.coord": "db7d9fe6612a770315927c2638454c12b38174cc819967dae3631913092f66d0",
+        "megapressDLPFC.table": "70bd74a132102d8ac004bd8fbde636441af8ce2c0a77b5dc412036f4b659b0eb",
+        "megapressDLPFC_concentrations.csv": "3d7a45b790302bed4a93398fcb8f2f3a1714fc430b34d153df1021ab53948480",
+        "megapressDLPFC_edit_off.RAW": "71edb6d4aee63d1b641910e7cd146892055db3fbcbb7f55d1efefc3163dcf5fa",
+        "megapressDLPFC_fida.json": "d4c806228f0932e9a20d20f64f715c5d271c8bc8831a176704ff7d7ab7bbec28",
+        "megapressDLPFC_report.html": "0ea69bb9f9357f49e615caacdc4f63150c4134fd6550d97fe33d27f63ec5e5f5"
+      },
+      "headline": {
+        "megapressDLPFC_concentrations.csv": [
+          "GABA+MM3co,3.28e-8,7,0.291,GABA+ (GABA + MM3co): primary result",
+          "GABA,8.45e-9,17,0.075,model-dependent: split from MM3co by the macromolecule model",
+          "MM3co,2.43e-8,11,0.216,model-dependent: co-edited macromolecules under GABA at 3.0 ppm",
+          "NAA+NAAG,1.13e-7,1,1,",
+          "Glu+Gln,7.74e-8,3,0.688,"
+        ]
+      },
+      "seconds": 8.1
+    },
+    "philips-megapress": {
+      "files": {
+        "sub-01_megapress_act.H2O": "e0e5f5f24bfb6c3c7f68a5701a0f219f858b1c56109f39ee1bbf4315a08e159f",
+        "sub-01_megapress_act.RAW": "369f4aa8f5277208db94c78c3b086313e572ee555c29fd3f8ce4bde7bf48634d",
+        "sub-01_megapress_act.control": "f160f64b0362f8da17c911ad72ccc1d10649bc9e9d2f6d818883e33700c184bc",
+        "sub-01_megapress_act.coord": "d516602d28e02c9e55d146302bdb26ff5110437a6bb34d4b985f927b12ffce64",
+        "sub-01_megapress_act.table": "3585cfe3011c60471fa517b1d98b1d0067e632c254984ca4f1b47eacf81b3592",
+        "sub-01_megapress_act_concentrations.csv": "0c4e9fc2d931827d252835dabe7fb9a1ded9616165e5e9be6b5da830f9b672ec",
+        "sub-01_megapress_act_edit_off.RAW": "c2e26ee1d9707a1d6824a2089aa5ed845fcf05ad15b16fbe464fa0aed225de76",
+        "sub-01_megapress_act_fida.json": "13eab9b24adc1c235719f743acf2b8028098e2a5a331176704252349e5677bb7",
+        "sub-01_megapress_act_report.html": "284664d353b9fe9a0fbcd68e21783dfec087d4f25353bd93ad89d22962775a7b"
+      },
+      "headline": {
+        "sub-01_megapress_act_concentrations.csv": [
+          "GABA+MM3co,0.966,5,0.286,GABA+ (GABA + MM3co): primary result",
+          "GABA,0.307,15,0.091,model-dependent: split from MM3co by the macromolecule model",
+          "MM3co,0.659,9,0.195,model-dependent: co-edited macromolecules under GABA at 3.0 ppm",
+          "NAA+NAAG,3.381,1,1,",
+          "Glu+Gln,2.355,3,0.697,"
+        ]
+      },
+      "seconds": 6.1
+    },
+    "philips-megapress-none": {
+      "files": {
+        "sub-01_megapress_act.H2O": "e0e5f5f24bfb6c3c7f68a5701a0f219f858b1c56109f39ee1bbf4315a08e159f",
+        "sub-01_megapress_act.RAW": "369f4aa8f5277208db94c78c3b086313e572ee555c29fd3f8ce4bde7bf48634d",
+        "sub-01_megapress_act.control": "7ea23d0f13a56bac0066ea9d0d02984022af46d90f0a4c7875357d0a99bf0977",
+        "sub-01_megapress_act.coord": "a9f6848ce335768e7c0c3a32714aba87080a59f8c431f3c4da9b8d6c35ea748e",
+        "sub-01_megapress_act.table": "60e0a15d53c8f00b4a358298ae18a26f36925dfd56031d652f7fa0615eb68a93",
+        "sub-01_megapress_act_concentrations.csv": "f033387a9f149d49b4a5a556067418b5c7b4e47a9a39bdbf66592c6a9f5ba97f",
+        "sub-01_megapress_act_edit_off.RAW": "c2e26ee1d9707a1d6824a2089aa5ed845fcf05ad15b16fbe464fa0aed225de76",
+        "sub-01_megapress_act_fida.json": "13eab9b24adc1c235719f743acf2b8028098e2a5a331176704252349e5677bb7",
+        "sub-01_megapress_act_report.html": "844a8ed06d5cfdb96fd593f41a75f3072a53805d38ceddf51263aed88d4d8f23"
+      },
+      "headline": {
+        "sub-01_megapress_act_concentrations.csv": [
+          "GABA,0.765,6,0.236",
+          "NAA+NAAG,3.24,1,1",
+          "Glu+Gln,2.313,4,0.714"
+        ]
+      },
+      "seconds": 6.1
+    },
+    "philips-megapress-unedited": {
+      "files": {
+        "sub-01_megapress_act.H2O": "239f5ccb9f4f873f6127227b43ffd37b4d433681549ab92876e9d66604ba6644",
+        "sub-01_megapress_act.RAW": "d3c93f2dde4ba558fac26449daa5253707d0abcfe58335f66bbb9382ddf30e5f",
+        "sub-01_megapress_act.control": "2aad14708d44a272151b8a034e8bfec3df2d69a91cac23aa7298a0c57c5f2c7a",
+        "sub-01_megapress_act.coord": "44dc0cd86b42e09727861b98b88b317f6176b8e66f60a6c51bcd0c3329c077a6",
+        "sub-01_megapress_act.table": "dcba994e171ac6be7c493277bf2b348404a907315702e411f1fa4155bdf5ecc0",
+        "sub-01_megapress_act_concentrations.csv": "180c3210c0d35a3421ddd334e186723e75c034b8aaf503e1c7eb95b54e88365f",
+        "sub-01_megapress_act_fida.json": "d21565d6bc065b620a7d922692ae138f633c971df3d3d16f037ad4925d7b43c7",
+        "sub-01_megapress_act_report.html": "cd235f61506d1c801e3ea8fa0e9b4c608814230a1103a81c64a91378460cad27"
+      },
+      "headline": {
+        "sub-01_megapress_act_concentrations.csv": [
+          "GABA,0,999,0",
+          "Ins,3.571,10,0.473",
+          "GPC+PCh,1.271,4,0.169",
+          "NAA+NAAG,5.59,3,0.741",
+          "Cr+PCr,7.542,2,1",
+          "Glu+Gln,4.441,13,0.589"
+        ]
+      },
+      "seconds": 18.2
+    },
+    "philips-press-group": {
+      "files": {
+        "lcmodel_group.csv": "58ab05245691ea01a4edc2b559f5f8d969461f950d699a0de0b38c5f27056d6e",
+        "lcmodel_group_wide.csv": "6a7045ce7403bee5494055250a43a8697d10ed2f02b0407d493cdeeac99443ad",
+        "sub-01_PRESS_35_act_report.html": "f1f88c7098cb5f3672f197052550268e41411d29aaec8b21a1357a87f1d9bdb2",
+        "sub-02_PRESS_35_act_report.html": "f46c4623ac1ffa2f54c06848189b1bafe99910708199cf034002c944b049d900"
+      },
+      "headline": {
+        "lcmodel_group.csv": []
+      },
+      "seconds": 28.2
+    },
+    "nifti-mrs-press": {
+      "files": {
+        "sub-01_PRESS_35.H2O": "1df7a942b9a424fe50674aaff182a2002fc02c983cd4ecded626854db8076956",
+        "sub-01_PRESS_35.RAW": "f274068c7dd067ab2c055f04ce11c1ff36e68e6a78192ea25c61829710cce631",
+        "sub-01_PRESS_35.control": "4a26fd4109822cec4c56fffe369de73591fe5444aa01cfa7ae9613bbd806e512",
+        "sub-01_PRESS_35.coord": "d86eb9e146b27d600559c92b925494985e524746e31360e3cc22268b572ebc91",
+        "sub-01_PRESS_35.table": "d49a26c31b9b5ade38ebe9d76ffa60e72626052c80915296e54d556233dd960a",
+        "sub-01_PRESS_35_concentrations.csv": "43c44349fe3ddced0d9e8e30042311d94c94265aa23c602eb212579df8aec3db",
+        "sub-01_PRESS_35_fida.json": "e53f9cc1a052060b370c3965015afa2b31342d35a1b41c68344f284e13896bdd",
+        "sub-01_PRESS_35_report.html": "514c809cbfb5598b3df5ec4f595dd31d5341f3c00cfa43df67c06509cd423ffe"
+      },
+      "headline": {
+        "sub-01_PRESS_35_concentrations.csv": [
+          "GABA,0.303,59,0.047",
+          "Ins,4.769,11,0.744",
+          "GPC+PCh,0.775,6,0.121",
+          "NAA+NAAG,7.991,3,1.246",
+          "Cr+PCr,6.414,2,1",
+          "Glu+Gln,7.886,8,1.23"
+        ]
+      },
+      "seconds": 28.2
+    },
+    "lcmodel-test": {
+      "files": {
+        "data.RAW": "b5c55a2b43249a15a2eb19620833e631ba3986d463006dd0e2ff792eddfec560",
+        "data.control": "73af10077617f831de0d995a91cc89d09100d788615dc890d548dbf813a5afe2",
+        "data.coord": "d847b91e39dcd026b357df231c6d9c524065d3fee79fd81e1f29c256e057aea3",
+        "data.table": "78bba3042b5533d7ca5a52d8c4a07e36b68be2fb835ce89897a7ef88c323e4b5",
+        "data_concentrations.csv": "76dfc8a11726774b37ffb7e0c829b4797b14680eba65eeffbb9e65efb9aa266a",
+        "data_report.html": "e2e2a29144f15f1b8f57761308b7675f4f937ed7e6954efa69d66e504829c379"
+      },
+      "headline": {
+        "data_concentrations.csv": [
+          "GABA,2.92e-7,45,0.16",
+          "Ins,0.00000166,5,0.911",
+          "GPC+PCh,4.56e-7,4,0.25",
+          "NAA+NAAG,0.00000238,3,1.306",
+          "Cr+PCr,0.00000183,3,1",
+          "Glu+Gln,0.00000276,8,1.51"
+        ]
+      },
+      "seconds": 8.1
+    },
+    "lcmodel-test-widened": {
+      "files": {
+        "data.RAW": "b5c55a2b43249a15a2eb19620833e631ba3986d463006dd0e2ff792eddfec560",
+        "data.control": "67627ad8b8f184c52bb34ec36cb7b6b0bdb8a6da1d26494ab8b391716f082ff9",
+        "data.coord": "5c4749599cb11741cdfee70d4273105535002556fff34cd9b137f1e2156ad265",
+        "data.table": "087929859f764232d5d2f543a2d86683681550d1a37ef242cc2689b0671dc9ff",
+        "data_concentrations.csv": "825b49e9f5894673a9ed56455b784539d119cdb84d6598abb668af42afaa09b1",
+        "data_report.html": "da4855fce4f2b99d0f740bde5b131083a4983e92e703bf4206d3de65faee9a71"
+      },
+      "headline": {
+        "data_concentrations.csv": [
+          "GABA,2.59e-7,50,0.138",
+          "Ins,0.00000181,6,0.965",
+          "GPC+PCh,4.86e-7,5,0.259",
+          "NAA+NAAG,0.00000246,4,1.307",
+          "Cr+PCr,0.00000188,4,1",
+          "Glu+Gln,0.00000295,9,1.57"
+        ]
+      },
+      "seconds": 8.1
+    }
+  },
+  "browser": {
+    "path": "apps/lcmodel/e2e/reference.spec.js: the app's fit and fit-group automation, its worker, the built assets",
+    "app": "lcmodel 0.5.20261007",
+    "browser": "Chromium 153.0.8010.12"
+  }
+}
