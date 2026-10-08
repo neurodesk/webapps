@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
-import { decodeNiftiBuffer, parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti';
+import { link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
+import { decodeNiftiBuffer, isValidNifti1, parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti';
 import { loadMindgrabCpu } from '@neurodesk/runtime-support/node/mindgrab';
 import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
 import createNiimath from '@niivue/niimath/niimath.js';
 import packageJson from '../package.json' with { type: 'json' };
 import { countDirections } from './gradients.js';
-import { MASK_OPTIONS, TENSOR_MAPS, extractB0, fitTensor, mapFileName } from './tensor.js';
+import { MASK_OPTIONS, TENSOR_MAPS, assertMaskOnGrid, extractB0, fitTensor, mapFileName } from './tensor.js';
 
 const MINDGRAB_PACKAGE = import.meta.resolve('@brainchop/mindgrab/package.json');
 const readVersion = async (url) => JSON.parse(await readFile(new URL(url), 'utf8')).version;
@@ -16,17 +16,13 @@ export const MINDGRAB_VERSION = await readVersion(MINDGRAB_PACKAGE);
 
 const run = (args, files) => runNiimath(createNiimath, args, files);
 
-// NIfTI-1 and NIfTI-2 begin with their header size, 348 or 540, in the file's byte order.
-function isNifti(buffer) {
-  if (buffer.byteLength < 348) return false;
-  const view = new DataView(buffer, 0, 4);
-  return [348, 540].some((size) => view.getInt32(0, true) === size || view.getInt32(0, false) === size);
-}
+// Little-endian NIfTI-1, which the web app accepts and the header reader parses.
+const isNifti = (buffer) => buffer.byteLength >= 352 && new DataView(buffer).getInt32(0, true) === 348 && isValidNifti1(buffer);
 
 async function readNifti(path, role) {
   const bytes = new Uint8Array(await readFile(path));
   const decoded = await decodeNiftiBuffer(bytes);
-  if (!isNifti(decoded)) throw new Error(`The ${role} ${path} is not NIfTI. Convert DICOM with dcm2niix first.`);
+  if (!isNifti(decoded)) throw new Error(`The ${role} ${path} is not little-endian NIfTI-1. Convert DICOM with dcm2niix first.`);
   return { bytes, header: parseNiftiHeader(decoded) };
 }
 
@@ -41,14 +37,15 @@ async function assertNewOutput(directory) {
   if (entries.length) throw new Error(`Output directory ${directory} is not empty. Choose a new or empty directory.`);
 }
 
-async function writeAtomically(path, bytes) {
-  const partial = `${path}.${randomUUID()}.partial`;
+// Each file appears under its name complete, and never replaces one a concurrent run wrote there:
+// link() fails when the name exists.
+async function publish(path, bytes) {
+  const partial = join(dirname(path), `.${randomUUID().slice(0, 8)}.partial`);
   try {
     await writeFile(partial, bytes, { flag: 'wx' });
-    await rename(partial, path);
-  } catch (error) {
+    await link(partial, path);
+  } finally {
     await rm(partial, { force: true });
-    throw error;
   }
 }
 
@@ -58,15 +55,18 @@ async function writeAtomically(path, bytes) {
  */
 async function mindgrabMask(dwi, bvalText, onProgress) {
   onProgress('Brain extraction (MindGrab, CPU)');
+  let provenance = null;
   try {
     const b0 = await extractB0(run, { dwi, bvalText });
     const mindgrab = await loadMindgrabCpu(MINDGRAB_PACKAGE);
     const result = await mindgrab.segment(b0, MASK_OPTIONS);
-    const provenance = { model: MASK_OPTIONS.model, version: MINDGRAB_VERSION, backend: result.backend, elapsedMs: Math.round(result.elapsedMs) };
+    provenance = { model: MASK_OPTIONS.model, version: MINDGRAB_VERSION, backend: result.backend, elapsedMs: Math.round(result.elapsedMs) };
     if (!result.mask) return { failure: 'MindGrab returned no brain mask', provenance };
-    return { mask: new Uint8Array(result.mask), provenance };
+    const mask = new Uint8Array(result.mask);
+    await assertMaskOnGrid(dwi, mask);
+    return { mask, provenance };
   } catch (error) {
-    return { failure: error instanceof Error ? error.message : String(error), provenance: null };
+    return { failure: error instanceof Error ? error.message : String(error), provenance };
   }
 }
 
@@ -110,7 +110,7 @@ export async function fit({ dwi, bval, bvec, output, maskFile, noMask = false, o
   const written = TENSOR_MAPS.map((map) => [mapFileName(name, map), maps[map]]);
   if (mindgrab && maskBytes) written.push([mapFileName(name, 'mask'), maskBytes]);
   await mkdir(destination, { recursive: true });
-  for (const [file, bytes] of written) await writeAtomically(join(destination, file), bytes);
+  for (const [file, bytes] of written) await publish(join(destination, file), bytes);
   return {
     output: destination,
     files: written.map(([file]) => file),

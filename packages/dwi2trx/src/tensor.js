@@ -4,7 +4,7 @@
 // `run(args, { inputs, outputs })` function that stages `inputs` (name -> bytes), runs one niimath
 // argv and returns `{ outputs }` (name -> bytes): runNiimath from
 // @neurodesk/runtime-support/node/niimath in Node, a cached module in the browser worker.
-import { decodeNiftiBuffer, parseNiftiHeader, sameVoxelGrid } from '@neurodesk/webapp-components/file-io/nifti';
+import { decodeNiftiBuffer, parseNiftiHeader, sameNiftiGrid } from '@neurodesk/webapp-components/file-io/nifti';
 import { b0Index } from './gradients.js';
 
 /** Every map dtifit writes, in its own naming: dti_<MAP>.nii.gz. */
@@ -18,7 +18,16 @@ export function mapFileName(niftiName, map) {
   return `${niftiName.replace(/\.nii(\.gz)?$/i, '') || 'dwi'}_${map}.nii.gz`;
 }
 
-const header = async (bytes) => parseNiftiHeader(await decodeNiftiBuffer(bytes));
+/**
+ * Throws unless `mask` is one 3D volume whose voxels sit where the DWI's do, in millimetres
+ * (honouring each header's spatial units).
+ */
+export async function assertMaskOnGrid(dwi, mask) {
+  const [image, brain] = await Promise.all([decodeNiftiBuffer(dwi), decodeNiftiBuffer(mask)]);
+  const dims = parseNiftiHeader(brain).dims;
+  if (dims[0] > 3 && dims.slice(4, dims[0] + 1).some((dim) => dim > 1)) throw new Error('The brain mask must be a single 3D volume.');
+  if (!sameNiftiGrid(image, brain)) throw new Error('The brain mask is not on the diffusion image\'s voxel grid.');
+}
 
 /** The first b0 volume of the DWI (see b0Index) as a .nii.gz, the input MindGrab masks. */
 export async function extractB0(run, { dwi, bvalText }) {
@@ -36,7 +45,7 @@ export async function fitTensor(run, { dwi, bval, bvec, mask }) {
   const args = ['--dtifit', '-k', 'dwi', '-r', 'dwi.bvec', '-b', 'dwi.bval', '-o', 'dti'];
   const inputs = { 'dwi.nii.gz': dwi, 'dwi.bval': bval, 'dwi.bvec': bvec };
   if (mask) {
-    if (!sameVoxelGrid(await header(dwi), await header(mask))) throw new Error('The brain mask is not on the diffusion image\'s voxel grid.');
+    await assertMaskOnGrid(dwi, mask);
     inputs['mask.nii.gz'] = mask;
     args.splice(args.length - 2, 0, '-m', 'mask');
   }

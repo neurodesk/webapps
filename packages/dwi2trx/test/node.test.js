@@ -128,15 +128,29 @@ test('invalid arguments and inputs fail before anything is written', async (t) =
   await writeFile(text, 'not an image'.repeat(40));
   await writeFile(short, '0 1000 1000');
   await writeFile(shifted, nifti(1, () => 1, { origin: 4 }));
+  // NIfTI-2 announces a 540-byte header; the same grid stored in metres sits 1000 times further out.
+  const nifti2 = join(paths.directory, 'nifti2.nii');
+  const fourD = join(paths.directory, 'four-d.nii');
+  const metres = join(paths.directory, 'metres.nii');
+  const two = Buffer.from(nifti(DIRECTIONS.length, signal));
+  two.writeInt32LE(540, 0);
+  await writeFile(nifti2, two);
+  await writeFile(fourD, nifti(2, () => 1));
+  const inMetres = nifti(1, () => 1);
+  inMetres.writeUInt8(1, 123);
+  await writeFile(metres, inMetres);
   const cases = [
     [[paths.dwi, paths.bval, output], /Provide a diffusion image, its bval and bvec files/],
     [[paths.dwi, paths.bval, paths.bvec, output, 'extra'], /Provide a diffusion image/],
     [[paths.dwi, paths.bval, paths.bvec, output, '--mask', paths.mask, '--no-mask'], /not both/],
     [[paths.dwi, paths.bval, paths.bvec, output, '--threads', '2'], /Unknown option '--threads'/],
     [[paths.dwi, paths.bval, paths.bvec, output, '--cache-dir', paths.directory], /--cache-dir applies only to download-models/],
-    [[text, paths.bval, paths.bvec, output, '--no-mask'], /diffusion image .* is not NIfTI/],
+    [[text, paths.bval, paths.bvec, output, '--no-mask'], /diffusion image .* is not little-endian NIfTI-1/],
+    [[nifti2, paths.bval, paths.bvec, output, '--no-mask'], /diffusion image .* is not little-endian NIfTI-1/],
+    [[paths.dwi, paths.bval, paths.bvec, output, '--mask', fourD], /single 3D volume/],
+    [[paths.dwi, paths.bval, paths.bvec, output, '--mask', metres], /not on the diffusion image's voxel grid/],
     [[paths.dwi, short, paths.bvec, output, '--no-mask'], /bvec row has 7 values but bval lists 3/],
-    [[paths.dwi, paths.bval, paths.bvec, output, '--mask', text], /brain mask .* is not NIfTI/],
+    [[paths.dwi, paths.bval, paths.bvec, output, '--mask', text], /brain mask .* is not little-endian NIfTI-1/],
     [[paths.dwi, paths.bval, paths.bvec, output, '--mask', shifted], /not on the diffusion image's voxel grid/],
   ];
   for (const [args, message] of cases) {

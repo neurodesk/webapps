@@ -34,7 +34,7 @@ import {
   generateSchemeInWorker,
 } from './dwi2trx/genvectors-worker-client'
 import { collectFiles, readNiftiHeader, type ResolvedInput, resolveInput, resolveExplicitInput } from './dwi2trx/input'
-import { formatBytes, InputTooLargeError } from './dwi2trx/input-limits'
+import { assertInputSize, formatBytes, InputTooLargeError } from './dwi2trx/input-limits'
 import {
   type InputSource,
   type Step,
@@ -1371,7 +1371,9 @@ async function runAutomation(request: AutomationRequest, track: boolean) {
     const resolved = await resolveExplicitInput({ nifti: inputs.image[0], bval, bvec, json: inputs.metadata[0] ?? sidecars.find((file) => /\.json$/i.test(file.name)) }, signal)
     await loadInput(resolved, resolved.source, seq, 'DWI')
     signal.throwIfAborted()
-    const fitted = await runFit({ mask: inputs.mask?.[0], signal, progress })
+    const mask = inputs.mask?.[0]
+    if (mask) assertInputSize([resolved.nifti, resolved.bval, resolved.bvec, mask])
+    const fitted = await runFit({ mask, signal, progress })
     const base = outputBase(resolved)
     const artifacts = TENSOR_MAPS.map((map) => ({ role: map.toLowerCase(), file: new File([fitted.files[map]], mapFileName(base, map)) }))
     const provenance = { tensor: { algorithm: 'niimath dtifit', version: niimathPackage.version, masked: fitted.masked, maskFailure: fitted.maskFailure, mask: fitted.maskProvenance } }

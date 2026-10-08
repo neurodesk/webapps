@@ -1,6 +1,6 @@
 import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
 import { segment } from '@brainchop/mindgrab'
-import { MASK_OPTIONS, TENSOR_MAPS, extractB0, fitTensor } from '@neurodesk/dwi2trx'
+import { MASK_OPTIONS, TENSOR_MAPS, assertMaskOnGrid, extractB0, fitTensor } from '@neurodesk/dwi2trx'
 import { runNiimath } from './dtifit'
 import type { DwiInput } from './state'
 
@@ -21,8 +21,11 @@ self.onmessage = async ({ data }: MessageEvent<{ input: DwiInput; mask?: File; a
         const b0 = await extractB0(runNiimath, { dwi, bvalText: await data.input.bval.text() })
         const result = await segment(b0, { ...MASK_OPTIONS, worker: false, backend: 'webgpu', assetPath: data.assetPath })
         maskProvenance = { model: MASK_OPTIONS.model, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs }
-        if (result.mask) mask = new Uint8Array(await new Blob([result.mask]).arrayBuffer())
-        else maskFailure = 'MindGrab returned no brain mask'
+        if (result.mask) {
+          const computed = new Uint8Array(await new Blob([result.mask]).arrayBuffer())
+          await assertMaskOnGrid(dwi, computed)
+          mask = computed
+        } else maskFailure = 'MindGrab returned no brain mask'
       } catch (error) {
         maskFailure = error instanceof Error ? error.message : String(error)
       }
