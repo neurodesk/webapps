@@ -18,7 +18,7 @@ const T1_PATH = process.argv[2] ||
 const STROKE_ONNX = path.join(ROOT, 'web/models/_dev_cache/lnm-stroke-lesion.onnx');
 const SYNTHSTRIP_ONNX = path.join(ROOT, 'web/models/_dev_cache/synthstrip.onnx');
 const SYNTHSTRIP_URL =
-  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/synthstrip.onnx';
+  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx';
 
 const PATCH = [128, 128, 128];
 const THRESHOLD = 0.4;

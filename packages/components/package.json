@@ -42,7 +42,6 @@
     "./styles/base.css": "./src/styles/base.css",
     "./styles/inference-workspace.css": "./src/styles/inference-workspace.css",
     "./styles/imaging-workspace.css": "./src/styles/imaging-workspace.css",
-    "./example-images": "./src/example-images.js",
     "./elements": {
       "types": "./src/elements/index.d.ts",
       "default": "./src/elements/index.js"

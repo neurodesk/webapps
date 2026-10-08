@@ -342,59 +342,59 @@
     ],
     "calmar": [
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz",
         "sha256": "34a8cb7af015515005cc14a2f4675054f26486ffd089ced2a09ce884a78c5efb",
         "bytes": 23769,
         "kind": "atlas-template"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Yeo7_LiberalMask_2mm.nii.gz",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Yeo7_LiberalMask_2mm.nii.gz",
         "sha256": "edfd11af848974b2d40936492d72995d41e1582eff114fbfdca07c4fa278e67d",
         "bytes": 73181,
         "kind": "atlas-template"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/templates/lnm-mni160.nii.gz",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz",
         "sha256": "cb6119e9ef403301d4e687e3dcb8fad09ad27c3d6dd556a0c387d7ababb78ccd",
         "bytes": 8514318,
         "kind": "atlas-template"
       },
       {
-        "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/v0.14.3-Update_Yeo2011_Schaefer2018_labelname/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
+        "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
         "sha256": "359da271b5d569ae76112693ef4f303cb744c5e060306ca45eca40bddacc85ac",
         "bytes": 69474,
         "kind": "atlas-template"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.bin",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.bin",
         "sha256": "5db67b0d6ece1ec25f59134c067cac7c6cd0ffe4884685ed7fd7e9bc89e78493",
         "bytes": 30810780,
         "kind": "connectome"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json",
-        "sha256": "2eaedaa3f766be6add0ef5115853e10b548642fea4fb61aa4c05a5c814e93d62",
-        "bytes": 53613,
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4cc5b1a5cde5fae1840c54ceddf54e16042adf5e/calmar/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json",
+        "sha256": "0c1802ea2a3179220de79ce1b1a651080ed03492955fd770360156a6f9e91398",
+        "bytes": 53973,
         "kind": "connectome-index"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.index.json",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.index.json",
         "kind": "connectome-index"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-stroke-lesion.onnx",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx",
         "sha256": "49f3d047a2299501791c7176cfda770d45d2f411a18ef41dd1105be4d0582cb8",
         "bytes": 74518462,
         "kind": "model"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-synthmorph-mni-48x64x80.onnx",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-synthmorph-mni-48x64x80.onnx",
         "sha256": "25ce269d060ee19228e78f9eaa0902e7094cdeab5fb20856ae771d9b6930652f",
         "bytes": 85119961,
         "kind": "model"
       },
       {
-        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/synthstrip.onnx",
+        "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx",
         "sha256": "7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074",
         "bytes": 10294211,
         "kind": "model"
@@ -417,102 +417,6 @@
       }
     ],
     "qsmbly": [
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4",
-        "kind": "example",
-        "sha256": "26f6d74ccd6e7fa34526a4a9f17fbfcce305b7ccdbee6ce7f4ed74dda8622b86",
-        "bytes": 381
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315917bd2b1503380d7d1",
-        "kind": "example",
-        "sha256": "260f4019476c9bad09f804c8004290549fc10f3d07da4e013773e1d18177486e",
-        "bytes": 377
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031591ca0aa1330880d636",
-        "kind": "example",
-        "sha256": "5b4a4f0a86ab1594db58194577d45f9ca3085515a06627bdaa69cfe96df3d75c",
-        "bytes": 378
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031592f1ede34d5380d7bf",
-        "kind": "example",
-        "sha256": "3dbe983e3eadb4dca595d045d33a235185f145eec51fb036e5cf41d4437f18b2",
-        "bytes": 382
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a1",
-        "kind": "example",
-        "sha256": "070dcd8efe29b12bb9509ba35d202621846fc49c06923f0a04a99569c5498e04",
-        "bytes": 378
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a2",
-        "kind": "example",
-        "sha256": "4a24501e299b9043dedac5564776be28b4e778dd2312298f9d40d1fbcf60f4cb",
-        "bytes": 382
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594d9869f43beec7017",
-        "kind": "example",
-        "sha256": "160ec9ddf8f062c763a04b29d2031f25bb63a97d22aa2b2558d185f486530571",
-        "bytes": 378
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594f1ede34d5380d7c2",
-        "kind": "example",
-        "sha256": "a812b389433bb137d45ae2df56e4ffadf761c84d7d82ba785fac09e6a469503f",
-        "bytes": 382
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c",
-        "sha256": "62f817c1d5556f25485438bf6f1d3ff3156cfd11609304519c3e753305dec01f",
-        "bytes": 3510840,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf825",
-        "sha256": "cca10c0802055165ed30a2292f0bd024668e93315fef8608701792596a5b1e15",
-        "bytes": 3666524,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf827",
-        "sha256": "e5dbd8b9641eaa4fe12917feccdb49f350df3d04f54008631fcfcfda7a093969",
-        "bytes": 3668449,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d37bd2b1503380d819",
-        "sha256": "3934f306e1475a31f74cbdbbe62fa5c36369617e256beb9c7cf8d5cf5e0d40ee",
-        "bytes": 3513321,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d469675bd488fdf828",
-        "sha256": "aa2bb366ebf3dce34b355a62666e19e8e254f238569f89d4b59de0c5bb5a3b9e",
-        "bytes": 3505501,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522",
-        "sha256": "cd9574df6ecca0e53500276eb40ab65574cc7686fe7a0f2b0e52bb4e7ada08ff",
-        "bytes": 3664119,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0",
-        "sha256": "03f790fd832d0d1c6a9338493ecb6c0a8b8f31f51415787fcc6a2502283ca431",
-        "bytes": 3664573,
-        "kind": "example"
-      },
-      {
-        "url": "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838",
-        "sha256": "c61d0b10df4ccea650d27b97ed21260c8fb68460b7eac22ac94cf46562503752",
-        "bytes": 3508647,
-        "kind": "example"
-      },
       {
         "url": "https://dicompare.neurodesk.org/embed/DicompareController.js",
         "path": "apps/dicompare/public/embed/DicompareController.js",
@@ -704,8 +608,39 @@
         "license": null
       },
       {
-        "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap",
-        "kind": "font-css"
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7W0Q5n-wU.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
+      },
+      {
+        "url": "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2",
+        "kind": "font",
+        "license": "OFL-1.1"
       },
       {
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz",
@@ -2019,58 +1954,6 @@
     ],
     "niimath": [
       {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Electrodes.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Philips.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_pitch.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/Iguana.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/MR_Gd.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_PD.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_t1.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_t2.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/fmri_pitch.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/mni152.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/spm152.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/spmMotor.nii.gz",
-        "kind": "example"
-      },
-      {
         "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/T1w7T.nii.gz",
         "sha256": "a2266104739ff6b847417119e85c51ceb1fcc57afd34ce2e836f738462bd4aca",
         "bytes": 9886098,
@@ -2267,58 +2150,6 @@
       },
       {
         "url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/fmri32.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Electrodes.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_Philips.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/CT_pitch.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/Iguana.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/MR_Gd.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_PD.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_t1.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/chris_t2.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/fmri_pitch.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/mni152.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/spm152.nii.gz",
-        "kind": "example"
-      },
-      {
-        "url": "https://niivue.github.io/niivue-demo-images/spmMotor.nii.gz",
         "kind": "example"
       },
       {
