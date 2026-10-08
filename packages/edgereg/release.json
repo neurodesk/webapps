@@ -1,0 +1,38 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "edgereg-v",
+  "displayName": "EdgeReg",
+  "app": "edgereg",
+  "run": "moving.nii.gz fixed.nii.gz results",
+  "readme": {
+    "run": "Register a moving image to a fixed image",
+    "notes": [
+      "Runs niimath -allineate from the same WebAssembly build as the web app and",
+      "writes its download, <moving>_registered.nii, on the fixed grid.",
+      "Add --robust-fov to crop the neck first. No network connection is required.",
+      "Input is NIfTI only: convert DICOM with dcm2niix first, or use the web app.",
+      "",
+      "Native niimath (container vnmd/niimath) runs the same method; its output",
+      "differs from this build's by floating-point rounding. Please cite:",
+      "Cox RW. AFNI 3dAllineate: affine image registration [Computer software]."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "edgereg"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "edgereg.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "edgereg"
+    }
+  }
+}

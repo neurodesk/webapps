@@ -1,0 +1,38 @@
+{
+  "name": "@neurodesk/edgereg",
+  "version": "0.3.20261007",
+  "description": "EdgeReg affine registration (niimath allineate) for browsers and the command line",
+  "type": "module",
+  "license": "BSD-2-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "edgereg": "./bin/edgereg.js"
+  },
+  "exports": {
+    ".": "./src/registration.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/registration.js && node --check src/node.js && node --check bin/edgereg.js"
+  },
+  "dependencies": {
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20260909"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/edgereg"
+  }
+}

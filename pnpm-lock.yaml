@@ -500,6 +500,9 @@ importers:
 
   apps/edgereg:
     dependencies:
+      '@neurodesk/edgereg':
+        specifier: workspace:*
+        version: link:../../packages/edgereg
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -990,6 +993,18 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/edgereg:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
 
   packages/fireants:
     dependencies:
