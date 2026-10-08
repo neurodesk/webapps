@@ -84,7 +84,12 @@ function correspondingDistance(a, b) {
     sum += distances[i];
   }
   distances.sort();
-  return { mean: sum / distances.length, p95: distances[Math.floor(distances.length * 0.95)], max: distances.at(-1) };
+  // numpy.quantile(..., method='linear'), as validation/compare.py computes the release p95.
+  const position = (distances.length - 1) * 0.95;
+  const lower = Math.floor(position);
+  const upper = Math.min(lower + 1, distances.length - 1);
+  const p95 = distances[lower] + (distances[upper] - distances[lower]) * (position - lower);
+  return { mean: sum / distances.length, p95, max: distances.at(-1) };
 }
 
 // A closed surface without handles: every edge joins two triangles and V - E + F = 2.
