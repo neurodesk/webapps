@@ -85,6 +85,8 @@ jobs:
           pnpm --filter @neurodesk/nii2tvx test
       - name: Lint every workspace package
         run: pnpm lint
+      - name: Test deployed isolation diagnostics
+        run: node --test test/deployed-isolation.test.mjs
 
   app-tests:
     needs: app-plan
