@@ -1,6 +1,7 @@
 export * from './ConsoleOutput.js';
 export * from './ProgressManager.js';
 export * from './ModalManager.js';
+export * from './dialogFocus.js';
 export * from './EchoNavigator.js';
 export * from './LabelLegend.js';
 export * from './MetricsSummary.js';
