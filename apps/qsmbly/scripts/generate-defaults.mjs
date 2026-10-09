@@ -32,6 +32,16 @@ const wasmModule = await import(wasmJsPath);
 const wasmBinary = await readFile(wasmBinaryPath);
 await wasmModule.default(wasmBinary);
 
+// qsm-core stores the TGV alphas as f32; write the shortest decimal that is the same f32
+// (0.001, not 0.0010000000474974513), as qsmxt-config does for TgvConfig.
+function shortestF32(x) {
+  for (let p = 1; p <= 9; p++) {
+    const d = Number(x.toPrecision(p));
+    if (Math.fround(d) === Math.fround(x)) return d;
+  }
+  return x;
+}
+
 // Collect defaults from WASM
 const defaults = {
   RTS_DEFAULTS: JSON.parse(wasmModule.get_rts_defaults()),
@@ -62,6 +72,13 @@ const defaults = {
   LINEAR_FIT_DEFAULTS: JSON.parse(wasmModule.get_linear_fit_defaults()),
   HOMOGENEITY_DEFAULTS: JSON.parse(wasmModule.get_homogeneity_defaults()),
   SIGNAL_ERODE_DEFAULTS: JSON.parse(wasmModule.get_signal_erode_defaults()),
+  ILSQR_DEFAULTS: JSON.parse(wasmModule.get_ilsqr_defaults()),
+  DL_TILING_DEFAULTS: JSON.parse(wasmModule.get_dl_tiling_defaults()),
+  // TGV's alphas per UI regularization level (qsm-core's get_default_alpha), so the
+  // main thread can export the alphas a TGV run uses.
+  TGV_ALPHA_PRESETS: Object.fromEntries([1, 2, 3, 4].map(level => [
+    level, Array.from(wasmModule.tgv_get_default_alpha_wasm(level), shortestF32),
+  ])),
 };
 
 // Generate JS file

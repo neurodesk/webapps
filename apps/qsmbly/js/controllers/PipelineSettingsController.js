@@ -11,24 +11,28 @@ import {
   ROMEO_DEFAULTS, LINEAR_FIT_DEFAULTS,
   VSHARP_DEFAULTS, SHARP_DEFAULTS, RESHARP_DEFAULTS, HARPERELLA_DEFAULTS,
   ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
-  TKD_DEFAULTS, TSVD_DEFAULTS, TIKHONOV_DEFAULTS,
+  TKD_DEFAULTS, TSVD_DEFAULTS, ILSQR_DEFAULTS, TIKHONOV_DEFAULTS,
   TV_DEFAULTS, RTS_DEFAULTS, NLTV_DEFAULTS, MEDI_DEFAULTS, TFI_DEFAULTS,
   NDI_DEFAULTS, FANSI_DEFAULTS, L1QSM_DEFAULTS, WHQSM_DEFAULTS, HDQSM_DEFAULTS,
+  DL_TILING_DEFAULTS,
+  DL_TOTAL_FIELD_MODELS,
 } from '../app/config.js';
+import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
+import { openDialog, closeDialog } from '@neurodesk/webapp-components/ui';
 
 // Deep-learning inversion methods and how browser tiling applies to each:
-//  - TILEABLE: overlap-tiling works well (approximate but sound) — default tiled.
-//  - NATIVE_TILE: the net is already patch-based, so it never OOMs and the tile options are moot.
-//  - OFFDESIGN: global (k-space) ops → not soundly tileable; runs whole-volume (may OOM) — prefer QSMxT.
-const DL_TILEABLE = new Set(['xqsm', 'qsmnet', 'qsmnet-plus', 'ir2qsm']);
-const DL_NATIVE_TILE = new Set(['qsmgan', 'autoqsm']);
-const DL_OFFDESIGN = new Set(['lpcnn', 'modl-qsm', 'nextqsm']);
-const DL_INVERSION_METHODS = new Set([...DL_TILEABLE, ...DL_NATIVE_TILE, ...DL_OFFDESIGN]);
+//  - tileable: has a tiled variant and runs tiled by default (approximate).
+//  - off_design (a subset of tileable): global (k-space) ops, so tiling is strongly off-design —
+//    tiled only so it runs in the browser at all; untiled it will likely OOM. Prefer QSMxT.
+//  - native: the net is already patch-based, so it never OOMs and the tile options are moot.
+const DL_NATIVE_TILE = new Set(DL_TILING_DEFAULTS.native);
+const DL_OFFDESIGN = new Set(DL_TILING_DEFAULTS.off_design);
+const DL_INVERSION_METHODS = new Set([...DL_TILING_DEFAULTS.tileable, ...DL_NATIVE_TILE]);
 
 export class PipelineSettingsController {
   constructor(modalElement) {
     this.modal = modalElement;
-    this.inputMode = 'dicom'; // 'dicom', 'raw', 'totalField', or 'localField'
+    this.inputMode = 'raw'; // 'raw', 'totalField', or 'localField'
     this._setupTabs();
     this._setupEventListeners();
   }
@@ -54,14 +58,14 @@ export class PipelineSettingsController {
     this._populateForm(settings, defaults);
     this.updateVisibility(nEchoes);
     this._switchTab('tabQsmPipeline');
-    this.modal.classList.add('active');
+    openDialog(this.modal, { onEscape: () => this.close() });
   }
 
   /**
    * Close the modal
    */
   close() {
-    this.modal.classList.remove('active');
+    closeDialog(this.modal);
   }
 
   /**
@@ -199,6 +203,10 @@ export class PipelineSettingsController {
 
     // Dipole inversion
     this._setEl('dipole_method', D.dipole_inversion);
+    this._setChecked('dlTiled', D.dl_tiling.enabled);
+    this._setEl('dlTileSize', D.dl_tiling.tile_size);
+    this._setEl('dlTileHalo', D.dl_tiling.tile_halo);
+    this._setChecked('qsm_reference_mean', true);
     this._showEl('tkd_settings', false);
     this._showEl('tsvd_settings', false);
     this._showEl('tikhonov_settings', false);
@@ -286,8 +294,8 @@ export class PipelineSettingsController {
     this._showEl('mediSmvRadiusGroup', MEDI_DEFAULTS.smv);
     this._setChecked('mediMerit', MEDI_DEFAULTS.merit);
 
-    this._setEl('ilsqrTol', QSMART_DEFAULTS.ilsqr_tol);
-    this._setEl('ilsqrMaxIter', QSMART_DEFAULTS.ilsqr_max_iter);
+    this._setEl('ilsqrTol', ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', ILSQR_DEFAULTS.max_iter);
   }
 
   /**
@@ -470,8 +478,8 @@ export class PipelineSettingsController {
       dipole_inversion: this._getEl('dipole_method'),
       dl_tiling: {
         enabled: this._getChecked('dlTiled'),
-        tile_size: parseInt(this._getEl('dlTileSize')) || 56,
-        tile_halo: (v => Number.isFinite(v) ? v : 4)(parseInt(this._getEl('dlTileHalo')))
+        tile_size: parseInt(this._getEl('dlTileSize')) || DL_TILING_DEFAULTS.tile_core,
+        tile_halo: (v => Number.isFinite(v) ? v : DL_TILING_DEFAULTS.tile_halo)(parseInt(this._getEl('dlTileHalo')))
       },
       tkd: {
         threshold: parseFloat(this._getEl('tkdThreshold'))
@@ -574,7 +582,7 @@ export class PipelineSettingsController {
    * @param {number} nEchoes - Number of echo files loaded
    */
   updateVisibility(nEchoes) {
-    const isRawMode = this.inputMode === 'raw' || this.inputMode === 'dicom';
+    const isRawMode = this.inputMode === 'raw';
     const isTotalFieldMode = this.inputMode === 'totalField';
     const isLocalFieldMode = this.inputMode === 'localField';
     const isFieldMapMode = isTotalFieldMode || isLocalFieldMode;
@@ -659,7 +667,7 @@ export class PipelineSettingsController {
 
     // Dipole inversion - show for standard pipeline only (TGV/QSMART handle inversion internally)
     const showDipoleInversion = (!isCombined && isRawMode) || (!isCombined && isFieldMapMode);
-    this._showEl('dipole_inversionSection', showDipoleInversion);
+    this._showEl('dipoleInversionSection', showDipoleInversion);
 
     // Check if MEDI with SMV is enabled - show error on background removal
     const dipoleMethod = this._getEl('dipole_method');
@@ -667,7 +675,7 @@ export class PipelineSettingsController {
     const bgDisabledByMediSmv = dipoleMethod === 'medi' && mediSmvEnabled && showBgRemoval;
 
     const bgHint = document.getElementById('bgRemovalDisabledHint');
-    if (bgHint) bgHint.style.display = bgDisabledByMediSmv ? '' : 'none';
+    if (bgHint) bgHint.hidden = !bgDisabledByMediSmv;
 
     // Enable/disable tabs based on pipeline state
     this._setTabEnabled('tabPhaseProcessing', isRawMode);
@@ -685,12 +693,13 @@ export class PipelineSettingsController {
         'Requires magnitude', 'error');
     }
 
-    // MEDI option in dipole inversion dropdown
+    // MEDI needs magnitude; the total-field deep-learning nets can't start from a local field
     const dipoleSelect = document.getElementById('dipole_method');
     if (dipoleSelect) {
+      const needsTotalField = isLocalFieldMode && DL_TOTAL_FIELD_MODELS.includes(dipoleSelect.value);
       this._showWarning('dipole_method', 'dipoleMethodWarning',
-        noMag && dipoleSelect.value === 'medi',
-        'Requires magnitude', 'error');
+        needsTotalField || (noMag && dipoleSelect.value === 'medi'),
+        needsTotalField ? 'Requires a total field (not a local field map)' : 'Requires magnitude', 'error');
     }
 
     // ROMEO magnitude weight checkboxes
@@ -766,15 +775,72 @@ export class PipelineSettingsController {
     this._setEl('sidebarSwiHpSigmaZ', swiSettings.hp_sigma?.[2] ?? SWI_DEFAULTS.hp_sigma[2]);
     this._setEl('sidebarSwiMipWindow', swiSettings.mip_window ?? SWI_DEFAULTS.mip_window);
 
+    this._setChecked('qsm_reference_mean', settings.reference_mean !== false);
+
     // TGV settings
     this._setEl('tgvRegularization', settings.tgv.regularization);
     this._setEl('tgvIterations', settings.tgv.iterations);
     this._setEl('tgvErosions', settings.tgv.erosions);
 
+    // TFI settings
+    this._setEl('tfiLambda', settings.tfi?.lambda ?? TFI_DEFAULTS.lambda);
+    this._setEl('tfiPrecond', settings.tfi?.precond ?? TFI_DEFAULTS.precond);
+
+    // QSMART settings. Without these the form keeps index.html's static values, which differ
+    // from QSMART_DEFAULTS, so a plain open + save silently changed the QSMART parameters.
+    const qsmart = { ...QSMART_DEFAULTS, ...settings.qsmart };
+    this._setEl('qsmartSdfSigma1Stage1', qsmart.sdf_sigma1_stage1);
+    this._setEl('qsmartSdfSigma2Stage1', qsmart.sdf_sigma2_stage1);
+    this._setEl('qsmartSdfSigma1Stage2', qsmart.sdf_sigma1_stage2);
+    this._setEl('qsmartSdfSigma2Stage2', qsmart.sdf_sigma2_stage2);
+    this._setEl('qsmartSdfSpatialRadius', qsmart.sdf_spatial_radius);
+    this._setEl('qsmartSdfLowerLim', qsmart.sdf_lower_lim);
+    this._setEl('qsmartSdfCurvConstant', qsmart.sdf_curv_constant);
+    this._setEl('qsmartVascSphereRadius', qsmart.vasc_sphere_radius);
+    this._setEl('qsmartFrangiScaleMin', qsmart.frangi_scale_min);
+    this._setEl('qsmartFrangiScaleMax', qsmart.frangi_scale_max);
+    this._setEl('qsmartFrangiScaleRatio', qsmart.frangi_scale_ratio);
+    this._setEl('qsmartFrangiC', qsmart.frangi_c);
+    this._setEl('qsmartIlsqrTol', qsmart.ilsqr_tol);
+    this._setEl('qsmartIlsqrMaxIter', qsmart.ilsqr_max_iter);
+    this._setEl('qsmartInversionMethod', qsmart.inversion_algorithm);
+    // Inner inversion params fall back to the standard algorithm defaults, as in reset()
+    const qTkd = { ...TKD_DEFAULTS, ...qsmart.tkd };
+    const qTsvd = { ...TSVD_DEFAULTS, ...qsmart.tsvd };
+    const qTikh = { ...TIKHONOV_DEFAULTS, ...qsmart.tikhonov };
+    const qTv = { ...TV_DEFAULTS, ...qsmart.tv };
+    const qRts = { ...RTS_DEFAULTS, ...qsmart.rts };
+    const qNltv = { ...NLTV_DEFAULTS, ...qsmart.nltv };
+    const qMedi = { ...MEDI_DEFAULTS, ...qsmart.medi };
+    this._setEl('qsmartTkdThreshold', qTkd.threshold);
+    this._setEl('qsmartTsvdThreshold', qTsvd.threshold);
+    this._setEl('qsmartTikhLambda', qTikh.lambda);
+    this._setEl('qsmartTikhReg', qTikh.reg ?? 'identity');
+    this._setEl('qsmartTvLambda', qTv.lambda);
+    this._setEl('qsmartTvMaxIter', qTv.max_iter);
+    this._setEl('qsmartTvTol', qTv.tol);
+    this._setEl('qsmartRtsDelta', qRts.delta);
+    this._setEl('qsmartRtsMu', qRts.mu);
+    this._setEl('qsmartRtsRho', qRts.rho);
+    this._setEl('qsmartRtsMaxIter', qRts.max_iter);
+    this._setEl('qsmartNltvLambda', qNltv.lambda);
+    this._setEl('qsmartNltvMu', qNltv.mu);
+    this._setEl('qsmartNltvMaxIter', qNltv.max_iter);
+    this._setEl('qsmartNltvTol', qNltv.tol);
+    this._setEl('qsmartNltvNewtonMaxIter', qNltv.newton_max_iter);
+    this._setEl('qsmartMediLambda', qMedi.lambda);
+    this._setEl('qsmartMediPercentage', qMedi.percentage);
+    this._setEl('qsmartMediMaxIter', qMedi.max_iter);
+    this._setEl('qsmartMediCgMaxIter', qMedi.cg_max_iter);
+    this._setChecked('qsmartMediSmv', qMedi.smv);
+    this._setEl('qsmartMediSmvRadius', qMedi.smv_radius);
+    this._setChecked('qsmartMediMerit', qMedi.merit);
+
     // Phase offset
     const phase_offset_method = settings.phase_offset_method || 'mcpc3ds';
     this._setChecked('phase_offset_enabled', phase_offset_method !== 'none');
     this._setEl('phase_offset_method', phase_offset_method === 'none' ? 'mcpc3ds' : phase_offset_method);
+    this._setChecked('bipolar_correction_enabled', !!settings.bipolar_correction);
 
     // MCPC-3D-S settings
     this._setEl('mcpc3dsSigmaX', settings.mcpc3ds?.sigma?.[0] ?? 10);
@@ -825,6 +891,10 @@ export class PipelineSettingsController {
     this._setEl('vsharpMaxRadius', settings.vsharp.max_radius ?? defaults.vsharpMaxRadius);
     this._setEl('vsharpMinRadius', settings.vsharp.min_radius ?? defaults.vsharpMinRadius);
     this._setEl('vsharpThreshold', settings.vsharp.threshold);
+
+    // SHARP settings
+    this._setEl('sharpRadius', settings.sharp?.radius ?? defaults.sharpRadius);
+    this._setEl('sharpThreshold', settings.sharp?.threshold ?? SHARP_DEFAULTS.threshold);
 
     // RESHARP settings
     if (settings.resharp) {
@@ -877,11 +947,11 @@ export class PipelineSettingsController {
     this._showEl('hdqsm_settings', dipoleMethod === 'hdqsm');
     this._showEl('ilsqr_settings', dipoleMethod === 'ilsqr');
     this._showEl('dl_inversion_settings', DL_INVERSION_METHODS.has(dipoleMethod));
-    // Deep-learning tiling controls (default: tiled on, browser-safe 56/4).
+    // Deep-learning tiling controls (default: tiled on, browser-safe core/halo).
     const dlTiling = settings.dl_tiling || {};
     this._setChecked('dlTiled', dlTiling.enabled !== false);
-    this._setEl('dlTileSize', dlTiling.tile_size ?? 56);
-    this._setEl('dlTileHalo', dlTiling.tile_halo ?? 4);
+    this._setEl('dlTileSize', dlTiling.tile_size ?? DL_TILING_DEFAULTS.tile_core);
+    this._setEl('dlTileHalo', dlTiling.tile_halo ?? DL_TILING_DEFAULTS.tile_halo);
     this._updateDlTilingWarning(dipoleMethod);
 
     // TKD settings
@@ -978,8 +1048,8 @@ export class PipelineSettingsController {
     this._setChecked('mediMerit', settings.medi.merit);
 
     // iLSQR settings
-    this._setEl('ilsqrTol', settings.ilsqr?.tol || 0.01);
-    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || 50);
+    this._setEl('ilsqrTol', settings.ilsqr?.tol || ILSQR_DEFAULTS.tol);
+    this._setEl('ilsqrMaxIter', settings.ilsqr?.max_iter || ILSQR_DEFAULTS.max_iter);
   }
 
   _setupEventListeners() {
@@ -1092,7 +1162,7 @@ export class PipelineSettingsController {
   _updateDlTilingWarning(method) {
     const box = document.getElementById('dlTilingWarning');
     if (!box) return;
-    if (!DL_INVERSION_METHODS.has(method)) { box.style.display = 'none'; return; }
+    if (!DL_INVERSION_METHODS.has(method)) { box.hidden = true; return; }
     const tiled = this._getChecked('dlTiled');
     const nice = method.toUpperCase();
     let msg;
@@ -1107,8 +1177,16 @@ export class PipelineSettingsController {
     } else {
       msg = `Tiled inference is approximate (≈0.94 correlation vs whole-volume; some low-frequency drift). For a publication-quality result, run ${nice} in QSMxT.`;
     }
+    if (tiled && !DL_NATIVE_TILE.has(method)) {
+      const core = parseInt(this._getEl('dlTileSize')) || DL_TILING_DEFAULTS.tile_core;
+      const halo = (v => Number.isFinite(v) ? v : DL_TILING_DEFAULTS.tile_halo)(parseInt(this._getEl('dlTileHalo')));
+      const c = clampTileConfig(core, halo);
+      if (c.clamped) {
+        msg += ` ⚠ Core ${core} + halo ${halo} makes ${core + 2 * halo}³ patches, too big for the browser's memory (at most ${MAX_WASM_PATCH_EDGE}³); this run will use core ${c.core} + halo ${c.halo}.`;
+      }
+    }
     box.textContent = msg;
-    box.style.display = '';
+    box.hidden = false;
   }
 
   _setEl(id, value) {
@@ -1128,7 +1206,7 @@ export class PipelineSettingsController {
 
   _showEl(id, show) {
     const el = document.getElementById(id);
-    if (el) el.style.display = show ? 'block' : 'none';
+    if (el) el.hidden = !show;
   }
 
   _disableEl(id, disabled) {
@@ -1168,40 +1246,6 @@ export class PipelineSettingsController {
         warning.querySelector('span').textContent = message;
         warning.style.display = '';
       }
-    } else if (warning) {
-      warning.style.display = 'none';
-    }
-  }
-
-  /**
-   * Show/hide a warning banner at the top of a section (replaces _disableSection)
-   * All inputs remain interactive.
-   * @param {string} id - Section element ID
-   * @param {boolean} hasWarning - Whether to show the warning
-   * @param {string} [warningText] - Warning text
-   */
-  _showSectionWarning(id, hasWarning, warningText) {
-    const section = document.getElementById(id);
-    if (!section) return;
-
-    const warningId = id + 'Warning';
-    let warning = document.getElementById(warningId);
-
-    if (hasWarning && warningText) {
-      if (!warning) {
-        warning = document.createElement('div');
-        warning.id = warningId;
-        warning.className = 'validation-message error inline-warning';
-        warning.innerHTML = '<span></span>';
-        const heading = section.querySelector('h4');
-        if (heading) {
-          heading.after(warning);
-        } else {
-          section.prepend(warning);
-        }
-      }
-      warning.querySelector('span').textContent = warningText;
-      warning.style.display = 'flex';
     } else if (warning) {
       warning.style.display = 'none';
     }

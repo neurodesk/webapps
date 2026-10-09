@@ -42,16 +42,22 @@ export const provisioners = {
   // The browser reference registers the 1 mm example once, about 3 min on a 4-core runner.
   ants: { env: ['ANTS_LIVE_DATA', 'ANTS_BROWSER_REFERENCE'], provision: async () => ({ ANTS_LIVE_DATA: '1', ANTS_BROWSER_REFERENCE: 'check' }) },
   'brain-extraction': flag('BRAIN_EXTRACTION_REAL_MODELS'),
+  // The browser reference runs quality control of the pinned example with each of the four models
+  // on the CPU backend, about 12 min on eight cores.
+  browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),
+  // The browser reference runs MindGrab on the CPU once, about 2 min and 3 GB.
   dwi2trx: {
-    env: ['DWI2TRX_FIXTURE_DIR'],
+    env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE'],
     provision: async (cache) => {
       await exampleFiles(cache, 'dwi2trx', 'dwi-gradients', ['image', 'bval', 'bvec']);
-      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx') };
+      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx'), DWI2TRX_BROWSER_REFERENCE: 'check' };
     },
   },
+  // The browser reference registers the 1 mm example once, about 30 s.
+  edgereg: { env: ['EDGEREG_BROWSER_REFERENCE'], provision: async () => ({ EDGEREG_BROWSER_REFERENCE: 'check' }) },
   // Both presets on the CPU, about 35 min each; the reference needs exactly 4 threads, which
   // matches GitHub's Linux runners.
   fireants: { env: ['FIREANTS_BROWSER_REFERENCE'], provision: async () => ({ FIREANTS_BROWSER_REFERENCE: 'check' }) },

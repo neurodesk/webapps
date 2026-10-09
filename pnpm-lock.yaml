@@ -142,20 +142,17 @@ importers:
   apps/brain2print:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260923
-        version: 0.1.20260923
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/brain2print':
+        specifier: workspace:*
+        version: link:../../packages/brain2print
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
-      '@neurodesk/topofit':
-        specifier: workspace:*
-        version: link:../../packages/topofit
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@niivue/niimath':
-        specifier: 1.4.20260909
-        version: 1.4.20260909
       '@niivue/niivue':
         specifier: 1.0.0-rc.11
         version: 1.0.0-rc.11
@@ -175,6 +172,9 @@ importers:
       '@brainchop/mindgrab':
         specifier: 0.1.20260925
         version: 0.1.20260925
+      '@neurodesk/browserqc':
+        specifier: workspace:*
+        version: link:../../packages/browserqc
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -458,11 +458,14 @@ importers:
   apps/dwi2trx:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: ^0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260925
+        version: 0.1.20260925
       '@dipy/gpu-streamlines':
         specifier: ^0.1.0
         version: 0.1.0
+      '@neurodesk/dwi2trx':
+        specifier: workspace:*
+        version: link:../../packages/dwi2trx
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -500,6 +503,9 @@ importers:
 
   apps/edgereg:
     dependencies:
+      '@neurodesk/edgereg':
+        specifier: workspace:*
+        version: link:../../packages/edgereg
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -682,6 +688,9 @@ importers:
       jest:
         specifier: ^29.7.0
         version: 29.7.0(@types/node@24.13.3)
+      smol-toml:
+        specifier: ^1.9.0
+        version: 1.9.0
 
   apps/seedseg:
     dependencies:
@@ -938,8 +947,11 @@ importers:
   packages/brain-extraction:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr
@@ -953,6 +965,44 @@ importers:
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
+
+  packages/brain2print:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
+      vite:
+        specifier: ^6.3.2
+        version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
+
+  packages/browserqc:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@niivue/niimath':
+        specifier: 1.4.20260928
+        version: 1.4.20260928
+    devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/carotid-flow:
     dependencies:
@@ -985,11 +1035,38 @@ importers:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
 
+  packages/dwi2trx:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: file:../../apps/dwi2trx/vendor/niimath
+        version: file:apps/dwi2trx/vendor/niimath
+
   packages/easy-mp2rage:
     dependencies:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/edgereg:
+    dependencies:
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: 1.4.20260909
+        version: 1.4.20260909
 
   packages/fireants:
     dependencies:
@@ -1085,6 +1162,9 @@ importers:
 
   packages/topofit:
     dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
@@ -6177,6 +6257,10 @@ packages:
   slash@3.0.0:
     resolution: {integrity: sha512-g9Q1haeby36OSStwb4ntCGGGaKsaVSjQ68fBxoQcutl5fS1vuY18H3wSt3jFyFtrkx+Kz0V1G85A4MyAdDMi2Q==}
     engines: {node: '>=8'}
+
+  smol-toml@1.9.0:
+    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
+    engines: {node: '>= 18'}
 
   source-map-js@1.2.1:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
@@ -12441,6 +12525,8 @@ snapshots:
   sisteransi@1.0.5: {}
 
   slash@3.0.0: {}
+
+  smol-toml@1.9.0: {}
 
   source-map-js@1.2.1: {}
 

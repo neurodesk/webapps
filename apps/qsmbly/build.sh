@@ -3,8 +3,10 @@
 # This compiles the Rust code to WASM and copies it to the serve directory
 #
 # Usage:
-#   ./build.sh           # Standard build (maximum browser compatibility)
-#   ./build.sh --simd    # SIMD-accelerated build (faster, requires modern browsers)
+#   ./build.sh                # Standard threaded build
+#   ./build.sh --simd         # SIMD-accelerated build (faster, requires modern browsers)
+#   ./build.sh --no-threads   # Single-threaded build (any static host, stable toolchain)
+# Flags may be combined in any order.
 
 set -e  # Exit on error
 
@@ -22,10 +24,14 @@ WASM_DIR="$SCRIPT_DIR/wasm"
 # `--simd` adds SIMD acceleration to both.
 SIMD_FEAT=""
 BUILD_TYPE="standard"
-if [[ "$1" == "--simd" ]]; then
-    SIMD_FEAT="simd"
-    BUILD_TYPE="SIMD-accelerated"
-fi
+THREADS=1
+for arg in "$@"; do
+    case "$arg" in
+        --simd)       SIMD_FEAT="simd"; BUILD_TYPE="SIMD-accelerated" ;;
+        --no-threads) THREADS=0 ;;
+        *)            echo "Error: unknown argument '$arg' (expected --simd and/or --no-threads)" >&2; exit 1 ;;
+    esac
+done
 
 echo "=== QSMbly WASM Build ($BUILD_TYPE) ==="
 echo ""
@@ -54,14 +60,21 @@ if [[ -n "$BINDGEN_VERSION" ]] && ! wasm-bindgen --version 2>/dev/null | grep -q
     echo "Installing wasm-bindgen-cli $BINDGEN_VERSION (matches Cargo.lock)..."
     env -u RUSTFLAGS -u CARGO_UNSTABLE_BUILD_STD cargo install wasm-bindgen-cli --version "$BINDGEN_VERSION" --locked
 fi
+# node generates the algorithm defaults; python3 patches the threaded worker helper.
+REQUIRED_TOOLS=(node)
+[[ "$THREADS" == "1" ]] && REQUIRED_TOOLS+=(python3)
+for tool in "${REQUIRED_TOOLS[@]}"; do
+    if ! command -v "$tool" &> /dev/null; then
+        echo "Error: $tool is not installed (required by the build)."
+        exit 1
+    fi
+done
 
 # Threaded (multi-core) build via wasm-bindgen-rayon. Speeds up ALL rayon paths in qsm-core
 # (classical algorithms) plus the tiled deep-learning loop. Requires nightly + build-std (to
 # rebuild std with atomics) and a cross-origin-isolated page at runtime (COOP/COEP — see
 # the shared coi service worker). Disable with `--no-threads` for a single-threaded build
 # that runs on any static host without special headers.
-THREADS=1
-for a in "$@"; do [[ "$a" == "--no-threads" ]] && THREADS=0; done
 
 WP=(wasm-pack)
 PAR_FEAT=""
@@ -119,6 +132,7 @@ node scripts/generate-defaults.mjs
 
 echo ""
 echo "[3/4] Copying WASM files to serve directory..."
+mkdir -p "$WASM_DIR"  # untracked, so absent in a fresh clone
 cp "$RUST_DIR/pkg/qsm_wasm.js" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm_bg.wasm" "$WASM_DIR/"
 cp "$RUST_DIR/pkg/qsm_wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
@@ -160,14 +174,6 @@ if hashdir:
 PYEOF
 fi
 
-# Copy romeo files if they exist
-if [ -f "$RUST_DIR/pkg/romeo_wasm.js" ]; then
-    cp "$RUST_DIR/pkg/romeo_wasm.js" "$WASM_DIR/"
-    cp "$RUST_DIR/pkg/romeo_wasm_bg.wasm" "$WASM_DIR/"
-    cp "$RUST_DIR/pkg/romeo_wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
-    cp "$RUST_DIR/pkg/romeo_wasm_bg.wasm.d.ts" "$WASM_DIR/" 2>/dev/null || true
-fi
-
 echo ""
 echo "[4/4] Build complete!"
 echo ""
@@ -175,6 +181,6 @@ echo "WASM files in $WASM_DIR:"
 ls -lh "$WASM_DIR"/*.wasm "$WASM_DIR"/*.js 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
 
 echo ""
-echo "To start the development server:"
-echo "  python -m http.server 8080"
+echo "To start the development server (coi-serviceworker.js supplies cross-origin isolation):"
+echo "  pnpm --filter qsmbly dev"
 echo "  # Then open http://localhost:8080"

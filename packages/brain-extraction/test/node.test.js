@@ -163,16 +163,27 @@ test('options a command does not use are refused instead of ignored', async (t) 
   assert.deepEqual(await readdir(root), ['input.nii']);
 });
 
-test('methods are synthstrip or bet, and mindgrab points to its issue', async (t) => {
+test('methods are synthstrip, bet or mindgrab', async (t) => {
   const { root, input, cache } = await workspace(t);
-  for (const method of ['BET', 'fsl', '']) {
+  for (const method of ['BET', 'MindGrab', 'fsl', '']) {
     const result = run([input, join(root, 'out'), `--method=${method}`, '--cache-dir', cache]);
     assert.equal(result.status, 1, method);
-    assert.match(result.stderr, new RegExp(`Method must be synthstrip or bet, not "${method}"`), method);
+    assert.match(result.stderr, new RegExp(`Method must be synthstrip, bet or mindgrab, not "${method}"`), method);
   }
-  const mindgrab = run([input, join(root, 'out'), '--method', 'mindgrab', '--cache-dir', cache]);
-  assert.equal(mindgrab.status, 1);
-  assert.match(mindgrab.stderr, /MindGrab is not available in the command line yet \(https:\/\/github\.com\/neurodesk\/webapps\/issues\/162\)/);
+  assert.deepEqual(await readdir(root), ['input.nii']);
+});
+
+test('MindGrab refuses the other methods\' options and reads its input before any inference', async (t) => {
+  const { root, input, cache } = await workspace(t);
+  const threads = run([input, join(root, 'out'), '--method', 'mindgrab', '--threads', '2', '--cache-dir', cache]);
+  assert.equal(threads.status, 1);
+  assert.match(threads.stderr, /--threads applies to --method synthstrip only/);
+  const fraction = run([input, join(root, 'out'), '--method', 'mindgrab', '--fractional-intensity', '0.3', '--cache-dir', cache]);
+  assert.equal(fraction.status, 1);
+  assert.match(fraction.stderr, /--fractional-intensity applies to --method bet only/);
+  const unreadable = run([input, join(root, 'out'), '--method', 'mindgrab', '--cache-dir', cache]);
+  assert.equal(unreadable.status, 1);
+  assert.doesNotMatch(unreadable.stderr, /Extracting brain with MindGrab/);
   assert.deepEqual(await readdir(root), ['input.nii']);
 });
 
@@ -227,5 +238,6 @@ test('command line reports help, rejects unsupported options and checks both run
   assert.equal(report.executable, process.execPath);
   assert.equal(report.onnxRuntime, '1.29.0');
   assert.ok(report.betSmokeTestVoxels > 0);
+  assert.equal(report.mindgrab, '0.1.20260925');
   assert.equal(report.models, undefined);
 });

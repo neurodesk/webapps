@@ -153,6 +153,7 @@ test('portable Node command lines build on target runners and publish through on
   assert.match(steps[target].run,/git rev-parse/);
   assert.match(steps[target].run,/GITHUB_SHA/);
   const runners={'linux-x64':'ubuntu-22.04','windows-x64':'windows-latest','macos-arm64':'macos-15'};
+  const registry=await loadAppsRegistry();
   const callers=await portableCallers();
   assert.deepEqual(callers.map(([,packageDir])=>packageDir).sort(),await packagesWithReleaseSpec(),'every package with release.json has exactly one portable workflow');
   for(const [name,packageDir] of callers) {
@@ -161,6 +162,8 @@ test('portable Node command lines build on target runners and publish through on
     assert.equal(flow.jobs.portable.uses,'./.github/workflows/node-cli-portable.yml',name);
     assert.equal(flow.jobs.portable.with.package,packageDir,name);
     const release=JSON.parse(await readFile(new URL(`../${packageDir}/release.json`,import.meta.url),'utf8'));
+    // The archives attach to the app's own release, which exists only for apps the release plan includes.
+    assert.equal(registry.apps.find(app=>app.id===release.app)?.ci.release,true,`${name}: ${release.app} is released, so ${release.app}-vVERSION exists`);
     const installer=Object.values(release.targets).some(target=>target.archive==='pkg');
     // A release with a macOS installer is published only by signing it.
     const publishInput=installer?'sign_release':'publish_release';

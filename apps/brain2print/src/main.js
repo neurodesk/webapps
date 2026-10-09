@@ -4,15 +4,13 @@ import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui'
 import { runDcm2niix, readImageFiles } from '@neurodesk/runtime-support/dcm2niix-client'
-import { createFloat32Nifti, extractNiftiHeader, readNiftiImageData } from '@neurodesk/webapp-components/file-io'
 import NiiVueGPU, { SLICE_TYPE } from '@niivue/niivue'
-import { version as mindgrabVersion } from '@brainchop/mindgrab/package.json'
 import mindsnapColormap from './mindsnap-colormap.json'
-import { Niimath } from '@niivue/niimath'
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation'
-import { writeStl, writeMz3 } from '@neurodesk/topofit/results'
+import { buildMesh, meshFiles, segmentBrain } from '@neurodesk/brain2print'
+import { createNiimathMesher, mindgrab } from '@neurodesk/brain2print/browser'
+import { writeMz3 } from '@neurodesk/webapp-components/file-io/mesh'
 import { APP } from './config.js'
-import { flipWinding, inspectMesh } from './mesh.js'
 
 const $ = (id) => document.getElementById(id)
 const directVolume = /\.(nii|nii\.gz|mgh|mgz|nrrd|mha|mhd|nhdr|head|v)$/i
@@ -32,7 +30,6 @@ let source = null
 let segmentation = null
 let series = []
 let busy = false
-let niimathReady = null
 let extension = null
 
 mountImagingWorkspace({
@@ -50,7 +47,7 @@ const info = createInfoDialog()
 $('aboutBtn').onclick = () => info.open('About Brain2Print', $('aboutContent'))
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'))
 const nv = new NiiVueGPU({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] })
-const niimath = new Niimath()
+const niimath = createNiimathMesher()
 const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
@@ -144,6 +141,14 @@ async function chooseFiles(files) {
   await loadImage(series[0])
 }
 
+// MindGrab and the command line read NIfTI as stored; other formats go through NiiVue's NIfTI writer.
+async function segmentationInput(file) {
+  if (/\.nii(\.gz)?$/i.test(file.name)) return new Uint8Array(await file.arrayBuffer())
+  const input = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
+  if (!(input instanceof Uint8Array)) throw new Error('Could not read the input image.')
+  return input
+}
+
 async function segment({ signal, progress = () => {}, backend = 'auto' } = {}) {
   if (!source || busy) throw new Error('Load an image and wait for the current step to finish.')
   signal?.throwIfAborted()
@@ -156,56 +161,32 @@ async function segment({ signal, progress = () => {}, backend = 'auto' } = {}) {
     await clearMeshes()
     await dropOverlays()
     status(`Segmenting with ${$('modelSelect').selectedOptions[0].text}…`)
-    const input = await nv.saveVolume({ volumeByIndex: 0, filename: '' })
-    if (!(input instanceof Uint8Array)) throw new Error('Could not read the input image.')
+    const input = await segmentationInput(image)
     const choice = $('modelSelect').value
-    const isPve = choice === 'pve'
-    const options = {
-      model: isPve ? 'mindmap' : choice,
-      worker: true,
-      // The worker resolves `auto` (src/backend.js): hardware WebGPU, hardware WebGL2, then threaded CPU; automation may name `cpu`.
-      backend,
-      gzipOutput: false,
-      assetPath: `${import.meta.env.BASE_URL}brainchop/${mindgrabVersion}/`,
-    }
     progress({ message: 'Segmenting brain tissues' })
-    const result = await runSegmentation(input, isPve, options, signal)
+    const result = await segmentBrain(mindgrab, input, choice, {
+      worker: true,
+      // The worker resolves `auto` (backend.js in @neurodesk/brain2print): hardware WebGPU, hardware WebGL2, then threaded CPU; automation may name `cpu`.
+      backend,
+      assetPath: `${import.meta.env.BASE_URL}brainchop/${mindgrab.version}/`,
+      signal,
+    })
     signal?.throwIfAborted()
-    let labels
-    let surface
-    if (isPve) {
-      // Brain fraction = GM + WM; its 0.5 isosurface is a sub-voxel pial surface.
-      const brain = readNiftiImageData(result.tissues.gm).data
-      const wm = readNiftiImageData(result.tissues.wm).data
-      for (let i = 0; i < brain.length; i++) brain[i] += wm[i]
-      labels = new Uint8Array(createFloat32Nifti(brain, extractNiftiHeader(result.tissues.gm)))
-      surface = labels
-    } else {
-      labels = new Uint8Array(result.image)
-      // Mesh the 0/1 brain mask, not the label values. Marching cubes interpolates between voxel
-      // centres, so at isovalue 0.5 a 0/1 edge is cut half way and the surface encloses the
-      // labelled voxels (skimage on the 2 mm fixture: within 0.5 %). A raw label L puts the cut
-      // (L - 0.5) / L of the way out, almost at the background voxel, and niimath's volume
-      // smoothing spreads large labels further still: 17-20 % too large, mindsnap (up to 103) 87 %.
-      const values = readNiftiImageData(result.image).data
-      const mask = new Float32Array(values.length)
-      for (let i = 0; i < values.length; i++) mask[i] = values[i] > 0 ? 1 : 0
-      surface = new Uint8Array(createFloat32Nifti(mask, extractNiftiHeader(result.image)))
-    }
     if (source !== image) throw new Error('The image changed during segmentation; run it again.')
     await dropOverlays()
-    if (isPve) {
+    const overlay = new File([result.bytes], result.name)
+    if (choice === 'pve') {
       // calMin 0.5 shows exactly what the mesh encloses.
-      await nv.addVolume({ url: new File([labels], 'brain-fraction.nii'), name: 'brain-fraction.nii', opacity: 0.5, colormap: 'warm', calMin: 0.5, calMax: 1 })
+      await nv.addVolume({ url: overlay, name: result.name, opacity: 0.5, colormap: 'warm', calMin: 0.5, calMax: 1 })
     } else {
-      await nv.addVolume({ url: new File([labels], 'segmentation.nii'), name: 'segmentation.nii', opacity: 0.5 })
+      await nv.addVolume({ url: overlay, name: result.name, opacity: 0.5 })
       await nv.setColormapLabel(nv.volumes.length - 1, choice === 'mindsnap' ? MINDSNAP_COLORMAP : SEG_COLORMAP)
     }
     signal?.throwIfAborted()
     // What the mesh step surfaces at 0.5: the brain fraction, or the binary mask of the labels.
-    segmentation = surface
-    status(`Segmentation complete on ${result.backend} (${Math.round(result.elapsedMs)} ms). Create the mesh when ready.`)
-    return { file: new File([labels], isPve ? 'brain-fraction.nii' : 'segmentation.nii'), type: isPve ? 'neuro:volume' : 'neuro:label-map', provenance: { model: options.model, partialVolume: isPve, version: mindgrabVersion, backend: result.backend, elapsedMs: result.elapsedMs } }
+    segmentation = result.surface
+    status(`Segmentation complete on ${result.provenance.backend} (${Math.round(result.provenance.elapsedMs)} ms). Create the mesh when ready.`)
+    return { file: overlay, type: result.type, provenance: result.provenance }
   } catch (error) {
     status(error instanceof Error ? error.message : String(error), true)
     throw error
@@ -223,50 +204,27 @@ async function mesh({ signal, progress = () => {} } = {}) {
   buttons()
   try {
     // Read before awaiting so edits made during niimath startup do not leak into this run.
-    const options = {
-      i: 0.5,
-      l: $('largestOnly').checked ? 1 : 0,
-      b: $('fillBubbles').checked ? 1 : 0,
-      r: Number($('simplify').value) / 100,
-      s: Number($('smooth').value),
+    const settings = {
+      largestOnly: $('largestOnly').checked,
+      fillBubbles: $('fillBubbles').checked,
+      simplify: Number($('simplify').value),
+      smooth: Number($('smooth').value),
     }
     status('Creating mesh with niimath…')
     progress({ message: 'Creating brain mesh' })
-    const cancel = () => niimath.dispose('cancelled')
-    signal?.addEventListener('abort', cancel, { once: true })
-    let output
-    try {
-      if (!niimathReady) niimathReady = niimath.init()
-      await niimathReady
-      signal?.throwIfAborted()
-      output = await niimath
-        .image(new File([labels], 'segmentation.nii'))
-        .mesh(options)
-        .run('brain.mz3')
-    } finally {
-      signal?.removeEventListener('abort', cancel)
-    }
+    const result = await buildMesh((bytes, options) => niimath.mesh(bytes, options, signal), labels, settings)
     signal?.throwIfAborted()
     if (segmentation !== labels) throw new Error('The segmentation changed during meshing; run it again.')
     await clearMeshes()
-    await nv.loadMeshes([{ url: new File([await output.arrayBuffer()], 'brain.mz3'), name: 'brain.mz3' }])
-    const current = nv.meshes.at(-1)
-    const report = inspectMesh(current)
-    const closed = report.manifold && report.consistent
-    // Only a closed, consistently wound mesh has a meaningful inside, so only then
-    // is a negative volume evidence of inward normals worth correcting for printing.
-    const shouldFlip = closed && report.signedVolume < 0
-    if (shouldFlip) {
-      flipWinding(current.indices)
-      await nv.updateGLVolume()
-    }
+    await nv.loadMeshes([{ url: new File([writeMz3(result.positions, result.indices)], 'brain.mz3'), name: 'brain.mz3' }])
     signal?.throwIfAborted()
     $('outputSection').open = true
-    status(`Mesh complete: ${current.indices.length / 3} triangles, ${closed ? 'closed manifold' : 'non-manifold'}, ${shouldFlip ? 'winding corrected' : 'winding preserved'}. Choose STL or OBJ to download.`)
-    return { artifacts: [{ role: 'mesh', file: new File([writeStl(current.positions, current.indices)], 'brain2print.stl') }, { role: 'geometry', file: new File([writeMz3(current.positions, current.indices)], 'brain2print.mz3') }], measurements: { ...inspectMesh(current), windingCorrected: shouldFlip, triangles: current.indices.length / 3 }, provenance: { algorithm: 'niimath mesh', options } }
+    const { triangles, windingCorrected } = result.measurements
+    status(`Mesh complete: ${triangles} triangles, ${result.closed ? 'closed manifold' : 'non-manifold'}, ${windingCorrected ? 'winding corrected' : 'winding preserved'}. Choose STL or OBJ to download.`)
+    const artifacts = meshFiles(result).map(({ role, name, bytes }) => ({ role, file: new File([bytes], name) }))
+    return { artifacts, measurements: result.measurements, provenance: result.provenance }
   } catch (error) {
     niimath.dispose('mesh failed')
-    niimathReady = null
     status(error instanceof Error ? error.message : String(error), true)
     throw error
   } finally {
@@ -274,6 +232,7 @@ async function mesh({ signal, progress = () => {} } = {}) {
     buttons()
   }
 }
+
 
 $('imageInput').addEventListener('change', () => {
   const files = Array.from($('imageInput').files)
@@ -337,25 +296,6 @@ const initialization = init()
 
 export default Object.freeze({ APP, chooseFiles, segment, mesh })
 
-
-function runSegmentation(input, tissues, options, signal) {
-  return new Promise((resolve, reject) => {
-    const active = new Worker(new URL('./segmentation-worker.js', import.meta.url), { type: 'module' })
-    const finish = (error, result) => {
-      active.terminate()
-      signal?.removeEventListener('abort', cancel)
-      if (error) reject(error)
-      else resolve(result)
-    }
-    const cancel = () => finish(signal.reason ?? new DOMException('Cancelled', 'AbortError'))
-    signal?.addEventListener('abort', cancel, { once: true })
-    active.onmessage = ({ data }) => data.error ? finish(new Error(data.error)) : finish(null, data.result)
-    active.onerror = (event) => finish(new Error(event.message || 'Segmentation worker failed'))
-    active.onmessageerror = () => finish(new Error('Segmentation worker returned an unreadable result'))
-    if (signal?.aborted) cancel()
-    else active.postMessage({ input, tissues, options })
-  })
-}
 
 registerAppAutomation({
   app: 'brain2print',

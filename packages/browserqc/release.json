@@ -1,0 +1,40 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "browserqc-v",
+  "displayName": "BrowserQC",
+  "app": "browserqc",
+  "run": "T1w.nii.gz results",
+  "readme": {
+    "run": "Compute MRIQC-style quality metrics of a T1-weighted image",
+    "notes": [
+      "Runs the web app's MindGrab segmentation on the CPU, then niimath --qc.",
+      "The MindGrab models and the MNI air template are included and checked locally.",
+      "No network connection or previously populated cache is required.",
+      "Add --model 16chan18cls for labels instead of tissue fractions, --bids for a sidecar,",
+      "and --help for every option. DICOM input and manual ratings need the web app.",
+      "",
+      "These are MRIQC-style estimates, not MRIQC normative values. Please cite:",
+      "Esteban O, Birman D, Schaer M, Koyejo OO, Poldrack RA, Gorgolewski KJ. MRIQC:",
+      "Advancing the automatic prediction of image quality in MRI from unseen sites.",
+      "PLoS ONE. 2017;12(9):e0184661."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "browserqc"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "browserqc.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "browserqc"
+    }
+  }
+}

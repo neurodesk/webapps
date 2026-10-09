@@ -8,14 +8,17 @@
     "run": "Extract the brain with SynthStrip",
     "notes": [
       "Add --method bet for BET; --fractional-intensity sets its threshold.",
-      "The SynthStrip model is included and checked locally. BET needs no model.",
+      "Add --method mindgrab for MindGrab on the CPU (about 2.6 GB of memory).",
+      "The SynthStrip model is included and checked locally. BET needs no model,",
+      "and MindGrab's weights are part of its WebAssembly module.",
       "No network connection or previously populated cache is required.",
-      "Add --help for options. MindGrab, DICOM input and mask editing need the web app.",
+      "Add --help for options. DICOM input and mask editing need the web app.",
       "",
       "Brain extraction is research software. Review the masks before use. Please cite",
       "the method you use: Hoopes A et al. SynthStrip: skull-stripping for any brain",
       "image. NeuroImage 2022. Smith SM. Fast robust automated brain extraction.",
-      "Human Brain Mapping 2002."
+      "Human Brain Mapping 2002. Fani A et al. MindGrab for BrainChop: fast and",
+      "accurate skull stripping for command line and browser. arXiv 2025."
     ]
   },
   "validation": "validation/cli-check.mjs",

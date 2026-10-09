@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QSMbly deep-learning threading bench</title>
+<style>
+  body { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 1rem; max-width: 70rem; }
+  pre { white-space: pre-wrap; }
+  code { background: #f0f0f0; padding: 0 .2em; }
+</style>
+</head>
+<body>
+<h3>Deep-learning inference: rayon pool size vs wasm heap</h3>
+<p>
+  cross-origin isolated: <b id="coi"></b> &middot;
+  navigator.hardwareConcurrency: <b id="hw"></b>
+</p>
+<p>
+  Each configuration runs in a fresh worker, so each gets its own wasm memory and its own thread
+  pool. Override the default plan with <code>?plan=&lt;url-encoded JSON array&gt;</code>, and add
+  <code>&amp;auto=1</code> to start on load (how <code>run_bench.sh</code> drives it).
+</p>
+<p><button id="go">run plan</button> <span id="status"></span></p>
+<pre id="out"></pre>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+$('coi').textContent = String(crossOriginIsolated);
+$('hw').textContent = String(navigator.hardwareConcurrency);
+
+const lines = [];
+const post = (o) => fetch('/result', { method: 'POST', body: JSON.stringify(o) }).catch(() => {});
+const say = (s) => {
+  lines.push(s);
+  $('out').textContent = lines.join('\n');
+  console.log(s);
+  post({ type: 'line', s });
+};
+
+// Defaults: a clinical-ish volume at the browser-safe 64³ patch QSMbly ships (core 56 + halo 4).
+const DEFAULTS = {
+  mode: 'tiled', model: 'xqsm', nx: 128, ny: 128, nz: 96,
+  core: 56, halo: 4, threads: navigator.hardwareConcurrency, flag: false, reps: 3, timeoutS: 1800,
+};
+
+window.BENCH_RESULTS = [];
+window.BENCH_DONE = false;
+
+function runConfig(cfg) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker('./worker.js', { type: 'module' });
+    const timer = setTimeout(() => {
+      say(`    TIMEOUT after ${cfg.timeoutS}s`);
+      w.terminate();
+      reject(new Error('timeout'));
+    }, cfg.timeoutS * 1000);
+    const fail = (msg) => { clearTimeout(timer); say(`    ${msg}`); w.terminate(); reject(new Error(msg)); };
+    // A wasm abort inside a pool thread surfaces here, not as a posted message.
+    w.onerror = (ev) => fail(`WORKER ERROR ${ev.message || ev.type}`);
+    w.onmessageerror = () => fail('WORKER MESSAGEERROR');
+    w.onmessage = (e) => {
+      const d = e.data;
+      if (d.type === 'log') say('    ' + d.m);
+      else if (d.type === 'tile')
+        say(`      tile ${d.done}/${d.total} at ${(d.ms / 1000).toFixed(1)}s heap=${d.heapMB.toFixed(0)}MB`);
+      else if (d.type === 'rep') {
+        const gaps = [];
+        for (let i = 1; i < d.stamps.length; i++) {
+          const g = d.stamps[i][2] - d.stamps[i - 1][2];
+          if (g > 200) gaps.push(g / 1000);
+        }
+        say(`    rep${d.rep}: ${d.secs.toFixed(1)}s  heap=${d.heapMB.toFixed(0)}MB  sum=${d.checksum.toFixed(6)}`
+          + (gaps.length ? `  waves=[${gaps.map((g) => g.toFixed(1)).join(', ')}]s` : ''));
+        post({ type: 'stamps', threads: d.threads, mode: d.mode, rep: d.rep, stamps: d.stamps });
+      } else if (d.type === 'done') { clearTimeout(timer); w.terminate(); resolve(d); }
+      else if (d.type === 'error') fail('ERROR ' + d.m);
+    };
+    w.postMessage(cfg);
+  });
+}
+
+$('go').onclick = async () => {
+  $('go').disabled = true;
+  const hw = navigator.hardwareConcurrency;
+  const plan = JSON.parse(new URLSearchParams(location.search).get('plan') || 'null')
+    || [{ threads: hw }, { threads: Math.max(1, Math.min(5, hw)) }];
+  post({ type: 'start', hw, coi: crossOriginIsolated, ua: navigator.userAgent });
+  for (const p of plan) {
+    const cfg = { ...DEFAULTS, ...p };
+    say(`[${cfg.mode}] ${cfg.model} ${cfg.nx}x${cfg.ny}x${cfg.nz} core=${cfg.core} halo=${cfg.halo}`
+      + ` pool=${cfg.threads} threads_ready=${cfg.flag}`);
+    $('status').textContent = JSON.stringify(cfg);
+    try {
+      const d = await runConfig(cfg);
+      window.BENCH_RESULTS.push(d);
+      post({ type: 'config_done', cfg, d });
+      say(`  => ${d.times.map((t) => t.toFixed(1)).join(', ')} s`
+        + `   peakHeap=${d.peakHeapMB.toFixed(0)}MB (after init ${d.heapAfterInitMB.toFixed(0)}MB)`);
+    } catch (err) {
+      window.BENCH_RESULTS.push({ cfg, error: String(err) });
+      post({ type: 'config_failed', cfg, error: String(err) });
+    }
+  }
+  post({ type: 'all_done', results: window.BENCH_RESULTS });
+  window.BENCH_DONE = true;
+  $('status').textContent = 'done';
+  say('ALL DONE');
+};
+
+if (new URLSearchParams(location.search).get('auto')) $('go').click();
+</script>
+</body>
+</html>

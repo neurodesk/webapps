@@ -70,8 +70,9 @@ test('hardware tractography returns tensor maps and a hashed TRX for the referen
   const snapshot = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
   expect(snapshot.state, snapshot.error?.message).toBe('succeeded');
   expect(snapshot.report.measurements.streamlines).toBeGreaterThan(0);
-  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['fa','tracts','v1']);
-  for (const [artifactId, artifact] of Object.entries(snapshot.report.artifacts)) {
+  expect(Object.values(snapshot.report.artifacts).map(({ role }) => role).sort()).toEqual(['fa','l1','l2','l3','md','mo','s0','tensor','tracts','v1','v2','v3']);
+  // Chromium stops a tab's scripted downloads after ten; the other maps are checked by the fit tests.
+  for (const [artifactId, artifact] of Object.entries(snapshot.report.artifacts).filter(([, artifact]) => ['fa', 'v1', 'tracts'].includes(artifact.role))) {
     const downloading = page.waitForEvent('download');
     await page.evaluate((artifactId) => globalThis.neurodeskAutomation.dispatch('download', { artifactId }), artifactId);
     const bytes = await readFile(await (await downloading).path());

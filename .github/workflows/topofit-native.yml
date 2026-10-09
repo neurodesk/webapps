@@ -9,6 +9,7 @@ on:
       - 'exes/synthsr/scripts/ci_macos_release.sh'
       - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/topofit/**'
+      - 'packages/components/src/file-io/mesh.js'
       - 'apps/topofit/**'
       - 'test/independent-workflows.test.mjs'
   push:
@@ -20,6 +21,7 @@ on:
       - 'exes/synthsr/scripts/ci_macos_release.sh'
       - 'exes/synthsr/scripts/notarize_macos.sh'
       - 'packages/topofit/**'
+      - 'packages/components/src/file-io/mesh.js'
       - 'apps/topofit/**'
       - 'test/independent-workflows.test.mjs'
   workflow_dispatch:

@@ -1,5 +1,14 @@
 # spinalcordtoolbox
 
+## 0.7.20261009
+
+### Patch Changes
+
+- d56383f: Keep Run segmentation disabled until an input is loaded. The section's styling blocked the mouse but not the keyboard, so Enter could start a segmentation with no image.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.7.20261007
 
 ### Minor Changes

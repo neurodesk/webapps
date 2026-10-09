@@ -23,13 +23,22 @@
   <script src="coi-serviceworker.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QSMbly | Quantitative Susceptibility Mapping</title>
-  <link rel="icon" href="favicon.ico" type="image/x-icon">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <meta name="description" content="QSMbly: a complete Quantitative Susceptibility Mapping (QSM) pipeline for MRI that runs entirely in your web browser using WebAssembly. Image data is processed locally and never uploaded.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="QSMbly">
+  <meta property="og:title" content="QSMbly | Quantitative Susceptibility Mapping">
+  <meta property="og:description" content="A complete Quantitative Susceptibility Mapping (QSM) pipeline for MRI that runs entirely in your web browser. Image data is processed locally and never uploaded.">
+  <meta property="og:url" content="https://qsmbly.neurodesk.org/">
+  <link rel="icon" href="favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-  <!-- Tagify (load before our CSS so we can override) -->
-  <link rel="stylesheet" href="https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css">
-  <script src="https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js"></script>
+  <link rel="stylesheet" href="css/inter.css">
+  <!-- Tagify (load before our CSS so we can override). Third-party CDN files are pinned to an exact
+       version with subresource integrity; when bumping a version, recompute the hash with
+       curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
+  <link rel="stylesheet" href="https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css"
+        integrity="sha384-WFLqESDcLYQRlWIJnQc7vNZt6kigZgDqJ/sXg9DXtHJk3/lPW5nD0Br5VN8TvOAm" crossorigin="anonymous">
+  <script src="https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js"
+          integrity="sha384-l3Fn0B60NCHpAg1Z2EH4w/F7+T4eTOnKFeu3RjlbNLbZsivRi3VnbcN2YCvoQqoS" crossorigin="anonymous"></script>
 
   <!-- Our styles last to override -->
   <link rel="stylesheet" href="vendor/webapp-components/src/styles/base.css">
@@ -60,6 +69,10 @@
   </script>
 </head>
 <body>
+  <!-- Shared icons, referenced with <use href="#..."> -->
+  <svg hidden aria-hidden="true">
+    <symbol id="icon-github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+  </svg>
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
@@ -187,7 +200,7 @@
           </select>
         </div>
 
-        <!-- Field Strength (hidden when units are ppm) -->
+        <!-- Field Strength (always required) -->
         <div class="param-group" id="fieldStrengthGroup">
           <label class="param-label" for="magField">Field Strength <span class="info-icon">i<span class="info-tooltip">Main magnetic field strength of the MRI scanner. Used to normalize field values to ppm for susceptibility calculation.</span></span></label>
           <div class="param-inline">
@@ -196,9 +209,9 @@
           </div>
         </div>
 
-        <!-- Echo Times (raw mode only) -->
+        <!-- Echo Times (raw mode; field maps when TGV/MEDI need the TE) -->
         <div class="param-group input-param-raw" id="echoTimesGroup">
-          <label class="param-label">Echo Times <span class="unit-inline">(ms)</span> <span class="info-icon">i<span class="info-tooltip">Echo times for each echo in milliseconds. Auto-populated from JSON sidecars if provided, or enter manually.</span></span></label>
+          <label class="param-label" for="echoTimesTagify">Echo Times <span class="unit-inline">(ms)</span> <span class="info-icon">i<span class="info-tooltip">Echo times for each echo in milliseconds. Auto-populated from JSON sidecars if provided, or enter manually.</span></span></label>
           <input type="text" id="echoTimesTagify" placeholder="Type values...">
         </div>
         </div>
@@ -380,7 +393,7 @@
                 </button>
               </div>
               <div class="brush-size-control" id="brushSizeControl" style="display: none;">
-                <label class="param-label" style="font-size: 0.7rem;">Brush Size: <span id="brushSizeValue">2</span></label>
+                <label class="param-label" for="brushSize" style="font-size: 0.7rem;">Brush Size: <span id="brushSizeValue">2</span></label>
                 <input type="range" id="brushSize" min="1" max="10" value="2" class="threshold-slider">
                 <div class="nd-row">
                   <button class="nd-btn nd-btn-secondary nd-btn-sm active" id="brushShapeSquare" title="Square brush (cube when 3D)">Square</button>
@@ -454,7 +467,7 @@
         <div class="section-content" data-disclosure-panel>
           <div id="sidebarPipelineDropdowns">
             <div class="param-group" id="sidebarMethodGroup">
-              <label class="param-label">Pipeline <span class="info-icon">i<span class="info-tooltip">Overall QSM reconstruction strategy. Each pipeline combines different processing steps to produce a susceptibility map.</span></span></label>
+              <label class="param-label" for="sidebarCombinedMethod">Pipeline <span class="info-icon">i<span class="info-tooltip">Overall QSM reconstruction strategy. Each pipeline combines different processing steps to produce a susceptibility map.</span></span></label>
               <select id="sidebarCombinedMethod">
                 <option value="none" selected>Standard</option>
                 <option value="tgv">TGV</option>
@@ -463,14 +476,14 @@
               </select>
             </div>
             <div class="param-group" id="sidebarUnwrapGroup">
-              <label class="param-label">Phase Unwrapping <span class="info-icon">i<span class="info-tooltip">Removes 2-pi wraps from MRI phase data to recover continuous phase values.</span></span></label>
+              <label class="param-label" for="sidebarUnwrapMethod">Phase Unwrapping <span class="info-icon">i<span class="info-tooltip">Removes 2-pi wraps from MRI phase data to recover continuous phase values.</span></span></label>
               <select id="sidebarUnwrapMethod">
                 <option value="romeo" selected>ROMEO</option>
                 <option value="laplacian">Laplacian</option>
               </select>
             </div>
             <div class="param-group" id="sidebarBgRemovalGroup">
-              <label class="param-label">Background Removal <span class="info-icon">i<span class="info-tooltip">Removes background field contributions from sources outside the brain to isolate the local tissue field.</span></span></label>
+              <label class="param-label" for="sidebarBgRemovalMethod">Background Removal <span class="info-icon">i<span class="info-tooltip">Removes background field contributions from sources outside the brain to isolate the local tissue field.</span></span></label>
               <select id="sidebarBgRemovalMethod">
                 <option value="vsharp" selected>V-SHARP</option>
                 <option value="sharp">SHARP</option>
@@ -483,7 +496,7 @@
               </select>
             </div>
             <div class="param-group" id="sidebarDipoleGroup">
-              <label class="param-label">Dipole Inversion <span class="info-icon">i<span class="info-tooltip">Recovers the susceptibility map from the local tissue field by solving an ill-posed inverse problem.</span></span></label>
+              <label class="param-label" for="sidebarDipoleMethod">Dipole Inversion <span class="info-icon">i<span class="info-tooltip">Recovers the susceptibility map from the local tissue field by solving an ill-posed inverse problem.</span></span></label>
               <select id="sidebarDipoleMethod">
                 <option value="tkd">TKD</option>
                 <option value="tsvd">TSVD</option>
@@ -609,14 +622,14 @@
 
         <div class="viewer-actions">
           <div class="window-controls">
-            <input type="number" id="windowMin" class="window-input" placeholder="min" step="any" title="Window minimum">
+            <input type="number" id="windowMin" class="window-input" aria-label="Window minimum" placeholder="min" step="any" title="Window minimum">
             <div class="range-slider-container">
-              <input type="range" id="rangeMin" class="range-slider range-min" min="0" max="100" value="0">
-              <input type="range" id="rangeMax" class="range-slider range-max" min="0" max="100" value="100">
+              <input type="range" id="rangeMin" aria-label="Window minimum slider" class="range-slider range-min" min="0" max="100" value="0">
+              <input type="range" id="rangeMax" aria-label="Window maximum slider" class="range-slider range-max" min="0" max="100" value="100">
               <div class="range-track"></div>
               <div class="range-selected" id="rangeSelected"></div>
             </div>
-            <input type="number" id="windowMax" class="window-input" placeholder="max" step="any" title="Window maximum">
+            <input type="number" id="windowMax" class="window-input" aria-label="Window maximum" placeholder="max" step="any" title="Window maximum">
             <button class="btn btn-sm" id="resetWindow" title="Reset to full range">Auto</button>
           </div>
           <label class="interp-checkbox">
@@ -629,7 +642,7 @@
             <input type="range" id="overlayOpacity" min="0" max="100" value="50">
             <span id="overlayOpacityValue">50%</span>
           </label>
-          <select class="colormap-select" id="colormapSelect">
+          <select class="colormap-select" id="colormapSelect" aria-label="Colormap">
             <option value="gray">Gray</option>
             <option value="hot">Hot</option>
             <option value="cool">Cool</option>
@@ -729,10 +742,10 @@
   <!-- Modals (outside app-container for proper z-index stacking) -->
   <!-- Pipeline Settings Modal -->
   <div class="modal-overlay" id="pipelineSettingsModal">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pipelineSettingsTitle">
       <div class="modal-header">
-        <h3>Pipeline Settings</h3>
-        <button class="modal-close" id="closePipelineSettings">&times;</button>
+        <h3 id="pipelineSettingsTitle">Pipeline Settings</h3>
+        <button class="modal-close" id="closePipelineSettings" aria-label="Close">&times;</button>
       </div>
       <div class="pipeline-tabs" id="pipelineTabs">
         <button class="pipeline-tab active" data-tab="tabQsmPipeline">Pipeline</button>
@@ -757,10 +770,10 @@
           </div>
 
           <!-- TFI Settings -->
-          <div id="tfi_settings" class="method-settings" style="display: none;">
+          <div id="tfi_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.26946" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.26946"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener" title="Code: QSM.rs"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener" title="Code: QSM.rs"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <p style="font-size: 0.75rem; line-height: 1.4; color: var(--nd-color-text); background: rgba(230,160,30,0.10); border-left: 3px solid #e6a01e; padding: var(--nd-space-xs) var(--nd-space-sm); margin: 0 0 var(--nd-space-sm); border-radius: 3px;">
               TFI is single-step: it inverts the <strong>total field</strong> directly (its own background removal). Larger <strong>preconditioner</strong> suits data with strong background fields (e.g. air near sinuses).
@@ -776,11 +789,11 @@
           </div>
 
           <!-- TGV Settings -->
-          <div id="tgv_settings" class="method-settings" style="display: none;">
+          <div id="tgv_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2015.02.041" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2015.02.041"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
               <a href="https://doi.org/10.1002/nbm.3570" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3570"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener" title="Code: QuantitativeSusceptibilityMappingTGV.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl" target="_blank" rel="noopener" title="Code: QuantitativeSusceptibilityMappingTGV.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tgvRegularization">Regularization Level</label>
@@ -802,10 +815,10 @@
           </div>
 
           <!-- QSMART Settings -->
-          <div id="qsmart_settings" class="method-settings" style="display: none;">
+          <div id="qsmart_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2020.117701" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2020.117701"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener" title="Code: QSMART"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/wtsyeda/QSMART" target="_blank" rel="noopener" title="Code: QSMART"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
 
             <p style="font-size: 0.75rem; line-height: 1.4; color: var(--nd-color-text); background: rgba(230,160,30,0.10); border-left: 3px solid #e6a01e; padding: var(--nd-space-xs) var(--nd-space-sm); margin: 0 0 var(--nd-space-sm); border-radius: 3px;">
@@ -896,7 +909,7 @@
             </div>
 
             <!-- TKD -->
-            <div id="qsmart_tkd_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_tkd_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartTkdThreshold">K-space truncation threshold</label>
                 <input type="number" id="qsmartTkdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
@@ -904,7 +917,7 @@
             </div>
 
             <!-- TSVD -->
-            <div id="qsmart_tsvd_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_tsvd_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartTsvdThreshold">Singular value cutoff</label>
                 <input type="number" id="qsmartTsvdThreshold" value="0.15" min="0.05" max="0.3" step="0.01">
@@ -912,7 +925,7 @@
             </div>
 
             <!-- Tikhonov -->
-            <div id="qsmart_tikhonov_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_tikhonov_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartTikhLambda">Regularization strength</label>
                 <input type="number" id="qsmartTikhLambda" value="0.01" min="0.001" max="1.0" step="0.001">
@@ -928,7 +941,7 @@
             </div>
 
             <!-- TV-ADMM -->
-            <div id="qsmart_tv_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_tv_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartTvLambda">Regularization strength</label>
                 <input type="number" id="qsmartTvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
@@ -944,7 +957,7 @@
             </div>
 
             <!-- RTS -->
-            <div id="qsmart_rts_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_rts_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartRtsDelta">K-space region threshold</label>
                 <input type="number" id="qsmartRtsDelta" value="0.15" min="0.05" max="0.3" step="0.01">
@@ -964,7 +977,7 @@
             </div>
 
             <!-- NLTV -->
-            <div id="qsmart_nltv_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_nltv_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartNltvLambda">Regularization strength</label>
                 <input type="number" id="qsmartNltvLambda" value="0.001" min="0.0001" max="0.1" step="0.0001">
@@ -988,7 +1001,7 @@
             </div>
 
             <!-- MEDI -->
-            <div id="qsmart_medi_settings" class="method-settings" style="display: none;">
+            <div id="qsmart_medi_settings" class="method-settings" hidden>
               <div class="param-group">
                 <label class="param-label" for="qsmartMediLambda">Regularization strength</label>
                 <input type="number" id="qsmartMediLambda" value="7.5e-5" min="1e-6" max="0.01" step="1e-5">
@@ -1010,7 +1023,7 @@
                   <input type="checkbox" id="qsmartMediSmv"> Pre-filter with SMV (reduces streaking)
                 </label>
               </div>
-              <div class="param-group" id="qsmartMediSmvRadiusGroup" style="display: none;">
+              <div class="param-group" id="qsmartMediSmvRadiusGroup" hidden>
                 <label class="param-label" for="qsmartMediSmvRadius">SMV kernel radius (mm)</label>
                 <input type="number" id="qsmartMediSmvRadius" value="5" min="1" max="20" step="1">
               </div>
@@ -1052,7 +1065,7 @@
               <div class="method-links">
                 <a href="https://doi.org/10.1002/mrm.27277" target="_blank" rel="noopener" title="Robinson et al. (2017) MCPC-3D-S"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>MCPC-3D-S</a>
                 <a href="https://doi.org/10.1002/mrm.26963" target="_blank" rel="noopener" title="Eckstein et al. (2018) ASPIRE"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>ASPIRE</a>
-                <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+                <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
               </div>
               <div class="param-xyz">
                 <span class="param-label">Smoothing Sigma (voxels)</span>
@@ -1095,7 +1108,7 @@
           <div id="romeo_settings" class="method-settings">
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.28563" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.28563"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/korbinian90/MriResearchTools.jl" target="_blank" rel="noopener" title="Code: MriResearchTools.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-checklist">
               <label><input type="checkbox" id="romeoPhaseCoherence" checked disabled> Phase Coherence</label>
@@ -1104,17 +1117,17 @@
               <div class="param-checklist-row"><label><input type="checkbox" id="romeo_mag_weight" checked> Magnitude Weight</label></div>
             </div>
             <!-- Multi-echo mode (shown for multi-echo data) -->
-            <div id="romeo_multi_echo_settings" style="display: none;">
+            <div id="romeo_multi_echo_settings" hidden>
               <div class="param-group">
-                <label class="param-label" for="romeoMultiEchoMode">Multi-Echo Mode</label>
+                <label class="param-label" for="romeo_multi_echo_mode">Multi-Echo Mode</label>
                 <select id="romeo_multi_echo_mode">
                   <option value="individual" selected>Individual (per-echo)</option>
                   <option value="template">Template (temporal)</option>
                 </select>
               </div>
-              <div id="romeo_template_settings" style="display: none;">
+              <div id="romeo_template_settings" hidden>
                 <div class="param-group">
-                  <label class="param-label" for="romeoTemplateEcho">Template Echo</label>
+                  <label class="param-label" for="romeo_template_echo">Template Echo</label>
                   <input type="number" id="romeo_template_echo" value="1" min="1" max="10" step="1">
                 </div>
               </div>
@@ -1127,10 +1140,10 @@
           </div>
 
           <!-- Laplacian Settings -->
-          <div id="laplacian_settings" class="method-settings" style="display: none;">
+          <div id="laplacian_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1364/OL.28.001194" target="_blank" rel="noopener" title="DOI: 10.1364/OL.28.001194"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
           </div>
         </div>
@@ -1161,7 +1174,7 @@
           </div>
 
           <!-- Linear Fit Settings -->
-          <div id="linear_fit_settings" class="method-settings" style="display: none;">
+          <div id="linear_fit_settings" class="method-settings" hidden>
             <div class="param-group">
               <label class="param-label" for="linear_fit_reliability_percentile">Reliability threshold (percentile)</label>
               <input type="number" id="linear_fit_reliability_percentile" value="90" min="0" max="100" step="5">
@@ -1176,7 +1189,7 @@
         <div class="tab-panel" id="tabBgRemoval">
         <div class="settings-section" id="bgRemovalSection">
           <h4>Background Removal</h4>
-          <span id="bgRemovalDisabledHint" class="validation-message error inline-warning" style="display: none;">
+          <span id="bgRemovalDisabledHint" class="validation-message error inline-warning" hidden>
             <span>Overridden by MEDI with SMV</span>
           </span>
           <div class="param-group">
@@ -1197,7 +1210,7 @@
           <div id="vsharp_settings" class="method-settings">
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.23000" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.23000"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="vsharpMaxRadius">Largest kernel radius (mm)</label>
@@ -1214,10 +1227,10 @@
           </div>
 
           <!-- SHARP Settings -->
-          <div id="sharp_settings" class="method-settings" style="display: none;">
+          <div id="sharp_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2010.10.070" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2010.10.070"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="sharpRadius">Kernel radius (mm)</label>
@@ -1230,7 +1243,7 @@
           </div>
 
           <!-- RESHARP Settings -->
-          <div id="resharp_settings" class="method-settings" style="display: none;">
+          <div id="resharp_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.24765" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.24765"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
             </div>
@@ -1253,10 +1266,10 @@
           </div>
 
           <!-- iSMV Settings -->
-          <div id="ismv_settings" class="method-settings" style="display: none;">
+          <div id="ismv_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.24998" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.24998"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="ismvRadius">Kernel radius (mm)</label>
@@ -1273,10 +1286,10 @@
           </div>
 
           <!-- PDF Settings -->
-          <div id="pdf_settings" class="method-settings" style="display: none;">
+          <div id="pdf_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/nbm.1670" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.1670"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="pdfTol">Convergence tolerance</label>
@@ -1289,10 +1302,10 @@
           </div>
 
           <!-- LBV Settings -->
-          <div id="lbv_settings" class="method-settings" style="display: none;">
+          <div id="lbv_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/nbm.3064" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3064"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="lbvTol">Convergence tolerance</label>
@@ -1305,7 +1318,7 @@
           </div>
 
           <!-- HARPERELLA Settings -->
-          <div id="harperella_settings" class="method-settings" style="display: none;">
+          <div id="harperella_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/nbm.3056" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.3056"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
             </div>
@@ -1320,7 +1333,7 @@
           </div>
 
           <!-- iHARPERELLA Settings -->
-          <div id="iharperella_settings" class="method-settings" style="display: none;">
+          <div id="iharperella_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://cds.ismrm.org/protected/15MPresentations/abstracts/3313.html" target="_blank" rel="noopener" title="ISMRM 2015 Abstract 3313"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
             </div>
@@ -1342,7 +1355,7 @@
         <div class="settings-section" id="dipoleInversionSection">
           <h4>Dipole Inversion</h4>
           <div class="param-group">
-            <label class="param-label" for="dipoleMethod">Method</label>
+            <label class="param-label" for="dipole_method">Method</label>
             <select id="dipole_method">
               <option value="tkd">TKD (Thresholded K-space Division)</option>
               <option value="tsvd">TSVD (Truncated Singular Value Decomposition)</option>
@@ -1375,7 +1388,7 @@
 
           <!-- Deep-learning tiling controls (shown for DL inversion methods). In the browser DL nets
                run overlap-tiled to fit the 32-bit wasm heap; these expose/adjust that. -->
-          <div id="dl_inversion_settings" class="method-settings" style="display: none;">
+          <div id="dl_inversion_settings" class="method-settings" hidden>
             <div class="nd-field">
               <label  for="dlTiled">
                 <input type="checkbox" id="dlTiled" checked> Tiled inference (bounded memory)
@@ -1383,20 +1396,20 @@
             </div>
             <div class="nd-field">
               <label  for="dlTileSize">Tile core size (voxels)</label>
-              <input type="number" id="dlTileSize" value="56" min="16" max="192" step="8">
+              <input type="number" id="dlTileSize" value="56" min="16" max="120" step="8">
             </div>
             <div class="nd-field">
               <label  for="dlTileHalo">Tile halo (voxels)</label>
               <input type="number" id="dlTileHalo" value="4" min="0" max="32" step="1">
             </div>
-            <div id="dlTilingWarning" class="nd-message warning" style="display: none;"></div>
+            <div id="dlTilingWarning" class="nd-message warning" hidden></div>
           </div>
 
           <!-- TKD Settings -->
-          <div id="tkd_settings" class="method-settings" style="display: none;">
+          <div id="tkd_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22135"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tkdThreshold">K-space truncation threshold</label>
@@ -1405,10 +1418,10 @@
           </div>
 
           <!-- TSVD Settings -->
-          <div id="tsvd_settings" class="method-settings" style="display: none;">
+          <div id="tsvd_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.22135" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22135"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tsvdThreshold">Singular value cutoff</label>
@@ -1417,10 +1430,10 @@
           </div>
 
           <!-- Tikhonov Settings -->
-          <div id="tikhonov_settings" class="method-settings" style="display: none;">
+          <div id="tikhonov_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/jmri.24365" target="_blank" rel="noopener" title="DOI: 10.1002/jmri.24365"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tikhLambda">Regularization strength</label>
@@ -1440,7 +1453,7 @@
           <div id="tv_settings" class="method-settings">
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.25029" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.25029"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="tvLambda">Regularization strength</label>
@@ -1457,10 +1470,10 @@
           </div>
 
           <!-- RTS Settings -->
-          <div id="rts_settings" class="method-settings" style="display: none;">
+          <div id="rts_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2017.11.018"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="rtsDelta">K-space region threshold</label>
@@ -1481,10 +1494,10 @@
           </div>
 
           <!-- NLTV Settings -->
-          <div id="nltv_settings" class="method-settings" style="display: none;">
+          <div id="nltv_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2017.11.018" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2017.11.018"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="nltvLambda">Regularization strength</label>
@@ -1509,10 +1522,10 @@
           </div>
 
           <!-- NDI Settings -->
-          <div id="ndi_settings" class="method-settings" style="display: none;">
+          <div id="ndi_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/nbm.4271" target="_blank" rel="noopener" title="DOI: 10.1002/nbm.4271"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.jl" target="_blank" rel="noopener" title="Code: QSM.jl"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="ndiTau">Gradient descent step size</label>
@@ -1529,10 +1542,10 @@
           </div>
 
           <!-- FANSI (Nonlinear TV) Settings -->
-          <div id="fansi_settings" class="method-settings" style="display: none;">
+          <div id="fansi_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.27073" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.27073"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="fansiAlpha1">Regularization strength (alpha1)</label>
@@ -1565,10 +1578,10 @@
           </div>
 
           <!-- FANSI (Nonlinear TGV) Settings -->
-          <div id="fansitgv_settings" class="method-settings" style="display: none;">
+          <div id="fansitgv_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.27073" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.27073"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="fansitgvAlpha1">Regularization strength (alpha1)</label>
@@ -1601,10 +1614,10 @@
           </div>
 
           <!-- L1-QSM Settings -->
-          <div id="l1qsm_settings" class="method-settings" style="display: none;">
+          <div id="l1qsm_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.28957" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.28957"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="l1qsmAlpha1">Regularization strength (alpha1)</label>
@@ -1637,10 +1650,10 @@
           </div>
 
           <!-- WH-QSM Settings -->
-          <div id="whqsm_settings" class="method-settings" style="display: none;">
+          <div id="whqsm_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.27483" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.27483"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="whqsmAlpha1">Regularization strength (alpha1)</label>
@@ -1673,10 +1686,10 @@
           </div>
 
           <!-- HD-QSM Settings -->
-          <div id="hdqsm_settings" class="method-settings" style="display: none;">
+          <div id="hdqsm_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.29218" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.29218"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://gitlab.com/cmilovic/FANSI-toolbox" target="_blank" rel="noopener" title="Code: FANSI-toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="hdqsmAlphaL2">L2 regularization strength (alpha_l2)</label>
@@ -1705,10 +1718,10 @@
           </div>
 
           <!-- MEDI Settings -->
-          <div id="medi_settings" class="method-settings" style="display: none;">
+          <div id="medi_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1002/mrm.22816" target="_blank" rel="noopener" title="DOI: 10.1002/mrm.22816"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener" title="Code: MEDI_toolbox"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/huawu02/MEDI_toolbox" target="_blank" rel="noopener" title="Code: MEDI_toolbox"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="mediLambda">Regularization strength</label>
@@ -1731,7 +1744,7 @@
                 <input type="checkbox" id="mediSmv"> Pre-filter with SMV (reduces streaking)
               </label>
             </div>
-            <div class="param-group" id="mediSmvRadiusGroup" style="display: none;">
+            <div class="param-group" id="mediSmvRadiusGroup" hidden>
               <label class="param-label" for="mediSmvRadius">SMV kernel radius (mm)</label>
               <input type="number" id="mediSmvRadius" value="5" min="1" max="20" step="1">
             </div>
@@ -1743,10 +1756,10 @@
           </div>
 
           <!-- iLSQR Settings -->
-          <div id="ilsqr_settings" class="method-settings" style="display: none;">
+          <div id="ilsqr_settings" class="method-settings" hidden>
             <div class="method-links">
               <a href="https://doi.org/10.1016/j.neuroimage.2014.12.043" target="_blank" rel="noopener" title="DOI: 10.1016/j.neuroimage.2014.12.043"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Paper</a>
-              <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener" title="Code: QSM.m"><svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>Code</a>
+              <a href="https://github.com/kamesy/QSM.m" target="_blank" rel="noopener" title="Code: QSM.m"><svg width="14" height="14" fill="currentColor"><use href="#icon-github"/></svg>Code</a>
             </div>
             <div class="param-group">
               <label class="param-label" for="ilsqrTol">Convergence tolerance</label>
@@ -1784,10 +1797,10 @@
 
   <!-- BET Settings Modal -->
   <div class="modal-overlay" id="betSettingsModal">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="betSettingsTitle">
       <div class="modal-header">
         <h3 id="betSettingsTitle">BET Settings</h3>
-        <button class="modal-close" id="closeBetSettings">&times;</button>
+        <button class="modal-close" id="closeBetSettings" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-section">
@@ -1869,13 +1882,13 @@
   <!-- About Modal -->
   <!-- Command Preview Modal -->
   <div class="modal-overlay" id="commandPreviewModal">
-    <div class="modal command-modal">
+    <div class="modal command-modal" role="dialog" aria-modal="true" aria-label="Export command and methods">
       <div class="modal-header">
         <div class="modal-tabs">
           <button class="modal-tab active" id="exportTabCommand">Command</button>
           <button class="modal-tab" id="exportTabMethods">Methods</button>
         </div>
-        <button class="modal-close" id="closeCommandPreview">&times;</button>
+        <button class="modal-close" id="closeCommandPreview" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body" style="min-height: 300px;">
         <div id="exportCommandPane">
@@ -1911,10 +1924,10 @@
 
   <!-- SWI Settings Modal -->
   <div class="modal-overlay" id="swiSettingsModal">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="swiSettingsTitle">
       <div class="modal-header">
-        <h3>SWI Settings</h3>
-        <button class="modal-close" id="closeSwiSettings">&times;</button>
+        <h3 id="swiSettingsTitle">SWI Settings</h3>
+        <button class="modal-close" id="closeSwiSettings" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="settings-section">
@@ -1933,11 +1946,11 @@
             <input type="number" id="sidebarSwiStrength" value="4" min="1" max="20" step="1" style="width: 100%;">
           </div>
           <div class="param-group">
-            <label class="param-label" for="sidebarSwiHpSigma">HP Filter Sigma <span class="info-icon">i<span class="info-tooltip">Gaussian high-pass filter sigma in voxels [X, Y, Z]. Separates local phase from background. Set Z=0 for thin axial slices.</span></span></label>
+            <label class="param-label" for="sidebarSwiHpSigmaX">HP Filter Sigma <span class="info-icon">i<span class="info-tooltip">Gaussian high-pass filter sigma in voxels [X, Y, Z]. Separates local phase from background. Set Z=0 for thin axial slices.</span></span></label>
             <div style="display: flex; gap: 4px;">
               <input type="number" id="sidebarSwiHpSigmaX" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="X">
-              <input type="number" id="sidebarSwiHpSigmaY" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="Y">
-              <input type="number" id="sidebarSwiHpSigmaZ" value="0" min="0" max="20" step="1" style="width: 33%;" placeholder="Z">
+              <input type="number" id="sidebarSwiHpSigmaY" aria-label="HP filter sigma Y" value="4" min="0" max="20" step="1" style="width: 33%;" placeholder="Y">
+              <input type="number" id="sidebarSwiHpSigmaZ" aria-label="HP filter sigma Z" value="0" min="0" max="20" step="1" style="width: 33%;" placeholder="Z">
             </div>
           </div>
           <div class="param-group">
@@ -1953,10 +1966,10 @@
   </div>
 
   <div class="modal-overlay" id="aboutModal">
-    <div class="modal about-modal">
+    <div class="modal about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
       <div class="modal-header">
-        <h3>About QSMbly</h3>
-        <button class="modal-close" id="closeAbout">&times;</button>
+        <h3 id="aboutTitle">About QSMbly</h3>
+        <button class="modal-close" id="closeAbout" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="about-highlight">
@@ -1986,10 +1999,10 @@
   </div>
 
   <div class="modal-overlay" id="privacyModal">
-    <div class="modal privacy-modal">
+    <div class="modal privacy-modal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
       <div class="modal-header">
-        <h3>Privacy</h3>
-        <button class="modal-close" id="closePrivacy">&times;</button>
+        <h3 id="privacyTitle">Privacy</h3>
+        <button class="modal-close" id="closePrivacy" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="privacy-highlight">
@@ -2005,7 +2018,7 @@
         <h4>What this means</h4>
         <ul class="privacy-list">
           <li>No data is uploaded to any server or cloud service</li>
-          <li>No internet connection is required after the page loads</li>
+          <li>After the page loads, an internet connection is needed only for the optional downloads listed below</li>
           <li>Sensitive patient data remains on your computer at all times</li>
           <li>There is no need to anonymise, deface, or otherwise de-identify your data before use</li>
         </ul>
@@ -2016,18 +2029,26 @@
         <h4>Analytics</h4>
         <p>QSMbly uses <a href="https://www.cloudflare.com/web-analytics/" target="_blank" rel="noopener">Cloudflare Web Analytics</a> to collect anonymous page-view statistics (e.g. number of visitors, country, referrer). This does not use cookies, does not track individual users, and does not have access to any of your data or processing results. It helps us understand how many people use QSMbly and where they come from.</p>
 
-        <h4>No other third-party services</h4>
-        <p>Beyond the lightweight analytics above, QSMbly does not use cookies, fingerprinting, or any other tracking. The only network requests are loading the application itself and the analytics beacon.</p>
+        <h4>Other network requests</h4>
+        <p>QSMbly does not use cookies, fingerprinting, or any other tracking. Besides the application itself and the analytics beacon, the page downloads code and data from these services; none of them receives your images:</p>
+        <ul class="privacy-list">
+          <li>The Inter font from Google Fonts, and the Tagify library from the unpkg CDN</li>
+          <li>The QSMxT project navigation bar from qsmxt.github.io</li>
+          <li>Deep-learning model weights from Hugging Face, the first time you use a deep-learning method (then cached in your browser)</li>
+          <li>Example data from Hugging Face, if you choose to load it</li>
+          <li>The dicompare protocol checker from dicompare.neurodesk.org, which in turn loads Python packages from jsDelivr and PyPI; it reads your DICOM headers locally</li>
+        </ul>
+        <p>Because of these downloads, deep-learning methods and dicompare need an internet connection the first time they are used.</p>
       </div>
     </div>
   </div>
 
   <!-- Citations Modal -->
   <div class="modal-overlay" id="citationsModal">
-    <div class="modal citations-modal">
+    <div class="modal citations-modal" role="dialog" aria-modal="true" aria-labelledby="citationsTitle">
       <div class="modal-header">
-        <h3>Citations</h3>
-        <button class="modal-close" id="closeCitations">&times;</button>
+        <h3 id="citationsTitle">Citations</h3>
+        <button class="modal-close" id="closeCitations" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body">
         <div class="citation-section citation-primary">
@@ -2277,10 +2298,10 @@
 
   <!-- dicompare Report Modal -->
   <div class="modal-overlay" id="dicompareModal">
-    <div class="modal dicompare-modal">
+    <div class="modal dicompare-modal" role="dialog" aria-modal="true" aria-labelledby="dicompareTitle">
       <div class="modal-header">
-        <h3>dicompare Report</h3>
-        <button class="modal-close" id="closeDicompare">&times;</button>
+        <h3 id="dicompareTitle">dicompare Report</h3>
+        <button class="modal-close" id="closeDicompare" aria-label="Close">&times;</button>
       </div>
       <div class="modal-body" id="dicompareModalBody">
         <!-- Content injected by DicompareReportRenderer -->
@@ -2541,15 +2562,15 @@
       const isMcpc3ds = method === 'mcpc3ds';
 
       // Show/hide MCPC-3D-S settings
-      mcpc3dsSettings.style.display = isMcpc3ds ? 'block' : 'none';
+      mcpc3dsSettings.hidden = !isMcpc3ds;
 
       updateUnwrapUI();
     }
 
     function updateUnwrapUI() {
       const method = unwrapMethod.value;
-      romeoSettings.style.display = method === 'romeo' ? 'block' : 'none';
-      laplacianSettings.style.display = method === 'laplacian' ? 'block' : 'none';
+      romeoSettings.hidden = method !== 'romeo';
+      laplacianSettings.hidden = method !== 'laplacian';
     }
 
     // ROMEO multi-echo mode controls
@@ -2559,8 +2580,8 @@
 
     function updateRomeoMultiEchoUI() {
       const isTemplate = romeoMultiEchoMode.value === 'template';
-      romeoTemplateSettings.style.display = isTemplate ? 'block' : 'none';
-      romeoCorrectGlobalSettings.style.display = isTemplate ? 'none' : 'block';
+      romeoTemplateSettings.hidden = !isTemplate;
+      romeoCorrectGlobalSettings.hidden = isTemplate;
     }
     romeoMultiEchoMode.addEventListener('change', updateRomeoMultiEchoUI);
     updateRomeoMultiEchoUI();
@@ -2575,8 +2596,8 @@
 
     function updateFieldCalculationUI() {
       const method = fieldCalculationMethod.value;
-      weightedAvgSettings.style.display = method === 'weighted_avg' ? 'block' : 'none';
-      linearFitSettings.style.display = method === 'linear_fit' ? 'block' : 'none';
+      weightedAvgSettings.hidden = method !== 'weighted_avg';
+      linearFitSettings.hidden = method !== 'linear_fit';
     }
 
     fieldCalculationMethod.addEventListener('change', updateFieldCalculationUI);

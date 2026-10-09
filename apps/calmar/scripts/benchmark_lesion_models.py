@@ -32,7 +32,7 @@ DEFAULT_OUT_DIR = ROOT / ".tmp_weights" / "lesion_model_benchmark"
 CURRENT_ONNX_CACHE = ROOT / "web/models/_dev_cache/lnm-stroke-lesion.onnx"
 CURRENT_ONNX_URL = (
     "https://huggingface.co/datasets/sbollmann/lnm-webapp-models"
-    "/resolve/main/models/lnm-stroke-lesion.onnx"
+    "/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx"
 )
 CURRENT_ONNX_MIN_BYTES = 10_000_000
 DS004884_T1 = ROOT / "tests/fixtures/ds004884-mini/T1.nii.gz"

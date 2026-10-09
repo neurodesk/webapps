@@ -244,7 +244,8 @@ const REAL_MODEL_MIN_DICE = { mindgrab: 0.96, synthstrip: 0.96 };
 
 // Holds each run on the real T1 example to validation/browser-reference.json and attaches its
 // measurements, which re-record the reference when the pipeline changes on purpose.
-for (const method of ['bet', 'synthstrip']) {
+// MindGrab runs on its CPU backend, the modules the command line runs.
+for (const method of ['bet', 'synthstrip', 'mindgrab']) {
   test(`${method} on the T1 example matches the recorded browser reference`, async ({ page }, testInfo) => {
     test.skip(!process.env.BRAIN_EXTRACTION_REAL_MODELS, 'Set BRAIN_EXTRACTION_REAL_MODELS=1 for the example download and inference.');
     test.setTimeout(1200000);
@@ -253,6 +254,10 @@ for (const method of ['bet', 'synthstrip']) {
     await page.getByLabel('Example', { exact: true }).selectOption(example.id);
     await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 600000 });
     await page.locator('#method').selectOption(method);
+    if (method === 'mindgrab') {
+      await page.locator('#advancedSettings summary').click();
+      await page.locator('#mindgrabBackend').selectOption('cpu');
+    }
     await page.locator('#runButton').click();
     await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', /succeeded|failed/, { timeout: 1100000 });
     await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready');
@@ -269,7 +274,13 @@ for (const method of ['bet', 'synthstrip']) {
     const measured = measure({ brain: brain.bytes, mask: mask.bytes });
     await testInfo.attach(`browser-reference-${method}`, { body: JSON.stringify(measured), contentType: 'application/json' });
     for (const [passed, line] of compareWithBrowser(measured, method)) expect(passed, line).toBe(true);
-    if (method === 'bet') expect(measured.maskSha256).toBe(browserReference.methods.bet.maskSha256);
+    if (browserReference.methods[method].tolerance.minimumDice === 1) expect(measured.maskSha256).toBe(browserReference.methods[method].maskSha256);
+    if (method === 'mindgrab') {
+      const reportDownload = page.waitForEvent('download');
+      await page.locator('#reportBtn').click();
+      const { provenance } = JSON.parse(await readFile(await (await reportDownload).path(), 'utf8'));
+      expect([provenance.version, provenance.model, provenance.backend]).toEqual([browserReference.methods.mindgrab.version, 'mindgrab', 'cpu']);
+    }
   });
 }
 

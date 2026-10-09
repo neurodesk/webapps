@@ -120,6 +120,20 @@ Cite the methods and software this app is built on:
 See also [NiiVue](https://github.com/niivue/niivue) (visualization) and
 [dcm2niix](https://github.com/rordenlab/dcm2niix) (DICOM conversion).
 
+## Command line
+
+`dwi2trx` from `packages/dwi2trx` runs the tensor fit with Node, on the same
+vendored niimath build, with MindGrab on the CPU:
+
+```bash
+dwi2trx dwi.nii.gz dwi.bval dwi.bvec results [--mask FILE | --no-mask]
+```
+
+It writes every dtifit map under the web app's download names. Tractography
+is not included: it needs WebGPU with subgroups. Portable archives for Linux
+x64, Windows x64 and macOS arm64 bundle their own Node runtime. See
+[packages/dwi2trx/README.md](../../packages/dwi2trx/README.md).
+
 ## Agent automation
 
-Automation offers `fit` and `tractography`; the latter fits first and then tracks. Supply explicit `image`, `bval` and `bvec` roles with optional `metadata`; gradient filenames need not match the image basename. DICOM conversion can supply its associated gradient sidecars instead. The existing input validator checks gradient and volume counts. Both operations return FA and V1, and tractography also returns TRX. The UI and agent share the same tensor and tracking handlers; the tensor computation runs in a cancellable worker using the existing dtifit and MindGrab implementations. Reports state whether masking succeeded, any fallback reason, tracking settings, seed cap and partial/truncated results. The viewer exposes the input, tensor and streamlines stages actually available. Streamline tracking requires hardware WebGPU with subgroups; CPU tensor checks do not establish GPU tracking parity.
+Automation offers `fit` and `tractography`; the latter fits first and then tracks. Supply explicit `image`, `bval` and `bvec` roles with optional `metadata`; gradient filenames need not match the image basename. DICOM conversion can supply its associated gradient sidecars instead. The existing input validator checks gradient and volume counts. An optional `mask` role supplies a brain mask on the diffusion grid and replaces the MindGrab mask. Both operations return all eleven dtifit maps (FA, MD, L1-L3, V1-V3, S0, MO and the tensor), named as the Save maps downloads, and tractography also returns TRX. The UI and agent share the same tensor and tracking handlers; the tensor computation runs in a cancellable worker using the existing dtifit and MindGrab implementations. Reports state whether masking succeeded, any fallback reason, tracking settings, seed cap and partial/truncated results. The viewer exposes the input, tensor and streamlines stages actually available. Streamline tracking requires hardware WebGPU with subgroups; CPU tensor checks do not establish GPU tracking parity.

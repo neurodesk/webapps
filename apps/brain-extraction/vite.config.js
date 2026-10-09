@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { neurodeskViteConfig } from '../../scripts/lib/vite-app-config.mjs';
 import { isolationFallback } from '../../scripts/lib/isolation-fallback-plugin.mjs';
+import { mindgrabFromAssetPath } from '../../scripts/lib/mindgrab-asset-path-plugin.mjs';
 
 const require = createRequire(new URL('../../packages/brain-extraction/package.json', import.meta.url));
 const mindgrabRoot = dirname(require.resolve('@brainchop/mindgrab/package.json'));
@@ -57,6 +58,8 @@ function extractionAssets() {
 export default neurodeskViteConfig({
   appId: 'brain-extraction',
   plugins: [extractionAssets(), isolationFallback()],
+  // The worker always passes assetPath, so MindGrab loads its modules from the mindgrab/ copies above.
+  worker: { plugins: () => [mindgrabFromAssetPath()] },
   build: { target: 'esnext', assetsInlineLimit: 0 },
   optimizeDeps: { exclude: ['onnxruntime-web', '@brainchop/mindgrab'] },
   server: { host: '127.0.0.1' },

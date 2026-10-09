@@ -21,7 +21,7 @@
  * jitter (e.g. 1000 vs 1004) reads as one shell, not many.
  */
 
-import { parseBvalBvec } from './validate.ts'
+import { parseBvalBvec } from '@neurodesk/dwi2trx/gradients'
 
 /** A raw diffusion sample: a direction (need not be unit) + its b-value. */
 export interface Sample {
