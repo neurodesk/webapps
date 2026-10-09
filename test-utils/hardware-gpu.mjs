@@ -7,7 +7,9 @@ import assert from 'node:assert/strict';
 // every suite keeps the SwiftShader adapter it has on Linux CI.
 export const hardwareGpu = process.env.NEURODESK_HARDWARE_GPU === '1';
 
-const SWIFTSHADER = ['--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'];
+// --use-webgpu-adapter keeps WebGPU on SwiftShader on a Mac too, where Chromium
+// would otherwise refuse the headless shell an adapter.
+const SWIFTSHADER = ['--use-webgpu-adapter=swiftshader', '--use-angle=swiftshader', '--use-vulkan=swiftshader', '--enable-features=Vulkan', '--disable-vulkan-surface'];
 
 // Spread into a config's `use` or pass to `test.use()`.
 export const gpuBrowser = hardwareGpu

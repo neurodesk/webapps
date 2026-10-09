@@ -1,0 +1,15 @@
+{
+  "description": "SynthSeg label maps against the FreeSurfer 8.1.0 goldens. exes/synthseg/tests/parity.rs, the package's pipeline test, the app's fixture e2e and validation/cli-check.mjs all read these gates. maxQuaternionError is exclusive; the other limits are inclusive.",
+  "maxAffineErrorMm": 0.0001,
+  "maxQuaternionError": 0.0001,
+  "maxMismatchFraction": {
+    "fixture": 5e-6,
+    "fullVolume": 2e-6
+  },
+  "fullVolumes": [
+    { "input": "T1_head", "mode": "fast" },
+    { "input": "T1_head", "mode": "default" },
+    { "input": "T1_head_2mm", "mode": "fast" },
+    { "input": "T1_head_2mm", "mode": "default" }
+  ]
+}

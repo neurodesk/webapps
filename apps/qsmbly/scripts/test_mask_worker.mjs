@@ -55,7 +55,7 @@ for (const operation of ['biasCorrection', 'voxelQuality']) {
           assert.equal(message.type, operation);
           queueMicrotask(() => this.onmessage({ data: {
             type: operation,
-            ...(fails ? { error: 'Scientific kernel failed' } : { result: new Float64Array([1, 2]).buffer }),
+            ...(fails ? { error: 'Scientific kernel failed' } : { result: new Float64Array([1, 2]) }),
           } }));
         },
       };
@@ -78,7 +78,8 @@ for (const operation of ['biasCorrection', 'voxelQuality']) {
       if (fails) await assert.rejects(promise, /Scientific kernel failed/);
       else assert.deepEqual(Array.from(await promise), [1, 2]);
       assert.equal(session.listeners.size, 0);
-      assert.deepEqual(Array.from(input), [1]);
+      // The input moves to the worker rather than being copied (astewartau/qsmbly#140).
+      assert.equal(input.byteLength, 0);
     });
   }
 }

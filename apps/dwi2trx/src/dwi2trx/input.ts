@@ -15,10 +15,10 @@ import {
 } from './input-limits.ts'
 import type { DwiInput } from './state.ts'
 import { isValidNifti1, parseNiftiHeader } from '@neurodesk/webapp-components/file-io'
+import { countDirections } from '@neurodesk/dwi2trx/gradients'
 import {
   baseName,
   chooseBestSeries,
-  countDirections,
   isBval,
   isBvec,
   isJson,

@@ -232,118 +232,6 @@
       "kind": "python-runtime",
       "dependencies": []
     },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4": {
-      "sha256": "26f6d74ccd6e7fa34526a4a9f17fbfcce305b7ccdbee6ce7f4ed74dda8622b86",
-      "bytes": 381,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315917bd2b1503380d7d1": {
-      "sha256": "260f4019476c9bad09f804c8004290549fc10f3d07da4e013773e1d18177486e",
-      "bytes": 377,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031591ca0aa1330880d636": {
-      "sha256": "5b4a4f0a86ab1594db58194577d45f9ca3085515a06627bdaa69cfe96df3d75c",
-      "bytes": 378,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031592f1ede34d5380d7bf": {
-      "sha256": "3dbe983e3eadb4dca595d045d33a235185f145eec51fb036e5cf41d4437f18b2",
-      "bytes": 382,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a1": {
-      "sha256": "070dcd8efe29b12bb9509ba35d202621846fc49c06923f0a04a99569c5498e04",
-      "bytes": 378,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a2": {
-      "sha256": "4a24501e299b9043dedac5564776be28b4e778dd2312298f9d40d1fbcf60f4cb",
-      "bytes": 382,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594d9869f43beec7017": {
-      "sha256": "160ec9ddf8f062c763a04b29d2031f25bb63a97d22aa2b2558d185f486530571",
-      "bytes": 378,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594f1ede34d5380d7c2": {
-      "sha256": "a812b389433bb137d45ae2df56e4ffadf761c84d7d82ba785fac09e6a469503f",
-      "bytes": 382,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c": {
-      "sha256": "62f817c1d5556f25485438bf6f1d3ff3156cfd11609304519c3e753305dec01f",
-      "bytes": 3510840,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf825": {
-      "sha256": "cca10c0802055165ed30a2292f0bd024668e93315fef8608701792596a5b1e15",
-      "bytes": 3666524,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf827": {
-      "sha256": "e5dbd8b9641eaa4fe12917feccdb49f350df3d04f54008631fcfcfda7a093969",
-      "bytes": 3668449,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d37bd2b1503380d819": {
-      "sha256": "3934f306e1475a31f74cbdbbe62fa5c36369617e256beb9c7cf8d5cf5e0d40ee",
-      "bytes": 3513321,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d469675bd488fdf828": {
-      "sha256": "aa2bb366ebf3dce34b355a62666e19e8e254f238569f89d4b59de0c5bb5a3b9e",
-      "bytes": 3505501,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522": {
-      "sha256": "cd9574df6ecca0e53500276eb40ab65574cc7686fe7a0f2b0e52bb4e7ada08ff",
-      "bytes": 3664119,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0": {
-      "sha256": "03f790fd832d0d1c6a9338493ecb6c0a8b8f31f51415787fcc6a2502283ca431",
-      "bytes": 3664573,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838": {
-      "sha256": "c61d0b10df4ccea650d27b97ed21260c8fb68460b7eac22ac94cf46562503752",
-      "bytes": 3508647,
-      "contentType": "application/octet-stream",
-      "kind": "example",
-      "dependencies": []
-    },
     "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl": {
       "sha256": "b1d9ff53eabba5791c7b9a3a3da16ed4ebcb0e0f435924687992db49b5ac76e8",
       "bytes": 396689,
@@ -380,38 +268,6 @@
       "contentType": "application/octet-stream",
       "kind": "python-wheel",
       "license": "MIT License",
-      "dependencies": []
-    },
-    "https://fonts.googleapis.com/css2?display=swap&family=Inter%3Awght%40400%3B500%3B600": {
-      "sha256": "140d59061134f391d0c81488d89b31027a15ec42b0a8a6d47df38f32bc92ccf6",
-      "bytes": 687,
-      "contentType": "text/css; charset=utf-8",
-      "kind": "font-css",
-      "dependencies": [
-        "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf",
-        "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf",
-        "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf"
-      ]
-    },
-    "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYMZg.ttf": {
-      "sha256": "e7a1aaf7eda9f2fad4131725fa556265ec75ca7b2d756260173a040363e8d4f7",
-      "bytes": 326048,
-      "contentType": "font/ttf",
-      "kind": "font",
-      "dependencies": []
-    },
-    "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuI6fMZg.ttf": {
-      "sha256": "8c883f63b2c4157d997319f2c8bc6995ed4357ef371940d31ca159004a4aae63",
-      "bytes": 325304,
-      "contentType": "font/ttf",
-      "kind": "font",
-      "dependencies": []
-    },
-    "https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfMZg.ttf": {
-      "sha256": "1b08e7fc267a5c7e1d614100f604b83e7e8a0be241f0f288faa2b3ac93a683ba",
-      "bytes": 324820,
-      "contentType": "font/ttf",
-      "kind": "font",
       "dependencies": []
     },
     "https://fonts.gstatic.com/s/pontanosans/v19/qFdD35GdgYR8EzR6oBLDHa3axT8N.woff2": {
@@ -877,143 +733,143 @@
       "license": "GPL-3.0-only",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz": {
       "sha256": "34a8cb7af015515005cc14a2f4675054f26486ffd089ced2a09ce884a78c5efb",
       "bytes": 23769,
       "contentType": "application/gzip",
       "kind": "atlas-template",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Yeo7_LiberalMask_2mm.nii.gz": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Yeo7_LiberalMask_2mm.nii.gz": {
       "sha256": "edfd11af848974b2d40936492d72995d41e1582eff114fbfdca07c4fa278e67d",
       "bytes": 73181,
       "contentType": "application/gzip",
       "kind": "atlas-template",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_000-039.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_000-039.bin": {
       "sha256": "f43456dac95c7da6d186bd9b573e7ccceda13c73c779a64fc3bac4bf8e96c372",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_040-079.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_040-079.bin": {
       "sha256": "26cfd86811eabfc58412e2f0b89d79231b117206884f040c6d15219386c3ad01",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_080-119.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_080-119.bin": {
       "sha256": "5e8fcf2244c7a0bb6d19dfdda6301bc76eb0e4f8771b5bd23f8f18dedaa67c00",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_120-159.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_120-159.bin": {
       "sha256": "deff7f611271e391c7efb4fba7a3e89d56aa958c35e4f776cdbd7bc5aff61401",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_160-199.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_160-199.bin": {
       "sha256": "b6f5dbbbe0ee81aa7d76bb5a035484589a5033308336093f4f89e5ca6f828541",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_200-239.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_200-239.bin": {
       "sha256": "b57e6c25548832cf35db61232f3c0f3870ff7108f9a301fb4e4fb928d868f4be",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_240-279.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_240-279.bin": {
       "sha256": "21dc89093c987acc3b174aea459994918f0c85d9391ff174bc67ad66f2a0bc3c",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_280-319.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_280-319.bin": {
       "sha256": "b0679e61c7a46e3dac2085b4cf8ec615d971d8d2f67bfa71383a1dbb013647ee",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_320-359.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_320-359.bin": {
       "sha256": "63bffd7497bb18438d58b3836fe83fa3821d071f1eaf6a2cdb8fb5f46abc7e26",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_360-399.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_360-399.bin": {
       "sha256": "3fc79b6afeb8b61bfedb508c52319a1ee05f3d48b920b10b36d736f3f310e27c",
       "bytes": 11800000,
       "contentType": "application/octet-stream",
       "kind": "connectome-shard",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json": {
-      "sha256": "2eaedaa3f766be6add0ef5115853e10b548642fea4fb61aa4c05a5c814e93d62",
-      "bytes": 53613,
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4cc5b1a5cde5fae1840c54ceddf54e16042adf5e/calmar/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json": {
+      "sha256": "0c1802ea2a3179220de79ce1b1a651080ed03492955fd770360156a6f9e91398",
+      "bytes": 53973,
       "contentType": "text/plain; charset=utf-8",
       "kind": "connectome-index",
       "dependencies": [
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_000-039.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_040-079.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_080-119.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_120-159.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_160-199.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_200-239.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_240-279.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_280-319.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_320-359.bin",
-        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_360-399.bin"
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_000-039.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_040-079.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_080-119.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_120-159.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_160-199.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_200-239.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_240-279.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_280-319.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_320-359.bin",
+        "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_360-399.bin"
       ]
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.bin": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.bin": {
       "sha256": "5db67b0d6ece1ec25f59134c067cac7c6cd0ffe4884685ed7fd7e9bc89e78493",
       "bytes": 30810780,
       "contentType": "application/octet-stream",
       "kind": "connectome",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.index.json": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.index.json": {
       "sha256": "2299aaa8a77b5b91ddc248db4597b822315ce1f62bf57f6158f097d3650376a2",
       "bytes": 581,
       "contentType": "text/plain; charset=utf-8",
       "kind": "connectome-index",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-stroke-lesion.onnx": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx": {
       "sha256": "49f3d047a2299501791c7176cfda770d45d2f411a18ef41dd1105be4d0582cb8",
       "bytes": 74518462,
       "contentType": "application/octet-stream",
       "kind": "model",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-synthmorph-mni-48x64x80.onnx": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-synthmorph-mni-48x64x80.onnx": {
       "sha256": "25ce269d060ee19228e78f9eaa0902e7094cdeab5fb20856ae771d9b6930652f",
       "bytes": 85119961,
       "contentType": "application/octet-stream",
       "kind": "model",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/synthstrip.onnx": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx": {
       "sha256": "7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074",
       "bytes": 10294211,
       "kind": "model",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/templates/lnm-mni160.nii.gz": {
+    "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz": {
       "sha256": "cb6119e9ef403301d4e687e3dcb8fad09ad27c3d6dd556a0c387d7ababb78ccd",
       "bytes": 8514318,
       "contentType": "application/gzip",
@@ -1247,97 +1103,6 @@
       "kind": "model",
       "dependencies": []
     },
-    "https://niivue.github.io/niivue-demo-images/chris_PD.nii.gz": {
-      "sha256": "d6d7fcbd5c2fee665ad5214a8a396c6ed10a366f663c05428f5437be7aa0c5fc",
-      "bytes": 1252056,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/chris_t1.nii.gz": {
-      "sha256": "534a240d1d41881bd33ae5b48ac22051836968775275f1261c4115dca0099649",
-      "bytes": 4183263,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/chris_t2.nii.gz": {
-      "sha256": "8b763fcadd7a9ae677d4c5cab86b32831c03cddf146504291e7a5082fd9feee1",
-      "bytes": 4294255,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz": {
-      "sha256": "cfa3081e28fdcd6392d9c63de44851769983df26c931434529ae735c36eab0b3",
-      "bytes": 7753434,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/CT_Electrodes.nii.gz": {
-      "sha256": "0566942708ff451458d0fdb1f61c4611187bb5cc0efa516c8500f1ff3c142e57",
-      "bytes": 5063223,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/CT_Philips.nii.gz": {
-      "sha256": "6b6ebf958bfe2972f27c3f8dc06bd3763eb7646186bd2e5251f37f9aa7a16971",
-      "bytes": 7816605,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/CT_pitch.nii.gz": {
-      "sha256": "c99658c4b878383f39920075db4350d65b46247b950d187678b3fd4bf7420025",
-      "bytes": 707836,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/fmri_pitch.nii.gz": {
-      "sha256": "a61c07bb95ca875317f43198d54afdb1f427173af65bc3c3b4e75f9231dd0cbb",
-      "bytes": 63466,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/Iguana.nii.gz": {
-      "sha256": "33f52cfdaf893c2c9e363dec4f59095f287f3e09d9c3cef0d6f2037e2e3dbcc6",
-      "bytes": 1589162,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/mni152.nii.gz": {
-      "sha256": "dbbd4542823c1e2b12265c9b7e3cf959ee02ff7829bbf05cdcfbecc0013a00fa",
-      "bytes": 4336029,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/MR_Gd.nii.gz": {
-      "sha256": "65cf8cff601a428be887483a06e422fa1d879246cc6fa50a04abd7d60b437b8c",
-      "bytes": 1225958,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/spm152.nii.gz": {
-      "sha256": "dd13949c1ef114114e47c9021ab01aeb5bbc19c1087d300ef2839c43581b998c",
-      "bytes": 4056970,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
-    "https://niivue.github.io/niivue-demo-images/spmMotor.nii.gz": {
-      "sha256": "844cb579905d324525079319c254da591c3a4b974d249609688a5a25b3f4a57e",
-      "bytes": 407394,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
     "https://raw.githubusercontent.com/neurolabusc/py_synthsr/04ab5548f4609c2b44ca51b3f4bc319b585dafa7/FLAIR.nii.gz": {
       "sha256": "87edd267540bcdb9734e4a42458c82c2aa8582c61ef6518a792bfdc1e89b5386",
       "bytes": 2547127,
@@ -1345,7 +1110,7 @@
       "kind": "example",
       "dependencies": []
     },
-    "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/v0.14.3-Update_Yeo2011_Schaefer2018_labelname/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz": {
+    "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz": {
       "sha256": "359da271b5d569ae76112693ef4f303cb744c5e060306ca45eca40bddacc85ac",
       "bytes": 69474,
       "contentType": "application/octet-stream",
@@ -1366,16 +1131,16 @@
       "kind": "runtime-cdn",
       "dependencies": []
     },
-    "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js": {
-      "sha256": "7aac84baaf804b20cd1522b79a2824b044c4b9a587f7323d7d82e38f9f655c39",
-      "bytes": 68827,
+    "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js": {
+      "sha256": "a4e16ccd7c4ec09c9fc37ca4b2d48fe4de4c60945b4ba019822560780916f0ec",
+      "bytes": 68826,
       "contentType": "text/javascript; charset=utf-8",
       "kind": "runtime-cdn",
       "dependencies": []
     },
-    "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css": {
-      "sha256": "7e3fd3a639d5fe4862ee0d1afb12cb0b4b8cfa5b6b21507b50b5dda702d89b4b",
-      "bytes": 12343,
+    "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css": {
+      "sha256": "f66cab4e02447d3a1e343c63adebe24a16f8f6186b1ca588c3db0c81693c2762",
+      "bytes": 12395,
       "contentType": "text/css; charset=utf-8",
       "kind": "runtime-cdn",
       "dependencies": []
@@ -2669,20 +2434,6 @@
       "license": "CC-BY-4.0",
       "dependencies": []
     },
-    "https://unpkg.com/@yaireo/tagify": {
-      "sha256": "7aac84baaf804b20cd1522b79a2824b044c4b9a587f7323d7d82e38f9f655c39",
-      "bytes": 68827,
-      "contentType": "text/javascript; charset=utf-8",
-      "kind": "runtime-cdn",
-      "dependencies": []
-    },
-    "https://unpkg.com/@yaireo/tagify/dist/tagify.css": {
-      "sha256": "7e3fd3a639d5fe4862ee0d1afb12cb0b4b8cfa5b6b21507b50b5dda702d89b4b",
-      "bytes": 12343,
-      "contentType": "text/css; charset=utf-8",
-      "kind": "runtime-cdn",
-      "dependencies": []
-    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/31d4c410405c48fe76c7b1bcc2de3fb0361f6f17/examples/nesvor/svrtk-simulated-fetal/stack-d0.nii.gz": {
       "sha256": "ca5ad2c6926d5fa7d4379be406ea7c59bf506c6276759e1bc81b0d2356f86255",
       "bytes": 1232590,
@@ -3418,6 +3169,62 @@
       "kind": "example",
       "license": "MIT",
       "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7W0Q5n-wU.woff2": {
+      "sha256": "fccca918fea40089dacadc7045861314d1a6bc91f1f323cc1eeb22ebcdb321b5",
+      "bytes": 25844,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7W0Q5n-wU.woff2": {
+      "sha256": "aebf2ab4a4ce6810d73c1ac7be7cafb4e5ec4cee2d6db5fb3e09691747ec4bd6",
+      "bytes": 18744,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7W0Q5n-wU.woff2": {
+      "sha256": "a2e2c783ca6f9c20486e81e72a279203e86730bbf8f01ff6a5ee9dbd09e1c271",
+      "bytes": 11272,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7W0Q5n-wU.woff2": {
+      "sha256": "46dd4cdca58c26ae87cc6927657bf83b2e8abfc39ffd0ab176e301a8d28d22bf",
+      "bytes": 19044,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7W0Q5n-wU.woff2": {
+      "sha256": "8db00ff46c67b22cda8bed865acf7077651cac8d2841d5b40980556b48961931",
+      "bytes": 10280,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7W0Q5n-wU.woff2": {
+      "sha256": "a28eb6d3ccb534ae0c94ca999371df024aab60b08c3c8a5720ee9e32fa0faaa2",
+      "bytes": 85272,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
+    },
+    "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2": {
+      "sha256": "c940764593d0fe5d596be327ca7558855e018039fb78509aa21921fd3644c3e4",
+      "bytes": 48432,
+      "contentType": "font/woff2",
+      "kind": "font",
+      "license": "OFL-1.1",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3484,16 +3291,16 @@
       "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/tqdm-4.66.2-py3-none-any.whl"
     ],
     "calmar": [
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Yeo7_LiberalMask_2mm.nii.gz",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.bin",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack_dev155.index.json",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-stroke-lesion.onnx",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/lnm-synthmorph-mni-48x64x80.onnx",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/models/synthstrip.onnx",
-      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/templates/lnm-mni160.nii.gz",
-      "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/v0.14.3-Update_Yeo2011_Schaefer2018_labelname/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Yeo7_LiberalMask_2mm.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4cc5b1a5cde5fae1840c54ceddf54e16042adf5e/calmar/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.bin",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.index.json",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-synthmorph-mni-48x64x80.onnx",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx",
+      "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz",
+      "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
       "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_lesion_mask.nii.gz"
@@ -3528,30 +3335,20 @@
       "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/typing_extensions-4.11.0-py3-none-any.whl",
       "https://dicompare.neurodesk.org/embed/DicompareController.js",
       "https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159071aec37958ec71a4",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315917bd2b1503380d7d1",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031591ca0aa1330880d636",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031592f1ede34d5380d7bf",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a1",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a03159442632a6310ec74a2",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594d9869f43beec7017",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a031594f1ede34d5380d7c2",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d064a982ca5fec727c",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf825",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d369675bd488fdf827",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d37bd2b1503380d819",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d469675bd488fdf828",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d542632a6310ec7522",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d571aec37958ec71c0",
-      "https://files.au-1.osf.io/v1/resources/z79k5/providers/osfstorage/6a0315d5a6ee1f1cc6fdf838",
       "https://files.pythonhosted.org/packages/64/52/fc88de4696f87c4b7316bb26082e7652961c59fb66de8da5c05667cdcdac/dicompare-0.11.1-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/db/5b/4e7d67d880b3344afff01708725a39717694a79391a32711fd40a8958bed/pydicom-2.4.5-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/40/44/4a5f08c96eb108af5cb50b41f76142f0afa346dfa99d5296fe7202a11854/tabulate-0.9.0-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/93/ab/9db91133fb05d5aa4be55d5068175bc878dc9dac6edd5525c8b89dc3641c/twixtools-0.24-py3-none-any.whl",
       "https://files.pythonhosted.org/packages/b8/f5/7f6aa3bbff013c0bf993129cbb2b1505790091f812accbe85cf001514737/nibabel-5.3.3-py3-none-any.whl",
-      "https://fonts.googleapis.com/css2?display=swap&family=Inter%3Awght%40400%3B500%3B600",
-      "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js",
-      "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2JL7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa0ZL7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2ZL7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1pL7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7W0Q5n-wU.woff2",
+      "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2",
+      "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js",
+      "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz",
@@ -3795,19 +3592,6 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/dwi16.nii.gz",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/fa8.nii.gz",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/fmri32.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Electrodes.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Philips.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_pitch.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/Iguana.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/MR_Gd.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_PD.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_t1.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_t2.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/fmri_pitch.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/mni152.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/spm152.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/spmMotor.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
     ],
@@ -3843,19 +3627,6 @@
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/dwi16.nii.gz",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/fa8.nii.gz",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/49b12b87f4e5def9672cf582b93ecd4a54273608/niimath/fmri32.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Abdo.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Electrodes.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_Philips.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/CT_pitch.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/Iguana.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/MR_Gd.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_PD.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_t1.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/chris_t2.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/fmri_pitch.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/mni152.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/spm152.nii.gz",
-      "https://niivue.github.io/niivue-demo-images/spmMotor.nii.gz",
       "https://raw.githubusercontent.com/neurolabusc/py_synthsr/04ab5548f4609c2b44ca51b3f4bc319b585dafa7/FLAIR.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",

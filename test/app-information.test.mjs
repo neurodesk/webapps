@@ -137,6 +137,19 @@ test('the shell About action appends the packages, builder and ecosystem block t
   assert.equal(overlay.querySelectorAll('[data-neurodesk-app-info="about"]').length, 1, 'block is not duplicated on reopen');
 });
 
+test('the shell Privacy dialog adds the app\'s own network statement from the registry', async () => {
+  const window = await mountShell('dicompare');
+  window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  const dialog = window.document.querySelector('.nd-app-dialog[data-dialog="privacy"]');
+  assert.ok(dialog?.hasAttribute('open'));
+  assert.match(dialog.textContent, /Google Analytics/);
+  assert.match(dialog.textContent, /Cloudflare Web Analytics, which sets no cookies/);
+  assert.match(dialog.textContent, /cdn\.jsdelivr\.net/);
+  const zarro = await mountShell('zarro');
+  zarro.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="privacy"]').click();
+  assert.doesNotMatch(zarro.document.querySelector('.nd-app-dialog[data-dialog="privacy"]').textContent, /Cloudflare/);
+});
+
 test('the shell About fallback uses registry paragraphs when the app has no About dialog', async () => {
   const window = await mountShell('zarro');
   window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="about"]').click();

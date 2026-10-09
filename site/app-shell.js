@@ -238,7 +238,8 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
       return citeInformationHtml()
         || `<p>Please cite the scientific software, methods, and models used in your analysis. App-specific citation details are available in the documentation and source repository.</p>`;
     }
-    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The Neurodesk hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>`;
+    const appPrivacy = information?.privacy ? `<p>${escapeHtml(information.privacy)}</p>` : '';
+    return `<p>Imaging files are processed in your browser unless the app clearly states otherwise. The Neurodesk hosting layer records page views only and sends no custom events. It makes no analytics request when Do Not Track or Global Privacy Control is enabled, and never sends your loaded imaging data to Google Analytics.</p>${appPrivacy}`;
   }
 
   function openFallbackDialog(kind) {

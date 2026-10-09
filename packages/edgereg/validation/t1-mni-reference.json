@@ -1,0 +1,63 @@
+{
+  "example": "t1-mni",
+  "inputs": {
+    "t1_crop.nii.gz": "534a240d1d41881bd33ae5b48ac22051836968775275f1261c4115dca0099649",
+    "MNI152_T1_1mm.nii.gz": "d1f03e160c2548592a01d98d44d7e0ffa8a8ef58bc9b07d26369e214ba170edb"
+  },
+  "robustFov": false,
+  "browser": {
+    "path": "apps/edgereg/e2e/reference.spec.js: the app's register automation, niimath worker, built assets",
+    "app": "edgereg 0.3.20261007",
+    "niimath": "@niivue/niimath 1.4.20260909",
+    "browser": "Chromium 153.0.8010.12",
+    "seconds": 10,
+    "artifact": {
+      "geometry": {
+        "dims": [
+          3,
+          182,
+          218,
+          182
+        ],
+        "pixdim": [
+          1,
+          1,
+          1
+        ],
+        "qformCode": 4,
+        "sformCode": 4,
+        "quatern": [
+          0,
+          1,
+          0,
+          90,
+          -126,
+          -72
+        ],
+        "srow": [
+          -1,
+          0,
+          0,
+          90,
+          0,
+          1,
+          0,
+          -126,
+          0,
+          0,
+          1,
+          -72
+        ]
+      },
+      "datatype": 2,
+      "headerSha256": "593fffd18d2923749d63efdc3e960beaed48fce59d905307e4b6a2176e6108d4",
+      "voxelSha256": "cfd6ad2e94f41bcbc80873971b9c5c6247e8b28deb110e8d609d3a85b91abad6",
+      "onFixedGrid": true,
+      "minimum": 0,
+      "maximum": 255,
+      "mean": 43.63271440979627,
+      "std": 50.50734445758476,
+      "fixedCorrelation": 0.8564610153617086
+    }
+  }
+}

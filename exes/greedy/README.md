@@ -97,7 +97,9 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 - `-rb VALUE` sets the value outside the moving image field of view. `-rb auto`
   uses the lower of zero and the moving image's finite minimum, which preserves
   the air background of CT images while retaining zero for magnitude images.
-- `-jitter 0` is accepted; any other `-jitter`, `-seed`, and `-double` are
+- `-jitter SIGMA` (default 0.5, as Greedy) offsets every affine sample by a
+  fixed Gaussian draw of that standard deviation in moving voxels; `-jitter 0`
+  samples exactly at the mapped voxel centres. `-seed` and `-double` are
   rejected. Images are always f32; geometry, histograms, and reductions are
   f64.
 - `--verify-aligned SRC` (reslice) requires the moving image grid to match
@@ -178,7 +180,11 @@ interpolation ~25%.
   derivative of p log p turns that into a ±3e-4 artefact that dominates the
   true 1e-5 gradient at iteration 0. greedy-rs starts from an exact zero
   field. The effect is inside the float/double spread above.
-- Greedy's `-jitter` and `-seed` randomness is not reproduced.
+- Greedy draws its affine jitter and its identity-start perturbation from a
+  clock-seeded generator; greedy-rs draws both from fixed seeds, so its runs
+  are reproducible but not bit-identical to a jittered Greedy run. Without
+  jitter, partial-volume NMI has a spurious maximum at the identity when the
+  fixed and moving grids coincide, and the affine stays there.
 - The NIfTI reader follows ITK 5.3+: the sform is used when it equals the
   qform, or when it is orthonormal and either the qform is absent, the sform
   is scanner-anatomical, or both agree within 1e-4; otherwise the qform.

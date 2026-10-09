@@ -1,6 +1,6 @@
 {
   "name": "ants",
-  "version": "0.3.20261007",
+  "version": "0.4.20261009",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260813",
+    "@neurodesk/ants": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

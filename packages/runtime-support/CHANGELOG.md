@@ -1,5 +1,17 @@
 # @neurodesk/runtime-support
 
+## 0.3.0
+
+### Minor Changes
+
+- 64ffefa: Add Node drivers for portable command lines. `@neurodesk/runtime-support/node/niimath` runs a niimath argv over in-memory files in a fresh WebAssembly instance. `@neurodesk/runtime-support/node/mindgrab` runs MindGrab, MindMap, MindSnap and the 18-class model on the CPU under Node, with the browser wrapper's options and result shape. Both reproduce the browser's outputs byte for byte; `validation/reference.json` pins them and `node-drivers.yml` checks them on Linux, Windows and macOS.
+
+### Patch Changes
+
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.2.1
 
 ### Patch Changes

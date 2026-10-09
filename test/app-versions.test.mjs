@@ -19,11 +19,23 @@ test('every app is versioned MAJOR.MINOR.YYYYMMDD with a valid past date', () =>
   for (const app of registry.apps) {
     const pkg = [...packages.values()].find((item) => item.group === 'apps' && item.id === app.id);
     assert.ok(pkg, `${app.id} has a package.json`);
-    assert.match(pkg.manifest.version, DATE_VERSION, `${app.id} version`);
+    // The scheme is written out here so that loosening DATE_VERSION cannot loosen this check.
+    assert.match(pkg.manifest.version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.20\d{6}$/, `${app.id} version`);
     const date = pkg.manifest.version.split('.')[2];
     validateReleaseDate(date);
     assert.ok(date <= releaseDate(), `${app.id} release date ${date} must not be in the future`);
   }
+});
+
+test('the version scheme accepts date releases and nothing else', () => {
+  for (const version of ['0.1.20260808', '2.10.20261231']) assert.match(version, DATE_VERSION);
+  for (const version of ['0.1.0', '1.2.3', '0.1.2026088', '0.1.202608080', 'v0.1.20260808', '0.1.20260808-rc.1', '0.1']) {
+    assert.doesNotMatch(version, DATE_VERSION, version);
+  }
+  for (const date of ['20260230', '20261301', '20260000', '2026-08-08']) {
+    assert.throws(() => validateReleaseDate(date), undefined, date);
+  }
+  validateReleaseDate('20240229');
 });
 
 test('embedded version strings and linked packages match their app', async () => {

@@ -1,0 +1,20 @@
+LCModel 6.3-1N
+Provencher SW. Estimation of metabolite concentrations from localized in vivo
+proton NMR spectra. Magn Reson Med 1993;30:672-679.
+https://doi.org/10.1002/mrm.1910300604
+Source: https://github.com/schorschinho/LCModel (BSD-3-Clause), ported to Rust
+in exes/lcmodel; its .TABLE and .COORD numbers match the Fortran on LCModel's
+test case.
+
+FID-A
+Simpson R, Devenyi GA, Jezzard P, Hennessy TJ, Near J. Advanced processing and
+simulation of MRS data using the FID appliance (FID-A). Magn Reson Med
+2017;77:23-33. https://doi.org/10.1002/mrm.26091
+Source: https://github.com/CIC-methods/FID-A (BSD-3-Clause), ported to Rust in
+exes/fida.
+
+Basis sets: simulated with FID-A (exes/lcmodel/basis), published on Hugging Face
+(neurodeskorg/webapps) and pinned by size and SHA-256 in model.manifest.json.
+
+Tissue correction: Gasparovic C et al., Magn Reson Med 2006;55:1219-1226, with
+the constants of Osprey (MIT, https://github.com/schorschinho/osprey).

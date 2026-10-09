@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { extname, join, relative } from 'node:path';
 import test from 'node:test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
@@ -10,7 +10,9 @@ const MONOREPO = 'https://github.com/neurodesk/webapps';
 // are provenance, not the current home of the app source. User-facing source,
 // issue, and release links must point at this monorepo instead. The registry's
 // `source` field is the canonical record; only repositories that were renamed
-// before the registry pinned them need listing here by hand.
+// before the registry pinned them need listing here by hand. Apps synced from an
+// upstream that stays their source (apps/<id>/upstream.json) are the exception:
+// their registry source is the live upstream, which they credit and link.
 const RENAMED_LEGACY_REPOSITORIES = {
   'neurodesk/lesion-network-mapping-webapp': 'calmar',
   'astewartau/seedseg': 'seedseg',
@@ -22,10 +24,28 @@ async function legacyAppRepositories() {
   for (const app of registry.apps) {
     const repository = app.source.split('@')[0].toLowerCase();
     if (repository === 'neurodesk/webapps') continue;
+    if (await syncedFromUpstream(app.id)) continue;
     repositories.set(repository, app.id);
   }
   return repositories;
 }
+
+async function syncedFromUpstream(appId) {
+  try {
+    await access(join(repoRoot, 'apps', appId, 'upstream.json'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+test('live upstreams are not legacy repositories; imported and renamed ones are', async () => {
+  const repositories = await legacyAppRepositories();
+  assert.equal(repositories.has('astewartau/qsmbly'), false);
+  assert.equal(repositories.has('astewartau/dicompare-web'), false);
+  assert.equal(repositories.get('astewartau/seedseg'), 'seedseg');
+  assert.equal(repositories.get('neurodesk/calmar-webapp'), 'calmar');
+});
 
 const SOURCE_EXTENSIONS = new Set(['.cff', '.css', '.html', '.js', '.md', '.toml', '.ts', '.tsx']);
 const SKIP_DIRECTORIES = new Set([
@@ -53,6 +73,10 @@ test('app-facing GitHub links use the monorepo as the current source home', asyn
   ];
 
   for (const path of await browserSourceFiles(join(repoRoot, 'apps'))) {
+    // Upstream-synced apps (apps/<id>/upstream.json) keep their upstream repository as the
+    // source (AGENTS.md); their README credits it, which is provenance, not a stale home.
+    const [, appId, file] = relative(join(repoRoot, 'apps'), path).match(/^([^/]+)\/(.+)$/) ?? [];
+    if (file === 'README.md' && await readFile(join(repoRoot, 'apps', appId, 'upstream.json')).then(() => true, () => false)) continue;
     const source = await readFile(path, 'utf8');
     for (const repositoryUrl of repositoryUrls) {
       for (const match of source.matchAll(repositoryUrl)) {

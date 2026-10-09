@@ -1,0 +1,72 @@
+# @neurodesk/brain-extraction
+
+Brain extraction shared by the brain extraction web app, SYNcro and the
+`brain-extraction` command line. It holds the BET and MindGrab adapters, the
+output names and NIfTI writer of the web app's downloads, and the command line.
+SynthStrip itself is `@neurodesk/synthstrip`.
+
+## Command line
+
+`brain-extraction` runs SynthStrip, BET or MindGrab on the CPU and writes the two files
+the web app downloads, `INPUT_METHOD_brain.nii` and `INPUT_METHOD_mask.nii`, on
+the input grid:
+
+```sh
+brain-extraction head.nii.gz results                  # SynthStrip
+brain-extraction head.nii.gz results --method bet --fractional-intensity 0.4
+brain-extraction head.nii.gz results --method mindgrab
+brain-extraction download-models                      # SynthStrip model, once
+brain-extraction self-check
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--method synthstrip\|bet\|mindgrab` | SynthStrip (default), BET or MindGrab. |
+| `--fractional-intensity F` | BET threshold from 0 to 1, default 0.5 as in the web app. Lower values give larger masks. |
+| `--threads N` | SynthStrip ONNX Runtime threads, default `SLURM_CPUS_PER_TASK` or all cores. |
+| `--cache-dir DIR`, `--offline` | Model directory and no-download mode. |
+
+The output directory must be new or empty. A lock file keeps two runs from
+writing into the same directory, and the brain and mask are staged before
+either is moved into place. The command prints a JSON report
+with the mask voxel count and the provenance, including the method, its
+settings and the model's SHA-256.
+
+SynthStrip loads the browser graph the web app loads (`@neurodesk/synthstrip/model`)
+on ONNX Runtime Node, with the CPU memory arena off: the T1 example then peaks
+at 2.6 GB instead of 4.4 GB. BET runs `wasm/bet.wasm`, qsm-core's BET compiled
+for WebAssembly without threads or generated glue. The web app runs the same
+qsm-core BET from QSMbly's threaded bundle; BET has no parallel code paths, so
+both compute the same mask. MindGrab runs `@brainchop/mindgrab`'s threaded CPU
+module, the one the web app runs on its CPU backend, through
+`@neurodesk/runtime-support/node/mindgrab`, with the app's options. Its weights
+are compiled into the module, so it downloads nothing. It uses every logical
+core, takes about 45 s and peaks at 2.6 GB on the 1 mm T1 example with eight
+cores. The web app's GPU backends run other modules and are not part of this
+comparison.
+
+The portable archives are built by `exes/node-cli` and
+`.github/workflows/brain-extraction-native.yml`. Each must pass
+`validation/cli-check.mjs`, which runs all three methods on the app's pinned T1
+example and holds the files to the browser run recorded in
+`apps/brain-extraction/validation/browser-reference.json`: NIfTI headers, mask
+voxels, mask Dice and brain intensities. BET and MindGrab must match the
+browser's mask and brain voxels bit for bit; the MindGrab reference ran the
+app's CPU backend.
+SynthStrip must reach Dice 0.99995; when its mask is not the browser's
+exactly, the Dice is taken against `validation/web-reference.mjs`, the app's
+ONNX Runtime Web path, after that reference reproduces the browser's mask.
+
+## BET WebAssembly
+
+`wasm/bet.wasm` is committed. `bet-wasm/` pins the qsm-core revision that
+`apps/qsmbly/rust-wasm/Cargo.lock` locks, and `test/bet-wasm.test.js` fails
+when they differ. After a qsm-core update, rebuild with Rust 1.98.0 and commit
+the result:
+
+```sh
+pnpm --filter @neurodesk/brain-extraction build:wasm
+```
+
+The `wasm-source` job rebuilds it with `scripts/build-bet-wasm.sh --check` and
+fails when the committed bytes differ.

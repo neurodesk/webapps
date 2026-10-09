@@ -1,0 +1,12 @@
+EdgeReg command line
+Copyright (c) 2026 Neurodesk
+BSD-2-Clause
+
+Registration runs niimath (Chris Rorden, BSD-2-Clause) compiled to
+WebAssembly by @niivue/niimath 1.4.20260909, the build the EdgeReg web app
+pins. Its -allineate is a port of AFNI's 3dAllineate (Robert W. Cox); see
+app/node_modules/@niivue/niimath/LICENSE in a portable archive.
+https://github.com/rordenlab/niimath
+
+Please cite: Cox RW. AFNI 3dAllineate: affine image registration [Computer
+software]. https://afni.nimh.nih.gov/pub/dist/doc/program_help/3dAllineate.html

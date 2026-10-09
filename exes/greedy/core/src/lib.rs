@@ -11,9 +11,10 @@ mod reslice;
 mod svf;
 
 pub use affine::{
-    AffineMetric, AffineOptions, image_centers, matrix as affine_matrix, nmi_score_gradient_affine,
-    optimize as optimize_affine, optimize_rigid, parameters as affine_parameters,
-    register as register_affine, register_rigid, score as score_affine, ssd_score_gradient,
+    AffineMetric, AffineOptions, DEFAULT_JITTER as DEFAULT_AFFINE_JITTER, image_centers,
+    matrix as affine_matrix, nmi_score_gradient_affine, optimize as optimize_affine,
+    optimize_rigid, parameters as affine_parameters, register as register_affine, register_rigid,
+    score as score_affine, ssd_score_gradient,
 };
 pub use gaussian::smooth as gaussian_smooth;
 pub use grid::{Grid, Mat4};

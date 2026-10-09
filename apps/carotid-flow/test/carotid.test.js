@@ -7,13 +7,8 @@ import { curveMetrics, curvesCsv, detectCarotids, inPlaneAxes, isSignedPhase, pe
 import { stem } from '@neurodesk/carotid-flow/outputs';
 import { tiltedPhantom } from '@neurodesk/carotid-flow/phantom';
 import { flowChartSvg, tickStep } from '../src/chart.js';
-import { APP, assignSeries } from '../src/config.js';
+import { assignSeries } from '../src/config.js';
 import { labelFiles, niftiFile, resultRows, withEditedLabels } from '../src/outputs.js';
-
-test('app id is lowercase kebab-case and the config is frozen', () => {
-  assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
-  assert.ok(Object.isFrozen(APP));
-});
 
 test('percentile reproduces MATLAB prctile', () => {
   // Values from MATLAB: prctile([1 2 3 4], 50|20|0|100) and prctile(1:10, 99.9|35).

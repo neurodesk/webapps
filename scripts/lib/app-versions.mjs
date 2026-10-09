@@ -10,11 +10,18 @@ import { repoRoot } from './apps-registry.mjs';
 
 export const DATE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(\d{8})$/;
 export const LINKED_PACKAGES = Object.freeze({
+  '@neurodesk/ants': 'ants',
+  '@neurodesk/brain-extraction': 'brain-extraction',
+  '@neurodesk/brain2print': 'brain2print',
+  '@neurodesk/browserqc': 'browserqc',
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/nii2tvx': 'disconnectome',
+  '@neurodesk/dwi2trx': 'dwi2trx',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',
+  '@neurodesk/edgereg': 'edgereg',
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
+  '@neurodesk/lcmodel': 'lcmodel',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',

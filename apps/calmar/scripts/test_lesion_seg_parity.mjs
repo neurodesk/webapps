@@ -34,7 +34,7 @@ const MODEL_CACHE_DIR = path.join(ROOT, 'web/models/_dev_cache');
 const MODEL_CACHE = path.join(MODEL_CACHE_DIR, 'lnm-stroke-lesion.onnx');
 const MODEL_URL =
   'https://huggingface.co/datasets/sbollmann/lnm-webapp-models' +
-  '/resolve/main/models/lnm-stroke-lesion.onnx';
+  '/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx';
 
 async function ensureModel() {
   try {

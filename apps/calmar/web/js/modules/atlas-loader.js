@@ -3,7 +3,7 @@ const ATLAS_CACHE = 'lnm-assets-v1';
 async function getNifti() {
   if (globalThis.nifti) return globalThis.nifti;
   // The bundled nifti-reader-js file is UMD; loading it installs globalThis.nifti.
-  await import('../nifti-js/index.js');
+  await import('../../nifti-js/index.js');
   if (!globalThis.nifti) {
     throw new Error('NIfTI parser is not available');
   }

@@ -28,6 +28,19 @@ hf upload neurodeskorg/webapps ./reg reg --repo-type dataset
 
 The app pins dataset revision `67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9` so releases remain reproducible.
 
+## Command line
+
+`edgereg` from `packages/edgereg` runs the same registration with Node, on the
+same niimath WebAssembly build:
+
+```bash
+edgereg moving.nii.gz fixed.nii.gz results [--robust-fov]
+```
+
+It writes the download under the web app's name. It has no DICOM import.
+Portable archives for Linux x64, Windows x64 and macOS arm64 bundle their own
+Node runtime. See [packages/edgereg/README.md](../../packages/edgereg/README.md).
+
 ## Agent automation
 
 The published `automation.json` describes the typed browser operation. Desktop

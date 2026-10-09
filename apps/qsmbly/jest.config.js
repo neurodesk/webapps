@@ -7,7 +7,6 @@ export default {
   testMatch: ['**/*.test.js'],
   moduleFileExtensions: ['js'],
   transform: {},
-  setupFilesAfterEnv: ['<rootDir>/js/test/setup.js'],
   collectCoverageFrom: [
     'js/**/*.js',
     '!js/test/**',

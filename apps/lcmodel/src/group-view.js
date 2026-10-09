@@ -1,7 +1,7 @@
 // The group table in the viewer: datasets down, quality and metabolites
 // across. Selecting a dataset's name shows its fit.
-import { QC_COLUMNS, STATUS, metaboliteNames } from "./group.js";
-import { formatConc, SD_LIMIT } from "./report.js";
+import { QC_COLUMNS, STATUS, metaboliteNames } from "@neurodesk/lcmodel/group";
+import { formatConc, SD_LIMIT } from "@neurodesk/lcmodel/report";
 
 const QC_DIGITS = { fidaSnr: 0, fidaLinewidthHz: 1, driftHz: 2, averagesRemoved: 0, averages: 0 };
 

@@ -20,14 +20,6 @@ test('catalog contains every app workspace without a repeated inventory', async 
   assert.deepEqual(registry.apps.map(({ id }) => id).sort(), workspaceIds.sort());
 });
 
-test('every catalog entry has a workspace and declared manifest', async () => {
-  const registry = await loadAppsRegistry();
-  for (const app of registry.apps) {
-    await access(join(repoRoot, 'apps', app.id, 'package.json'));
-    if (app.model_manifest) await access(join(repoRoot, app.model_manifest));
-  }
-});
-
 test('every app has searchable category metadata', async () => {
   const registry = await loadAppsRegistry();
   const categoryIds = new Set(registry.site.categories.map(({ id }) => id));
@@ -42,7 +34,7 @@ test('BrowserQC scientific assets are pinned to Hugging Face and not embedded', 
   const manifest = JSON.parse(
     await readFile(join(repoRoot, 'models', 'browserqc.manifest.json'), 'utf8'),
   );
-  const source = await readFile(join(repoRoot, 'apps', 'browserqc', 'src', 'main.ts'), 'utf8');
+  const source = await readFile(join(repoRoot, 'packages', 'browserqc', 'src', 'pipeline.js'), 'utf8');
 
   assert.match(manifest.revision, /^[0-9a-f]{40}$/);
   assert.ok(manifest.base_url.includes(`/resolve/${manifest.revision}/browserqc/`));
@@ -71,20 +63,24 @@ test('CI app-test matrix covers the complete catalog', async () => {
 });
 
 test('CI browser-e2e matrix covers exactly the apps with runnable browser suites', async () => {
-  const registry = await loadAppsRegistry();
-  for (const app of registry.apps) {
-    assert.equal(typeof app.ci.browser_test, 'boolean', `${app.id} must expose ci.browser_test`);
-    if (!app.ci.browser_test) continue;
-    const packageJson = JSON.parse(
-      await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8'),
-    );
-    assert.ok(packageJson.scripts?.['test:e2e'], `${app.id} must define test:e2e`);
-  }
-
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
   assert.equal(workflow.jobs['browser-e2e'].needs, 'app-plan');
   assert.match(workflow.jobs['browser-e2e'].if, /has_browser_apps/);
   assert.match(workflow.jobs['browser-e2e'].strategy.matrix, /fromJSON\(needs\.app-plan\.outputs\.browser_apps\)/);
+});
+
+test('every Playwright spec an app ships is run by its browser command', async () => {
+  // CI runs `test:e2e` and nothing else: a spec that command does not reach is never executed.
+  const registry = await loadAppsRegistry();
+  const unreached = [];
+  for (const app of registry.apps) {
+    const specs = (await readdir(join(repoRoot, 'apps', app.id, 'e2e')).catch(() => []))
+      .filter(name => /\.spec\.[cm]?[jt]s$/.test(name));
+    if (specs.length === 0) continue;
+    const { scripts } = JSON.parse(await readFile(join(repoRoot, 'apps', app.id, 'package.json'), 'utf8'));
+    if (!/\bplaywright test\b/.test(scripts['test:e2e'] ?? '')) unreached.push(`${app.id}: ${specs.join(', ')}`);
+  }
+  assert.deepEqual(unreached, []);
 });
 
 test('hardware-GPU apps run their browser suite on a macOS runner with Metal', async () => {

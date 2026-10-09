@@ -1,0 +1,14 @@
+Brain2Print
+Copyright (c) 2026 Neurodesk
+MIT
+
+Third-party components
+
+@brainchop/mindgrab, MIT, https://github.com/neuroneural/brainchopC
+  MindGrab, MindMap, MindSnap and the 18-class model, weights compiled into its WebAssembly.
+@niivue/niimath, BSD-2-Clause, https://github.com/rordenlab/niimath
+
+The pipeline follows the Brain2Print web tool:
+Rorden C, McCormick M, Hanayik T, Masoud M, Plis SM. brain2print AI powered web tool
+for creating 3D printable brain models. Scientific Reports. 2025;15:15664.
+https://doi.org/10.1038/s41598-025-00014-5

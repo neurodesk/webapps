@@ -1,412 +1,297 @@
 #!/usr/bin/env node --no-warnings
-// Contract test for web/js/lnm-app.js: the orchestrator class structure and
-// import surface. Written before lnm-app.js is created per the project's TDD
-// policy.
+// Executed checks for LesionNetworkMappingApp behaviour that the larger
+// stubbed suite (scripts/test_lnm_app_behavior.mjs) does not reach: stage
+// dispatch, the CSV export, "Start over", perf formatting and the pipeline
+// log. The app runs against a jsdom copy of the real web/index.html, so
+// every DOM id it reads or writes is the page's own.
 //
-// We inspect the source rather than executing it because the module pulls in
-// browser-only globals (fetch, document, NiiVue) that aren't trivial to stub
-// in Node. Acorn parses the file to confirm it's syntactically valid; the
-// regex checks pin the shape we rely on at runtime.
+// This file used to regex the app source for method names and call
+// expressions. Importing the module already proves the import surface
+// resolves; everything else is asserted by running it.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'acorn';
+import { JSDOM } from 'jsdom';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const APP_PATH = path.join(ROOT, 'web/js/lnm-app.js');
-const ATLAS_OPTIONS_PATH = path.join(ROOT, 'web/js/app/atlas-options.js');
+const dom = new JSDOM(fs.readFileSync(path.join(ROOT, 'web/index.html'), 'utf8'), { url: 'http://localhost:8080/' });
+for (const name of ['window', 'document', 'HTMLElement', 'customElements', 'Event', 'Node', 'MutationObserver']) {
+  globalThis[name] = dom.window[name];
+}
+const { document } = dom.window;
+globalThis.niivue = {
+  SHOW_RENDER: { NEVER: 0, AUTO: 2 },
+  Niivue: class {}
+};
+globalThis.Worker = class {
+  postMessage() {}
+  terminate() {}
+};
 
-assert.ok(fs.existsSync(APP_PATH), 'web/js/lnm-app.js must exist');
-assert.ok(
-  !fs.existsSync(path.join(ROOT, 'web/js/spinalcordtoolbox-app.js')),
-  'web/js/spinalcordtoolbox-app.js must be deleted (renamed)'
-);
+const { LesionNetworkMappingApp } = await import(path.join(ROOT, 'web/js/lnm-app.js'));
+const { ATLAS_OPTIONS, getAtlasOptionById } = await import(path.join(ROOT, 'web/js/app/atlas-options.js'));
 
-const src = fs.readFileSync(APP_PATH, 'utf8');
-const atlasOptionsSrc = fs.readFileSync(ATLAS_OPTIONS_PATH, 'utf8');
-
-// Acorn parse — catches stray syntax errors before they ship.
-parse(src, { ecmaVersion: 'latest', sourceType: 'module' });
-
-// Class + key methods must exist. Phase 1 stubs runYeoOverlap and exportCsv;
-// later phases extend them with chart rendering and full CSV serialization.
-assert.match(src, /export\s+class\s+LesionNetworkMappingApp\b/,
-  'must export class LesionNetworkMappingApp');
-for (const method of [
-  'init', 'setStructural', 'setLesion', 'runYeoOverlap', 'exportCsv',
-  // Phase 2a.1.4b additions:
-  'runBrainExtraction', 'downloadBrainMask',
-  // Phase 2a.2.3 additions:
-  'runLesionSegmentation', 'downloadLesionMask',
-  // Phase 3.4 additions:
-  'runRegistration',
-  // Phase 4.4 additions:
-  'runFcNetworkMap', 'downloadNetworkMap',
-  // Phase 5 additions:
-  'applyNetworkThreshold', 'scheduleThresholdPreviewOverlay',
-  'renderThresholdPreviewOverlay', 'downloadThresholdedNetworkMap',
-  // Phase 6 additions: warp+resample bridge + one-click full chain.
-  'applyRegistrationToLesion', 'runFullPipeline',
-  // Phase 13 additions: about-modal version wiring.
-  'populateVersionLabel',
-  // Phase 15 additions: stage dispatch + threshold-default helper.
-  '_runStage', '_applyThresholdDefaults',
-  // Phase 19 additions: per-stage perf instrumentation helpers.
-  '_now', '_formatMs',
-  // Phase 16 additions: in-browser affine pre-registration to MNI160 1mm.
-  'prealignToMni160',
-  // Phase 21 additions: clear-results control.
-  'clearResults',
-  // Phase 31: auto-promote the pipeline selection on file drop.
-  '_autoPromotePipeline',
-  // Phase 40 additions: exploratory functional profile result panels.
-  'ensureFunctionProfiles', 'updateDirectFunctionProfile', 'updateAffectedFunctionProfile'
-]) {
-  const re = new RegExp(`\\b${method}\\s*\\(`);
-  assert.match(src, re, `LesionNetworkMappingApp must define method ${method}`);
+function makeApp() {
+  const app = new LesionNetworkMappingApp();
+  app.messages = [];
+  app.updateOutput = message => app.messages.push(message);
+  return app;
 }
 
-// Imports: must pull in the pieces we expect, and must NOT pull in any of the
-// SCT modules we deleted in Phase 0.
-const requiredImports = [
-  /import\s*\{[^}]*SimpleFileIOController[^}]*\}\s*from\s+['"]@neurodesk\/webapp-components\/file-io['"]/s,
-  /import\s*\{[^}]*ViewerController[^}]*\}\s*from\s+['"]@neurodesk\/webapp-components['"]/s,
-  /from\s+['"]\.\/app\/lnm-tasks\.js['"]/,
-  /from\s+['"]\.\/app\/lnm-labels\.js['"]/,
-  /from\s+['"]\.\/modules\/parcel-overlap\.js['"]/,
-  /from\s+['"]\.\/modules\/atlas-loader\.js['"]/,
-  /from\s+['"]\.\/modules\/spatial-file\.js['"]/
+// Replace methods with recorders that resolve immediately.
+function record(app, methods) {
+  const calls = [];
+  for (const method of methods) {
+    assert.equal(typeof app[method], 'function', `app.${method} exists`);
+    app[method] = async (...args) => {
+      calls.push(args.length ? [method, ...args] : [method]);
+    };
+  }
+  return calls;
+}
+
+const STAGE_METHODS = [
+  'runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'startLesionMaskReview',
+  'runRegistration', 'applyRegistrationToLesion', 'runAtlasOverlap', 'runFcNetworkMap'
 ];
-for (const re of requiredImports) {
-  assert.match(src, re, `lnm-app.js must import ${re}`);
+
+// ---- _runStage: each pipeline module runs the right stage ----
+{
+  const app = makeApp();
+  const calls = record(app, STAGE_METHODS);
+  const run = async stage => {
+    calls.length = 0;
+    const result = await app._runStage(stage);
+    return { result, calls: [...calls] };
+  };
+
+  assert.deepEqual((await run({ module: 'brain-extraction' })).calls, [['runBrainExtraction']]);
+  assert.deepEqual((await run({ module: 'prealign' })).calls, [['prealignToMni160', { skipIfAligned: true }]]);
+
+  // Auto segmentation always hands over to mask review and pauses there.
+  const segmentation = await run({ module: 'inference-pipeline' });
+  assert.deepEqual(segmentation.calls, [['runLesionSegmentation'], ['startLesionMaskReview', { seedFile: null }]]);
+  assert.deepEqual(segmentation.result, { pausedForMaskReview: true });
+
+  // Registration is followed by the warp + atlas-grid bridge.
+  assert.deepEqual((await run({ module: 'registration' })).calls, [['runRegistration'], ['applyRegistrationToLesion']]);
+  assert.deepEqual((await run({ module: 'parcel-overlap' })).calls, [['runAtlasOverlap']]);
+  assert.deepEqual((await run({ module: 'fc-weighted-sum' })).calls, [['runFcNetworkMap']]);
+
+  // Threshold stage: pipeline defaults are written into the controls, then
+  // the threshold is applied from those controls.
+  let thresholdApplied = 0;
+  app.applyNetworkThreshold = () => {
+    thresholdApplied++;
+  };
+  await app._runStage({ module: 'threshold', defaults: { value: 2.5, symmetric: false, minClusterVoxels: 12 } });
+  assert.equal(thresholdApplied, 1);
+  assert.equal(document.getElementById('networkThresholdValue').value, '2.5');
+  assert.equal(document.getElementById('networkThresholdSymmetric').checked, false);
+  assert.equal(document.getElementById('networkThresholdMinCluster').value, '12');
+  assert.equal(document.getElementById('networkThresholdValueLabel').textContent, '2.5%');
+
+  // Work that already exists is not redone.
+  app.brainmaskFile = { name: 'mask.nii' };
+  assert.deepEqual((await run({ module: 'brain-extraction' })).calls, [], 'an existing brain mask is reused');
+  app.lesionMaskFile = { name: 'lesion.nii' };
+  app.lesionMaskConfirmed = true;
+  const confirmed = await run({ module: 'inference-pipeline' });
+  assert.deepEqual(confirmed.calls, [], 'a confirmed lesion mask is not re-segmented');
+  assert.equal(confirmed.result, undefined, 'and the pipeline does not pause again');
+  app.lesionMaskConfirmed = false;
+  app.autoLesionSeedFile = { name: 'seed.nii' };
+  const seeded = await run({ module: 'inference-pipeline' });
+  assert.deepEqual(seeded.calls, [['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]], 'an existing seed goes straight to review');
+  assert.deepEqual(seeded.result, { pausedForMaskReview: true });
+
+  await assert.rejects(app._runStage({ module: 'nope' }), /unknown module 'nope'/);
+  await assert.rejects(app._runStage({}), /stage must declare a module/);
 }
-const forbiddenImports = [
-  /sct-tasks/i,
-  /sct-processing/i,
-  /\bvertebrae\b/i,
-  /\bSpinalCordToolbox\b/,
-  /['"]\.\/app\/labels\.js['"]/   // old labels.js (without lnm- prefix)
-];
-for (const re of forbiddenImports) {
-  assert.doesNotMatch(src, re, `lnm-app.js must not reference ${re}`);
+
+// ---- runFullPipeline: stages run in order, are timed, and stop at review ----
+{
+  const app = makeApp();
+  const calls = record(app, STAGE_METHODS);
+  app.structuralFile = { name: 'T1.nii' };
+  app.selectedPipeline = {
+    id: 'test-chain',
+    stages: [
+      { id: 'brain', module: 'brain-extraction' },
+      { id: 'prealign', module: 'prealign' },
+      { id: 'lesion', module: 'inference-pipeline' },
+      { id: 'register', module: 'registration' }
+    ]
+  };
+  await app.runFullPipeline();
+  assert.deepEqual(
+    calls.map(([method]) => method),
+    ['runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'startLesionMaskReview'],
+    'nothing after the lesion seed runs before the mask is confirmed'
+  );
+  // Completed stages are timed; the paused stage is not.
+  const perfLines = app.messages.filter(message => message.startsWith('[perf] '));
+  assert.equal(perfLines.length, 2, 'one timing line per completed stage');
+  assert.match(perfLines[0], /^\[perf\] brain \(brain-extraction\): \d+ ms$/);
+  assert.match(perfLines[1], /^\[perf\] prealign \(prealign\): \d+ ms$/);
+  assert.deepEqual(app._perfStats.map(entry => entry.id), ['brain', 'prealign']);
+  assert.equal(app.messages.at(-1), 'Pipeline paused for manual lesion-mask review.');
+  assert.equal(app._pendingMaskResume.nextStageIndex, 3, 'confirming the mask resumes at registration');
+  assert.equal(document.getElementById('statusText').textContent, 'Review and confirm the lesion mask');
 }
 
-// runAtlasOverlap/runYeoOverlap is the linchpin of the overlap flow: it must call both
-// computeParcelOverlap and summarizeNetworkOverlap from parcel-overlap.js so
-// the UI gets per-atlas aggregates. The acorn parse above guarantees the
-// file is parseable; here we pin behaviour.
-assert.match(src, /computeParcelOverlap\s*\(/,
-  'atlas overlap must call computeParcelOverlap');
-assert.match(src, /summarizeNetworkOverlap\s*\(/,
-  'Yeo atlas overlap must still call summarizeNetworkOverlap');
-
-// Atlas selection must be driven by the shared registry instead of hidden
-// hard-coded Yeo literals.
-assert.match(src, /from\s+['"]\.\/app\/atlas-options\.js['"]/,
-  'lnm-app.js must import the selectable atlas registry');
-assert.match(src, /atlasSelect/,
-  'lnm-app.js must bind the visible Atlas selector');
-assert.match(src, /runAtlasOverlap\s*\(/,
-  'lnm-app.js must expose an atlas-neutral overlap method');
-assert.match(src, /loadConnectomeChannelsFromManifest\s*\(/,
-  'Schaefer connectomes must be loadable through lazy channel loading');
-assert.match(src, /tagSpatialFile\s*\(/,
-  'pipeline files must be tagged with spatial metadata at app boundaries');
-assert.match(src, /assertSameSpace\s*\(/,
-  'viewer overlays must assert that base and overlay share a spatial contract');
-assert.match(src, /assertSpace\s*\(/,
-  'atlas and registration stages must assert expected input spaces');
-assert.match(src, /viewerBaseFile/,
-  'viewer overlay checks must track the active viewer base, not only structuralFile');
-assert.match(src, /assertVolumeStackSpaces\s*\(/,
-  'multi-volume viewer stacks must validate all overlay spaces before rendering');
-
-// Phase 1c.2 + atlas selector follow-up: the reducer still reports
-// voxelsOutsideAtlas, but the UI must present it as unlabeled atlas-label
-// coverage rather than a brain-mask warning.
-assert.match(src, /voxelsOutsideAtlas/,
-  'lnm-app.js must reference voxelsOutsideAtlas (atlas label coverage-note wiring)');
-assert.match(src, /outsideAtlasWarning/,
-  'lnm-app.js must keep the #outsideAtlasWarning element for compatibility');
-assert.match(src, /selected atlas|Atlas set to|showAtlasCoverageNote/,
-  'coverage note must be atlas-neutral');
-
-// runYeoOverlap must call the atlas loader rather than the Phase 1c.1 stub.
-assert.match(src, /loadAtlasFromManifest|fetchAndDecodeAtlas|loadAtlas/,
-  'runYeoOverlap must invoke the atlas-loader (no longer a stub)');
-
-// Phase 2a.1.4b: brain-extraction wiring. The orchestrator must spin up an
-// CalmarPipeline, kick a 'run-synthstrip' message via runBrainExtraction,
-// listen for 'brainmask' stageData, render it as an overlay (or store it
-// for download), and offer a NIfTI download via downloadBrainMask.
-assert.match(src, /from\s+['"]\.\/controllers\/CalmarPipeline\.js['"]/,
-  'lnm-app.js must import CalmarPipeline');
-assert.match(src, /new\s+CalmarPipeline\s*\(/,
-  'orchestrator must instantiate CalmarPipeline');
-assert.match(src, /\brunSynthStrip\s*\(/,
-  'runBrainExtraction must call executor.runSynthStrip(...)');
-assert.match(src, /['"]lnm-synthstrip['"]/,
-  'orchestrator must reference the lnm-synthstrip asset id literal');
-assert.match(src, /['"]brainmask['"]/,
-  'orchestrator must wire the brainmask stage');
-
-// Phase 3.4: SynthMorph MNI registration wiring. runRegistration reads the
-// lnm-synthmorph-mni manifest entry + the lnm-mni160 reference, calls
-// executor.runRegistration(...).
-assert.match(src, /\brunRegistration\s*\(/,
-  'orchestrator must call executor.runRegistration(...)');
-assert.match(src, /['"]lnm-synthmorph-mni['"]/,
-  'orchestrator must reference the lnm-synthmorph-mni asset id literal');
-assert.match(src, /['"]lnm-mni160['"]/,
-  'orchestrator must reference the lnm-mni160 atlas asset id literal');
-assert.match(src, /executionProviders:\s*model\.browserRuntime\?\.executionProviders/,
-  'orchestrator must pass SynthMorph manifest executionProviders into the worker');
-
-// Phase 4.4+: FC weighted-sum wiring. runFcNetworkMap loads the selected
-// connectome, calls fcWeightedSum, wraps as NIfTI, enables
-// #downloadNetworkMapButton.
-assert.match(src, /from\s+['"]\.\/modules\/fc-weighted-sum\.js['"]/,
-  'lnm-app.js must import fc-weighted-sum.js');
-assert.match(src, /\bfcWeightedSum\s*\(/,
-  'orchestrator must invoke fcWeightedSum(...)');
-assert.match(src, /\bdecodeFcPack\s*\(/,
-  'orchestrator must decode the FC pack via decodeFcPack');
-assert.match(src, /\bsummaryToNetworkWeights\s*\(/,
-  'orchestrator must convert Yeo overlap summary to network weights');
-assert.match(src, /\bparcelResultToChannelWeights\s*\(/,
-  'orchestrator must convert Schaefer parcel overlaps to channel weights');
-assert.match(src, /\bloadConnectomeFromManifest\s*\(/,
-  'orchestrator must load the FC pack via loadConnectomeFromManifest');
-assert.match(src, /this\.networkMapAffine\s*=\s*flatAffine/,
-  'runFcNetworkMap must retain the atlas affine for network-map NIfTI outputs');
-assert.match(src, /affine:\s*this\.networkMapAffine/,
-  'network-map NIfTI writers must use the selected atlas affine, not a default centered grid');
-assert.match(src, /scalar:\s*true[\s\S]*?symmetricCal:\s*true/,
-  'network-map overlay must render as a scalar t-map with symmetric calibration');
-assert.match(src, /\bdisplayNetworkMapOnYeoTemplate\s*\(/,
-  'Yeo display helper alias must remain for compatibility');
-assert.match(src, /\bdisplayNetworkMapOnAtlasTemplate\s*\(/,
-  'runFcNetworkMap must display FC maps on the selected atlas-space display base');
-assert.match(src, /\bbuildYeoBrainMaskBaseFile\s*\(/,
-  'Yeo brain-mask display helper alias must remain for compatibility');
-assert.match(src, /\bbuildAtlasBrainMaskBaseFile\s*\(/,
-  'network-map display must use an atlas brain-mask base with matching FOV');
-assert.match(src, /\bloadVolumeStack\s*\(/,
-  'network-map display must replace the patient-space viewer stack with an atlas-space stack');
-assert.match(src, /stage:\s*['"]atlas-brain-mask['"]/,
-  'network-map display base must be stage-tracked as atlas-brain-mask');
-assert.match(src, /downloadNetworkMapButton[\s\S]*?disabled\s*=\s*false|disabled\s*=\s*false[\s\S]*?downloadNetworkMapButton/,
-  'lnm-app.js must enable #downloadNetworkMapButton after a successful run');
-
-assert.doesNotMatch(src, /pipelineSelect/,
-  'lnm-app.js must not bind a visible pipeline selector; Run analysis is input-driven');
-assert.match(src, /getPipelineById\(['"]lnm-yeo-auto['"]\)/,
-  'default Run analysis pipeline must be the structural-T1 auto chain');
-assert.match(src, /populateVersionLabel\s*\(/,
-  'populateVersionLabel must be defined');
-assert.match(src, /aboutAppVersion/,
-  'populateVersionLabel must reference the #aboutAppVersion DOM id');
-
-// Phase 16: in-browser affine pre-registration. The orchestrator must
-// import the centroid + affine helpers from prealign.js and surface a
-// 'Pre-align to MNI' button.
-assert.match(src, /from\s+['"]\.\/modules\/prealign\.js['"]/,
-  'lnm-app.js must import prealign.js');
-assert.match(src, /\bcentroidOfMask\s*\(/,
-  'prealignToMni160 must call centroidOfMask');
-// Phase 26: prealignToMni160 must use the PCA principal-axis aligner.
-assert.match(src, /\bprincipalAxisAlign\s*\(/,
-  'prealignToMni160 must call principalAxisAlign (PCA-based, Phase 26)');
-assert.match(src, /['"]prealignToMniButton['"]/,
-  '#prealignToMniButton must be referenced for the click binding');
-
-// Phase 19: per-stage perf instrumentation. runFullPipeline must collect
-// stage timings into _perfStats and log a [perf] line per stage. Source-
-// grep guards so a future refactor that drops the timing loses the test.
-assert.match(src, /this\._perfStats\s*=\s*\[\s*\]/,
-  'runFullPipeline must reset _perfStats at start');
-assert.match(src, /\[perf\]/,
-  'each stage must emit a [perf] line into the console');
-assert.match(src, /technicalConsole\s*=\s*new CalmarConsoleOutput/,
-  'lnm-app.js must keep a separate technical log viewer');
-assert.match(src, /updateDebugOutput\s*\(/,
-  'lnm-app.js must route model and processing details to the technical log');
-assert.match(src, /shouldShowClinicalLog\s*\(/,
-  'lnm-app.js must filter clinician-facing log messages separately from diagnostic output');
-assert.match(src, /performance\.now/,
-  '_now must call performance.now() when available');
-
-// Phase 15 + Phase 34: _runStage must dispatch on stage.module and cover
-// every implemented module, including the Phase 34 'prealign' module.
-// Source-grep each module's case-clause (a typo or missing branch
-// would silently fall through to the throw).
-for (const m of ['brain-extraction', 'prealign', 'inference-pipeline', 'registration',
-                 'parcel-overlap', 'fc-weighted-sum', 'threshold']) {
-  const re = new RegExp(`case\\s+['"]${m}['"]`);
-  assert.match(src, re, `_runStage must handle module '${m}'`);
+// ---- duration formatting (hand-worked) ----
+{
+  const app = makeApp();
+  assert.equal(app._formatMs(0), '0 ms');
+  assert.equal(app._formatMs(999.4), '999 ms');
+  assert.equal(app._formatMs(1000), '1.00 s');
+  assert.equal(app._formatMs(12345), '12.35 s');
+  assert.equal(app._formatMs(59999), '60.00 s');
+  assert.equal(app._formatMs(60000), '1.00 min');
+  assert.equal(app._formatMs(150000), '2.50 min');
+  assert.ok(app._now() > 0);
 }
-assert.match(src, /this\.selectedPipeline/,
-  'runFullPipeline must read from this.selectedPipeline');
-assert.match(src, /for\s*\(\s*const\s+stage\s+of\s+pipeline\.stages\s*\)/,
-  'runFullPipeline must iterate pipeline.stages');
 
-// Phase 14: cancel button must be wired to executor.cancel(). Source-grep
-// for the cancel-button id + an executor.cancel call so a regression that
-// re-disables the button at boot but never invokes cancel surfaces here.
-assert.match(src, /['"]cancelButton['"]/,
-  'cancel-button DOM id must be referenced');
-assert.match(src, /this\.executor\.cancel\s*\(/,
-  'cancel button must invoke this.executor.cancel(...)');
+// ---- exportCsv: a real .csv download of the displayed overlap ----
+{
+  const app = makeApp();
+  const downloads = [];
+  const blobs = new Map();
+  globalThis.URL.createObjectURL = blob => {
+    const url = `blob:test-${blobs.size}`;
+    blobs.set(url, blob);
+    return url;
+  };
+  const revoked = [];
+  globalThis.URL.revokeObjectURL = url => revoked.push(url);
+  dom.window.HTMLAnchorElement.prototype.click = function click() {
+    downloads.push({ href: this.href, download: this.download, attached: document.body.contains(this) });
+  };
 
-// Phase 6: bridge module + warp+resample wiring. applyRegistrationToLesion
-// must invoke executor.runWarpMask, decode the 'mni-lesion' stage data, and
-// resample onto the Yeo grid via the new resample module.
-assert.match(src, /from\s+['"]\.\/modules\/resample\.js['"]/,
-  'lnm-app.js must import resample.js');
-assert.match(src, /\bresampleAffine\s*\(/,
-  'applyRegistrationToLesion must call resampleAffine(...)');
-assert.match(src, /\baffineFromHeader\s*\(/,
-  'applyRegistrationToLesion must read affines via affineFromHeader');
-assert.match(src, /\brunWarpMask\s*\(/,
-  'applyRegistrationToLesion must dispatch runWarpMask');
-assert.match(src, /['"]mni-lesion['"]/,
-  'orchestrator must wire the mni-lesion stage');
+  app.exportCsv();
+  assert.deepEqual(downloads, [], 'nothing to export before an overlap exists');
 
-// Phase 5: threshold UI wiring. applyNetworkThreshold reads the top-percent
-// slider / magnitude / min-cluster controls and updates either the
-// thresholded mask state or the live overlay; downloadThresholdedNetworkMap
-// emits a Blob NIfTI with the thresholded binary mask.
-assert.match(src, /from\s+['"]\.\/modules\/threshold\.js['"]/,
-  'lnm-app.js must import threshold.js');
-assert.match(src, /\bapplyThresholdDetailed\s*\(/,
-  'orchestrator must call applyThresholdDetailed(...) to get cluster cleanup stats');
-assert.match(src, /thresholdResult\.threshold/,
-  'orchestrator must report the actual percentile cutoff used for top-percent thresholding');
-assert.match(src, /1\s*-\s*\(topPercent\s*\/\s*100\)/,
-  'percentile UI must convert top-percent slider values to quantile cutoffs');
-assert.match(src, /NETWORK_TOP_PERCENT_MAX\s*=\s*10/,
-  'percentile slider must be scoped to the useful 0..10% range');
-assert.match(src, /NETWORK_TOP_PERCENT_STEP\s*=\s*0\.1/,
-  'percentile slider must allow fine 0.1% adjustment');
-assert.match(src, /['"]thresholdValue['"]|getElementById\(['"]thresholdValue['"]\)|networkThresholdValue/,
-  'orchestrator must read the threshold slider value');
-assert.doesNotMatch(src, /networkThresholdMode|thresholdMode/,
-  'orchestrator must not read a threshold mode; connectivity-map thresholding is top-percent only');
-assert.match(src, /mode:\s*['"]percentile['"]/,
-  'orchestrator must always call the threshold engine in percentile/top-percent mode');
-assert.match(src, /thresholdMinCluster[\s\S]*?addEventListener\(['"]input['"]/,
-  'min-cluster changes must recompute while the user types');
-assert.match(src, /removedByCluster/,
-  'threshold summary must report whether cluster cleanup removed voxels');
-assert.match(src, /\bscheduleThresholdPreviewOverlay\s*\(/,
-  'applyNetworkThreshold must schedule a live threshold preview overlay');
-assert.match(src, /replaceOverlayForStage\s*\(\s*['"]threshold-preview['"]/,
-  'threshold preview must replace the existing threshold-preview overlay stage');
-assert.match(src, /\bprojectThresholdToPatientSpace\s*\(/,
-  'threshold preview must project final threshold masks back to patient T1 space when registration is available');
-assert.match(src, /\brunInverseWarpMask\s*\(/,
-  'patient-space threshold projection must dispatch the inverse-warp worker path');
-assert.match(src, /stage:\s*['"]threshold-patient['"]/,
-  'patient-space threshold projection must wait for the threshold-patient stage output');
-assert.match(src, /\brunInverseWarpStage\s*\(/,
-  'patient-space inverse-warp projections must be serialized through runInverseWarpStage');
-assert.match(src, /\brenderPatientLayerStack\s*\(/,
-  'patient-space threshold projection must render the structural/brainmask/lesion/threshold viewer stack');
-assert.match(src, /\bprojectAtlasToPatientSpace\s*\(/,
-  'orchestrator must expose a subject-space Yeo atlas QC projection');
-assert.match(src, /stage:\s*['"]atlas-patient['"]/,
-  'subject-space Yeo atlas QC must use the atlas-patient stage output');
-assert.match(src, /labelMap:\s*true/,
-  'subject-space Yeo atlas QC must request label-preserving inverse warp');
-assert.match(src, /layerToggleT1[\s\S]*?layerToggleThresholdMap[\s\S]*?layerToggleAtlasQc/,
-  'lnm-app.js must bind viewer layer toggles for T1, brain mask, lesion mask, threshold map, and Yeo atlas QC');
-assert.match(src, /showSubjectAtlasButton/,
-  'lnm-app.js must bind the subject-space atlas QC button');
-assert.match(src, /registrationQcMode/,
-  'lnm-app.js must bind the registration QC mode selector');
-assert.match(src, /registrationBlendValue/,
-  'lnm-app.js must bind the Patient/MNI registration blend slider');
-assert.match(src, /\bapplyRegistrationBlend\s*\(/,
-  'registration QC must expose a helper that applies patient/MNI blend opacity');
-assert.match(src, /\bhandleRegistrationBlendInput\s*\(/,
-  'registration blend input must switch to the active MNI QC view when needed');
-assert.match(src, /\brenderMniRegistrationQc\s*\(/,
-  'registration QC must expose an MNI-space template/registered-T1 view');
-assert.match(src, /\brenderCheckerboardRegistrationQc\s*\(/,
-  'registration QC must expose a fixed-template/registered-T1 checkerboard view');
-assert.match(src, /\brenderDisplacementRegistrationQc\s*\(/,
-  'registration QC must expose a displacement-magnitude view');
-assert.match(src, /['"]registered-t1-mni160['"]/,
-  'orchestrator must store the registered T1 MNI-space QC output');
-assert.match(src, /['"]registration-displacement-mag['"]/,
-  'orchestrator must store the registration displacement-magnitude QC output');
+  document.getElementById('networkThresholdMinCluster').value = '10';
+  app.overlapResult = {
+    summary: {
+      totalLesionVoxels: 100,
+      networks: [
+        { network: 'Visual', voxelsInLesion: 60, fractionOfLesion: 0.6, parcels: [1] },
+        { network: 'Default', voxelsInLesion: 35, fractionOfLesion: 0.35, parcels: [7] },
+        { network: 'Limbic', voxelsInLesion: 5, fractionOfLesion: 0.05, parcels: [5] }
+      ]
+    },
+    networkSizes: { Visual: 1200, Default: 700, Limbic: 500 }
+  };
+  app.exportCsv();
+  assert.equal(downloads.length, 1);
+  assert.equal(downloads[0].download, 'lnm-overlap.csv');
+  assert.equal(downloads[0].attached, true, 'the link is in the document when clicked');
+  assert.equal(document.querySelector('a[download]'), null, 'and removed afterwards');
+  assert.deepEqual(revoked, [downloads[0].href]);
+  const blob = blobs.get(downloads[0].href);
+  assert.equal(blob.type, 'text/csv;charset=utf-8');
+  // Fractions of network: 60 / 1200 = 0.05 and 35 / 700 = 0.05. Limbic has
+  // 5 voxels, below the 10-voxel minimum set above, so it is not exported.
+  assert.equal(
+    await blob.text(),
+    'network,voxelsInLesion,fractionOfLesion,voxelsInNetwork,fractionOfNetwork,parcels\n' +
+    'Visual,60,0.6000,1200,0.0500,1\n' +
+    'Default,35,0.3500,700,0.0500,7\n'
+  );
+  document.getElementById('networkThresholdMinCluster').value = '30';
+}
 
-// Phase 2a.2.3: lesion-segmentation wiring. runLesionSegmentation reads
-// the lnm-stroke-lesion manifest entry, calls executor.runInference(...),
-// and listens for 'segmentation' stageData. downloadLesionMask emits a
-// .nii Blob just like downloadBrainMask did for the brain mask.
-assert.match(src, /\brunInference\s*\(/,
-  'runLesionSegmentation must call executor.runInference(...)');
-assert.match(src, /['"]lnm-stroke-lesion['"]/,
-  'orchestrator must reference the lnm-stroke-lesion asset id literal');
-assert.match(src, /['"]segmentation['"]/,
-  'orchestrator must wire the segmentation stage');
-assert.match(src, /downloadLesionMaskButton[\s\S]*?disabled\s*=\s*false|disabled\s*=\s*false[\s\S]*?downloadLesionMaskButton|downloadLesionMaskButton[\s\S]*?removeAttribute\(['"]disabled/,
-  'lnm-app.js must enable #downloadLesionMaskButton after a successful run');
+// ---- Start over: results are dropped, the structural image is kept ----
+{
+  const app = makeApp();
+  const viewer = [];
+  app.viewerController = {
+    clearAll: () => viewer.push('clearAll'),
+    removeVolumeForStage: stage => viewer.push(`remove ${stage}`),
+    getVolumeIndexForStage: () => null
+  };
+  app.loadViewerBaseVolume = async file => {
+    viewer.push(`base ${file.name}`);
+  };
+  let executorCleared = 0;
+  app.executor.clearResults = () => {
+    executorCleared++;
+  };
 
-// Phase 1c.3: runYeoOverlap must populate #networkOverlapTable via the new
-// renderer, and exportCsv must serialise via overlap-export and trigger a
-// real Blob download (no more 'not implemented' stub).
-assert.match(src, /from\s+['"]\.\/modules\/overlap-export\.js['"]/,
-  'lnm-app.js must import from ./modules/overlap-export.js');
-assert.match(src, /from\s+['"]\.\/modules\/overlap-render\.js['"]/,
-  'lnm-app.js must import from ./modules/overlap-render.js');
-assert.match(src, /from\s+['"]\.\/modules\/function-profiles\.js['"]/,
-  'lnm-app.js must import from ./modules/function-profiles.js');
-assert.match(src, /renderOverlapTable\s*\(/,
-  'runYeoOverlap must call renderOverlapTable(...)');
-assert.match(src, /serializeOverlapCsv\s*\(/,
-  'exportCsv must call serializeOverlapCsv(...)');
-assert.match(src, /loadFunctionProfilesFromManifest\s*\(/,
-  'lnm-app.js must load the compact functional profile asset');
-assert.match(src, /rankFunctionalTerms\s*\(/,
-  'lnm-app.js must rank terms from network-weighted summaries');
-assert.match(src, /renderFunctionalProfileTable\s*\(/,
-  'lnm-app.js must render functional profile result tables');
-assert.match(atlasOptionsSrc, /functionProfileAssetId[\s\S]*?['"]yeo7-neurosynth-v7-function-profiles['"]/,
-  'atlas registry must attach the Yeo7 Neurosynth/NiMARE profile asset id to the Yeo option');
-assert.match(atlasOptionsSrc, /functionProfileAssetId[\s\S]*?['"]schaefer400-neurosynth-v7-function-profiles['"]/,
-  'atlas registry must attach the Schaefer400 Neurosynth/NiMARE profile asset id to the Schaefer option');
-assert.match(src, /Atlas label drivers/,
-  'parcel-based functional profile tables must use atlas-label driver copy');
-assert.match(src, /directFunctionProfileTable/,
-  'direct lesion overlap must render a functional profile table');
-assert.match(src, /mapFunctionProfileTable/,
-  'thresholded connectivity-map effects must render a functional profile table');
+  const structural = { name: 'T1.nii' };
+  app.structuralFile = structural;
+  app.overlapResult = { summary: {} };
+  app.networkMapData = new Float32Array(8);
+  app.lesionMaskFile = { name: 'lesion.nii' };
+  app.lesionMaskConfirmed = true;
+  app.hasRegistrationDisplacement = true;
+  const results = document.getElementById('resultsSection');
+  results.classList.remove('collapsed');
+  const outputIds = [
+    'downloadOverlapCsv', 'downloadBrainMaskButton', 'downloadLesionMaskButton', 'downloadNetworkMapButton',
+    'downloadThresholdedNetworkMapButton', 'downloadEditedLesionMaskButton', 'checkAtlasAlignmentButton',
+    'showSubjectAtlasButton', 'downloadSubjectAtlasButton'
+  ];
+  for (const id of outputIds) document.getElementById(id).disabled = false;
+  document.querySelector('#networkOverlapTable tbody').innerHTML = '<tr><td>Visual</td><td>60</td><td>60%</td></tr>';
+  app.showAtlasCoverageNote(4, 10);
+  assert.match(
+    document.getElementById('outsideAtlasWarning').textContent,
+    /^6 of 10 lesion voxels are assigned to .+ labels; 4 are unlabeled by this atlas\.$/,
+    'the coverage note is about atlas labels, not a brain mask'
+  );
+  assert.equal(document.getElementById('outsideAtlasWarning').classList.contains('hidden'), false);
 
-// exportCsv must trigger a real download — Blob + createObjectURL + a .csv
-// filename. Source-grep is brittle but matches the SCT-style guardrails:
-// catches the "stub left behind" regression at lint time.
-assert.match(src, /\bnew\s+Blob\b/,
-  'exportCsv must construct a Blob for download');
-assert.match(src, /URL\.createObjectURL\s*\(/,
-  'exportCsv must create an object URL for the Blob');
-assert.match(src, /\.csv['"]/,
-  'exportCsv must reference a .csv filename');
+  app.clearResults({ full: false });
+  assert.equal(app.structuralFile, structural, 'the structural image survives');
+  assert.deepEqual(
+    [app.overlapResult, app.networkMapData, app.lesionMaskFile, app.lesionMaskConfirmed, app.hasRegistrationDisplacement],
+    [null, null, null, false, false]
+  );
+  for (const id of outputIds) {
+    assert.equal(document.getElementById(id).disabled, true, `${id} is disabled again`);
+  }
+  assert.ok(results.classList.contains('collapsed'), 'the results section collapses');
+  assert.equal(document.querySelector('#networkOverlapTable tbody').children.length, 0, 'the overlap table is emptied');
+  assert.ok(document.getElementById('outsideAtlasWarning').classList.contains('hidden'));
+  assert.equal(document.getElementById('networkThresholdSummary').textContent, 'Compute a network map first to enable thresholding.');
+  assert.equal(executorCleared, 1, 'worker results are dropped too');
+  assert.deepEqual(viewer, ['remove threshold-preview', 'base T1.nii'], 'the viewer goes back to the structural image');
+  assert.equal(app.messages.at(-1), 'Results cleared (structural retained).');
 
-// renderOverlapTable receives atlas colormaps so bars match the active
-// atlas palette across the app + the NiiVue overlay.
-assert.match(src, /YEO7_COLORMAP/,
-  'overlap rendering must keep the YEO7_COLORMAP path for Yeo compatibility');
-assert.match(src, /SCHAEFER400_COLORMAP/,
-  'overlap rendering must support a Schaefer400 colormap');
+  viewer.length = 0;
+  app.clearResults({ full: true });
+  assert.equal(app.structuralFile, null, 'a full reset also drops the input');
+  assert.deepEqual(viewer, ['remove threshold-preview', 'clearAll']);
+  assert.equal(app.messages.at(-1), 'All state cleared.');
+}
 
-// Once an overlap result exists, the CSV download button must become
-// interactive. Source-grep the toggle so a regression that leaves the button
-// disabled forever surfaces here, not in user reports.
-assert.match(src, /downloadOverlapCsv[\s\S]*?disabled\s*=\s*false|disabled\s*=\s*false[\s\S]*?downloadOverlapCsv|downloadOverlapCsv[\s\S]*?removeAttribute\(['"]disabled/,
-  'lnm-app.js must enable #downloadOverlapCsv after a successful run');
+// ---- atlas registry: both atlases are selectable, Schaefer first ----
+{
+  assert.deepEqual(ATLAS_OPTIONS.map(option => [option.id, option.displayName]), [
+    ['schaefer400', 'Schaefer 400 parcels'],
+    ['yeo7', 'Yeo 7 networks']
+  ]);
+  const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'web/models/manifest.json'), 'utf8'));
+  const assetIds = new Set(
+    Object.values(manifest)
+      .filter(Array.isArray)
+      .flat()
+      .map(asset => asset?.id)
+  );
+  for (const option of ATLAS_OPTIONS) {
+    assert.equal(getAtlasOptionById(option.id), option);
+    for (const key of ['overlapAtlasAssetId', 'connectomeAssetId', 'functionProfileAssetId']) {
+      assert.ok(assetIds.has(option[key]), `${option.id}.${key} (${option[key]}) is a manifest asset`);
+    }
+  }
+  assert.equal(getAtlasOptionById('yeo7').functionProfileAssetId, 'yeo7-neurosynth-v7-function-profiles');
+  assert.equal(getAtlasOptionById('schaefer400').functionProfileAssetId, 'schaefer400-neurosynth-v7-function-profiles');
+}
 
-console.log('LNM app skeleton OK: class + 5 methods + import surface + atlas + render + CSV wiring validated.');
+console.log('LNM app OK: stage dispatch, pipeline timing, CSV export, reset and atlas registry executed.');
+process.exit(0);

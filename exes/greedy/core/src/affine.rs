@@ -16,14 +16,71 @@ pub enum AffineMetric {
 pub struct AffineOptions {
     pub iterations: usize,
     pub verbose: bool,
+    /// Standard deviation, in moving voxels, of the fixed per-sample offset
+    /// Greedy adds to every affine sample position (`-jitter`, default 0.5).
+    /// Zero samples exactly at the mapped voxel centres.
+    pub jitter: f64,
 }
+
+/// Greedy's default `-jitter`.
+pub const DEFAULT_JITTER: f64 = 0.5;
 
 impl Default for AffineOptions {
     fn default() -> Self {
         Self {
             iterations: 100,
             verbose: false,
+            jitter: DEFAULT_JITTER,
         }
+    }
+}
+
+/// Greedy's affine jitter image: one Gaussian offset per fixed voxel, drawn
+/// once per pyramid level and added to the sample position in moving voxel
+/// space (`MultiComponentImageMetricBase`). Partial-volume histograms have a
+/// cusp wherever samples land on voxel centres, which on a shared grid makes
+/// the identity a spurious local optimum; the offsets smooth it away.
+/// Greedy seeds from the clock; greedy-rs seeds from the grid so every run
+/// is reproducible.
+fn jitter_field(dims: [usize; 3], sigma: f64) -> Option<Vec<[f64; 3]>> {
+    if sigma <= 0.0 {
+        return None;
+    }
+    let mut random = SplitMix(
+        0x6a69_7474_6572 ^ ((dims[0] as u64) << 40 | (dims[1] as u64) << 20 | dims[2] as u64),
+    );
+    let count = dims[0] * dims[1] * dims[2];
+    Some(
+        (0..count)
+            .map(|_| std::array::from_fn(|_| sigma * random.gaussian()))
+            .collect(),
+    )
+}
+
+/// SplitMix64: a small, fixed-seed generator for reproducible jitter.
+struct SplitMix(u64);
+
+impl SplitMix {
+    fn unit(&mut self) -> f64 {
+        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^= z >> 31;
+        (z >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    /// Standard normal by Box--Muller.
+    fn gaussian(&mut self) -> f64 {
+        let radius = (-2.0 * (1.0 - self.unit()).ln()).sqrt();
+        radius * (std::f64::consts::TAU * self.unit()).cos()
+    }
+}
+
+fn jittered(position: [f64; 3], jitter: Option<&[[f64; 3]]>, sample: usize) -> [f64; 3] {
+    match jitter {
+        Some(offsets) => std::array::from_fn(|axis| position[axis] + offsets[sample][axis]),
+        None => position,
     }
 }
 
@@ -207,6 +264,15 @@ pub fn ssd_score_gradient(
     moving: &NiftiImage,
     transform: Mat4,
 ) -> Result<(f64, [f64; 12])> {
+    ssd_score_gradient_jittered(fixed, moving, transform, None)
+}
+
+fn ssd_score_gradient_jittered(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    transform: Mat4,
+    jitter: Option<&[[f64; 3]]>,
+) -> Result<(f64, [f64; 12])> {
     let voxel_matrix = voxel_transform(&fixed.grid, &moving.grid, transform)?;
     let dims = fixed.grid.dims;
     let slabs = map_z(dims[2], |z| {
@@ -216,8 +282,10 @@ pub fn ssd_score_gradient(
             let line = dims[0] * (y + dims[1] * z);
             for x in 0..dims[0] {
                 let index = [x as f64, y as f64, z as f64];
-                let (sample, voxel_gradient) =
-                    trilinear_scalar_gradient(moving, voxel_matrix.apply(index));
+                let (sample, voxel_gradient) = trilinear_scalar_gradient(
+                    moving,
+                    jittered(voxel_matrix.apply(index), jitter, line + x),
+                );
                 let delta = sample as f64 - fixed.data[line + x] as f64;
                 value += delta * delta;
                 sums.add(voxel_gradient.map(|g| 2.0 * delta * g), index);
@@ -257,6 +325,7 @@ pub fn nmi_score_gradient_affine(
         moving,
         &bin_image(moving)?,
         transform,
+        None,
     )
 }
 
@@ -266,6 +335,7 @@ fn nmi_score_gradient_binned(
     moving: &NiftiImage,
     moving_bins: &[u8],
     transform: Mat4,
+    jitter: Option<&[[f64; 3]]>,
 ) -> Result<(f64, [f64; 12])> {
     let voxel_matrix = voxel_transform(&fixed.grid, &moving.grid, transform)?;
     let dims = fixed.grid.dims;
@@ -284,7 +354,11 @@ fn nmi_score_gradient_binned(
         for x in 0..dims[0] {
             corners(
                 line + x,
-                histogram_sample::<false>(&moving.grid, moving_bins, position),
+                histogram_sample::<false>(
+                    &moving.grid,
+                    moving_bins,
+                    jittered(position, jitter, line + x),
+                ),
             );
             for axis in 0..3 {
                 position[axis] += step[axis];
@@ -300,8 +374,11 @@ fn nmi_score_gradient_binned(
             for x in 0..dims[0] {
                 let fixed_bin = fixed_bins[line + x] as usize;
                 if fixed_bin != 0 {
-                    let (corners, _, derivatives) =
-                        histogram_sample::<true>(&moving.grid, moving_bins, position);
+                    let (corners, _, derivatives) = histogram_sample::<true>(
+                        &moving.grid,
+                        moving_bins,
+                        jittered(position, jitter, line + x),
+                    );
                     sums.add(
                         corner_gradient(&weights, fixed_bin, corners, derivatives),
                         [x as f64, y as f64, z as f64],
@@ -321,13 +398,16 @@ fn evaluate(
     fixed: &NiftiImage,
     moving: &NiftiImage,
     bins: &Option<(Vec<u8>, Vec<u8>)>,
+    jitter: Option<&[[f64; 3]]>,
     scaled: [f64; 12],
     scale: [f64; 12],
     metric: AffineMetric,
 ) -> Result<(f64, [f64; 12])> {
     let parameters = std::array::from_fn(|index| scaled[index] / scale[index]);
     let (value, gradient) = match (metric, bins) {
-        (AffineMetric::Ssd, _) => ssd_score_gradient(fixed, moving, matrix(parameters))?,
+        (AffineMetric::Ssd, _) => {
+            ssd_score_gradient_jittered(fixed, moving, matrix(parameters), jitter)?
+        }
         // Greedy minimizes -10000 times NMI rather than maximizing an
         // unscaled score. The constant changes its first Netlib step.
         (AffineMetric::Nmi, Some((fixed_bins, moving_bins))) => {
@@ -337,6 +417,7 @@ fn evaluate(
                 moving,
                 moving_bins,
                 matrix(parameters),
+                jitter,
             )?;
             (-10_000.0 * value, gradient.map(|value| -10_000.0 * value))
         }
@@ -379,6 +460,7 @@ fn evaluate_rigid(
     fixed: &NiftiImage,
     moving: &NiftiImage,
     bins: &Option<(Vec<u8>, Vec<u8>)>,
+    jitter: Option<&[[f64; 3]]>,
     scaled: [f64; 12],
     scale: [f64; 12],
     metric: AffineMetric,
@@ -386,10 +468,16 @@ fn evaluate_rigid(
     let rigid = std::array::from_fn(|index| scaled[index] / scale[index]);
     let transform = rigid_matrix(rigid);
     let (value, affine_gradient) = match (metric, bins) {
-        (AffineMetric::Ssd, _) => ssd_score_gradient(fixed, moving, transform)?,
+        (AffineMetric::Ssd, _) => ssd_score_gradient_jittered(fixed, moving, transform, jitter)?,
         (AffineMetric::Nmi, Some((fixed_bins, moving_bins))) => {
-            let (value, gradient) =
-                nmi_score_gradient_binned(fixed, fixed_bins, moving, moving_bins, transform)?;
+            let (value, gradient) = nmi_score_gradient_binned(
+                fixed,
+                fixed_bins,
+                moving,
+                moving_bins,
+                transform,
+                jitter,
+            )?;
             (-10_000.0 * value, gradient.map(|entry| -10_000.0 * entry))
         }
         (AffineMetric::Nmi, None) => unreachable!("NMI bins are computed per level"),
@@ -763,6 +851,65 @@ fn lbfgs(
     Ok(best_x)
 }
 
+/// Optimizer coordinates of the 12 affine parameters: translations in mm and
+/// matrix entries times the fixed dimension they multiply, as Greedy's
+/// `GetOptimalParameterScaling`.
+fn affine_scale(fixed: &Grid) -> [f64; 12] {
+    let [nx, ny, nz] = fixed.dims.map(|n| n as f64);
+    [1.0, nx, ny, nz, 1.0, nx, ny, nz, 1.0, nx, ny, nz]
+}
+
+/// Optimizer coordinates of the six rigid parameters: translations in mm
+/// and rotations times the largest fixed extent in mm.
+fn rigid_scale(fixed: &Grid) -> [f64; 12] {
+    let extent = (0..3)
+        .map(|column| {
+            let spacing = (0..3)
+                .map(|row| fixed.lps_from_voxel.0[row][column].powi(2))
+                .sum::<f64>()
+                .sqrt();
+            spacing * fixed.dims[column] as f64
+        })
+        .fold(1.0, f64::max);
+    [
+        1.0, 1.0, 1.0, extent, extent, extent, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+    ]
+}
+
+/// Greedy's `InitializeAffineTransform`: when the starting transform is the
+/// identity in voxel space, every fixed sample lands exactly on a moving
+/// voxel centre. Partial-volume NMI then has a cusp-shaped maximum there
+/// (no descent direction, so the first line search fails and the start is
+/// returned), and Greedy adds U(-0.4, 0.4) to each scaled optimizer
+/// coefficient. `to_coefficients` and `from_coefficients` map between the
+/// physical-RAS transform and those coefficients.
+fn jitter_identity_start(
+    fixed: &Grid,
+    moving: &Grid,
+    start: Mat4,
+    to_coefficients: impl Fn(Mat4) -> [f64; 12],
+    from_coefficients: impl Fn([f64; 12]) -> Mat4,
+) -> Result<Mat4> {
+    let voxel_identity = product(ras_from_voxel(moving), ras_from_voxel(fixed).inverse()?);
+    let identity = to_coefficients(voxel_identity);
+    let mut coefficients = to_coefficients(start);
+    let distance = identity
+        .iter()
+        .zip(&coefficients)
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0, f64::max);
+    if distance >= 1e-4 {
+        return Ok(start);
+    }
+    // Greedy draws U(-0.4, 0.4) from a clock-seeded mt19937; the seed here
+    // is fixed so every run is reproducible.
+    let mut random = SplitMix(0x6772_6565_6479);
+    for value in &mut coefficients {
+        *value += 0.8 * random.unit() - 0.4;
+    }
+    Ok(from_coefficients(coefficients))
+}
+
 /// Greedy's Netlib L-BFGS path: five corrections, More--Thuente line search,
 /// and an evaluation (not iteration) budget.
 pub fn optimize(
@@ -775,27 +922,23 @@ pub fn optimize(
     if options.iterations == 0 {
         return Ok(initial);
     }
-    let scale = [
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-        1.0,
-        fixed.grid.dims[0] as f64,
-        fixed.grid.dims[1] as f64,
-        fixed.grid.dims[2] as f64,
-    ];
+    let scale = affine_scale(&fixed.grid);
     let x = std::array::from_fn(|index| parameters(initial)[index] * scale[index]);
     let bins = match metric {
         AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
         AffineMetric::Ssd => None,
     };
+    let jitter = jitter_field(fixed.grid.dims, options.jitter);
     let best = lbfgs(x, options, 12, |candidate| {
-        evaluate(fixed, moving, &bins, candidate, scale, metric)
+        evaluate(
+            fixed,
+            moving,
+            &bins,
+            jitter.as_deref(),
+            candidate,
+            scale,
+            metric,
+        )
     })?;
     Ok(matrix(std::array::from_fn(|index| {
         best[index] / scale[index]
@@ -812,18 +955,7 @@ pub fn optimize_rigid(
     if options.iterations == 0 {
         return Ok(initial);
     }
-    let extent = (0..3)
-        .map(|column| {
-            let spacing = (0..3)
-                .map(|row| fixed.grid.lps_from_voxel.0[row][column].powi(2))
-                .sum::<f64>()
-                .sqrt();
-            spacing * fixed.grid.dims[column] as f64
-        })
-        .fold(1.0, f64::max);
-    let scale = [
-        1.0, 1.0, 1.0, extent, extent, extent, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
-    ];
+    let scale = rigid_scale(&fixed.grid);
     let parameters = rigid_parameters(initial);
     let x = std::array::from_fn(|index| {
         if index < 6 {
@@ -836,8 +968,17 @@ pub fn optimize_rigid(
         AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
         AffineMetric::Ssd => None,
     };
+    let jitter = jitter_field(fixed.grid.dims, options.jitter);
     let best = lbfgs(x, options, 6, |candidate| {
-        evaluate_rigid(fixed, moving, &bins, candidate, scale, metric)
+        evaluate_rigid(
+            fixed,
+            moving,
+            &bins,
+            jitter.as_deref(),
+            candidate,
+            scale,
+            metric,
+        )
     })?;
     Ok(rigid_matrix(std::array::from_fn(|index| {
         best[index] / scale[index]
@@ -850,6 +991,7 @@ pub fn register(
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
+    jitter: f64,
 ) -> Result<Mat4> {
     if iterations == [0, 0, 0] {
         return Ok(image_centers(&fixed.grid, &moving.grid));
@@ -859,6 +1001,18 @@ pub fn register(
     // Greedy initializes at the coarsest reference spaces, not the original
     // input grids. The physical matrix is then carried to finer levels.
     let mut transform = image_centers(&fixed_pyramid[0].grid, &moving_pyramid[0].grid);
+    let scale = affine_scale(&fixed_pyramid[0].grid);
+    transform = jitter_identity_start(
+        &fixed_pyramid[0].grid,
+        &moving_pyramid[0].grid,
+        transform,
+        |start| std::array::from_fn(|index| parameters(start)[index] * scale[index]),
+        |coefficients| {
+            matrix(std::array::from_fn(|index| {
+                coefficients[index] / scale[index]
+            }))
+        },
+    )?;
     for level in 0..3 {
         transform = optimize(
             &fixed_pyramid[level],
@@ -868,6 +1022,7 @@ pub fn register(
             AffineOptions {
                 iterations: iterations[level],
                 verbose,
+                jitter,
             },
         )?;
         if verbose {
@@ -886,6 +1041,7 @@ pub fn register_rigid(
     metric: AffineMetric,
     iterations: [usize; 3],
     verbose: bool,
+    jitter: f64,
 ) -> Result<Mat4> {
     if iterations == [0, 0, 0] {
         return Ok(image_centers(&fixed.grid, &moving.grid));
@@ -893,6 +1049,27 @@ pub fn register_rigid(
     let fixed_pyramid = build_pyramid(fixed)?;
     let moving_pyramid = build_pyramid(moving)?;
     let mut transform = image_centers(&fixed_pyramid[0].grid, &moving_pyramid[0].grid);
+    let scale = rigid_scale(&fixed_pyramid[0].grid);
+    transform = jitter_identity_start(
+        &fixed_pyramid[0].grid,
+        &moving_pyramid[0].grid,
+        transform,
+        |start| {
+            let rigid = rigid_parameters(start);
+            std::array::from_fn(|index| {
+                if index < 6 {
+                    rigid[index] * scale[index]
+                } else {
+                    0.0
+                }
+            })
+        },
+        |coefficients| {
+            rigid_matrix(std::array::from_fn(|index| {
+                coefficients[index] / scale[index]
+            }))
+        },
+    )?;
     for level in 0..3 {
         transform = optimize_rigid(
             &fixed_pyramid[level],
@@ -902,6 +1079,7 @@ pub fn register_rigid(
             AffineOptions {
                 iterations: iterations[level],
                 verbose,
+                jitter,
             },
         )?;
         if verbose {
@@ -941,8 +1119,16 @@ mod tests {
         moving.data.rotate_left(7);
         let parameters = [0.2, -0.1, 0.3, 0.02, -0.03, 0.04];
         let scaled = std::array::from_fn(|index| if index < 6 { parameters[index] } else { 0.0 });
-        let (_, gradient) =
-            evaluate_rigid(&fixed, &moving, &None, scaled, [1.0; 12], AffineMetric::Ssd).unwrap();
+        let (_, gradient) = evaluate_rigid(
+            &fixed,
+            &moving,
+            &None,
+            None,
+            scaled,
+            [1.0; 12],
+            AffineMetric::Ssd,
+        )
+        .unwrap();
         let step = 1e-3;
         for index in 0..6 {
             let mut plus = parameters;

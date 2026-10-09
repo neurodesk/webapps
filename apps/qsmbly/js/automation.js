@@ -21,7 +21,6 @@ export function registerQsmAutomation(app) {
         app.automationProgress = progress;
         try {
           app.clearAllResults();
-          executor.pipelineHasRun = false;
           executor.lastRunSettings = null;
           const files = app.fileIOController;
           files.clearAllFiles();
@@ -50,7 +49,7 @@ export function registerQsmAutomation(app) {
             if (!app.maskPrepSettings.prepared) throw new Error('QSM mask preparation did not complete.');
             await app.generateRobustMask();
             signal.throwIfAborted();
-            if (!app.currentMaskData?.some(value => value > 0)) throw new Error('QSM masking did not produce a nonempty mask.');
+            if (!app.maskController.currentMaskData?.some(value => value > 0)) throw new Error('QSM masking did not produce a nonempty mask.');
           }
           await awaitPipelineStep(executor, {
             terminal: 'complete', completionCallback: 'onPipelineComplete', errorCallback: 'onPipelineError',
@@ -60,7 +59,7 @@ export function registerQsmAutomation(app) {
           const artifacts = Object.entries(executor.getResults()).map(([id, result]) => ({
             id: `stage-${id}`, role: id === 'final' ? 'qsm' : 'intermediate', file: result.file,
           }));
-          const mask = inputs.mask[0] || new File([app.createMaskNifti(app.currentMaskData)], 'brain_mask.nii', { type: 'application/x-nifti' });
+          const mask = inputs.mask[0] || new File([app.maskController.createMaskNifti(app.maskController.currentMaskData)], 'brain_mask.nii', { type: 'application/x-nifti' });
           artifacts.push({ role: 'mask', file: mask });
           const volume = await readNifti(await final.arrayBuffer());
           let minimum = Infinity;

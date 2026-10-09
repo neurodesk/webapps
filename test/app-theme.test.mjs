@@ -52,6 +52,40 @@ test('core UI pairings meet WCAG AA text contrast', () => {
   assert.ok(contrast(token('nd-brand-console-time'), token('nd-brand-console-surface')) >= 4.5);
 });
 
+// The light palette overrides a subset of the brand tokens in its own block; a token
+// it does not restate keeps its dark value, exactly as the cascade resolves it.
+function lightToken(name) {
+  const block = css.match(/:root\[data-neurodesk-app\]\[data-neurodesk-theme="light"\]\s*\{([^}]*)\}/);
+  assert.ok(block, 'missing the light palette block');
+  const match = block[1].match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i'));
+  return match ? match[1].toLowerCase() : token(name);
+}
+
+test('the light palette meets the same WCAG AA text contrast', () => {
+  const pairs = [
+    ['nd-brand-text', 'nd-brand-surface', 4.5],
+    ['nd-brand-text-muted', 'nd-brand-surface', 4.5],
+    ['nd-brand-action-text', 'nd-brand-primary', 4.5],
+    ['nd-brand-menu-text', 'nd-brand-menu', 4.5],
+    ['nd-brand-text-dim', 'nd-brand-pale', 4.5],
+    ['nd-brand-success', 'nd-brand-surface', 4.5],
+    ['nd-brand-console-text', 'nd-brand-console-surface', 4.5],
+    ['nd-brand-console-time', 'nd-brand-console-surface', 4.5],
+  ];
+  assert.notEqual(lightToken('nd-brand-surface'), token('nd-brand-surface'), 'the light palette must define its own surface');
+  for (const [foreground, background, minimum] of pairs) {
+    const ratio = contrast(lightToken(foreground), lightToken(background));
+    assert.ok(ratio >= minimum, `light ${foreground} on ${background}: ${ratio.toFixed(2)} < ${minimum}`);
+  }
+});
+
+test('the contrast formula reproduces the WCAG reference ratios', () => {
+  // WCAG 2.1: black on white is 21:1; #767676 is the lightest grey that passes AA on white.
+  assert.equal(Number(contrast('#000000', '#ffffff').toFixed(2)), 21);
+  assert.equal(Number(contrast('#767676', '#ffffff').toFixed(2)), 4.54);
+  assert.equal(Number(contrast('#777777', '#ffffff').toFixed(2)), 4.48);
+});
+
 test('disabled controls keep full opacity and readable text', () => {
   assert.match(css, /\[data-neurodesk-app\] :is\(button:disabled, input:disabled, select:disabled, textarea:disabled\)\s*\{[^}]*opacity:\s*1/s);
 });

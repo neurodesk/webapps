@@ -1,6 +1,8 @@
 <!-- SPECKIT START -->
 # General Instructions
 
+- `SCT_E2E_LESION_MS` is a documented unpublished browser-test gate in `scripts/lib/e2e-test-data.mjs`; the SCT tutorial MS image has no redistribution licence, so CI cannot provision it.
+
 - `test:native-analysis` requires a real Docker compute server through `COMPUTE_SERVER_URL` and `COMPUTE_SERVER_TOKEN`. It compares native SCT data exactly with direct pinned-container runs, excluding timestamps, and retains generated fixtures under `TMPDIR`. `COMPUTE_SERVER_DATA` additionally checks downloaded artifact bytes against server files. Simulated runs cannot satisfy this gate.
 
 - after every change to the source code make sure the Agent.md file is updated

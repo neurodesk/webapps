@@ -44,7 +44,13 @@ export function createSyntheticMuscleMapNifti() {
   return buffer;
 }
 
-export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_000 } = {}) {
+// Without `reference` this is a transport smoke on a synthetic blob: it proves the real model ran,
+// not that its labels are right. With `reference` (apps/musclemap/test/upstream-reference.mjs) the
+// input is the pinned body MRI slab and the returned `segmentation` bytes are for comparison with
+// upstream MuscleMap's label map.
+export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_000, reference = null } = {}) {
+  const input = reference?.input ?? { name: 'release-smoke-mri.nii', buffer: createSyntheticMuscleMapNifti() };
+  const inputDims = reference?.dims ?? INPUT_DIMS;
   const normalizedAppUrl = new URL('./', appUrl).href;
   const serviceWorkerUrl = new URL('coi-serviceworker.js', normalizedAppUrl).href;
   const runtimeRequests = [];
@@ -79,12 +85,12 @@ export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_
     await page.locator('#modelSelect').selectOption('musclemap-wholebody-v1.4');
     await page.locator('#overlapSelect').selectOption('0');
     await page.locator('#chunkSizeSelect').selectOption('1');
-    await page.locator('#sourceChunkSizeSelect').selectOption('5');
+    await page.locator('#sourceChunkSizeSelect').selectOption(reference?.sourceChunkSize ?? '5');
     await page.locator('#webgpuToggle').evaluate((toggle) => { toggle.checked = false; });
     await page.locator('#fileInput').setInputFiles({
-      name: 'release-smoke-mri.nii',
+      name: input.name,
       mimeType: 'application/octet-stream',
-      buffer: createSyntheticMuscleMapNifti(),
+      buffer: input.buffer,
     });
     await page.waitForFunction(() => !document.querySelector('#runSegmentation')?.disabled, null, { timeout: 30_000 });
     await page.locator('#runSegmentation').click();
@@ -116,6 +122,7 @@ export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_
         browserThreads: navigator.hardwareConcurrency,
         modelOption: document.querySelector('#modelSelect')?.selectedOptions[0]?.textContent,
         segmentationBytes: bytes?.byteLength ?? 0,
+        segmentationBase64: bytes ? btoa(Array.from(new Uint8Array(bytes), (byte) => String.fromCharCode(byte)).join('')) : null,
         segmentationDims: view ? [view.getInt16(42, true), view.getInt16(44, true), view.getInt16(46, true)] : null,
         provenance: segmentation?.provenance ?? null,
         metrics: window.app._pendingMetrics ?? null,
@@ -129,14 +136,14 @@ export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_
 
     requireCondition(output.includes('Downloaded and verified: musclemap-wholebody.onnx'), 'model verification did not run');
     requireCondition(output.includes('Session created. Input: input, Output: output'), 'real model session was not created');
-    requireCondition(output.includes('Inference complete: 1 working slices'), 'real model inference did not finish');
+    requireCondition(output.includes(`Inference complete: ${inputDims[2]} working slices`), 'real model inference did not finish');
     requireCondition(output.includes('Keeping the largest 6-connected component'), 'connected-component cleanup did not run');
     requireCondition(output.includes('Metrics ready.'), `metrics failed:\n${output}`);
     requireCondition(requestedThreads >= 2, `release smoke used ${requestedThreads || 0} WASM threads`);
     requireCondition(requestedThreads === state.browserThreads, `ORT requested ${requestedThreads} of ${state.browserThreads} browser threads`);
     requireCondition(state.modelOption?.includes('113 structures, v1.4'), `wrong model selected: ${state.modelOption}`);
     requireCondition(state.segmentationBytes > 352, `segmentation contains ${state.segmentationBytes} bytes`);
-    requireCondition(JSON.stringify(state.segmentationDims) === JSON.stringify(INPUT_DIMS), `segmentation dimensions are ${state.segmentationDims}`);
+    requireCondition(JSON.stringify(state.segmentationDims) === JSON.stringify(inputDims), `segmentation dimensions are ${state.segmentationDims}`);
     requireCondition(state.provenance?.assetSha256 === MODEL_SHA256, 'segmentation provenance has the wrong model digest');
     requireCondition(state.provenance?.labelSpaceId === 'musclemap-wholebody-v1.4', 'segmentation provenance has the wrong label space');
     requireCondition(state.metrics?.totalVolumeMl > 0, `metrics total is ${state.metrics?.totalVolumeMl ?? 'missing'}`);
@@ -156,6 +163,7 @@ export async function verifyMuscleMapFullPipeline(page, appUrl, { timeout = 180_
       appVersion: state.appVersion,
       requestedThreads,
       segmentationBytes: state.segmentationBytes,
+      segmentation: Buffer.from(state.segmentationBase64, 'base64'),
       totalVolumeMl: state.metrics.totalVolumeMl,
       runtimeRequests: [...new Set(runtimeRequests)],
     };

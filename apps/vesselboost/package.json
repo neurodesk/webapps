@@ -1,7 +1,8 @@
 {
   "scripts": {
     "lint": "node ../../scripts/check-app-js.mjs web",
-    "test": "npm run lint && npm run test:analytics && npm run test:spatial-file && npm run test:pipeline-graph && npm run test:viewer-controller && npm run test:result-display && npm run test:mask-edit && npm run test:n4-shrink-policy",
+    "test": "npm run lint && npm run test:analytics && npm run test:spatial-file && npm run test:pipeline-graph && npm run test:viewer-controller && npm run test:result-display && npm run test:mask-edit && npm run test:n4-shrink-policy && npm run test:upstream-reference",
+    "test:upstream-reference": "node --test test/upstream-reference.test.mjs",
     "test:analytics": "node --no-warnings scripts/test_analytics.mjs",
     "test:spatial-file": "node --no-warnings scripts/test_spatial_file.mjs",
     "test:pipeline-graph": "node --no-warnings scripts/test_pipeline_graph.mjs",
@@ -19,7 +20,6 @@
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test && pnpm build && pnpm test:preprocessing && node scripts/test_example_workflow.mjs",
     "test:preprocessing": "node scripts/test_preprocessing_workflow.mjs",
-    "test:shared": "node --test test/shared-components-parity.test.js",
     "test:examples": "node --test scripts/test_examples.mjs",
     "test:example-data": "node --test scripts/test_example_data.mjs",
     "test:example-workflow": "node scripts/test_example_workflow.mjs"
@@ -34,7 +34,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "vesselboost",
-  "version": "0.5.20261007",
+  "version": "0.5.20261009",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

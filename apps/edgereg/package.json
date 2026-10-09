@@ -1,6 +1,6 @@
 {
   "name": "edgereg",
-  "version": "0.3.20261007",
+  "version": "0.4.20261009",
   "private": true,
   "type": "module",
   "license": "BSD-2-Clause",
@@ -13,6 +13,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@neurodesk/edgereg": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niimath": "1.4.20260909",

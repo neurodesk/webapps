@@ -7,11 +7,12 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nativeReleases, portableSpecs } from '../lib/native-releases.mjs';
 import { catalogReleases, parseReleases } from '../lib/standalone-import.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const catalog = JSON.parse(await readFile(join(root, 'registry/standalone.json'), 'utf8'));
-const releases = process.argv.length > 2 ? parseReleases(process.argv.slice(2)) : catalogReleases(catalog);
+const releases = process.argv.length > 2 ? parseReleases(process.argv.slice(2)) : catalogReleases(catalog, nativeReleases(await portableSpecs()));
 const directory = await mkdtemp(join(tmpdir(), 'catalog-update-'));
 try {
   const update = join(directory, 'update.json');

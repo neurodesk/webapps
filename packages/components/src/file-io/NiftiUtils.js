@@ -89,12 +89,19 @@ export function isValidNifti1(data) {
     && view.getUint8(346) === 0x31;
 }
 
-export async function decodeNiftiBuffer(bufferLike) {
+/**
+ * Uncompressed NIfTI bytes; uncompressed input is returned unchanged.
+ * With `maxBytes` (e.g. 352 for a header), decompression stops once at least that many bytes
+ * are decoded, so the result may be longer than `maxBytes` but is usually far shorter than the
+ * whole image.
+ */
+export async function decodeNiftiBuffer(bufferLike, { maxBytes = Infinity } = {}) {
   const buffer = toArrayBuffer(bufferLike);
   if (!isGzipped(buffer)) return buffer;
   if (typeof DecompressionStream === 'function') {
     const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
-    return new Response(stream).arrayBuffer();
+    if (maxBytes === Infinity) return new Response(stream).arrayBuffer();
+    return readStreamPrefix(stream, maxBytes);
   }
   try {
     const { gunzipSync } = await import('node:zlib');
@@ -102,6 +109,26 @@ export async function decodeNiftiBuffer(bufferLike) {
   } catch (error) {
     throw new Error(`Compressed NIfTI decoding requires DecompressionStream or node:zlib: ${error.message}`);
   }
+}
+
+async function readStreamPrefix(stream, maxBytes) {
+  const reader = stream.getReader();
+  const chunks = [];
+  let length = 0;
+  while (length < maxBytes) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    length += value.length;
+  }
+  if (length >= maxBytes) await reader.cancel().catch(() => {});
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result.buffer;
 }
 
 export async function readNifti(bufferLike, OutputCtor = Float32Array) {

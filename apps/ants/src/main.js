@@ -5,9 +5,11 @@ import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import { createResultList, bindFileDrop, createInfoDialog, renderCommand, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
+import { artifactFiles } from "@neurodesk/ants/outputs";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from "@neurodesk/webapp-components/automation";
 import { extractBrain } from "./brain-extraction.js";
+import { createRegistrationRunner } from "./registration-runner.js";
 
 const $ = (id) => document.getElementById(id);
 const slots = {
@@ -26,8 +28,6 @@ let outputs = {};
 let busy = false;
 let viewersReady = false;
 let viewersDestroyed = false;
-let registrationWorker = null;
-let cancelRegistration = null;
 let timer;
 
 mountImagingWorkspace({
@@ -302,7 +302,7 @@ const RESULTS = {
   registered: { description: "Registered moving image" },
   affine: { description: "Affine transform (.mat)" },
   warp: { description: "Forward warp" },
-  inverseWarp: { description: "Inverse warp" },
+  "inverse-warp": { description: "Inverse warp" },
 };
 const results = createResultList({
   element: $("resultList"),
@@ -310,64 +310,11 @@ const results = createResultList({
   onDownload: (stage) => downloadFile(outputs[stage]),
 });
 
-function runRegistration(fixed, moving, onProgress, signal) {
-  signal?.throwIfAborted();
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" });
-    registrationWorker = worker;
-    let closed = false;
-    const close = () => {
-      closed = true;
-      signal?.removeEventListener("abort", abort);
-      worker.terminate();
-      if (registrationWorker === worker) {
-        registrationWorker = null;
-        cancelRegistration = null;
-        $("cancelButton").hidden = true;
-      }
-    };
-    worker.onmessage = ({ data }) => {
-      if (closed) return;
-      if (data.log) {
-        log.log(data.log);
-        return;
-      }
-      if (data.phase) {
-        onProgress(data.phase);
-        return;
-      }
-      close();
-      if (data.error) reject(new Error(data.error));
-      else resolve(data);
-    };
-    worker.onerror = (event) => {
-      if (closed) return;
-      close();
-      reject(new Error(event.error instanceof Error ? event.error.message : event.message || "ANTs worker failed to start."));
-    };
-    worker.onmessageerror = () => {
-      if (closed) return;
-      close();
-      reject(new Error("ANTs worker could not exchange registration data."));
-    };
-    const abort = () => {
-      if (closed) return;
-      close();
-      reject(signal?.reason ?? new DOMException("Cancelled", "AbortError"));
-    };
-    cancelRegistration = abort;
-    signal?.addEventListener("abort", abort, { once: true });
-    $("cancelButton").hidden = false;
-    Promise.all([fixed.arrayBuffer(), moving.arrayBuffer()]).then(([fixedBytes, movingBytes]) => {
-      if (closed) return;
-      worker.postMessage({ fixed: fixedBytes, moving: movingBytes }, [fixedBytes, movingBytes]);
-    }).catch((error) => {
-      if (closed) return;
-      close();
-      reject(error);
-    });
-  });
-}
+const registration = createRegistrationRunner({
+  createWorker: () => new Worker(new URL("./registration-worker.js", import.meta.url), { type: "module" }),
+  onLog: (line) => log.log(line),
+  onActiveChange: (active) => { $("cancelButton").hidden = !active; },
+});
 
 async function register({
   moving = slots.moving.file,
@@ -389,20 +336,15 @@ async function register({
   }, 1000);
   $("progress").removeAttribute("value");
   try {
-    const data = await runRegistration(fixed, moving, (next) => {
+    const data = await registration.run(fixed, moving, (next) => {
       phase = next;
       status(next);
       progress({ message: next });
     }, signal);
     signal?.throwIfAborted();
-    const stem = moving.name.replace(/\.nii(\.gz)?$/i, "");
-    output = new File([data.image], `${stem}_registered.nii.gz`);
-    outputs = {
-      registered: output,
-      affine: new File([data.transforms["0GenericAffine.mat"]], `${stem}_0GenericAffine.mat`),
-      warp: new File([data.transforms["1Warp.nii.gz"]], `${stem}_1Warp.nii.gz`),
-      inverseWarp: new File([data.transforms["1InverseWarp.nii.gz"]], `${stem}_1InverseWarp.nii.gz`),
-    };
+    const files = artifactFiles(moving.name, { warped: data.image, transforms: data.transforms });
+    outputs = Object.fromEntries(files.map(({ role, name, bytes }) => [role, new File([bytes], name)]));
+    output = outputs.registered;
     await viewers.resliced.loadVolumes([{ url: output, name: output.name }]);
     signal?.throwIfAborted();
     results.render(RESULTS);
@@ -410,7 +352,7 @@ async function register({
     $("progress").value = 1;
     status(`Registration complete in ${((performance.now() - started) / 1000).toFixed(1)} s`);
     return {
-      artifacts: Object.entries(outputs).map(([role, file]) => ({ role: role === "inverseWarp" ? "inverse-warp" : role, file })),
+      artifacts: Object.entries(outputs).map(([role, file]) => ({ role, file })),
       provenance: { algorithm: "ANTs SyN", implementation: "@neurodesk/registration", seed: 42, affineIterations: "2100x1200x1200x0", synIterations: "40x20x0", elapsedMs: performance.now() - started },
     };
   } catch (error) {
@@ -430,7 +372,7 @@ $("runButton").onclick = () => void runTask("Starting registration…", async ()
 });
 $("cancelButton").onclick = () => {
   status("Cancelling registration…");
-  cancelRegistration?.();
+  registration.cancel();
 };
 
 async function init() {
@@ -455,7 +397,7 @@ async function init() {
 window.addEventListener("pagehide", () => {
   exampleControl.destroy();
   clearInterval(timer);
-  registrationWorker?.terminate();
+  registration.terminate();
   destroyViewers();
 });
 

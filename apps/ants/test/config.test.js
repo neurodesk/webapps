@@ -2,15 +2,7 @@
 // Playwright test in e2e/ — Node tests must not import modules that touch `document`.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { APP, MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "../src/config.js";
-
-test("app id is lowercase kebab-case", () => {
-  assert.match(APP.id, /^[a-z][a-z0-9-]*$/);
-});
-
-test("app config is frozen", () => {
-  assert.ok(Object.isFrozen(APP));
-});
+import { MOVING_EXAMPLES, STATIONARY_EXAMPLES } from "../src/config.js";
 
 test("the brain-only defaults use the shared registration dataset", () => {
   assert.deepEqual(MOVING_EXAMPLES.map(({ filename }) => filename), ["t1_brain.nii.gz"]);

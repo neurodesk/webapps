@@ -1,7 +1,7 @@
 {
   "name": "niimath",
   "private": true,
-  "version": "1.3.20261007",
+  "version": "1.3.20261009",
   "type": "module",
   "license": "BSD-2-Clause",
   "scripts": {
@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "node ../../scripts/check-app-js.mjs .",
     "test": "node ../../scripts/check-app-js.mjs .",
-    "test:e2e": "node ../../test/examples.smoke.mjs --app niimath"
+    "test:e2e": "node ../../test/examples.smoke.mjs --app niimath && playwright test"
   },
   "devDependencies": {
     "vite": "^5.4.6"

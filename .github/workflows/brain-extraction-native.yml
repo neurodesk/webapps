@@ -1,0 +1,82 @@
+name: brain-extraction-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/brain-extraction-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/brain-extraction/**'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/node/**'
+      - 'apps/brain-extraction/**'
+      - 'apps/qsmbly/rust-wasm/**'
+      - 'packages/synthsr/**'
+      - 'packages/synthstrip/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/brain-extraction-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/brain-extraction/**'
+      - 'packages/runtime-support/package.json'
+      - 'packages/runtime-support/src/node/**'
+      - 'apps/brain-extraction/**'
+      - 'apps/qsmbly/rust-wasm/**'
+      - 'packages/synthsr/**'
+      - 'packages/synthstrip/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing brain extraction release
+        type: boolean
+        default: false
+
+concurrency:
+  group: brain-extraction-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  wasm-source:
+    name: committed BET WASM equals a rebuild from source
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
+      - name: Rebuild and compare
+        run: bash packages/brain-extraction/scripts/build-bet-wasm.sh --check
+
+  portable:
+    needs: wasm-source
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/brain-extraction
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
