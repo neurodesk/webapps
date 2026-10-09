@@ -62,7 +62,10 @@ try {
       await page.locator('#pipelineSection [data-disclosure-toggle]').click();
     }
     await page.locator('#runPipelineSidebar').click();
-    await page.waitForFunction(() => window.app.pipelineExecutor.pipelineHasRun, null, { timeout: 300000 });
+    await page.waitForFunction(() => {
+      const executor = window.app.pipelineExecutor;
+      return Boolean(executor.getResult('final')?.file) && !executor.isRunning();
+    }, null, { timeout: 300000 });
     const result = page.locator('#stage-item-final .stage-download');
     await expect(result).toBeEnabled();
     const downloadPromise = page.waitForEvent('download');

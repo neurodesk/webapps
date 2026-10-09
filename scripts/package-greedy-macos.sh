@@ -54,6 +54,8 @@ if [[ "$identity" != - ]]; then
     pkgutil --check-signature "$pkg" >> "$pkg.validation.txt"
     xcrun stapler validate "$pkg" >> "$pkg.validation.txt" 2>&1
 fi
+# The digest of the stapled package; the Standalone catalog accepts a receipt only when it records it.
+printf 'sha256: %s\n' "$(cat "$pkg.sha256")" >> "$pkg.validation.txt"
 
 if [[ "$identity" != - ]]; then
     mkdir -p "$root/packages/greedy/native/macos-arm64"

@@ -1,5 +1,7 @@
 # @neurodesk/fireants
 
+## 0.3.20261009
+
 ## 0.3.20261007
 
 ### Minor Changes

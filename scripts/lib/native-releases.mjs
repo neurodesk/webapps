@@ -53,11 +53,36 @@ export function portableSpecsAt(ref, root = repoRoot) {
   return specs;
 }
 
+function claim(releases, app, source) {
+  const sources = releases.get(app) ?? [];
+  for (const other of sources) {
+    const shared = source.targets.filter((platform) => other.targets.includes(platform));
+    if (shared.length) throw new Error(`${app}: ${shared.join(', ')} claimed by both ${other.workflow} and ${source.workflow}`);
+    if (other.workflow === source.workflow) throw new Error(`${app}: two release sources share ${source.workflow}`);
+  }
+  releases.set(app, [...sources, source]);
+}
+
+// Every app's release sources, as { app: [source] }. Each source owns the platforms it builds, and one
+// platform never has two owners. A Rust source is dispatched by hand and attaches to the release named by
+// its Cargo.toml version; a portable source starts with the app release and builds in release.json's
+// workflow (default <app>-native.yml). A source with a macOS installer publishes only by signing it.
 export function nativeReleases(specs) {
-  const releases = new Map(Object.entries(RUST_RELEASES).map(([app, release]) => [app, { ...release, startsWithAppRelease: false, spec: null }]));
+  const releases = new Map();
+  for (const [app, release] of Object.entries(RUST_RELEASES)) {
+    claim(releases, app, { ...release, publishInput: 'sign_release', startsWithAppRelease: false, spec: null });
+  }
   for (const [app, { packageDir, spec, legacy }] of specs) {
-    if (releases.has(app)) throw new Error(`${app}: both a Rust and a portable Node release`);
-    releases.set(app, { workflow: `${app}-native.yml`, targets: Object.keys(spec.targets), startsWithAppRelease: true, packageDir, spec: legacy ? null : spec });
+    const targets = Object.keys(spec.targets);
+    const installer = targets.some((platform) => spec.targets[platform].archive === 'pkg');
+    claim(releases, app, {
+      workflow: spec.workflow ?? `${app}-native.yml`,
+      targets,
+      publishInput: installer ? 'sign_release' : 'publish_release',
+      startsWithAppRelease: true,
+      packageDir,
+      spec: legacy ? null : spec,
+    });
   }
   return releases;
 }

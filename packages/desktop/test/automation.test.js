@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createAutomationService, loadAutomationContracts } from '../src/automation.js';
 import { parseContract, readContract } from '../src/contracts.js';
@@ -114,6 +114,63 @@ test('timeouts and unavailable native engines return actionable failures', async
   assert.equal(run.state, 'failed');
   assert.equal(run.error.code, 'TIMEOUT');
   assert.deepEqual(await service.listResources(), []);
+});
+
+test('failed runs remain running until partial outputs have been removed', { timeout: 5000 }, async t => {
+  const { root, service, request } = await fixture(t, async ({ outputDirectory }) => {
+    await writeFile(join(outputDirectory, 'partial.nii'), 'partial');
+    throw new Error('Processing failed');
+  });
+  let removing;
+  const removalStarted = new Promise(resolve => { removing = resolve; });
+  let release;
+  const cleanup = new Promise(resolve => { release = resolve; });
+  const remove = fs.promises.rm;
+  t.mock.method(fs.promises, 'rm', async (path, options) => {
+    if (basename(path) === 'outputs') {
+      removing();
+      await cleanup;
+    }
+    return remove(path, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  const started = await service.start('synthseg', request);
+  const partial = join(root, 'runs', started.id, 'outputs', 'partial.nii');
+  let cancellation;
+  try {
+    await removalStarted;
+    assert.equal((await service.get(started.id)).state, 'running');
+    assert.equal(await readFile(partial, 'utf8'), 'partial');
+    cancellation = service.cancel(started.id);
+  } finally {
+    release();
+  }
+  await cancellation;
+  const run = await completed(service, started.id);
+  assert.equal(run.state, 'failed');
+  assert.equal(run.error.code, 'EXECUTION_FAILED');
+  assert.equal(run.error.message, 'Processing failed');
+  await assert.rejects(readFile(partial), { code: 'ENOENT' });
+});
+
+test('cleanup errors still publish the execution failure and report the cleanup error', { timeout: 5000 }, async t => {
+  const { service, request } = await fixture(t, async () => { throw new Error('Processing failed'); });
+  const remove = fs.promises.rm;
+  t.mock.method(fs.promises, 'rm', async (path, options) => {
+    if (basename(path) === 'outputs') throw new Error('Removal failed');
+    return remove(path, options);
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  let logged;
+  const cleanupError = new Promise(resolve => { logged = resolve; });
+  t.mock.method(console, 'error', logged);
+  const started = await service.start('synthseg', request);
+  assert.equal(await cleanupError, 'Run cleanup failed: Removal failed');
+  const run = await service.get(started.id);
+  assert.equal(run.state, 'failed');
+  assert.equal(run.error.message, 'Processing failed');
 });
 
 test('discovery verifies the contract against the offline inventory', async t => {

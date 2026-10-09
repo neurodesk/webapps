@@ -1,5 +1,15 @@
 # qsmbly
 
+## 0.29.20261009
+
+### Patch Changes
+
+- 501ea0c: Load Inter from `css/inter.css`, which names the Google Fonts v20 WOFF2 files directly, instead of the `fonts.googleapis.com` stylesheet, whose response can change. The page now loads one variable-weight file per script subset.
+- 8ac4f60: Default the smallest V-SHARP kernel radius to twice the largest voxel dimension, as QSM.jl does. Anisotropic data previously started from twice the smallest dimension; isotropic data is unchanged.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.29.20261007
 
 ### Patch Changes

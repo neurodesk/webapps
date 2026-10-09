@@ -3,6 +3,10 @@ import { VERSION, MODEL_BASE_URL } from './config.js';
 export const SCT_STABLE_SOURCE = 'https://spinalcordtoolbox.com/stable/user_section/command-line/sct_deepseg.html';
 const HF_DATASET_ASSET_REVISION = '55c9462a14bc9c84cf093c348cffda9148099df9';
 const HF_DATASET_ASSET_BASE_URL = `https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/${HF_DATASET_ASSET_REVISION}`;
+// sct-lesion-ms.onnx was added to the dataset after the revision above. It has
+// its own pin so the other assets' URLs (and their offline-asset locks) stay put.
+const HF_DATASET_MS_LESION_REVISION = '9ed55d734edbd3b4dcd2da298ab49ce277c1bc4e';
+const HF_DATASET_MS_LESION_BASE_URL = `https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/${HF_DATASET_MS_LESION_REVISION}`;
 
 export const TASK_STATUS = Object.freeze({
   SUPPORTED: 'supported',
@@ -370,15 +374,83 @@ export const SCT_TASKS = [
     id: 'lesion_ms',
     displayName: 'MS lesion',
     category: 'pathology',
-    description: 'Contrast-agnostic multiple sclerosis lesion segmentation.',
+    description: 'Contrast-agnostic multiple sclerosis lesion segmentation (SCT lesion_ms, single fold).',
     inputContrasts: ['T1w', 'T2w', 'T2star', 'MP2RAGE', 'PSIR', 'STIR'],
     requiredInputs: [{ role: 'image', contrast: 'supported MS spinal cord MRI contrast' }],
     outputType: 'binary-mask',
     labelSet: 'lesion',
-    supportStatus: TASK_STATUS.UNSUPPORTED,
-    validationStatus: 'not-run',
-    unsupportedReason: 'Converted and checked against SCT 7.3 locally (scripts/convert_ms_lesion_model.py); the ONNX model is not hosted yet.',
-    modelAssets: []
+    supportStatus: TASK_STATUS.SUPPORTED,
+    validationStatus: 'passed',
+    validationSummary: 'Fold 1 of SCT\'s five-fold lesion_ms model (release r20250909, what `sct_deepseg lesion_ms -single-fold` runs in SCT 7.3) converted to ONNX. One image, the SCT course MS case (axial T2w, 0.69x0.69x7.5 mm): Dice 0.83 against SCT 7.3 -single-fold in Docker (browser pipeline 171 voxels, 4 lesions, 606 mm3; SCT 190 voxels, 5 lesions, 674 mm3; the missed lesion is 8 voxels), and Dice 0.82 from a real Chromium WASM run (169 voxels, 4 lesions, 599 mm3). Against SCT\'s default five-fold vote, reproduced with nnU-Net outside SCT because the container ran out of memory (170 voxels, 5 lesions, 603 mm3): Dice 0.83. The browser uses a 192x160x64 patch instead of the plan\'s 192x192x192 and the app\'s shared resampling; this is a software parity check, not a clinical validation.',
+    outputStages: [
+      {
+        id: 'lesion',
+        kind: 'nifti',
+        labelSet: 'lesion',
+        sourceRegion: 'lesion',
+        sourceLabels: [1],
+        outputSuffix: '_lesion_seg'
+      },
+      {
+        id: 'lesion_metrics',
+        kind: 'metrics',
+        derivedFrom: ['lesion'],
+        outputSuffix: '_lesion_metrics.csv'
+      }
+    ],
+    modelAssets: [
+      {
+        id: 'sct-lesion-ms',
+        sourceUrl: 'https://github.com/ivadomed/ms-lesion-agnostic/releases/download/r20250909/model_fold1.zip',
+        sourceVersion: 'r20250909',
+        sourceFormat: 'SCT lesion_ms nnUNet ResEncL package, fold 1 (sct_deepseg lesion_ms -single-fold)',
+        browserFormat: 'onnx',
+        filename: 'sct-lesion-ms.onnx',
+        downloadUrl: `${HF_DATASET_MS_LESION_BASE_URL}/web/models/sct-lesion-ms.onnx`,
+        conversionStatus: 'converted',
+        checksum: 'sha256:b858ec157889c931e7bb395bb6095063fe8a9acb19d7ad30f4afccd76b3319c6',
+        sizeBytes: 409486303,
+        modelOrientation: 'RPI',
+        patchSize: [192, 160, 64],
+        preprocessing: {
+          modelOrientation: 'RPI',
+          modelAxisOrder: 'zyx',
+          targetSpacing: [1, 1, 1]
+        },
+        output: {
+          activation: 'sigmoid-regions',
+          channelCount: 1,
+          channelOrder: ['lesion'],
+          datasetLabels: {
+            background: 0,
+            lesion: 1
+          },
+          classMap: [
+            { stage: 'lesion', sourceRegion: 'lesion', sourceLabels: [1], outputLabel: 1 }
+          ],
+          regions: [
+            {
+              name: 'lesion',
+              stage: 'lesion',
+              channel: 0,
+              sourceLabels: [1],
+              outputLabel: 1,
+              threshold: 0.5,
+              description: 'MS lesion segmentation'
+            }
+          ],
+          paddingMode: 'center-min-patch',
+          gaussianSigmaScale: 0.125,
+          metricsStage: 'lesion_metrics'
+        },
+        inferenceDefaults: {
+          overlap: 0.5,
+          probabilityThreshold: 0.5,
+          minComponentSize: 1,
+          testTimeAugmentation: false
+        }
+      }
+    ]
   },
   {
     id: 'lesion_ms_axial_t2',

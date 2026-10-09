@@ -1,8 +1,6 @@
 // DOM-independent helpers, unit-tested under Node (see test/logic.test.js).
-export const outputStem = (name) => name.replace(/\.nii(\.gz)?$/i, '');
-
-// SynthSeg's CT path expects Hounsfield units; only CT scans store negatives.
-export const looksLikeCt = (voxels) => voxels.some((value) => value < 0);
+// Naming and CT detection come from the package so the synthseg command line makes the same decisions.
+export { looksLikeCt, outputStem } from '@neurodesk/synthseg/results';
 
 export const gridOf = ({ dims, header }) => ({ dims, affine: header.affine });
 

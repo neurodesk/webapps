@@ -42,6 +42,15 @@ explicit Run action, pinned examples and cancellable automation. Automated PVE
 runs return `csf`, `gm`, `wm`, `mask` and `qc`; label runs return `labels`, `mask`
 and `qc`. Choose `model: "16chan18cls"` to retain the previous label output.
 
+## Command line
+
+The portable `browserqc` command line runs this app's pipeline in Node, with
+the same MindGrab and niimath WebAssembly on the CPU, and writes the app's
+downloads. Its archives for Linux, Windows and macOS include the models and
+air template and run offline; get them from the Standalone dialog. The app
+and the command line share the pipeline in `packages/browserqc`, whose README
+describes the options and the release check against this app's own output.
+
 ## Native pipeline
 
 Run `python3 cli/qc.py --in T1.nii.gz --out qc.json`. Install the matching

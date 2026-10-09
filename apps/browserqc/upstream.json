@@ -19,6 +19,7 @@
     "Keep model weights and example images outside the repository, fetched with checksums from pinned Hugging Face manifests; port relevant ignored public asset changes by updating those manifests.",
     "Keep MindGrab model selection and partial-volume tissue estimates; review QC metrics and ratings against each model.",
     "Use the public niimath package API and shared DICOM importer instead of upstream vendored runtimes.",
-    "Keep monorepo date-based release versions and deployment workflows; port relevant ignored index.html and src/style.css changes through the shared design system."
+    "Keep monorepo date-based release versions and deployment workflows; port relevant ignored index.html and src/style.css changes through the shared design system.",
+    "Keep the MindGrab mask and segmentation sequence, the pinned air template and the report provenance in packages/browserqc, shared with the browserqc command line; give MindGrab and niimath a NIfTI file's own bytes, as the command line does."
   ]
 }

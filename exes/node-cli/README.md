@@ -26,6 +26,7 @@ Each package describes its archives in `release.json`:
 | `run` | Arguments shown after the executable in `README.txt` |
 | `readme.run`, `readme.notes` | Heading for the run command and closing paragraphs of `README.txt` |
 | `validation` | Script, relative to the package, run as `node SCRIPT --executable PATH` on the extracted archive |
+| `workflow` | Optional. The workflow that builds the archives, when it is not `<app>-native.yml` because another release source already owns that name (SynthSEG's Rust macOS installer) |
 | `targets` | Release targets with their kind (`tar.gz`, `zip`, or `pkg` for macOS) and executable name |
 
 The package must have exactly one `bin` entry, `bin/<tool>.js`. Packaging runs

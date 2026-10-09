@@ -514,7 +514,7 @@ mod mega_tests {
     }
 
     /// The co-edited macromolecule model the app adds to a MEGA-PRESS fit
-    /// (apps/lcmodel/src/lcmodel-io.js, coEditedMacromolecules), with the
+    /// (packages/lcmodel/src/lcmodel-io.js, coEditedMacromolecules), with the
     /// app's fit range for edited data.
     fn co_edited_mm(hzpppm: f64) -> String {
         let ppm = |hz: f64| format!("{:.3}", hz / hzpppm);

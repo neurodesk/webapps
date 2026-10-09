@@ -141,7 +141,7 @@ export function createAutomationService({ contracts, outputRoot, execute, native
           if (sessionInfo) await viewers.close(sessionInfo.id);
           else if (retained) await retained.close();
           const cancelled = controller.signal.aborted && controller.signal.reason?.name === 'AbortError';
-          run.snapshot = {
+          const failedSnapshot = {
             ...run.snapshot,
             state: cancelled ? 'cancelled' : 'failed',
             phase: 'complete',
@@ -149,7 +149,11 @@ export function createAutomationService({ contracts, outputRoot, execute, native
             error: { code: cancelled ? 'CANCELLED' : controller.signal.aborted ? 'TIMEOUT' : error.code ?? 'EXECUTION_FAILED',
               message: String(error.message ?? error), ...(error.candidates && { candidates: error.candidates }) },
           };
-          await rm(outputDirectory, { recursive: true, force: true });
+          try {
+            await rm(outputDirectory, { recursive: true, force: true });
+          } finally {
+            run.snapshot = failedSnapshot;
+          }
         } finally {
           clearTimeout(timer);
           await persist(run).catch(error => console.error(`Could not save run record: ${error.message}`));

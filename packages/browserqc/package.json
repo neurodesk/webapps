@@ -1,0 +1,44 @@
+{
+  "name": "@neurodesk/browserqc",
+  "version": "1.5.20261009",
+  "description": "BrowserQC MRI quality control (MindGrab segmentation and niimath QC metrics) for browsers and the command line",
+  "type": "module",
+  "license": "BSD-2-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "browserqc": "./bin/browserqc.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/pipeline.d.ts",
+      "default": "./src/pipeline.js"
+    },
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/pipeline.js && node --check src/node.js && node --check bin/browserqc.js"
+  },
+  "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@niivue/niimath": "1.4.20260928"
+  },
+  "devDependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/browserqc"
+  }
+}

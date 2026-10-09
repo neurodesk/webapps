@@ -1,5 +1,20 @@
 # spinalcordtoolbox
 
+## 0.8.20261009
+
+### Minor Changes
+
+- Add MS lesion segmentation (`lesion_ms`): SCT 7.3's contrast-agnostic MS lesion model, fold 1 of release r20250909. It produces a lesion mask and lesion-only browser metrics. On the SCT course axial T2w MS image the browser result has Dice 0.82 against SCT's single-fold output and misses the smallest 8-voxel lesion.
+
+## 0.7.20261009
+
+### Patch Changes
+
+- d56383f: Keep Run segmentation disabled until an input is loaded. The section's styling blocked the mouse but not the keyboard, so Enter could start a segmentation with no image.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.7.20261007
 
 ### Minor Changes

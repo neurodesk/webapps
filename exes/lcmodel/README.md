@@ -139,6 +139,6 @@ and Asp differ by 4 to 15 % (norm of the difference). The shaped set is closer t
 pulses are FID-A's examples, so it is closer, not exact.
 
 A MEGA-PRESS difference basis has no macromolecule spectra. The app adds
-them as LCModel simulated components (CHSIMU, `apps/lcmodel/src/lcmodel-io.js`):
+them as LCModel simulated components (CHSIMU, `packages/lcmodel/src/lcmodel-io.js`):
 MM09 at 0.915 ppm and MM3co at 3.0 ppm, tied by CHRATO, after Zöllner et al.
 (NMR Biomed 2022;35:e4618). MM-suppressed sets get no MM3co.

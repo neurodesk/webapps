@@ -125,3 +125,5 @@ jobs:
             gh pr edit "$pr" --title "$title" --body-file "$RUNNER_TEMP/body.md"
             if [ "$CONFLICTS" -gt 0 ]; then gh pr ready "$pr" --undo || true; fi
           fi
+          # Codex reviews App-authored pull requests only when asked.
+          gh pr comment "$BRANCH" --body '@codex review'

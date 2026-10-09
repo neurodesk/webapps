@@ -21,6 +21,7 @@ minimumReleaseAgeExclude:
   - '@fideus-labs/ngff-zarr@0.38.0'
   - '@fideus-labs/fiff@0.8.2'
 overrides:
-  '@playwright/test': 1.63.0
-  playwright: 1.63.0
+  '@playwright/test': 1.64.0
+  playwright: 1.64.0
   '@electron/osx-sign>isbinaryfile': 5.0.7
+  '@itk-wasm/dam>decompress': npm:@xhmikosr/decompress@11.1.3

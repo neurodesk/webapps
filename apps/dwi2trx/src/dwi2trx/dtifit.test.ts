@@ -1,6 +1,7 @@
 /**
- * End-to-end check of the niimath dtifit pipeline against the bundled sample.
- * Runs the real WASM (unmasked dtifit), so it needs the vendored niimath.
+ * End-to-end check of the shared dtifit pipeline through the app's niimath runner
+ * against the bundled sample. Runs the real WASM (unmasked dtifit), so it needs the
+ * vendored niimath.
  * Run: node --experimental-strip-types src/dwi2trx/dtifit.test.ts  (Node 22+).
  */
 
@@ -8,10 +9,8 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
-import { fitTensor } from './dtifit.ts'
-
-const asFile = (path: string, name: string) =>
-  new File([readFileSync(path)], name)
+import { fitTensor } from '@neurodesk/dwi2trx'
+import { runNiimath } from './dtifit.ts'
 
 const fixtureDir = process.env.DWI2TRX_FIXTURE_DIR || 'public'
 const fixture = join(fixtureDir, 'dwi.nii.gz')
@@ -20,15 +19,13 @@ if (!existsSync(fixture)) {
   process.exit(0)
 }
 
-const input = {
-  nifti: asFile(fixture, 'dwi.nii.gz'),
-  bval: asFile(join(fixtureDir, 'dwi.bval'), 'dwi.bval'),
-  bvec: asFile(join(fixtureDir, 'dwi.bvec'), 'dwi.bvec'),
-  directions: 21,
-  source: 'sample' as const,
-}
-
-const { fa, v1 } = await fitTensor(input)
+const maps = await fitTensor(runNiimath, {
+  dwi: readFileSync(fixture),
+  bval: readFileSync(join(fixtureDir, 'dwi.bval')),
+  bvec: readFileSync(join(fixtureDir, 'dwi.bvec')),
+})
+const fa = new Blob([maps.FA])
+const v1 = new Blob([maps.V1])
 
 // FA: 3D float32 in [0, 1] with white-matter structure over the brain.
 const faBytes = gunzipSync(Buffer.from(await fa.arrayBuffer()))

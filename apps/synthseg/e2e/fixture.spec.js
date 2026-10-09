@@ -11,10 +11,12 @@ import { planGpuGraph } from '../../../packages/runtime-support/src/gpu-unet/ses
 import { hardwareGpu } from '../../../test-utils/hardware-gpu.mjs';
 
 const graph = JSON.parse(readFileSync(new URL('../../../packages/synthseg/src/gpu-model.json', import.meta.url), 'utf8'));
+const gates = JSON.parse(readFileSync(new URL('../../../packages/synthseg/validation/gates.json', import.meta.url), 'utf8'));
 
 const fixtures = '../../exes/synthseg/test/fixtures';
 const references = process.env.SYNTHSEG_REFERENCE_DIR;
 const probeOnly = Boolean(process.env.SYNTHSEG_PROBE_ONLY);
+const parityRepeats = Number(process.env.SYNTHSEG_PARITY_REPEATS || 1);
 // Only the hardware benchmark run refreshes the committed validation/report.json.
 const reportPath = resolve(process.env.SYNTHSEG_VALIDATION_REPORT || (references ? 'validation/report.json' : 'test-results/validation-report.json'));
 const checksum = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,6 +37,9 @@ test.afterEach(async ({}, info) => {
     evidence.failure = { test: info.title, message: info.error?.message || info.status };
   }
   save();
+  if (info.status !== info.expectedStatus) {
+    await info.attach('validation-report', { path: reportPath, contentType: 'application/json' });
+  }
 });
 
 async function adapterEvidence(page) {
@@ -89,8 +94,52 @@ function countLabels(data) {
   return counts;
 }
 
+function captureGpuPosteriors() {
+  const getMappedRange = globalThis.GPUBuffer.prototype.getMappedRange;
+  globalThis.GPUBuffer.prototype.getMappedRange = function (...args) {
+    const buffer = getMappedRange.apply(this, args);
+    if (this.label !== 'SynthSeg output readback') return buffer;
+    const values = new Float32Array(buffer);
+    const words = new Uint32Array(buffer);
+    const voxels = values.length / 33;
+    const channelSums = Array(33).fill(0);
+    let nonFinite = 0;
+    let outsideUnitInterval = 0;
+    let sampleHash = 2166136261;
+    for (let channel = 0; channel < 33; channel++) {
+      const end = (channel + 1) * voxels;
+      for (let i = channel * voxels; i < end; i++) {
+        const value = values[i];
+        if (!Number.isFinite(value)) nonFinite++;
+        if (value < 0 || value > 1) outsideUnitInterval++;
+        channelSums[channel] += value;
+      }
+    }
+    for (let i = 0; i < words.length; i += 101) {
+      sampleHash = Math.imul(sampleHash ^ words[i], 16777619) >>> 0;
+    }
+    console.info('SYNTHSEG_POSTERIOR_DIAGNOSTIC ' + JSON.stringify({
+      byteLength: buffer.byteLength, nonFinite, outsideUnitInterval, channelSums, sampleHash,
+    }));
+    return buffer;
+  };
+}
+
+async function instrumentPosteriors(route) {
+  const response = await route.fetch();
+  await route.fulfill({ response, body: `(${captureGpuPosteriors.toString()})();\n${await response.text()}` });
+}
+
 async function checkCase(page, { input, reference, mode, limit, pinned }) {
-  const result = { device: 'webgpu', input, mode, pass: false, limit };
+  const result = { device: 'webgpu', input, mode, pass: false, limit, gpuPosteriors: [] };
+  const onConsole = message => {
+    const prefix = 'SYNTHSEG_POSTERIOR_DIAGNOSTIC ';
+    if (!message.text().startsWith(prefix)) return;
+    result.gpuPosteriors.push(JSON.parse(message.text().slice(prefix.length)));
+    save();
+  };
+  page.on('console', onConsole);
+  await page.route('**/assets/inference-worker-*.js', instrumentPosteriors, { times: 1 });
   evidence.results.push(result);
   save();
   await page.goto('./');
@@ -103,6 +152,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // The state flips when the run succeeds; the text follows once the viewer has the labels.
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'succeeded');
   await expect(page.locator('#statusText')).toContainText('Labels ready', { timeout: 120000 });
+  page.removeListener('console', onConsole);
   const download = await Promise.all([page.waitForEvent('download'), page.locator('#saveBtn').click()]).then(([value]) => value);
   const reportDownload = await Promise.all([page.waitForEvent('download'), page.locator('#reportBtn').click()]).then(([value]) => value);
   const producedBytes = readFileSync(await download.path());
@@ -112,6 +162,42 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   const report = JSON.parse(readFileSync(await reportDownload.path(), 'utf8'));
   const inputDescriptor = Array.isArray(report.inputs.image) ? report.inputs.image[0] : report.inputs.image;
   const outputDescriptor = report.artifacts.labels || Object.values(report.artifacts).find(value => value.role === 'labels');
+  await test.info().attach(`${mode}-labels.nii.gz`, { path: await download.path(), contentType: 'application/gzip' });
+  await test.info().attach(`${mode}-report.json`, { path: await reportDownload.path(), contentType: 'application/json' });
+  const expectedCounts = countLabels(golden.data);
+  const producedCounts = countLabels(produced.data);
+  const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
+  let mismatches = 0;
+  const confusion = new Map();
+  for (let i = 0; i < golden.data.length; i++) {
+    if (produced.data[i] === golden.data[i]) continue;
+    mismatches++;
+    const pair = `${golden.data[i]}:${produced.data[i]}`;
+    confusion.set(pair, (confusion.get(pair) || 0) + 1);
+  }
+  Object.assign(result, {
+    mismatched_voxels: mismatches,
+    compared_voxels: produced.data.length,
+    mismatch_fraction: mismatches / produced.data.length,
+    max_affine_error_mm: affineError,
+    inputSha256: checksum(readFileSync(input)),
+    goldenSha256: checksum(goldenBytes),
+    outputSha256: checksum(producedBytes),
+    provenance: report.provenance,
+    hippocampi: report.measurements.labels.filter(label => [17, 53].includes(label.id)),
+    labelCounts: [...new Set([...expectedCounts.keys(), ...producedCounts.keys()])].sort((a, b) => a - b).map(id => ({
+      id,
+      reference: expectedCounts.get(id) || 0,
+      produced: producedCounts.get(id) || 0,
+      delta: (producedCounts.get(id) || 0) - (expectedCounts.get(id) || 0),
+    })),
+    confusion: [...confusion].map(([pair, voxels]) => {
+      const [reference, produced] = pair.split(':').map(Number);
+      return { reference, produced, voxels };
+    }),
+  });
+  save();
+  expect(result.gpuPosteriors).toHaveLength(mode === 'default' ? 2 : 1);
   expect(report.status).toBe('succeeded');
   expect(inputDescriptor.sha256).toBe(checksum(readFileSync(input)));
   expect(outputDescriptor.sha256).toBe(checksum(producedBytes));
@@ -119,7 +205,6 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   // The report's measurements are checked against FreeSurfer's label map, not against the app's
   // own counting: every label FreeSurfer found is reported, within the voxels the gate allows.
   const allowed = Math.floor(limit * golden.data.length);
-  const expectedCounts = countLabels(golden.data);
   // FreeSurfer's sform defines voxel volume; pixdim rounds the oblique axes independently.
   const [a, b, c] = golden.header.affine;
   const voxelMl = Math.abs(
@@ -141,22 +226,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
   }
   expect(produced.dims).toEqual(golden.dims);
   expect(produced.header.xyztUnits).toBe(golden.header.xyztUnits);
-  const affineError = Math.max(...produced.header.affine.flatMap((row, i) => Array.from(row, (value, j) => Math.abs(value - golden.header.affine[i][j]))));
-  expect(affineError).toBeLessThanOrEqual(1e-4);
-  let mismatches = 0;
-  for (let i = 0; i < golden.data.length; i++) if (produced.data[i] !== golden.data[i]) mismatches++;
-  Object.assign(result, {
-    mismatched_voxels: mismatches,
-    compared_voxels: produced.data.length,
-    mismatch_fraction: mismatches / produced.data.length,
-    max_affine_error_mm: affineError,
-    inputSha256: inputDescriptor.sha256,
-    goldenSha256: checksum(goldenBytes),
-    outputSha256: outputDescriptor.sha256,
-    provenance: report.provenance,
-    hippocampi: report.measurements.labels.filter(label => [17, 53].includes(label.id)),
-  });
-  save();
+  expect(affineError).toBeLessThanOrEqual(gates.maxAffineErrorMm);
   expect(result.mismatch_fraction).toBeLessThanOrEqual(limit);
   result.pass = true;
   save();
@@ -177,7 +247,7 @@ if (!probeOnly) {
         input: `${fixtures}/small.nii.gz`,
         reference: `${fixtures}/small_${mode}.nii.gz`,
         mode,
-        limit: 5e-6,
+        limit: gates.maxMismatchFraction.fixture,
         pinned: goldenVoxels[mode],
       });
     });
@@ -191,15 +261,14 @@ if (references && !probeOnly) {
   test('segments the benchmark volumes within the native parity gate', async ({ page }) => {
     expect(hardwareGpu, 'The benchmark volumes need NEURODESK_HARDWARE_GPU=1').toBe(true);
     test.setTimeout(7200000);
-    for (const stem of ['T1_head', 'T1_head_2mm']) {
-      for (const mode of ['fast', 'default']) {
-        await checkCase(page, {
-          input: `${references}/${stem}.nii.gz`,
-          reference: `${references}/${stem}_${mode}.nii.gz`,
-          mode,
-          limit: 2e-6,
-        });
-      }
+    const cases = [...gates.fullVolumes, ...Array.from({ length: parityRepeats - 1 }, () => ({ input: 'T1_head', mode: 'default' }))];
+    for (const { input: stem, mode } of cases) {
+      await checkCase(page, {
+        input: `${references}/${stem}.nii.gz`,
+        reference: `${references}/${stem}_${mode}.nii.gz`,
+        mode,
+        limit: gates.maxMismatchFraction.fullVolume,
+      });
     }
   });
 }

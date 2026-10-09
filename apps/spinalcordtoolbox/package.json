@@ -18,6 +18,7 @@
     "test:totalspineseg": "node scripts/test_totalspineseg.cjs",
     "test:totalspineseg:worker": "node scripts/test_totalspineseg_worker_smoke.cjs",
     "test:lesion-analysis": "node scripts/test_lesion_analysis.cjs",
+    "test:lesion-ms:worker": "node scripts/test_ms_lesion_worker_smoke.cjs",
     "test:inference:postprocessing": "node scripts/test_inference_multiclass.cjs",
     "test:batch:webapp": "node scripts/test_batch_processing_cases.cjs",
     "test:fixtures": "node scripts/test_fixture_parity_outputs.cjs",
@@ -53,7 +54,7 @@
     "jsdom": "^24.0.0"
   },
   "name": "spinalcordtoolbox",
-  "version": "0.7.20261007",
+  "version": "0.8.20261009",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

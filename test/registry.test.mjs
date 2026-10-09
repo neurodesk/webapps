@@ -34,7 +34,7 @@ test('BrowserQC scientific assets are pinned to Hugging Face and not embedded', 
   const manifest = JSON.parse(
     await readFile(join(repoRoot, 'models', 'browserqc.manifest.json'), 'utf8'),
   );
-  const source = await readFile(join(repoRoot, 'apps', 'browserqc', 'src', 'main.ts'), 'utf8');
+  const source = await readFile(join(repoRoot, 'packages', 'browserqc', 'src', 'pipeline.js'), 'utf8');
 
   assert.match(manifest.revision, /^[0-9a-f]{40}$/);
   assert.ok(manifest.base_url.includes(`/resolve/${manifest.revision}/browserqc/`));

@@ -1,0 +1,20 @@
+DWI2TRX command line
+Copyright (c) 2026 Neurodesk
+BSD-2-Clause
+
+The tensor fit runs niimath --dtifit (Chris Rorden, BSD-2-Clause) from the
+dtifit-enabled WebAssembly build vendored in apps/dwi2trx/vendor/niimath
+(@niivue/niimath 1.2.0-dtifit.0), the build the DWI2TRX web app runs.
+https://github.com/rordenlab/niimath
+
+The brain mask runs MindGrab (@brainchop/mindgrab 0.1.20260925, MIT,
+Copyright (c) 2024-2026 spikedoanz, Sergey Plis) on its CPU modules; see
+app/node_modules/@brainchop/mindgrab/LICENSE in a portable archive.
+https://github.com/neuroneural/brainchopC
+
+Please cite: Basser PJ, Mattiello J, LeBihan D. MR diffusion tensor
+spectroscopy and imaging. Biophysical Journal. 1994;66(1):259-267.
+Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a
+method to enhance testing and improve tool quality. Aperture Neuro. 2024;4.
+Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate
+skull stripping for command line and browser. arXiv. 2025.

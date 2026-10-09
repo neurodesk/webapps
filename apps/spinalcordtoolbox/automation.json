@@ -31,6 +31,7 @@
             "spinalcord",
             "graymatter",
             "lesion_sci_t2",
+            "lesion_ms",
             "spine"
           ],
           "default": "spinalcord"

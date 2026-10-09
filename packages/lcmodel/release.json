@@ -1,0 +1,43 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "lcmodel-v",
+  "displayName": "LCModel",
+  "app": "lcmodel",
+  "run": "meas.dat meas_water.dat results",
+  "readme": {
+    "run": "Preprocess with FID-A and fit with LCModel",
+    "notes": [
+      "Give the raw files (twix, RDA, DICOM, P-file, SDAT/SPAR, NIfTI-MRS, Bruker)",
+      "or folders of them, or an LCModel .RAW; the last argument is a new",
+      "output directory. The library's basis sets are included and checked.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for every setting. Tissue correction from a T1 image needs",
+      "the web app; give the voxel's tissue fractions instead.",
+      "",
+      "LCModel is research software. Review each fit before use. Please cite:",
+      "Provencher SW. Estimation of metabolite concentrations from localized",
+      "in vivo proton NMR spectra. Magn Reson Med 1993;30:672-679.",
+      "Simpson R, Devenyi GA, Jezzard P, Hennessy TJ, Near J. Advanced",
+      "processing and simulation of MRS data using the FID appliance (FID-A).",
+      "Magn Reson Med 2017;77:23-33."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "lcmodel"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "lcmodel.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "lcmodel"
+    }
+  }
+}

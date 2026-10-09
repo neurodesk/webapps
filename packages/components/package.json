@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/webapp-components",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "Framework-free ESM components for static Neurodesk neuroimaging webapps.",
   "type": "module",
   "types": "./src/index.d.ts",
@@ -26,6 +26,7 @@
     },
     "./file-io": "./src/file-io/index.js",
     "./file-io/nifti": "./src/file-io/NiftiUtils.js",
+    "./file-io/mesh": "./src/file-io/mesh.js",
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",
       "default": "./src/net/fetchWithRetry.js"
@@ -42,7 +43,6 @@
     "./styles/base.css": "./src/styles/base.css",
     "./styles/inference-workspace.css": "./src/styles/inference-workspace.css",
     "./styles/imaging-workspace.css": "./src/styles/imaging-workspace.css",
-    "./example-images": "./src/example-images.js",
     "./elements": {
       "types": "./src/elements/index.d.ts",
       "default": "./src/elements/index.js"

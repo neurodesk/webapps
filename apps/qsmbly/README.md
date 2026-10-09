@@ -19,12 +19,37 @@ the adaptations to keep when resolving conflicts. To run it locally, use
 
 ## Features
 
-- **Completely Private**: All processing happens locally in your browser — your data never leaves your computer
+- **Private**: All processing happens locally in your browser — your images are never uploaded (see [What leaves your browser](#what-leaves-your-browser))
 - **Zero Installation**: No Python, MATLAB, or specialized software required
 - **Cross-Platform**: Works on Windows, macOS, Linux, and even mobile devices
 - **Interactive**: Real-time visualization with NiiVue, adjustable contrast, and masking thresholds
 - **Portable**: Static files can be hosted anywhere (GitHub Pages, local server, etc.)
 - **Comprehensive**: 20+ algorithms covering the complete QSM pipeline
+
+## What leaves your browser
+
+Your images never do. Files you load are read into browser memory and processed by WebAssembly in a
+Web Worker on your machine; the app never uploads them. Results are only saved where you choose to
+download them.
+
+The page does make some network requests of its own. None of them carries image data:
+
+- **Cloudflare Web Analytics.** A beacon (`static.cloudflareinsights.com`) records an anonymous page
+  view: the usual visitor metadata such as country, referrer and browser. It sets no cookies.
+- **Fonts and libraries.** The Inter font files come from Google Fonts (pinned in
+  `css/inter.css`), and the Tagify library from the unpkg CDN. These services see the request
+  like any other web request. NiiVue is served with the app.
+- **The QSMxT navigation bar.** `qsm-nav.js` is loaded from `qsmxt.github.io`.
+- **Deep-learning model weights**, downloaded from Hugging Face (`huggingface.co/qsmxt`) the first
+  time you run a deep-learning method, then cached in your browser's IndexedDB.
+- **Example data**, downloaded from Hugging Face only if you click to load it.
+- **dicompare**, the protocol checker, which loads its code and the QSM consensus schema from
+  `dicompare.neurodesk.org` the first time you load DICOM files, and when run, Pyodide from
+  jsDelivr and the `dicompare` Python package from PyPI. The DICOM headers it checks are read in
+  your browser.
+
+Deep-learning methods and dicompare therefore need an internet connection the first time they are
+used; the rest of the pipeline works offline once the page has loaded.
 
 ## Algorithms
 
@@ -108,37 +133,39 @@ available reconstruction model.
 
 ```
 qsmbly/
-├── index.html              # Main application interface
+├── index.html              # Application interface
 ├── build.sh                # WASM build script
 ├── run.sh                  # Development server
 ├── test.sh                 # Rust test runner
 ├── js/
 │   ├── qsm-app-romeo.js    # Main application logic
 │   ├── qsm-worker-pure.js  # Web worker for pipeline execution
-│   ├── app/
-│   │   └── config.js       # Centralized configuration
-│   ├── controllers/        # UI controllers (file I/O, pipeline, viewer, etc.)
-│   ├── modules/            # UI modules (NIfTI utils, masking, viewer)
-│   └── workers/            # Web workers (DiCompare)
+│   ├── app/                # Configuration and algorithm defaults (qsm-defaults.js is generated)
+│   ├── controllers/        # UI controllers (inputs, DICOM, masking, pipeline, viewer)
+│   ├── modules/            # Masking, model weights, config bridge, guided tour
+│   └── worker/utils/       # Helpers used by the pipeline worker
 ├── css/
-│   └── modern-styles.css   # Application styling
-├── wasm/                   # Compiled WebAssembly (served to browser)
+│   ├── modern-styles.css   # Application styling
+│   └── inter.css           # Inter font faces, pinned to Google Fonts v20 files
+├── scripts/                # Defaults generator, example and startup tests, benchmarks
+├── wasm/                   # Compiled WebAssembly (built by build.sh, served to the browser)
 ├── rust-wasm/              # WASM binding layer
 │   ├── Cargo.toml          # Depends on qsm-core
-│   └── src/lib.rs          # Thin wasm_bindgen wrappers (59 exports)
-├── dcm2niix/               # DICOM-to-NIfTI conversion (WASM)
-├── schemas/                # DiCompare validation schemas
-├── niivue/                 # NiiVue neuroimaging viewer
-└── nifti-js/               # NIfTI reader (JavaScript)
+│   └── src/lib.rs          # Thin wasm_bindgen wrappers around QSM.rs
+└── niivue/                 # NiiVue neuroimaging viewer (vendored ES module)
 ```
+
+Shared monorepo code supplies NIfTI I/O, DICOM conversion, dialogs, the console and
+cross-origin isolation. Versions and licenses of the vendored third-party code are
+recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Technical Stack
 
 - **[QSM.rs](https://github.com/astewartau/QSM.rs)**: Core QSM algorithms (Rust, compiled to WebAssembly)
 - **[wasm-bindgen](https://github.com/rustwasm/wasm-bindgen)**: JavaScript/WASM interop
 - **[NiiVue](https://github.com/niivue/niivue)**: WebGL neuroimaging viewer
-- **[dcm2niix](https://github.com/rordenlab/dcm2niix)**: DICOM conversion (WASM build)
-- **[Pyodide](https://pyodide.org/)**: Python in browser (for DiCompare validation)
+- **[dcm2niix](https://github.com/rordenlab/dcm2niix)**: DICOM conversion (WASM build, from the shared components)
+- **[Tagify](https://github.com/yairEO/tagify)**: Echo-time input
 
 ## License
 
