@@ -16,6 +16,13 @@ const SCT_TESTING_DATA_FIXTURE_MAP = Object.freeze({
   'test_data/batch_t2_deepseg_lesion_sci_t2/batch_output_sc.nii.gz': 't2/t2_fake_lesion_sc_seg.nii.gz',
   'test_data/batch_t2_deepseg_lesion_sci_t2/batch_output_lesion.nii.gz': 't2/t2_fake_lesion_lesion_seg.nii.gz'
 });
+// The MS lesion input is the SCT course image; it has no licence file upstream,
+// so it is fetched from its pinned upstream tag and never re-hosted. Its SCT
+// reference mask comes from the Hugging Face fixture dataset like the others.
+const SCT_TUTORIAL_DATA_RAW_BASE = 'https://raw.githubusercontent.com/spinalcordtoolbox/sct_tutorial_data/SCT-Course-20251208';
+const SCT_TUTORIAL_DATA_FIXTURE_MAP = Object.freeze({
+  'test_data/course_t2_ms_deepseg_lesion_ms/input.nii.gz': 'single_subject/data/t2_ms/t2.nii.gz'
+});
 
 function requiredSctFixturePaths(rootDir) {
   const required = [path.join(rootDir, 'test_data/batch_processing.sh')];
@@ -49,6 +56,8 @@ async function ensureSctBatchFixtures(rootDir, options = {}) {
     const relativePath = path.relative(rootDir, filePath).split(path.sep).join('/');
     if (SCT_TESTING_DATA_FIXTURE_MAP[relativePath]) {
       await downloadSctTestingDataFile(SCT_TESTING_DATA_FIXTURE_MAP[relativePath], filePath);
+    } else if (SCT_TUTORIAL_DATA_FIXTURE_MAP[relativePath]) {
+      await download(`${SCT_TUTORIAL_DATA_RAW_BASE}/${SCT_TUTORIAL_DATA_FIXTURE_MAP[relativePath]}`, filePath);
     } else {
       await downloadHfFile(repoId, revision, relativePath, filePath);
     }
@@ -146,6 +155,7 @@ module.exports = {
   DEFAULT_HF_DATASET_REPO,
   DEFAULT_HF_REVISION,
   SCT_TESTING_DATA_FIXTURE_MAP,
+  SCT_TUTORIAL_DATA_FIXTURE_MAP,
   download,
   ensureSctBatchFixtures,
   hasSctBatchFixtures,

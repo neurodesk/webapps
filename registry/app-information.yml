@@ -143,6 +143,11 @@ apps:
         title: SCIsegV2
         reference: "Naga Karthik E, Valošek J, Farner L, et al. SCIsegV2: A universal tool for segmentation of intramedullary lesions in spinal cord injury. arXiv. 2024."
         url: https://arxiv.org/abs/2407.17265
+      - group: Lesion segmentation
+        title: Contrast-agnostic MS lesion segmentation
+        reference: "Benveniste PL, Létourneau-Guillon L, Araujo D, et al. Generalizable spinal cord multiple sclerosis lesion segmentation across MRI contrasts, protocols, and centers. Multiple Sclerosis Journal. 2026."
+        doi: 10.1177/13524585261427333
+        code: https://github.com/ivadomed/ms-lesion-agnostic
       - group: Spine segmentation
         title: TotalSpineSeg
         reference: "Warszawer Y, Molinier N, Valošek J, et al. TotalSpineSeg: Robust spine segmentation and labeling across multiple MRI contrasts. Proceedings of the ISMRM. 2025."

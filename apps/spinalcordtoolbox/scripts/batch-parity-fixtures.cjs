@@ -42,6 +42,24 @@ const FIXTURE_CASES = Object.freeze([
     tolerancePolicy: DEFAULT_NIFTI_POLICY
   },
   {
+    // SCT course MS image (axial T2w, 0.69x0.69x7.5 mm). The reference is
+    // `sct_deepseg lesion_ms -single-fold` from SCT 7.3 (model r20250909).
+    id: 'course_t2_ms_deepseg_lesion_ms',
+    batchStep: { section: 't2_ms', sourceLine: null },
+    externalReference: 'spinalcordtoolbox/sct_tutorial_data@SCT-Course-20251208:single_subject/data/t2_ms/t2.nii.gz',
+    inputPath: 'test_data/course_t2_ms_deepseg_lesion_ms/input.nii.gz',
+    expectedOutputPath: 'test_data/course_t2_ms_deepseg_lesion_ms/batch_output_lesion.nii.gz',
+    expectedOutputPaths: {
+      lesion: 'test_data/course_t2_ms_deepseg_lesion_ms/batch_output_lesion.nii.gz'
+    },
+    browserOutputPaths: {
+      lesion: 'test_data/course_t2_ms_deepseg_lesion_ms/browser_output_lesion.nii.gz'
+    },
+    producedOutputName: 'batch_output_lesion.nii.gz',
+    outputType: 'multi-nifti',
+    tolerancePolicy: DEFAULT_NIFTI_POLICY
+  },
+  {
     id: 'batch_t2s_deepseg_spinalcord',
     batchStep: { section: 't2s', sourceLine: 114 },
     inputPath: 'test_data/batch_t2s_deepseg_spinalcord/input.nii.gz',

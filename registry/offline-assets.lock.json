@@ -1075,6 +1075,13 @@
       "kind": "model",
       "dependencies": []
     },
+    "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/9ed55d734edbd3b4dcd2da298ab49ce277c1bc4e/web/models/sct-lesion-ms.onnx": {
+      "sha256": "b858ec157889c931e7bb395bb6095063fe8a9acb19d7ad30f4afccd76b3319c6",
+      "bytes": 409486303,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "dependencies": []
+    },
     "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-lesion-sci-t2.onnx": {
       "sha256": "3b28b46ac85345fd33f0ce393c6538370794fe9b5d1ffedeb5df88891bfa1cdb",
       "bytes": 123451938,
@@ -3248,6 +3255,7 @@
       "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-graymatter.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-lesion-sci-t2.onnx",
+      "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/9ed55d734edbd3b4dcd2da298ab49ce277c1bc4e/web/models/sct-lesion-ms.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/sct-spinalcord.onnx",
       "https://huggingface.co/datasets/sbollmann/sct-webapp-data/resolve/55c9462a14bc9c84cf093c348cffda9148099df9/web/models/totalspineseg-step1.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/spinalcordtoolbox/t2-cord/sct_T2_spinalcord.nii.gz",

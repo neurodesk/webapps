@@ -126,6 +126,7 @@ export const provisioners = {
 // Gates no public data can open. Each needs a reason; the test suite rejects any
 // other gate that no provisioner sets.
 export const unpublished = {
+  SCT_E2E_LESION_MS: 'SCT tutorial MS image has no redistribution licence; use a local sct_tutorial_data copy',
   CAROTID_FLOW_EXAMPLE: "the requesting lab's export, not licensed for release",
   TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',
 };

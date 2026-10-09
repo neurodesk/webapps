@@ -46,6 +46,26 @@ The default SCT task is `spinalcord`, matching the stable `sct_deepseg spinalcor
 
 Supported states are recorded in `web/models/manifest.json`: `supported`, `unvalidated`, `unsupported`, and `retired`.
 
+### MS lesion (`lesion_ms`)
+
+The MS lesion task runs fold 1 of SCT's contrast-agnostic MS lesion model (release `r20250909`, the one SCT 7.3 uses), which is what `sct_deepseg lesion_ms -single-fold` runs. SCT's default averages five folds; that is about 2 GB of weights and is not shipped. The task returns a lesion mask and a lesion table (count, volume, length, width, equivalent diameter). It does not segment the cord, so cord-relative measures such as tissue bridges are left empty.
+
+```bash
+# model_fold1.zip from https://github.com/ivadomed/ms-lesion-agnostic/releases/tag/r20250909
+python scripts/convert_ms_lesion_model.py --source model_fold1.zip --output web/models/sct-lesion-ms.onnx
+```
+
+Checked on one image, the SCT course MS case (axial T2w, 7.5 mm slices), against SCT 7.3 in Docker:
+
+| | Lesion voxels | Lesions | Volume (mm3) | Dice vs SCT single fold |
+| --- | --- | --- | --- | --- |
+| SCT 7.3 `lesion_ms -single-fold` | 190 | 5 | 673.5 | 1 |
+| SCT five-fold vote (reproduced with nnU-Net, see `AGENTS.md`) | 170 | 5 | 602.6 | 0.939 |
+| Browser pipeline (Node, ONNX Runtime) | 171 | 4 | 606.2 | 0.826 |
+| Browser (Chromium, WASM) | 169 | 4 | 599.1 | 0.819 |
+
+The browser misses the smallest lesion (8 voxels). This is a software parity check on a single image, not a validation of clinical accuracy.
+
 ## Project Structure
 
 ```
@@ -124,7 +144,9 @@ npm run test:fixtures
 
 The fixture download script pulls `test_data/batch_processing.sh` and each
 fixture `input.nii.gz` / `batch_output.nii.gz` pair from the Hugging Face
-dataset `sbollmann/sct-webapp-data`. Browser-generated `browser_output.nii.gz`
+dataset `sbollmann/sct-webapp-data`. The MS lesion input is fetched from
+`spinalcordtoolbox/sct_tutorial_data` at a pinned tag instead, because that
+image has no licence that allows re-hosting. Browser-generated `browser_output.nii.gz`
 files are not stored there; `npm run test:fixtures` regenerates them locally
 when needed.
 
@@ -133,6 +155,7 @@ when needed.
 If you use SCT workflows, please cite Spinal Cord Toolbox and the relevant SCT task/model references:
 
 - **Spinal Cord Toolbox**: [spinalcordtoolbox.com](https://spinalcordtoolbox.com/stable/)
+- **MS lesion segmentation**: Benveniste PL, Létourneau-Guillon L, Araujo D, et al. Generalizable spinal cord multiple sclerosis lesion segmentation across MRI contrasts, protocols, and centers. Multiple Sclerosis Journal. 2026. [doi:10.1177/13524585261427333](https://doi.org/10.1177/13524585261427333)
 - **dcm2niix**: Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. J Neurosci Methods. 2016;264:47-56. [GitHub](https://github.com/rordenlab/dcm2niix)
 - **ONNX Runtime Web**: Microsoft. [onnxruntime.ai](https://onnxruntime.ai)
 - **NiiVue**: NiiVue Contributors. [github.com/niivue/niivue](https://github.com/niivue/niivue)
