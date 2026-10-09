@@ -938,8 +938,11 @@ importers:
   packages/brain-extraction:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr

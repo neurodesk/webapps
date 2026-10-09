@@ -54,9 +54,27 @@ function extractionAssets() {
     },
   };
 }
+// The worker always passes assetPath, so MindGrab loads its modules from the mindgrab/ copies above.
+// Its fallback imports name every model's module for every backend and would bundle all twelve.
+function mindgrabFromAssetPath() {
+  const prefix = '\0mindgrab-from-asset-path:';
+  return {
+    name: 'mindgrab-from-asset-path',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!importer?.includes('@brainchop/mindgrab') || !/^\.\/brainchop-[\w-]+\.js$/.test(source)) return null;
+      return prefix + source;
+    },
+    load(id) {
+      if (!id.startsWith(prefix)) return null;
+      return `throw new Error(${JSON.stringify(`${id.slice(prefix.length)} is not bundled; pass assetPath to MindGrab.`)});`;
+    },
+  };
+}
 export default neurodeskViteConfig({
   appId: 'brain-extraction',
   plugins: [extractionAssets(), isolationFallback()],
+  worker: { plugins: () => [mindgrabFromAssetPath()] },
   build: { target: 'esnext', assetsInlineLimit: 0 },
   optimizeDeps: { exclude: ['onnxruntime-web', '@brainchop/mindgrab'] },
   server: { host: '127.0.0.1' },

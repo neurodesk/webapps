@@ -6,9 +6,11 @@ import * as ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
+import { loadMindgrabCpu } from '@neurodesk/runtime-support/node/mindgrab';
 import packageJson from '../package.json' with { type: 'json' };
 import { runBet } from './bet.js';
 import { betRuntime } from './bet-runtime.js';
+import { runMindgrab } from './mindgrab.js';
 import { outputNames, writeOutputs } from './outputs.js';
 
 export const MODEL_ASSETS = Object.freeze([SYNTHSTRIP_MODEL]);
@@ -21,6 +23,9 @@ const IDENTITY_MODEL = Buffer.from('CAc6NwoQCgF4EgF5IghJZGVudGl0eRIBZ1oPCgF4EgoK
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const arrayBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === '1';
+
+// The MindGrab package this package pins, which the web app also serves.
+const loadMindgrab = () => loadMindgrabCpu(import.meta.resolve('@brainchop/mindgrab/package.json'));
 
 async function loadBetRuntime() {
   return betRuntime(await WebAssembly.compile(await readFile(new URL('../wasm/bet.wasm', import.meta.url))));
@@ -51,19 +56,23 @@ const METHODS = {
       return { ...result, provenance: { ...result.provenance, runtime: 'WebAssembly, single-threaded' } };
     },
   },
+  // The web app's CPU backend: the same modules, with the weights compiled in, and the same options.
   mindgrab: {
-    unavailable: 'MindGrab is not available in the command line yet (https://github.com/neurodesk/webapps/issues/162). Use --method synthstrip or --method bet, or MindGrab in the web app.',
+    models: [],
+    async extract({ volume, onProgress }) {
+      const { segment } = await loadMindgrab();
+      const result = await runMindgrab({ volume, backend: 'cpu', segmenter: segment, onProgress });
+      return { ...result, provenance: { ...result.provenance, runtime: 'WebAssembly with Node worker threads' } };
+    },
   },
 };
 
 export function resolveMethod(value = DEFAULT_METHOD) {
-  const method = Object.hasOwn(METHODS, value) ? METHODS[value] : null;
-  if (!method) {
-    const available = Object.keys(METHODS).filter((name) => !METHODS[name].unavailable);
-    throw new Error(`Method must be ${available.join(' or ')}, not "${value}".`);
+  if (!Object.hasOwn(METHODS, value)) {
+    const names = Object.keys(METHODS);
+    throw new Error(`Method must be ${names.slice(0, -1).join(', ')} or ${names.at(-1)}, not "${value}".`);
   }
-  if (method.unavailable) throw new Error(method.unavailable);
-  return method;
+  return METHODS[value];
 }
 
 export function resolveFractionalIntensity(value, method) {
@@ -156,6 +165,7 @@ export async function checkInstallation() {
   await session.release();
   if (y.data[0] !== 42) throw new Error('ONNX Runtime CPU check failed.');
   const betVoxels = betSmokeTest(await loadBetRuntime());
+  const mindgrab = await loadMindgrab();
   const models = process.env.NEURODESK_BRAIN_EXTRACTION_MODEL_DIR ? await downloadModels({ offline: true }) : null;
   return {
     platform: process.platform,
@@ -165,6 +175,7 @@ export async function checkInstallation() {
     onnxRuntime: ort.env.versions.node,
     executionProvider: 'cpu',
     betSmokeTestVoxels: betVoxels,
+    mindgrab: mindgrab.version,
     ...(models ? { models } : {}),
   };
 }

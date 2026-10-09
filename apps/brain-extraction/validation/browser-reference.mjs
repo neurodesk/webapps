@@ -40,6 +40,7 @@ export function measure({ brain, mask }) {
     maskHeaderSha256: sha256(mask.subarray(0, NIFTI_HEADER_BYTES)),
     maskVoxels,
     maskSha256: sha256(labels),
+    brainSha256: sha256(new Uint8Array(brainVolume.data.buffer, brainVolume.data.byteOffset, brainVolume.data.byteLength)),
     nonBinary,
     background: [...background],
     brainMean: Number((brainSum / maskVoxels).toFixed(3)),
@@ -75,5 +76,7 @@ export function compareWithBrowser(measured, method) {
     [within(measured.maskVoxels, expected.maskVoxels, tolerance.relative), `${measured.maskVoxels} mask voxels, browser ${expected.maskVoxels} ± ${percent}`],
     [within(measured.brainMean, expected.brainMean, tolerance.relative), `brain mean ${measured.brainMean} inside the mask, browser ${expected.brainMean} ± ${percent}`],
     [measured.brainMax === expected.brainMax, `brain maximum ${measured.brainMax}, browser ${expected.brainMax}`],
+    // Methods whose browser mask the command line must reproduce bit for bit pin the brain voxels too.
+    ...(expected.brainSha256 ? [[measured.brainSha256 === expected.brainSha256, `brain voxels identical to the browser's (${measured.brainSha256.slice(0, 16)})`]] : []),
   ];
 }
