@@ -172,6 +172,9 @@ importers:
       '@brainchop/mindgrab':
         specifier: 0.1.20260925
         version: 0.1.20260925
+      '@neurodesk/browserqc':
+        specifier: workspace:*
+        version: link:../../packages/browserqc
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -978,6 +981,22 @@ importers:
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
+
+  packages/browserqc:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@niivue/niimath':
+        specifier: 1.4.20260928
+        version: 1.4.20260928
+    devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/carotid-flow:
     dependencies:
