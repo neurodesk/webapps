@@ -213,3 +213,18 @@ test('sameNiftiGrid rejects different dimensions', () => {
   new DataView(b).setInt16(46, 19, true);
   assert.equal(sameNiftiGrid(gridHeader(), b), false);
 });
+
+test('decodeNiftiBuffer decodes gzip whole or only the first maxBytes', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { decodeNiftiBuffer } = await import('../src/file-io/index.js');
+  // Large and varied enough that the decompressor emits several chunks.
+  const original = new Uint8Array(1 << 20).map((_, i) => (i * 2654435761) >>> 24);
+  const gz = gzipSync(original);
+  assert.equal(await decodeNiftiBuffer(original.buffer), original.buffer);
+  const whole = new Uint8Array(await decodeNiftiBuffer(gz));
+  assert.deepEqual(whole, original);
+  const head = new Uint8Array(await decodeNiftiBuffer(gz, { maxBytes: 352 }));
+  assert.ok(head.length >= 352);
+  assert.ok(head.length < original.length);
+  assert.deepEqual(head.slice(0, 352), original.slice(0, 352));
+});

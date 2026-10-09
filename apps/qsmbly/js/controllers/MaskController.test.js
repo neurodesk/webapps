@@ -5,6 +5,8 @@
  * handed to the worker as `customMaskBuffer`, and what the overlay draws.
  */
 
+import { jest } from '@jest/globals';
+import zlib from 'node:zlib';
 import { MaskController } from './MaskController.js';
 
 /** Build a NIfTI-1 file (header + data) as a File-like object. */
@@ -209,13 +211,231 @@ describe('MaskController.loadMaskFromFile', () => {
     const result = await controller.loadMaskFromFile(mask, null);
 
     expect(result.ok).toBe(true);
-    expect(controller.getMaskDims()).toEqual(DIMS);
-    expect(controller.getVoxelSize()).toEqual([0.25, 0.25, 1]);
+    expect(controller.maskDims).toEqual(DIMS);
+    expect(controller.voxelSize).toEqual([0.25, 0.25, 1]);
   });
 
   it('reports a missing file rather than throwing', async () => {
     const result = await controller.loadMaskFromFile(null);
     expect(result.ok).toBe(false);
     expect(controller.currentMaskData).toBeNull();
+  });
+});
+
+describe('MaskController error paths', () => {
+  const DIMS = [4, 4, 2];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  let controller;
+  let log;
+  let savedDocument;
+
+  beforeEach(() => {
+    savedDocument = global.document;
+    global.document = { getElementById: () => null };
+    log = [];
+    controller = new MaskController({
+      nv: { volumes: [] },
+      updateOutput: (m) => log.push(m),
+      setProgress: () => {},
+      initializeWorker: async () => {},
+      config: {},
+    });
+  });
+
+  afterEach(() => {
+    global.document = savedDocument;
+  });
+
+  describe('combineMagnitudeRSS', () => {
+    it('combines echoes of the same size', async () => {
+      const a = makeNiftiFile('e1.nii', DIMS, 16, new Float32Array(N).fill(3));
+      const b = makeNiftiFile('e2.nii', DIMS, 16, new Float32Array(N).fill(4));
+      const rss = await controller.combineMagnitudeRSS([{ file: a }, { file: b }]);
+      expect(rss.length).toBe(N);
+      expect(rss[0]).toBeCloseTo(5);
+    });
+
+    it('names the echo whose matrix size differs instead of producing NaNs', async () => {
+      const a = makeNiftiFile('e1.nii', DIMS, 16, new Float32Array(N).fill(3));
+      const b = makeNiftiFile('e2_small.nii', [4, 4, 1], 16, new Float32Array(N / 2).fill(4));
+      await expect(controller.combineMagnitudeRSS([{ file: a }, { file: b }]))
+        .rejects.toThrow(/Echo 2 \(e2_small\.nii\) has 16 voxels but echo 1 has 32/);
+    });
+  });
+
+  describe('computeOtsuThreshold', () => {
+    it('returns null for a constant image so callers can bail out', () => {
+      controller.preparedMagnitudeData = new Float64Array(N).fill(7);
+      expect(controller.computeOtsuThreshold()).toBeNull();
+      expect(log.some(m => /Cannot compute threshold/.test(m))).toBe(true);
+    });
+
+    it('returns null before Prepare', () => {
+      expect(controller.computeOtsuThreshold()).toBeNull();
+    });
+  });
+
+  describe('runBET', () => {
+    const magnitudeFiles = [{ file: { name: 'mag.nii' } }];
+
+    it('reports a failure through onError, not onComplete', async () => {
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      const onComplete = jest.fn();
+      const onError = jest.fn();
+      await controller.runBET({ magnitudeFiles, betSettings: {}, onComplete, onError });
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith('WASM init failed');
+    });
+
+    it('falls back to onComplete({ error }) when no onError is given', async () => {
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      const onComplete = jest.fn();
+      await controller.runBET({ magnitudeFiles, betSettings: {}, onComplete });
+      expect(onComplete).toHaveBeenCalledWith({ error: 'WASM init failed' });
+    });
+
+    it('reports a mask display failure through onError', async () => {
+      controller.displayCurrentMask = async () => { throw new Error('display failed'); };
+      const onComplete = jest.fn();
+      const onError = jest.fn();
+      await controller.handleBETComplete({ maskData: new Float32Array(N), coverage: '0%' }, onComplete, onError);
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledWith('display failed');
+    });
+  });
+
+  describe('applyMaskOps', () => {
+    beforeEach(() => {
+      controller.currentMaskData = new Float32Array(N).fill(1);
+      controller.maskDims = DIMS;
+    });
+
+    it('starts a fresh worker when a cancel has nulled the old one', async () => {
+      // Stands in for QsmPipelineController: cancel() leaves no channel until initialize() runs.
+      let worker = null;
+      const listeners = new Set();
+      controller.getWorker = () => worker;
+      controller.initializeWorker = async () => {
+        worker = {
+          subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+          send: (msg) => {
+            const reply = { type: 'applyMaskOpsComplete', maskData: msg.data.mask };
+            queueMicrotask(() => listeners.forEach(fn => fn(reply)));
+          },
+        };
+      };
+
+      await expect(controller.applyMaskOps('erode:1')).resolves.toBe(true);
+      expect(listeners.size).toBe(0);
+    });
+
+    it('rejects with the init error instead of dereferencing a null worker', async () => {
+      controller.getWorker = () => null;
+      controller.initializeWorker = async () => { throw new Error('WASM init failed'); };
+      await expect(controller.applyMaskOps('erode:1')).rejects.toThrow('WASM init failed');
+    });
+  });
+
+  describe('applyBiasCorrection', () => {
+    it('moves the magnitude to the worker and resolves with the typed-array result', async () => {
+      const listeners = new Set();
+      let received;
+      // The WorkerSession channel QsmPipelineController hands the mask controller.
+      const worker = {
+        subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+        // Clone like a real postMessage, honouring the transfer list in both directions.
+        send: (msg, transfer) => {
+          received = structuredClone(msg, { transfer });
+          const result = received.data.magnitude.map((v) => v * 2);
+          const reply = structuredClone({ type: 'biasCorrection', result }, { transfer: [result.buffer] });
+          queueMicrotask(() => listeners.forEach((fn) => fn(reply)));
+        },
+      };
+      controller.initializeWorker = async () => {};
+      controller.getWorker = () => worker;
+      controller.magnitudeFileBytes = new ArrayBuffer(352);
+      const magnitude = new Float64Array([1, 2, 3]);
+
+      const corrected = await controller.applyBiasCorrection(magnitude);
+
+      expect(magnitude.byteLength).toBe(0);
+      // (constructor names: structuredClone builds its copies outside jest's realm)
+      expect(received.data.magnitude.constructor.name).toBe('Float64Array');
+      expect(corrected.constructor.name).toBe('Float64Array');
+      expect(Array.from(corrected)).toEqual([2, 4, 6]);
+      expect(listeners.size).toBe(0);
+    });
+  });
+});
+
+describe('MaskController NIfTI reading of .nii and .nii.gz', () => {
+  const DIMS = [8, 6, 4];
+  const N = DIMS[0] * DIMS[1] * DIMS[2];
+  const SLOPE = 2.5;
+  const INTER = -3;
+  let controller;
+
+  beforeEach(() => {
+    // No viewer: decoding must not depend on (or touch) NiiVue.
+    controller = new MaskController({ nv: null, updateOutput: () => {}, setProgress: () => {}, config: {} });
+  });
+
+  /** The same int16 image with a non-identity scale, uncompressed and gzipped. */
+  async function scaledPair() {
+    const values = Array.from({ length: N }, (_, i) => (i * 37) % 1000 - 500);
+    const nii = makeNiftiFile('mag.nii', DIMS, 4, values);
+    const buffer = await nii.arrayBuffer();
+    const view = new DataView(buffer);
+    view.setFloat32(112, SLOPE, true);
+    view.setFloat32(116, INTER, true);
+    const gz = zlib.gzipSync(new Uint8Array(buffer));
+    const niiGz = { name: 'mag.nii.gz', arrayBuffer: async () => gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength) };
+    return { values, nii, niiGz };
+  }
+
+  it('applies scl_slope/scl_inter identically to both', async () => {
+    const { values, nii, niiGz } = await scaledPair();
+
+    const plain = await controller.readNiftiData(nii);
+    const gzipped = await controller.readNiftiData(niiGz);
+
+    expect(gzipped).toBeInstanceOf(Float64Array);
+    expect(Array.from(gzipped)).toEqual(Array.from(plain));
+    expect(Array.from(plain)).toEqual(values.map(v => v * SLOPE + INTER));
+  });
+
+  it('returns the same 352-byte header for both', async () => {
+    const { nii, niiGz } = await scaledPair();
+
+    const plain = new Uint8Array(await controller.readNiftiHeader(nii));
+    const gzipped = new Uint8Array(await controller.readNiftiHeader(niiGz));
+
+    expect(gzipped.length).toBe(352);
+    expect(Array.from(gzipped)).toEqual(Array.from(plain));
+  });
+
+  it('rejects a corrupt gzip stream', async () => {
+    const { niiGz } = await scaledPair();
+    const truncated = (await niiGz.arrayBuffer()).slice(0, 40);
+    await expect(controller.readNiftiData({ name: 'bad.nii.gz', arrayBuffer: async () => truncated }))
+      .rejects.toThrow();
+  });
+
+  it('adopts a gzipped mask against an uncompressed reference', async () => {
+    controller.clearMask = async () => {};
+    controller.displayCurrentMask = async () => {};
+    const values = new Uint8Array(N);
+    values[5] = 1;
+    const maskBuffer = await makeNiftiFile('mask.nii', DIMS, 2, values).arrayBuffer();
+    const gz = zlib.gzipSync(new Uint8Array(maskBuffer));
+    const mask = { name: 'mask.nii.gz', arrayBuffer: async () => gz.buffer.slice(gz.byteOffset, gz.byteOffset + gz.byteLength) };
+    const reference = makeNiftiFile('mag.nii', DIMS, 16, new Float32Array(N).fill(100));
+
+    const result = await controller.loadMaskFromFile(mask, reference);
+
+    expect(result.ok).toBe(true);
+    expect(controller.maskDims).toEqual(DIMS);
+    expect(controller.currentMaskData[5]).toBe(1);
+    expect(controller.currentMaskData[4]).toBe(0);
   });
 });

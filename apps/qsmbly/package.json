@@ -2,6 +2,14 @@
   "name": "qsmbly",
   "version": "0.29.20261009",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
+  "homepage": "https://qsmbly.neurodesk.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/astewartau/qsmbly.git"
+  },
+  "bugs": {
+    "url": "https://github.com/astewartau/qsmbly/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 8080",
@@ -19,8 +27,9 @@
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app qsmbly && node scripts/test_startup.mjs && node scripts/test_upstream.mjs"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.12",
     "jest": "^29.7.0",
-    "@types/jest": "^29.5.12"
+    "smol-toml": "^1.9.0"
   },
   "dependencies": {
     "@neurodesk/webapp-components": "workspace:*"
@@ -51,5 +60,8 @@
     "wasm",
     "medical-imaging"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.9"
+  }
 }

@@ -17,6 +17,9 @@ onnx = ["qsm-core/onnx", "dep:getrandom"]
 # threaded build (nightly + -Z build-std + target-feature=+atomics,+bulk-memory) and a
 # cross-origin-isolated page (COOP/COEP). See build.sh and the coi service worker.
 parallel = ["qsm-core/parallel", "dep:wasm-bindgen-rayon"]
+# Route the bindings' console_log! diagnostics to the browser console. Off by default, so
+# release bundles carry no logging strings or JS calls; enable it when debugging a build.
+debug-log = []
 
 [dependencies]
 # Core QSM algorithms. `parallel` (rayon) is enabled via our own `parallel` feature for

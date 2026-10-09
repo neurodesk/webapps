@@ -1,75 +1,49 @@
 /**
  * FilterUtils Tests
  */
-import { boxFilter3D, boxFilter3dSeparable } from './FilterUtils.js';
+import { boxFilter3dSeparable } from './FilterUtils.js';
+
+// Brute-force reference: mean over the in-bounds part of a kx*ky*kz box (MATLAB smooth3 'box').
+function boxMeanReference(data, nx, ny, nz, kx, ky, kz) {
+  const [hx, hy, hz] = [kx, ky, kz].map(k => Math.floor(k / 2));
+  const out = new Float64Array(nx * ny * nz);
+  for (let k = 0; k < nz; k++) {
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        let sum = 0, count = 0;
+        for (let kk = Math.max(0, k - hz); kk <= Math.min(nz - 1, k + hz); kk++) {
+          for (let jj = Math.max(0, j - hy); jj <= Math.min(ny - 1, j + hy); jj++) {
+            for (let ii = Math.max(0, i - hx); ii <= Math.min(nx - 1, i + hx); ii++) {
+              sum += data[ii + jj * nx + kk * nx * ny];
+              count++;
+            }
+          }
+        }
+        out[i + j * nx + k * nx * ny] = sum / count;
+      }
+    }
+  }
+  return out;
+}
 
 describe('FilterUtils', () => {
-  describe('boxFilter3D', () => {
-    const nx = 5, ny = 5, nz = 5;
-
-    test('should smooth data with radius 1', () => {
-      const data = new Float64Array(nx * ny * nz).fill(0);
-      // Set center voxel to 1
-      const centerIdx = 2 + 2 * nx + 2 * nx * ny;
-      data[centerIdx] = 27;  // Will be averaged with 26 zeros
-
-      const result = boxFilter3D(data, nx, ny, nz, 1);
-
-      // Center should be averaged: 27/27 = 1
-      expect(result[centerIdx]).toBeCloseTo(1, 5);
-    });
-
-    test('should preserve uniform data', () => {
-      const data = new Float64Array(nx * ny * nz).fill(42);
-      const result = boxFilter3D(data, nx, ny, nz, 1);
-
-      // All values should still be 42
-      for (let i = 0; i < result.length; i++) {
-        expect(result[i]).toBeCloseTo(42, 5);
-      }
-    });
-
-    test('should handle radius 0', () => {
-      const data = new Float64Array(nx * ny * nz);
-      for (let i = 0; i < data.length; i++) {
-        data[i] = i;
-      }
-
-      const result = boxFilter3D(data, nx, ny, nz, 0);
-
-      // Radius 0 means only the voxel itself, so no change
-      for (let i = 0; i < result.length; i++) {
-        expect(result[i]).toBeCloseTo(data[i], 5);
-      }
-    });
-
-    test('should return Float64Array', () => {
-      const data = new Float64Array(nx * ny * nz);
-      const result = boxFilter3D(data, nx, ny, nz, 1);
-
-      expect(result).toBeInstanceOf(Float64Array);
-      expect(result.length).toBe(data.length);
-    });
-  });
-
   describe('boxFilter3dSeparable', () => {
     const nx = 5, ny = 5, nz = 5;
 
-    test('should produce similar results to boxFilter3D', () => {
-      const data = new Float64Array(nx * ny * nz);
+    test('should match a brute-force box mean, including at the borders', () => {
+      // Non-cubic grid and an asymmetric kernel, so a transposed axis or a wrong
+      // border normalization shows up as a mismatch.
+      const [gx, gy, gz] = [6, 5, 4];
+      const data = new Float64Array(gx * gy * gz);
       for (let i = 0; i < data.length; i++) {
-        data[i] = Math.sin(i * 0.1);
+        data[i] = Math.sin(i * 0.7) + 0.1 * i;
       }
 
-      // Use kernel size 3 (radius 1)
-      const result1 = boxFilter3D(data, nx, ny, nz, 1);
-      const result2 = boxFilter3dSeparable(data, nx, ny, nz, 3, 3, 3);
+      const expected = boxMeanReference(data, gx, gy, gz, 3, 5, 1);
+      const result = boxFilter3dSeparable(data, gx, gy, gz, 3, 5, 1);
 
-      // Results should be close (separable approximation)
-      // Note: They won't be identical because boxFilter3D uses cubic neighborhood
-      // while separable uses axis-aligned passes
-      for (let i = 0; i < result1.length; i++) {
-        expect(Math.abs(result1[i] - result2[i])).toBeLessThan(0.5);
+      for (let i = 0; i < expected.length; i++) {
+        expect(result[i]).toBeCloseTo(expected[i], 10);
       }
     });
 

@@ -424,11 +424,13 @@
         "kind": "built-runtime"
       },
       {
-        "url": "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js",
+        "url": "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js",
+        "sha256": "a4e16ccd7c4ec09c9fc37ca4b2d48fe4de4c60945b4ba019822560780916f0ec",
         "kind": "runtime-cdn"
       },
       {
-        "url": "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css",
+        "url": "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css",
+        "sha256": "f66cab4e02447d3a1e343c63adebe24a16f8f6186b1ca588c3db0c81693c2762",
         "kind": "runtime-cdn"
       },
       {

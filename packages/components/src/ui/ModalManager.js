@@ -1,3 +1,5 @@
+import { openDialog, closeDialog } from './dialogFocus.js';
+
 export class ModalManager {
   constructor(options = {}) {
     // Back-compat: accept a plain element-id string (e.g. new ModalManager('aboutModal')).
@@ -12,12 +14,14 @@ export class ModalManager {
     }
   }
 
+  /** Show the overlay, move focus into it, trap Tab inside it and close it on Escape. */
   open() {
-    this.element?.classList.add(this.activeClass);
+    openDialog(this.element, { onEscape: () => this.close(), activeClass: this.activeClass });
   }
 
+  /** Hide the overlay and return focus to the element that opened it. */
   close() {
-    this.element?.classList.remove(this.activeClass);
+    closeDialog(this.element, { activeClass: this.activeClass });
   }
 
   toggle() {

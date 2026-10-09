@@ -3,16 +3,9 @@
  *
  * Centralized configuration for all magic numbers, default values,
  * and constants used across the application.
- *
- * This module works as both an ES module (for modern scripts) and
- * can be loaded via importScripts in web workers.
  */
 
-// Detect environment and set up exports appropriately
-const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
-const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
-
-// Application version (keep in sync with package.json, Cargo.toml, and git tags)
+// Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
 export const VERSION = '0.29.20261009';
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
@@ -68,6 +61,7 @@ import {
   TV_DEFAULTS as _TV,
   TKD_DEFAULTS as _TKD,
   TGV_DEFAULTS as _TGV,
+  TGV_ALPHA_PRESETS as _TGV_ALPHA_PRESETS,
   BET_DEFAULTS as _BET,
   VSHARP_DEFAULTS as _VSHARP,
   PDF_DEFAULTS as _PDF,
@@ -92,7 +86,13 @@ import {
   LINEAR_FIT_DEFAULTS as _LINEAR_FIT,
   HOMOGENEITY_DEFAULTS as _HOMOGENEITY,
   SIGNAL_ERODE_DEFAULTS as _SIGNAL_ERODE,
+  ILSQR_DEFAULTS as _ILSQR,
+  DL_TILING_DEFAULTS as _DL_TILING,
 } from './qsm-defaults.js';
+
+// Deep-learning overlap tiling (lib.rs DL_TILING): the default tile core/halo, the model ids run
+// tiled by default, and the off-design and natively patch-based subsets.
+export const DL_TILING_DEFAULTS = { ..._DL_TILING };
 
 // Signal-gated erosion (QSM-CI): qsm-core's defaults, used by the mask "Signal Erode" refinement.
 export const SIGNAL_ERODE_DEFAULTS = { ..._SIGNAL_ERODE };
@@ -118,10 +118,12 @@ export const TKD_DEFAULTS = {
   threshold: _TKD.threshold,
 };
 
+// Radii are absolute, in mm (qsm-core's fixed defaults). The pipeline replaces them with
+// voxel-size-derived radii — see PIPELINE_DEFAULTS and getVoxelBasedDefaults below.
 export const VSHARP_DEFAULTS = {
   threshold: _VSHARP.threshold,
-  max_radius_factor: _VSHARP.max_radius_factor,
-  min_radius_factor: _VSHARP.min_radius_factor,
+  max_radius: _VSHARP.max_radius,
+  min_radius: _VSHARP.min_radius,
 };
 
 export const PDF_DEFAULTS = {
@@ -158,6 +160,18 @@ export const TGV_DEFAULTS = {
   tol: _TGV.tol,
 };
 
+/** qsm-core's TGV [alpha0, alpha1] for each UI regularization level (generated). */
+export const TGV_ALPHA_PRESETS = _TGV_ALPHA_PRESETS;
+
+/**
+ * The [alpha0, alpha1] a TGV regularization level stands for. Levels outside 1-4 are
+ * clamped, as qsm-core's get_default_alpha does.
+ */
+export function tgvAlphaPreset(level) {
+  const n = Number.isFinite(Number(level)) ? Math.round(Number(level)) : 2;
+  return [..._TGV_ALPHA_PRESETS[Math.min(4, Math.max(1, n))]];
+}
+
 export const SWI_DEFAULTS = {
   hp_sigma: _SWI.hp_sigma,
   scaling: _SWI.scaling,
@@ -176,11 +190,6 @@ export const MASK_CONFIG = {
 export const MASK_PREP_DEFAULTS = {
   source: 'phase_quality',      // 'first_echo', 'combined', or 'phase_quality'
   biasCorrection: true
-};
-
-// Progress animation settings
-export const PROGRESS_CONFIG = {
-  animationSpeed: 0.5           // 50% per second - catches up quickly
 };
 
 // (TGV_DEFAULTS and SWI_DEFAULTS are now sourced from QSM.rs — see imports above)
@@ -247,9 +256,16 @@ export const HARPERELLA_DEFAULTS = {
   tol: _HARPERELLA.tol,
 };
 
-// TSVD (Truncated SVD) defaults (shares TKD threshold)
+// TSVD (Truncated SVD) defaults. qsm-core has no TSVD params struct and qsmxt-config types
+// `inversion.tsvd` as TkdConfig, so TSVD's generated defaults are TKD's.
 export const TSVD_DEFAULTS = {
   threshold: _TKD.threshold,
+};
+
+// iLSQR as a standalone dipole inversion (QSMART's inner iLSQR uses QSMART_DEFAULTS.ilsqr_*)
+export const ILSQR_DEFAULTS = {
+  tol: _ILSQR.tol,
+  max_iter: _ILSQR.max_iter,
 };
 
 // (VSHARP_DEFAULTS, ISMV_DEFAULTS, PDF_DEFAULTS, LBV_DEFAULTS,
@@ -381,11 +397,17 @@ export const PIPELINE_METHODS = {
   qsmart_inversion: ['tkd', 'tsvd', 'tikhonov', 'tv', 'rts', 'nltv', 'medi', 'ilsqr']
 };
 
+// Deep-learning inversions that take the TOTAL field (they do their own background removal),
+// so they cannot run from a local field map.
+export const DL_TOTAL_FIELD_MODELS = ['autoqsm', 'nextqsm'];
+
 // Default pipeline settings (assembled from individual defaults)
 export const PIPELINE_DEFAULTS = {
   combined_method: 'none',
   swi: { ...SWI_DEFAULTS },
-  tgv: { ...TGV_DEFAULTS },
+  // The UI sets TGV's alphas through the regularization level (tgvAlphaPreset), so the
+  // defaults leave them unset rather than carry qsm-core's fixed pair alongside the level.
+  tgv: { ...TGV_DEFAULTS, alpha0: null, alpha1: null },
   qsmart: { ...QSMART_DEFAULTS },
   tfi: { ...TFI_DEFAULTS },
   unwrapping_algorithm: 'romeo',
@@ -396,6 +418,7 @@ export const PIPELINE_DEFAULTS = {
   linearFit: { ...LINEAR_FIT_DEFAULTS },
   romeo: { ...ROMEO_DEFAULTS },
   bf_algorithm: 'vsharp',
+  // null = derive from voxel size once it is known (applyVoxelDefaults), not qsm-core's fixed mm radii
   vsharp: { ...VSHARP_DEFAULTS, max_radius: null, min_radius: null },
   sharp: { ...SHARP_DEFAULTS },
   resharp: { ...RESHARP_DEFAULTS },
@@ -420,7 +443,8 @@ export const PIPELINE_DEFAULTS = {
   l1qsm: { ...L1QSM_DEFAULTS },
   whqsm: { ...WHQSM_DEFAULTS },
   hdqsm: { ...HDQSM_DEFAULTS },
-  medi: { ...MEDI_DEFAULTS }
+  medi: { ...MEDI_DEFAULTS },
+  ilsqr: { ...ILSQR_DEFAULTS }
 };
 
 /**
@@ -457,76 +481,4 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     // LBV: maxit = max(dims) - matches QSM.jl lbv.jl
     lbvMaxit: maxDim
   };
-}
-
-/**
- * Phase scaling constants
- */
-export const PHASE_SCALING = {
-  PI_THRESHOLD_MULTIPLIER: 1.1,   // Range > 2π * 1.1 triggers scaling
-  MAX_PI_MULTIPLIER: 1.5          // Values > π * 1.5 trigger scaling
-};
-
-/**
- * Box filter default radius for reliability map computation
- */
-export const BOX_FILTER_DEFAULTS = {
-  reliabilityRadius: 1
-};
-
-// Make config available globally for non-module scripts and workers
-const QSMConfig = {
-  VERSION,
-  QSM_RS_VERSION,
-  SIGNAL_ERODE_DEFAULTS,
-  PHYSICS,
-  INPUT_MODES,
-  FIELD_MAP_UNITS,
-  INPUT_DEFAULTS,
-  VIEWER_CONFIG,
-  MASK_CONFIG,
-  BET_DEFAULTS,
-  MASK_PREP_DEFAULTS,
-  PROGRESS_CONFIG,
-  SWI_DEFAULTS,
-  TGV_DEFAULTS,
-  QSMART_DEFAULTS,
-  TFI_DEFAULTS,
-  ROMEO_DEFAULTS,
-  MCPC3DS_DEFAULTS,
-  LINEAR_FIT_DEFAULTS,
-  VSHARP_DEFAULTS,
-  SHARP_DEFAULTS,
-  RESHARP_DEFAULTS,
-  HARPERELLA_DEFAULTS,
-  ISMV_DEFAULTS,
-  PDF_DEFAULTS,
-  LBV_DEFAULTS,
-  TKD_DEFAULTS,
-  TSVD_DEFAULTS,
-  TIKHONOV_DEFAULTS,
-  TV_DEFAULTS,
-  RTS_DEFAULTS,
-  NLTV_DEFAULTS,
-  NDI_DEFAULTS,
-  FANSI_DEFAULTS,
-  L1QSM_DEFAULTS,
-  WHQSM_DEFAULTS,
-  HDQSM_DEFAULTS,
-  MEDI_DEFAULTS,
-  STAGE_DISPLAY_NAMES,
-  PIPELINE_METHODS,
-  PIPELINE_DEFAULTS,
-  getVoxelBasedDefaults,
-  PHASE_SCALING,
-  BOX_FILTER_DEFAULTS
-};
-
-// Export for different environments
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  // Web Worker context
-  self.QSMConfig = QSMConfig;
-} else if (typeof window !== 'undefined') {
-  // Browser context
-  window.QSMConfig = QSMConfig;
 }
