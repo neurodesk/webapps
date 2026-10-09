@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/brain-extraction",
-  "version": "0.3.20261007",
+  "version": "0.4.20261009",
   "private": true,
   "description": "BET, MindGrab and SynthStrip brain extraction for browsers and the command line",
   "type": "module",

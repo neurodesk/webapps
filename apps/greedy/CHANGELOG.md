@@ -1,5 +1,17 @@
 # greedy
 
+## 0.4.20261009
+
+### Patch Changes
+
+- 4c12e24: Recover affine registrations that start on a shared grid. Greedy's default sample jitter (`-jitter 0.5`) was missing, so when the fixed and moving images shared a voxel grid the affine stayed at the identity while reporting success: a copy of the template turned 8° and shifted 9 mm came back 21 mm from the truth, and is now recovered to 0.4 mm. `greedy-rs -jitter SIGMA` sets the jitter; `-jitter 0` keeps the previous exact sampling.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+- Updated dependencies [64ffefa]
+  - @neurodesk/webapp-components@0.12.0
+  - @neurodesk/runtime-support@0.3.0
+  - @neurodesk/greedy@0.4.20261009
+
 ## 0.4.20261007
 
 ### Patch Changes

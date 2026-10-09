@@ -1,5 +1,15 @@
 # calmar
 
+## 0.5.20261009
+
+### Patch Changes
+
+- 9a0f4ae: Make the DeepISLES DWI/ADC seed route runnable once its asset is validated: its helpers were declared inside the registration step and the affine reader was never imported, so the route would have stopped with a ReferenceError. Zero background voxels now stay zero under the nonzero z-score, as in MONAI's `NormalizeIntensity(nonzero=True)`. The atlas loader's fallback import of the bundled NIfTI parser now points at the file that exists.
+- 501ea0c: Load every model, atlas, template and connectome from a fixed revision instead of `main`: `sbollmann/lnm-webapp-models` at commit `6fd71cdb`, the Schaefer400 2 mm atlas from CBIG commit `d1454a61` instead of a movable tag, and the Schaefer400 connectome index from `neurodeskorg/webapps` commit `4cc5b1a5`, a copy whose shard URLs are pinned to the same `lnm-webapp-models` commit. The bytes of every model, atlas and shard are unchanged.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.5.20261007
 
 ### Patch Changes
