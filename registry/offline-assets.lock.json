@@ -1124,16 +1124,16 @@
       "kind": "runtime-cdn",
       "dependencies": []
     },
-    "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js": {
-      "sha256": "7aac84baaf804b20cd1522b79a2824b044c4b9a587f7323d7d82e38f9f655c39",
-      "bytes": 68827,
+    "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js": {
+      "sha256": "a4e16ccd7c4ec09c9fc37ca4b2d48fe4de4c60945b4ba019822560780916f0ec",
+      "bytes": 68826,
       "contentType": "text/javascript; charset=utf-8",
       "kind": "runtime-cdn",
       "dependencies": []
     },
-    "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css": {
-      "sha256": "7e3fd3a639d5fe4862ee0d1afb12cb0b4b8cfa5b6b21507b50b5dda702d89b4b",
-      "bytes": 12343,
+    "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css": {
+      "sha256": "f66cab4e02447d3a1e343c63adebe24a16f8f6186b1ca588c3db0c81693c2762",
+      "bytes": 12395,
       "contentType": "text/css; charset=utf-8",
       "kind": "runtime-cdn",
       "dependencies": []
@@ -3339,8 +3339,8 @@
       "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa2pL7W0Q5n-wU.woff2",
       "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa25L7W0Q5n-wU.woff2",
       "https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7W0Q5nw.woff2",
-      "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js",
-      "https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css",
+      "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js",
+      "https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.css",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz",
