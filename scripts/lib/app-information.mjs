@@ -43,6 +43,7 @@ export async function loadAppInformation(registry, path = appInformationPath) {
     if (info.execution !== undefined && !(text(info.execution) && /browser|server|computer|machine/i.test(info.execution))) {
       errors.push(`${id}.execution must be a sentence saying where processing happens when present`);
     }
+    if (info.privacy !== undefined && !text(info.privacy)) errors.push(`${id}.privacy must be a non-empty sentence when present`);
     if (info.about !== undefined && (!Array.isArray(info.about) || !info.about.length || !info.about.every(text))) {
       errors.push(`${id}.about must be a non-empty list of paragraphs when present`);
     }
@@ -96,6 +97,7 @@ export function appInformationPayload(information, appId) {
     shared: information.shared,
     builders: info.builders ?? null,
     execution: info.execution ?? null,
+    privacy: info.privacy ?? null,
     about: info.about ?? [],
     packages: info.packages,
     citations: info.citations,

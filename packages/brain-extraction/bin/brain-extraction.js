@@ -15,8 +15,7 @@ INPUT_METHOD_brain.nii and INPUT_METHOD_mask.nii on the input grid, the files
 the brain extraction web app downloads.
 
 Options:
-  --method NAME                synthstrip (default) or bet. mindgrab is not
-                               available in the command line yet.
+  --method NAME                synthstrip (default), bet or mindgrab
   --fractional-intensity F     BET threshold from 0 to 1 (default 0.5); lower
                                values give larger masks
   --threads N                  SynthStrip ONNX Runtime threads (default
@@ -28,8 +27,10 @@ Options:
   -h, --help                   Show this help
 
 OUTPUT_DIR must be new or empty. The SynthStrip model downloads once and is
-SHA-256 checked on every load. BET needs no model. DICOM input and mask
-editing are available in the web app only.`;
+SHA-256 checked on every load. BET needs no model, and MindGrab's weights are
+part of its WebAssembly module. MindGrab runs the web app's CPU backend on all
+logical cores and needs about 2.6 GB of memory. DICOM input and mask editing
+are available in the web app only.`;
 
 const reportProgress = () => {
   let previous;

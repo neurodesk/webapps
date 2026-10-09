@@ -15,6 +15,19 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// A gate from packages/synthseg/validation/gates.json, which the Node pipeline test, the web app's
+/// fixture e2e and the portable command line's release check read too.
+fn gate_value(path: &[&str]) -> f64 {
+    let gates: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../packages/synthseg/validation/gates.json"
+    ))
+    .unwrap();
+    path.iter()
+        .fold(&gates, |value, key| &value[*key])
+        .as_f64()
+        .unwrap()
+}
+
 fn load(path: &Path) -> nifti::Volume<f64> {
     nifti::read(&fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))).unwrap()
 }
@@ -154,7 +167,7 @@ fn assert_header_matches(out: &Path, reference: &Path) {
     for o in (76..80).chain(256..280).step_by(4) {
         let f = |h: &[u8]| f32::from_le_bytes(h[o..o + 4].try_into().unwrap());
         assert!(
-            (f(&a) - f(&b)).abs() < 1e-4,
+            f64::from((f(&a) - f(&b)).abs()) < gate_value(&["maxQuaternionError"]),
             "quaternion field at {o}: {} vs {}",
             f(&a),
             f(&b)
@@ -168,7 +181,7 @@ fn gate(out: &Path, reference: &Path, limit: f64) {
     let d = compare(&load(out), &load(reference));
     let fraction = d.mismatched as f64 / d.total as f64;
     assert!(
-        d.affine <= 1e-4 && fraction <= limit,
+        d.affine <= gate_value(&["maxAffineErrorMm"]) && fraction <= limit,
         "{}: affine {} mismatched {} of {} ({fraction:.5})",
         out.display(),
         d.affine,
@@ -205,7 +218,7 @@ fn cli_matches_fixture_and_refuses_to_clobber() {
             gate(
                 &out,
                 &root().join(format!("test/fixtures/small_{mode}.nii.gz")),
-                5e-6,
+                gate_value(&["maxMismatchFraction", "fixture"]),
             );
             let report: serde_json::Value = serde_json::from_str(
                 &fs::read_to_string(dir.join(format!("{device}_{mode}.json"))).unwrap(),
@@ -377,7 +390,8 @@ fn real_volumes() {
                 assert_header_matches(&out, &reference);
                 let d = compare(&load(&out), &load(&reference));
                 let fraction = d.mismatched as f64 / d.total as f64;
-                let pass = d.affine <= 1e-4 && fraction <= 2e-6;
+                let pass = d.affine <= gate_value(&["maxAffineErrorMm"])
+                    && fraction <= gate_value(&["maxMismatchFraction", "fullVolume"]);
                 let sidecar: serde_json::Value = serde_json::from_str(
                     &fs::read_to_string(out.with_extension("").with_extension("json")).unwrap(),
                 )

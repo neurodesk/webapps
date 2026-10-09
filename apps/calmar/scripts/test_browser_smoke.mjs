@@ -43,7 +43,7 @@ const AUTO_T1_PATH = path.join(ROOT, 'tests/fixtures/lnm-auto-mini/T1.nii.gz');
 const MNI160_CACHE = path.join(ROOT, 'web/models/_dev_cache/lnm-mni160.nii.gz');
 const MNI160_URL =
   'https://huggingface.co/datasets/sbollmann/lnm-webapp-models' +
-  '/resolve/main/templates/lnm-mni160.nii.gz';
+  '/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz';
 
 async function ensureMni160() {
   try {

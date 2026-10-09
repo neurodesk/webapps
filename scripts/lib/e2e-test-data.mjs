@@ -2,7 +2,8 @@
 // environment that enables them. Every file is pinned: examples by the offline
 // asset lock, models and goldens by their manifests. Apps whose tests need a
 // hardware GPU (ci.hardware_gpu) are provisioned on the macOS runner; the rest
-// on Linux.
+// on Linux. A hardware-GPU app's optional `cpu` provisioner is the subset of its
+// tests that a CPU-only browser can finish; Linux runs that subset with `--cpu`.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -41,21 +42,28 @@ export const provisioners = {
   // The browser reference registers the 1 mm example once, about 3 min on a 4-core runner.
   ants: { env: ['ANTS_LIVE_DATA', 'ANTS_BROWSER_REFERENCE'], provision: async () => ({ ANTS_LIVE_DATA: '1', ANTS_BROWSER_REFERENCE: 'check' }) },
   'brain-extraction': flag('BRAIN_EXTRACTION_REAL_MODELS'),
+  // The browser reference runs quality control of the pinned example with each of the four models
+  // on the CPU backend, about 12 min on eight cores.
+  browserqc: { env: ['BROWSERQC_BROWSER_REFERENCE'], provision: async () => ({ BROWSERQC_BROWSER_REFERENCE: 'check' }) },
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),
+  // The browser reference runs MindGrab on the CPU once, about 2 min and 3 GB.
   dwi2trx: {
-    env: ['DWI2TRX_FIXTURE_DIR'],
+    env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE'],
     provision: async (cache) => {
       await exampleFiles(cache, 'dwi2trx', 'dwi-gradients', ['image', 'bval', 'bvec']);
-      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx') };
+      return { DWI2TRX_FIXTURE_DIR: join(cache, 'dwi2trx'), DWI2TRX_BROWSER_REFERENCE: 'check' };
     },
   },
+  // The browser reference registers the 1 mm example once, about 30 s.
+  edgereg: { env: ['EDGEREG_BROWSER_REFERENCE'], provision: async () => ({ EDGEREG_BROWSER_REFERENCE: 'check' }) },
   // Both presets on the CPU, about 35 min each; the reference needs exactly 4 threads, which
   // matches GitHub's Linux runners.
   fireants: { env: ['FIREANTS_BROWSER_REFERENCE'], provision: async () => ({ FIREANTS_BROWSER_REFERENCE: 'check' }) },
   greedy: flag('GREEDY_LIVE_DATA'),
-  lcmodel: flag('LCMODEL_E2E_LARGE'),
+  // The browser reference fits all 14 cases of packages/lcmodel/validation/reference.mjs, about 5 min.
+  lcmodel: { env: ['LCMODEL_E2E_LARGE', 'LCMODEL_BROWSER_REFERENCE'], provision: async () => ({ LCMODEL_E2E_LARGE: '1', LCMODEL_BROWSER_REFERENCE: 'check' }) },
   nesvor: {
     env: ['NESVOR_MASK_FIXTURE_DIR'],
     provision: async (cache) => {
@@ -74,6 +82,14 @@ export const provisioners = {
     provision: async (cache) => {
       const [image] = await exampleFiles(cache, 'syncro', 'trace-t1', ['primary']);
       return { SYNCRO_SCIENTIFIC_TESTS: '1', SYNCRO_AUTOMATION_IMAGE: image, SYNTHSR_MODEL: join(synthsrModels(), 'synthsr-v2.onnx') };
+    },
+    // The pinned T1 through WASM SynthSR, SynthStrip and Greedy needs no GPU (issue #211).
+    cpu: {
+      env: ['SYNCRO_AUTOMATION_IMAGE'],
+      provision: async (cache) => {
+        const [image] = await exampleFiles(cache, 'syncro', 'trace-t1', ['primary']);
+        return { SYNCRO_AUTOMATION_IMAGE: image };
+      },
     },
   },
   synthseg: {
@@ -114,8 +130,9 @@ export const unpublished = {
   TOPOFIT_SURFACE_REPLAY: 'OpenRecon validation surfaces, not licensed for release',
 };
 
-export async function provisionTestData(app, cache) {
-  const provisioner = provisioners[app];
+// With `cpu`, only the app's CPU subset; for an app without one, nothing.
+export async function provisionTestData(app, cache, { cpu = false } = {}) {
+  const provisioner = cpu ? provisioners[app]?.cpu : provisioners[app];
   if (!provisioner) return {};
   const environment = await provisioner.provision(cache);
   const keys = Object.keys(environment).sort();

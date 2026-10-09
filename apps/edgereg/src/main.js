@@ -2,6 +2,7 @@ import examples from '../examples.json';
 import { createExampleSelector } from '@neurodesk/webapp-components/ui';
 import NiiVueGPU, { MULTIPLANAR_TYPE, SHOW_RENDER, SLICE_TYPE } from "@niivue/niivue";
 import { Niimath } from "@niivue/niimath";
+import { OUTPUT_DATA_TYPE, registeredName, registrationChain } from "@neurodesk/edgereg";
 import "@neurodesk/webapp-components/styles/imaging-workspace.css";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import { createResultList, bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from "@neurodesk/webapp-components/ui";
@@ -30,7 +31,7 @@ let niimath = new Niimath();
 let niimathReady;
 let timer;
 
-niimath.setOutputDataType("input");
+niimath.setOutputDataType(OUTPUT_DATA_TYPE);
 
 mountImagingWorkspace({
   controls: "#controls",
@@ -175,7 +176,7 @@ function destroyViewers() {
 function resetNiimath() {
   niimath.dispose();
   niimath = new Niimath();
-  niimath.setOutputDataType("input");
+  niimath.setOutputDataType(OUTPUT_DATA_TYPE);
   niimathReady = undefined;
 }
 
@@ -298,12 +299,10 @@ async function register({
     await niimathReady;
     signal?.throwIfAborted();
     if (cancelled) return;
-    const source = niimath.image(moving).gz(0);
-    const chain = robustFov ? source.robustfov() : source;
-    const blob = await chain.allineate(fixed).run("registered.nii");
+    const blob = await registrationChain(niimath.image(moving), fixed, { robustFov }).run("registered.nii");
     signal?.throwIfAborted();
     if (cancelled) return;
-    output = new File([blob], `${moving.name.replace(/\.nii(\.gz)?$/i, "")}_registered.nii`);
+    output = new File([blob], registeredName(moving.name));
     await viewers.resliced.loadVolumes([{ url: output, name: output.name }]);
     signal?.throwIfAborted();
     if (cancelled) {

@@ -34,7 +34,7 @@ import {
   generateSchemeInWorker,
 } from './dwi2trx/genvectors-worker-client'
 import { collectFiles, readNiftiHeader, type ResolvedInput, resolveInput, resolveExplicitInput } from './dwi2trx/input'
-import { formatBytes, InputTooLargeError } from './dwi2trx/input-limits'
+import { assertInputSize, formatBytes, InputTooLargeError } from './dwi2trx/input-limits'
 import {
   type InputSource,
   type Step,
@@ -43,6 +43,7 @@ import {
   type DwiInput,
 } from './dwi2trx/state'
 import { baseName, flipBvecX } from './dwi2trx/validate'
+import { TENSOR_MAPS, mapFileName } from '@neurodesk/dwi2trx'
 import { downloadBlob, extractAffine } from '@neurodesk/webapp-components/file-io'
 import {
   buildGradientScheme,
@@ -339,8 +340,8 @@ saveBtn.addEventListener('click', () => {
 saveMapsBtn.addEventListener('click', () => {
   if (!state.maps || !state.input) return
   const base = outputBase(state.input)
-  download(state.maps.fa, `${base}_FA.nii.gz`)
-  download(state.maps.v1, `${base}_V1.nii.gz`)
+  download(state.maps.fa, mapFileName(base, 'FA'))
+  download(state.maps.v1, mapFileName(base, 'V1'))
 })
 faSlider.addEventListener('input', () => {
   if (shownView === 'maps') setFaFloor() // ignore while the raw DWI is shown
@@ -885,18 +886,22 @@ try {
 }
 
 interface ProcessingContext {
+  /** A brain mask on the DWI grid; skips MindGrab. */
+  mask?: File
   signal?: AbortSignal
   progress?: (update: { message: string; value?: number }) => void
 }
 
 interface TensorResult {
   maps: TensorMaps
+  /** Every dtifit map, keyed by its name in TENSOR_MAPS. */
+  files: Record<string, File>
   masked: boolean
   maskFailure: string | null
-  maskProvenance: { model: string; version: string; backend: string; elapsedMs: number } | null
+  maskProvenance: Record<string, unknown> | null
 }
 
-function fitInWorker(input: DwiInput, { signal, progress }: ProcessingContext): Promise<TensorResult> {
+function fitInWorker(input: DwiInput, { mask, signal, progress }: ProcessingContext): Promise<TensorResult> {
   return new Promise((resolve, reject) => {
     const active = new Worker(new URL('./dwi2trx/tensor-worker.ts', import.meta.url), { type: 'module' })
     const finish = (error?: Error, result?: TensorResult) => {
@@ -917,7 +922,7 @@ function fitInWorker(input: DwiInput, { signal, progress }: ProcessingContext): 
     active.onerror = (event) => finish(new Error(event.message || 'Tensor worker failed'))
     active.onmessageerror = () => finish(new Error('Tensor worker returned an unreadable result'))
     if (signal?.aborted) cancel()
-    else active.postMessage({ input, assetPath: `${import.meta.env.BASE_URL}brainchop/` })
+    else active.postMessage({ input, mask, assetPath: `${import.meta.env.BASE_URL}brainchop/` })
   })
 }
 
@@ -1366,8 +1371,11 @@ async function runAutomation(request: AutomationRequest, track: boolean) {
     const resolved = await resolveExplicitInput({ nifti: inputs.image[0], bval, bvec, json: inputs.metadata[0] ?? sidecars.find((file) => /\.json$/i.test(file.name)) }, signal)
     await loadInput(resolved, resolved.source, seq, 'DWI')
     signal.throwIfAborted()
-    const fitted = await runFit({ signal, progress })
-    const artifacts = [{ role: 'fa', file: fitted.maps.fa }, { role: 'v1', file: fitted.maps.v1 }]
+    const mask = inputs.mask?.[0]
+    if (mask) assertInputSize([resolved.nifti, resolved.bval, resolved.bvec, mask])
+    const fitted = await runFit({ mask, signal, progress })
+    const base = outputBase(resolved)
+    const artifacts = TENSOR_MAPS.map((map) => ({ role: map.toLowerCase(), file: new File([fitted.files[map]], mapFileName(base, map)) }))
     const provenance = { tensor: { algorithm: 'niimath dtifit', version: niimathPackage.version, masked: fitted.masked, maskFailure: fitted.maskFailure, mask: fitted.maskProvenance } }
     if (!track) return { artifacts, provenance }
     for (const [input, key] of [[seedFaIn, 'seedFa'], [stopFaIn, 'stopFa'], [stepSizeIn, 'stepSize'], [maxAngleIn, 'maxAngle'], [seedDensityIn, 'density']] as const) input.value = String(parameters[key])

@@ -30,11 +30,11 @@ const ATLAS_CACHE = path.join(CACHE_DIR, 'Yeo7_LiberalMask_2mm.nii.gz');
 const FC_BIN_CACHE = path.join(CACHE_DIR, 'yeo7_fc_pack.bin');
 const FC_INDEX_CACHE = path.join(CACHE_DIR, 'yeo7_fc_pack.index.json');
 const ATLAS_URL =
-  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/atlases/Yeo7_LiberalMask_2mm.nii.gz';
+  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Yeo7_LiberalMask_2mm.nii.gz';
 const FC_BIN_URL =
-  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack.bin';
+  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack.bin';
 const FC_INDEX_URL =
-  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/main/connectomes/yeo7_fc_pack.index.json';
+  'https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack.index.json';
 
 async function ensureFile(cachePath, url, minBytes, label) {
   try {

@@ -98,7 +98,9 @@ def package(target):
         shutil.copy2(extracted / name / executable, native / executable)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     Path(f'{archive}.sha256').write_text(f'{digest}  {archive.name}\n', encoding='utf-8', newline='\n')
-    Path(f'{archive}.validation.txt').write_text(report)
+    # The Standalone catalog accepts a receipt only when it records the archive's digest and name.
+    receipt = report.rstrip('\n') + f'\nsha256: {digest}  {archive.name}\n'
+    Path(f'{archive}.validation.txt').write_text(receipt, encoding='utf-8', newline='\n')
     print(archive)
 
 

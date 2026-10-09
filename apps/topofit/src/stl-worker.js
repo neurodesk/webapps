@@ -6,7 +6,7 @@
 // hence readMz3 + writeStl here. Once the published build writes STL, ask niimath for out.stl and
 // drop both serializers.
 import createNiimath from '@niivue/niimath/niimath.js';
-import { readMz3, writeMz3, writeStl } from '@neurodesk/topofit/results';
+import { readMz3, writeMz3, writeStl } from '@neurodesk/webapp-components/file-io/mesh';
 
 const output = [];
 

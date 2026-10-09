@@ -1,4 +1,4 @@
-import { writeMz3 } from './results.js';
+import { writeMz3 } from '@neurodesk/webapp-components/file-io/mesh';
 export { surfaceNormals } from './patches.js';
 
 // Greedy spatial sampling keeps glyphs separated in scanner RAS, including across folds.

@@ -71,6 +71,19 @@ test('QC failure after real segmentation fails the operation instead of publishi
   await expect(page.locator('#saveBtn')).toBeDisabled();
 });
 
+test('an air template with other bytes fails QC instead of publishing metrics', async ({ page }) => {
+  await page.route('**/browserqc/avg152T1.nii.gz', route => route.fulfill({ status: 200, contentType: 'application/gzip', body: Buffer.from('not the template') }));
+  await page.goto('./');
+  await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
+  await adopt(page, 'image', fixture);
+  await dispatch(page, 'start', { parameters: { backend: 'cpu', model: '16chan18cls' } });
+  await expect.poll(async () => (await dispatch(page, 'snapshot')).state, { timeout: 840000, intervals: [1000, 2000, 5000] }).toBe('failed');
+  const snapshot = await dispatch(page, 'snapshot');
+  expect(snapshot.error.message).toMatch(/avg152T1\.nii\.gz has SHA-256 [0-9a-f]{64}, not the pinned/);
+  expect(snapshot.report).toBeUndefined();
+  await expect(page.locator('#saveBtn')).toBeDisabled();
+});
+
 test('default PVE analysis publishes native-grid fractions and an independent mask', async ({ page }) => {
   await page.goto('./');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);

@@ -51,7 +51,7 @@ const MODEL_URL = MODEL_ASSET.sourceUrl;
 const REF_CACHE = path.join(MODEL_CACHE_DIR, 'lnm-mni160.nii.gz');
 const REF_URL =
   'https://huggingface.co/datasets/sbollmann/lnm-webapp-models' +
-  '/resolve/main/templates/lnm-mni160.nii.gz';
+  '/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz';
 
 async function ensureFile(cachePath, url, minBytes, label) {
   try {

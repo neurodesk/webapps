@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "dwi2trx-v",
+  "displayName": "DWI2TRX",
+  "app": "dwi2trx",
+  "run": "dwi.nii.gz dwi.bval dwi.bvec results",
+  "readme": {
+    "run": "Fit the diffusion tensor inside a MindGrab brain mask",
+    "notes": [
+      "Runs the web app's tensor fit (niimath --dtifit, same WebAssembly build) and",
+      "writes FA, MD, L1-L3, V1-V3, S0, MO, the tensor and the brain mask.",
+      "MindGrab runs on the CPU and needs about 3 GB of memory. Give --mask FILE",
+      "to use your own brain mask, or --no-mask to fit every voxel.",
+      "Tractography is not included: it needs WebGPU with subgroups. Use the web app.",
+      "No network connection is required. Input is NIfTI with FSL bval/bvec files.",
+      "",
+      "Please cite: Basser PJ, Mattiello J, LeBihan D. MR diffusion tensor",
+      "spectroscopy and imaging. Biophysical Journal. 1994;66(1):259-267."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "dwi2trx"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "dwi2trx.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "dwi2trx"
+    }
+  }
+}

@@ -12,8 +12,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@brainchop/mindgrab": "^0.1.20260813",
+    "@brainchop/mindgrab": "0.1.20260925",
     "@dipy/gpu-streamlines": "^0.1.0",
+    "@neurodesk/dwi2trx": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/dcm2niix": "^1.2.0",

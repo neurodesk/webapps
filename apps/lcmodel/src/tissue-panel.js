@@ -9,7 +9,7 @@ import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 import { decodeNiftiBuffer, parseNiftiHeader, readNiftiImageData, extractNiftiHeader, createFloat32Nifti } from "@neurodesk/webapp-components/file-io";
 import { bindFileDrop } from "@neurodesk/webapp-components/ui";
 import { voxelWeights, tissueFractions } from "./voxel.js";
-import { correctConcentrations, correctedCsv, fieldKey } from "./tissue.js";
+import { correctionFor, tissueTexts } from "@neurodesk/lcmodel/tissue";
 
 const $ = (id) => document.getElementById(id);
 const FIELDS = { gm: "fGm", wm: "fWm", csf: "fCsf" };
@@ -210,42 +210,18 @@ export function createTissuePanel(hooks) {
    * @param rows LCModel's rows; `waterScaled` whether they are in mM.
    */
   function correct(rows, { waterScaled, edited }) {
-    const fractions = fractionsFromFields();
-    if (!fractions) return null;
-    if (!waterScaled) return { reason: "Tissue correction needs water-scaled concentrations (a water reference)." };
-    if (!dataset) return { reason: "Tissue correction needs the acquisition header (not a .RAW file)." };
-    if (!fieldKey(dataset.fieldT)) return { reason: `Relaxation constants are tabulated for 3 T and 7 T, not ${fixed(dataset.fieldT)} T.` };
-    try {
-      return correctConcentrations(rows, {
-        fractions,
-        fieldT: dataset.fieldT,
-        metabolite: { teMs: dataset.teMs, trMs: dataset.trMs },
-        water: { teMs: dataset.waterTeMs ?? dataset.teMs, trMs: dataset.waterTrMs ?? dataset.trMs },
-        metaboliteRelaxation: $("metabRelax").checked,
-        alpha: edited,
-      });
-    } catch (error) {
-      return { reason: error.message };
-    }
+    return correctionFor(rows, { fractions: fractionsFromFields(), header: dataset, waterScaled, edited, metaboliteRelaxation: $("metabRelax").checked });
   }
 
   /** Downloads for the result list, keyed by stage. */
   function resultFiles(result, stem, ratioTo) {
     if (!result?.rows) return {};
-    const report = {
-      fractions: result.fractions,
-      molalFractions: result.molalFractions,
+    const texts = tissueTexts(result, stem, ratioTo, {
       fractionSource: measured ? { method: "MindMap partial-volume maps (@brainchop/mindgrab segmentTissues)", version: mindgrabVersion, backend: maps?.backend, t1: t1?.name, coverage: measured.coverage } : "entered",
       voxel: dataset?.voxel ?? null,
       voxelInT1Mm3: weights?.volumeMm3 ?? null,
-      waterAttenuation: result.waterAttenuation,
-      ...result.constants,
-      concentrations: result.rows.map((r) => ({ name: r.name, lcmodel: r.concentration, corrected: r.corrected, alphaCorrected: r.alphaCorrected ?? null, t1Ms: r.t1 * 1000, t2Ms: r.t2 * 1000 })),
-    };
-    const entries = {
-      tissueConcentrations: { description: "Tissue-corrected concentrations (.csv)", file: new File([correctedCsv(result, ratioTo)], `${stem}_tissue_corrected.csv`, { type: "text/csv" }), viewable: false },
-      tissueReport: { description: "Tissue correction inputs (.json)", file: new File([JSON.stringify(report, null, 2)], `${stem}_tissue_correction.json`, { type: "application/json" }), viewable: false },
-    };
+    });
+    const entries = Object.fromEntries(Object.entries(texts).map(([role, { description, name, type, body, viewable }]) => [role, { description, file: new File([body], name, { type }), viewable }]));
     if (t1 && dataset?.voxel) entries.voxelMask = { description: "Voxel mask in T1 space (.nii)", file: new File([maskNifti()], `${stem}_voxel_mask.nii`), viewable: true };
     if (measured && maps?.files) {
       // The partial-volume maps behind the fractions, for checking the segmentation.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalArrows, surfaceNormals } from '../src/normal-arrows.js';
-import { readMz3 } from '../src/results.js';
+import { readMz3 } from '@neurodesk/webapp-components/file-io/mesh';
 
 function plane() {
   const white = [];

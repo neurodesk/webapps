@@ -9,7 +9,8 @@
     "Adapt PipelineExecutor to QsmPipelineController and the shared WorkerSession protocol.",
     "Fetch model weights through the shared downloader with upstream hashes and a pinned Hugging Face revision.",
     "Build both WASM bundles with the repository's pinned nightly toolchain and shared cross-origin isolation support.",
-    "Keep monorepo date-based release versions and deployment workflows."
+    "Keep monorepo date-based release versions and deployment workflows.",
+    "Load Inter from css/inter.css, which pins the Google Fonts v20 files, not from the mutable fonts.googleapis.com stylesheet."
   ],
   "branch": "main",
   "rewrite": {

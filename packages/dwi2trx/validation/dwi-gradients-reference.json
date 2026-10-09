@@ -1,0 +1,616 @@
+{
+  "example": "dwi-gradients",
+  "inputs": {
+    "dwi.nii.gz": "9007c69e6f93b94fd57bf427415a7b4bd2c0822a6b5ee334cb561b8a6ebcd50f",
+    "dwi.bval": "5b7b0b81f43794445d5b12fb227a5f4ed838c9df384d9a639d47d18fb067118b",
+    "dwi.bvec": "709d68fced5a626dc8496cd0d2950efe18d29187f6aa028bd05551c69e0f6376"
+  },
+  "mask": {
+    "path": "dwi2trx command line: MindGrab CPU modules on the first b0 volume",
+    "provenance": {
+      "model": "mindgrab",
+      "version": "0.1.20260925",
+      "backend": "cpu",
+      "elapsedMs": 35045
+    },
+    "geometry": {
+      "dims": [
+        3,
+        72,
+        72,
+        39
+      ],
+      "pixdim": [
+        3,
+        3,
+        3
+      ],
+      "qformCode": 1,
+      "sformCode": 1,
+      "quatern": [
+        0,
+        1,
+        0,
+        108,
+        -98.27899932861328,
+        -23.39620018005371
+      ],
+      "srow": [
+        -3,
+        0,
+        0,
+        108,
+        0,
+        3,
+        0,
+        -98.27899932861328,
+        0,
+        0,
+        3,
+        -23.39620018005371
+      ]
+    },
+    "datatype": 2,
+    "fileSha256": "bd286e970c066e11c2ff0f616fc4f7ec81f5c3806a08bc8865c64219b6ede609",
+    "headerSha256": "31f2fd0b99b6d69e0ffacc6fe912bd354db6ff3fd8c0c10c940a83b0b1b356fe",
+    "voxelSha256": "bdfda26cfb1c450899abe6f001cf42bef51362dc9341ab879e02df72a2d57948",
+    "nonFinite": 0,
+    "nonzero": 48259,
+    "minimum": 0,
+    "maximum": 1,
+    "mean": 0.23869796612852168,
+    "std": 0.4262877515183458
+  },
+  "browser": {
+    "path": "apps/dwi2trx/e2e/reference.spec.js: the app's fit automation with the mask role, tensor worker, built assets",
+    "app": "dwi2trx 0.4.20261007",
+    "niimath": "1.2.0-dtifit.0",
+    "browser": "Chromium 153.0.8010.12",
+    "seconds": 3,
+    "maps": {
+      "FA": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "2a2cc2481df8329e4b357e96a038ec852f8ac031a4f22d97d34ce5272bcb6b06",
+        "headerSha256": "0fd0b709cb05b58ca4cd7a8af1f1b4e6afb6cf97ac322a8ee9327e9bf8e2fe68",
+        "voxelSha256": "7ce09b3afebb89669885da370a6b7207301e440736961cb27ecc03c39ecb2cd5",
+        "nonFinite": 0,
+        "nonzero": 48247,
+        "minimum": 0,
+        "maximum": 0.951921284198761,
+        "mean": 0.06069454492251682,
+        "std": 0.13113179450929147
+      },
+      "MD": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "a11bc382596dd5beec07629def4732faf000c46dcd1f3bcf221479a471436627",
+        "headerSha256": "971bf7ac7da58529c7459f9a56b65cce7828dba763de6ea1ef4cca5074e0c160",
+        "voxelSha256": "85efd8879a53d10c7104fad9978869743235dad2b70dde79b45fb2df5a6e0156",
+        "nonFinite": 0,
+        "nonzero": 48247,
+        "minimum": 0,
+        "maximum": 0.0023222065065056086,
+        "mean": 0.00017554347935982886,
+        "std": 0.000338327506897538
+      },
+      "L1": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "778b0dd679888f062a2931cc9b4656a5f4c2d177d37698dd41f0aba7f9f993fe",
+        "headerSha256": "971bf7ac7da58529c7459f9a56b65cce7828dba763de6ea1ef4cca5074e0c160",
+        "voxelSha256": "085a6d09c79965e770c10aab4c0a7d085b6617ade4dd99c0763dc09b47ef0916",
+        "nonFinite": 0,
+        "nonzero": 48259,
+        "minimum": -0.00035445968387648463,
+        "maximum": 0.0031182561069726944,
+        "mean": 0.00022247526658686863,
+        "std": 0.00042905227277390294
+      },
+      "L2": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "70c9d6dad8c0b75a54297f0b3d2e7655b89545a6205e3c7b295e9ed397ec6b0b",
+        "headerSha256": "971bf7ac7da58529c7459f9a56b65cce7828dba763de6ea1ef4cca5074e0c160",
+        "voxelSha256": "2760d49610b0a5c475fe9101d184ef3b763c754825114fc431f93bfe742791f1",
+        "nonFinite": 0,
+        "nonzero": 48256,
+        "minimum": -0.0006042987224645913,
+        "maximum": 0.0024141869507730007,
+        "mean": 0.0001692551741368255,
+        "std": 0.00033177490871335517
+      },
+      "L3": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "9ea574470461a7db540f85dcd612606ea9a8a294641f8eea96c38160d593efdf",
+        "headerSha256": "971bf7ac7da58529c7459f9a56b65cce7828dba763de6ea1ef4cca5074e0c160",
+        "voxelSha256": "a39f9a78f36c92807ea831263718d6068f685a8cab0c6267c1026afce7cb6cd6",
+        "nonFinite": 0,
+        "nonzero": 48218,
+        "minimum": -0.0006973675335757434,
+        "maximum": 0.0021337566431611776,
+        "mean": 0.0001349306762489722,
+        "std": 0.0002667159186845981
+      },
+      "V1": {
+        "geometry": {
+          "dims": [
+            4,
+            72,
+            72,
+            39,
+            3
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "f6208196d0e0dd2b9638edf4549998d623c87995dc053687bb18935de7f620ef",
+        "headerSha256": "6e2a6474b91a5542968b7c94a3b7d24c9e80aa31ef4c351a81029baf00376f8a",
+        "voxelSha256": "af1513c7c7e6c3cfbdf7e5531d6a655d6d0643260458504a03c2683ea8bb747d",
+        "nonFinite": 0,
+        "nonzero": 144777,
+        "minimum": -0.9999522566795349,
+        "maximum": 0.9999896287918091,
+        "mean": -0.000783002742677408,
+        "std": 0.2820733514732315
+      },
+      "V2": {
+        "geometry": {
+          "dims": [
+            4,
+            72,
+            72,
+            39,
+            3
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "270edec7bc83a235fb998c9f1e1c01c9354ca761663ccc0ace5f539e9618d3cc",
+        "headerSha256": "6e2a6474b91a5542968b7c94a3b7d24c9e80aa31ef4c351a81029baf00376f8a",
+        "voxelSha256": "65c79dc4627cb177279c8cb0849a51f7a40b5c2c02d9c7203fad96bdc283b830",
+        "nonFinite": 0,
+        "nonzero": 144777,
+        "minimum": -0.9999740719795227,
+        "maximum": 0.999995231628418,
+        "mean": -0.025426153036574216,
+        "std": 0.2809261459305178
+      },
+      "V3": {
+        "geometry": {
+          "dims": [
+            4,
+            72,
+            72,
+            39,
+            3
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "b4c6c31b8b75813c3e6564fe731f9e44beb5ad60c388810688492d1ed8ab0c6d",
+        "headerSha256": "6e2a6474b91a5542968b7c94a3b7d24c9e80aa31ef4c351a81029baf00376f8a",
+        "voxelSha256": "2360f63d51ede72e6cd4833f8677427cd7c747dcb77c9182c8b05a0cc361e2fc",
+        "nonFinite": 0,
+        "nonzero": 144777,
+        "minimum": -0.9999697208404541,
+        "maximum": 0.9999958276748657,
+        "mean": 0.05291045236903157,
+        "std": 0.2770676320643745
+      },
+      "S0": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "b27ab68c1e4b76ba2175eaf1725fd8b1ffafdaa8778ed76d93589ee2ed47ba6b",
+        "headerSha256": "971bf7ac7da58529c7459f9a56b65cce7828dba763de6ea1ef4cca5074e0c160",
+        "voxelSha256": "3342a4069f471ac37d543285b92f4eb666fbf9acdf2e8de872d62e9e19d2d422",
+        "nonFinite": 0,
+        "nonzero": 48259,
+        "minimum": 0,
+        "maximum": 2354.001953125,
+        "mean": 123.15251318806379,
+        "std": 249.60540775512078
+      },
+      "MO": {
+        "geometry": {
+          "dims": [
+            3,
+            72,
+            72,
+            39
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "c97af51483e85dd9e4d29efa442b6023f6631b6d80b52cd0188b6a8b48b7612e",
+        "headerSha256": "1b214283a522cc8d61a0e31057d03657910b00cd22a9aaf8cee207af480e3529",
+        "voxelSha256": "c4fdc88e5fabe8b9cbaeaded7ab470b04ebffd90c7b3ba9aa14f6820fb723cb6",
+        "nonFinite": 0,
+        "nonzero": 48259,
+        "minimum": -0.9999894499778748,
+        "maximum": 0.9999819397926331,
+        "mean": 0.049791741517912616,
+        "std": 0.3032910675607922
+      },
+      "tensor": {
+        "geometry": {
+          "dims": [
+            4,
+            72,
+            72,
+            39,
+            6
+          ],
+          "pixdim": [
+            3,
+            3,
+            3
+          ],
+          "qformCode": 1,
+          "sformCode": 1,
+          "quatern": [
+            0,
+            1,
+            0,
+            108,
+            -98.27899932861328,
+            -23.39620018005371
+          ],
+          "srow": [
+            -3,
+            0,
+            0,
+            108,
+            0,
+            3,
+            0,
+            -98.27899932861328,
+            0,
+            0,
+            3,
+            -23.39620018005371
+          ]
+        },
+        "datatype": 16,
+        "fileSha256": "41801b108ae628252e0d077049ad58d2af7f23a79dc0c8e7b2fcdc90da0dae1c",
+        "headerSha256": "b07ea0b3c033b536dcd8814f7fc7e813cd8ed6c9429837fff0586b3a9c070dba",
+        "voxelSha256": "895ae9f2bb3f6f5581d7f8d0eb199a8edad34da40c5566358b554fd0f0412985",
+        "nonFinite": 0,
+        "nonzero": 289554,
+        "minimum": -0.0009266987326554954,
+        "maximum": 0.002672203816473484,
+        "mean": 0.0000866550546349587,
+        "std": 0.0002609362138859922
+      }
+    }
+  }
+}

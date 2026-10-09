@@ -43,6 +43,16 @@
           "minimum": 0,
           "maximum": 1
         },
+        "mask": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional brain mask on the diffusion grid; replaces the MindGrab mask",
+          "minimum": 0,
+          "maximum": 1
+        },
         "metadata": {
           "source": "files",
           "type": "neuro:metadata",
@@ -63,7 +73,70 @@
           "space": "input",
           "maximum": 1
         },
+        "md": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l1": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l2": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l3": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
         "v1": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "v2": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "v3": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "s0": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "mo": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "tensor": {
           "type": "neuro:volume",
           "mediaType": "application/gzip",
           "minimum": 1,
@@ -110,6 +183,16 @@
             "bvecs"
           ],
           "description": "Explicit FSL gradient vectors; required unless DICOM supplies sidecars",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional brain mask on the diffusion grid; replaces the MindGrab mask",
           "minimum": 0,
           "maximum": 1
         },
@@ -169,7 +252,70 @@
           "space": "input",
           "maximum": 1
         },
+        "md": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l1": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l2": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "l3": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
         "v1": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "v2": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "v3": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "s0": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "mo": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "space": "input",
+          "maximum": 1
+        },
+        "tensor": {
           "type": "neuro:volume",
           "mediaType": "application/gzip",
           "minimum": 1,
