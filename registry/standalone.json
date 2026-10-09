@@ -701,35 +701,35 @@
         {
           "kind": "cli",
           "platform": "linux-x64",
-          "version": "0.3.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-linux-x64.tar.gz",
-          "sha256": "d22f2b8554babd83c07584fab388a510f972c4c9632075107a32d9664c91c80d",
-          "bytes": 43717134,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-linux-x64.tar.gz.validation.txt",
+          "version": "0.3.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-linux-x64.tar.gz",
+          "sha256": "09244ee2b94c0646e292f3a4036dc5aac57f89236e6d194842bb804aa7616303",
+          "bytes": 43717141,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-linux-x64.tar.gz.validation.txt",
           "modelsIncluded": true,
-          "command": "tar -xzf fireants-0.3.20261007-linux-x64.tar.gz\n./fireants-0.3.20261007-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
+          "command": "tar -xzf fireants-0.3.20261009-linux-x64.tar.gz\n./fireants-0.3.20261009-linux-x64/fireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "macos-arm64",
-          "version": "0.3.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg",
-          "sha256": "74961c4f2e1c12245164ed2297528abcd0e1a435346b0b56ce4f607e43952cbe",
-          "bytes": 37155009,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-macos-arm64.pkg.validation.txt",
+          "version": "0.3.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-macos-arm64.pkg",
+          "sha256": "e6ff56cd5ea8925ba45f9b94babe650fb070805d5fd434fb18bb203276665001",
+          "bytes": 37154951,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-macos-arm64.pkg.validation.txt",
           "modelsIncluded": true,
-          "command": "sudo installer -pkg fireants-0.3.20261007-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
+          "command": "sudo installer -pkg fireants-0.3.20261009-macos-arm64.pkg -target /\nfireants self-check\nfireants moving.nii.gz fixed.nii.gz results"
         },
         {
           "kind": "cli",
           "platform": "windows-x64",
-          "version": "0.3.20261007",
-          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip",
-          "sha256": "58d0e1c58372f92bbac61fcf1044115e4d40df79a8d50e3c6a69b30568cbd8fd",
-          "bytes": 33382085,
-          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261007/fireants-0.3.20261007-windows-x64.zip.validation.txt",
+          "version": "0.3.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-windows-x64.zip",
+          "sha256": "34cbf0959d3a064af676e59919859b2c4b52980a521ac693bbb472f2f6e22aaa",
+          "bytes": 33382086,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/fireants-v0.3.20261009/fireants-0.3.20261009-windows-x64.zip.validation.txt",
           "modelsIncluded": true,
-          "command": "Expand-Archive -Path .\\fireants-0.3.20261007-windows-x64.zip -DestinationPath .\n.\\fireants-0.3.20261007-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
+          "command": "Expand-Archive -Path .\\fireants-0.3.20261009-windows-x64.zip -DestinationPath .\n.\\fireants-0.3.20261009-windows-x64\\fireants.exe moving.nii.gz fixed.nii.gz results"
         }
       ],
       "containers": []
