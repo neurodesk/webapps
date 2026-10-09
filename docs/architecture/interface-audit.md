@@ -268,7 +268,7 @@ The shared example selector now shows one short line once an example loads, such
 "T1-weighted head MRI loaded." Its description and expected result sit in a tooltip
 beside the Example label, and apps' status bars receive the same short line.
 
-## elastix, 8 October 2026
+## elastix, 9 October 2026
 
 The new elastix app follows the registration family's layout: moving, stationary
 and registered panels with linked stationary and registered crosshairs, one Register
@@ -277,6 +277,9 @@ other registration apps it needs no WebGPU, because the viewers use NiiVue's Web
 backend. Image URLs sit in a collapsed "Open from URL" section. Resolutions, B-spline
 grid spacing and elastix parameter files sit under Advanced settings. Parameter files
 use the `protocol` input kind. A 2D stationary image switches the layout to Axial.
-`pnpm audit:interfaces` (desktop and phone) and `pnpm test:mobile` pass for elastix on
-its production build, and the desktop workflow was reviewed after registering the
-hosted example.
+`pnpm build` built the full 31-app catalog. The interface audit and mobile checks
+pass for elastix against the assembled production site; desktop, phone and light-theme
+screenshots were reviewed. The shared workflow check retains edited settings across
+disclosures and preserves the previous input after a rejected detached-header load.
+The shared upload check covers extensionless DICOM and multiple-series selection.
+Registration, output downloads and cancellation are exercised by the app browser suite.

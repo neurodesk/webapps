@@ -1,0 +1,13 @@
+diff --git a/index.js b/index.js
+index 13a0f18e3fb288ccc6fb8dc9b1e065a717eedb00..92d2a17bec9a063b0a540479b1335becef7ba8f2 100644
+--- a/index.js
++++ b/index.js
+@@ -4,7 +4,7 @@ import util from 'util'
+ import stream from 'stream'
+ const pipeline = util.promisify(stream.pipeline)
+ 
+-import tar from 'tar'
++import * as tar from 'tar'
+ import { filesFromPaths } from 'files-from-path'
+ import { createFileEncoderStream } from 'ipfs-car'
+ import decompress from 'decompress'

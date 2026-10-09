@@ -32,7 +32,7 @@
             <select id="stationarySeries"></select>
           </div>
           <p class="nd-hint">NIfTI, DICOM, OME-Zarr (.ozx or .zarr folder), TIFF, NRRD, MetaImage
-            <span class="nd-info-icon" tabindex="0" aria-label="About supported images">i<span class="nd-info-tooltip">Any format ITK reads works too. Color images, time series and channels are reduced to the first scalar volume. Large OME-Zarr and TIFF pyramids register at the finest level that fits in memory.</span></span>
+            <span class="nd-info-icon" tabindex="0" aria-label="About supported images">i<span class="nd-info-tooltip">Self-contained scalar 2D and 3D ITK images are supported. Convert detached .mhd/.nhdr inputs to .mha, .nrrd or NIfTI first. OME-Zarr and TIFF color, time and channel axes reduce to the first scalar volume. Large OME-Zarr and TIFF pyramids register at the finest level that fits in memory.</span></span>
           </p>
           <details class="nd-sidebar-section" id="urlSection">
             <summary class="nd-section-title">Open from URL</summary>

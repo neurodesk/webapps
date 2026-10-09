@@ -2,5 +2,4 @@
 // without a browser (see test/config.test.js).
 export const APP = Object.freeze({
   id: "elastix",
-  version: "0.0.0",
 });

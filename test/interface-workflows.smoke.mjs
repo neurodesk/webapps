@@ -121,6 +121,26 @@ try {
     await expect(page.locator('#threshold')).toHaveValue('60');
     await expect(page.locator('#saveButton')).toBeDisabled();
   });
+  await check('elastix', async page => {
+    await expect(page.locator('#runButton')).toBeDisabled();
+    await page.locator('#method').selectOption('rigid');
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#resolutions').fill('2');
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#advancedSettings > summary').tap();
+    await expect(page.locator('#resolutions')).toHaveValue('2');
+    await expect(page.locator('#method')).toHaveValue('rigid');
+    await page.locator('#movingInput').setInputFiles(nifti('moving.nii'));
+    await expect(page.locator('#movingInfo')).toContainText('moving.nii');
+    await page.locator('#stationaryInput').setInputFiles(nifti('stationary.nii'));
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await page.locator('#movingInput').setInputFiles({
+      name: 'detached.mhd', mimeType: 'text/plain', buffer: Buffer.from('ElementDataFile = image.raw'),
+    });
+    await expect(page.locator('#statusText')).toContainText('self-contained');
+    await expect(page.locator('#movingInfo')).toContainText('moving.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+  });
   await check('syncro', async page => {
     await expect(page.locator('#runButton')).toBeDisabled();
     await expect(page.locator('#results')).not.toHaveAttribute('open','');

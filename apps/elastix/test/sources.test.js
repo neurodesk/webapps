@@ -19,6 +19,16 @@ test("local files are routed to the reader their format needs", () => {
   assert.throws(() => classifySource([]), /Choose an image/);
 });
 
+test("detached ITK headers are refused with self-contained conversion guidance", () => {
+  for (const extension of ["mhd", "nhdr", "MHD", "NHDR"]) {
+    const header = file(`image.${extension}`);
+    for (const selection of [[header], [header, file("image.raw")], [file("image.raw"), header]]) {
+      assert.throws(() => classifySource(selection), /detached header.*self-contained \.mha or \.nrrd.*NIfTI/);
+    }
+    assert.throws(() => classifySource(`https://example.org/image.${extension}?download=1`), /detached header.*self-contained \.mha or \.nrrd.*NIfTI/);
+  }
+});
+
 test("URLs are routed by their path, ignoring queries and trailing slashes", () => {
   assert.equal(classifySource("https://example.org/data/image.ome.zarr/"), "zarr-url");
   assert.equal(classifySource("https://example.org/idr0051/preview.zarr/0"), "zarr-url");

@@ -6,8 +6,9 @@
 // about 64 MB per image, room for the 7.2 M voxel MNI template.
 export const VOXEL_BUDGET = 2 ** 24;
 
-// Formats @itk-wasm/image-io reads by extension (NIfTI goes through dcm2niix's pass-through).
-const ITK_EXTENSIONS = /\.(nrrd|nhdr|mha|mhd|mgh|mgz|mnc|mnc2|gipl|gipl\.gz|vtk|hdf5|h5|mrc|rec|png|jpe?g|bmp|lsm|pic|isq|aim|fdf|iwi\.cbor|iwi\.cbor\.zst)$/i;
+// Self-contained formats @itk-wasm/image-io reads (NIfTI goes through dcm2niix's pass-through).
+const ITK_EXTENSIONS = /\.(nrrd|mha|mgh|mgz|mnc|mnc2|gipl|gipl\.gz|vtk|hdf5|h5|mrc|rec|png|jpe?g|bmp|lsm|pic|isq|aim|fdf|iwi\.cbor|iwi\.cbor\.zst)$/i;
+const DETACHED_HEADER = /\.(mhd|nhdr)$/i;
 const NIFTI = /\.(nii|nii\.gz)$/i;
 const TIFF = /\.tiff?$/i;
 const OZX = /\.ozx$/i;
@@ -15,6 +16,12 @@ const ZARR_SEGMENT = /(^|\/)[^/]+\.zarr\//i;
 
 function relativePath(file) {
   return file.webkitRelativePath || file._webkitRelativePath || "";
+}
+
+function rejectDetachedHeader(name) {
+  if (DETACHED_HEADER.test(name)) {
+    throw new Error(`${name} is a detached header whose external pixel file cannot be loaded here. Save a self-contained .mha or .nrrd image, or convert it to NIfTI.`);
+  }
 }
 
 /** The `.zarr` folder prefix of a dropped file, or "" when it is not inside one. */
@@ -43,6 +50,7 @@ export function zarrFolderEntries(files) {
 export function classifySource(source) {
   if (typeof source === "string") {
     const path = new URL(source).pathname.replace(/\/+$/, "");
+    rejectDetachedHeader(path);
     if (TIFF.test(path)) return "tiff-url";
     if (OZX.test(path)) return "ozx-url";
     if (NIFTI.test(path) || ITK_EXTENSIONS.test(path)) return "file-url";
@@ -51,6 +59,7 @@ export function classifySource(source) {
   const files = Array.from(source);
   if (!files.length) throw new Error("Choose an image file or folder.");
   if (files.some(zarrRoot)) return "zarr-folder";
+  for (const file of files) rejectDetachedHeader(file.name);
   if (files.length === 1) {
     const [{ name }] = files;
     if (OZX.test(name)) return "ozx";

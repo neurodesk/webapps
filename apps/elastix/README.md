@@ -36,14 +36,19 @@ written as a `displacements` field.
 | Source | Reader |
 | --- | --- |
 | NIfTI, DICOM | dcm2niix (DICOM), then `@itk-wasm/image-io` |
-| NRRD, MetaImage, MGH, MINC and other ITK formats | `@itk-wasm/image-io` |
+| Self-contained scalar ITK files, including NRRD (`.nrrd`), MetaImage (`.mha`), MGH and MINC | `@itk-wasm/image-io` |
 | OME-Zarr `.ozx`, a dropped `.zarr` folder, an OME-Zarr URL | `@fideus-labs/ngff-zarr` (zip archives through `@zarrita/storage`) |
 | TIFF and OME-TIFF, local or by URL | `@fideus-labs/fiff` over geotiff, by range request for a URL |
 
-Pyramids register at the finest level of at most 2^24 voxels. A single-slice volume becomes a 2D image when its plane lies in physical XY.
+Detached headers (`.mhd`, `.nhdr`) with external pixel files are unsupported.
+Save a self-contained `.mha` or `.nrrd` image, or convert the pair to NIfTI before
+loading it. ITK files must contain one scalar 2D or 3D image. OME-Zarr and TIFF
+channel and time axes reduce to the first scalar volume.
+
+Pyramids register at the finest level of at most 2^24 voxels. A single-slice
+volume becomes a 2D image when its plane lies in physical XY.
 Sagittal and oblique single-slice volumes are rejected because reducing them to
-2D would discard their physical coordinates. Color, channel and time axes reduce
-to the first scalar volume.
+2D would discard their physical coordinates.
 
 ## Build and test
 
@@ -64,3 +69,12 @@ hosted 1 mm pair, a known rigid displacement through the automation contract,
 and a synthetic 2D pair with a known shift as local OME-Zarr, local OME-TIFF, a
 remote OME-Zarr folder and a remote TIFF served by range request, plus a
 two-level pyramidal OME-TIFF.
+
+## Archive dependencies
+
+ITK-Wasm's Node data archive manager is pinned to the maintained
+`@xhmikosr/decompress@11.1.4` and `tar@7.5.22` through scoped workspace overrides.
+The one-line `@itk-wasm/dam` patch uses tar's namespace export for compatibility.
+Archive tests resolve the actual ITK dependency, pack and extract a valid archive,
+and reject direct and chained escaping symlinks. These Node archive tools are not
+the browser's OME-Zarr ZIP reader.
