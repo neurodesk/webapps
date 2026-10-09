@@ -458,11 +458,14 @@ importers:
   apps/dwi2trx:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: ^0.1.20260813
-        version: 0.1.20260813
+        specifier: 0.1.20260925
+        version: 0.1.20260925
       '@dipy/gpu-streamlines':
         specifier: ^0.1.0
         version: 0.1.0
+      '@neurodesk/dwi2trx':
+        specifier: workspace:*
+        version: link:../../packages/dwi2trx
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -1028,6 +1031,21 @@ importers:
       electron-builder:
         specifier: 26.15.3
         version: 26.15.3(electron-builder-squirrel-windows@26.15.3)
+
+  packages/dwi2trx:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/niimath':
+        specifier: file:../../apps/dwi2trx/vendor/niimath
+        version: file:apps/dwi2trx/vendor/niimath
 
   packages/easy-mp2rage:
     dependencies:
