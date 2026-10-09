@@ -47,7 +47,8 @@ try {
   await expect(page.locator('#betVoxelScale')).toHaveValue('10');
   await page.locator('#runBetWithSettings').click();
   await page.waitForFunction(() => window.app?.maskController?.currentMaskData?.some(value => value > 0), null, { timeout: 180000 });
-  assert.equal(await page.evaluate(() => window.app.maskVoxelScale), 10);
+  // The BET run is recorded (with its voxel scale) once the mask is displayed (astewartau/qsmbly#140).
+  await page.waitForFunction(() => window.app.maskVoxelScale === 10, null, { timeout: 30000 });
   console.log('PASS QSMbly: mouse brain dialog and voxel-scaled BET fallback');
   assert.equal(await page.evaluate(() => crossOriginIsolated), true);
   console.log('PASS QSMbly: About upstream link, shared HD-BET dialog, and cross-origin isolation');

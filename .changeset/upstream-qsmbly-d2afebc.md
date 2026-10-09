@@ -1,30 +1,15 @@
 ---
 "qsmbly": patch
+"@neurodesk/webapp-components": patch
 ---
 
 Merge upstream astewartau/qsmbly 2f91e83..d2afebc:
 
-- Add a bench for what the DL thread pool costs in wasm heap (#119)
-- Deploy the staging branch to qsmbly.neurodesk.org/staging (#121)
-- Create CNAME
-- Accept a v-prefixed version on the manual deploy, and check it before building (#123)
-- Write .nojekyll when publishing, so Pages serves the branch as-is (#124)
-- Let staging deploys supersede each other, and make overlapping ones safe (#125)
-- Record the #89 pool-size sweep on stable hardware, and let run_bench.sh pick its browser (#122)
-- Surface errors on mask paths that failed silently or crashed (#126)
-- Tidy the build, dev-server and dependency-bump scripts (#127)
-- Consolidate CSS: move inline style block, define missing variables, remove dead and duplicate rules (#136)
-- Clean up the worker layer: report errors once, drop dead code, honour TGV settings (#135)
-- Validate WASM export inputs, reject unknown enum codes, tidy lint and logging (#134)
-- Accessibility, pinned CDN assets with SRI, privacy and README docs, smaller icons (#133)
-- Escape file-derived text, delete dead app/controller code, fix UI robustness issues (#132)
-- Derive V-SHARP and iLSQR defaults from the generated qsm-defaults.js (#131)
-- CI: build what deploy builds, add linting, deploy the release tag (#129)
-- Make worker init fail loudly, survive Cancel, and drop dead stage skipping (#128)
-- Decode .nii.gz properly, apply field-map voxel defaults, lazy-load dicompare (#130)
-- Test ConfigBridge against qsmxt-config and cover the near-pure controllers (#138)
-- Keep deep-learning tile patches small enough to run in the browser at all (#137)
-- Modal focus management, single <h1>, Tagify without !important, hidden-attribute panels (#139)
-- Restructure the WASM bindings: shared helpers, one error convention, one DL tiling table (#141)
-- Make MaskController own mask state, drop unused executor surface, send typed arrays to the worker (#140)
-- One numerical path: run field-map modes and QSMART through the config-driven qsm-core stages (#142)
+- One numerical path: total- and local-field maps and QSMART run through the same config-driven qsm-core stages as raw phase, so the same settings give the same numbers whichever input they start from (#142). Field strength is always required; TGV and MEDI on a field map ask for its echo time.
+- TGV's regularization level decides its alphas from the first run, and the exported command names the alphas that ran (#142). V-SHARP and iLSQR defaults come from the generated qsm-core defaults (#131).
+- Deep-learning tile patches are capped at 120 voxels so they fit browser memory (#137).
+- Gzipped NIfTI masks and field maps are decoded with their scaling, and field-map voxel sizes set the defaults (#130). A 4D mask is refused instead of silently truncated.
+- The WASM module failing to load is reported instead of hanging, and Cancel during loading settles (#128). Mask paths report errors that used to fail silently (#126).
+- File names are escaped in the mask list and the import triage (#132). dicompare loads on first use, so an unreachable dicompare.neurodesk.org only disables the report (#130).
+- Accessibility: labelled controls, hidden-attribute settings panels, and dialogs that take focus, trap Tab, close on Escape and return focus (#133, #139; the shared ModalManager now does this for every app). Tagify is pinned to 4.39.0 with subresource integrity.
+- The shared decodeNiftiBuffer can stop after the header (`{ maxBytes }`).
