@@ -806,7 +806,41 @@
       "desktop": true,
       "profile": "interactive",
       "assets": [],
-      "downloads": [],
+      "downloads": [
+        {
+          "kind": "cli",
+          "platform": "linux-x64",
+          "version": "0.4.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-linux-x64.tar.gz",
+          "sha256": "af3dafe28b00687c1accc5abc7112eae0bcbbed2d10e92588ebaae46e6a9128a",
+          "bytes": 97169316,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-linux-x64.tar.gz.validation.txt",
+          "modelsIncluded": true,
+          "command": "tar -xzf brain-extraction-0.4.20261009-linux-x64.tar.gz\n./brain-extraction-0.4.20261009-linux-x64/brain-extraction head.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "macos-arm64",
+          "version": "0.4.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-macos-arm64.pkg",
+          "sha256": "d42c284747f0e8ea4248ed83d65409080ce9e9ddd491c5d71a73ed31e39d911d",
+          "bytes": 99052375,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-macos-arm64.pkg.validation.txt",
+          "modelsIncluded": true,
+          "command": "sudo installer -pkg brain-extraction-0.4.20261009-macos-arm64.pkg -target /\nbrain-extraction self-check\nbrain-extraction head.nii.gz results"
+        },
+        {
+          "kind": "cli",
+          "platform": "windows-x64",
+          "version": "0.4.20261009",
+          "url": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-windows-x64.zip",
+          "sha256": "dedbf34b5ce33c35d426ae9ed2bf47134b91da38ef4346f5c631f1857f64fa61",
+          "bytes": 102731565,
+          "validationUrl": "https://github.com/neurodesk/webapps/releases/download/brain-extraction-v0.4.20261009/brain-extraction-0.4.20261009-windows-x64.zip.validation.txt",
+          "modelsIncluded": true,
+          "command": "Expand-Archive -Path .\\brain-extraction-0.4.20261009-windows-x64.zip -DestinationPath .\n.\\brain-extraction-0.4.20261009-windows-x64\\brain-extraction.exe head.nii.gz results"
+        }
+      ],
       "containers": []
     },
     "disconnectome": {
