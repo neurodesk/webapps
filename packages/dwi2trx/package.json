@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/dwi2trx",
-  "version": "0.4.20261007",
+  "version": "0.5.20261009",
   "description": "DWI2TRX's diffusion tensor fit (niimath dtifit, MindGrab brain mask) for browsers and the command line",
   "type": "module",
   "license": "BSD-2-Clause",

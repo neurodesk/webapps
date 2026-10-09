@@ -1,5 +1,15 @@
 # @neurodesk/desktop
 
+## 0.26.20261009
+
+### Patch Changes
+
+- 501ea0c: Pin every offline source to an immutable URL so a host redeploy can no longer fail the nightly checksum check. CALMAR assets move to fixed Hugging Face and GitHub commits, QSMbly loads Inter from versioned font files, and the unused QSMbly OSF multi-echo files and NiiVue demo images (NiiMath, SynthSR) leave the bundle. `test/offline-asset-pins.test.mjs` rejects unpinned sources.
+- 3adf140: Write the models pack without GNU tar. The archive is now produced in Node as a plain USTAR stream, so it builds on macOS and Windows as well as Linux and stays byte-identical for the same models. Its checksum differs from packs written by GNU tar, so the next release uploads the pack once more.
+- Updated dependencies [66bf9e9]
+- Updated dependencies [501ea0c]
+  - @neurodesk/webapp-components@0.12.0
+
 ## 0.26.20261007
 
 ### Patch Changes
