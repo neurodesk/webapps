@@ -1,7 +1,7 @@
 {
   "name": "browserqc",
   "private": true,
-  "version": "1.4.20261007",
+  "version": "1.5.20261009",
   "type": "module",
   "license": "BSD-2-Clause",
   "description": "Automated MRI quality control, entirely in the browser. No data leaves your machine.",

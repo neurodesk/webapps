@@ -1,5 +1,7 @@
 # @neurodesk/syncro
 
+## 0.6.20261009
+
 ## 0.6.20261007
 
 ### Minor Changes
