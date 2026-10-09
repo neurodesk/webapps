@@ -114,6 +114,8 @@ export function openDialog(overlay, { onEscape, activeClass = 'active' } = {}) {
   if (stack.some((entry) => entry.overlay === overlay)) return;
 
   const doc = documentOf(overlay);
+  // Outside a DOM (a lightweight stub), showing the overlay is all there is to do.
+  if (typeof doc?.addEventListener !== 'function') return;
   if (!listening.has(doc)) {
     doc.addEventListener('keydown', onKeydown);
     listening.add(doc);

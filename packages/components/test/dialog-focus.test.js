@@ -130,3 +130,22 @@ test('ModalManager honours a custom active class', () => {
   modal.close();
   assert.equal(el.classList.contains('open'), false);
 });
+
+test('ModalManager still toggles an overlay in a document without event support', () => {
+  const classes = new Set();
+  const element = {
+    classList: { add: c => classes.add(c), remove: c => classes.delete(c), contains: c => classes.has(c) },
+    addEventListener() {},
+  };
+  const previous = globalThis.document;
+  globalThis.document = { getElementById: () => element };
+  try {
+    const modal = new ModalManager('m');
+    modal.open();
+    assert.equal(modal.isOpen(), true);
+    modal.close();
+    assert.equal(modal.isOpen(), false);
+  } finally {
+    globalThis.document = previous;
+  }
+});
