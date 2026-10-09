@@ -193,6 +193,7 @@ class QSMApp {
       onStageData: (data) => this._onStageData(data),
       onPipelineComplete: () => this._onPipelineComplete(),
       onPipelineError: () => this._onPipelineError(),
+      onJobStart: () => this._setJobRunning(true),
       config: window.QSMConfig
     });
 

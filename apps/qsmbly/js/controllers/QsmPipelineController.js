@@ -17,6 +17,8 @@ export class QsmPipelineController {
     this.onStageData = options.onStageData || (() => {});
     this.onPipelineComplete = options.onPipelineComplete || (() => {});
     this.onPipelineError = options.onPipelineError || (() => {});
+    // Called when a job starts, before the worker is ready, so the UI can offer Cancel at once.
+    this.onJobStart = options.onJobStart || (() => {});
     this.config = options.config;
     // How long `initialize()` waits for the worker's 'initialized' reply before giving up.
     this.initTimeoutMs = options.initTimeoutMs ?? QsmPipelineController.INIT_TIMEOUT_MS;
@@ -287,13 +289,17 @@ export class QsmPipelineController {
    * messages and a final 'complete' or 'error'. Resolves false if the worker could not start.
    */
   async _start(type, data, message, transfer) {
+    // Running (and so cancellable) from the start: the first run may wait for the WASM to load.
+    this.pipelineRunning = true;
+    this.onJobStart();
     try {
       await this.initialize();
       this.updateOutput(message);
-      this.pipelineRunning = true;
       this.send(type, data, transfer);
       return true;
     } catch (error) {
+      // cancel() has already reset the state and reported it.
+      if (!this.pipelineRunning) return false;
       this._handleError(error.message);
       console.error(error);
       return false;

@@ -240,6 +240,31 @@ describe('QsmPipelineController initialization', () => {
   });
 });
 
+describe('QsmPipelineController cancel while the worker loads', () => {
+  let savedWorker;
+  beforeEach(() => {
+    savedWorker = global.Worker;
+    global.Worker = class { postMessage() {} terminate() {} };
+  });
+  afterEach(() => { global.Worker = savedWorker; });
+
+  test('a run is cancellable before the WASM has loaded, and settles without an error', async () => {
+    const onJobStart = jest.fn();
+    const onPipelineError = jest.fn();
+    const ex = new QsmPipelineController({ updateOutput: () => {}, setProgress: () => {}, onJobStart, onPipelineError });
+
+    const started = ex.run({ pipelineSettings: {} });
+    expect(onJobStart).toHaveBeenCalledTimes(1);
+    expect(ex.isRunning()).toBe(true);
+
+    ex.cancel();
+
+    await expect(started).resolves.toBe(false);
+    expect(ex.isRunning()).toBe(false);
+    expect(onPipelineError).not.toHaveBeenCalled();
+  });
+});
+
 describe('QsmPipelineController job start', () => {
   /** A worker stub that clones each message the way postMessage does, transfers included. */
   function makeStartedExecutor() {
