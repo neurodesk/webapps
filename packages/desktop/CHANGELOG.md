@@ -1,5 +1,11 @@
 # @neurodesk/desktop
 
+## 0.27.20261009
+
+### Patch Changes
+
+- Wait for partial output cleanup before publishing a failed or cancelled automation run, so clients cannot observe a completed run while its outputs are still being removed.
+
 ## 0.26.20261009
 
 ### Patch Changes
