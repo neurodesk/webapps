@@ -9,27 +9,17 @@ import { estimateHdBetPatches } from './modules/HdBetEstimate.js';
 import { MOUSE_BET_DEFAULTS, looksLikeRodentFov, fieldOfViewMm, voxelScaleMethodsNote, insertBetMethodsNote, replaceMaskingSentence, RS2_NET_METHODS } from './modules/mask/RodentMask.js';
 import {
   parseNiftiHeader,
-  gunzipNifti,
   createMaskNifti,
   createFloat64Nifti
-<<<<<<< monorepo
   , createNiftiFromVolume
+  , decodeNiftiBuffer
 } from '@neurodesk/webapp-components/file-io';
 import { ModalManager } from '@neurodesk/webapp-components/ui';
+import { escapeHtml } from './modules/ui/escapeHtml.js';
 import { Tutorial } from './modules/ui/Tutorial.js';
 import { QsmInputSet, QsmPipelineController, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
 import { QsmDicomInput } from './controllers/QsmDicomInput.js';
-import { DicompareController } from 'https://dicompare.neurodesk.org/embed/DicompareController.js';
 import { DicompareReportRenderer } from '@neurodesk/webapp-components/ui';
-=======
-} from './modules/file-io/NiftiUtils.js';
-import { ModalManager } from './modules/ui/ModalManager.js';
-import { escapeHtml } from './modules/ui/escapeHtml.js';
-import { LandingPage } from './modules/ui/LandingPage.js';
-import { Tutorial, WelcomePrompt } from './modules/ui/Tutorial.js';
-import { FileIOController, QsmPipelineController, PipelineSettingsController, MaskController, ViewerController } from './controllers/index.js';
-import { DicomController } from './controllers/DicomController.js';
->>>>>>> upstream
 import * as QSMConfig from './app/config.js';
 import { buildConfigJson, maskSectionString } from './modules/ConfigBridge.js';
 import { echoTimeDependentStep } from './worker/utils/ScanParams.js';
@@ -88,7 +78,7 @@ class QSMApp {
     // here. Created now rather than in init() so that state exists from the start.
     this.maskController = new MaskController({
       nv: this.nv,
-      getWorker: () => this.pipelineExecutor?.getWorker(),
+      getWorker: () => this.pipelineExecutor?.getChannel(),
       updateOutput: (msg) => this.updateOutput(msg),
       setProgress: (val, text) => this.setProgress(val, text),
       initializeWorker: () => this.pipelineExecutor?.initialize(),
@@ -206,20 +196,6 @@ class QSMApp {
       config: window.QSMConfig
     });
 
-<<<<<<< monorepo
-    // Initialize mask controller
-    this.maskController = new MaskController({
-      nv: this.nv,
-      getWorker: () => this.pipelineExecutor?.getChannel(),
-      updateOutput: (msg) => this.updateOutput(msg),
-      setProgress: (val, text) => this.setProgress(val, text),
-      initializeWorker: () => this.pipelineExecutor?.initialize(),
-      beginCancellableJob: (onCancel) => this.beginCancellableJob(onCancel),
-      config: window.QSMConfig
-    });
-
-=======
->>>>>>> upstream
     // Initialize viewer controller
     this.viewerController = new ViewerController({
       nv: this.nv,
@@ -249,18 +225,13 @@ class QSMApp {
     this.dicompareModal = new ModalManager('dicompareModal');
     this.swiModal = new ModalManager('swiSettingsModal');
 
-<<<<<<< monorepo
-    // Start loading WASM in the background immediately
-    this.pipelineExecutor.initialize();
+    // Start loading WASM in the background immediately. A failure here is reported, and the
+    // next action that needs the worker retries the load.
+    this.pipelineExecutor.initialize().catch((e) => this.updateOutput(`Error: ${e.message}`));
     this.automation = registerQsmAutomation(this);
     document.getElementById('unifiedFiles').disabled = false;
     document.getElementById('maskFiles').disabled = false;
     void this.setupExamples().catch(error => this.updateOutput(error.message));
-=======
-    // Start loading WASM in the background immediately. A failure here is reported, and the
-    // next action that needs the worker retries the load.
-    this.pipelineExecutor.initialize().catch((e) => this.updateOutput(`Error: ${e.message}`));
->>>>>>> upstream
   }
 
   /** Wire up the guided tutorial, launched on demand from the header "Guide" button. */
@@ -459,14 +430,6 @@ class QSMApp {
     this._elapsedTimer = null;
   }
 
-<<<<<<< monorepo
-  stopProgressAnimation() {
-    if (this.progressAnimationId) {
-      cancelAnimationFrame(this.progressAnimationId);
-      this.progressAnimationId = null;
-    }
-  }
-
   async setupExamples() {
     const response = await fetch(new URL('examples.json', document.baseURI));
     if (!response.ok) throw new Error('Could not load the example catalog.');
@@ -487,8 +450,6 @@ class QSMApp {
     input.closest('.section-content').prepend(this.exampleSelector);
   }
 
-=======
->>>>>>> upstream
   setupEventListeners() {
     // Async handlers that reach the worker can reject (e.g. the WASM fails to load); report it.
     const reportErrors = (fn) => async (...args) => {
@@ -508,8 +469,6 @@ class QSMApp {
 
     // Unified file input
     this._setupUnifiedDropZone();
-
-    // Load example data button
 
     // Field map units dropdown
     document.getElementById('fieldMapUnits')?.addEventListener('change', () => {
@@ -592,25 +551,7 @@ class QSMApp {
     }
 
     // Threshold Robust button - Otsu + auto-refinement
-<<<<<<< monorepo
-    document.getElementById('thresholdRobust')?.addEventListener('click', () => this.generateRobustMask());
-=======
-    document.getElementById('thresholdRobust')?.addEventListener('click', reportErrors(async () => {
-      document.getElementById('thresholdModeButtons').style.display = 'none';
-      await this.previewMask();
-      this.maskOpsHistory = ['threshold:otsu'];
-      this.updateOutput("Applying robust refinement (dilate, fill holes, erode x2)...");
-      await this.dilateMask3D();
-      this._pushMaskOp('dilate');
-      await this.fillHoles3D();
-      this.maskOpsHistory.push('fill-holes:0');
-      await this.erodeMask3D(2);
-      this._pushMaskOp('erode');
-      this._pushMaskOp('erode');
-      await this.displayCurrentMask();
-      this.updateOutput("Robust mask complete");
-    }));
->>>>>>> upstream
+    document.getElementById('thresholdRobust')?.addEventListener('click', reportErrors(() => this.generateRobustMask()));
 
     // Threshold Manual button - Otsu + slider
     document.getElementById('thresholdManual')?.addEventListener('click', async () => {
@@ -628,12 +569,7 @@ class QSMApp {
     document.getElementById('runHdBet')?.addEventListener('click', () => this.openHdBetSettingsModal());
     // Mouse brain extraction - RS2-Net, with voxel-scaled BET as the fallback
     document.getElementById('runMouseBet')?.addEventListener('click', () => this.openMouseBrainModal());
-<<<<<<< monorepo
-    document.getElementById('runRs2Net')?.addEventListener('click', () => this.runRs2NetWithSettings());
-=======
-    document.getElementById('closeMouseBrain')?.addEventListener('click', () => this.mouseBrainModal?.close());
     document.getElementById('runRs2Net')?.addEventListener('click', reportErrors(() => this.runRs2NetWithSettings()));
->>>>>>> upstream
     document.getElementById('runMouseScaledBet')?.addEventListener('click', () => {
       this.mouseBrainModal?.close();
       this.openBetSettingsModal('mouse');
@@ -1053,72 +989,6 @@ class QSMApp {
   }
 
   /**
-<<<<<<< monorepo
-=======
-   * Fetch example data from GitHub Release and load it.
-   */
-  async _loadExampleData() {
-    const btn = document.getElementById('loadExampleData');
-    const { baseUrl, files } = QSMConfig.EXAMPLE_DATA;
-
-    btn.disabled = true;
-    btn.textContent = 'Downloading example data...';
-    this.updateOutput('Downloading example data...');
-    this.setProgress(0, 'Downloading example data...');
-
-    try {
-      // First, issue HEAD requests in parallel to learn total size
-      const headResponses = await Promise.all(files.map(async (name) => {
-        const resp = await fetch(`${baseUrl}/${name}`, { method: 'HEAD' });
-        const len = parseInt(resp.headers.get('Content-Length') || '0', 10);
-        return { name, size: len };
-      }));
-      const totalBytes = headResponses.reduce((sum, h) => sum + h.size, 0);
-      const perFileBytes = new Array(files.length).fill(0);
-      let downloadedBytes = 0;
-
-      const updateProgress = () => {
-        downloadedBytes = perFileBytes.reduce((s, b) => s + b, 0);
-        const frac = totalBytes > 0 ? downloadedBytes / totalBytes : 0;
-        const mb = (downloadedBytes / 1e6).toFixed(1);
-        const totalMb = (totalBytes / 1e6).toFixed(1);
-        this.setProgress(frac, `Downloaded ${mb} / ${totalMb} MB`);
-      };
-
-      const fetched = await Promise.all(files.map(async (name, i) => {
-        const resp = await fetch(`${baseUrl}/${name}`);
-        if (!resp.ok) throw new Error(`Failed to fetch ${name}: ${resp.status}`);
-
-        const reader = resp.body.getReader();
-        const chunks = [];
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          perFileBytes[i] += value.byteLength;
-          updateProgress();
-        }
-        const blob = new Blob(chunks);
-        return new File([blob], name);
-      }));
-
-      this.updateOutput(`Downloaded ${fetched.length} files. Loading...`);
-      await this._handleUnifiedFiles(fetched);
-      this.setProgress(0, '');
-      this.updateOutput('Example data loaded successfully.');
-    } catch (err) {
-      this.setProgress(0, '');
-      this.updateOutput(`Error loading example data: ${err.message}`);
-      console.error('Example data load failed:', err);
-    } finally {
-      btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Load example data';
-      // Same rule as _onBucketsChanged, which a failed download never reaches
-      btn.disabled = Object.values(this.fileIOController.buckets).some(b => b.length > 0);
-    }
-  }
-
-  /**
->>>>>>> upstream
    * Central state handler — called whenever bucket contents change.
    * Replaces scattered switchInputMode/updateEchoInfo calls.
    */
@@ -1608,10 +1478,7 @@ class QSMApp {
    * @returns {Promise<boolean>} True if the dicompare modules are available
    */
   _loadDicompare() {
-    this.dicompareLoad ||= Promise.all([
-      import('https://dicompare.neurodesk.org/embed/DicompareController.js'),
-      import('https://dicompare.neurodesk.org/embed/DicompareReportRenderer.js')
-    ]).then(([{ DicompareController }, { DicompareReportRenderer }]) => {
+    this.dicompareLoad ||= import('https://dicompare.neurodesk.org/embed/DicompareController.js').then(({ DicompareController }) => {
       this.dicompareController = new DicompareController({
         schemaUrl: 'https://dicompare.neurodesk.org/schemas/QSM_Consensus_Guidelines_v1.0.json',
         updateOutput: (msg) => this.updateOutput(msg)
@@ -2016,11 +1883,7 @@ class QSMApp {
     switch (mode) {
       case 'raw': {
         const hasEchoTimes = this.fileIOController?.hasEchoTimes() || false;
-<<<<<<< monorepo
-        const hasMask = this.currentMaskData !== null || this.fileIOController.hasMask();
-=======
-        const hasMask = this.maskController.currentMaskData !== null;
->>>>>>> upstream
+        const hasMask = this.maskController.currentMaskData !== null || this.fileIOController.hasMask();
         canRun = isValid && hasEchoTimes && hasMask;
         break;
       }
@@ -2580,12 +2443,6 @@ class QSMApp {
     this.updateEchoInfo();
   }
 
-<<<<<<< monorepo
-  // Create mask NIfTI using source header as template - delegates to imported module
-  createMaskNifti(maskData) {
-    return createMaskNifti(maskData, this.magnitudeFileBytes);
-  }
-
   async generateRobustMask() {
     document.getElementById('thresholdModeButtons').style.display = 'none';
     await this.previewMask();
@@ -2603,9 +2460,6 @@ class QSMApp {
   }
 
   async runRomeoQSM(options = {}) {
-=======
-  async runRomeoQSM() {
->>>>>>> upstream
     if (this.maskAlignmentActive) {
       this.updateOutput('Apply or cancel the mask alignment preview before running.');
       return;
@@ -2654,9 +2508,9 @@ class QSMApp {
     }
 
     try {
-      const headerInfo = parseNiftiHeader(await this.readNiftiHeader(this.fileIOController.buckets.magnitude[0].file));
-      this.voxelSize = headerInfo.voxelSize;
-      this.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
+      const headerInfo = parseNiftiHeader(await this.maskController.readNiftiHeader(this.fileIOController.buckets.magnitude[0].file));
+      this.maskController.voxelSize = headerInfo.voxelSize;
+      this.maskController.maskDims = [headerInfo.nx, headerInfo.ny, headerInfo.nz];
       this.applyVoxelDefaults();
 
       // Read file buffers
@@ -2674,16 +2528,10 @@ class QSMApp {
       }
 
       // Prepare custom mask if available
-<<<<<<< monorepo
       const uploadedMask = this.fileIOController.getMaskFile();
       let customMaskBuffer = uploadedMask ? await uploadedMask.arrayBuffer() : null;
-      if (this.currentMaskData && this.magnitudeFileBytes) {
-        const maskNifti = this.createMaskNifti(this.currentMaskData);
-=======
-      let customMaskBuffer = null;
       if (this.maskController.currentMaskData && this.maskController.magnitudeFileBytes) {
         const maskNifti = this.maskController.createMaskNifti(this.maskController.currentMaskData);
->>>>>>> upstream
         customMaskBuffer = maskNifti;
         this.updateOutput(this.maskPrepSettings.source === 'custom' ? "Using uploaded mask" : "Using edited mask");
       }
@@ -2768,7 +2616,7 @@ class QSMApp {
       const totalFieldBuffer = await totalFieldFile.arrayBuffer();
 
       // Extract voxel size from NIfTI header for pipeline defaults
-      const fieldHeader = (await gunzipNifti(new Uint8Array(totalFieldBuffer), 352)).slice(0, 352).buffer;
+      const fieldHeader = (await decodeNiftiBuffer(totalFieldBuffer, { maxBytes: 352 })).slice(0, 352);
       if (fieldHeader.byteLength >= 352) {
         const headerInfo = parseNiftiHeader(fieldHeader);
         this.maskController.voxelSize = headerInfo.voxelSize;
@@ -2848,7 +2696,7 @@ class QSMApp {
       const localFieldBuffer = await localFieldFile.arrayBuffer();
 
       // Extract voxel size from NIfTI header for pipeline defaults
-      const fieldHeader = (await gunzipNifti(new Uint8Array(localFieldBuffer), 352)).slice(0, 352).buffer;
+      const fieldHeader = (await decodeNiftiBuffer(localFieldBuffer, { maxBytes: 352 })).slice(0, 352);
       if (fieldHeader.byteLength >= 352) {
         const headerInfo = parseNiftiHeader(fieldHeader);
         this.maskController.voxelSize = headerInfo.voxelSize;
@@ -3286,12 +3134,7 @@ class QSMApp {
     this.updateOutput(`Screenshot saved: ${filename}`);
   }
 
-  /**
-   * Create a NIfTI buffer from a NiiVue volume
-   */
-
   updateOutput(message) {
-<<<<<<< monorepo
     this.technicalLog ??= new ConsoleOutput({
       outputElementId: 'consoleOutput',
       lineClass: 'console-line',
@@ -3303,32 +3146,6 @@ class QSMApp {
   }
 
   /**
-   * Auto-detect optimal threshold using Otsu's method and set the slider
-   * Delegates computation to the shared volume threshold utility.
-   */
-  /**
-=======
-    const consoleOutput = document.getElementById('consoleOutput');
-    if (consoleOutput) {
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-      const line = document.createElement('div');
-      line.className = 'console-line';
-      const timeEl = document.createElement('span');
-      timeEl.className = 'console-time';
-      timeEl.textContent = `[${time}]`;
-      const messageEl = document.createElement('span');
-      messageEl.className = 'console-message';
-      messageEl.textContent = message;
-      line.append(timeEl, ' ', messageEl);
-      consoleOutput.appendChild(line);
-      // Auto-scroll to bottom
-      consoleOutput.scrollTop = consoleOutput.scrollHeight;
-    }
-    console.log(message);
-  }
-
-  /**
->>>>>>> upstream
    * Auto-detect optimal threshold using Otsu's method
    * Delegates to MaskController, which logs progress and updates the slider
    */
@@ -3506,26 +3323,6 @@ class QSMApp {
         customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
-<<<<<<< monorepo
-      const preparedMagnitude = this.preparedMagnitudeData
-        ? Array.from(this.preparedMagnitudeData)
-        : null;
-
-      await this.pipelineExecutor.initialize();
-      this.updateOutput("Starting SWI pipeline...");
-
-      this.pipelineExecutor.runSpecial('runSWI', {
-          magnitudeBuffers,
-          phaseBuffers,
-          maskThreshold: this.maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          pipelineSettings: this.pipelineSettings
-      });
-
-      this._setJobRunning(true);
-      document.getElementById('runSWI').disabled = true;
-=======
       const preparedMagnitude = this.maskController.preparedMagnitudeData;
 
       const started = await this.pipelineExecutor.runSWI({
@@ -3538,10 +3335,9 @@ class QSMApp {
       }, transferable(magnitudeBuffers, phaseBuffers, customMaskBuffer));
 
       if (started) {
-        document.getElementById('cancelPipeline').disabled = false;
+        this._setJobRunning(true);
         document.getElementById('runSWI').disabled = true;
       }
->>>>>>> upstream
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
@@ -3588,25 +3384,6 @@ class QSMApp {
         customMaskBuffer = this.maskController.createMaskNifti(this.maskController.currentMaskData);
       }
 
-<<<<<<< monorepo
-      const preparedMagnitude = this.preparedMagnitudeData
-        ? Array.from(this.preparedMagnitudeData)
-        : null;
-
-      await this.pipelineExecutor.initialize();
-      this.updateOutput("Starting T2*/R2* mapping...");
-
-      this.pipelineExecutor.runSpecial('runT2starR2star', {
-          magnitudeBuffers,
-          maskThreshold: this.maskThreshold,
-          customMaskBuffer,
-          preparedMagnitude,
-          echoTimes
-      });
-
-      this._setJobRunning(true);
-      document.getElementById('runT2starR2star').disabled = true;
-=======
       const preparedMagnitude = this.maskController.preparedMagnitudeData;
 
       const started = await this.pipelineExecutor.runT2starR2star({
@@ -3618,10 +3395,9 @@ class QSMApp {
       }, transferable(magnitudeBuffers, customMaskBuffer));
 
       if (started) {
-        document.getElementById('cancelPipeline').disabled = false;
+        this._setJobRunning(true);
         document.getElementById('runT2starR2star').disabled = true;
       }
->>>>>>> upstream
 
     } catch (error) {
       this.updateOutput(`Error: ${error.message}`);
@@ -3842,12 +3618,8 @@ class QSMApp {
     this.commandPreviewModal?.open();
 
     // Ask worker to generate command and methods via WASM
-<<<<<<< monorepo
-    if (!this.pipelineExecutor?.isReady()) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
-=======
-    const worker = this.pipelineExecutor?.getWorker();
-    if (!worker) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
->>>>>>> upstream
+    const channel = this.pipelineExecutor?.getChannel();
+    if (!channel || !this.pipelineExecutor.isReady()) { if (cmdEl) cmdEl.textContent = 'ERROR: Worker not available'; return; }
 
     const maskSection = maskSectionString(this.maskOpsHistory, maskSource);
     // Mouse BET's voxel scaling has no qsmxt equivalent: flag it in the command, and describe it
@@ -3864,35 +3636,26 @@ class QSMApp {
       scaleComment = `# Note: the mask was made with RS2-Net in QSMbly, which qsmxt cannot run;\n`
         + `# download it from Results and pass it to qsmxt as an existing mask.\n`;
     }
-<<<<<<< monorepo
-    const unsubscribe = this.pipelineExecutor.subscribe((message) => {
-      if (message.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : scaleComment + message.result;
-      } else if (message.type === 'methodsResult') {
-        if (message.error) {
-          if (methodsRaw) methodsRaw.textContent = `ERROR: ${message.error}`;
-=======
     // The worker answers each request with commandResult, methodsResult, configTomlResult, in
     // request order. Keep one listener: drop the previous click's, and skip the replies still owed
     // to earlier clicks so their configTomlResult does not detach this one early.
-    if (this._exportWorker !== worker) this._exportPending = 0;
-    if (this._exportHandler) this._exportWorker.removeEventListener('message', this._exportHandler);
-    let skip = this._exportPending;
-    this._exportPending++;
-    const handler = (e) => {
-      const type = e.data.type;
+    if (this._exportChannel !== channel) this._exportPending = 0;
+    this._exportUnsubscribe?.();
+    let skip = this._exportPending || 0;
+    this._exportPending = skip + 1;
+    const unsubscribe = this.pipelineExecutor.subscribe((message) => {
+      const type = message.type;
       if (type !== 'commandResult' && type !== 'methodsResult' && type !== 'configTomlResult') return;
       if (type === 'configTomlResult') this._exportPending--;
       if (skip > 0) {
         if (type === 'configTomlResult') skip--;
         return;
       }
-      if (e.data.type === 'commandResult') {
-        if (cmdEl) cmdEl.textContent = e.data.error ? `ERROR: ${e.data.error}` : scaleComment + e.data.result;
-      } else if (e.data.type === 'methodsResult') {
-        if (e.data.error) {
-          if (methodsRaw) methodsRaw.textContent = `ERROR: ${e.data.error}`;
->>>>>>> upstream
+      if (message.type === 'commandResult') {
+        if (cmdEl) cmdEl.textContent = message.error ? `ERROR: ${message.error}` : scaleComment + message.result;
+      } else if (message.type === 'methodsResult') {
+        if (message.error) {
+          if (methodsRaw) methodsRaw.textContent = `ERROR: ${message.error}`;
           if (methodsRendered) methodsRendered.innerHTML = '<em>Could not generate the methods section.</em>';
         } else {
           const raw = rs2
@@ -3903,27 +3666,16 @@ class QSMApp {
         }
       } else if (message.type === 'configTomlResult') {
         // Last message back — safe to detach. A null _lastToml disables the download.
-<<<<<<< monorepo
         this._lastToml = message.error ? null : message.result;
         unsubscribe();
+        this._exportUnsubscribe = null;
       }
     });
+    this._exportChannel = channel;
+    this._exportUnsubscribe = unsubscribe;
     this.pipelineExecutor.send('generateCommand', { configJson, maskSection });
     this.pipelineExecutor.send('generateMethods', { configJson, maskSection });
     this.pipelineExecutor.send('generateConfigToml', { configJson, maskSection });
-=======
-        this._lastToml = e.data.error ? null : e.data.result;
-        worker.removeEventListener('message', handler);
-        this._exportHandler = null;
-      }
-    };
-    this._exportWorker = worker;
-    this._exportHandler = handler;
-    worker.addEventListener('message', handler);
-    worker.postMessage({ type: 'generateCommand', data: { configJson, maskSection } });
-    worker.postMessage({ type: 'generateMethods', data: { configJson, maskSection } });
-    worker.postMessage({ type: 'generateConfigToml', data: { configJson, maskSection } });
->>>>>>> upstream
   }
 
   switchExportTab(tab) {

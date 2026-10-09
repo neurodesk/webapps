@@ -50,7 +50,6 @@ if ! command -v cargo &> /dev/null; then
     exit 1
 fi
 
-<<<<<<< monorepo
 # wasm-pack installs the wasm-bindgen CLI matching Cargo.lock with `cargo install` when it is
 # missing, and that host build inherits the environment. The threaded build below exports wasm
 # target features and wasm-ld arguments (--shared-memory, ...) in RUSTFLAGS, which the host
@@ -61,7 +60,6 @@ if [[ -n "$BINDGEN_VERSION" ]] && ! wasm-bindgen --version 2>/dev/null | grep -q
     echo "Installing wasm-bindgen-cli $BINDGEN_VERSION (matches Cargo.lock)..."
     env -u RUSTFLAGS -u CARGO_UNSTABLE_BUILD_STD cargo install wasm-bindgen-cli --version "$BINDGEN_VERSION" --locked
 fi
-=======
 # node generates the algorithm defaults; python3 patches the threaded worker helper.
 REQUIRED_TOOLS=(node)
 [[ "$THREADS" == "1" ]] && REQUIRED_TOOLS+=(python3)
@@ -71,7 +69,6 @@ for tool in "${REQUIRED_TOOLS[@]}"; do
         exit 1
     fi
 done
->>>>>>> upstream
 
 # Threaded (multi-core) build via wasm-bindgen-rayon. Speeds up ALL rayon paths in qsm-core
 # (classical algorithms) plus the tiled deep-learning loop. Requires nightly + build-std (to
@@ -184,6 +181,6 @@ echo "WASM files in $WASM_DIR:"
 ls -lh "$WASM_DIR"/*.wasm "$WASM_DIR"/*.js 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
 
 echo ""
-echo "To start the development server (sends the COOP/COEP headers threaded WASM needs):"
-echo "  ./run.sh"
+echo "To start the development server (coi-serviceworker.js supplies cross-origin isolation):"
+echo "  pnpm --filter qsmbly dev"
 echo "  # Then open http://localhost:8080"

@@ -146,7 +146,7 @@ describe('QsmPipelineController initialization', () => {
     await expect(first).rejects.toThrow('WASM load failed: boom');
     await expect(waiting).rejects.toThrow('WASM load failed: boom');
     expect(workers[0].terminated).toBe(true);
-    expect(ex.worker).toBeNull();
+    expect(ex.workerSession).toBeNull();
     expect(ex.workerInitializing).toBe(false);
     // An init failure is not a pipeline failure; callers report it.
     expect(onPipelineError).not.toHaveBeenCalled();
@@ -165,7 +165,7 @@ describe('QsmPipelineController initialization', () => {
     workers[0].onerror({});
 
     await expect(p).rejects.toThrow(/Worker error: the worker script failed to load/);
-    expect(ex.worker).toBeNull();
+    expect(ex.workerSession).toBeNull();
     expect(ex.workerInitializing).toBe(false);
     spy.mockRestore();
   });
@@ -246,7 +246,7 @@ describe('QsmPipelineController job start', () => {
     const onPipelineError = jest.fn();
     const ex = new QsmPipelineController({ updateOutput: () => {}, setProgress: () => {}, onPipelineError });
     const posted = [];
-    ex.worker = { postMessage: (msg, transfer) => posted.push(structuredClone(msg, { transfer })) };
+    ex.workerSession = { send: (msg, transfer) => posted.push(structuredClone(msg, { transfer })) };
     ex.initialize = async () => {};
     return { ex, posted, onPipelineError };
   }

@@ -311,17 +311,16 @@ describe('MaskController error paths', () => {
     });
 
     it('starts a fresh worker when a cancel has nulled the old one', async () => {
-      // Stands in for QsmPipelineController: cancel() leaves no worker until initialize() runs.
+      // Stands in for QsmPipelineController: cancel() leaves no channel until initialize() runs.
       let worker = null;
       const listeners = new Set();
       controller.getWorker = () => worker;
       controller.initializeWorker = async () => {
         worker = {
-          addEventListener: (_, fn) => listeners.add(fn),
-          removeEventListener: (_, fn) => listeners.delete(fn),
-          postMessage: (msg) => {
+          subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+          send: (msg) => {
             const reply = { type: 'applyMaskOpsComplete', maskData: msg.data.mask };
-            queueMicrotask(() => listeners.forEach(fn => fn({ data: reply })));
+            queueMicrotask(() => listeners.forEach(fn => fn(reply)));
           },
         };
       };
@@ -341,15 +340,15 @@ describe('MaskController error paths', () => {
     it('moves the magnitude to the worker and resolves with the typed-array result', async () => {
       const listeners = new Set();
       let received;
+      // The WorkerSession channel QsmPipelineController hands the mask controller.
       const worker = {
-        addEventListener: (_, fn) => listeners.add(fn),
-        removeEventListener: (_, fn) => listeners.delete(fn),
+        subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
         // Clone like a real postMessage, honouring the transfer list in both directions.
-        postMessage: (msg, transfer) => {
+        send: (msg, transfer) => {
           received = structuredClone(msg, { transfer });
           const result = received.data.magnitude.map((v) => v * 2);
           const reply = structuredClone({ type: 'biasCorrection', result }, { transfer: [result.buffer] });
-          queueMicrotask(() => listeners.forEach((fn) => fn({ data: reply })));
+          queueMicrotask(() => listeners.forEach((fn) => fn(reply)));
         },
       };
       controller.initializeWorker = async () => {};

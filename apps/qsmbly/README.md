@@ -36,15 +36,17 @@ The page does make some network requests of its own. None of them carries image 
 
 - **Cloudflare Web Analytics.** A beacon (`static.cloudflareinsights.com`) records an anonymous page
   view: the usual visitor metadata such as country, referrer and browser. It sets no cookies.
-- **Fonts and libraries.** The Inter font comes from Google Fonts, and the Tagify and NiiVue
-  libraries from the unpkg CDN. These services see the request like any other web request.
+- **Fonts and libraries.** The Inter font files come from Google Fonts (pinned in
+  `css/inter.css`), and the Tagify library from the unpkg CDN. These services see the request
+  like any other web request. NiiVue is served with the app.
 - **The QSMxT navigation bar.** `qsm-nav.js` is loaded from `qsmxt.github.io`.
 - **Deep-learning model weights**, downloaded from Hugging Face (`huggingface.co/qsmxt`) the first
   time you run a deep-learning method, then cached in your browser's IndexedDB.
 - **Example data**, downloaded from Hugging Face only if you click to load it.
 - **dicompare**, the protocol checker, which loads its code and the QSM consensus schema from
-  `dicompare.neurodesk.org`, and when run, Pyodide from jsDelivr and the `dicompare` Python package
-  from PyPI. The DICOM headers it checks are read in your browser.
+  `dicompare.neurodesk.org` the first time you load DICOM files, and when run, Pyodide from
+  jsDelivr and the `dicompare` Python package from PyPI. The DICOM headers it checks are read in
+  your browser.
 
 Deep-learning methods and dicompare therefore need an internet connection the first time they are
 used; the rest of the pipeline works offline once the page has loaded.
@@ -79,7 +81,6 @@ pnpm --filter qsmbly dev
    ```bash
    cargo install wasm-pack
    ```
-<<<<<<< monorepo
 3. Install the pinned toolchain for threaded WASM:
    ```bash
    rustup toolchain install nightly-2025-11-15 --component rust-src --target wasm32-unknown-unknown
@@ -88,25 +89,11 @@ pnpm --filter qsmbly dev
 ### Build and Run
 ```bash
 # Threaded classical and lazy-loaded deep-learning bundles
-=======
-3. **Install the nightly toolchain** (the default threaded build rebuilds `std` with atomics):
-   ```bash
-   rustup toolchain install nightly --component rust-src
-   ```
-   Not needed with `--no-threads`.
-4. **Node.js** (generates the algorithm defaults) and **Python 3** (patches the threaded
-   worker helper, and runs the development server).
-
-### Build and Run
-```bash
-# Standard threaded build
->>>>>>> upstream
 ./build.sh
 
 # SIMD-accelerated build (faster, requires modern browsers)
 ./build.sh --simd
 
-<<<<<<< monorepo
 # Single-threaded bundles for hosts without cross-origin isolation
 ./build.sh --no-threads
 
@@ -118,21 +105,6 @@ Run `pnpm --filter qsmbly build` from the repository root to assemble the themed
 production application. The deep-learning bundle always uses SIMD128. Model
 weights download on first use from a pinned Hugging Face revision and are checked
 against the QSM.rs model registry's sizes and SHA-256 hashes.
-=======
-# Single-threaded build (stable toolchain; runs on any static host)
-./build.sh --no-threads
-
-# Flags combine in any order, e.g.
-./build.sh --no-threads --simd
-
-# Start the development server on http://localhost:8080
-./run.sh
-```
-
-`run.sh` runs `serve.py`, which sends the cross-origin-isolation (COOP/COEP) headers that
-threaded WASM needs and disables caching so a rebuilt bundle is always picked up. It listens
-on `127.0.0.1` only; pass a host to expose it, e.g. `./run.sh 8080 0.0.0.0`.
->>>>>>> upstream
 
 ### SIMD Acceleration
 
@@ -152,86 +124,48 @@ pnpm --filter qsmbly test:examples
 pnpm --filter qsmbly test:e2e
 ```
 
-<<<<<<< monorepo
 Run these commands from the repository root. Browser tests download the pinned
 brain example and xQSM weights, reconstruct an image, and check the About link
 and HD-BET controls. They verify workflow execution, not the accuracy of every
 available reconstruction model.
-=======
-## Deployment
-
-Two environments, both served from GitHub Pages out of the `gh-pages` branch, which holds each as
-an independent subtree:
-
-| | URL | Deployed from | When |
-|---|---|---|---|
-| Release | [qsmbly.neurodesk.org](https://qsmbly.neurodesk.org/) | `main` | a GitHub release is published |
-| Staging | [qsmbly.neurodesk.org/staging](https://qsmbly.neurodesk.org/staging/) | `staging` | every push to the branch |
-
-The intended flow is: open feature PRs against `staging`, look at the result on the staging site,
-then PR `staging` into `main` and cut a release from there. A staging deploy never touches the
-released site, and publishing a release never rolls staging back.
-
-Both go through `.github/workflows/build-pages.yml`, so there is one definition of what a
-deployable site contains; `deploy.yml` and `deploy-staging.yml` differ only in which ref they
-build, which version they stamp, and which subtree they own. `scripts/publish-pages.sh` does the
-publishing and will refuse to replace the site root if that would delete a subtree it was not told
-to keep.
-
-Notes:
-
-- The staging build is stamped `0.0.0-staging.g<sha>`. That string is not decoration: the wasm
-  fetch is cache-busted by the app version, so a fixed staging version would serve a cached
-  bundle against new JavaScript.
-- Staging is excluded from search engines via `robots.txt` at the site root.
-- Pushing to `staging` deploys regardless of whether the test suite passes — it is a place to look
-  at work in progress. CI still runs on the branch and on PRs into it.
->>>>>>> upstream
 
 ## Repository Structure
 
 ```
 qsmbly/
-├── index.html              # Landing page and application interface
-├── coi-serviceworker.js    # Adds COOP/COEP headers on static hosts (cross-origin isolation)
+├── index.html              # Application interface
 ├── build.sh                # WASM build script
-├── run.sh                  # Development server (wraps serve.py)
-├── serve.py                # Static server with COOP/COEP + no-cache headers
+├── run.sh                  # Development server
 ├── test.sh                 # Rust test runner
 ├── js/
 │   ├── qsm-app-romeo.js    # Main application logic
 │   ├── qsm-worker-pure.js  # Web worker for pipeline execution
 │   ├── app/                # Configuration and algorithm defaults (qsm-defaults.js is generated)
-│   ├── controllers/        # UI controllers (file I/O, DICOM, masking, pipeline, viewer)
-│   ├── modules/            # File I/O, masking, model weights, UI (landing page, tour, modals)
+│   ├── controllers/        # UI controllers (inputs, DICOM, masking, pipeline, viewer)
+│   ├── modules/            # Masking, model weights, config bridge, guided tour
 │   └── worker/utils/       # Helpers used by the pipeline worker
 ├── css/
 │   ├── modern-styles.css   # Application styling
-│   ├── landing.css         # Landing page styling
-│   ├── app.css             # Modals, pipeline settings and other app components
-│   └── a11y.css            # Accessibility tweaks (keyboard-operable accordion headers)
-├── assets/                 # App screenshot (written by scripts/capture-landing-shot.mjs)
-├── scripts/                # Defaults generator, Pages publishing, landing screenshot, benchmarks
+│   └── inter.css           # Inter font faces, pinned to Google Fonts v20 files
+├── scripts/                # Defaults generator, example and startup tests, benchmarks
 ├── wasm/                   # Compiled WebAssembly (built by build.sh, served to the browser)
 ├── rust-wasm/              # WASM binding layer
 │   ├── Cargo.toml          # Depends on qsm-core
 │   └── src/lib.rs          # Thin wasm_bindgen wrappers around QSM.rs
-├── dcm2niix/               # DICOM-to-NIfTI conversion (WASM)
-└── nifti-js/               # NIfTI reader (JavaScript)
+└── niivue/                 # NiiVue neuroimaging viewer (vendored ES module)
 ```
 
-Versions and licenses of the vendored third-party code are recorded in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Shared monorepo code supplies NIfTI I/O, DICOM conversion, dialogs, the console and
+cross-origin isolation. Versions and licenses of the vendored third-party code are
+recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Technical Stack
 
 - **[QSM.rs](https://github.com/astewartau/QSM.rs)**: Core QSM algorithms (Rust, compiled to WebAssembly)
 - **[wasm-bindgen](https://github.com/rustwasm/wasm-bindgen)**: JavaScript/WASM interop
 - **[NiiVue](https://github.com/niivue/niivue)**: WebGL neuroimaging viewer
-- **[dcm2niix](https://github.com/rordenlab/dcm2niix)**: DICOM conversion (WASM build)
-- **[NIFTI-Reader-JS](https://github.com/rii-mango/NIFTI-Reader-JS)**: NIfTI parsing
+- **[dcm2niix](https://github.com/rordenlab/dcm2niix)**: DICOM conversion (WASM build, from the shared components)
 - **[Tagify](https://github.com/yairEO/tagify)**: Echo-time input
-- **[coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker)**: Cross-origin isolation on static hosts
 
 ## License
 

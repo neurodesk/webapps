@@ -40,7 +40,7 @@ function makeElement(id, tagName, a, options) {
     querySelector: () => null,
     querySelectorAll: () => [],
     closest: () => null,
-    // Enough for the dialog focus helper (dialogFocus.js) that open()/close() go through.
+    // Enough for the shared dialog focus helper (openDialog/closeDialog) that open()/close() use.
     hasAttribute: n => n in a,
     setAttribute(n, v) { a[n] = String(v); },
     focus() {},

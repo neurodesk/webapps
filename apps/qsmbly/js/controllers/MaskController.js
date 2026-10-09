@@ -5,13 +5,8 @@
  * threshold detection, and BET integration.
  */
 
-<<<<<<< monorepo
 import { computeOtsuThreshold } from '@neurodesk/webapp-components/volume';
-import { createMaskNifti, createNiftiHeaderFromVolume, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
-=======
-import { computeOtsuThreshold } from '../modules/mask/ThresholdUtils.js';
-import { createMaskNifti, createNiftiHeaderFromVolume, gunzipNifti, isValidNifti1, readNiftiImageData, sameNiftiGrid } from '../modules/file-io/NiftiUtils.js';
->>>>>>> upstream
+import { createMaskNifti, createNiftiHeaderFromVolume, decodeNiftiBuffer, isValidNifti1, readNiftiImageData, sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 
 export class MaskController {
   /**
@@ -280,10 +275,10 @@ export class MaskController {
    * @returns {Promise<ArrayBuffer>} Header buffer (352 bytes)
    */
   async readNiftiHeader(file) {
-    const data = await gunzipNifti(new Uint8Array(await file.arrayBuffer()), 352);
+    const data = await decodeNiftiBuffer(await file.arrayBuffer(), { maxBytes: 352 });
 
     // Return the first 352 bytes (NIfTI-1 header)
-    return data.slice(0, 352).buffer;
+    return data.slice(0, 352);
   }
 
   /**
@@ -292,11 +287,11 @@ export class MaskController {
    * @returns {Promise<Float64Array>} Image data as Float64Array, with scl_slope/scl_inter applied
    */
   async readNiftiData(file) {
-    const data = await gunzipNifti(new Uint8Array(await file.arrayBuffer()));
+    const data = await decodeNiftiBuffer(await file.arrayBuffer());
     if (!isValidNifti1(data)) {
       throw new Error('Not a valid NIfTI-1 file');
     }
-    return readNiftiImageData(data);
+    return readNiftiImageData(data, Float64Array).data;
   }
 
   /**
@@ -380,11 +375,7 @@ export class MaskController {
           if (message.error) {
             reject(new Error(message.error));
           } else {
-<<<<<<< monorepo
-            resolve(new Float64Array(message.result));
-=======
-            resolve(event.data.result);
->>>>>>> upstream
+            resolve(message.result);
           }
         }
       });
@@ -398,11 +389,7 @@ export class MaskController {
           sigma_mm: 7.0,
           nbox: 15
         }
-<<<<<<< monorepo
-      }, []);
-=======
       }, [magnitudeData.buffer]);
->>>>>>> upstream
     });
   }
 
@@ -458,11 +445,7 @@ export class MaskController {
           if (message.error) {
             reject(new Error(message.error));
           } else {
-<<<<<<< monorepo
-            resolve(new Float64Array(message.result));
-=======
-            resolve(event.data.result);
->>>>>>> upstream
+            resolve(message.result);
           }
         }
       });
@@ -477,11 +460,7 @@ export class MaskController {
           mask: mask,
           nx, ny, nz
         }
-<<<<<<< monorepo
-      }, []);
-=======
       }, [phase1, mag, phase2, mask].filter(Boolean).map((a) => a.buffer));
->>>>>>> upstream
     });
   }
 
@@ -795,12 +774,8 @@ export class MaskController {
       }
       magnitude = mag;
     }
-<<<<<<< monorepo
-    await this.initializeWorker();
-=======
     // A previous cancel terminates and nulls the worker, so make sure there is a live one.
     await this.initializeWorker?.();
->>>>>>> upstream
     const worker = this.getWorker();
     const mask = Uint8Array.from(this.currentMaskData, (v) => (v > 0 ? 1 : 0));
     const magnitudeArr = Float64Array.from(magnitude);
@@ -1524,13 +1499,8 @@ export class MaskController {
             this.updateOutput(data.message);
             break;
           case 'betComplete':
-<<<<<<< monorepo
             unsubscribe();
-            this.handleBETComplete(data, onComplete);
-=======
-            worker.removeEventListener('message', betHandler);
             this.handleBETComplete(data, onComplete, fail);
->>>>>>> upstream
             break;
           case 'betError':
             unsubscribe();
@@ -1551,11 +1521,7 @@ export class MaskController {
           subdivisions: betSettings.subdivisions,
           voxelScale: betSettings.voxelScale || 1
         }
-<<<<<<< monorepo
-      }, []);
-=======
       }, [magnitudeNifti]);
->>>>>>> upstream
 
     } catch (error) {
       this.updateOutput(`BET Error: ${error.message}`);

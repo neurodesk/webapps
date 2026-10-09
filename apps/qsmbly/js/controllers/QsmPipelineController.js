@@ -37,6 +37,8 @@ export class QsmPipelineController {
     this.cancelHandlers = new Set();
     this.results = {};
     this.stageOrder = [];
+    // Settings of the last QSM run, reported by the automation contract.
+    this.lastRunSettings = null;
   }
 
   // ==================== State Accessors ====================
@@ -62,7 +64,6 @@ export class QsmPipelineController {
     return () => this.cancelHandlers.delete(fn);
   }
 
-<<<<<<< monorepo
   beginCancellableJob(onCancel) {
     this.pipelineRunning = true;
     const unregister = this.onCancel(onCancel);
@@ -75,16 +76,10 @@ export class QsmPipelineController {
     };
   }
 
-  hasResult(stage) {
-    return !!this.results[stage]?.file;
-  }
-
   getResult(stage) {
     return this.results[stage] || null;
   }
 
-=======
->>>>>>> upstream
   getResults() {
     return this.results;
   }
@@ -93,15 +88,25 @@ export class QsmPipelineController {
     return this.stageOrder;
   }
 
+  getLastRunSettings() {
+    return this.lastRunSettings;
+  }
+
   // ==================== Worker Management ====================
 
   _setupWorker() {
     if (this.workerSession) return;
     this.workerSession = new WorkerSession({
       createWorker: () => new Worker('js/qsm-worker-pure.js', { type: 'module' }),
-      onError: (message, event) => {
-        this.updateOutput(`Worker error: ${message}`);
+      onError: (_, event) => {
         console.error('Worker error:', event);
+        // A worker script that fails to load reports an ErrorEvent with no message.
+        const message = event?.message || 'the worker script failed to load';
+        if (this.workerInitializing) {
+          this._failInit(new Error(`Worker error: ${message}`));
+          return;
+        }
+        this.updateOutput(`Worker error: ${message}`);
         this._handleError(message);
       },
     });
@@ -155,24 +160,8 @@ export class QsmPipelineController {
           this._handleStageData(data);
           break;
       }
-<<<<<<< monorepo
     });
     this.workerSession.start();
-=======
-    };
-
-    this.worker.onerror = (e) => {
-      console.error('Worker error:', e);
-      // A worker script that fails to load reports an ErrorEvent with no message.
-      const message = e.message || 'the worker script failed to load';
-      if (this.workerInitializing) {
-        this._failInit(new Error(`Worker error: ${message}`));
-        return;
-      }
-      this.updateOutput(`Worker error: ${message}`);
-      this._handleError(message);
-    };
->>>>>>> upstream
   }
 
   /** Settle the pending init promise (resolve when `error` is null) and clear init state. */
@@ -192,9 +181,9 @@ export class QsmPipelineController {
    * `initialize()` starts from a fresh one, then reject everyone waiting on this attempt.
    */
   _failInit(error) {
-    if (this.worker) {
-      this.worker.terminate();
-      this.worker = null;
+    if (this.workerSession) {
+      this.workerSession.terminate();
+      this.workerSession = null;
     }
     this.workerReady = false;
     this.setProgress(0, 'Failed');
@@ -253,10 +242,6 @@ export class QsmPipelineController {
     this.workerInitializing = true;
     this.updateOutput("Loading WASM module...");
 
-<<<<<<< monorepo
-    // Send init message to worker
-    this.send('init');
-=======
     this.initPromise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this._failInit(new Error(
@@ -266,11 +251,7 @@ export class QsmPipelineController {
     });
     const promise = this.initPromise;
 
-    this.worker.postMessage({
-      type: 'init',
-      data: {}
-    });
->>>>>>> upstream
+    this.send('init');
 
     return promise;
   }
@@ -289,6 +270,7 @@ export class QsmPipelineController {
       totalField: 'Total Field Map Pipeline',
       localField: 'Local Field Map Pipeline'
     };
+    this.lastRunSettings = JSON.parse(JSON.stringify(pipelineConfig.pipelineSettings ?? null));
     return this._start('run', pipelineConfig, `Starting ${modeLabels[inputMode] || 'Pipeline'}...`, transfer);
   }
 
@@ -296,14 +278,9 @@ export class QsmPipelineController {
     return this._start('runSWI', data, 'Starting SWI pipeline...', transfer);
   }
 
-<<<<<<< monorepo
-      // Pass through all pipeline config to the worker
-      this.send('run', pipelineConfig);
-=======
   async runT2starR2star(data, transfer = []) {
     return this._start('runT2starR2star', data, 'Starting T2*/R2* mapping...', transfer);
   }
->>>>>>> upstream
 
   /**
    * Post a job to the worker and mark the executor running; the worker answers with stageData
@@ -314,7 +291,7 @@ export class QsmPipelineController {
       await this.initialize();
       this.updateOutput(message);
       this.pipelineRunning = true;
-      this.worker.postMessage({ type, data }, transfer);
+      this.send(type, data, transfer);
       return true;
     } catch (error) {
       this._handleError(error.message);
@@ -358,91 +335,19 @@ export class QsmPipelineController {
     this.stageOrder = [];
   }
 
-<<<<<<< monorepo
-  async downloadStage(stage) {
-    if (!this.results[stage]?.file) {
-      this.updateOutput(`${stage} not available - run the pipeline first`);
-      return;
-    }
+  // ==================== Worker Access (for mask controller and exports) ====================
 
-    const file = this.results[stage].file;
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  // ==================== Skip Stage Logic ====================
-
-  determineSkipStages(currentSettings) {
-    // First run - can't skip anything
-    if (!this.pipelineHasRun || !this.lastRunSettings) {
-      return { skipUnwrap: false, skipBgRemoval: false };
-    }
-
-    // If key results are missing, can't skip
-    if (!this.results['unwrapped'] || !this.results['localField']) {
-      return { skipUnwrap: false, skipBgRemoval: false };
-    }
-
-    const last = this.lastRunSettings;
-    const current = currentSettings;
-
-    // Check if unwrapping settings changed
-    const unwrapChanged =
-      current.phaseUnwrapping !== last.phaseUnwrapping ||
-      (current.phaseUnwrapping === 'romeo' && current.romeo?.useQualityMap !== last.romeo?.useQualityMap);
-
-    // Check if background removal settings changed
-    const bgChanged =
-      current.bf_algorithm !== last.bf_algorithm ||
-      (current.bf_algorithm === 'vsharp' &&
-        (current.vsharp?.minRadius !== last.vsharp?.minRadius ||
-          current.vsharp?.maxRadius !== last.vsharp?.maxRadius)) ||
-      (current.bf_algorithm === 'pdf' &&
-        (current.pdf?.tolerance !== last.pdf?.tolerance ||
-          current.pdf?.iterations !== last.pdf?.iterations)) ||
-      (current.bf_algorithm === 'sharp' &&
-        current.sharp?.radius !== last.sharp?.radius) ||
-      (current.bf_algorithm === 'lbv' &&
-        current.lbv?.tolerance !== last.lbv?.tolerance) ||
-      (current.bf_algorithm === 'ismv' &&
-        (current.ismv?.tolerance !== last.ismv?.tolerance ||
-          current.ismv?.iterations !== last.ismv?.iterations));
-
-    // If unwrap changed, can't skip anything
-    if (unwrapChanged) {
-      return { skipUnwrap: false, skipBgRemoval: false };
-    }
-
-    // If only dipole inversion changed, can skip both unwrap and bg removal
-    if (!bgChanged) {
-      return { skipUnwrap: true, skipBgRemoval: true };
-    }
-
-    // If bg removal changed but not unwrap, can skip unwrap only
-    return { skipUnwrap: true, skipBgRemoval: false };
-  }
-
-  send(type, data = {}) {
-    this.workerSession?.send({ type, data });
-  }
-
-  runSpecial(type, data) {
-    this.pipelineRunning = true;
-    this.send(type, data);
+  /**
+   * Post a message to the worker. Buffers are copied unless listed in `transfer`, which
+   * detaches them here: pass only ones the caller no longer needs.
+   */
+  send(type, data = {}, transfer = []) {
+    this.workerSession?.send({ type, data }, transfer);
   }
 
   subscribe(listener) {
     return this.workerSession?.subscribe(listener) || (() => {});
   }
-=======
-  // ==================== Worker Access (for mask controller) ====================
->>>>>>> upstream
 
   getChannel() {
     return this.workerSession;

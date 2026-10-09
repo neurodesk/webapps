@@ -18,7 +18,7 @@ import {
   DL_TOTAL_FIELD_MODELS,
 } from '../app/config.js';
 import { clampTileConfig, MAX_WASM_PATCH_EDGE } from '../worker/utils/DlTiling.js';
-import { openDialog, closeDialog } from '../modules/ui/dialogFocus.js';
+import { openDialog, closeDialog } from '@neurodesk/webapp-components/ui';
 
 // Deep-learning inversion methods and how browser tiling applies to each:
 //  - tileable: has a tiled variant and runs tiled by default (approximate).

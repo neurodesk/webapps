@@ -1,10 +1,10 @@
 /**
- * FileIOController bucket logic: categorization, the single-file and mutual-exclusivity rules,
+ * QsmInputSet (upstream FileIOController) bucket logic: categorization, the single-file and mutual-exclusivity rules,
  * reordering and moving. Pure apart from the DOM-backed list rendering, which these paths skip.
  */
 
 import { jest } from '@jest/globals';
-import { FileIOController } from './FileIOController.js';
+import { QsmInputSet } from './QsmInputSet.js';
 
 const file = name => ({ name });
 const names = bucket => bucket.map(e => e.name);
@@ -13,7 +13,7 @@ function controller() {
   const callbacks = {
     onFilesChanged: jest.fn(), onMagnitudeFilesChanged: jest.fn(), onPhaseFilesChanged: jest.fn(),
   };
-  return { io: new FileIOController(callbacks), callbacks };
+  return { io: new QsmInputSet(callbacks), callbacks };
 }
 
 describe('categorizeFile', () => {
@@ -135,7 +135,7 @@ describe('addFiles', () => {
 
   test('reports an unreadable sidecar and still adds the image', async () => {
     const updateOutput = jest.fn();
-    const io = new FileIOController({ updateOutput });
+    const io = new QsmInputSet({ updateOutput });
     await io.addFiles([file('gre_ph.nii'), { name: 'gre_ph.json', text: async () => '{oops' }]);
     expect(updateOutput).toHaveBeenCalledWith(expect.stringContaining('Could not read sidecar gre_ph.json'));
     expect(names(io.buckets.phase)).toEqual(['gre_ph.nii']);

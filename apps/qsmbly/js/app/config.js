@@ -5,18 +5,8 @@
  * and constants used across the application.
  */
 
-<<<<<<< monorepo
-// Detect environment and set up exports appropriately
-const isWorker = typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope;
-const isModule = typeof exports !== 'undefined' || (typeof window !== 'undefined' && window.QSMConfig === undefined);
-
-// Application version (keep in sync with package.json, Cargo.toml, and git tags)
+// Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
 export const VERSION = '0.29.20261007';
-=======
-// Application version — 0.0.0 in git; the release CI stamps the real version (the release
-// tag) into the build at deploy time. Single source of truth is the git tag.
-export const VERSION = '0.29.20261007'; // 0.0.0 in git; the release CI stamps the real version at deploy time
->>>>>>> upstream
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
 export const QSM_RS_VERSION = '0.38.0';
@@ -492,78 +482,3 @@ export function getVoxelBasedDefaults(voxelSize = [1, 1, 1], maskDims = null) {
     lbvMaxit: maxDim
   };
 }
-<<<<<<< monorepo
-
-/**
- * Phase scaling constants
- */
-export const PHASE_SCALING = {
-  PI_THRESHOLD_MULTIPLIER: 1.1,   // Range > 2π * 1.1 triggers scaling
-  MAX_PI_MULTIPLIER: 1.5          // Values > π * 1.5 trigger scaling
-};
-
-/**
- * Box filter default radius for reliability map computation
- */
-export const BOX_FILTER_DEFAULTS = {
-  reliabilityRadius: 1
-};
-
-// Make config available globally for non-module scripts and workers
-const QSMConfig = {
-  VERSION,
-  QSM_RS_VERSION,
-  SIGNAL_ERODE_DEFAULTS,
-  PHYSICS,
-  INPUT_MODES,
-  FIELD_MAP_UNITS,
-  INPUT_DEFAULTS,
-  VIEWER_CONFIG,
-  MASK_CONFIG,
-  BET_DEFAULTS,
-  MASK_PREP_DEFAULTS,
-  PROGRESS_CONFIG,
-  SWI_DEFAULTS,
-  TGV_DEFAULTS,
-  QSMART_DEFAULTS,
-  TFI_DEFAULTS,
-  ROMEO_DEFAULTS,
-  MCPC3DS_DEFAULTS,
-  LINEAR_FIT_DEFAULTS,
-  VSHARP_DEFAULTS,
-  SHARP_DEFAULTS,
-  RESHARP_DEFAULTS,
-  HARPERELLA_DEFAULTS,
-  ISMV_DEFAULTS,
-  PDF_DEFAULTS,
-  LBV_DEFAULTS,
-  TKD_DEFAULTS,
-  TSVD_DEFAULTS,
-  TIKHONOV_DEFAULTS,
-  TV_DEFAULTS,
-  RTS_DEFAULTS,
-  NLTV_DEFAULTS,
-  NDI_DEFAULTS,
-  FANSI_DEFAULTS,
-  L1QSM_DEFAULTS,
-  WHQSM_DEFAULTS,
-  HDQSM_DEFAULTS,
-  MEDI_DEFAULTS,
-  STAGE_DISPLAY_NAMES,
-  PIPELINE_METHODS,
-  PIPELINE_DEFAULTS,
-  getVoxelBasedDefaults,
-  PHASE_SCALING,
-  BOX_FILTER_DEFAULTS
-};
-
-// Export for different environments
-if (typeof self !== 'undefined' && typeof WorkerGlobalScope !== 'undefined') {
-  // Web Worker context
-  self.QSMConfig = QSMConfig;
-} else if (typeof window !== 'undefined') {
-  // Browser context
-  window.QSMConfig = QSMConfig;
-}
-=======
->>>>>>> upstream

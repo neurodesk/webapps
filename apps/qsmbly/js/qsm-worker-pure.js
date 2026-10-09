@@ -136,11 +136,7 @@ function sendStageData(stage, data, dims, voxelSize, affine, description, displa
     voxelSize[0], voxelSize[1], voxelSize[2],
     affine
   );
-<<<<<<< monorepo
   emitMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow, displayRange });
-=======
-  self.postMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow, displayRange }, [niftiBytes.buffer]);
->>>>>>> upstream
 }
 
 /** Canonical TOML for the config-driven qsm-core stages (the mask is supplied separately). */
@@ -161,9 +157,6 @@ function applyReference(chi, mask, pipelineSettings) {
   return result;
 }
 
-<<<<<<< monorepo
-  emitMessage({ type: 'stageData', stage, data: niftiBytes, description, displayNow });
-=======
 /** Convert a field map in the user's units to ppm, via qsm-core's conversions. */
 function fieldMapToPpm(field, units, b0) {
   switch (units) {
@@ -172,7 +165,6 @@ function fieldMapToPpm(field, units, b0) {
     case 'rad_s': return new Float64Array(wasmModule.rads_to_ppm_wasm(field, requireFieldStrength(b0)));
     default: throw new Error(`Unknown field map units '${units}' (expected hz, rad_s or ppm)`);
   }
->>>>>>> upstream
 }
 
 function logRange(label, data, mask) {
@@ -1156,11 +1148,7 @@ function postBETLog(message) {
 }
 
 function postBETComplete(maskData, coverage) {
-<<<<<<< monorepo
   emitMessage({ type: 'betComplete', maskData, coverage });
-=======
-  self.postMessage({ type: 'betComplete', maskData, coverage }, [maskData.buffer]);
->>>>>>> upstream
 }
 
 function postBETError(message) {

@@ -32,11 +32,6 @@
   <link rel="icon" href="favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="css/inter.css">
-<<<<<<< monorepo
-  <!-- Tagify (load before our CSS so we can override) -->
-  <link rel="stylesheet" href="https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.css">
-  <script src="https://unpkg.com/@yaireo/tagify@4.38.0/dist/tagify.js"></script>
-=======
   <!-- Tagify (load before our CSS so we can override). Third-party CDN files are pinned to an exact
        version with subresource integrity; when bumping a version, recompute the hash with
        curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A -->
@@ -44,17 +39,10 @@
         integrity="sha384-WFLqESDcLYQRlWIJnQc7vNZt6kigZgDqJ/sXg9DXtHJk3/lPW5nD0Br5VN8TvOAm" crossorigin="anonymous">
   <script src="https://unpkg.com/@yaireo/tagify@4.39.0/dist/tagify.js"
           integrity="sha384-l3Fn0B60NCHpAg1Z2EH4w/F7+T4eTOnKFeu3RjlbNLbZsivRi3VnbcN2YCvoQqoS" crossorigin="anonymous"></script>
->>>>>>> upstream
 
   <!-- Our styles last to override -->
   <link rel="stylesheet" href="vendor/webapp-components/src/styles/base.css">
   <link rel="stylesheet" href="css/modern-styles.css">
-<<<<<<< monorepo
-=======
-  <link rel="stylesheet" href="css/landing.css">
-  <link rel="stylesheet" href="css/app.css">
-  <link rel="stylesheet" href="css/a11y.css">
->>>>>>> upstream
 
   <!-- Cross-project "ecosystem bar", shown atop the app
        (canonical source: QSMxT/qsmxt.github.io → qsm-nav.js). -->
@@ -73,29 +61,7 @@
     })();
   </script>
 
-<<<<<<< monorepo
   <!-- NiiVue -->
-=======
-  <!-- The splash is always the front door. The app lives at "#app" (e.g.
-       /qsmbly/#app), so only skip straight to it when that hash is present
-       (avoids a flash of the welcome screen before the app JS loads). -->
-  <script>
-    if (location.hash === '#app') {
-      document.documentElement.classList.add('landing-seen');
-    }
-  </script>
-
-  <!-- NiiVue. An import statement can't carry an integrity attribute, so the hash goes in an import
-       map, which must precede every module script. Browsers without import-map integrity support
-       ignore it and load the module unchecked. -->
-  <script type="importmap">
-    {
-      "integrity": {
-        "https://unpkg.com/@niivue/niivue@0.57.0/dist/index.js": "sha384-G4VGFD+GlcBaC7mVX9HPxlLvosr47k0YUf4iiFQ6/SGIaxp8e5WGFPTeBV+P7QQl"
-      }
-    }
-  </script>
->>>>>>> upstream
   <script type="module">
     import { Niivue, NVImage } from "./niivue/index.js";
     window.Niivue = Niivue;
@@ -103,157 +69,10 @@
   </script>
 </head>
 <body>
-<<<<<<< monorepo
-=======
   <!-- Shared icons, referenced with <use href="#..."> -->
   <svg hidden aria-hidden="true">
     <symbol id="icon-github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
   </svg>
-  <!-- ==================================================================== -->
-  <!-- Landing / welcome overlay (shown on first visit, hidden after Launch) -->
-  <!-- ==================================================================== -->
-  <div class="landing-overlay" id="landingPage">
-    <div class="landing-scroll">
-      <nav class="landing-nav">
-        <div class="landing-nav-inner">
-          <div class="landing-brand">
-            <img src="icon.svg" alt="QSMbly" width="26" height="26">
-            <span>QSMbly</span>
-          </div>
-          <div class="landing-nav-links">
-            <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">GitHub</a>
-            <a href="#" id="landingNavLaunch" class="landing-nav-launch">Launch &rarr;</a>
-          </div>
-        </div>
-      </nav>
-
-      <div class="landing-inner">
-        <header class="landing-hero">
-          <div class="landing-hero-copy">
-            <h1 class="grad">QSMbly</h1>
-            <p class="landing-tagline">Quantitative Susceptibility Mapping, in your browser.</p>
-            <p class="landing-sub">Load your phase and magnitude images, pick your algorithms, and reconstruct susceptibility maps. Nothing to install, and your data stays on your computer.</p>
-            <div class="landing-cta">
-              <button class="landing-btn-primary" id="landingLaunch" type="button">
-                Launch QSMbly
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-              </button>
-              <button class="landing-btn-ghost" id="landingLaunchTour" type="button">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                Take a guided tour
-              </button>
-            </div>
-          </div>
-          <div class="landing-art">
-            <svg viewBox="0 0 400 310" xmlns="http://www.w3.org/2000/svg" role="img"
-                 aria-label="A laptop running QSMbly in a browser, with a susceptibility map on screen">
-              <defs>
-                <linearGradient id="qbly-g" x1="0" y1="0" x2="1" y2="1">
-                  <stop stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/>
-                </linearGradient>
-                <linearGradient id="qbly-tint" x1="0" y1="0" x2="0" y2="1">
-                  <stop stop-color="#60a5fa" stop-opacity=".18"/><stop offset="1" stop-color="#2563eb" stop-opacity=".05"/>
-                </linearGradient>
-                <radialGradient id="qbly-glow" cx=".5" cy=".5" r=".5">
-                  <stop stop-color="#3b82f6" stop-opacity=".3"/><stop offset="1" stop-color="#3b82f6" stop-opacity="0"/>
-                </radialGradient>
-                <radialGradient id="qbly-void" cx=".5" cy=".42" r=".55">
-                  <stop stop-color="#1c2533"/><stop offset=".7" stop-color="#0f141b"/><stop offset="1" stop-color="#0b0e14"/>
-                </radialGradient>
-              </defs>
-              <ellipse cx="200" cy="150" rx="215" ry="145" fill="url(#qbly-glow)"/>
-              <ellipse cx="200" cy="262" rx="168" ry="12" fill="#3b82f6" fill-opacity=".08"/>
-              <!-- deck: matches the screen at the hinge, widens slightly toward the viewer -->
-              <polygon points="68,222 332,222 332,232 68,232" fill="#2563eb" fill-opacity=".35"
-                       stroke="url(#qbly-g)" stroke-width="2.5" stroke-linejoin="round"/>
-              <polygon points="88,176 312,176 332,222 68,222" fill="url(#qbly-tint)"
-                       stroke="url(#qbly-g)" stroke-width="2.5" stroke-linejoin="round"/>
-              <line x1="100" y1="186" x2="300" y2="186" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
-              <line x1="96" y1="195" x2="304" y2="195" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
-              <line x1="92" y1="204" x2="308" y2="204" stroke="#60a5fa" stroke-opacity=".22" stroke-width="2" stroke-dasharray="6 5"/>
-              <rect x="176" y="209" width="48" height="8" rx="3" fill="#60a5fa" fill-opacity=".25"/>
-              <!-- lid and screen -->
-              <polygon points="96,44 304,44 312,176 88,176" fill="url(#qbly-tint)"
-                       stroke="url(#qbly-g)" stroke-width="3" stroke-linejoin="round"/>
-              <rect x="104" y="52" width="192" height="116" rx="4" fill="url(#qbly-void)"/>
-              <!-- browser chrome, with the padlock: it runs locally -->
-              <rect x="104" y="52" width="192" height="20" fill="#60a5fa" fill-opacity=".10"/>
-              <line x1="104" y1="72" x2="296" y2="72" stroke="#60a5fa" stroke-opacity=".35" stroke-width="1.5"/>
-              <circle cx="120" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
-              <circle cx="133" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
-              <circle cx="146" cy="62" r="3.5" fill="#60a5fa" fill-opacity=".55"/>
-              <rect x="166" y="58" width="116" height="8" rx="4" fill="#60a5fa" fill-opacity=".12"
-                    stroke="#60a5fa" stroke-opacity=".4" stroke-width="1.5"/>
-              <rect x="174" y="61" width="8" height="6" rx="1.2" fill="#60a5fa" fill-opacity=".9"/>
-              <path d="M175.5 61 v-2.2 a2.5 2.5 0 0 1 5 0 v2.2" fill="none" stroke="#60a5fa" stroke-width="1.4"/>
-              <!-- the map on screen -->
-              <ellipse cx="200" cy="120" rx="49" ry="40" fill="#60a5fa" fill-opacity=".06"/>
-              <ellipse cx="200" cy="120" rx="49" ry="40" fill="none" stroke="#60a5fa" stroke-opacity=".5" stroke-width="2"/>
-              <ellipse cx="200" cy="120" rx="36" ry="29" fill="none" stroke="#60a5fa" stroke-opacity=".35" stroke-width="2"/>
-              <ellipse cx="200" cy="120" rx="22" ry="16" fill="none" stroke="#60a5fa" stroke-opacity=".25" stroke-width="2"/>
-              <line x1="200" y1="91" x2="200" y2="149" stroke="#60a5fa" stroke-opacity=".3" stroke-width="1.5"/>
-              <circle cx="188" cy="124" r="4" fill="#60a5fa" fill-opacity=".55"/>
-              <circle cx="213" cy="117" r="3" fill="#60a5fa" fill-opacity=".4"/>
-              <path d="M272 92 C 290 72, 306 56, 322 46" fill="none" stroke="#60a5fa" stroke-opacity=".6"
-                    stroke-width="2" stroke-dasharray="3 5" stroke-linecap="round"/>
-              <g transform="translate(318 6)">
-                <rect width="64" height="64" rx="16" fill="url(#qbly-g)"/>
-                <g transform="matrix(0.05572,0,0,-0.05572,19.5728,38.5758)"><path d="M265 -28 252 95 498 431H406L240 203L227 332C222 375 219 441 158 441C90 441 64 356 60 303L81 296C88 339 109 361 149 361C192 361 193 314 197 282L210 164L-52 -195H40L222 57L236 -62C241 -103 246 -205 307 -205C363 -205 398 -133 402 -73L381 -66C374 -86 370 -130 319 -130C279 -130 268 -59 265 -28Z" fill="#fff"/></g>
-              </g>
-            </svg>
-          </div>
-        </header>
-
-        <section class="landing-section">
-          <h2>Why QSMbly?</h2>
-          <div class="landing-features">
-            <div class="landing-card">
-              <div class="landing-card-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              </div>
-              <h3>Completely private</h3>
-              <p>Your data never leaves your device, so there's no need to de-identify scans first.</p>
-            </div>
-            <div class="landing-card">
-              <div class="landing-card-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-              </div>
-              <h3>Zero installation</h3>
-              <p>No Python, MATLAB, or Docker. The whole pipeline is compiled to WebAssembly.</p>
-            </div>
-            <div class="landing-card">
-              <div class="landing-card-icon">
-                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-              </div>
-              <h3>Every QSM.rs algorithm</h3>
-              <p>Phase unwrapping, background field removal, and two dozen dipole inversion methods. Mix and match to suit your data.</p>
-            </div>
-          </div>
-        </section>
-
-        <section class="landing-sibling">
-          <p>QSMbly runs the same reconstruction code as <a href="https://qsmxt.github.io/QSMxT/" target="_blank" rel="noopener noreferrer">QSMxT</a>, the command-line QSM pipeline: both are built on <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a>. Try methods here, then scale up with QSMxT when you have a whole study to process.</p>
-          <button class="landing-btn-primary" id="landingLaunchBottom" type="button" onclick="document.getElementById('landingLaunch').click()">
-            Get started
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-          </button>
-        </section>
-
-        <footer class="landing-footer">
-          <span>&copy; QSMbly &middot; <span id="landingVersion"></span></span>
-          <span>
-            <a href="https://github.com/astewartau/qsmbly" target="_blank" rel="noopener noreferrer">GitHub</a>
-            &nbsp;&middot;&nbsp;
-            <a href="https://github.com/astewartau/QSM.rs" target="_blank" rel="noopener noreferrer">QSM.rs</a>
-            &nbsp;&middot;&nbsp;
-            <a href="https://neurodesk.org/" target="_blank" rel="noopener noreferrer">Neurodesk</a>
-          </span>
-        </footer>
-      </div>
-    </div>
-  </div>
-
->>>>>>> upstream
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
@@ -261,7 +80,7 @@
         <div class="logo-icon">
           <img src="QSMbly.png" alt="QSMbly" width="20" height="20">
         </div>
-        <div class="app-title">QSMbly <span>Quantitative Susceptibility Mapping</span> <span class="version" id="appVersion"></span></div>
+        <h1>QSMbly <span>Quantitative Susceptibility Mapping</span> <span class="version" id="appVersion"></span></h1>
       </div>
       <div class="header-links">
         <button class="header-link" id="openGuide" title="Guided tour">
@@ -310,37 +129,22 @@
     <aside class="app-sidebar" id="sidebar">
       <div class="sidebar-scroll">
       <!-- File Upload Section -->
-<<<<<<< monorepo
       <section class="sidebar-section" id="inputSection" data-disclosure data-disclosure-group="workflow">
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-=======
-      <section class="sidebar-section" id="inputSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="true">
->>>>>>> upstream
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-<<<<<<< monorepo
           Input Files
         </button></h2>
         <div class="section-content" data-disclosure-panel>
-=======
-          Input Files</button>
-        </h2>
-        <div class="section-content">
->>>>>>> upstream
 
         <!-- Single unified drop zone -->
         <div class="file-upload-group">
           <div class="upload-group">
             <div class="file-upload-zone file-drop" id="unifiedDrop">
-<<<<<<< monorepo
               <input type="file" data-neurodesk-input="image" id="unifiedFiles" multiple disabled>
-=======
-              <input type="file" id="unifiedFiles" aria-label="Choose input files" accept=".nii,.nii.gz,.gz,application/gzip,.json,.dcm" multiple>
->>>>>>> upstream
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
@@ -377,26 +181,15 @@
       </section>
 
       <!-- Input Parameters Section -->
-<<<<<<< monorepo
       <section class="sidebar-section collapsed" id="paramsSection" data-disclosure data-disclosure-group="workflow">
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-=======
-      <section class="sidebar-section collapsed" id="paramsSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="false">
->>>>>>> upstream
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-<<<<<<< monorepo
           Input Parameters
         </button></h2>
         <div class="section-content" data-disclosure-panel>
-=======
-          Input Parameters</button>
-        </h2>
-        <div class="section-content">
->>>>>>> upstream
         <!-- Field Map Units (shown for totalField and localField modes) -->
         <div class="param-group input-param-fieldmap" id="fieldMapUnitsGroup" style="display: none;">
           <label class="param-label" for="fieldMapUnits">Field Map Units <span class="info-icon">i<span class="info-tooltip">Units of the uploaded field map. Must match the data for correct susceptibility scaling.</span></span></label>
@@ -425,7 +218,6 @@
       </section>
 
       <!-- Masking Section -->
-<<<<<<< monorepo
       <section class="sidebar-section collapsed" id="maskSection" data-disclosure data-disclosure-group="workflow">
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -434,16 +226,6 @@
           Masking
         </button></h2>
         <div class="section-content" data-disclosure-panel>
-=======
-      <section class="sidebar-section collapsed" id="maskSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="false">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
-          </svg>
-          Masking</button>
-        </h2>
-        <div class="section-content">
->>>>>>> upstream
 
         <!-- Masking input source selection -->
         <div class="param-group">
@@ -485,11 +267,7 @@
           </div>
           <div class="upload-group compact">
             <div class="file-upload-zone file-drop compact" id="maskDrop">
-<<<<<<< monorepo
               <input type="file" data-neurodesk-input="image" id="maskFiles" multiple disabled>
-=======
-              <input type="file" id="maskFiles" aria-label="Choose mask file" accept=".nii,.nii.gz,.gz,application/gzip">
->>>>>>> upstream
               <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                 <polyline points="17 8 12 3 7 8"/>
@@ -574,15 +352,9 @@
         </div>
 
         <!-- Morphological Operations (collapsible subsection) -->
-<<<<<<< monorepo
         <div class="mask-operations subsection collapsed" id="maskOperations" style="display: none;" data-disclosure>
           <button type="button" class="subsection-title" data-disclosure-toggle>Refine Mask</button>
           <div class="subsection-content" data-disclosure-panel>
-=======
-        <div class="mask-operations subsection collapsed" id="maskOperations" style="display: none;">
-          <div class="subsection-title" role="button" tabindex="0" aria-expanded="false" onclick="this.parentElement.classList.toggle('collapsed')">Refine Mask</div>
-          <div class="subsection-content">
->>>>>>> upstream
             <div class="mask-op-buttons">
               <button class="btn btn-secondary btn-sm" id="fillHoles" title="Fill holes inside the mask">
                 Fill Holes
@@ -647,28 +419,16 @@
       </section>
 
       <!-- Supplementary Images Section -->
-<<<<<<< monorepo
       <section class="sidebar-section collapsed" id="swiSection" data-disclosure data-disclosure-group="workflow">
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-=======
-      <section class="sidebar-section collapsed" id="swiSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="false">
->>>>>>> upstream
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
             <circle cx="12" cy="12" r="3"/>
           </svg>
-<<<<<<< monorepo
           Supplementary Images
         </button></h2>
         <div class="section-content" data-disclosure-panel>
           <h5 style="margin: 0 0 var(--nd-space-xs); font-size: 0.8rem; color: var(--nd-color-text-muted);">SWI</h5>
-=======
-          Supplementary Images</button>
-        </h2>
-        <div class="section-content">
-          <h5 style="margin: 0 0 var(--space-xs); font-size: 0.8rem; color: var(--color-text-muted);">SWI</h5>
->>>>>>> upstream
           <div style="display: flex; gap: 8px;">
             <button class="btn btn-secondary" id="openSwiSettings" style="flex: 1;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -696,26 +456,15 @@
       </section>
 
       <!-- Pipeline Section -->
-<<<<<<< monorepo
       <section class="sidebar-section collapsed" id="pipelineSection" data-disclosure data-disclosure-group="workflow">
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-=======
-      <section class="sidebar-section collapsed" id="pipelineSection">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="false">
->>>>>>> upstream
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
-<<<<<<< monorepo
           QSM Pipeline
         </button></h2>
         <div class="section-content" data-disclosure-panel>
-=======
-          QSM Pipeline</button>
-        </h2>
-        <div class="section-content">
->>>>>>> upstream
           <div id="sidebarPipelineDropdowns">
             <div class="param-group" id="sidebarMethodGroup">
               <label class="param-label" for="sidebarCombinedMethod">Pipeline <span class="info-icon">i<span class="info-tooltip">Overall QSM reconstruction strategy. Each pipeline combines different processing steps to produce a susceptibility map.</span></span></label>
@@ -797,26 +546,15 @@
       </section>
 
       <!-- Results Section - dynamically populated -->
-<<<<<<< monorepo
       <section class="sidebar-section hidden collapsed" id="stage-buttons" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
-=======
-      <section class="sidebar-section hidden collapsed" id="stage-buttons">
-        <h2 class="section-title" onclick="toggleSection(this.parentElement)"><button type="button" class="section-toggle" aria-expanded="false">
->>>>>>> upstream
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
             <polyline points="22 4 12 14.01 9 11.01"/>
           </svg>
-<<<<<<< monorepo
           Results
         </button></h2>
         <div class="section-content" data-disclosure-panel>
-=======
-          Results</button>
-        </h2>
-        <div class="section-content">
->>>>>>> upstream
         <!-- Stage buttons are dynamically added here -->
         <div class="stage-buttons-grid" id="dynamicStageButtons"></div>
         <button class="btn btn-secondary btn-sm" id="clearAllResults" style="width: 100%; margin-top: var(--nd-space-xs);">
@@ -1650,8 +1388,7 @@
 
           <!-- Deep-learning tiling controls (shown for DL inversion methods). In the browser DL nets
                run overlap-tiled to fit the 32-bit wasm heap; these expose/adjust that. -->
-<<<<<<< monorepo
-          <div id="dl_inversion_settings" class="method-settings" style="display: none;">
+          <div id="dl_inversion_settings" class="method-settings" hidden>
             <div class="nd-field">
               <label  for="dlTiled">
                 <input type="checkbox" id="dlTiled" checked> Tiled inference (bounded memory)
@@ -1659,28 +1396,13 @@
             </div>
             <div class="nd-field">
               <label  for="dlTileSize">Tile core size (voxels)</label>
-              <input type="number" id="dlTileSize" value="56" min="16" max="192" step="8">
-=======
-          <div id="dl_inversion_settings" class="method-settings" hidden>
-            <div class="param-group">
-              <label class="param-label" for="dlTiled">
-                <input type="checkbox" id="dlTiled" checked> Tiled inference (bounded memory)
-              </label>
-            </div>
-            <div class="param-group">
-              <label class="param-label" for="dlTileSize">Tile core size (voxels)</label>
               <input type="number" id="dlTileSize" value="56" min="16" max="120" step="8">
->>>>>>> upstream
             </div>
             <div class="nd-field">
               <label  for="dlTileHalo">Tile halo (voxels)</label>
               <input type="number" id="dlTileHalo" value="4" min="0" max="32" step="1">
             </div>
-<<<<<<< monorepo
-            <div id="dlTilingWarning" class="nd-message warning" style="display: none;"></div>
-=======
-            <div id="dlTilingWarning" class="method-warning" hidden></div>
->>>>>>> upstream
+            <div id="dlTilingWarning" class="nd-message warning" hidden></div>
           </div>
 
           <!-- TKD Settings -->
@@ -2124,7 +1846,6 @@
     </div>
   </div>
 
-<<<<<<< monorepo
   <template id="mouseBrainTemplate">
     <p class="nd-hint">RS2-Net is a deep-learning brain extractor trained on rat and mouse MRI from 89 centres.</p>
     <p class="nd-hint">First use downloads 63 MB of model weights under GPL-3.0, then caches them in your browser.</p>
@@ -2147,132 +1868,6 @@
         <option value="1">1.0 (fastest, seams possible)</option>
       </select>
       <p class="nd-hint">Smaller steps overlap more patches to reduce seams.</p>
-=======
-  <!-- Mouse Brain Extraction Modal -->
-  <div class="modal-overlay" id="mouseBrainModal">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mouseBrainTitle">
-      <div class="modal-header">
-        <h3 id="mouseBrainTitle">Mouse Brain Extraction</h3>
-        <button class="modal-close" id="closeMouseBrain" aria-label="Close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="settings-section">
-          <p class="modal-note">
-            <strong>RS2-Net</strong> is a deep-learning brain extractor trained on 1,142 rat and mouse
-            MRIs from 89 centres. It handles thick slices and the thin rodent skull, where BET leaks
-            into the surrounding muscle. A mouse head usually fits in a single patch, which takes
-            <strong>one to two minutes</strong>; <strong>Stop</strong> cancels it at any point.
-          </p>
-          <p class="modal-note">
-            First run downloads <strong>63 MB</strong> of model weights (GPL-3.0). They are cached in
-            your browser afterwards.
-          </p>
-
-          <h4>Inference Parameters</h4>
-
-          <div class="param-group">
-            <label class="param-label">
-              <input type="checkbox" id="rs2NetTta"> Mirroring augmentation (TTA)
-            </label>
-            <div class="param-hint">
-              Averages the network over 8 mirrored versions of every patch: <strong>8&times; the
-              runtime</strong>, and on in-vivo mouse data the mask barely changes (Dice 0.99).
-            </div>
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">Patch Size</label>
-            <div class="param-hint">
-              Fixed at 128&times;96&times;128 (~2.7 GB peak). RS2-Net's native 128&times;128&times;160
-              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; the two agree at
-              Dice 0.99 on mouse data. Larger volumes are covered by overlapping patches.
-            </div>
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">Fallback</label>
-            <div class="param-hint">
-              <strong>Scaled BET</strong> runs BET on voxel sizes multiplied by 10, so its human-tuned
-              surface model fits the mouse brain. It is instant and needs no download, but on
-              thick-slice data it tends to leak into the skull base.
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="runMouseScaledBet">Scaled BET&hellip;</button>
-        <button class="btn btn-primary" id="runRs2Net">Run RS2-Net</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- HD-BET Settings Modal -->
-  <div class="modal-overlay" id="hdBetSettingsModal">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="hdBetSettingsTitle">
-      <div class="modal-header">
-        <h3 id="hdBetSettingsTitle">HD-BET Settings</h3>
-        <button class="modal-close" id="closeHdBetSettings" aria-label="Close">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="settings-section">
-          <p class="modal-note">
-            HD-BET runs a 30-million-parameter neural network over every overlapping patch of the
-            volume. It is the most accurate option here, and by far the slowest &mdash; expect
-            <strong>several minutes</strong>. Progress is reported per patch, and
-            <strong>Stop</strong> cancels it at any point.
-          </p>
-          <p class="modal-note" id="hdBetWeightsNote" style="display: none;">
-            First run downloads <strong>123 MB</strong> of model weights (CC-BY-NC-4.0). They are
-            cached in your browser afterwards.
-          </p>
-
-          <h4>Inference Parameters</h4>
-
-          <div class="param-group">
-            <label class="param-label" for="hdBetTileStep">Patch Step</label>
-            <div class="param-hint">
-              How far the sliding window moves each time, as a fraction of the patch. Smaller
-              steps blend patch seams better; larger steps mean fewer patches and a shorter run.
-              0.5 is HD-BET's own default.
-            </div>
-            <select id="hdBetTileStep">
-              <option value="0.5">0.5 — best quality (default)</option>
-              <option value="0.75">0.75 — faster</option>
-              <option value="1">1.0 — fastest, patches abut, seams possible</option>
-            </select>
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">
-              <input type="checkbox" id="hdBetTta"> Mirroring augmentation (TTA)
-            </label>
-            <div class="param-hint">
-              Averages the network over 8 mirrored versions of every patch. Roughly
-              <strong>8&times; the runtime</strong> for a marginal gain — off in HD-BET's own QSM-CI
-              configuration, and rarely worth it here.
-            </div>
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">Patch Size</label>
-            <div class="param-hint">
-              Fixed at 128&times;128&times;64 (~1.9 GB peak). HD-BET's native 192&times;192&times;96
-              needs ~4.5 GB, past the 4 GB a 32-bit WebAssembly page can address; smaller patches
-              start labelling tissue deep inside the brain as background.
-            </div>
-          </div>
-
-          <div class="param-group">
-            <label class="param-label">Estimated Work</label>
-            <div class="param-hint" id="hdBetEstimate">—</div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="resetHdBetSettings">Reset Defaults</button>
-        <button class="btn btn-primary" id="runHdBetWithSettings">Run HD-BET</button>
-      </div>
->>>>>>> upstream
     </div>
     <label class="nd-check" title="Averages eight mirrored predictions per patch and takes roughly eight times longer."><input type="checkbox" id="hdBetTta"> Mirroring augmentation</label>
     <p class="nd-hint">Patch size is fixed at 128 × 128 × 64 to fit browser memory.</p>
@@ -2370,29 +1965,6 @@
     </div>
   </div>
 
-<<<<<<< monorepo
-=======
-  <!-- Welcome-tour prompt (shown once after first launch) -->
-  <div class="modal-overlay" id="welcomeModal">
-    <div class="modal welcome-modal" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
-      <div class="modal-body">
-        <div class="welcome-modal-icon">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        </div>
-        <h3 id="welcomeTitle">Welcome to QSMbly!</h3>
-        <p>New here? Take a quick guided tour and we'll walk you through building your first susceptibility map, step by step.</p>
-        <div class="welcome-modal-actions">
-          <button class="tour-btn tour-btn-ghost" id="welcomeLater" type="button">Maybe later</button>
-          <button class="tour-btn tour-btn-primary" id="welcomeStartTour" type="button">Start tour</button>
-        </div>
-        <label class="welcome-dontshow">
-          <input type="checkbox" id="welcomeDontShow"> Don't show this again
-        </label>
-      </div>
-    </div>
-  </div>
-
->>>>>>> upstream
   <div class="modal-overlay" id="aboutModal">
     <div class="modal about-modal" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
       <div class="modal-header">
@@ -2460,7 +2032,7 @@
         <h4>Other network requests</h4>
         <p>QSMbly does not use cookies, fingerprinting, or any other tracking. Besides the application itself and the analytics beacon, the page downloads code and data from these services; none of them receives your images:</p>
         <ul class="privacy-list">
-          <li>Fonts from Google Fonts, and the Tagify and NiiVue libraries from the unpkg CDN</li>
+          <li>The Inter font from Google Fonts, and the Tagify library from the unpkg CDN</li>
           <li>The QSMxT project navigation bar from qsmxt.github.io</li>
           <li>Deep-learning model weights from Hugging Face, the first time you use a deep-learning method (then cached in your browser)</li>
           <li>Example data from Hugging Face, if you choose to load it</li>
@@ -2755,26 +2327,6 @@
   <script>
 
 
-    // Keep aria-expanded on the accordion toggles in step with the 'collapsed' class, which the
-    // app also sets directly (e.g. when a pipeline stage opens the next section).
-    function syncExpanded(container, toggle) {
-      const update = () => toggle.setAttribute('aria-expanded', String(!container.classList.contains('collapsed')));
-      update();
-      new MutationObserver(update).observe(container, { attributes: true, attributeFilter: ['class'] });
-    }
-    document.querySelectorAll('.sidebar-section > .section-title > .section-toggle').forEach(btn => {
-      syncExpanded(btn.closest('.sidebar-section'), btn);
-    });
-    document.querySelectorAll('.subsection > .subsection-title[role="button"]').forEach(title => {
-      syncExpanded(title.parentElement, title);
-      title.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          title.click();
-        }
-      });
-    });
-
     // View tab switching
     document.querySelectorAll('.view-tab').forEach(tab => {
       tab.addEventListener('click', () => {
@@ -3055,7 +2607,6 @@
     updateFieldCalculationUI();
 
   </script>
-<<<<<<< monorepo
 
   <style>
     /* Additional styles for stage buttons grid */
@@ -4102,8 +3653,6 @@
       text-decoration: underline;
     }
   </style>
-=======
->>>>>>> upstream
 <!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2b2a798e37144db68fce59dd84c8c1c4"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

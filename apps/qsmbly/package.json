@@ -23,20 +23,12 @@
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-<<<<<<< monorepo
     "test:examples": "node --test scripts/test_examples.mjs scripts/test_mask_worker.mjs",
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app qsmbly && node scripts/test_startup.mjs && node scripts/test_upstream.mjs"
-=======
-    "lint": "eslint ."
->>>>>>> upstream
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
     "@types/jest": "^29.5.12",
-    "eslint": "^9.39.5",
-    "globals": "^17.13.0",
     "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
     "smol-toml": "^1.9.0"
   },
   "dependencies": {

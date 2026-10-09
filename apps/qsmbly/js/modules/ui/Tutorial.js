@@ -17,8 +17,6 @@
  *   }
  */
 
-import { openDialog, closeDialog } from './dialogFocus.js';
-
 const POLL_MS = 200;
 const PADDING = 12;      // gap between spotlight and tooltip
 const VIEWPORT_PAD = 16; // keep tooltip this far from the viewport edge
@@ -229,61 +227,3 @@ export class Tutorial {
     this.tooltip.style.left = `${left}px`;
   }
 }
-<<<<<<< monorepo
-=======
-
-/**
- * Welcome-tour prompt shown once after the user first launches the app.
- * Offers to start the tour, with a "Don't show again" opt-out.
- */
-const DISMISS_KEY = 'qsmbly_tutorial_dismissed';
-
-export class WelcomePrompt {
-  /**
-   * @param {Object} opts
-   * @param {() => void} opts.onStart  Called when the user starts the tour.
-   */
-  constructor({ onStart } = {}) {
-    this.onStart = onStart;
-    this.modal = document.getElementById('welcomeModal');
-    this._wire();
-  }
-
-  isDismissed() {
-    try {
-      return localStorage.getItem(DISMISS_KEY) === 'true';
-    } catch {
-      return false;
-    }
-  }
-
-  open() {
-    openDialog(this.modal, { onEscape: () => this.close() });
-  }
-
-  close() {
-    closeDialog(this.modal);
-    const checkbox = document.getElementById('welcomeDontShow');
-    if (checkbox?.checked) {
-      try {
-        localStorage.setItem(DISMISS_KEY, 'true');
-      } catch {
-        /* non-fatal */
-      }
-    }
-  }
-
-  _wire() {
-    if (!this.modal) return;
-
-    document.getElementById('welcomeStartTour')?.addEventListener('click', () => {
-      this.close();
-      this.onStart?.();
-    });
-    document.getElementById('welcomeLater')?.addEventListener('click', () => this.close());
-    this.modal.addEventListener('click', (e) => {
-      if (e.target === this.modal) this.close();
-    });
-  }
-}
->>>>>>> upstream

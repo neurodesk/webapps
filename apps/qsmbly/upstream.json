@@ -19,12 +19,17 @@
   "ignore": [
     ".github/**",
     ".gitignore",
-    "package-lock.json",
     "assets/qsmbly-app.png",
+    "CNAME",
     "coi-serviceworker.js",
+    "css/a11y.css",
+    "css/app.css",
     "css/landing.css",
     "css/modern-styles.css",
+    "eslint.config.js",
+    "package-lock.json",
     "scripts/capture-landing-shot.mjs",
+    "scripts/publish-pages.sh",
     "serve.py"
   ]
 }

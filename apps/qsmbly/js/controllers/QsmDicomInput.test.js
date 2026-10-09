@@ -1,21 +1,21 @@
 /**
- * DicomController._classifyBatch: sorting dcm2niix output into magnitude, phase and extras, with
+ * QsmDicomInput (upstream DicomController) _classifyBatch: sorting dcm2niix output into magnitude, phase and extras, with
  * echo times and field strength from the sidecars. (FileImport.test.js covers Bruker naming.)
  */
 
 import { jest } from '@jest/globals';
-import { DicomController } from './DicomController.js';
+import { QsmDicomInput } from './QsmDicomInput.js';
 
 const nifti = name => ({ name });
 const sidecar = (name, json) => ({ name, text: async () => (typeof json === 'string' ? json : JSON.stringify(json)) });
 
 function classify(niftis, sidecars = []) {
   const updateOutput = jest.fn();
-  const dicom = new DicomController({ updateOutput });
+  const dicom = new QsmDicomInput({ updateOutput });
   return dicom._classifyBatch(niftis, sidecars).then(result => ({ result, updateOutput }));
 }
 
-describe('DicomController._classifyBatch', () => {
+describe('QsmDicomInput._classifyBatch', () => {
   test('sorts each component by echo time and converts it to ms', async () => {
     const { result } = await classify(
       ['gre_e3', 'gre_e1', 'gre_e2', 'gre_e3_ph', 'gre_e1_ph', 'gre_e2_ph'].map(n => nifti(`${n}.nii`)),
@@ -97,10 +97,10 @@ describe('DicomController._classifyBatch', () => {
   });
 });
 
-describe('DicomController._processResults', () => {
+describe('QsmDicomInput._processResults', () => {
   test('passes the classified batch to onConversionComplete', async () => {
     const onConversionComplete = jest.fn();
-    const dicom = new DicomController({ onConversionComplete, updateOutput: () => {} });
+    const dicom = new QsmDicomInput({ onConversionComplete, updateOutput: () => {} });
     await dicom._processResults([nifti('gre.nii'), nifti('gre_ph.nii'), sidecar('gre.json', { EchoTime: 0.01 })]);
     const batch = onConversionComplete.mock.calls[0][0];
     expect(batch.magnitude[0]).toMatchObject({ name: 'gre.nii', echoTime: 10 });
@@ -110,7 +110,7 @@ describe('DicomController._processResults', () => {
   test('reports when dcm2niix produced no NIfTI', async () => {
     const onConversionComplete = jest.fn();
     const updateOutput = jest.fn();
-    await new DicomController({ onConversionComplete, updateOutput })._processResults([sidecar('x.json', {})]);
+    await new QsmDicomInput({ onConversionComplete, updateOutput })._processResults([sidecar('x.json', {})]);
     expect(onConversionComplete).not.toHaveBeenCalled();
     expect(updateOutput).toHaveBeenCalledWith(expect.stringContaining('No NIfTI files produced'));
   });
