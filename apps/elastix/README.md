@@ -40,9 +40,10 @@ written as a `displacements` field.
 | OME-Zarr `.ozx`, a dropped `.zarr` folder, an OME-Zarr URL | `@fideus-labs/ngff-zarr` (zip archives through `@zarrita/storage`) |
 | TIFF and OME-TIFF, local or by URL | `@fideus-labs/fiff` over geotiff, by range request for a URL |
 
-Pyramids register at the finest level of at most 2^24 voxels. A single-slice
-volume becomes a 2D image; color, channel and time axes reduce to the first
-scalar volume.
+Pyramids register at the finest level of at most 2^24 voxels. A single-slice volume becomes a 2D image when its plane lies in physical XY.
+Sagittal and oblique single-slice volumes are rejected because reducing them to
+2D would discard their physical coordinates. Color, channel and time axes reduce
+to the first scalar volume.
 
 ## Build and test
 

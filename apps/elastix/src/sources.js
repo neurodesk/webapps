@@ -87,8 +87,8 @@ export function voxelCount(image) {
 }
 
 /**
- * The scalar 2D or 3D image elastix registers. A single-slice volume becomes
- * 2D, so a 2D microscopy plane read as XYZ pairs with a 2D image.
+ * The scalar 2D or 3D image elastix registers. An XY single-slice volume
+ * becomes 2D; other planes cannot lose their third physical coordinate.
  */
 export function squeezeSingletons(image) {
   if (image.imageType.components !== 1) {
@@ -97,6 +97,9 @@ export function squeezeSingletons(image) {
   const { dimension } = image.imageType;
   if (dimension === 3 && image.size[2] === 1) {
     const direction = image.direction;
+    if (Math.abs(direction[6]) > 1e-6 || Math.abs(direction[7]) > 1e-6) {
+      throw new Error(`${image.name || "The image"} is a single-slice 3D image with an oblique or non-axial plane; choose a native 2D image or a 3D image with multiple slices.`);
+    }
     return {
       ...image,
       imageType: { ...image.imageType, dimension: 2 },

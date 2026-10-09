@@ -23,6 +23,7 @@ import {
 } from "@fideus-labs/ngff-zarr/browser";
 import { TiffStore } from "@fideus-labs/fiff";
 import ZipFileStore from "@zarrita/storage/zip";
+import { createIoWorkerQueue } from "./io-worker.js";
 import { chooseLevel, classifySource, squeezeSingletons, urlName, voxelCount, VOXEL_BUDGET, zarrFolderEntries } from "./sources.js";
 import { outputStem, plainBytes, withTypedParameterArrays } from "./outputs.js";
 import {
@@ -39,27 +40,13 @@ import {
   spatialDims,
 } from "./transform-export.js";
 
-let ioWorker = null;
-let queue = Promise.resolve();
+const io = createIoWorkerQueue(() => createWebWorker(null));
 
 /** Run one ITK-Wasm call on the shared IO worker after the calls before it. */
-function onIoWorker(task) {
-  const run = queue.then(async () => {
-    ioWorker ??= await createWebWorker(null);
-    const result = await task(ioWorker);
-    if (result?.webWorker) ioWorker = result.webWorker;
-    return result;
-  });
-  queue = run.catch(() => {});
-  return run;
-}
+const onIoWorker = io.run;
 
 /** Abandon in-flight IO: its pipeline promise never settles once the worker is gone. */
-export function resetIo() {
-  ioWorker?.terminate();
-  ioWorker = null;
-  queue = Promise.resolve();
-}
+export const resetIo = io.reset;
 
 export function abortable(promise, signal) {
   if (!signal) return promise;

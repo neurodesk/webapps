@@ -51,7 +51,10 @@ export function createRegistrationRunner({ elastix, defaultParameterMap, createW
 
     const work = (async () => {
       worker = await createWebWorker();
-      if (closed) throw cancelled();
+      if (closed) {
+        worker.terminate();
+        throw cancelled();
+      }
       let maps = parameterObject;
       if (!maps) {
         onPhase("Building elastix parameter maps");

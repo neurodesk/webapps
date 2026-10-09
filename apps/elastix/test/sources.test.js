@@ -79,6 +79,21 @@ test("a single-slice volume becomes a 2D image", () => {
   assert.equal(squeezeSingletons(volume), volume);
 });
 
+test("single-slice sagittal and oblique volumes are refused before their geometry is projected", () => {
+  const angle = Math.PI / 6;
+  const directions = [
+    [0, 0, 1, 0, 1, 0, -1, 0, 0],
+    [1, 0, 0, 0, 0, -1, 0, 1, 0],
+    [1, 0, 0, 0, Math.cos(angle), -Math.sin(angle), 0, Math.sin(angle), Math.cos(angle)],
+  ];
+  for (const direction of directions) {
+    const plane = image({ size: [64, 32, 1], direction: new Float64Array(direction) });
+    assert.throws(() => squeezeSingletons(plane), /single-slice 3D image with an oblique or non-axial plane/);
+    assert.deepEqual(Array.from(plane.direction), direction);
+    assert.equal(plane.imageType.dimension, 3);
+  }
+});
+
 test("color, 1D and 4D images are refused", () => {
   assert.throws(() => squeezeSingletons(image({ size: [8, 8], components: 3 })), /3 components/);
   assert.throws(() => squeezeSingletons(image({ size: [8, 8, 8, 2] })), /4 dimensions/);

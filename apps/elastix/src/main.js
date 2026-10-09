@@ -35,6 +35,7 @@ import { assertCompatiblePair, classifySource } from "./sources.js";
 import { chainParameterFiles, METHOD_LABELS, presetSettings, sortParameterFiles, stageNames } from "./parameter-maps.js";
 import { outputNames } from "./outputs.js";
 import { createRegistrationRunner } from "./registration.js";
+import { loadSlotSource } from "./slot-loader.js";
 
 const $ = (id) => document.getElementById(id);
 const slotElements = (name) => ({
@@ -262,18 +263,14 @@ async function clearOutput() {
 
 async function setSlot(name, source, signal) {
   const slot = slots[name];
-  await clearOutput();
-  slot.source = null;
-  slot.info.hidden = true;
-  slot.drop.classList.remove("has-files");
   try {
-    await viewers[name].loadVolumes([{ url: source.displayFile, name: source.displayFile.name }]);
+    slot.source = await loadSlotSource({ viewer: viewers[name], source, previous: slot.source, signal });
   } catch (error) {
-    await viewers[name].removeAllVolumes();
+    const previousSeries = slot.series.indexOf(slot.source?.displayFile);
+    if (previousSeries >= 0) slot.select.value = String(previousSeries);
     throw error;
   }
-  signal?.throwIfAborted();
-  slot.source = source;
+  await clearOutput();
   slot.info.hidden = false;
   slot.info.textContent = `${source.name} · ${source.note}`;
   slot.drop.classList.add("has-files");
@@ -294,11 +291,11 @@ async function loadFiles(name, files, signal) {
     progress.setText(`Reading ${name} image · converting DICOM if needed…`);
     const images = await abortable(readImageFiles(files), signal);
     if (!images.length) throw new Error("Choose NIfTI files or a complete DICOM series.");
-    showSeries(slot, images);
     await setSlot(name, await abortable(readNiftiFile(images[0]), signal), signal);
+    showSeries(slot, images);
   } else {
-    showSeries(slot, []);
     await setSlot(name, await abortable(readSource(files, { signal }), signal), signal);
+    showSeries(slot, []);
   }
 }
 
@@ -333,8 +330,8 @@ $("urlButton").onclick = () => {
       const url = slot.url.value.trim();
       if (!/^https?:\/\//i.test(url)) throw new Error(`The ${name} URL must start with https:// or http://.`);
       progress.setText(`Opening the ${name} image URL…`);
-      showSeries(slot, []);
       await setSlot(name, await abortable(readSource(url, { signal }), signal), signal);
+      showSeries(slot, []);
     }
     complete(`Opened ${urls.map(([name]) => name).join(" and ")} image URL${urls.length > 1 ? "s" : ""}.`);
   });

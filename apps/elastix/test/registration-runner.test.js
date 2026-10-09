@@ -55,6 +55,41 @@ test("cancelling terminates the worker, ignores a late result and frees the next
   assert.deepEqual(active, [true, false, true, false]);
 });
 
+for (const cancelWithSignal of [false, true]) {
+  test(`cancelling during worker creation releases the late worker without closing the next run (${cancelWithSignal ? "signal" : "button"})`, async () => {
+    const f = fakes();
+    const waiting = [];
+    const active = [];
+    const runner = createRegistrationRunner({
+      ...f,
+      createWebWorker: () => new Promise((resolve) => waiting.push(resolve)),
+      onActiveChange: (value) => active.push(value),
+    });
+    const controller = new AbortController();
+    const first = runner.run({ fixed: "f", moving: "m", parameterObject: [{}], signal: controller.signal });
+    if (cancelWithSignal) controller.abort();
+    else runner.cancel();
+    await assert.rejects(first, { name: "AbortError" });
+
+    const second = runner.run({ fixed: "f", moving: "m", parameterObject: [{}] });
+    let terminations = 0;
+    waiting[0]({ terminate() { terminations += 1; } });
+    await tick();
+    assert.equal(terminations, 1);
+    assert.equal(runner.active, true);
+    assert.deepEqual(active, [true, false, true]);
+    assert.equal(f.pending.length, 0, "the cancelled run never registers");
+
+    waiting[1](await f.createWebWorker());
+    await tick();
+    f.pending[0].resolve();
+    assert.equal((await second).result, "image");
+    assert.ok(f.workers[0].terminated);
+    assert.equal(terminations, 1);
+    assert.deepEqual(active, [true, false, true, false]);
+  });
+}
+
 test("an abort signal cancels the run and only one run is active at a time", async () => {
   const f = fakes();
   const runner = createRegistrationRunner(f);
