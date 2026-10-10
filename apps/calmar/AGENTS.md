@@ -107,6 +107,13 @@ Common issues it catches:
 
 ## Test surface
 
+The real structural automation example keeps SynthStroke's 8-axis test-time
+augmentation and uses a 15-minute browser-test budget. Override it with
+`CALMAR_AUTOMATION_TIMEOUT_MS` when measuring another machine. The
+`candidate-workflow` attachment records stage timings, pending worker waits and
+mask-review state, including on failure; use it to distinguish slow inference
+from a stalled output handoff before changing the budget again.
+
 | Script | What it covers |
 | --- | --- |
 | `npm run lint` | acorn syntax check on all `web/**/*.js` |

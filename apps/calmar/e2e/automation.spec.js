@@ -91,7 +91,7 @@ test('a matching shape with a shifted affine is rejected before lesion mapping',
 test('real structural example produces an unconfirmed native lesion candidate', async ({ page }) => {
   const image = process.env.CALMAR_AUTOMATION_IMAGE;
   test.skip(!image, 'Set CALMAR_AUTOMATION_IMAGE=example or a structural T1 path to run full candidate inference.');
-  const timeout = Number(process.env.CALMAR_AUTOMATION_TIMEOUT_MS || 600000);
+  const timeout = Number(process.env.CALMAR_AUTOMATION_TIMEOUT_MS || 900000);
   expect(Number.isFinite(timeout) && timeout > 0).toBe(true);
   test.setTimeout(timeout + 60000);
   const [example] = JSON.parse(await readFile(new URL('../examples.json', import.meta.url)));
@@ -106,16 +106,61 @@ test('real structural example produces an unconfirmed native lesion candidate', 
   await page.goto('/');
   await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
   await upload(page, 'structural', { name: image === 'example' ? source.name : basename(image), mimeType: 'application/octet-stream', buffer: bytes });
+  await page.evaluate(() => {
+    globalThis.__calmarCandidateStages = [];
+    for (const name of ['setStructural', 'runBrainExtraction', 'prealignToMni160', 'runLesionSegmentation', 'startLesionMaskReview']) {
+      const original = app[name];
+      app[name] = async function (...args) {
+        const started = performance.now();
+        const stage = { name, state: 'running', startedMs: started };
+        __calmarCandidateStages.push(stage);
+        try {
+          const result = await original.apply(this, args);
+          stage.state = 'complete';
+          return result;
+        } catch (error) {
+          stage.state = 'failed';
+          stage.error = error.message;
+          throw error;
+        } finally {
+          stage.durationMs = Math.round(performance.now() - started);
+        }
+      };
+    }
+  });
   let snapshot;
+  let operationError;
   try {
     snapshot = await finish(page, 'prepare-lesion', {}, timeout);
-  } finally {
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.state).toBe('succeeded');
+  } catch (error) {
+    operationError = error;
+  }
+  try {
     const diagnostics = messages.slice(-200).join('\n');
     await writeFile(join(directory, 'candidate-browser.log'), diagnostics);
     await test.info().attach('candidate-browser', { body: diagnostics, contentType: 'text/plain' });
+    const workflow = await page.evaluate(async () => ({
+      snapshot: await neurodeskAutomation.dispatch('snapshot'),
+      stages: __calmarCandidateStages.map(stage => ({
+        ...stage,
+        durationMs: stage.durationMs ?? Math.round(performance.now() - stage.startedMs)
+      })),
+      pendingStageData: [...app._stageDataResolvers.keys()],
+      pendingSteps: [...app._stepCompleteResolvers.keys()],
+      maskReviewActive: app.maskReviewActive,
+      nativeCandidateReady: Boolean(app.nativeLesionSeedFile),
+      technicalLog: document.getElementById('technicalConsoleOutput')?.textContent?.slice(-4000)
+    })).catch(error => ({ error: error.message }));
+    const workflowDiagnostics = JSON.stringify(workflow, null, 2);
+    await writeFile(join(directory, 'candidate-workflow.json'), workflowDiagnostics);
+    await test.info().attach('candidate-workflow', { body: workflowDiagnostics, contentType: 'application/json' });
+  } catch (error) {
+    if (!operationError) throw error;
+    console.warn(`CALMaR diagnostic capture failed: ${error.message}`);
   }
-  expect(snapshot.error).toBeUndefined();
-  expect(snapshot.state).toBe('succeeded');
+  if (operationError) throw operationError;
   expect(snapshot.report.summary.requiresReview).toBe(true);
   expect(snapshot.report.summary.lesionConfirmed).toBe(false);
   expect(await page.evaluate(() => window.app.lesionMaskConfirmed)).toBe(false);
