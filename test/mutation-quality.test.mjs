@@ -27,6 +27,10 @@ test('the pilot mutates one helper and invokes only its data-free Node test suit
   assert.equal(config.coverageAnalysis, 'off');
   assert.equal(config.thresholds.break, null);
   assert.equal(config.cleanTempDir, 'always');
+  const smokeSource = readFileSync(target, 'utf8').split('\n').slice(9, 12).join('\n');
+  assert.match(smokeSource, /export function tableName\(id, atlasId\)/, 'update the smoke mutation range when tableName moves');
+  assert.equal(config.jsonReporter.fileName, 'quality-artifacts/mutations/mutation.json');
+  assert.equal(config.htmlReporter.fileName, 'quality-artifacts/mutations/index.html');
 });
 
 test('surviving mutations are reported without a score gate', () => {
