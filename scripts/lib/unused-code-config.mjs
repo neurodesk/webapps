@@ -14,12 +14,13 @@ export function htmlEntries(directory, generated = []) {
       const src = element.getAttribute('src');
       if (/^(?:https?:)?\/\//.test(src)) continue;
       const path = src.split(/[?#]/)[0];
+      if (generated.includes(path.replace(/^(?:\.\/|\/)/, ''))) continue;
       const candidates = path.startsWith('/')
         ? [resolve(dirname(html), `.${path}`), resolve(directory, `.${path}`)]
         : [resolve(dirname(html), path)];
       const target = candidates.find(isFile);
       if (target) entries.push(relative(directory, target).replaceAll('\\', '/'));
-      else if (!generated.includes(path.replace(/^(?:\.\/|\/)/, ''))) throw new Error(`Missing local HTML script in ${html}: ${src}`);
+      else throw new Error(`Missing local HTML script in ${html}: ${src}`);
     }
     dom.window.close();
   }
@@ -51,6 +52,23 @@ export function validateLiteralEntries(root, workspaces) {
     for (const entry of config.entry) {
       if (entry.startsWith('!') || /[*?\[\]{}]/.test(entry)) continue;
       if (!isFile(resolve(root, workspace, entry))) throw new Error(`Missing explicit entry: ${workspace}/${entry}`);
+    }
+  }
+}
+
+// Only these generated/vendor exclusions are part of the coverage contract.
+export const projectExclusions = ['!**/node_modules/**', '!**/dist/**', '!**/vendor/**', '!**/public/**', '!**/wasm/pkg/**', '!**/validation/results/**', '!**/*.generated.{js,ts}'];
+const workspaceExclusions = {
+  'apps/qsmbly': ['!niivue/**'],
+  'packages/vesselboost': ['!preprocessing/**'],
+  'packages/easy-mp2rage': ['!wasm/**'],
+};
+
+export function validateProjectExclusions(workspaces) {
+  for (const [workspace, config] of Object.entries(workspaces)) {
+    const allowed = [...projectExclusions, ...(workspaceExclusions[workspace] ?? [])];
+    for (const pattern of config.project) {
+      if (pattern.startsWith('!') && !allowed.includes(pattern)) throw new Error(`Undocumented source exclusion: ${workspace}/${pattern}`);
     }
   }
 }

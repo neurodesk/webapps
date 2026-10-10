@@ -16,7 +16,8 @@ both successful canary findings and real configuration failures.
 ## Coverage and entry rules
 
 `knip.config.mjs` discovers every pnpm workspace with `@manypkg/get-packages`.
-Each workspace gets a project glob covering JavaScript and TypeScript sources;
+Each workspace gets a project glob covering JavaScript and TypeScript sources,
+including `.mts` and `.cts`;
 new workspaces receive the same coverage automatically. A tracked-file coverage
 test rejects source files outside configured projects and explicit exclusions.
 Ordinary source files are not all entries. The following roots account for externally invoked code:
@@ -37,12 +38,14 @@ worker references. New runtime modules loaded through constructed URLs need an
 explicit entry. Literal entries are checked for existence during configuration
 loading. Local HTML scripts are parsed as HTML, with served web-root resolution;
 unknown missing scripts fail configuration. Known generated HTML runtimes have
-exact per-app exceptions in the configuration. Dist APIs map to JavaScript or
+exact per-app exceptions in the configuration and stay excluded after local staging. Dist APIs map to JavaScript or
 TypeScript sources and fail if a source mapping is missing.
 Add a narrowly named root and explain its caller here.
 
 Generated distributions, node_modules, vendor copies, public runtime assets and
-validation result archives are excluded. Generated model catalogs are excluded.
+validation result archives are excluded. Project negations are checked against
+the documented shared exclusions and exact per-workspace exceptions; a new
+exclusion cannot silently hide source files. Generated model catalogs are excluded.
 The committed easy-mp2rage WASM glue and vesselboost preprocessing glue are excluded
 in their own workspaces. QSMbly's imported NiiVue copy is excluded. Declaration
 files are excluded from unused-file suggestions; unused types remain reported.

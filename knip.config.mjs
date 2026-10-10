@@ -2,14 +2,13 @@ import { getPackages } from '@manypkg/get-packages';
 import { readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { htmlEntries, publishedSourceEntries, validateLiteralEntries } from './scripts/lib/unused-code-config.mjs';
+import { htmlEntries, projectExclusions, publishedSourceEntries, validateLiteralEntries, validateProjectExclusions } from './scripts/lib/unused-code-config.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const { packages } = await getPackages(root);
-const source = '**/*.{js,mjs,cjs,jsx,ts,tsx}';
-const excluded = ['!**/node_modules/**', '!**/dist/**', '!**/vendor/**', '!**/public/**', '!**/wasm/pkg/**', '!**/validation/results/**', '!**/*.generated.{js,ts}'];
-const commandEntries = ['scripts/**/*.{js,mjs,cjs}', '!scripts/lib/**', 'tools/**/*.{js,mjs,cjs}', 'bin/**/*.{js,mjs,cjs}', 'validation/**/*.{js,mjs,cjs}', '!validation/results/**'];
-const testEntries = ['test/**/*.{js,mjs,cjs,ts,tsx}', 'tests/**/*.{js,mjs,cjs,ts,tsx}', 'e2e/**/*.{js,mjs,cjs,ts,tsx}', '**/*.{test,spec}.{js,mjs,cjs,ts,tsx}'];
+const source = '**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}';
+const commandEntries = ['scripts/**/*.{js,mjs,cjs,mts,cts}', '!scripts/lib/**', 'tools/**/*.{js,mjs,cjs,mts,cts}', 'bin/**/*.{js,mjs,cjs,mts,cts}', 'validation/**/*.{js,mjs,cjs,mts,cts}', '!validation/results/**'];
+const testEntries = ['test/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'tests/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'e2e/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', '**/*.{test,spec}.{js,mjs,cjs,ts,tsx,mts,cts}'];
 
 // Build staging supplies these exact local HTML scripts before dev/build.
 const generatedHtmlScripts = {
@@ -23,15 +22,15 @@ const generatedHtmlScripts = {
 
 const workspaces = {
   '.': {
-    entry: [...commandEntries, ...testEntries, '.github/actions/**/*.{js,mjs,cjs}', 'site/landing.js', 'site/theme.js', 'site/app-shell.js', '*.config.{js,mjs,cjs,ts,mts}', 'exes/nii2tvx/wasm_demo.mjs'],
-    project: ['scripts/**/*.{js,mjs,cjs}', 'test/**/*.{js,mjs,cjs,ts,tsx}', 'test-utils/**/*.{js,mjs,cjs,ts,tsx}', 'site/*.{js,mjs}', 'site/shell-adapters/**/*.js', '.github/actions/**/*.{js,mjs,cjs}', '*.{js,mjs,cjs,jsx,ts,tsx}', 'exes/**/*.{js,mjs,cjs,jsx,ts,tsx}'],
+    entry: [...commandEntries, ...testEntries, '.github/actions/**/*.{js,mjs,cjs,mts,cts}', 'site/landing.js', 'site/theme.js', 'site/app-shell.js', '*.config.{js,mjs,cjs,ts,mts,cts}', 'exes/nii2tvx/wasm_demo.mjs'],
+    project: ['scripts/**/*.{js,mjs,cjs,mts,cts}', 'test/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'test-utils/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'site/*.{js,mjs}', 'site/shell-adapters/**/*.js', '.github/actions/**/*.{js,mjs,cjs,mts,cts}', '*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}', 'exes/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
   },
 };
 for (const pkg of packages) {
   const directory = relative(root, pkg.dir).replaceAll('\\', '/');
   workspaces[directory] = {
-    entry: [...htmlEntries(pkg.dir, generatedHtmlScripts[directory]), ...commandEntries, ...testEntries, '*.config.{js,mjs,cjs,ts,mts}'],
-    project: [source, ...excluded],
+    entry: [...htmlEntries(pkg.dir, generatedHtmlScripts[directory]), ...commandEntries, ...testEntries, '*.config.{js,mjs,cjs,ts,mts,cts}'],
+    project: [source, ...projectExclusions],
   };
 }
 
@@ -70,6 +69,7 @@ for (const family of runtimeManifest.families) {
 }
 
 validateLiteralEntries(root, workspaces);
+validateProjectExclusions(workspaces);
 
 export default {
   workspaces,

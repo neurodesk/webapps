@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { htmlEntries, publishedSourceEntries, sourceCoverage, validateLiteralEntries } from '../scripts/lib/unused-code-config.mjs';
+import { htmlEntries, publishedSourceEntries, sourceCoverage, validateLiteralEntries, validateProjectExclusions } from '../scripts/lib/unused-code-config.mjs';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -25,8 +25,8 @@ test('every pnpm workspace receives a source project without treating all source
   for (const pkg of packages) {
     const name = relative(process.cwd(), pkg.dir).replaceAll('\\', '/');
     assert.ok(config.workspaces[name], name);
-    assert.ok(config.workspaces[name].project.includes('**/*.{js,mjs,cjs,jsx,ts,tsx}'), name);
-    assert.ok(!config.workspaces[name].entry.some((entry) => entry === '**/*.{js,mjs,cjs,jsx,ts,tsx}' || entry === 'src/**/*.{js,mjs,cjs,jsx,ts,tsx}'), name);
+    assert.ok(config.workspaces[name].project.includes('**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'), name);
+    assert.ok(!config.workspaces[name].entry.some((entry) => entry === '**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}' || entry === 'src/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'), name);
   }
 });
 
@@ -68,10 +68,12 @@ test('missing executables and malformed successful output fail', (t) => {
 });
 
 test('all tracked JavaScript and TypeScript files are covered or explicitly excluded', () => {
-  const files = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs', '*.cjs', '*.jsx', '*.ts', '*.tsx'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+  const files = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs', '*.cjs', '*.jsx', '*.ts', '*.tsx', '*.mts', '*.cts'], { encoding: 'utf8' }).split('\0').filter(Boolean);
   assert.deepEqual(files.filter((file) => !sourceCoverage(file, config.workspaces)), []);
   assert.equal(sourceCoverage('new-tools/unregistered-helper.js', config.workspaces), undefined);
   assert.equal(sourceCoverage('docs/new-live-helper.js', config.workspaces), undefined);
+  assert.equal(sourceCoverage('apps/dicompare/src/new-module.mts', config.workspaces), 'covered');
+  assert.equal(sourceCoverage('apps/dicompare/src/new-module.cts', config.workspaces), 'covered');
 });
 
 test('HTML roots handle static web roots, unquoted attributes and query strings', (t) => {
@@ -82,6 +84,8 @@ test('HTML roots handle static web roots, unquoted attributes and query strings'
   assert.deepEqual(htmlEntries(options.cwd), ['web/js/main.js']);
   writeFileSync(join(options.cwd, 'web/index.html'), '<script src=missing.js></script>');
   assert.throws(() => htmlEntries(options.cwd), /Missing local HTML script/);
+  assert.deepEqual(htmlEntries(options.cwd, ['missing.js']), []);
+  writeFileSync(join(options.cwd, 'web/missing.js'), 'console.log("staged runtime");');
   assert.deepEqual(htmlEntries(options.cwd, ['missing.js']), []);
 });
 
@@ -111,4 +115,10 @@ test('relative report output resolves against the requested working directory', 
   const options = fixture(t);
   runReport({ ...options, output: 'relative-artifacts' });
   assert.match(readFileSync(join(options.cwd, 'relative-artifacts/summary.md'), 'utf8'), /deadExport/);
+});
+
+test('only documented project exclusions can satisfy source coverage', () => {
+  validateProjectExclusions(config.workspaces);
+  assert.throws(() => validateProjectExclusions({ 'apps/dicompare': { project: ['**/*.js', '!src/**'] } }), /Undocumented source exclusion/);
+  assert.throws(() => validateProjectExclusions({ 'apps/dicompare': { project: ['**/*.js', '!niivue/**'] } }), /Undocumented source exclusion/);
 });
