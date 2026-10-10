@@ -2,6 +2,11 @@
 
 ## 0.4.20261010
 
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/registration@0.1.1
+
 ## 0.4.20261009
 
 ### Minor Changes

@@ -5,6 +5,10 @@
 ### Patch Changes
 
 - Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
+  - @neurodesk/runtime-support@0.4.2
+  - @neurodesk/dwi2trx@0.5.20261010
+- Updated dependencies
   - @neurodesk/runtime-support@0.4.1
   - @neurodesk/dwi2trx@0.5.20261010
   - @neurodesk/webapp-components@0.12.1

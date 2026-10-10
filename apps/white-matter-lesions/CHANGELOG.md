@@ -9,6 +9,12 @@
 ### Patch Changes
 
 - Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
+  - @neurodesk/runtime-support@0.4.2
+  - @neurodesk/synthsr@0.6.20261010
+  - @neurodesk/synthstrip@0.1.5
+  - @neurodesk/white-matter-lesions@0.3.20261010
+- Updated dependencies
   - @neurodesk/white-matter-lesions@0.3.20261010
   - @neurodesk/runtime-support@0.4.1
   - @neurodesk/webapp-components@0.12.1
