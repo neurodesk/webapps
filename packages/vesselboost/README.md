@@ -40,6 +40,10 @@ before import for both CLI and direct Node API use.
 `pnpm --filter @neurodesk/vesselboost build` verifies every artifact checksum;
 `build:wasm` rebuilds using Rust 1.98.0, wasm-pack 0.13.1, wasm-bindgen 0.2.114,
 locked QSM.rs commit `3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d` and no wasm-opt.
+Rebuilding requires the official Linux x64 musl bindgen executable, SHA-256
+`bbc726fb17a79c004d2dcb979977be5f49e3f057fa579364c33d838153849ab7`;
+CI verifies its immutable release archive before adding it to PATH. The crates.io
+CLI with the same version emits different producer metadata and is refused.
 Build paths are remapped to stable `/cargo` and `/workspace` prefixes.
 Native CI rebuilds and compares committed bytes. Both browser and Node must
 initialize this artifact successfully, including workflows that skip optional steps.

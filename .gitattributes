@@ -15,3 +15,9 @@ exes/nii2tvx/test/*.tsv -text
 
 # LCModel test case inputs and native outputs, compared byte for byte by packages/lcmodel and its release check.
 exes/lcmodel/tests/data/** -text
+
+# Required VesselBoost artifacts are verified as bytes on every portable target.
+packages/vesselboost/preprocessing/*.js text eol=lf
+packages/vesselboost/preprocessing/*.d.ts text eol=lf
+packages/vesselboost/preprocessing/artifact.json text eol=lf
+packages/vesselboost/preprocessing/*.wasm -text

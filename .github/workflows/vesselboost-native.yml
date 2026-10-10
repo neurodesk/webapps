@@ -80,7 +80,13 @@ jobs:
           rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
           rustup default 1.98.0
           cargo install wasm-pack --version 0.13.1 --locked
-          cargo install wasm-bindgen-cli --version 0.2.114 --locked
+          task_bindgen_dir="$(mktemp -d "$RUNNER_TEMP/vesselboost-bindgen.XXXXXX")"
+          curl --fail --location --retry 3 \
+            https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.114/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl.tar.gz \
+            --output "$task_bindgen_dir/bindgen.tar.gz"
+          echo "ce21be002bdbc22ede2a5cf250cb801d2106956fc3c529c75d9452729db3490c  $task_bindgen_dir/bindgen.tar.gz" | sha256sum --check
+          tar -xzf "$task_bindgen_dir/bindgen.tar.gz" -C "$task_bindgen_dir"
+          echo "$task_bindgen_dir/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
         env:
           CARGO_BUILD_JOBS: 2
       - name: Build locked source and compare every committed artifact byte
