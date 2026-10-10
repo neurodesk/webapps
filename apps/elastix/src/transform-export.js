@@ -1,8 +1,8 @@
 // Pure helpers for writing the registration transform as OME-Zarr (RFC-5).
 // elastix itself evaluates the transform: transformix resamples a
 // "coordinate image" whose voxels hold their own physical coordinate along
-// one axis, and linear interpolation of a linear function is exact, so the
-// result at each output point is that coordinate of T(point). A linear
+// one axis. Linear interpolation recovers that coordinate of T(point) to
+// the sampler's precision. A linear
 // transform is then fitted exactly from the stationary image's corners; any
 // other is sampled at every stationary voxel as a displacement field. No DOM
 // or ITK-Wasm imports, so Node tests exercise it directly.
@@ -58,25 +58,25 @@ export function physicalPoint(image, index) {
  * Half-width of a coordinate image that contains every point the transform
  * can reach: a power of two, so its corner values stay exact in float32.
  */
-export function coordinateRadius(images) {
+export function coordinateRadius(images, center = []) {
   let reach = 1;
   for (const image of images) {
     const corners = 2 ** image.imageType.dimension;
     for (let corner = 0; corner < corners; corner += 1) {
       const index = Array.from(image.size, (size, axis) => ((corner >> axis) & 1) * (size - 1));
-      for (const value of physicalPoint(image, index)) reach = Math.max(reach, Math.abs(value));
+      physicalPoint(image, index).forEach((value, axis) => { reach = Math.max(reach, Math.abs(value - (center[axis] ?? 0))); });
     }
   }
   return 2 ** Math.ceil(Math.log2(reach * 100));
 }
 
-/** Two voxels per axis spanning [-radius, radius], each holding its coordinate along `axis`. */
-export function coordinateImage(dimension, axis, radius, componentType = "float64") {
+/** Two voxels per axis around `center`, holding the coordinate minus its center along `axis`. */
+export function coordinateImage(dimension, axis, radius, componentType = "float64", center = Array(dimension).fill(0)) {
   const Data = componentType === "float32" ? Float32Array : Float64Array;
   return {
     imageType: { dimension, componentType, pixelType: "Scalar", components: 1 },
     name: `coordinate-${axis}`,
-    origin: Array(dimension).fill(-radius),
+    origin: center.map((value) => value - radius),
     spacing: Array(dimension).fill(2 * radius),
     direction: new Float64Array(dimension * dimension).map((_, index) => (index % (dimension + 1) === 0 ? 1 : 0)),
     size: Array(dimension).fill(2),
@@ -85,7 +85,7 @@ export function coordinateImage(dimension, axis, radius, componentType = "float6
   };
 }
 
-/** The optimized maps, set to resample with linear interpolation, which keeps coordinate images exact. */
+/** The optimized maps, set to resample with linear interpolation, without altering the optimized maps. */
 export function coordinateParameterObject(transformParameterObject) {
   return transformParameterObject.map((map) => ({
     ...map,
@@ -113,33 +113,53 @@ export function cornerGrid(image) {
   };
 }
 
-/** Least-squares affine q = M p + t, exact for an affine mapping sampled at its grid corners. */
+/** Least-squares affine q = M p + t, solved by QR on centered, scaled coordinates. */
 export function fitAffine(points, mapped) {
-  const dimension = points[0].length;
-  const n = dimension + 1;
-  const system = Array.from({ length: n }, () => Array(n + dimension).fill(0));
-  points.forEach((point, k) => {
-    const row = [...point, 1];
-    for (let i = 0; i < n; i += 1) {
-      for (let j = 0; j < n; j += 1) system[i][j] += row[i] * row[j];
-      for (let j = 0; j < dimension; j += 1) system[i][n + j] += row[i] * mapped[k][j];
-    }
-  });
-  for (let column = 0; column < n; column += 1) {
-    let pivot = column;
-    for (let row = column + 1; row < n; row += 1) {
-      if (Math.abs(system[row][column]) > Math.abs(system[pivot][column])) pivot = row;
-    }
-    [system[column], system[pivot]] = [system[pivot], system[column]];
-    for (let row = 0; row < n; row += 1) {
-      if (row === column) continue;
-      const factor = system[row][column] / system[column][column];
-      for (let j = column; j < n + dimension; j += 1) system[row][j] -= factor * system[column][j];
-    }
+  const dimension = points[0]?.length;
+  if (![2, 3].includes(dimension) || points.length < dimension + 1 || mapped.length !== points.length
+    || [...points, ...mapped].some((point) => point.length !== dimension || !point.every(Number.isFinite))) {
+    throw new Error("Cannot export an affine from invalid corner coordinates.");
   }
-  const coefficient = (input, output) => system[input][n + output] / system[input][input];
-  const matrix = Array.from({ length: dimension }, (_, row) => Array.from({ length: dimension }, (_, column) => coefficient(column, row)));
-  const offset = Array.from({ length: dimension }, (_, row) => coefficient(dimension, row));
+  const center = (values) => values[0].map((first, axis) => first
+    + values.reduce((sum, point) => sum + (point[axis] - first), 0) / values.length);
+  const inputCenter = center(points);
+  const outputCenter = center(mapped);
+  const scales = inputCenter.map((value, axis) => Math.max(...points.map((point) => Math.abs(point[axis] - value))));
+  if (scales.some((value) => !Number.isFinite(value) || value === 0)) {
+    throw new Error("Cannot export an affine from a degenerate corner grid.");
+  }
+  const system = points.map((point, k) => [
+    ...point.map((value, axis) => (value - inputCenter[axis]) / scales[axis]),
+    ...mapped[k].map((value, axis) => value - outputCenter[axis]),
+  ]);
+  // Householder QR avoids squaring the grid's condition number.
+  for (let column = 0; column < dimension; column += 1) {
+    const norm = Math.hypot(...system.slice(column).map((row) => row[column]));
+    if (!Number.isFinite(norm) || norm <= 64 * Number.EPSILON * points.length) {
+      throw new Error("Cannot export an affine from a degenerate corner grid.");
+    }
+    const diagonal = system[column][column] < 0 ? norm : -norm;
+    const vector = system.slice(column).map((row) => row[column]);
+    vector[0] -= diagonal;
+    const vectorNorm = Math.hypot(...vector);
+    const unit = vector.map((value) => value / vectorNorm);
+    for (let j = column; j < 2 * dimension; j += 1) {
+      const projection = unit.reduce((sum, value, i) => sum + value * system[column + i][j], 0);
+      unit.forEach((value, i) => { system[column + i][j] -= 2 * value * projection; });
+    }
+    system[column][column] = diagonal;
+  }
+  const matrix = Array.from({ length: dimension }, (_, output) => {
+    const coefficients = Array(dimension).fill(0);
+    for (let row = dimension - 1; row >= 0; row -= 1) {
+      let value = system[row][dimension + output];
+      for (let column = row + 1; column < dimension; column += 1) value -= system[row][column] * coefficients[column];
+      coefficients[row] = value / system[row][row];
+    }
+    return coefficients.map((value, axis) => value / scales[axis]);
+  });
+  const offset = outputCenter.map((value, row) => value
+    - matrix[row].reduce((sum, entry, column) => sum + entry * inputCenter[column], 0));
   let residual = 0;
   points.forEach((point, k) => {
     for (let row = 0; row < dimension; row += 1) {
@@ -147,7 +167,16 @@ export function fitAffine(points, mapped) {
       residual = Math.max(residual, Math.abs(value - mapped[k][row]));
     }
   });
-  return { matrix, offset, residual };
+  const fit = { matrix, offset, residual };
+  assertAffineFit(fit, Infinity);
+  return fit;
+}
+
+/** Reject invalid or inaccurate coefficients before serializing an RFC-5 affine. */
+export function assertAffineFit({ matrix, offset, residual }, tolerance) {
+  if (![...matrix.flat(), ...offset, residual].every(Number.isFinite) || residual > tolerance) {
+    throw new Error(`Cannot export an accurate finite affine transform from the mapped corners (error ${residual}, limit ${tolerance}).`);
+  }
 }
 
 /** An ITK-Wasm Affine transform (centre at the origin) for a matrix and offset. */

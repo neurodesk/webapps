@@ -10,13 +10,16 @@
 
 - Updated dependencies
   - @neurodesk/lcmodel@0.7.20261010
+  - @neurodesk/runtime-support@0.4.1
+  - @neurodesk/webapp-components@0.12.1
 
 ## 0.6.20261010
 
 ### Patch Changes
 
 - Updated dependencies
-  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/runtime-support@0.4.1
+  - @neurodesk/webapp-components@0.12.1
   - @neurodesk/lcmodel@0.6.20261010
 
 ## 0.6.20261009

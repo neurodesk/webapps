@@ -6,7 +6,7 @@
  */
 
 // Application version. `pnpm release` writes the date version (scripts/lib/app-versions.mjs).
-export const VERSION = '0.29.20261009';
+export const VERSION = '0.30.20261010';
 
 // QSM.rs core library version (the pinned qsm-core dependency tag in rust-wasm/Cargo.toml)
 export const QSM_RS_VERSION = '0.38.0';

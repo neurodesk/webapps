@@ -164,6 +164,7 @@ test('a phase token is not hidden by an echo suffix or a protocol name', () => {
 function gridHeader() {
   const buffer = new ArrayBuffer(352);
   const view = new DataView(buffer);
+  view.setInt32(0, 348, true);
   [96, 82, 18].forEach((dim, i) => view.setInt16(42 + i * 2, dim, true));
   [1, 0.167, 0.195, 0.8].forEach((value, i) => view.setFloat32(76 + i * 4, value, true));
   view.setInt16(254, 1, true);

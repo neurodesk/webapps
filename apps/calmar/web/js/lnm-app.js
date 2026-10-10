@@ -1,3 +1,5 @@
+import { prealignVolumes } from '@neurodesk/calmar/alignment';
+import { prepare as prepareCandidate, atlasOverlap, map as mapReviewedLesion, filterSummaryByMinCluster } from '@neurodesk/calmar/pipeline';
 import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
 
@@ -26,14 +28,11 @@ import {
   decodeNiftiBuffer
 } from './modules/atlas-loader.js';
 import {
-  fcWeightedSum,
-  decodeFcPack,
-  parcelResultToChannelWeights,
-  summaryToNetworkWeights
+  decodeFcPack
 } from './modules/fc-weighted-sum.js';
 import { applyThresholdDetailed } from './modules/threshold.js';
 import { affineFromHeader, resampleAffine } from './modules/resample.js';
-import { centroidOfMask, applyAffineToVoxel, computePrealignAffine, principalAxisAlign } from './modules/prealign.js';
+import { centroidOfMask, applyAffineToVoxel } from './modules/prealign.js';
 import { writeNifti1 } from './modules/nifti-writer.js';
 import { resampleBinaryMask, writeBinaryMaskNifti } from './modules/mask-transform.js';
 import {
@@ -96,34 +95,6 @@ function binarise(typedArray) {
     out[i] = typedArray[i] > 0 ? 1 : 0;
   }
   return out;
-}
-
-function foregroundMaskFromIntensity(data, dims = null, fractionOfMax = 0.05) {
-  let max = -Infinity;
-  for (let i = 0; i < data.length; i++) {
-    const v = Number(data[i]);
-    if (v > max) max = v;
-  }
-  const threshold = (Number.isFinite(max) ? max : 0) * fractionOfMax;
-  const mask = new Uint8Array(data.length);
-  let count = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (Number(data[i]) > threshold) {
-      mask[i] = 1;
-      count++;
-    }
-  }
-  if (count === 0) {
-    let fallback = Math.floor(data.length / 2);
-    if (Array.isArray(dims) && dims.length === 3) {
-      const x = Math.min(Math.floor(dims[0] / 2), dims[0] - 1);
-      const y = Math.min(Math.floor(dims[1] / 2), dims[1] - 1);
-      const z = Math.min(Math.floor(dims[2] / 2), dims[2] - 1);
-      fallback = x + y * dims[0] + z * dims[0] * dims[1];
-    }
-    if (fallback >= 0 && fallback < mask.length) mask[fallback] = 1;
-  }
-  return mask;
 }
 
 function dimsEqual(a, b) {
@@ -207,18 +178,6 @@ function summarizeAtlasOverlap(parcelResult, atlas, atlasOption) {
 function normalizeMinClusterVoxels(value) {
   const n = Math.floor(Number(value));
   return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-function filterSummaryByMinCluster(summary, minClusterVoxels = 0) {
-  if (!summary || !Array.isArray(summary.networks)) return summary || null;
-  const minVoxels = normalizeMinClusterVoxels(minClusterVoxels);
-  if (minVoxels <= 1) return summary;
-  return {
-    ...summary,
-    networks: summary.networks.filter(
-      row => (Number(row?.voxelsInLesion) || 0) >= minVoxels
-    )
-  };
 }
 
 function atlasSpaceName(atlasOption) {
@@ -1422,14 +1381,7 @@ export class LesionNetworkMappingApp {
     });
 
     const lesionBin = binarise(lesion.data);
-    const parcelResult = computeParcelOverlap({
-      lesion: lesionBin,
-      atlas: atlas.data,
-      dims: atlas.dims,
-    });
-    const labelMap = labelMapForAtlas(atlas, atlasOption);
-    const summary = summarizeAtlasOverlap(parcelResult, atlas, atlasOption);
-    const networkSizes = computeLabelSizes(atlas.data, labelMap);
+    const { parcelResult, summary, networkSizes } = atlasOverlap(lesionBin, atlas, atlasOption);
     this.overlapResult = { parcelResult, summary, atlas, networkSizes, atlasOption };
     document.getElementById('resultsSection').classList.remove('collapsed');
     this.showAtlasCoverageNote(parcelResult.voxelsOutsideAtlas, parcelResult.totalLesionVoxels);
@@ -2410,6 +2362,10 @@ export class LesionNetworkMappingApp {
       return;
     }
     const atlasOption = this.overlapResult.atlasOption || this.getAtlasOption();
+    if (!this.overlapResult.parcelResult.parcels.length) {
+      this.updateOutput(`No labelled ${atlasSpaceName(atlasOption)} parcels overlap the lesion; network map skipped.`);
+      return;
+    }
     const manifest = await this.ensureManifest();
     const connectomeEntry = manifest.connectomeAssets?.find(
       asset => asset.id === atlasOption.connectomeAssetId
@@ -2431,13 +2387,8 @@ export class LesionNetworkMappingApp {
     // console + status bar.
     let lastTick = 0;
     let requestedLabels = null;
-    let weights = null;
     if (atlasOption.weightSource === 'parcel') {
       requestedLabels = this.overlapResult.parcelResult.parcels.map(parcel => String(parcel.label));
-      if (requestedLabels.length === 0) {
-        this.updateOutput(`No labelled ${atlasSpaceName(atlasOption)} parcels overlap the lesion; network map skipped.`);
-        return;
-      }
     }
     const progressOptions = {
       onProgress: ({ received, total, label }) => {
@@ -2462,16 +2413,6 @@ export class LesionNetworkMappingApp {
       : await loadConnectomeFromManifest(atlasOption.connectomeAssetId, { ...progressOptions, manifest });
     const { index, manifestEntry } = loadResult;
     const pack = this.decodeLoadedConnectome(loadResult, requestedLabels);
-    if (atlasOption.weightSource === 'parcel') {
-      const channelLabels = pack.channelLabels || index.channelLabels || index.parcelLabels || {};
-      weights = parcelResultToChannelWeights(this.overlapResult.parcelResult, channelLabels).weights;
-    } else {
-      const channelLabels = index.networkLabels || manifestEntry.networkLabels || {};
-      const networkOrder = Object.keys(channelLabels)
-        .sort((a, b) => Number(a) - Number(b))
-        .map(key => channelLabels[key]);
-      weights = summaryToNetworkWeights(this.overlapResult.summary, networkOrder);
-    }
     const dims = index.shape.slice(1);
     const atlasAssetId =
       index.atlasAssetId ||
@@ -2488,6 +2429,20 @@ export class LesionNetworkMappingApp {
     }
     const atlasAffine = affineFromHeader(atlas.header);
     const flatAffine = flattenAffine3Rows(atlasAffine);
+    const mapped = await mapReviewedLesion({
+      overlap: this.overlapResult,
+      atlasOption,
+      reviewed: true,
+      threshold: {
+        mode: 'percentile',
+        value: 1 - (Number(document.getElementById('networkThresholdValue')?.value ?? 5) / 100),
+        symmetric: document.getElementById('networkThresholdSymmetric')?.checked ?? true,
+        minClusterVoxels: this.getResultsMinClusterVoxels()
+      }
+    }, {
+      connectome: async () => ({ pack, index, reference: atlas })
+    });
+    const weights = mapped.weights;
     this.updateOutput(
       `Computing network map: weights=[${
         Array.from(weights).slice(0, 12).map(w => w.toFixed(2)).join(', ')
@@ -2495,7 +2450,7 @@ export class LesionNetworkMappingApp {
         weights.length > 12 ? ', ...' : ''
       }]`
     );
-    const fcMap = fcWeightedSum(weights, pack.tMaps, dims);
+    const fcMap = mapped.data;
 
     // Stash for Phase 5 re-thresholding without recomputing the FC sum.
     this.networkMapData = fcMap;
@@ -3411,12 +3366,8 @@ export class LesionNetworkMappingApp {
     const mni160 = await getMni160Ref();
     const mni160Affine = affineFromHeader(mni160.header);
     this.fixedMni160Info = { dims: mni160.dims, affine: mni160Affine, spacing: [1, 1, 1] };
-    const mniForegroundMask = foregroundMaskFromIntensity(mni160.data, mni160.dims, 0.05);
-    const mniCenterVox = centroidOfMask(mniForegroundMask, mni160.dims);
-    const { dstAffine, mniDims, eigenvalues } = principalAxisAlign(
-      mask.data, t1.dims, t1Affine,
-      { mniDims: mni160.dims, mniCenterVox, mniAffine: mni160Affine }
-    );
+    const aligned = prealignVolumes({ data: t1.data, dims: t1.dims, affine: t1Affine }, mask.data, { data: mni160.data, dims: mni160.dims, affine: mni160Affine });
+    const { samplingAffine: dstAffine, dims: mniDims, eigenvalues } = aligned;
     this.prealignSamplingAffine = dstAffine;
     const cVox = centroidOfMask(mask.data, t1.dims);
     const cWorld = applyAffineToVoxel(t1Affine, cVox);
@@ -3427,14 +3378,8 @@ export class LesionNetworkMappingApp {
     );
 
     // Resample T1 (trilinear) and brainmask (nearest, binary).
-    const t1Resampled = resampleAffine(
-      t1.data, t1.dims, t1Affine, mniDims, dstAffine, 'trilinear'
-    );
-    const maskResampled = resampleAffine(
-      mask.data, t1.dims, t1Affine, mniDims, dstAffine, 'nearest'
-    );
-    const maskBin = new Uint8Array(maskResampled.length);
-    for (let i = 0; i < maskResampled.length; i++) maskBin[i] = maskResampled[i] > 0.5 ? 1 : 0;
+    const t1Resampled = aligned.data;
+    const maskBin = aligned.brainMask;
 
     const flatAff = flattenAffine3Rows(mni160Affine);
     const t1Nifti = writeNifti1(t1Resampled, {
@@ -3742,7 +3687,7 @@ export class LesionNetworkMappingApp {
           await this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile });
           return { pausedForMaskReview: true };
         }
-        await this.runLesionSegmentation();
+        await prepareCandidate(null, { segment: () => this.runLesionSegmentation() });
         await this.startLesionMaskReview({ seedFile: this.autoLesionSeedFile });
         return { pausedForMaskReview: true };
       case 'registration':

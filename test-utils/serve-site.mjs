@@ -3,7 +3,7 @@ import { stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 
-export async function serveSite(dist, { isolationHeaders = true, port = 0 } = {}) {
+export async function serveSite(dist, { isolationHeaders = true, port = 0, files = new Map() } = {}) {
   const mimeTypes = new Map([
     ['.css', 'text/css; charset=utf-8'],
     ['.html', 'text/html; charset=utf-8'],
@@ -35,7 +35,7 @@ export async function serveSite(dist, { isolationHeaders = true, port = 0 } = {}
         }).end(body);
         return;
       }
-      let path = resolveRequest(url.pathname);
+      let path = files.get(url.pathname) || resolveRequest(url.pathname);
       if (!path) {
         response.writeHead(400).end('Bad request');
         return;
@@ -65,6 +65,7 @@ export async function serveSite(dist, { isolationHeaders = true, port = 0 } = {}
           'cross-origin-embedder-policy': 'credentialless',
           'cross-origin-opener-policy': 'same-origin',
         } : {}),
+        ...(files.has(url.pathname) ? { 'access-control-allow-origin': '*' } : {}),
         'x-content-type-options': 'nosniff',
       });
       if (request.method === 'HEAD') response.end();

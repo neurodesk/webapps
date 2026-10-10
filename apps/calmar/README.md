@@ -743,3 +743,14 @@ on `sub-M2051 ses-284`: 0.5325.
 ## License
 
 TBD; intended to be open-source. Third-party assets retain their own licenses.
+
+## Command line
+
+The portable `calmar` command uses the shared pipeline in `packages/calmar`.
+Run `calmar prepare T1.nii.gz candidate-results`, review and edit the native-space
+candidate, then run `calmar map reviewed-lesion.nii.gz mapping-results --reviewed
+--structural T1.nii.gz`. Preparation always stops for human review. The shared
+Standalone action lists verified releases after publication.
+
+See the [command-line guide](../../packages/calmar/README.md#command-line) for
+atlas-space inputs, offline model preparation, outputs and platform support.

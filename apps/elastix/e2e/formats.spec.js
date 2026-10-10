@@ -5,6 +5,7 @@ import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { ncc, readVolume } from "../../../test-utils/registration-similarity.mjs";
 import { fixedPixels, movingPixels, pyramidalTiff, SHIFT_PX, SPACING, syntheticPair, totalTranslation } from "./fixtures.mjs";
+import { memoryStoreToZip } from "@fideus-labs/ngff-zarr";
 import { readTransformArchive } from "./ome-zarr-transform.mjs";
 
 const pair = await syntheticPair();
@@ -50,7 +51,7 @@ async function serveTiff(page, role, requests) {
 
 async function download(page, label) {
   const row = page.locator("#resultList .nd-volume-toggle").filter({ hasText: label });
-  const [file] = await Promise.all([page.waitForEvent("download"), row.getByRole("button", { name: "Download" }).click()]);
+  const [file] = await Promise.all([page.waitForEvent("download", { timeout: 30_000 }), row.getByRole("button", { name: "Download" }).click()]);
   return readFile(await file.path());
 }
 
@@ -154,4 +155,91 @@ test("an unreachable URL shows an error and keeps the URL controls usable", asyn
   await expect(page.locator("#statusText")).toHaveClass(/error/);
   await expect(page.locator("#movingInfo")).toBeHidden();
   await expect(page.locator("#urlButton")).toBeEnabled();
+});
+
+test("cancelling a remote TIFF read retains the selected image and permits a fresh import", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.createdWorkers = [];
+    const BrowserWorker = window.Worker;
+    window.Worker = class extends BrowserWorker {
+      constructor(url, options) {
+        super(url, options);
+        window.createdWorkers.push(String(url));
+      }
+    };
+  });
+  const url = `${REMOTE}/cancelled.ome.tif`;
+  let release;
+  const pending = new Promise((resolve) => { release = resolve; });
+  let started;
+  const reading = new Promise((resolve) => { started = resolve; });
+  await page.route(url, async (route) => {
+    if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+    started();
+    await pending;
+    const bytes = pair.moving.tiff;
+    const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? "");
+    const start = range ? Number(range[1]) : 0;
+    const end = range && range[2] ? Math.min(Number(range[2]), bytes.length - 1) : bytes.length - 1;
+    await route.fulfill({ status: range ? 206 : 200, body: bytes.subarray(start, end + 1), headers: {
+      ...cors, "accept-ranges": "bytes", "content-range": `bytes ${start}-${end}/${bytes.length}`,
+    } });
+  });
+  await page.goto("/");
+  await page.locator("#movingInput").setInputFiles({ name: "selected.nii.gz", mimeType: "application/gzip", buffer: fixture });
+  await expect(page.locator("#movingInfo")).toContainText("selected.nii.gz");
+  const selected = await page.locator("#movingInfo").textContent();
+  const inputValue = await page.locator("#movingInput").inputValue();
+  await page.locator("#urlSection > summary").click();
+  await page.locator("#movingUrl").fill(url);
+  await page.locator("#urlButton").click();
+  await reading;
+  await page.locator("#cancelButton").click();
+  await expect(page.locator("#statusText")).toContainText(/cancelled/i);
+  const workersAfterCancel = await page.evaluate(() => window.createdWorkers.length);
+  release();
+  // fiff 0.8.2 cannot abort its metadata fetch. Let that read finish after cancel.
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => window.createdWorkers.length)).toBe(workersAfterCancel);
+  await expect(page.locator("#movingInfo")).toHaveText(selected);
+  await expect(page.locator("#movingInput")).toHaveJSProperty("value", inputValue);
+  await expect(page.locator("#movingUrl")).toHaveValue(url);
+  const retry = await serveZarr(page, "moving");
+  await page.locator("#movingUrl").fill(retry);
+  await page.locator("#urlButton").click();
+  await expect(page.locator("#statusText")).toHaveText("Opened moving image URL.");
+  await expect(page.locator("#movingInfo")).toContainText("moving.ome.zarr · 128×128 uint16");
+});
+
+
+test("an identity transform exports on a tiny OME-Zarr grid far from the origin", async ({ page }) => {
+  const store = new Map(pair.fixed.store);
+  const root = JSON.parse(new TextDecoder().decode(store.get("zarr.json")));
+  root.attributes.ome.multiscales[0].datasets[0].coordinateTransformations = [
+    { type: "scale", scale: [1e-5 / 127, 1e-5 / 127] },
+    { type: "translation", translation: [1000, 1000] },
+  ];
+  store.set("zarr.json", new TextEncoder().encode(JSON.stringify(root)));
+  const bytes = Buffer.from(memoryStoreToZip(store));
+  await page.goto("/");
+  for (const role of ["moving", "stationary"]) {
+    await page.locator(`#${role}Input`).setInputFiles({ name: `${role}.ozx`, mimeType: "application/zip", buffer: bytes });
+    await expect(page.locator(`#${role}Info`)).toContainText(`${role}.ozx`);
+  }
+  const parameters = (await readFile(new URL("fixtures/parameters_Rigid.txt", import.meta.url), "utf8"))
+    .replace('(MaximumNumberOfIterations 100)', '(MaximumNumberOfIterations 0)');
+  await page.locator("#advancedSettings > summary").click();
+  await page.locator("#parameterInput").setInputFiles({ name: "identity.txt", mimeType: "text/plain", buffer: Buffer.from(parameters) });
+  await expect(page.locator("#parameterInfo")).toContainText("EulerTransform");
+  await page.locator("#runButton").click();
+  await expect(page.locator("#statusText")).toContainText("Registration complete");
+  const { transformation } = await readTransformArchive(await download(page, "Transform (OME-Zarr)"));
+  expect(transformation.type).toBe("affine");
+  expect(transformation.affine.flat().every(Number.isFinite)).toBe(true);
+  for (const point of [[1000, 1000], [1000.00001, 1000.00001], [1000.0000037, 1000.0000081]]) {
+    transformation.affine.forEach((row, axis) => {
+      const mapped = row[0] * point[0] + row[1] * point[1] + row[2];
+      expect(Math.abs(mapped - point[axis])).toBeLessThan(1e-9);
+    });
+  }
 });

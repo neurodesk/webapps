@@ -1,5 +1,14 @@
 # @neurodesk/desktop
 
+## 0.27.20261010
+
+### Patch Changes
+
+- Keep the SynthSeg geometry adapter's normalized header byte order consistent with the shared endian-aware NIfTI reader.
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.1
+
 ## 0.27.20261009
 
 ### Patch Changes

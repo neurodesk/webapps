@@ -40,12 +40,26 @@ MP = dict(B0=7.0, TR=4.3, TIs=(0.840, 2.370), FlipDegrees=(5.0, 6.0), NZslices=(
 SA = dict(TR=2.4, TRFLASH=0.005, TIs=(0.150, 1.500), FlipDegrees=(6.0, 6.0),
           NZslices=(24, 24), averageT1=1.5)
 
-# Each case is one command-line run with UNI and INV2. "baseline" names the case it differs from
+# Each case is one command-line run with UNI and optional INV2. "baseline" names the case it differs from
 # by one option; cli-check.mjs requires the two goldens to differ, so the phantom exercises the
 # option. A stated SA2RAGE flip angle of 12 degrees and a tfl reference angle of 40 degrees
 # overestimate B1 enough that some brain voxels do not converge, which the fallback then fills.
 CASES = {
     'sa2rage': dict(sa2rage=SA),
+    'sa2rage-no-inv2': dict(sa2rage=SA, no_inv2=True),
+    'tfl-no-inv2': dict(b1_ref_angle=80.0, no_inv2=True),
+    'sa2rage-no-inv2-fa12': dict(sa2rage=dict(SA, FlipDegrees=(12.0, 12.0)), no_inv2=True),
+    'sa2rage-no-inv2-fa12-fallback': dict(sa2rage=dict(SA, FlipDegrees=(12.0, 12.0)),
+                                           no_inv2=True, fallback_uncorrected=True,
+                                           baseline='sa2rage-no-inv2-fa12'),
+    'tfl-no-inv2-reference-40': dict(b1_ref_angle=40.0, no_inv2=True),
+    'tfl-no-inv2-reference-40-fallback': dict(b1_ref_angle=40.0, no_inv2=True,
+                                               fallback_uncorrected=True,
+                                               baseline='tfl-no-inv2-reference-40'),
+    'tfl-rank-deficient': dict(b1_ref_angle=80.0, plane_input=True, extend_fov=True),
+    'tfl-clamp-measured': dict(b1_ref_angle=80.0, clamp_input=True),
+    'tfl-clamp-extended': dict(b1_ref_angle=80.0, clamp_input=True, extend_fov=True,
+                               baseline='tfl-clamp-measured'),
     'sa2rage-fa12': dict(sa2rage=dict(SA, FlipDegrees=(12.0, 12.0)), baseline='sa2rage'),
     'sa2rage-fa12-fallback': dict(sa2rage=dict(SA, FlipDegrees=(12.0, 12.0)), fallback_uncorrected=True,
                                   baseline='sa2rage-fa12'),
@@ -89,7 +103,9 @@ def record(klass, name):
 
 
 def run_case(name, case):
-    inputs = [record('uni', 'phantom_UNI.nii.gz'), record('inv2', 'phantom_INV2.nii.gz')]
+    inputs = [record('uni', 'phantom_UNI.nii.gz')]
+    if not case.get('no_inv2'):
+        inputs.append(record('inv2', 'phantom_INV2.nii.gz'))
     if 'sa2rage' in case:
         inputs.append(record('sa2rage', 'phantom_SA2RAGE.nii.gz'))
     dio.survey = lambda _paths: inputs
@@ -100,7 +116,10 @@ def run_case(name, case):
     work = tempfile.mkdtemp(prefix='easy-mp2rage-golden-')
     try:
         P.run([], work, inv_eff=INV_EFF,
-              b1_map=None if 'sa2rage' in case else os.path.join(PHA, 'phantom_B1map_tfl.nii.gz'),
+              b1_map=None if 'sa2rage' in case else (os.path.join(OUT, 'inputs', 'clamp_B1map_tfl.nii.gz')
+                       if case.get('clamp_input') else
+                       os.path.join(OUT, 'inputs', 'plane_B1map_tfl.nii.gz') if case.get('plane_input') else
+                       os.path.join(PHA, 'phantom_B1map_tfl.nii.gz')),
               b1_map_type='tfl', b1_ref_angle=case.get('b1_ref_angle', 80.0),
               fallback_uncorrected=case.get('fallback_uncorrected', False),
               extend_fov=case.get('extend_fov', False), work_dir=work, log=lambda _m: None)
@@ -130,8 +149,45 @@ def main():
     if os.path.isdir(OUT):
         shutil.rmtree(OUT)
     os.makedirs(OUT)
+    # Narrow measured slab with a linear field. Extrapolation across the brain
+    # reaches BOTH default bounds after smoothing and resampling.
+    affine = nib.load(os.path.join(PHA, 'phantom_UNI.nii.gz')).affine.copy()
+    affine[0, 3] = -4.0
+    x = np.arange(5) * 2.0 - 4.0
+    field = np.broadcast_to(800.0 * (1.0 + 0.1 * x[:, None, None]), (5, 20, 18)).copy()
+    os.makedirs(os.path.join(OUT, 'inputs'))
+    write_gz(nib.Nifti1Image(field, affine), os.path.join(OUT, 'inputs', 'clamp_B1map_tfl.nii.gz'))
+    affine[0, 3] = 0.0
+    y = np.arange(20) * 2.0 - 20.0
+    plane = np.broadcast_to(800.0 * (1.0 + 0.005 * y[None, :, None]), (1, 20, 18)).copy()
+    write_gz(nib.Nifti1Image(plane, affine), os.path.join(OUT, 'inputs', 'plane_B1map_tfl.nii.gz'))
+    # Independent component goldens for minimum-norm rank-deficient fitting
+    # and the even-sized median fallback. Includes measured out-of-range values.
+    component_dir = os.path.join(OUT, 'b1fill')
+    os.makedirs(component_dir)
+    for name in ('rank-deficient', 'sparse'):
+        field = np.full((10, 10, 10), np.nan)
+        mask = np.ones(field.shape, dtype=bool)
+        if name == 'rank-deficient':
+            yy, zz = np.meshgrid(np.arange(10), np.arange(10), indexing='ij')
+            field[5] = 0.9 + 0.01 * yy + 0.02 * zz
+        else:
+            field[5, 5, 5], field[5, 5, 6] = 0.8, 1.2
+        field[0, 0, 0], field[0, 0, 1] = 0.2, 1.9
+        out = D.extend_b1_fov(field, mask)
+        assert np.isfinite(out).all()
+        if name == 'sparse':
+            assert out[1, 1, 1] == 1.0
+        for suffix, value in [('field', field), ('mask', mask), ('expected', out)]:
+            np.save(os.path.join(component_dir, f'{name}-{suffix}.npy'), value)
     for name, case in CASES.items():
         run_case(name, case)
+        if name == 'tfl-clamp-extended':
+            values = nib.load(os.path.join(OUT, name, 'B1map.nii.gz')).get_fdata()
+            # The exported map is float32. Exact boundary counts prove the
+            # independent pipeline reached the clamp, not merely the fill path.
+            assert np.count_nonzero(values == np.float32(0.35)) > 0
+            assert np.count_nonzero(values == np.float32(1.7)) > 0
         print(f'  cli/{name}')
     # The denoising golden at the default strength is u_rc_out.npy; this adds a non-default one.
     np.save(os.path.join(OUT, 'denoise-regularization-2.npy'), denoise_case(2.0))
@@ -139,7 +195,10 @@ def main():
     manifest = dict(numpy=np.__version__, scipy=scipy.__version__, nibabel=nib.__version__,
                     mp2rage=MP,
                     cases={name: dict(b1_source='sa2rage' if 'sa2rage' in case else 'tfl',
-                                      args=cli_args(case), baseline=case.get('baseline'))
+                                      args=cli_args(case), baseline=case.get('baseline'),
+                                      inv2=not case.get('no_inv2', False),
+                                      b1_input='inputs/clamp_B1map_tfl.nii.gz' if case.get('clamp_input') else
+                                               'inputs/plane_B1map_tfl.nii.gz' if case.get('plane_input') else None)
                            for name, case in CASES.items()})
     with open(os.path.join(OUT, 'manifest.json'), 'w') as f:
         json.dump(manifest, f, indent=2)

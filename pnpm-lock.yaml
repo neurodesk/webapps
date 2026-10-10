@@ -211,6 +211,9 @@ importers:
 
   apps/calmar:
     dependencies:
+      '@neurodesk/calmar':
+        specifier: workspace:*
+        version: link:../../packages/calmar
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1057,6 +1060,18 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../components
+
+  packages/calmar:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      nifti-reader-js:
+        specifier: 0.8.0
+        version: 0.8.0
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/carotid-flow:
     dependencies:

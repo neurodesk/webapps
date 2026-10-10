@@ -22,6 +22,7 @@ assert.equal(formatBytes(MAX_INPUT_BYTES), '2.00 GB')
 
 const nifti = new Uint8Array(352)
 const header = new DataView(nifti.buffer)
+header.setInt32(0, 348, true)
 header.setInt16(40, 4, true)
 header.setInt16(42, 1, true)
 header.setInt16(44, 1, true)
