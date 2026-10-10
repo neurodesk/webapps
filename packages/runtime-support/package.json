@@ -24,5 +24,8 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "build:freebrowse-viewer": "node scripts/build-freebrowse-viewer.mjs"
+  },
+  "devDependencies": {
+    "vite": "^6.3.2"
   }
 }
