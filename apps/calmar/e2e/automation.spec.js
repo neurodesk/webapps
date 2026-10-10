@@ -132,6 +132,8 @@ test('real structural example produces an unconfirmed native lesion candidate', 
   let operationError;
   try {
     snapshot = await finish(page, 'prepare-lesion', {}, timeout);
+    expect(snapshot.error).toBeUndefined();
+    expect(snapshot.state).toBe('succeeded');
   } catch (error) {
     operationError = error;
   }
@@ -159,8 +161,6 @@ test('real structural example produces an unconfirmed native lesion candidate', 
     console.warn(`CALMaR diagnostic capture failed: ${error.message}`);
   }
   if (operationError) throw operationError;
-  expect(snapshot.error).toBeUndefined();
-  expect(snapshot.state).toBe('succeeded');
   expect(snapshot.report.summary.requiresReview).toBe(true);
   expect(snapshot.report.summary.lesionConfirmed).toBe(false);
   expect(await page.evaluate(() => window.app.lesionMaskConfirmed)).toBe(false);
