@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import { loadMindgrabCpu } from '@neurodesk/runtime-support/node/mindgrab';
-import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
+import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
+import { runNiimath } from '@neurodesk/node-drivers/niimath';
 import { operationParametersSchema } from '@neurodesk/webapp-components/automation/parameters';
 import createNiimath from '@niivue/niimath/niimath.js';
 import packageJson from '../package.json' with { type: 'json' };

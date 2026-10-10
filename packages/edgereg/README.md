@@ -19,7 +19,7 @@ of view from the top of the head, removing the neck.
 
 The web app chains these calls on `@niivue/niimath`'s browser worker. The
 command line builds the same chain, reads the argv the worker would run, and
-passes it to `runNiimath` from `@neurodesk/runtime-support/node/niimath` with the
+passes it to `runNiimath` from `@neurodesk/node-drivers/niimath` with the
 same `@niivue/niimath` 1.4.20260909 WebAssembly build.
 
 ## Command line

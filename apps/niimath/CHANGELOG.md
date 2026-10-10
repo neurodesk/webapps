@@ -1,5 +1,12 @@
 # niimath
 
+## 1.3.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+
 ## 1.3.20261009
 
 ### Patch Changes

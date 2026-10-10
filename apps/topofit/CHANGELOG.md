@@ -1,5 +1,13 @@
 # topofit
 
+## 0.15.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/topofit@0.15.20261010
+
 ## 0.15.20261009
 
 ### Minor Changes

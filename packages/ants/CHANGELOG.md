@@ -1,5 +1,7 @@
 # @neurodesk/ants
 
+## 0.4.20261010
+
 ## 0.4.20261009
 
 ### Minor Changes

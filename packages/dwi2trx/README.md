@@ -19,7 +19,7 @@ without a build step:
 `src/tensor.js` takes a `run(args, { inputs, outputs })` function instead of a
 niimath module. The app passes one that drives its cached module
 (`apps/dwi2trx/src/dwi2trx/dtifit.ts`). The command line passes `runNiimath`
-from `@neurodesk/runtime-support/node/niimath`. Both load the same vendored
+from `@neurodesk/node-drivers/niimath`. Both load the same vendored
 dtifit-enabled build, `apps/dwi2trx/vendor/niimath`.
 
 ## Command line
@@ -71,7 +71,7 @@ dwi2trx self-check
 ```
 
 By default the brain mask is MindGrab's, as in the web app. The command line
-runs MindGrab's CPU modules through `@neurodesk/runtime-support/node/mindgrab`,
+runs MindGrab's CPU modules through `@neurodesk/node-drivers/mindgrab`,
 where the web app uses WebGPU. On the example DWI this took 50 to 100 s and a
 2.4 GB peak resident set on an 8-core Linux host. If MindGrab fails, the fit
 runs unmasked and says why, as the web app does. `--mask FILE` uses your own
@@ -119,7 +119,7 @@ That file holds two things:
 
 - `mask`: the MindGrab mask the command line computes from the example's b0 on
   the CPU. The CPU modules reproduce MindGrab's browser CPU backend byte for
-  byte (`packages/runtime-support/validation/reference.json`, checked on Linux,
+  byte (`packages/node-drivers/validation/reference.json`, checked on Linux,
   Windows and macOS by `node-drivers.yml`).
 - `browser`: the eleven maps the web app downloaded when given that mask through
   its `mask` automation input. `apps/dwi2trx/e2e/reference.spec.js` recorded

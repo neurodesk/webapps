@@ -1,5 +1,7 @@
 # @neurodesk/synthseg
 
+## 0.6.20261010
+
 ## 0.6.20261009
 
 ### Minor Changes

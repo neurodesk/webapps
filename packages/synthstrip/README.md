@@ -18,3 +18,7 @@ python scripts/prepare-browser-model.py original-synthstrip.onnx models/synthstr
 ```
 
 The source checksum is enforced. The output SHA-256 is `dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800` (10,296,357 bytes). On the real test image, the rewritten graph preserves the reference brain and mask exactly; signed-distance maximum error is 0.0000212 mm. The model is published through `models/syncro.manifest.json` and has the same attribution/license as the source model.
+
+The browser adapter needs `@neurodesk/runtime-support` in the consuming app.
+It is a development dependency here so standalone Node deployments omit the
+browser runtime and its dependencies.

@@ -110,7 +110,7 @@ self.onmessage = async ({ data: job }) => {
       Tensor,
       onProgress: progress,
       runtime: {
-        app: 'TopoFit web 0.15.20261009',
+        app: 'TopoFit web 0.15.20261010',
         release: manifest.release,
         assets: Object.fromEntries(manifest.assets.map(({ filename, sha256 }) => [filename, sha256])),
         ...(job.patches ? { cortexAtlasSha256: cortexAtlas.sha256 } : {}),

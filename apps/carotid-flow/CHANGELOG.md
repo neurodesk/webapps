@@ -1,5 +1,13 @@
 # carotid-flow
 
+## 0.4.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/carotid-flow@0.4.20261010
+
 ## 0.4.20261009
 
 ### Patch Changes

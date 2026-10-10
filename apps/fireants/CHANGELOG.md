@@ -1,5 +1,13 @@
 # fireants
 
+## 0.3.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/fireants@0.3.20261010
+
 ## 0.3.20261009
 
 ### Patch Changes
