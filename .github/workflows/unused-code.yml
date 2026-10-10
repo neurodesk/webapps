@@ -17,8 +17,6 @@ jobs:
   report:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -28,6 +26,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: node --test test/unused-code.test.mjs
+        env:
+          TMPDIR: ${{ runner.temp }}
       - run: pnpm quality:unused
       - uses: actions/upload-artifact@v7
         if: always()
