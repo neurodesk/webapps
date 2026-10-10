@@ -76,7 +76,7 @@ class WindowsSigningTests(unittest.TestCase):
     def test_mock_signer_changes_launcher_and_node_before_verification(self):
         def run(command, **kwargs):
             request = Path(command[command.index('-FilesJson') + 1])
-            self.assertEqual(set(json.loads(request.read_text())), {str(self.root / name) for name in self.required})
+            self.assertEqual(set(json.loads(request.read_text())), {str((self.root / name).resolve()) for name in self.required})
             mock_sign(self.root)
         with patch.dict(os.environ, CONFIGURED), patch.object(signing.sys, 'platform', 'win32'), patch.object(signing.subprocess, 'run', side_effect=run):
             signing.sign_tree(self.root, self.required)
