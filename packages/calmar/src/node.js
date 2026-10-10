@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import * as ort from 'onnxruntime-node';
+// ORT 1.29 telemetry otherwise creates a device ID/database outside result directories.
+process.env.ORT_DISABLE_TELEMETRY = '1';
+const ort = await import('onnxruntime-node');
 import { getOrientationTransform } from '@neurodesk/webapp-components/volume';
 import manifest from '../model.manifest.json' with { type: 'json' };
 import assets from '../assets.lock.json' with { type: 'json' };
@@ -440,6 +442,9 @@ export async function checkInstallation() {
     version: packageJson.version,
     platform: process.platform,
     arch: process.arch,
+    node: process.version,
+    executable: process.execPath,
+    onnxRuntime: ort.env.versions.node,
     models: await downloadModels({ offline: true }),
   };
 }

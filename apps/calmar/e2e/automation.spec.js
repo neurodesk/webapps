@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createNiftiFromVolume, readNifti } from '../../../packages/components/src/file-io/NiftiUtils.js';
-import { decodeFcPack } from '../web/js/modules/fc-weighted-sum.js';
+import { decodeFcPack } from '@neurodesk/calmar/fc-weighted-sum';
 
 const directory = join(process.env.TMPDIR || process.env.RUNNER_TEMP, 'neurodesk-calmar-automation');
 const manifest = JSON.parse(await readFile(new URL('../web/models/manifest.json', import.meta.url)));

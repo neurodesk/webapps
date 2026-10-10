@@ -65,7 +65,9 @@ NEURODESK_CALMAR_MODEL_DIR=/data/calmar-models NEURODESK_OFFLINE=1 calmar self-c
 `download-models` verifies every byte count and SHA-256 against immutable URLs
 in `assets.lock.json`. The portable launcher selects its bundled model directory
 and offline mode. Missing or corrupt assets fail before writing results; offline
-execution never repairs or populates caches. Source installs use a cache named
+execution never repairs or populates caches. The native adapter disables ONNX
+Runtime telemetry before initialization so it cannot create device IDs or
+databases outside the output directory. Source installs use a cache named
 for the asset set or `NEURODESK_CALMAR_MODEL_DIR`. `--cache-dir` selects another
 prepared directory. DeepISLES remains benchmark-only and is not installed or
 accepted as a command-line method.
