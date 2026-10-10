@@ -86,7 +86,7 @@ function averageProbabilityMaps(maps) {
   return result;
 }
 
-export async function runInference(inputData, { selectedModels = MODEL_ASSETS.map(asset => asset.filename), threshold = 0.1, nMarkers = 3, Tensor, createSession, qsm, loadModel, decompress, events = {} }) {
+export async function runInference(inputData, { selectedModels, threshold = 0.1, nMarkers = 3, Tensor, createSession, qsm, loadModel, decompress, events = {} }) {
   const models = resolveModels(selectedModels);
   validateSelection({ threshold, nMarkers });
   const postLog = events.log || (() => {});

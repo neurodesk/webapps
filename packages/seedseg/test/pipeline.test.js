@@ -50,3 +50,37 @@ test('failed inference releases the real-session adapter resources and emits no 
   assert.ok(released && disposed);
   assert.equal(stages, 0);
 });
+
+test('public pipeline defaults run all four published checkpoints and produce their consensus', async () => {
+  const { runInference: runPublicInference } = await import('@neurodesk/seedseg');
+  const loaded = [];
+  const ran = [];
+  const released = [];
+  const result = await runPublicInference(input, {
+    qsm: { makehomogeneous_wasm: data => data },
+    loadModel: async asset => {
+      loaded.push(asset.seed);
+      return asset.seed;
+    },
+    Tensor: class { dispose() {} },
+    createSession: async seed => ({
+      inputNames: ['input'],
+      outputNames: ['output'],
+      run: async () => {
+        ran.push(seed);
+        // Zero logits give equal three-class probabilities independently of the checkpoint.
+        return { output: { data: new Float32Array(3 * 32 ** 3) } };
+      },
+      release: async () => released.push(seed),
+    }),
+  });
+  assert.deepEqual(loaded, [42, 123, 456, 789]);
+  assert.deepEqual(ran, [42, 123, 456, 789]);
+  assert.deepEqual(released, [42, 123, 456, 789]);
+  assert.deepEqual(Object.keys(result.stages), ['model1', 'model2', 'model3', 'model4', 'avgProb', 'consensus']);
+  const average = await readNifti(result.stages.avgProb.niftiData);
+  assert.ok(average.data.every(value => value === Math.fround(1 / 3)));
+  const consensus = await readNifti(result.stages.consensus.niftiData);
+  assert.ok(consensus.data.every(value => value === 1));
+  assert.equal(result.markerVoxels, 8);
+});
