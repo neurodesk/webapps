@@ -42,3 +42,24 @@ workspace. Generated assets and other workspaces are outside that scoped check.
 The app ESLint wrapper files remain part of the generator contract. Use the
 package `pnpm lint` command for scoped inventory and baseline handling; direct
 `eslint .` invocation does not implement that repository gate.
+
+## Typed promise handling
+
+Zarro's `src/**/*.{ts,tsx,mts,cts}` is checked against its real strict TypeScript
+project for `@typescript-eslint/no-floating-promises` and
+`@typescript-eslint/no-misused-promises`. New source files in that directory
+receive both rules. Missing type information fails the parser; it cannot be
+recorded in the lint baseline. The CI gate installs Zarro's dependencies and
+runs its type checker before lint so an unresolved import cannot silently turn
+a library's promise types into `any`.
+
+Await work whose completion is needed before the next mutation. At synchronous
+browser callbacks, attach a rejection handler that reports the failure through
+the existing status path. `void promise` alone does not pass. Async functions
+passed to callbacks that expect `void` also fail; use a synchronous callback
+that invokes the task with explicit rejection reporting.
+
+Typed promise checking currently covers Zarro only. BrowserQC, Deface,
+Dicompare, DWI2TRX and root agentic tests still need their own project audit and
+promise policy. JavaScript remains covered by the correctness rules; enabling
+`checkJs` for the entire catalog is a separate migration.

@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tsParser from '@neurodesk/code-quality';
+import tsPlugin from '@neurodesk/code-quality/plugin';
 import globals from 'globals';
 
 // Correctness only. Existing findings are reviewed in scripts/quality/lint-baseline.json.
@@ -74,6 +75,21 @@ export default [
       'no-redeclare': 'off',
       'no-dupe-class-members': 'off',
       'no-undef': 'off',
+    },
+  },
+  {
+    // Begin with Zarro's strict TS5 project. Other apps need their own typed audit.
+    files: ['apps/zarro/src/**/*.{ts,tsx,mts,cts}'],
+    languageOptions: {
+      parserOptions: {
+        project: ['./apps/zarro/tsconfig.json'],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    plugins: { '@typescript-eslint': tsPlugin },
+    rules: {
+      '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: false, checkThenables: true }],
+      '@typescript-eslint/no-misused-promises': 'error',
     },
   },
   {

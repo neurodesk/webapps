@@ -92,3 +92,21 @@ test('can preserve running work while still coalescing queued tasks', async () =
   assert.equal(await superseded, undefined)
   assert.equal(await latest, 'latest')
 })
+
+test('rejects a failed task and runs the latest pending task afterward', async () => {
+  const queue = new LatestTaskQueue(false)
+  let failFirst
+  const failure = new Error('Store fetch failed')
+  const first = queue.run(() => new Promise((_, reject) => {
+    failFirst = reject
+  }))
+  const rejected = assert.rejects(first, (error) => error === failure)
+  const superseded = queue.run(async () => 'superseded')
+  const latest = queue.run(async () => 'latest')
+
+  failFirst(failure)
+  await rejected
+  assert.equal(await superseded, undefined)
+  assert.equal(await latest, 'latest')
+  assert.equal(await queue.run(async () => 'recovered'), 'recovered')
+})

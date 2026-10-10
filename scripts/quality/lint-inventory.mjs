@@ -37,6 +37,9 @@ export async function assertCoverage(eslint, files) {
     const config = await eslint.calculateConfigForFile(file);
     const required = ['no-unreachable', 'no-dupe-keys', 'no-constant-condition'];
     if (!/\.[cm]?tsx?$/.test(file)) required.push('no-undef');
+    if (file.startsWith('apps/zarro/src/') && /\.[cm]?tsx?$/.test(file)) {
+      required.push('@typescript-eslint/no-floating-promises', '@typescript-eslint/no-misused-promises');
+    }
     if (!config || required.some((rule) => config.rules?.[rule]?.[0] !== 2)) {
       throw new Error(`No effective correctness rules for ${file}`);
     }

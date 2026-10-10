@@ -530,6 +530,10 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function reportViewerActionError(error: unknown): void {
+  status(errorText(error), { error: true })
+}
+
 function showEmptyState(message: string): void {
   els.emptyState.textContent = message
   els.emptyState.hidden = false
@@ -1742,7 +1746,7 @@ function addCustomUrlInput(value = ''): HTMLInputElement {
   input.spellcheck = false
   input.value = value
   const remove = createStoreRemoveButton('Remove OME-Zarr store', () => {
-    removeCustomUrlRow(row, input)
+    removeCustomUrlRow(row, input).catch(reportViewerActionError)
   })
   input.addEventListener('input', () => {
     shouldInitializeCustomSource = true
@@ -1792,7 +1796,7 @@ function renderStainLayers(): void {
     metadata.textContent = `${layer.storeUrls.length} translated chunk${layer.storeUrls.length === 1 ? '' : 's'} · ${layer.source === 'dandi' ? 'DANDI' : 'Custom URL'}`
     select.append(name, metadata)
     select.addEventListener('click', () => {
-      void selectStainLayer(layer.id, true)
+      selectStainLayer(layer.id, true).catch(reportViewerActionError)
     })
 
     const remove = document.createElement('button')
@@ -1801,7 +1805,7 @@ function renderStainLayers(): void {
     remove.textContent = 'Remove'
     remove.setAttribute('aria-label', `Remove ${layer.name} stain layer`)
     remove.addEventListener('click', () => {
-      void removeStainLayer(layer.id)
+      removeStainLayer(layer.id).catch(reportViewerActionError)
     })
     main.append(select, remove)
 
@@ -2006,27 +2010,31 @@ function renderSelectedDandiStores(): void {
     name.textContent =
       asset?.path.split('/').at(-1) ?? customStoreName(storeUrl)
     name.title = storeUrl
-    const remove = createStoreRemoveButton(`Remove DANDI store ${index + 1}`, async () => {
-      if (!layer) return
-      stainLayers = updateStainLayer(stainLayers, layer.id, {
-        name: layer.name,
-        storeUrls: layer.storeUrls.filter((selectedUrl) => selectedUrl !== storeUrl),
-      })
-      if (!stainLayers.some(({ id }) => id === layer.id)) {
-        activeStainLayerId = stainLayers[0]?.id ?? null
-        await removeStainLayerRuntime(layer.id)
-      }
-      shouldInitializeCustomSource = true
-      renderStainLayers()
-      renderSelectedDandiStores()
-      syncDandiGroupActions()
-      status('Store removed. Updating the viewer…', { progress: null })
-      await reloadAfterStoreRemoval()
-      if (activeSource) status('Store removed')
+    const remove = createStoreRemoveButton(`Remove DANDI store ${index + 1}`, () => {
+      removeSelectedDandiStore(layer, storeUrl).catch(reportViewerActionError)
     })
     row.append(name, remove)
     scroll.append(row)
   })
+}
+
+async function removeSelectedDandiStore(layer: StainLayer | null, storeUrl: string): Promise<void> {
+  if (!layer) return
+  stainLayers = updateStainLayer(stainLayers, layer.id, {
+    name: layer.name,
+    storeUrls: layer.storeUrls.filter((selectedUrl) => selectedUrl !== storeUrl),
+  })
+  if (!stainLayers.some(({ id }) => id === layer.id)) {
+    activeStainLayerId = stainLayers[0]?.id ?? null
+    await removeStainLayerRuntime(layer.id)
+  }
+  shouldInitializeCustomSource = true
+  renderStainLayers()
+  renderSelectedDandiStores()
+  syncDandiGroupActions()
+  status('Store removed. Updating the viewer…', { progress: null })
+  await reloadAfterStoreRemoval()
+  if (activeSource) status('Store removed')
 }
 
 async function clearSelectedDandiAssets(): Promise<void> {
@@ -4029,9 +4037,10 @@ function loadCustomSourceFromInput(): void {
   }
   syncSourceControls()
   updateUrlFromControls()
-  void (stainLayerRuntimes.has(layer.id)
+  const loading = stainLayerRuntimes.has(layer.id)
     ? reloadVolume({ reloadSource: true })
-    : loadSelectedStainLayerRuntime(layer.id))
+    : loadSelectedStainLayerRuntime(layer.id)
+  loading.catch(reportViewerActionError)
 }
 
 function chunkShapeFromPlan(plan: ChunkPlan): Shape3 {
@@ -4694,12 +4703,13 @@ async function applyDetailBudget(): Promise<void> {
   syncDetailBudget()
   updateUrlFromControls()
   if (stainLayerRuntimes.size === 0) return
-  for (const runtime of stainLayerRuntimes.values()) {
+  const updates = [...stainLayerRuntimes.values()].map((runtime) => {
     runtime.readSession.renew()
-    runtime.chunkedVolume.setBudget(currentDetailBudgetBytes())
-  }
+    return runtime.chunkedVolume.setBudget(currentDetailBudgetBytes())
+  })
   setActiveLodLoading(currentDetailLevel ?? undefined)
   syncDownloadControl()
+  await Promise.all(updates)
 }
 
 function updateZoomSelection(): void {
@@ -4923,7 +4933,7 @@ function scheduleAdaptiveLod(focusMoved = false): void {
     return
   }
   adaptiveLodRequested = true
-  if (!adaptiveLodRunning) void drainAdaptiveLodRequests()
+  if (!adaptiveLodRunning) drainAdaptiveLodRequests().catch(reportViewerActionError)
 }
 
 async function waitForAdaptiveLodIdle(): Promise<void> {
@@ -4962,7 +4972,7 @@ async function drainAdaptiveLodRequests(): Promise<void> {
   } finally {
     adaptiveLodRunning = false
     syncViewControls()
-    if (adaptiveLodRequested) void drainAdaptiveLodRequests()
+    if (adaptiveLodRequested) drainAdaptiveLodRequests().catch(reportViewerActionError)
   }
 }
 
@@ -5004,12 +5014,13 @@ async function applyAdaptiveLodRequest(): Promise<void> {
       target,
     )
     primary.detailLevel = target
-    primary.chunkedVolume.setFocus(focusFraction, bounds)
+    const focusing = primary.chunkedVolume.setFocus(focusFraction, bounds)
     if (primary.layerId === activeStainLayerId) {
       currentDetailLevel = target
       lastAdaptiveRequestKey = requestKey
       if (targetChanged) setActiveLodLoading(target)
     }
+    await focusing
     await waitForStainLayerRefocus(primary.chunkedVolume)
   }
 
@@ -5582,19 +5593,21 @@ async function main(): Promise<void> {
       )
       return
     }
-    void reloadVolume({ reloadSource: true })
+    reloadVolume({ reloadSource: true }).catch(reportViewerActionError)
   })
   els.layout.addEventListener('change', () => {
     updateUrlFromControls()
-    void applyLayoutControl()
+    applyLayoutControl().catch(reportViewerActionError)
   })
   els.zoom.addEventListener('input', updateZoomSelection)
   els.zarrLevel.addEventListener('change', () => {
-    void applyZarrLevelControl()
+    applyZarrLevelControl().catch(reportViewerActionError)
   })
   els.scrollZoomSpeed.addEventListener('input', syncScrollZoomSpeed)
   els.detailBudget.addEventListener('input', syncDetailBudget)
-  els.detailBudget.addEventListener('change', applyDetailBudget)
+  els.detailBudget.addEventListener('change', () => {
+    applyDetailBudget().catch(reportViewerActionError)
+  })
   els.zoom.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return
     event.preventDefault()
@@ -5607,7 +5620,7 @@ async function main(): Promise<void> {
     control.addEventListener('input', applyPanControls)
   }
   els.colormap.addEventListener('change', () => {
-    void applyColormap()
+    applyColormap().catch(reportViewerActionError)
   })
   els.autoContrast.addEventListener('click', applyAutoContrast)
   els.windowLevel.addEventListener('input', handleWindowInput)
@@ -5643,20 +5656,20 @@ async function main(): Promise<void> {
   })
   els.newCustomLayer.addEventListener('click', startNewCustomLayer)
   els.removeZarrUrl.addEventListener('click', () => {
-    removeCustomUrlRow(els.zarrUrl.closest<HTMLElement>('.zarr-url-row')!, els.zarrUrl)
+    removeCustomUrlRow(els.zarrUrl.closest<HTMLElement>('.zarr-url-row')!, els.zarrUrl).catch(reportViewerActionError)
   })
   els.searchDandi.addEventListener('click', () => {
-    void searchDandiAssets()
+    searchDandiAssets().catch(reportViewerActionError)
   })
   for (const input of [els.dandisetId, els.dandiVersion, els.dandiQuery]) {
     input.addEventListener('keydown', (event) => {
       if (event.key !== 'Enter') return
       event.preventDefault()
-      void searchDandiAssets()
+      searchDandiAssets().catch(reportViewerActionError)
     })
   }
   els.clearDandiSelection.addEventListener('click', () => {
-    void clearSelectedDandiAssets()
+    clearSelectedDandiAssets().catch(reportViewerActionError)
   })
   els.reload.addEventListener('click', () => {
     exampleSelector.cancel()
@@ -5669,16 +5682,16 @@ async function main(): Promise<void> {
         return
       }
     }
-    void (customLayer && !stainLayerRuntimes.has(customLayer.id)
+    (customLayer && !stainLayerRuntimes.has(customLayer.id)
       ? loadSelectedStainLayerRuntime(customLayer.id)
-      : reloadVolume({ reloadSource: true }))
+      : reloadVolume({ reloadSource: true })).catch(reportViewerActionError)
   })
   els.downloadNifti.addEventListener('click', () => {
-    void downloadNifti()
+    downloadNifti().catch(reportViewerActionError)
   })
   els.niftiLevel.addEventListener('change', syncDownloadControl)
   els.createShareLink.addEventListener('click', () => {
-    void createShareLink()
+    createShareLink().catch(reportViewerActionError)
   })
 
   if (currentSourceKind() === 'omezarr' && currentStoreUrls().length === 0) {

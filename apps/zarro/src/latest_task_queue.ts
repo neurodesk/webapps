@@ -30,7 +30,7 @@ export class LatestTaskQueue {
         resolve: resolve as (result: unknown) => void,
         reject,
       }
-      void this.drain()
+      this.drain().catch(reject)
     })
   }
 

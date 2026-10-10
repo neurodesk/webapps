@@ -39,7 +39,7 @@ test('an ignore or empty configuration cannot silently remove owned source', asy
 test('JS, TypeScript and worker correctness canaries report real errors', async () => {
   for (const [filePath, code, rule] of [
     ['packages/components/src/canary.js', 'missingBinding();', 'no-undef'],
-    ['apps/zarro/src/canary.ts', 'const x: number = 1; if (true) { console.log(x); }', 'no-constant-condition'],
+    ['apps/deface/src/canary.ts', 'const x: number = 1; if (true) { console.log(x); }', 'no-constant-condition'],
     ['apps/brain2print/src/canary-worker.js', 'document.querySelector("canvas");', 'no-restricted-globals'],
     ['packages/components/src/canary.js', '/* eslint-disable */\nmissingBinding();', 'no-undef'],
   ]) {
@@ -123,4 +123,40 @@ test('preserved workspace tasks include chained checks and no empty turbo fallba
     task('chain', 'eslint . && tsc --noEmit'),
     task('absent', undefined),
   ]), ['--filter=types', '--filter=chain']);
+});
+
+test('the typed project checks new source, async callbacks and ignored promises', async () => {
+  const directory = await mkdtemp(join(root, 'apps/zarro/src/promise-canary-'));
+  const floating = '@typescript-eslint/no-floating-promises';
+  const misused = '@typescript-eslint/no-misused-promises';
+  try {
+    const cases = [
+      ['floating.ts', 'export {}; Promise.resolve(1);', floating],
+      ['void.ts', 'export {}; void Promise.resolve(1);', floating],
+      ['callback.ts', 'export {}; document.addEventListener("click", async () => { await Promise.resolve(1); });', misused],
+      ['condition.ts', 'export {}; if (Promise.resolve(true)) { console.log("unreachable decision"); }', misused],
+      ['awaited.ts', 'export async function run() { await Promise.resolve(1); }', null],
+      ['handled.ts', 'export {}; Promise.reject(new Error("reported")).catch((error: unknown) => { console.error(error); });', null],
+    ];
+    for (const [name, source] of cases) await writeFile(join(directory, name), source);
+    const files = cases.map(([name]) => join(directory, name));
+    const results = await eslint.lintFiles(files);
+    for (const [index, [, , expected]] of cases.entries()) {
+      const result = results.find((entry) => entry.filePath === join(directory, cases[index][0]));
+      assert.ok(result, cases[index][0]);
+      const errors = result.messages.filter((message) => message.severity === 2);
+      assert.equal(errors.some((message) => message.fatal), false, `${cases[index][0]} must parse with type information`);
+      if (expected) assert.ok(errors.some((message) => message.ruleId === expected), cases[index][0]);
+      else assert.deepEqual(errors, [], cases[index][0]);
+    }
+    const newFile = join(directory, 'floating.ts').slice(root.length);
+    assert.ok(sourceInventory(root).includes(newFile));
+    await assertCoverage(eslint, [newFile]);
+    const result = spawnSync('pnpm', ['lint:correctness'], { cwd: root, encoding: 'utf8' });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /floating\.ts:1:12 @typescript-eslint\/no-floating-promises/);
+    assert.match(result.stderr, /callback\.ts:1:\d+ @typescript-eslint\/no-misused-promises/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -27,5 +27,6 @@ jobs:
           cache: pnpm
       # Root-command canaries preserve every workspace type/syntax task; install their dependencies without runtime postinstalls.
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter zarro exec tsc --noEmit
       - run: pnpm lint:correctness
       - run: pnpm test:lint
