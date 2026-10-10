@@ -13,7 +13,6 @@
   - @neurodesk/webapp-components@0.12.1
   - @neurodesk/calmar@0.6.20261010
 - Updated dependencies [c6e4804]
-  - @neurodesk/calmar@0.6.20261010
 
 ## 0.5.20261009
 

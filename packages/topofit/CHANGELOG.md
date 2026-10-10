@@ -6,6 +6,7 @@
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.1
+
 ## 0.15.20261009
 
 ### Minor Changes

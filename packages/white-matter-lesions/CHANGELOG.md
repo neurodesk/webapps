@@ -7,8 +7,6 @@
 - Updated dependencies
   - @neurodesk/synthsr@0.6.20261010
   - @neurodesk/synthstrip@0.1.5
-- @neurodesk/synthsr@0.6.20261010
-- @neurodesk/synthstrip@0.1.5
 
 ## 0.2.20261009
 
