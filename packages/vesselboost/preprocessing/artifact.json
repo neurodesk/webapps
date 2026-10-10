@@ -3,6 +3,7 @@
   "wasmPack": "0.13.1",
   "wasmBindgen": "0.2.114",
   "wasmOpt": false,
+  "remapBuildPaths": true,
   "qsmCommit": "3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d",
   "files": [
     {
@@ -12,8 +13,8 @@
     },
     {
       "filename": "preprocessing_bg.wasm",
-      "bytes": 141901,
-      "sha256": "cbc6588100aada3243df2c96bdd4616eeea0cd1ad7074af5b2ec7b374df97a89"
+      "bytes": 141762,
+      "sha256": "ac0acbe36fc21313624b63508740a8d1dc6473eded1a74d884f08e0d51b599f7"
     },
     {
       "filename": "preprocessing.d.ts",

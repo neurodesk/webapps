@@ -26,6 +26,7 @@ if (process.argv.includes('--record')) {
         wasmPack: '0.13.1',
         wasmBindgen: '0.2.114',
         wasmOpt: false,
+        remapBuildPaths: true,
         qsmCommit: '3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d',
         files,
       },

@@ -40,6 +40,7 @@ before import for both CLI and direct Node API use.
 `pnpm --filter @neurodesk/vesselboost build` verifies every artifact checksum;
 `build:wasm` rebuilds using Rust 1.98.0, wasm-pack 0.13.1, wasm-bindgen 0.2.114,
 locked QSM.rs commit `3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d` and no wasm-opt.
+Build paths are remapped to stable `/cargo` and `/workspace` prefixes.
 Native CI rebuilds and compares committed bytes. Both browser and Node must
 initialize this artifact successfully, including workflows that skip optional steps.
 
