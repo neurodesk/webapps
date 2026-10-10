@@ -59,6 +59,24 @@ try {
     await expect(page.locator('#vesselboost-log')).toHaveClass(/collapsed/);
     await expect(page.locator('#runSegmentation')).toBeEnabled();
   });
+  await check('qsmbly', async page => {
+    await expect(page.locator('#unifiedFiles')).toBeEnabled({ timeout: 120000 });
+    const toggle = page.locator('#paramsSection [data-disclosure-toggle]');
+    await toggle.tap();
+    await page.locator('#magField').fill('7');
+    await page.locator('[data-neurodesk-shell-control="cite"]').tap();
+    const dialog = page.locator('.nd-app-dialog[data-dialog="cite"]');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('HD-BET');
+    await expect(dialog).toContainText('Single-step TGV');
+    await dialog.locator('.nd-app-dialog__close').tap();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator('#magField')).toHaveValue('7');
+    await toggle.tap();
+    await expect(page.locator('#magField')).toBeHidden();
+    await toggle.tap();
+    await expect(page.locator('#magField')).toHaveValue('7');
+  });
   await check('browserqc', async page => {
     await page.locator('#modelPick').selectOption('mindmap')
     await page.locator('#processingSection > summary').tap()

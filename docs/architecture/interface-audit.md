@@ -6,7 +6,7 @@ All 16 registered apps were reviewed on 9 September 2026, starting from `e6ef75e
 
 | App | Implemented behavior |
 | --- | --- |
-| QSMbly | Native buttons replace mouse-only headings, including Refine Mask. Accordion grouping and workflow-driven expansion remain. The technical log starts collapsed and opens for errors or the mobile Console tab. |
+| QSMbly | Native buttons replace mouse-only headings, including Refine Mask. Accordion grouping and workflow-driven expansion remain. The technical log starts collapsed and opens for errors or the mobile Console tab. Cite now uses the shared registry dialog (10 October 2026), including HD-BET, deep-learning inversion methods and single-step TGV; upstream DOI coverage is checked from the sync snapshot. |
 | MuscleMap | Inference tuning and the technical log start collapsed. Section buttons support keyboard activation and retain inputs. Shared navigation replaces repeated footer links. |
 | VesselBoost | Optional downsampling, bias correction, denoising, and brain extraction start collapsed. Segmentation remains available. Section controls and the technical log use the shared accessible binding. Footer navigation is consolidated. |
 | Spinal Cord Toolbox | Task selection and Run remain available. Advanced segmentation settings start collapsed. Disabled steps are inert. Threshold values survive closing and reopening after import. Footer navigation is consolidated. |
