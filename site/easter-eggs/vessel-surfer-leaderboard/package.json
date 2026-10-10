@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "wrangler dev --local",
     "test": "node --test test/*.test.js",
-    "lint": "eslint .",
+    "lint": "node ../../../scripts/lint.mjs --workspace",
     "ensure-database": "node scripts/ensure-database.mjs",
     "migrate": "wrangler d1 migrations apply vessel-surfer-leaderboard --remote",
     "deploy": "wrangler deploy"

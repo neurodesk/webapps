@@ -69,7 +69,12 @@ export default [
     files: ['**/*.{ts,tsx,mts,cts}'],
     languageOptions: { parser: tsParser },
     // TypeScript resolves imported types and ambient declarations.
-    rules: { 'no-undef': 'off' },
+    rules: {
+      // TS permits overload declarations; the type checker owns redeclarations.
+      'no-redeclare': 'off',
+      'no-dupe-class-members': 'off',
+      'no-undef': 'off',
+    },
   },
   {
     files: ['**/*.{cjs,cts}'],

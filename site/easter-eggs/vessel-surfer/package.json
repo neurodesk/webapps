@@ -9,7 +9,7 @@
     "preview": "node scripts/preview-site.mjs",
     "test": "node scripts/fetch-data.mjs && node --test test/*.test.js",
     "test:e2e": "playwright test",
-    "lint": "eslint ."
+    "lint": "node ../../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
     "three": "0.180.0",

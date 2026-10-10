@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { ESLint } from 'eslint';
 import config from '../eslint.config.js';
 import { assertCoverage, sourceInventory } from '../scripts/quality/lint-inventory.mjs';
 import { fingerprint, root } from '../scripts/lint.mjs';
+import { preservedLintFilters } from '../scripts/lint-workspaces.mjs';
 
 const eslint = new ESLint({ cwd: root, overrideConfigFile: join(root, 'eslint.config.js') });
 
@@ -67,4 +68,48 @@ test('the root lint command rejects new untracked source in shared packages', as
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('package lint rejects new source and skips generated files in its workspace', async () => {
+  await mkdir(join(root, 'apps/brain2print/dist'), { recursive: true });
+  const source = await mkdtemp(join(root, 'apps/brain2print/src/lint-canary-'));
+  const generated = await mkdtemp(join(root, 'apps/brain2print/dist/lint-canary-'));
+  try {
+    await writeFile(join(generated, 'ignored.js'), 'missingGeneratedBinding();\n');
+    const clean = spawnSync('pnpm', ['--filter', 'brain2print', 'lint'], { cwd: root, encoding: 'utf8' });
+    assert.equal(clean.status, 0, clean.stderr);
+    await writeFile(join(source, 'canary.js'), 'missingScopedLintBinding();\n');
+    const failure = spawnSync('pnpm', ['--filter', 'brain2print', 'lint'], { cwd: root, encoding: 'utf8' });
+    assert.equal(failure.status, 1);
+    assert.match(failure.stderr, /canary\.js:1:1 no-undef/);
+    assert.doesNotMatch(failure.stderr, /missingGeneratedBinding/);
+  } finally {
+    await rm(source, { recursive: true, force: true });
+    await rm(generated, { recursive: true, force: true });
+  }
+});
+
+test('TypeScript overload declarations remain valid source', async () => {
+  const source = `export function double(value: number): number;
+export function double(value: string): string;
+export function double(value: number | string) { return typeof value === 'number' ? value * 2 : value + value; }
+export class Value {
+  read(input: number): number;
+  read(input: string): string;
+  read(input: number | string) { return input; }
+}`;
+  const [result] = await eslint.lintText(source, { filePath: join(root, 'apps/deface/src/overload-canary.ts') });
+  assert.deepEqual(result.messages, []);
+});
+
+test('preserved workspace tasks include chained checks and no empty turbo fallback', () => {
+  const task = (name, lint) => ({ packageJson: { name, scripts: { lint } } });
+  assert.deepEqual(preservedLintFilters([]), []);
+  assert.deepEqual(preservedLintFilters([
+    task('plain-eslint', 'eslint .'),
+    task('delegate', 'node ../../scripts/lint.mjs --workspace'),
+    task('types', 'tsc --noEmit'),
+    task('chain', 'eslint . && tsc --noEmit'),
+    task('absent', undefined),
+  ]), ['--filter=types', '--filter=chain']);
 });

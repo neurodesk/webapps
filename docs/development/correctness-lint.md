@@ -27,7 +27,9 @@ The initial inventory records existing diagnostics in
 `scripts/quality/lint-baseline.json`. Each entry fingerprints the file path,
 rule, message and offending source line, with a count for duplicate occurrences.
 Changing the defective line or adding a new occurrence fails. Moving an
-unchanged line within its file keeps its identity. Resolved entries also fail
+unchanged line within its file keeps its identity. Deleting a finding and
+adding the identical defective line elsewhere in the same file is also
+indistinguishable; the baseline is not a substitute for review. Resolved entries also fail
 until their entries are removed, so the baseline cannot silently grow stale.
 Some existing undefined names are browser globals injected by automation or
 classic scripts; confirm their declaration before treating a diagnostic as a
@@ -37,5 +39,5 @@ later focused changes.
 Fix a finding in the source and delete only its matching baseline entry. Do not
 regenerate the baseline to make a new error pass. Fatal parser errors can never
 be baselined. The new-app template imports the root configuration; use the root
-command for the complete repository gate. Individual `eslint .` tasks report
-all diagnostics in their app, including existing debt.
+command for the complete repository gate. Package `pnpm lint` tasks delegate to the same inventory and baseline for their
+workspace. Generated assets and other workspaces are outside that scoped check.

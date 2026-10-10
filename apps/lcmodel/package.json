@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
-    "lint": "eslint ."
+    "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",

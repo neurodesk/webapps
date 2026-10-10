@@ -2,7 +2,7 @@
 import { ESLint } from 'eslint';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { relative } from 'node:path';
+import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertCoverage, sourceInventory } from './quality/lint-inventory.mjs';
 
@@ -37,9 +37,14 @@ export async function inspect(eslint, files, baseline) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const baseline = JSON.parse(await readFile(new URL('./quality/lint-baseline.json', import.meta.url), 'utf8'));
+  const allBaseline = JSON.parse(await readFile(new URL('./quality/lint-baseline.json', import.meta.url), 'utf8'));
   const eslint = new ESLint({ cwd: root, overrideConfigFile: `${root}eslint.config.js` });
-  const files = sourceInventory(root);
+  const workspace = process.argv.includes('--workspace') ? relative(root, process.cwd()).split(sep).join('/') : '';
+  if (workspace.startsWith('..')) throw new Error('The lint workspace must be inside the repository.');
+  const prefix = workspace ? `${workspace}/` : '';
+  const baseline = Object.fromEntries(Object.entries(allBaseline).filter(([, entry]) => entry.file.startsWith(prefix)));
+  const files = sourceInventory(root).filter((file) => file.startsWith(prefix));
+  if (files.length === 0) throw new Error(`No owned source found in ${workspace || 'repository'}.`);
   const { findings, stale } = await inspect(eslint, files, baseline);
   for (const finding of findings) {
     console.error(`${finding.file}:${finding.line}:${finding.column} ${finding.ruleId ?? 'parse'} ${finding.message}`);

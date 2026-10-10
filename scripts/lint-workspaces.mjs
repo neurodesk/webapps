@@ -1,28 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { getPackages } from '@manypkg/get-packages';
 
-// Preserve package type checks and syntax checks. Root ESLint replaces empty
-// app ESLint tasks; running those directly would bypass the reviewed baseline.
-const root = fileURLToPath(new URL('../', import.meta.url));
-const filters = [];
-for (const directory of ['apps', 'packages', 'site/easter-eggs']) {
-  for (const entry of await readdir(new URL(`../${directory}/`, import.meta.url), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const path = new URL(`../${directory}/${entry.name}/package.json`, import.meta.url);
-    let manifest;
-    try {
-      manifest = JSON.parse(await readFile(path, 'utf8'));
-    } catch (error) {
-      if (error.code === 'ENOENT') continue;
-      throw error;
-    }
-    if (manifest.scripts?.lint && !/^eslint\b/.test(manifest.scripts.lint)) {
-      filters.push(`--filter=${manifest.name}`);
-    }
+// Preserve all workspace syntax/type checks. Skip only the exact ESLint task
+// replaced by the central gate, and its exact scoped delegation contract.
+export function preservedLintFilters(packages) {
+  return packages.flatMap(({ packageJson }) => {
+    const lint = packageJson.scripts?.lint;
+    const delegates = /^node (?:\.\.\/)+scripts\/lint\.mjs --workspace$/.test(lint ?? '');
+    return lint && lint !== 'eslint .' && !delegates ? [`--filter=${packageJson.name}`] : [];
+  });
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const { packages } = await getPackages(root);
+  const filters = preservedLintFilters(packages);
+  if (filters.length > 0) {
+    const args = ['exec', 'turbo', 'run', 'lint', ...filters];
+    // pnpm sets its script entry point, avoiding Windows .cmd shell execution.
+    const command = process.env.npm_execpath ? process.execPath : 'pnpm';
+    const commandArgs = process.env.npm_execpath ? [process.env.npm_execpath, ...args] : args;
+    const result = spawnSync(command, commandArgs, {
+      cwd: root,
+      stdio: 'inherit',
+      env: { ...process.env, TURBO_TELEMETRY_DISABLED: '1' },
+    });
+    if (result.error) throw result.error;
+    process.exitCode = result.status ?? 1;
   }
 }
-const result = spawnSync('pnpm', ['exec', 'turbo', 'run', 'lint', ...filters], { cwd: root, stdio: 'inherit', env: { ...process.env, TURBO_TELEMETRY_DISABLED: '1' } });
-if (result.error) throw result.error;
-process.exitCode = result.status ?? 1;
