@@ -4,7 +4,8 @@ Run `pnpm quality:unused` after `pnpm install --frozen-lockfile --ignore-scripts
 No app builds, model downloads, native compilers or browser runtimes are required.
 The independent `unused-code` workflow runs on every pull request and main push.
 It writes a GitHub job summary and uploads `quality-artifacts/unused-code` with
-`knip.json`, `summary.md` and `diagnostics.log`.
+`knip.json`, `summary.md` and `diagnostics.log`. Scan warnings also appear in the
+summary so incomplete analysis is visible without downloading diagnostics.
 
 Findings are candidates for review. They do not fail CI yet. Invalid configuration,
 configuration modules that throw, scanner crashes, missing executables and invalid
@@ -16,8 +17,9 @@ both successful canary findings and real configuration failures.
 
 `knip.config.mjs` discovers every pnpm workspace with `@manypkg/get-packages`.
 Each workspace gets a project glob covering JavaScript and TypeScript sources;
-new workspaces receive the same coverage automatically. Ordinary source files
-are not all entries. The following roots account for externally invoked code:
+new workspaces receive the same coverage automatically. A tracked-file coverage
+test rejects source files outside configured projects and explicit exclusions.
+Ordinary source files are not all entries. The following roots account for externally invoked code:
 
 - Local script tags in `index.html` and `web/index.html`, including static apps.
 - Package exports, bins and framework configurations discovered by Knip plugins.
@@ -32,14 +34,24 @@ are not all entries. The following roots account for externally invoked code:
 
 Knip follows imports, literal dynamic imports and `new URL(..., import.meta.url)`
 worker references. New runtime modules loaded through constructed URLs need an
-explicit entry. Add a narrowly named root and explain its caller here.
+explicit entry. Literal entries are checked for existence during configuration
+loading. Local HTML scripts are parsed as HTML, with served web-root resolution;
+unknown missing scripts fail configuration. Known generated HTML runtimes have
+exact per-app exceptions in the configuration. Dist APIs map to JavaScript or
+TypeScript sources and fail if a source mapping is missing.
+Add a narrowly named root and explain its caller here.
 
 Generated distributions, node_modules, vendor copies, public runtime assets and
 validation result archives are excluded. Generated model catalogs are excluded.
 The committed easy-mp2rage WASM glue and vesselboost preprocessing glue are excluded
 in their own workspaces. QSMbly's imported NiiVue copy is excluded. Declaration
 files are excluded from unused-file suggestions; unused types remain reported.
-Public entry exports remain protected because external users can import them.
+The root project includes native JavaScript demos under `exes`. The canonical
+`templates/app-template` contains scaffolding placeholders and is checked by the
+app-generator tests instead of Knip. `docs/architecture/examples` holds historical
+source snapshots and is excluded. Other new root source directories fail the
+tracked-file coverage test until they are configured. Public entry exports remain protected
+because external users can import them.
 Exports used within their own file are not suggested for removal.
 
 The report includes unused files, exports, types, duplicate exports, dependencies

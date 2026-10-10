@@ -1,5 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { htmlEntries, publishedSourceEntries, sourceCoverage, validateLiteralEntries } from '../scripts/lib/unused-code-config.mjs';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
@@ -63,4 +65,50 @@ test('missing executables and malformed successful output fail', (t) => {
   assert.throws(() => runReport({ ...options, executable: join(options.cwd, 'missing') }), /ENOENT/);
   assert.throws(() => runReport({ ...options, prefix: ['-e', 'console.log("not json")', '--'] }), /JSON/);
   assert.throws(() => summarize({}), /expected JSON report/);
+});
+
+test('all tracked JavaScript and TypeScript files are covered or explicitly excluded', () => {
+  const files = execFileSync('git', ['ls-files', '-z', '*.js', '*.mjs', '*.cjs', '*.jsx', '*.ts', '*.tsx'], { encoding: 'utf8' }).split('\0').filter(Boolean);
+  assert.deepEqual(files.filter((file) => !sourceCoverage(file, config.workspaces)), []);
+  assert.equal(sourceCoverage('new-tools/unregistered-helper.js', config.workspaces), undefined);
+  assert.equal(sourceCoverage('docs/new-live-helper.js', config.workspaces), undefined);
+});
+
+test('HTML roots handle static web roots, unquoted attributes and query strings', (t) => {
+  const options = fixture(t);
+  mkdirSync(join(options.cwd, 'web/js'), { recursive: true });
+  writeFileSync(join(options.cwd, 'web/js/main.js'), 'console.log("main");');
+  writeFileSync(join(options.cwd, 'web/index.html'), '<script type=module src=/js/main.js?v=1></script>');
+  assert.deepEqual(htmlEntries(options.cwd), ['web/js/main.js']);
+  writeFileSync(join(options.cwd, 'web/index.html'), '<script src=missing.js></script>');
+  assert.throws(() => htmlEntries(options.cwd), /Missing local HTML script/);
+  assert.deepEqual(htmlEntries(options.cwd, ['missing.js']), []);
+});
+
+test('public dist JavaScript exports map to TypeScript sources or fail loudly', (t) => {
+  const options = fixture(t);
+  mkdirSync(join(options.cwd, 'src'), { recursive: true });
+  writeFileSync(join(options.cwd, 'src/index.ts'), 'export const publicApi = 1;');
+  assert.deepEqual(publishedSourceEntries(options.cwd, { '.': { import: './dist/index.js' } }), ['src/index.ts']);
+  assert.throws(() => publishedSourceEntries(options.cwd, './dist/missing.js'), /Missing source mapping/);
+});
+
+test('missing explicit runtime entries fail configuration validation', (t) => {
+  const options = fixture(t);
+  validateLiteralEntries(options.cwd, { '.': { entry: ['index.js', 'optional/**/*.js'] } });
+  assert.throws(() => validateLiteralEntries(options.cwd, { '.': { entry: ['missing-worker.js'] } }), /Missing explicit entry/);
+});
+
+test('duplicate symbol groups and scan warnings appear in summaries', () => {
+  const report = { issues: [{ file: 'module.js', files: [], exports: [], types: [], dependencies: [], devDependencies: [], duplicates: [[{ name: 'named', line: 1 }, { name: 'default', line: 2 }]] }] };
+  const markdown = summarize(report, 'Warning: could not parse source.js\n');
+  assert.match(markdown, /named, default/);
+  assert.match(markdown, /Scan diagnostics \(1 lines/);
+  assert.match(markdown, /could not parse source.js/);
+});
+
+test('relative report output resolves against the requested working directory', (t) => {
+  const options = fixture(t);
+  runReport({ ...options, output: 'relative-artifacts' });
+  assert.match(readFileSync(join(options.cwd, 'relative-artifacts/summary.md'), 'utf8'), /deadExport/);
 });
