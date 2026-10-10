@@ -1,0 +1,31 @@
+name: code-quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  correctness:
+    runs-on: ubuntu-latest
+    env:
+      ONNXRUNTIME_NODE_INSTALL: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      # This gate needs only root tooling, not downloaded models or runtime postinstalls.
+      - run: pnpm --filter neurodesk-webapps... install --frozen-lockfile --ignore-scripts
+      - run: pnpm lint:correctness
+      - run: pnpm test:lint

@@ -1,0 +1,12 @@
+{
+  "name": "@neurodesk/code-quality",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./parser.mjs",
+  "dependencies": {
+    "@typescript-eslint/parser": "8.57.1",
+    "eslint": "9.39.5",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,9 +1,1 @@
-// Flat ESLint config so `pnpm lint` works out of the box in a scaffolded app.
-export default [
-  { ignores: ["dist/**", "public/brainchop/**"] },
-  {
-    files: ["**/*.js"],
-    languageOptions: { ecmaVersion: 2022, sourceType: "module" },
-    rules: {},
-  },
-];
+export { default } from '../../eslint.config.js';
