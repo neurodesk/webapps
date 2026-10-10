@@ -1,6 +1,6 @@
 {
   "name": "lcmodel",
-  "version": "0.6.20261010",
+  "version": "0.7.20261010",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@brainchop/mindgrab": "0.1.20260923",
+    "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/lcmodel": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",

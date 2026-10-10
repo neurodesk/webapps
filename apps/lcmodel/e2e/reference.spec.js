@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { forceCpu, proxyAssets } from "./tissue-runtime.mjs";
 import { readFile } from "node:fs/promises";
 import { CASES, compare, documents, exampleFiles, headline, readReference, summarize, writeReference } from "../../../packages/lcmodel/validation/reference.mjs";
 
@@ -23,11 +24,14 @@ for (const entry of CASES) {
   test(`web app ${entry.operation} of ${entry.id} matches the browser reference`, async ({ page, browser }) => {
     test.skip(mode !== "check" && mode !== "write", "set LCMODEL_BROWSER_REFERENCE=check or write");
     test.setTimeout(20 * minutes);
-    const files = await exampleFiles(entry.example);
+    await proxyAssets(page);
+    const files = await exampleFiles(entry.example, { includeT1: entry.t1 });
+    if (entry.t1) await forceCpu(page);
     await page.goto("/");
     await expect(page.locator("#neurodesk-input-transfer")).toHaveCount(1);
-    await adopt(page, files.filter((f) => f.role !== "basis"), "spectra");
+    await adopt(page, files.filter((f) => f.role !== "basis" && f.role !== "t1"), "spectra");
     await adopt(page, files.filter((f) => f.role === "basis"), "basis");
+    await adopt(page, files.filter((f) => f.role === "t1"), "t1");
     const started = performance.now();
     await dispatch(page, "start", { operation: entry.operation, parameters: entry.parameters });
     await expect.poll(async () => (await dispatch(page, "snapshot")).state, { timeout: 15 * minutes, intervals: [2_000] }).not.toBe("running");
@@ -40,6 +44,10 @@ for (const entry of CASES) {
       await dispatch(page, "download", { artifactId });
       const download = await downloaded;
       downloads.set(download.suggestedFilename(), await readFile(await download.path()));
+    }
+    if (entry.t1) {
+      const correction = [...downloads].find(([name]) => name.endsWith("_tissue_correction.json"));
+      expect(JSON.parse(correction[1].toString("utf8")).fractionSource.backend).toBe("cpu");
     }
     const actual = { files: summarize(downloads), headline: headline(downloads), documents: documents(downloads) };
     const reference = await readReference().catch(() => ({ cases: {} }));

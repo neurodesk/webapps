@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { decodeNiftiBuffer, parseNiftiVolume } from "@neurodesk/webapp-components/file-io";
-import { voxelWeights, tissueFractions, invert4, multiply4, apply4 } from "../src/voxel.js";
+import { voxelWeights, tissueFractions, invert4, multiply4, apply4 } from "@neurodesk/lcmodel/voxel";
 
 const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
 const box = (size, center) => [[size[0], 0, 0, center[0]], [0, size[1], 0, center[1]], [0, 0, size[2], center[2]], [0, 0, 0, 1]];

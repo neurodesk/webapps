@@ -118,10 +118,10 @@ console.log(`INFO reference: ${reference.browser.app}, ${reference.browser.brows
 const work = await mkdtemp(join(tmpdir(), "lcmodel-cli-check-"));
 try {
   for (const entry of CASES.filter((c) => selected(c.id))) {
-    const files = await exampleFiles(entry.example);
+    const files = await exampleFiles(entry.example, { includeT1: entry.t1 });
     const basis = files.find((f) => f.role === "basis");
     const output = join(work, entry.id);
-    const args = [...files.filter((f) => f.role !== "basis").map((f) => f.path), output, ...(basis ? ["--basis", basis.path] : []), ...cliArguments(entry.parameters)];
+    const args = [...files.filter((f) => f.role !== "basis" && f.role !== "t1").map((f) => f.path), output, ...(basis ? ["--basis", basis.path] : []), ...cliArguments(entry.parameters), ...(entry.t1 ? ["--t1", files.find((f) => f.role === "t1").path] : [])];
     const { seconds } = lcmodel(args);
     const expected = reference.cases[entry.id];
     console.log(`INFO ${entry.id}: lcmodel ${cliArguments(entry.parameters).join(" ") || "(defaults)"}, ${seconds.toFixed(1)} s (web app ${expected.seconds} s)`);

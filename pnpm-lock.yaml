@@ -645,8 +645,8 @@ importers:
   apps/lcmodel:
     dependencies:
       '@brainchop/mindgrab':
-        specifier: 0.1.20260923
-        version: 0.1.20260923
+        specifier: 0.1.20260925
+        version: 0.1.20260925
       '@neurodesk/lcmodel':
         specifier: workspace:*
         version: link:../../packages/lcmodel
@@ -1130,7 +1130,20 @@ importers:
 
   packages/greedy: {}
 
-  packages/lcmodel: {}
+  packages/lcmodel:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      '@niivue/dcm2niix':
+        specifier: 1.2.0
+        version: 1.2.0
 
   packages/nesvor:
     dependencies:
@@ -1513,9 +1526,6 @@ packages:
 
   '@brainchop/mindgrab@0.1.20260813':
     resolution: {integrity: sha512-HpushBfOzG5yhzgKmhjy1q+8DYxLdM96LeeciF+W2wwStKFzNW1ABY87fwGZjFXcivoWVv+HWPfakBe/GrQPsA==}
-
-  '@brainchop/mindgrab@0.1.20260923':
-    resolution: {integrity: sha512-U6u1UPNxIn/mudogTtUgaDi5zWzwtxQxiPAgOu3dT9zvqRS9hWaGRyLX3zPXFb07/WGJA/OrmVsGGsT/PzdqZw==}
 
   '@brainchop/mindgrab@0.1.20260925':
     resolution: {integrity: sha512-FFuU3IMQqrUuiHdm6l0//eXZ5X4vuOTgq4yK4qgUn5dOiMnY7LjRP+SpFULCZK3H4zW/mNuONXAE/Ex1PZvbvA==}
@@ -7727,10 +7737,6 @@ snapshots:
   '@borewit/text-codec@0.2.2': {}
 
   '@brainchop/mindgrab@0.1.20260813':
-    dependencies:
-      '@webgpu/types': 0.1.71
-
-  '@brainchop/mindgrab@0.1.20260923':
     dependencies:
       '@webgpu/types': 0.1.71
 

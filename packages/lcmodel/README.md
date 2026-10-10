@@ -105,8 +105,12 @@ provenance: the parameters given, the preprocessing settings, the basis set and
 its checksum, the LCModel control file and the run time. An error prints one
 message and exits with status 1.
 
-`--t1` is refused: segmenting a T1 image for the tissue correction needs the
-web app until #203. Give the voxel's fractions instead.
+`--t1 FILE_OR_DIR` reads a same-session 3D NIfTI or DICOM series. MindMap
+segments it on the CPU, then measures each dataset's own spectroscopy voxel
+on the tissue maps. Give a T1 or all three fractions, not both. A 4D T1 or
+a dataset without a recorded voxel position is refused. Segmentation needs
+about 3.9 GB of memory and runs once for a group. The CPU modules contain
+the model weights, so the complete archive runs offline.
 
 ### Outputs
 
@@ -115,7 +119,10 @@ For a dataset named `meas`, the web app's downloads under the same names:
 `meas.RAW`, `meas.control`, and when they apply `meas.H2O`,
 `meas_edit_off.RAW`, `meas_fida.json`, `meas_tissue_corrected.csv` and
 `meas_tissue_correction.json`. A group adds `lcmodel_group.csv` and
-`lcmodel_group_wide.csv`, and each fitted dataset's files.
+`lcmodel_group_wide.csv`, and each fitted dataset's files. A T1 adds each
+dataset's `<stem>_voxel_mask.nii` and the shared `<t1>_gm.nii`,
+`<t1>_wm.nii` and `<t1>_csf.nii` maps. The correction JSON records MindMap
+version, CPU backend, T1 name, coverage and voxel geometry.
 
 ### Basis sets and offline use
 
@@ -152,6 +159,6 @@ line to three references that do not run its code path:
   0.872 of the creatine with LCModel's prior).
 
 On Linux x64 the command line wrote the browser's files byte for byte in all
-14 cases, apart from one value of the tissue correction's inputs, which
+15 cases, including forced-CPU MindMap tissues on the defaced Philips T1, apart from one value of the tissue correction's inputs, which
 differed by 1.2e-16 relative. The examples download once into the system temporary directory and are
 checked against `registry/offline-assets.lock.json`.

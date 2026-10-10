@@ -4,11 +4,14 @@
 // (about two minutes on eight cores), so that test needs LCMODEL_E2E_LARGE=1;
 // typed-in fractions cover the rest of the workflow on every run.
 import { test, expect } from "@playwright/test";
+import { forceCpu, proxyAssets } from "./tissue-runtime.mjs";
 import { readFileSync } from "node:fs";
 
 const EXAMPLE = "philips-press-t1";
 
 async function loadExample(page) {
+  await proxyAssets(page);
+  await forceCpu(page);
   await page.goto("/");
   await page.getByRole("combobox", { name: "Example", exact: true }).selectOption(EXAMPLE);
   await expect(page.locator("#t1Info")).toContainText("256 × 256 × 204", { timeout: 300000 });
@@ -88,6 +91,7 @@ test("MindMap segments the T1 and measures the voxel", async ({ page }) => {
   await expect(page.locator("#corrHeader")).toBeVisible();
   const report = JSON.parse((await download(page, "Tissue correction inputs")).toString("utf8"));
   expect(report.fractionSource.method).toContain("MindMap");
+  expect(report.fractionSource.backend).toBe("cpu");
   // MindMap writes 8-bit maps with a scale factor.
   expect((await download(page, "Grey matter map")).length).toBeGreaterThanOrEqual(352 + 256 * 256 * 204);
 });

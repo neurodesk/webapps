@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PARAMETERS, T1_UNSUPPORTED, downloadModels, fit, optionName, parseParameters } from "../src/node.js";
+import { PARAMETERS, downloadModels, fit, optionName, parseParameters } from "../src/node.js";
 
 const automation = JSON.parse(await readFile(new URL("../../../apps/lcmodel/automation.json", import.meta.url), "utf8"));
 const bin = fileURLToPath(new URL("../bin/lcmodel.js", import.meta.url));
@@ -41,7 +41,7 @@ test("settings are checked against the automation contract", () => {
   assert.throws(() => parseParameters({ "fraction-gm": "0.6", "fraction-wm": "0.3" }), /all three tissue fractions/);
 });
 
-test("the executable rejects unknown options, missing arguments, a T1 and two basis sets", async (t) => {
+test("the executable rejects unknown options, missing arguments, a missing T1 and two basis sets", async (t) => {
   const unknown = run("in.dat", "out", "--threshold", "3");
   assert.equal(unknown.status, 1);
   assert.match(unknown.stderr, /Unknown option '--threshold'/);
@@ -51,7 +51,9 @@ test("the executable rejects unknown options, missing arguments, a T1 and two ba
   const directory = await scratch(t);
   const t1 = run(...testCase, join(directory, "out"), "--t1", "t1.nii.gz");
   assert.equal(t1.status, 1);
-  assert.equal(t1.stderr.trim(), T1_UNSUPPORTED);
+  assert.match(t1.stderr, /Input t1.nii.gz does not exist/);
+  const mixed = run(...testCase, join(directory, "out"), "--t1", "t1.nii.gz", "--fraction-gm", "0.6", "--fraction-wm", "0.3", "--fraction-csf", "0.1");
+  assert.match(mixed.stderr, /Give either a T1 image or tissue fractions/);
   const both = run(...testCase, join(directory, "out"), "--basis", "a.basis", "--basis-set", "press-3t-te35");
   assert.match(both.stderr, /Give --basis or --basis-set, not both/);
   assert.match(run("--help").stdout, /--\[no-\]drift-correction/);
