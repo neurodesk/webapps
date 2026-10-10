@@ -1,4 +1,4 @@
-import { UnifiedSchema } from '../hooks/useSchemaService';
+import type { UnifiedSchema } from '../hooks/useSchemaService';
 import { Acquisition, DicomField } from '../types';
 import { inferDataTypeFromValue, processSchemaFieldForUI } from './datatypeInference';
 import { buildValidationRuleFromField } from './fieldFormatters';

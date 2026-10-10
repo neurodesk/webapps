@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Acquisition, DicomField } from '../types';
-import { ProcessingProgress } from '../contexts/WorkspaceContext';
+import type { ProcessingProgress } from '../contexts/WorkspaceContext';
 import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import { processUploadedFiles, FileObject } from '../utils/fileUploadUtils';
 import { filesToFileList } from '../utils/workspaceHelpers';

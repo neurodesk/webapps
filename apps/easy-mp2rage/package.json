@@ -17,6 +17,7 @@
     "predev": "pnpm run build"
   },
   "dependencies": {
-    "@neurodesk/easy-mp2rage": "workspace:*"
+    "@neurodesk/easy-mp2rage": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
   }
 }

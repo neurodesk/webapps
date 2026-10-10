@@ -1,11 +1,16 @@
 # dicom2vid
 
+## 0.4.20261010
+
+### Patch Changes
+
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
+
 ## 0.4.20260928
 
 ### Patch Changes
 
 - Publish the current automation contract and JSON Schema at both static build URLs, including clean builds without a prior development session. Refresh cached builds when the shared automation contract or browser adapter changes.
-
 
 ### Minor Changes
 

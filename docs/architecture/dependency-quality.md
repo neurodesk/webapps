@@ -49,7 +49,10 @@ that an entire scientific package is browser-only or Node-only.
 The NIfTI reader's conditional `node:zlib` fallback is permitted only for that
 module and builtin. Existing SynthSR, SynthStrip and SynthSeg browser adapters
 may use their explicitly declared development runtime dependency so portable
-Node installations omit it, as their deployment contracts require. Electron
+Node installations omit it, as their deployment contracts require. SYNcro also
+declares its bundled SynthSR, SynthStrip and registration helpers as build
+dependencies. Its real production build is checked to bundle those helpers and
+leave only nifti-reader-js and onnxruntime-node as runtime packages. Electron
 host modules may use their existing devDependencies. These exceptions are exact
 source/dependency pairs; a new adapter must establish its own contract.
 
@@ -87,19 +90,16 @@ portable package contents; packaging, runtime and browser tests own those checks
 
 ## Existing findings and follow-up work
 
-`config/dependency-baseline.json` contains 30 individual findings, each identified
-by its rule, source and target. New findings fail even when an old finding
-vanishes and the total stays unchanged. Removing a finding also requires deleting
-its baseline entry, so resolved debt cannot silently return later.
+`config/dependency-baseline.json` is empty. Findings remain identified by rule,
+source and target. New findings fail even when an old finding vanishes and the
+total stays unchanged. Removing a finding also requires deleting its baseline
+entry, so resolved debt cannot silently return later.
 
-| Findings | Follow-up |
-| --- | --- |
-| 10 dicompare context/hook/helper cycle edges | Extract shared types and pure helpers from React context modules. Preserve upstream import adaptations. |
-| 3 NeSVoR browser/worker/reference-workflow cycle edges | Separate the worker protocol and browser orchestration. These edges span a worker URL rather than one ESM execution context. |
-| 3 dicom2vid and easy-mp2rage shared component imports | Declare `@neurodesk/webapp-components` in their app manifests. |
-| 3 SYNcro app imports of its undeclared pipeline workspace | Establish an explicit app build dependency on `@neurodesk/syncro`. |
-| 5 SYNcro package imports of SynthSR, SynthStrip and registration sources | Audit the bundled portable CLI before choosing build or runtime declarations. Adding browser-heavy runtime dependencies would change portable installation behavior. |
-| 6 NeSVoR package imports of SynthSR volume helpers and shared fetchModel | Declare the appropriate workspace dependencies or provide a smaller pure helper dependency. |
+The initial 30 findings were resolved with explicit app/package declarations,
+three explicit dicompare type imports, and extraction of NeSVoR's unchanged pure
+reference validator. The browser continues to export the same validator and
+preset; its worker imports the pure helper directly. No upstream source pin or
+scientific behavior changed.
 
 Several test and validation imports also use root development tooling, notably
 Playwright and jsdom in app/package tests and Ajv in the desktop contract generator.
