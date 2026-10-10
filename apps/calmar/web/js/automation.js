@@ -1,3 +1,4 @@
+import { prepare } from '@neurodesk/calmar/pipeline';
 import { createDicomConverter, createNiivueAdapter, registerAppAutomation, summarizeLabels } from '@neurodesk/webapp-components/automation';
 import { readNifti } from '@neurodesk/webapp-components/file-io';
 import { loadAtlasFromManifest, decodeNiftiBuffer } from './modules/atlas-loader.js';
@@ -93,13 +94,22 @@ export function registerCalmarAutomation(app) {
         await app.setStructural(inputs.structural[0]);
         signal.throwIfAborted();
         progress({ value: 0.05, message: 'Extracting brain' });
-        await app.runBrainExtraction();
-        signal.throwIfAborted();
-        await app.prealignToMni160({ skipIfAligned: true });
-        signal.throwIfAborted();
-        await app.runLesionSegmentation();
-        signal.throwIfAborted();
-        const candidate = await app.startLesionMaskReview({ seedFile: app.autoLesionSeedFile });
+        const prepared = await prepare(null, {
+          extractBrain: async () => {
+            await app.runBrainExtraction();
+            signal.throwIfAborted();
+          },
+          prealign: async () => {
+            await app.prealignToMni160({ skipIfAligned: true });
+            signal.throwIfAborted();
+          },
+          segment: async () => {
+            await app.runLesionSegmentation();
+            signal.throwIfAborted();
+          },
+          projectCandidate: () => app.startLesionMaskReview({ seedFile: app.autoLesionSeedFile })
+        });
+        const candidate = prepared.candidate;
         if (!candidate || app.lesionMaskConfirmed) throw new Error('CALMaR did not return an unconfirmed lesion candidate for review.');
         const brainMask = app.nativeBrainmaskFile || app.brainmaskFile;
         const manifest = await app.ensureManifest();

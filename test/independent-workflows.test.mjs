@@ -261,3 +261,33 @@ test('shared publication changes select both callers and independently test the 
   assert.ok(steps.some(step => step.with?.components === 'rustfmt, clippy'));
   assert.doesNotMatch(JSON.stringify(flow), /fetch_model|test-real|ort|setup-node|pnpm|secrets\./);
 });
+
+test('live browser release checks are opt-in and provision a production app separately', async () => {
+  const shared = await workflow('node-cli-portable');
+  assert.equal(shared.on.workflow_call.inputs.validation_app.default, '');
+  for (const [name, packageDir] of await portableCallers()) {
+    const caller = await workflow(name);
+    const spec = JSON.parse(await readFile(new URL(`../${packageDir}/release.json`, import.meta.url), 'utf8'));
+    assert.equal(caller.jobs.portable.with.validation_app, spec.validationApp);
+  }
+  for (const name of ['Configure browser reference cache', 'Install browser reference Chromium', 'Build production browser reference app', 'Provision browser reference comparison']) {
+    const build = shared.jobs.portable.steps.find(step => step.name === name);
+    const release = shared.jobs.release.steps.find(step => step.name === name);
+    assert.equal(build.if, "inputs.validation_app != ''");
+    assert.equal(release.if, "inputs.sign_release && inputs.validation_app != ''");
+  }
+});
+
+test('CPU Node driver parity skips optional CUDA installation', async () => {
+  const flow = await workflow('node-drivers');
+  assert.equal(flow.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
+  assert.ok(flow.jobs.node.steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
+});
+
+test('Brain2Print browser CPU parity skips optional CUDA installation', async () => {
+  const flow = await workflow('brain2print-native');
+  const job = flow.jobs['browser-reference'];
+  const install = job.steps.find(step => step.run === 'pnpm install --frozen-lockfile');
+  assert.equal(install.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
+  assert.ok(job.steps.some(step => step.run === 'node packages/brain2print/validation/browser-reference.mjs --check'));
+});

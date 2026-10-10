@@ -1,0 +1,36 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "calmar-v",
+  "displayName": "CALMAR lesion network mapping",
+  "app": "calmar",
+  "run": "prepare t1.nii.gz candidate-results",
+  "readme": {
+    "run": "Prepare a candidate lesion for human review",
+    "notes": [
+      "Review and edit candidate-lesion.nii before network mapping.",
+      "Map a reviewed atlas-space binary mask with calmar map --reviewed lesion.nii.gz results.",
+      "Both supported atlases/connectomes and all default model assets are included locally.",
+      "No network connection or populated cache is required.",
+      "Research software; inspect registration and lesion masks."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "calmar"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "calmar.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "calmar"
+    }
+  },
+  "validationApp": "calmar"
+}

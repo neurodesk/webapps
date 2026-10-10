@@ -26,6 +26,7 @@ permissions:
   contents: read
 
 env:
+  ONNXRUNTIME_NODE_INSTALL: skip
   # rordenlab/niimath main after v1.0.20260924 (npm 1.4.20260924); later commits change only the Python wrapper.
   NIIMATH_NATIVE_COMMIT: 95645c2447ae4c5853d23c3e449a5b32e8aafe23
 
