@@ -164,7 +164,12 @@ test('real structural example produces an unconfirmed native lesion candidate', 
   expect(snapshot.report.summary.requiresReview).toBe(true);
   expect(snapshot.report.summary.lesionConfirmed).toBe(false);
   expect(await page.evaluate(() => window.app.lesionMaskConfirmed)).toBe(false);
-  const candidate = await readNifti(await download(page, snapshot.report, 'candidate'));
+  const candidateBytes = await download(page, snapshot.report, 'candidate');
+  if (process.env.CALMAR_REFERENCE_DIR) {
+    await mkdir(process.env.CALMAR_REFERENCE_DIR, { recursive: true });
+    await writeFile(join(process.env.CALMAR_REFERENCE_DIR, 'candidate-lesion.nii'), candidateBytes);
+  }
+  const candidate = await readNifti(candidateBytes);
   expect(candidate.dims).toEqual((await readNifti(bytes)).dims);
   expect(candidate.data.every(value => value === 0 || value === 1)).toBe(true);
   await writeFile(join(directory, 'candidate-report.json'), JSON.stringify(snapshot.report, null, 2));

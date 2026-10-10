@@ -1,0 +1,10 @@
+{
+  "input": {
+    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/calmar/stroke-lesion/stroke_T1.nii.gz",
+    "sha256": "725a37bf9556c6776a7be552597999df67d175a44eafc03252db058e8f5c5cad"
+  },
+  "minimumCandidateDice": 0.995,
+  "minimumScientificDice": 0.5,
+  "maximumFcError": 1e-06,
+  "candidateReference": "Live production Chromium/ONNX Runtime Web CPU on the pinned input; no recorded native output serves as a golden."
+}

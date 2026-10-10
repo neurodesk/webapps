@@ -49,13 +49,13 @@
     "test:real-data-pca": "node --no-warnings scripts/test_real_data_pca.mjs",
     "test:deploy-budget": "node scripts/test_deploy_budget.cjs",
     "test:manifest-checksums": "node scripts/test_manifest_checksums.cjs",
-    "vendor": "node ../../scripts/vendor-components.mjs",
+    "vendor": "node ../../scripts/vendor-components.mjs && node scripts/stage-pipeline.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "node ../../scripts/dev-server.mjs --dir web --port 8080 --cache-policy 'no-store, must-revalidate' --staging-route /__lnm_downloads/ --build-info",
     "prebuild": "pnpm vendor && pnpm runtime-support && node ../../scripts/fetch-app-runtime.mjs --dest web/wasm ort-web:ort.min.js,ort.webgpu.bundle.min.mjs,ort-wasm-simd-threaded.mjs,ort-wasm-simd-threaded.wasm,ort-wasm-simd-threaded.jsep.mjs,ort-wasm-simd-threaded.jsep.wasm",
-    "build": "node ../../scripts/build-static.mjs",
-    "pretest": "pnpm runtime-support",
+    "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app calmar",
+    "pretest": "pnpm vendor && pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test",
     "test:examples": "node --test scripts/test_examples.mjs"
@@ -63,7 +63,8 @@
   "dependencies": {
     "nifti-reader-js": "^0.8.0",
     "onnxruntime-node": "^1.24.3",
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/calmar": "workspace:*"
   },
   "devDependencies": {
     "acorn": "^8.16.0",

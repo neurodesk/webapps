@@ -1,0 +1,45 @@
+{
+  "name": "@neurodesk/calmar",
+  "version": "0.5.20261009",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "calmar": "./bin/calmar.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./node": "./src/node.js",
+    "./volume-utils": "./src/volume-utils.js",
+    "./brain-extraction": "./src/brain-extraction.js",
+    "./registration": "./src/registration.js",
+    "./prealign": "./src/prealign.js",
+    "./resample": "./src/resample.js",
+    "./fc-weighted-sum": "./src/fc-weighted-sum.js",
+    "./parcel-overlap": "./src/parcel-overlap.js",
+    "./threshold": "./src/threshold.js",
+    "./nifti-writer": "./src/nifti-writer.js",
+    "./overlap-export": "./src/overlap-export.js",
+    "./inference-numerics": "./src/inference-numerics.js",
+    "./inference-pipeline": "./src/inference-pipeline.js",
+    "./pipeline": "./src/pipeline.js",
+    "./alignment": "./src/alignment.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "model.manifest.json",
+    "README.md",
+    "assets.lock.json"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "nifti-reader-js": "0.8.0",
+    "onnxruntime-node": "1.29.0",
+    "@neurodesk/webapp-components": "workspace:*"
+  }
+}

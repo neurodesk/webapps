@@ -174,3 +174,21 @@ The example imports only a structural T1. Run analysis computes the lesion mask;
 ## Threaded runtime hosting
 
 Keep `ort-web` in Calmar's `app_scoped_runtime_families`. Its WASM thread workers must load within `/calmar/`, where the isolation service worker supplies the required headers. Moving them to `/_runtime/` blocks worker startup on GitHub Pages and leaves SynthStrip waiting after normalization.
+
+## Shared headless pipeline and portable command line
+
+`packages/calmar/src` owns the scientific helpers and headless prepare/map
+workflow. Browser module paths reexport the generated `web/vendor/calmar/src`
+copy; `scripts/stage-pipeline.mjs` stages it after components for dev/build/test.
+Change the shared source and retain existing independent Python, Node and browser
+parity gates. Do not restore an app-local scientific implementation.
+
+`prepare` ends at an unconfirmed native-space candidate. `map` requires explicit
+review approval and either a matching atlas-space binary mask or a reviewed
+native mask plus its structural T1. Preserve the PCA/SynthMorph parameters and
+the human review boundary. `packages/calmar/validation/cli-check.mjs` validates
+each extracted portable release offline; immutable assets and checksums live in
+`packages/calmar/assets.lock.json`, derived from the browser model manifest and
+pinned connectome indexes. Releases follow root date-version instructions and
+the shared signed macOS packager rather than the imported standalone release
+instructions above.
