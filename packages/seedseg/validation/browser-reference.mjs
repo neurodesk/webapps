@@ -50,6 +50,14 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       return route.fulfill({ status: 302, headers: { Location: `${origin}/validation-models/${asset.filename}`, 'Access-Control-Allow-Origin': '*' } });
     });
     const page = await context.newPage();
+    let runtimeVersion;
+    page.on('worker', worker => {
+      if (!worker.url().includes('/js/inference-worker.js')) return;
+      runtimeVersion = worker.evaluate(async () => {
+        const runtime = await import(new URL('../wasm/ort.webgpu.bundle.min.mjs', self.location.href).href);
+        return runtime.env.versions.web;
+      });
+    });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     page.on('requestfailed', request => console.error(`Browser request failed: ${request.url()} ${request.failure()?.errorText}`));
@@ -88,7 +96,9 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       }
     }
     assert.equal(errors.length, 0, errors.join('\n'));
-    return { files, provenance: snapshot.report.provenance, chromium: browser.version(), ortWeb: '1.21.0', composite };
+    const ortWeb = await runtimeVersion;
+    assert.equal(ortWeb, '1.21.0', 'Actual worker runtime agrees with the pinned ORT Web release');
+    return { files, provenance: snapshot.report.provenance, chromium: browser.version(), ortWeb, composite };
   } finally {
     await browser?.close();
     await new Promise(accept => server.close(accept));
