@@ -1,3 +1,4 @@
+import { runSteps } from '../vendor/vesselboost/src/options.js';
 import { awaitPipelineStep, createDicomConverter, createNiivueAdapter, registerAppAutomation } from '@neurodesk/webapp-components/automation';
 import { readNifti } from '@neurodesk/webapp-components/file-io';
 import { summarizeLabels } from '@neurodesk/webapp-components/automation';
@@ -30,14 +31,21 @@ export function registerVesselBoostAutomation(app) {
             betMethodSelect: parameters.brainExtraction,
             betFiInput: parameters.brainThreshold,
           })) document.getElementById(id).value = String(value);
-          await step('downsample', () => parameters.downsample === 1 ? app.skipDownsample() : app.runDownsample());
-          await step('n4', () => parameters.biasCorrection ? app.runN4() : app.skipN4());
-          await step('denoise', () => parameters.denoise === 'none' ? app.skipDenoise() : app.runDenoise());
-          await step('inference', () => app.runSegmentation());
-          if (parameters.brainExtraction !== 'none') {
-            await step('bet', () => app.runBET());
-            await step('apply-brain-mask', () => app.applyBrainMask());
-          }
+          await runSteps(async type => {
+            const actions = {
+              downsample: ['downsample', () => app.runDownsample()],
+              'skip-downsample': ['downsample', () => app.skipDownsample()],
+              'run-n4': ['n4', () => app.runN4()],
+              'skip-n4': ['n4', () => app.skipN4()],
+              'run-denoise': ['denoise', () => app.runDenoise()],
+              'skip-denoise': ['denoise', () => app.skipDenoise()],
+              'run-inference': ['inference', () => app.runSegmentation()],
+              'run-bet': ['bet', () => app.runBET()],
+              'apply-brain-mask': ['apply-brain-mask', () => app.applyBrainMask()],
+            };
+            const [name, action] = actions[type];
+            await step(name, action);
+          }, parameters);
           const segmentation = executor.getResult('segmentation')?.file;
           if (!segmentation) throw new Error('VesselBoost did not return a completed vessel segmentation.');
           const artifacts = [{ role: 'vessels', file: segmentation }];

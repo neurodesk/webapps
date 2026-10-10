@@ -66,6 +66,7 @@ apps:
 
   vesselboost:
     packages:
+      - { name: "@neurodesk/vesselboost", url: https://github.com/neurodesk/webapps/tree/main/packages/vesselboost, role: shared browser and portable CPU preprocessing and inference }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the 3D UNet in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }

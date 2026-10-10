@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, extname, join, relative, sep } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
 import { stageOperationParameters } from './operation-parameters-runtime.mjs';
 
@@ -121,6 +121,31 @@ async function removeAppCopies(siteDist, registry) {
   }
 }
 
+// Single-file runtimes can move to the shared store. Threaded worker families
+// retain their existing app scope policy and must not opt into this operation.
+async function deduplicateSources({ manifest, files, siteDist, registry }) {
+  for (const family of manifest.families.filter(family => family.deduplicate)) {
+    for (const asset of family.files) {
+      const app = registry.apps.find(app => app.id === asset.source_app);
+      if (!app || app.app_scoped_runtime_families?.includes(family.id)) throw new Error(`Cannot deduplicate scoped runtime ${family.id}`);
+      const sourcePath = join(siteDist, app.path, asset.source);
+      const targetPath = join(siteDist, '_runtime', family.target, asset.name);
+      let references = 0;
+      for (const file of files.filter(file => file.startsWith(join(siteDist, app.path) + sep) && TEXT_EXTENSIONS.has(extname(file)))) {
+        const original = await readFile(file, 'utf8');
+        const rewritten = original.replace(/(['"])([^'"\n]+)\1/g, (match, quote, reference) => {
+          if (resolve(dirname(file), reference) !== sourcePath) return match;
+          references++;
+          return `${quote}${moduleReference(file, targetPath)}${quote}`;
+        });
+        if (rewritten !== original) await writeFile(file, rewritten);
+      }
+      if (!references) throw new Error(`No static references found for deduplicated runtime ${sourcePath}`);
+      await rm(sourcePath);
+    }
+  }
+}
+
 export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }) {
   const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets', 'manifest.json'), 'utf8'));
   if (manifest.schema_version !== 1) throw new Error('Unsupported runtime-assets manifest schema');
@@ -153,5 +178,6 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
       await rewriteFile(file, runtimeRoot, app, relativePath);
     }
   }
+  await deduplicateSources({ manifest, files, siteDist, registry });
   await removeAppCopies(siteDist, registry);
 }

@@ -36,6 +36,29 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('vesselboost', async page => {
+    await page.locator('#fileInput').setInputFiles(nifti('automation-input.nii'));
+    await expect(page.locator('#runDownsampleBtn')).toBeEnabled();
+    await expect(page.locator('#status')).toContainText('complete');
+    for (const [section, action] of [
+      ['stepDownsampleSection', 'skipDownsampleBtn'],
+      ['stepN4Section', 'skipN4Btn'],
+      ['stepDenoiseSection', 'skipDenoiseBtn'],
+    ]) {
+      await page.locator(`#${section} [data-disclosure-toggle]`).tap();
+      await page.locator(`#${action}`).tap();
+    }
+    await expect(page.locator('#runSegmentation')).toBeEnabled();
+    await page.locator('#modelSelect').selectOption('omelette1');
+    await page.locator('#thresholdInput').fill('0.2');
+    const toggle = page.locator('#stepInferenceSection [data-disclosure-toggle]');
+    await toggle.tap();
+    await toggle.tap();
+    await expect(page.locator('#modelSelect')).toHaveValue('omelette1');
+    await expect(page.locator('#thresholdInput')).toHaveValue('0.2');
+    await expect(page.locator('#vesselboost-log')).toHaveClass(/collapsed/);
+    await expect(page.locator('#runSegmentation')).toBeEnabled();
+  });
   await check('qsmbly', async page => {
     await expect(page.locator('#unifiedFiles')).toBeEnabled({ timeout: 120000 });
     const toggle = page.locator('#paramsSection [data-disclosure-toggle]');

@@ -29,6 +29,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/nesvor': 'nesvor',
   '@neurodesk/syncro': 'syncro',
   '@neurodesk/topofit': 'topofit',
+  '@neurodesk/vesselboost': 'vesselboost',
   '@neurodesk/white-matter-lesions': 'white-matter-lesions',
 });
 
