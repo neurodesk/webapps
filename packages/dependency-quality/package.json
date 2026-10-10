@@ -1,0 +1,15 @@
+{
+  "name": "@neurodesk/dependency-quality",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Repository dependency graph and boundary checks.",
+  "exports": {
+    ".": "./src/index.mjs"
+  },
+  "dependencies": {
+    "@swc/core": "1.15.11",
+    "dependency-cruiser": "18.5.0",
+    "enhanced-resolve": "5.26.0"
+  }
+}
