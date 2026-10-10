@@ -21,3 +21,11 @@ packages/vesselboost/preprocessing/*.js text eol=lf
 packages/vesselboost/preprocessing/*.d.ts text eol=lf
 packages/vesselboost/preprocessing/artifact.json text eol=lf
 packages/vesselboost/preprocessing/*.wasm -text
+
+# MuscleMap model contracts are checksum- and byte-size-pinned across platforms.
+apps/musclemap/model-sources/*.json -text
+
+# Generated MuscleMap contracts are compared with the generator's exact LF output.
+apps/musclemap/web/js/app/model-catalog.generated.js text eol=lf
+packages/musclemap/src/model-catalog.generated.js text eol=lf
+models/musclemap.manifest.json text eol=lf

@@ -46,9 +46,9 @@ test('embedded version strings and linked packages match their app', async () =>
   }
 });
 
-test('MuscleMap releases stay on the supported upstream series', () => {
+test('MuscleMap app releases version portable features separately from checkpoints', () => {
   const { manifest } = packages.get('musclemap');
-  assert.equal(manifest.releaseSeries, '1.4');
+  assert.equal(manifest.releaseSeries, '1.5');
   assert.equal(manifest.version.split('.').slice(0, 2).join('.'), manifest.releaseSeries);
 });
 

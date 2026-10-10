@@ -23,6 +23,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/lcmodel': 'lcmodel',
+  '@neurodesk/musclemap': 'musclemap',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',
@@ -203,6 +204,8 @@ export const EMBEDDED_VERSION_SITES = Object.freeze({
     { file: 'apps/musclemap/model-sources/release.json', pattern: /("targetAppVersion":\s*")[^"]+(")/, replace: '$1{version}$2' },
     { file: 'apps/musclemap/web/js/app/model-catalog.generated.js', pattern: /(export const APP_VERSION = ")[^"]+(")/, replace: '$1{version}$2' },
     { file: 'apps/musclemap/web/js/app/model-catalog.generated.js', pattern: /(export const TARGET_APP_VERSION = ")[^"]+(")/, replace: '$1{version}$2' },
+    { file: 'packages/musclemap/src/model-catalog.generated.js', pattern: /(export const APP_VERSION = ")[^"]+(")/, replace: '$1{version}$2' },
+    { file: 'packages/musclemap/src/model-catalog.generated.js', pattern: /(export const TARGET_APP_VERSION = ")[^"]+(")/, replace: '$1{version}$2' },
   ],
   zarro: [
     { file: 'apps/zarro/src/config.js', pattern: /(version: ')[^']+(')/, replace: '$1{version}$2' },
