@@ -3,13 +3,16 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { availableParallelism, homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import * as ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import packageJson from '../package.json' with { type: 'json' };
 import { ENSEMBLE_SIZES, FLAMES_FOLDS, SYNTHSTRIP } from './assets.js';
 import { nonzeroMask, runFolds } from './pipeline.js';
 import { lesionResults, outputNames } from './results.js';
+
+// Set before loading the native library, including direct users of the Node API.
+process.env.ORT_DISABLE_TELEMETRY ??= '1';
+const ort = await import('onnxruntime-node');
 
 export const MODEL_ASSETS = Object.freeze([SYNTHSTRIP, ...FLAMES_FOLDS]);
 

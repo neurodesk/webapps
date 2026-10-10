@@ -6,9 +6,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { writeVolume } from '@neurodesk/synthsr';
-import * as ort from 'onnxruntime-node';
 import { FLAMES_FOLDS, SYNTHSTRIP } from '../src/assets.js';
 import { MODEL_ASSETS, checkInstallation, defaultCacheDir, downloadModels, segment } from '../src/node.js';
+
+const ort = await import('onnxruntime-node');
 
 const cli = fileURLToPath(new URL('../bin/flames.js', import.meta.url));
 
@@ -156,6 +157,22 @@ test('self-check writes nothing to the home directory', async (t) => {
   await mkdir(home);
   const result = spawnSync(process.execPath, [cli, 'self-check'], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home } });
   assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(await readdir(home, { recursive: true }), []);
+});
+
+test('the direct Node API executes without writing to an empty home outside CI', async (t) => {
+  const { root } = await workspace(t);
+  const home = join(root, 'api-home');
+  await mkdir(home);
+  const script = `
+    const { checkInstallation } = await import(${JSON.stringify(new URL('../src/node.js', import.meta.url).href)});
+    console.log(JSON.stringify(await checkInstallation()));
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home, TMPDIR: tmpdir() },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).executionProvider, 'cpu');
   assert.deepEqual(await readdir(home, { recursive: true }), []);
 });
 

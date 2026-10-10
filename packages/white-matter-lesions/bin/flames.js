@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
 
-// ONNX Runtime's Linux build otherwise writes a telemetry device ID under ~/.cache/Microsoft.
+// ONNX Runtime otherwise writes telemetry state under the user's home directory.
 // It reads the variable when its library loads, so node.js is imported afterwards.
 process.env.ORT_DISABLE_TELEMETRY ??= '1';
 const { checkInstallation, downloadModels, segment } = await import('../src/node.js');
