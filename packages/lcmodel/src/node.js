@@ -38,6 +38,7 @@ import {
 } from "./pipeline.js";
 import { recommendBasis } from "./basis-select.js";
 import { correctionFor, tissueTexts } from "./tissue.js";
+import { readT1, segmentT1, correctFromT1, tissueMapFiles } from "./t1-node.js";
 import { loadLcmodel } from "./wasm.js";
 
 export { PARAMETERS };
@@ -45,8 +46,6 @@ export { PARAMETERS };
 const APP = `lcmodel command line ${packageJson.version}`;
 const LIBRARY = basisLibrary(manifest);
 const FRACTIONS = ["fractionGM", "fractionWM", "fractionCSF"];
-
-export const T1_UNSUPPORTED = "--t1 is not supported yet: segmenting a T1 image for the tissue correction needs the web app (https://github.com/neurodesk/webapps/issues/203). Give the voxel's fractions with --fraction-gm, --fraction-wm and --fraction-csf instead.";
 
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === "1";
@@ -287,12 +286,13 @@ export async function fit({
   onProgress = () => {},
   log = () => {},
 }) {
-  if (t1) throw new Error(T1_UNSUPPORTED);
+  if (t1 && FRACTIONS.some(key => p[key] !== undefined)) throw new Error("Give either a T1 image or tissue fractions, not both.");
   if (!inputs?.length || !output) throw new Error("Spectroscopy files and an output directory are required.");
   if (basis && p.basisSet && p.basisSet !== "auto") throw new Error("Give --basis or --basis-set, not both.");
   const destination = resolve(output);
   await assertNewOutput(destination);
   const started = performance.now();
+  const structural = t1 ? await readT1(await readInputs([t1]), log) : null;
   const files = await readInputs(inputs);
   const sorted = sortInputs(files);
   const custom = basis ? await readBasisFile(basis) : sorted.basis[0] ? parseCustomBasis(sorted.basis[0].name, decode(sorted.basis[0])) : null;
@@ -334,13 +334,20 @@ export async function fit({
   const settings = settingsFrom(p);
   const versions = reportVersions(APP);
   const onStep = (message) => report(undefined, message);
+  const eligible = input.kind === "fida" && input.datasets.some(dataset => dataset.header?.voxel);
+  if (structural && !eligible) throw new Error("These spectroscopy data do not record the voxel position.");
+  let segmentation = null;
+  if (structural) {
+    report(undefined, "Segmenting the T1 image (MindMap on CPU)…");
+    segmentation = await segmentT1(structural, log);
+  }
   await mkdir(destination, { recursive: true });
   const group = input.kind === "fida" && input.datasets.length > 1;
   // A WebAssembly trap may leave the module broken: the next dataset gets a fresh one.
   const recycle = () => createEngine(sorted.other, engineOptions);
   const result = group
-    ? await fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle })
-    : await fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log });
+    ? await fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle, segmentation })
+    : await fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log, segmentation });
   result.provenance = {
     app: APP,
     parameters: p,
@@ -352,7 +359,7 @@ export async function fit({
   return { output: destination, ...result };
 }
 
-async function fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log }) {
+async function fitOne(engine, { input, p, settings, bases, acquisition, versions, destination, onStep, log, segmentation }) {
   const choice = chooseBasis(input, 0, { basisSet: p.basisSet ?? "auto", bases, acquisition });
   const entry = await fitPlanned(engine, { input, index: 0, basisId: choice, settings, bases, acquisition, onStep, log });
   const f = entry.fit;
@@ -362,13 +369,14 @@ async function fitOne(engine, { input, p, settings, bases, acquisition, versions
   if (correction?.reason) throw new Error(correction.reason);
   f.correction = correction ? { ...correction, source: { kind: "entered" } } : null;
   const texts = Object.values(resultTexts(entry, input, versions));
-  if (f.correction) texts.push(...Object.values(tissueTexts(f.correction, fileStem(datasetLabel(input, 0)), f.ratioTo, { voxel: header?.voxel ?? null })));
+  if (segmentation) texts.push(...correctFromT1(segmentation, entry, header, fileStem(datasetLabel(input, 0)), p.metaboliteRelaxation ?? true), ...tissueMapFiles(segmentation));
+  else if (f.correction) texts.push(...Object.values(tissueTexts(f.correction, fileStem(datasetLabel(input, 0)), f.ratioTo, { voxel: header?.voxel ?? null })));
   const written = await writeTexts(destination, texts);
   const summary = fitSummary(entry, choice === CUSTOM ? bases.custom.name : choice);
   return { files: written, ...summary };
 }
 
-async function fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle }) {
+async function fitGroup(engine, { input, p, settings, bases, versions, destination, onStep, log, recycle, segmentation }) {
   if (p.fractionGM !== undefined) throw new Error("Tissue fractions describe one voxel; give them with one dataset, not a group of datasets.");
   const explicit = Boolean(p.basisSet && p.basisSet !== "auto");
   const first = headerFor(input, 0, null);
@@ -377,11 +385,20 @@ async function fitGroup(engine, { input, p, settings, bases, versions, destinati
   const n = input.datasets.length;
   log(`Fitting ${n} datasets. ${plan.description}`);
   const fits = new Map();
+  const tissueFiles = [];
   for (let k = 0; k < n; k += 1) {
     const label = input.datasets[k].label;
     const step = (message) => onStep(`Dataset ${k + 1} of ${n} (${label}): ${message}`);
     try {
       const entry = await fitPlanned(engine, { input, index: k, basisId: plan.bases[k], settings, bases, acquisition: null, onStep: step, log });
+      const header = input.datasets[k].header;
+      if (segmentation && entry.fit.water && header?.voxel) {
+        try {
+          tissueFiles.push(...correctFromT1(segmentation, entry, header, fileStem(datasetLabel(input, k)), p.metaboliteRelaxation ?? true));
+        } catch (error) {
+          log(`${label}: tissue correction skipped: ${error.message}`, "warning");
+        }
+      }
       fits.set(k, entry);
       log(`${label}: fitted with ${entry.basis.label}`);
     } catch (error) {
@@ -398,6 +415,8 @@ async function fitGroup(engine, { input, p, settings, bases, versions, destinati
     { name: "lcmodel_group.csv", body: groupCsvLong(records) },
     { name: "lcmodel_group_wide.csv", body: groupCsvWide(records) },
   ];
+  texts.push(...tissueFiles);
+  if (tissueFiles.length) texts.push(...tissueMapFiles(segmentation));
   for (const entry of fitted) texts.push(...Object.values(resultTexts(entry, input, versions)));
   const written = await writeTexts(destination, texts);
   return {

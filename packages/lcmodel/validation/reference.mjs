@@ -31,6 +31,7 @@ export const CASES = Object.freeze([
     operation: "fit",
     parameters: { badAverageSd: 2, phaseAndReference: false, eddyCurrentCorrection: false, lineBroadening: "lcmodel" },
   },
+  { id: "philips-press-t1-cpu", example: "philips-press-t1", operation: "fit", parameters: {}, t1: true },
   { id: "philips-press-tissue", example: "philips-press-t1", operation: "fit", parameters: { fractionGM: 0.6, fractionWM: 0.27, fractionCSF: 0.13 } },
   { id: "philips-press-tissue-water-only", example: "philips-press-t1", operation: "fit", parameters: { fractionGM: 0.6, fractionWM: 0.27, fractionCSF: 0.13, metaboliteRelaxation: false } },
   { id: "siemens-special", example: "siemens-special", operation: "fit", parameters: {} },
@@ -47,16 +48,16 @@ export const CASES = Object.freeze([
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 /**
- * The example's files a case uses (the T1 is left out: the command line takes
- * entered fractions), downloaded once into the system temporary directory and
+ * The example's files a case uses, including its T1 for segmentation cases,
+ * downloaded once into the system temporary directory and
  * checked against registry/offline-assets.lock.json.
  * @returns {Promise<{role: string, name: string, path: string}[]>}
  */
-export async function exampleFiles(exampleId) {
+export async function exampleFiles(exampleId, { includeT1 = false } = {}) {
   const example = examples.find((e) => e.id === exampleId);
   if (!example) throw new Error(`No example ${exampleId} in apps/lcmodel/examples.json`);
   const files = [];
-  for (const file of example.files.filter((f) => f.role !== "t1")) {
+  for (const file of example.files.filter((f) => includeT1 || f.role !== "t1")) {
     const pin = lock.assets[file.url];
     if (!pin) throw new Error(`${file.url} is not in registry/offline-assets.lock.json`);
     const path = join(tmpdir(), "neurodesk-lcmodel-validation", pin.sha256, file.name);

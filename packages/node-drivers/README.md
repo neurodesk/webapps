@@ -1,11 +1,11 @@
 # @neurodesk/node-drivers
 
-Two Node drivers that let a portable command line run the same WebAssembly as
+Node drivers that let a portable command line run the same WebAssembly as
 its app, with no production dependencies. The caller supplies its pinned builds.
 
 ## Node drivers for command lines
 
-Both drivers take the build the caller pins, so a command line runs the bytes
+The drivers take the build the caller pins, so a command line runs the bytes
 its web app runs. Add MindGrab or niimath to the command line's own dependencies at the
 app's version, alongside `@neurodesk/node-drivers`.
 
@@ -67,3 +67,12 @@ reproduce them byte for byte. MindGrab inference runs with
 side; without `--check` it rewrites the references.
 `.github/workflows/node-drivers.yml` runs all of this on Linux, Windows and
 macOS.
+
+### dcm2niix
+
+`convertDicom(files, factory, { onLog })` writes an in-memory DICOM series to
+one fresh raw Emscripten dcm2niix instance and returns its NIfTI files as
+`{ name, bytes }`. The caller supplies its pinned factory, for example the
+`dcm2niix.jpeg.js` beside `import.meta.resolve('@niivue/dcm2niix')`.
+It runs without browser globals or network downloads. Conversion exit codes
+0 and 3 are accepted, as in the browser wrapper; other codes throw.

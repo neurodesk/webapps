@@ -24,7 +24,7 @@ into a group table.
 Settings:
 ${settingsHelp}
   --basis FILE                    An LCModel .BASIS file (.gz allowed) instead of the library.
-  --t1 FILE                       Not supported yet: give the tissue fractions instead.
+  --t1 FILE_OR_DIR                Same-session 3D NIfTI or DICOM series; MindMap CPU tissues.
   --cache-dir DIR                 Basis-set directory (default NEURODESK_LCMODEL_MODEL_DIR or
                                   ~/.cache/neurodesk/lcmodel/<set>)
   --offline                       Never download; fail if a basis set is missing

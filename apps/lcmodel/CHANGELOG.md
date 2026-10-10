@@ -1,5 +1,18 @@
 # lcmodel
 
+## 0.7.20261010
+
+### Minor Changes
+
+- Accept same-session T1 NIfTI and DICOM for offline MindMap CPU tissue correction. Measure each dataset's voxel on shared maps and save the voxel masks, maps and segmentation provenance. Share voxel geometry with the app, align MindGrab at 0.1.20260925 and check the command line against forced-CPU app downloads on the defaced Philips T1.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/lcmodel@0.7.20261010
+  - @neurodesk/runtime-support@0.4.1
+  - @neurodesk/webapp-components@0.12.1
+
 ## 0.6.20261010
 
 ### Patch Changes

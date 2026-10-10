@@ -8,7 +8,7 @@ import { version as mindgrabVersion } from "@brainchop/mindgrab/package.json";
 import { readImageFiles } from "@neurodesk/runtime-support/dcm2niix-client";
 import { decodeNiftiBuffer, parseNiftiHeader, readNiftiImageData, extractNiftiHeader, createFloat32Nifti } from "@neurodesk/webapp-components/file-io";
 import { bindFileDrop } from "@neurodesk/webapp-components/ui";
-import { voxelWeights, tissueFractions } from "./voxel.js";
+import { voxelWeights, tissueFractions } from "@neurodesk/lcmodel/voxel";
 import { correctionFor, tissueTexts } from "@neurodesk/lcmodel/tissue";
 
 const $ = (id) => document.getElementById(id);

@@ -104,7 +104,7 @@ fitting, both as Rust ports compiled to WebAssembly (`packages/lcmodel`).
   the same session (NIfTI, or DICOM through the shared dcm2niix import) is
   segmented with MindMap's partial-volume maps (`@brainchop/mindgrab`
   `segmentTissues`; WebGPU, hardware WebGL2, else the threaded CPU module).
-  `src/voxel.js` samples the oblique voxel box on the T1 grid (5 x 5 x 5 points
+  `@neurodesk/lcmodel/voxel` samples the oblique voxel box on the T1 grid (5 x 5 x 5 points
   per T1 voxel) for Osprey-style fractions; the Voxel view draws it on the T1.
   `src/tissue.js` is Osprey's `quantTiss`/`quantAlpha` (Gasparovic 2006, Harris
   2015) on LCModel's water-scaled output, tested against Osprey's own code in

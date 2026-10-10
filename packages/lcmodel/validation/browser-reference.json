@@ -1130,11 +1130,458 @@
         ]
       },
       "seconds": 8.1
+    },
+    "philips-press-t1-cpu": {
+      "files": {
+        "sub-01_PRESS_35_act.H2O": "1df7a942b9a424fe50674aaff182a2002fc02c983cd4ecded626854db8076956",
+        "sub-01_PRESS_35_act.RAW": "f274068c7dd067ab2c055f04ce11c1ff36e68e6a78192ea25c61829710cce631",
+        "sub-01_PRESS_35_act.control": "fda252ab586844b3b3bfb15d27a93b261ee29884aa2f66be3240c1f23f445005",
+        "sub-01_PRESS_35_act.coord": "5dbb5e1705e0f9292f17d79ec76f9d0c23e45f2c52125639aa483bfbdbd2c3d8",
+        "sub-01_PRESS_35_act.table": "0075334d8be055d59a3424e67af12a9e08acaf93c667d3548537843d41aa8f1e",
+        "sub-01_PRESS_35_act_concentrations.csv": "43c44349fe3ddced0d9e8e30042311d94c94265aa23c602eb212579df8aec3db",
+        "sub-01_PRESS_35_act_fida.json": "e53f9cc1a052060b370c3965015afa2b31342d35a1b41c68344f284e13896bdd",
+        "sub-01_PRESS_35_act_report.html": "97e141ee157dba112fdf77f434b4249c79d7f763cf9f5ea48d143cc070e5bb93",
+        "sub-01_PRESS_35_act_tissue_corrected.csv": "465ec9d636494a3b62a0b93827463fcbe862e2affa3405ffa521c0f3940598e5",
+        "sub-01_PRESS_35_act_tissue_correction.json": "ac1bf99b82d70d89713adb13d4142b28e2027589f4bf48b533a40e9069c18922",
+        "sub-01_PRESS_35_act_voxel_mask.nii": "0b202fc5a79cd7f154971f2fac641271d2d36eb292d00e9720560f82a24edb60",
+        "sub-01_T1w_defaced_csf.nii": "36329c235fc0d430414f6316943708dbc6cc6f62d1bd59fc7e4d81b22991bf4a",
+        "sub-01_T1w_defaced_gm.nii": "76efb91fe1804e3f88ede3b6f9c5411e5705b39cf22d8c0c925a697a45e2ec63",
+        "sub-01_T1w_defaced_wm.nii": "6533eb339d6c47d329528763613dfc8088158df2a148caeea443f328678589ba"
+      },
+      "headline": {
+        "sub-01_PRESS_35_act_concentrations.csv": [
+          "GABA,0.303,59,0.047",
+          "Ins,4.769,11,0.744",
+          "GPC+PCh,0.775,6,0.121",
+          "NAA+NAAG,7.991,3,1.246",
+          "Cr+PCr,6.414,2,1",
+          "Glu+Gln,7.886,8,1.23"
+        ]
+      },
+      "documents": {
+        "sub-01_PRESS_35_act_tissue_correction.json": {
+          "fractions": {
+            "gm": 0.48851148851148846,
+            "wm": 0.30269730269730266,
+            "csf": 0.20879120879120877
+          },
+          "molalFractions": {
+            "gm": 0.488340233172273,
+            "wm": 0.25213602869102947,
+            "csf": 0.25952373813669755
+          },
+          "fractionSource": {
+            "method": "MindMap partial-volume maps (@brainchop/mindgrab segmentTissues)",
+            "version": "0.1.20260925",
+            "backend": "cpu",
+            "t1": "sub-01_T1w_defaced.nii.gz",
+            "coverage": 0.7968290556934439
+          },
+          "voxel": {
+            "affine": [
+              [
+                30,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                29.913668208474796,
+                -2.2743030390175263,
+                -45.03344727
+              ],
+              [
+                0,
+                2.2743030390175263,
+                29.913668208474796,
+                37.66220856
+              ],
+              [
+                0,
+                0,
+                0,
+                1
+              ]
+            ],
+            "centerMm": [
+              0,
+              -45.03344727,
+              37.66220856
+            ],
+            "sizeMm": [
+              30,
+              30,
+              30
+            ],
+            "source": "Philips SPAR off_center, angulation, size",
+            "space": "RAS"
+          },
+          "voxelInT1Mm3": 27002.399999999296,
+          "waterAttenuation": {
+            "gm": 0.5655761756981438,
+            "wm": 0.5847117859718276,
+            "csf": 0.38042258498124965
+          },
+          "method": "Gasparovic et al. 2006 (Osprey quantTiss)",
+          "unit": "mmol/kg tissue water",
+          "lcmodel": {
+            "wconc": 35880,
+            "atth2o": 0.7,
+            "attmet": 1
+          },
+          "waterConcentration": {
+            "gm": 43300,
+            "wm": 36080,
+            "csf": 53840,
+            "pure": 55510
+          },
+          "waterRelaxation": {
+            "gm": {
+              "t1": 1.331,
+              "t2": 0.11
+            },
+            "wm": {
+              "t1": 0.832,
+              "t2": 0.0792
+            },
+            "csf": {
+              "t1": 3.817,
+              "t2": 0.503
+            }
+          },
+          "metaboliteRelaxation": true,
+          "alpha": null,
+          "metabolite": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "water": {
+            "teMs": 35,
+            "trMs": 2000
+          },
+          "concentrations": [
+            {
+              "name": "Ala",
+              "lcmodel": 0.00454,
+              "corrected": 0.005477173764018508,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Asc",
+              "lcmodel": 0.68,
+              "corrected": 0.8347399504369494,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143.5
+            },
+            {
+              "name": "Asp",
+              "lcmodel": 2.59,
+              "corrected": 3.3018173173006047,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 124.25
+            },
+            {
+              "name": "Cr",
+              "lcmodel": 1.149,
+              "corrected": 1.4217197598623814,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "GABA",
+              "lcmodel": 0.303,
+              "corrected": 0.4391771416690773,
+              "alphaCorrected": null,
+              "t1Ms": 1310,
+              "t2Ms": 88.5
+            },
+            {
+              "name": "Glc",
+              "lcmodel": 1.096,
+              "corrected": 1.383528128255652,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 128.75
+            },
+            {
+              "name": "Gln",
+              "lcmodel": 0.796,
+              "corrected": 0.984437771145794,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 139.25
+            },
+            {
+              "name": "Glu",
+              "lcmodel": 7.09,
+              "corrected": 8.868171877636897,
+              "alphaCorrected": null,
+              "t1Ms": 1220,
+              "t2Ms": 126.25
+            },
+            {
+              "name": "Gly",
+              "lcmodel": 0.724,
+              "corrected": 0.9283332069767029,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 121.75
+            },
+            {
+              "name": "GPC",
+              "lcmodel": 0.775,
+              "corrected": 0.8455007859237779,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 233
+            },
+            {
+              "name": "GSH",
+              "lcmodel": 0.541,
+              "corrected": 0.7022785699701592,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 116.75
+            },
+            {
+              "name": "Ins",
+              "lcmodel": 4.769,
+              "corrected": 5.220134758744965,
+              "alphaCorrected": null,
+              "t1Ms": 1120,
+              "t2Ms": 198.75
+            },
+            {
+              "name": "Lac",
+              "lcmodel": 0.312,
+              "corrected": 0.39142066034035367,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 131.75
+            },
+            {
+              "name": "NAA",
+              "lcmodel": 7.953,
+              "corrected": 9.006668718191857,
+              "alphaCorrected": null,
+              "t1Ms": 1410,
+              "t2Ms": 300.5
+            },
+            {
+              "name": "NAAG",
+              "lcmodel": 0.0376,
+              "corrected": 0.045582962240332835,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 151.25
+            },
+            {
+              "name": "PCh",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1190,
+              "t2Ms": 230.25
+            },
+            {
+              "name": "PCr",
+              "lcmodel": 5.265,
+              "corrected": 6.514668873520833,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "PE",
+              "lcmodel": 6.214,
+              "corrected": 7.819681501619126,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 130.25
+            },
+            {
+              "name": "Scyllo",
+              "lcmodel": 0.308,
+              "corrected": 0.3784106684188607,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 143
+            },
+            {
+              "name": "Tau",
+              "lcmodel": 0.38,
+              "corrected": 0.49890084389602946,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 112.5
+            },
+            {
+              "name": "-CrCH2",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "GPC+PCh",
+              "lcmodel": 0.775,
+              "corrected": 0.831372360074176,
+              "alphaCorrected": null,
+              "t1Ms": 1135,
+              "t2Ms": 231.625
+            },
+            {
+              "name": "NAA+NAAG",
+              "lcmodel": 7.991,
+              "corrected": 9.187542290014434,
+              "alphaCorrected": null,
+              "t1Ms": 1337.5,
+              "t2Ms": 225.875
+            },
+            {
+              "name": "Ins+Gly",
+              "lcmodel": 5.493,
+              "corrected": 6.6268976840867095,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Cr+PCr",
+              "lcmodel": 6.414,
+              "corrected": 7.936388633383215,
+              "alphaCorrected": null,
+              "t1Ms": 1350,
+              "t2Ms": 156
+            },
+            {
+              "name": "Glu+Gln",
+              "lcmodel": 7.886,
+              "corrected": 9.801956684879585,
+              "alphaCorrected": null,
+              "t1Ms": 1242.5,
+              "t2Ms": 132.75
+            },
+            {
+              "name": "Lip13a",
+              "lcmodel": 15.131,
+              "corrected": 18.254430886203536,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13b",
+              "lcmodel": 0,
+              "corrected": 0,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip09",
+              "lcmodel": 4.337,
+              "corrected": 5.232269298358649,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09",
+              "lcmodel": 3.634,
+              "corrected": 4.384151863093228,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip20",
+              "lcmodel": 2.554,
+              "corrected": 3.0812118487452134,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20",
+              "lcmodel": 5.101,
+              "corrected": 6.15397871591595,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM12",
+              "lcmodel": 2.214,
+              "corrected": 2.6710270294134313,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14",
+              "lcmodel": 6.936,
+              "corrected": 8.367770314368364,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM17",
+              "lcmodel": 3.977,
+              "corrected": 4.7979559602426445,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "Lip13a+Lip13b",
+              "lcmodel": 15.131,
+              "corrected": 18.254430886203536,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM14+Lip13a+Lip13b+MM12",
+              "lcmodel": 24.281,
+              "corrected": 29.293228229985328,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM09+Lip09",
+              "lcmodel": 7.97,
+              "corrected": 9.61521473551267,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            },
+            {
+              "name": "MM20+Lip20",
+              "lcmodel": 7.655,
+              "corrected": 9.235190564661163,
+              "alphaCorrected": null,
+              "t1Ms": 1265,
+              "t2Ms": 154.5
+            }
+          ]
+        }
+      },
+      "seconds": 73.4
     }
   },
   "browser": {
     "path": "apps/lcmodel/e2e/reference.spec.js: the app's fit and fit-group automation, its worker, the built assets",
-    "app": "lcmodel 0.5.20261007",
-    "browser": "Chromium 153.0.8010.12"
+    "app": "lcmodel 0.7.20261010",
+    "browser": "Chromium 156.0.8078.4"
   }
 }
