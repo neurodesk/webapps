@@ -4,6 +4,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { upstreamCitationSnapshot } from './upstream-citations.mjs';
 
 export const PACKAGE_VERSION_SITE = { file: 'package.json', pattern: /("version":\s*")[^"]+(")/ };
 
@@ -152,6 +153,11 @@ export function mergeUpstream({ upstream, base, target, appDir, config = {}, ver
     }
     writeFileSync(file, merged.content);
     report.push({ path, status: merged.conflict ? 'conflict' : 'merged' });
+  }
+  if (config.citationSnapshot) {
+    const { file, selector, output } = config.citationSnapshot;
+    const snapshot = upstreamCitationSnapshot(show(upstream, target, file).toString('utf8'), target, selector);
+    writeFileSync(join(appDir, output), `${JSON.stringify(snapshot, null, 2)}\n`);
   }
   return report;
 }

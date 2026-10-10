@@ -399,6 +399,10 @@ apps:
         reference: "Langkammer C, Bredies K, Poser BA, et al. Fast quantitative susceptibility mapping using 3D EPI and total generalized variation. NeuroImage. 2015;111:622–630."
         doi: 10.1016/j.neuroimage.2015.02.041
         code: https://github.com/korbinian90/QuantitativeSusceptibilityMappingTGV.jl
+      - group: Dipole inversion
+        title: Single-step TGV
+        reference: "Chatnuntawech I, McDaniel P, Cauley SF, et al. Single-step quantitative susceptibility mapping with variational penalties. NMR in Biomedicine. 2017;30(4):e3570."
+        doi: 10.1002/nbm.3570
       - group: QSMART pipeline
         title: QSMART and spatial domain filtering
         reference: "Yaghmaie N, Syeda WT, Wu C, et al. QSMART: Quantitative Susceptibility Mapping Artifact Reduction Technique. NeuroImage. 2021;231:117701."
