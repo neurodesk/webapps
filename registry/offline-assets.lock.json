@@ -3821,6 +3821,10 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz"
+    ],
+    "elastix": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/moving/t1_brain.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz"
     ]
   }
 }

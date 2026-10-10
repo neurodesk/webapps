@@ -664,3 +664,23 @@ apps:
       browser_test: true
       hardware_gpu: true
       release: true
+  - id: elastix
+    path: elastix
+    title: elastix
+    description: Rigid, affine and B-spline registration of MRI, OME-Zarr and TIFF images with elastix, in the browser.
+    categories: [registration]
+    keywords: [registration, elastix, affine, B-spline, OME-Zarr, TIFF, microscopy]
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false

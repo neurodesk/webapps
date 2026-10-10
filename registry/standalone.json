@@ -1102,6 +1102,13 @@
         }
       ],
       "containers": []
+    },
+    "elastix": {
+      "desktop": true,
+      "profile": "batch",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

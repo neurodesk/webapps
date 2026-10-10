@@ -40,6 +40,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `niimath` | Image maths | `apps/niimath/package.json` uses `@niivue/niimath`. Assess upstream native distribution and reuse it rather than porting the algorithm. |
 | `dicompare` | Protocol comparison and validation | `apps/dicompare/src/workers/pyodide.worker.ts` uses the upstream Python engine. Package that engine for batch work; schema editing remains interactive. |
 | `fireants` | Registration | `apps/fireants` uses `@fireants/fireants`. Prove its CPU/headless API and dependency bundle on all targets. |
+| `elastix` | Rigid, affine and B-spline registration | `@itk-wasm/elastix` ships Node pipelines (`elastixNode`, `defaultParameterMapNode`), and elastix itself has native releases and the `itk-elastix` Python package. Wrap the app's presets, float32 casting and chained parameter-file output in a command before packaging. |
 | `musclemap` | Muscle segmentation and fat metrics | `apps/musclemap/web/js/inference-worker.js`. Extract orchestration and supply native inference and a model cache. |
 | `vesselboost` | Vessel segmentation | `apps/vesselboost/web/js/inference-worker.js` and Rust preprocessing. Add a headless inference adapter and model provisioning. |
 | `spinalcordtoolbox` | Segmentation, labeling and lesion analysis | `apps/spinalcordtoolbox/web/js/inference-pipeline.js` and Node inference tests exist. Add a filesystem CLI adapter and pinned offline assets. |

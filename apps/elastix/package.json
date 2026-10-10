@@ -1,0 +1,34 @@
+{
+  "name": "elastix",
+  "version": "0.1.20261009",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "node scripts/copy-pipelines.mjs && vite --force",
+    "build": "node scripts/copy-pipelines.mjs && vite build && node ../../scripts/theme-app-dist.mjs --app elastix",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@fideus-labs/fiff": "0.8.2",
+    "@fideus-labs/ngff-zarr": "0.38.0",
+    "@fideus-labs/worker-pool": "^2.1.0",
+    "@itk-wasm/elastix": "2.1.0",
+    "@itk-wasm/image-io": "1.6.1",
+    "@itk-wasm/transform-io": "1.1.0",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niivue": "1.0.0-rc.13",
+    "@zarrita/storage": "0.2.0",
+    "itk-wasm": "1.0.0-b.201"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "vite": "^5.0.0",
+    "zarrita": "0.7.5"
+  }
+}
