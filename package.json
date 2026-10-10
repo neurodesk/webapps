@@ -35,7 +35,8 @@
     "new-app": "node scripts/new-app.mjs",
     "release": "node scripts/release-apps.mjs",
     "release:dry-run": "node scripts/release-apps.mjs --dry-run",
-    "generate:neuroflow": "node scripts/generate-neuroflow.mjs"
+    "generate:neuroflow": "node scripts/generate-neuroflow.mjs",
+    "quality:unused": "node scripts/report-unused-code.mjs"
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "3.0.62",
@@ -53,6 +54,7 @@
     "e2e": "0.16.0",
     "esbuild": "0.28.1",
     "jsdom": "^24.0.0",
+    "knip": "6.41.0",
     "playwright": "1.64.0",
     "turbo": "^2.0.0",
     "typescript": "7.0.2",

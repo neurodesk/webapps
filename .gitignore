@@ -102,3 +102,5 @@ apps/*/web/examples.json
 
 # Scratch session emitted by native validation tools.
 /:memory:.ses
+
+quality-artifacts/
