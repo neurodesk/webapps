@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { ESLint } from 'eslint';
@@ -56,6 +56,10 @@ test('existing findings do not hide changed defective source', () => {
 
 test('the root lint command rejects new untracked source in shared packages', async () => {
   const directory = await mkdtemp(join(root, 'packages/components/src/lint-canary-'));
+  await mkdir(join(root, '.audit'), { recursive: true });
+  const aliasDirectory = await mkdtemp(join(root, '.audit/lint-alias-'));
+  const alias = join(aliasDirectory, 'repository');
+  await symlink(root, alias, 'junction');
   try {
     const canary = join(directory, 'canary.js');
     await writeFile(canary, 'missingLintCanary();\n');
@@ -65,8 +69,15 @@ test('the root lint command rejects new untracked source in shared packages', as
     const result = spawnSync('pnpm', ['lint'], { cwd: root, encoding: 'utf8' });
     assert.equal(result.status, 1);
     assert.match(result.stderr, /canary\.js:1:1 no-undef/);
+    const linked = spawnSync(process.execPath, [join(alias, 'scripts/lint.mjs')], { cwd: alias, encoding: 'utf8' });
+    assert.equal(linked.status, 1);
+    assert.match(linked.stderr, /canary\.js:1:1 no-undef/);
+    const workspaceChecks = spawnSync(process.execPath, [join(alias, 'scripts/lint-workspaces.mjs')], { cwd: alias, encoding: 'utf8' });
+    assert.equal(workspaceChecks.status, 0, workspaceChecks.stderr);
+    assert.match(workspaceChecks.stdout, /successful/);
   } finally {
     await rm(directory, { recursive: true, force: true });
+    await rm(aliasDirectory, { recursive: true, force: true });
   }
 });
 

@@ -31,13 +31,14 @@ unchanged line within its file keeps its identity. Deleting a finding and
 adding the identical defective line elsewhere in the same file is also
 indistinguishable; the baseline is not a substitute for review. Resolved entries also fail
 until their entries are removed, so the baseline cannot silently grow stale.
-Some existing undefined names are browser globals injected by automation or
-classic scripts; confirm their declaration before treating a diagnostic as a
-runtime defect. Explicit environment declarations can replace those entries in
-later focused changes.
+
 
 Fix a finding in the source and delete only its matching baseline entry. Do not
 regenerate the baseline to make a new error pass. Fatal parser errors can never
 be baselined. The new-app template imports the root configuration; use the root
 command for the complete repository gate. Package `pnpm lint` tasks delegate to the same inventory and baseline for their
 workspace. Generated assets and other workspaces are outside that scoped check.
+
+The app ESLint wrapper files remain part of the generator contract. Use the
+package `pnpm lint` command for scoped inventory and baseline handling; direct
+`eslint .` invocation does not implement that repository gate.

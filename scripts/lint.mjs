@@ -2,11 +2,12 @@
 import { ESLint } from 'eslint';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertCoverage, sourceInventory } from './quality/lint-inventory.mjs';
 
-export const root = fileURLToPath(new URL('../', import.meta.url));
+export const root = realpathSync(fileURLToPath(new URL('../', import.meta.url))) + sep;
 export function fingerprint(file, message, source) {
   const line = source.split(/\r?\n/)[message.line - 1] ?? '';
   const identity = [file, message.ruleId, message.message, line.trim()];
@@ -36,10 +37,10 @@ export async function inspect(eslint, files, baseline) {
   return { findings, stale: [...remaining.entries()].filter(([, entry]) => entry.count > 0), results };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const allBaseline = JSON.parse(await readFile(new URL('./quality/lint-baseline.json', import.meta.url), 'utf8'));
   const eslint = new ESLint({ cwd: root, overrideConfigFile: `${root}eslint.config.js` });
-  const workspace = process.argv.includes('--workspace') ? relative(root, process.cwd()).split(sep).join('/') : '';
+  const workspace = process.argv.includes('--workspace') ? relative(root, realpathSync(process.cwd())).split(sep).join('/') : '';
   if (workspace.startsWith('..')) throw new Error('The lint workspace must be inside the repository.');
   const prefix = workspace ? `${workspace}/` : '';
   const baseline = Object.fromEntries(Object.entries(allBaseline).filter(([, entry]) => entry.file.startsWith(prefix)));
