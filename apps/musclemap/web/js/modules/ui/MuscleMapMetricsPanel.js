@@ -4,6 +4,7 @@
  * Displays volumetric metrics summary and provides CSV download
  * after segmentation completes.
  */
+import { metricsCsv } from '../../../vendor/musclemap/src/results.js';
 import { downloadBlob } from '@neurodesk/webapp-components/file-io';
 export class MuscleMapMetricsPanel {
   constructor(containerId = 'metricsSummary') {
@@ -110,112 +111,7 @@ export class MuscleMapMetricsPanel {
 
   _downloadCSV() {
     if (!this.metrics || !this.detectedLabels) return;
-
-    const imfResults = this._getImfResults();
-    const hasImf = imfResults.length > 0;
-    const hasThreeComponentImf = imfResults.some(imf => imf.components === 3);
-    const columns = ['label_index', 'label_name', 'volume_ml', 'slice_count'];
-
-    if (hasImf) {
-      columns.push(
-        'imf_mode',
-        'imf_method',
-        'imf_components',
-        'muscle_percent',
-        'fat_percent',
-        'total_volume_ml',
-        'fat_volume_ml',
-        'muscle_volume_ml',
-        'muscle_threshold'
-      );
-      if (hasThreeComponentImf) {
-        columns.push('undefined_percent', 'undefined_volume_ml', 'fat_threshold');
-      }
-    }
-
-    const rows = [columns.join(',')];
-
-    for (const label of this.detectedLabels) {
-      const row = {
-        label_index: label.index,
-        label_name: label.name,
-        volume_ml: this._formatNumber(this.metrics.labelVolumes[label.index], 4),
-        slice_count: this.metrics.labelSliceCounts[label.index] || 0
-      };
-
-      if (!hasImf) {
-        rows.push(columns.map(col => this._csvValue(row[col])).join(','));
-        continue;
-      }
-
-      for (const imf of imfResults) {
-        const imfRow = { ...row };
-        this._addImfCsvFields(imfRow, imf, label.index);
-        rows.push(columns.map(col => this._csvValue(imfRow[col])).join(','));
-      }
-    }
-
-    // Total row
-    const totalRow = {
-      label_index: '',
-      label_name: 'TOTAL',
-      volume_ml: this._formatNumber(this.metrics.totalVolumeMl, 4),
-      slice_count: ''
-    };
-    if (!hasImf) {
-      rows.push(columns.map(col => this._csvValue(totalRow[col])).join(','));
-    } else {
-      for (const imf of imfResults) {
-        const imfTotalRow = { ...totalRow };
-        this._addImfTotalCsvFields(imfTotalRow, imf);
-        rows.push(columns.map(col => this._csvValue(imfTotalRow[col])).join(','));
-      }
-    }
-
-    const csv = rows.join('\n');
+    const csv = metricsCsv(this.metrics, this.detectedLabels);
     downloadBlob(new Blob([csv], { type: 'text/csv' }), 'musclemap_metrics.csv');
-  }
-
-  _addImfCsvFields(row, imf, labelIndex) {
-    const threshold = imf.thresholds?.[labelIndex] || {};
-    row.imf_mode = imf.mode;
-    row.imf_method = imf.method;
-    row.imf_components = imf.components;
-    row.muscle_percent = this._formatNumber(imf.labelMusclePercentages?.[labelIndex], 2);
-    row.fat_percent = this._formatNumber(imf.labelFatPercentages?.[labelIndex], 2);
-    row.total_volume_ml = this._formatNumber(imf.labelTotalVolumesMl?.[labelIndex], 4);
-    row.fat_volume_ml = this._formatNumber(imf.labelFatVolumesMl?.[labelIndex], 4);
-    row.muscle_volume_ml = this._formatNumber(imf.labelMuscleVolumesMl?.[labelIndex], 4);
-    row.muscle_threshold = this._formatNumber(threshold.muscleMax, 4);
-    if (imf.components === 3) {
-      row.undefined_percent = this._formatNumber(imf.labelUndefinedPercentages?.[labelIndex], 2);
-      row.undefined_volume_ml = this._formatNumber(imf.labelUndefinedVolumesMl?.[labelIndex], 4);
-      row.fat_threshold = this._formatNumber(threshold.fatMin, 4);
-    }
-  }
-
-  _addImfTotalCsvFields(row, imf) {
-    row.imf_mode = imf.mode;
-    row.imf_method = imf.method;
-    row.imf_components = imf.components;
-    row.muscle_percent = this._formatNumber(imf.totalMusclePercentage, 2);
-    row.fat_percent = this._formatNumber(imf.totalFatPercentage, 2);
-    row.total_volume_ml = this._formatNumber(imf.totalMeasuredVolumeMl, 4);
-    row.fat_volume_ml = this._formatNumber(imf.totalFatVolumeMl, 4);
-    row.muscle_volume_ml = this._formatNumber(imf.totalMuscleVolumeMl, 4);
-    if (imf.components === 3) {
-      row.undefined_percent = this._formatNumber(imf.totalUndefinedPercentage, 2);
-      row.undefined_volume_ml = this._formatNumber(imf.totalUndefinedVolumeMl, 4);
-    }
-  }
-
-  _formatNumber(value, digits) {
-    return Number.isFinite(value) ? value.toFixed(digits) : '';
-  }
-
-  _csvValue(value) {
-    if (value == null) return '';
-    const text = String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   }
 }

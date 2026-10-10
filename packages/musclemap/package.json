@@ -1,0 +1,34 @@
+{
+  "name": "@neurodesk/musclemap",
+  "version": "1.5.20261010",
+  "type": "module",
+  "license": "MIT",
+  "description": "MuscleMap segmentation and muscle metrics for browsers and portable command lines",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "musclemap": "./bin/musclemap.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./node": "./src/node.js",
+    "./catalog": "./src/model-catalog.generated.js",
+    "./results": "./src/results.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/pipeline.js && node --check src/node.js && node --check bin/musclemap.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "onnxruntime-node": "1.29.0"
+  }
+}

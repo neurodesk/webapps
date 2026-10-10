@@ -3229,7 +3229,6 @@
   },
   "apps": {
     "musclemap": [
-      "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
       "https://github.com/neurodesk/webapps/releases/download/musclemap-model-v1.4-fp32/musclemap-wholebody-v1.4-fp32.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-abdomen-v0.0-fp32.onnx",
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/09599eb2e065662debc491435eadc56b3bb6da11/musclemap/musclemap-forearm-v0.0-fp32.onnx",

@@ -289,6 +289,7 @@ for (const model of release.models) models.push(await loadModel(model, release))
 
 await Promise.all([
   writeOrCheck(generatedCatalogPath, renderCatalog(release, models)),
+  writeOrCheck(join(repoRoot, 'packages/musclemap/src/model-catalog.generated.js'), renderCatalog(release, models)),
   writeOrCheck(manifestPath, renderManifest(release, models))
 ]);
 

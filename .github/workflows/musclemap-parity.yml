@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'apps/musclemap/**'
+      - 'packages/musclemap/**'
       - 'packages/components/src/volume/**'
       - '.github/workflows/musclemap-parity.yml'
   push:
     branches: [main]
     paths:
       - 'apps/musclemap/**'
+      - 'packages/musclemap/**'
       - 'packages/components/src/volume/**'
       - '.github/workflows/musclemap-parity.yml'
   workflow_dispatch:

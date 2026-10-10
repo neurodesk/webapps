@@ -678,6 +678,9 @@ importers:
 
   apps/musclemap:
     dependencies:
+      '@neurodesk/musclemap':
+        specifier: workspace:*
+        version: link:../../packages/musclemap
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1159,6 +1162,15 @@ importers:
       '@niivue/dcm2niix':
         specifier: 1.2.0
         version: 1.2.0
+
+  packages/musclemap:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
 
   packages/nesvor:
     dependencies:

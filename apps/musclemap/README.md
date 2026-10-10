@@ -164,3 +164,14 @@ The scientific fidelity command is a separate release gate because ordinary unit
 ## Sources and license
 
 The model configuration, labels, and checkpoint metadata come from [MuscleMap](https://github.com/MuscleMap/MuscleMap) at the revision recorded in `model-sources/release.json`. Whole-body v1.4 is published in [Zenodo record 21929873](https://zenodo.org/records/21929873) under the MIT license. The app also uses MONAI, ONNX Runtime Web, and NiiVue.
+
+## Portable command line
+
+The `musclemap` executable uses the browser worker's shared scientific pipeline,
+with native ONNX Runtime on the CPU. Its portable releases include all seven
+checksummed checkpoints and run offline. For source installation, options, IMF
+methods and output names, see [the package command-line instructions](../../packages/musclemap/README.md#command-line).
+
+```sh
+musclemap image.nii.gz results --model wholebody-v1.4 --threads 4
+```
