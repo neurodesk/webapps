@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { promisify } from 'node:util';
 import { execFile } from 'node:child_process';
-import { repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
+import { appInformationPayload, loadAppInformation } from '../scripts/lib/app-information.mjs';
+import { mountAppShell } from '../test-utils/mount-app-shell.mjs';
 
 const source = (...parts) => readFile(join(repoRoot, ...parts), 'utf8');
 const exists = async (...parts) => access(join(repoRoot, ...parts)).then(() => true, () => false);
@@ -25,9 +27,19 @@ test('the workspace and static pages expose one typed shell-control contract', a
   }
 
   const qsm = await source('apps', 'qsmbly', 'index.html');
-  for (const action of ['about', 'cite', 'privacy']) {
+  for (const action of ['about', 'privacy']) {
     assert.match(qsm, new RegExp(`data-neurodesk-control=["']${action}["']`), `qsmbly/${action}`);
   }
+  assert.doesNotMatch(qsm, /data-neurodesk-control=["']cite["']|id=["']citationsModal["']/);
+  const information = await loadAppInformation(await loadAppsRegistry());
+  const window = await mountAppShell({ appId: 'qsmbly', bodyHtml: qsm, information: appInformationPayload(information, 'qsmbly') });
+  window.document.querySelector('[data-neurodesk-shell-control="cite"]').click();
+  const cite = window.document.querySelector('.nd-app-dialog[data-dialog="cite"]');
+  assert.ok(cite?.hasAttribute('open'), 'qsmbly/cite opens the shared registry dialog');
+  for (const citation of information.apps.qsmbly.citations) {
+    assert.ok(cite.textContent.includes(citation.title), `qsmbly/cite includes ${citation.title}`);
+  }
+  assert.ok(cite.querySelector('a[href="https://doi.org/10.1038/s41592-023-02145-x"]'));
   assert.match(qsm, /data-neurodesk-shell-link=["']more-apps["']/);
   assert.match(qsm, /data-neurodesk-shell-link=["']github["']/);
 

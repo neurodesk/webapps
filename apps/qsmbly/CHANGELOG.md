@@ -1,5 +1,11 @@
 # qsmbly
 
+## 0.29.20261010
+
+### Patch Changes
+
+- Show the complete registry citation list through the shared Cite dialog, include the single-step TGV paper, and check upstream DOI coverage during sync.
+
 ## 0.29.20261009
 
 ### Patch Changes
