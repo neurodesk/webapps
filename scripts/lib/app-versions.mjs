@@ -23,6 +23,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/lcmodel': 'lcmodel',
+  '@neurodesk/seedseg': 'seedseg',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',

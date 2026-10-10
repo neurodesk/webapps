@@ -1,6 +1,7 @@
 import { awaitPipelineStep, createDicomConverter, createNiivueAdapter, registerAppAutomation, summarizeLabels } from '@neurodesk/webapp-components/automation';
 import { readNifti } from '@neurodesk/webapp-components/file-io';
 import { MODELS, MODEL_BASE_URL, VERSION } from './app/config.js';
+import { MODEL_ASSETS } from '../vendor/seedseg/src/assets.js';
 
 export function registerSeedSegAutomation(app) {
   const automation = registerAppAutomation({
@@ -38,7 +39,7 @@ export function registerSeedSegAutomation(app) {
             measurements: summarizeLabels(await readNifti(await consensus.arrayBuffer()), { I: [0, 1], labels: ['Background', 'Fiducial marker'] }),
             provenance: {
               appVersion: VERSION,
-              models: MODELS.filter(model => parameters.models.includes(model.seed)).map(model => ({ name: model.name, url: `${MODEL_BASE_URL}/${model.name}` })),
+              models: MODELS.filter(model => parameters.models.includes(model.seed)).map(model => ({ name: model.name, url: `${MODEL_BASE_URL}/${model.name}`, sha256: MODEL_ASSETS.find(asset => asset.filename === model.name).sha256 })),
               executionProvider: 'wasm',
               settings: executor.lastRunSettings.settings,
             },

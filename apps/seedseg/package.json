@@ -1,11 +1,11 @@
 {
   "name": "seedseg",
-  "version": "0.5.20261010",
+  "version": "0.6.20261010",
   "private": true,
   "type": "module",
   "description": "Browser-based prostate fiducial marker segmentation.",
   "scripts": {
-    "vendor": "node ../../scripts/vendor-components.mjs",
+    "vendor": "node ../../scripts/vendor-components.mjs && node scripts/stage-pipeline.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "node ../../scripts/dev-server.mjs --dir web --port 8080",
@@ -17,7 +17,8 @@
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app seedseg"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/seedseg": "workspace:*"
   },
   "neurodeskWebapp": {
     "static": {

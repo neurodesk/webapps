@@ -48,3 +48,13 @@ python scripts/inference/consensus_inference.py \
 ## Citation
 
 Stewart et al. "Deep-Learning-Enabled Differentiation between Intraprostatic Gold Fiducial Markers and Calcification in Quantitative Susceptibility Mapping." bioRxiv (2023). https://doi.org/10.1101/2023.10.26.564293
+
+## Portable command line
+
+`packages/seedseg` contains the runtime-injected pipeline shared by this app and
+`seedseg image.nii.gz results --ensemble 4 --top-n 3`. Portable releases include
+all four verified checkpoints and run offline on Linux x64, Windows x64 and
+Apple silicon. See [the command-line README](../../packages/seedseg/README.md)
+for options, matching download names and validation limits. A representative
+clinical reference is pending; the synthetic transport fixture is not an app
+example or a clinical accuracy claim.

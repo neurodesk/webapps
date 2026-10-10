@@ -1,0 +1,15 @@
+{
+  "id": "qsm-wasm",
+  "version": "0.9.2",
+  "download_base": "https://github.com/astewartau/qsmbly/releases/download/v0.9.2",
+  "files": [
+    {
+      "name": "qsm_wasm.js",
+      "sha256": "3586d143f1257d1a06304fbb74028cbae51c6a716efea26037a996a1941a6eca"
+    },
+    {
+      "name": "qsm_wasm_bg.wasm",
+      "sha256": "64e10fb3e75dad7d9be2af5ca796524d8ca0efc9740e70fd50cb0782960b340b"
+    }
+  ]
+}

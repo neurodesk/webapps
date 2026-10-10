@@ -784,10 +784,6 @@
         "kind": "built-runtime"
       },
       {
-        "url": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
-        "kind": "runtime-cdn"
-      },
-      {
         "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
       },
