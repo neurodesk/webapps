@@ -63,11 +63,19 @@ test('all ORT workers use shared input and thread policy', async () => {
     assert.doesNotMatch(worker, /function\s+getOptimalWasmThreads\s*\(/);
     assert.doesNotMatch(worker, /navigator\.hardwareConcurrency/);
   }
-  for (const app of ['calmar', 'spinalcordtoolbox', 'vesselboost']) {
+  for (const app of ['calmar', 'spinalcordtoolbox']) {
     const worker = await source('apps', app, 'web', 'js', 'inference-worker.js');
     assert.match(worker, /prepareRasWorkerInput/);
     assert.doesNotMatch(worker, /function\s+loadStateFromInput\s*\(/);
   }
+  const vesselWorker = await source('apps', 'vesselboost', 'web', 'js', 'inference-worker.js');
+  assert.match(vesselWorker, /import\s+\{\s*createVesselBoostPipeline\s*\}\s+from\s+['"]\.\.\/vendor\/vesselboost\/src\/pipeline\.js['"]/);
+  assert.match(vesselWorker, /pipeline\s*=\s*createVesselBoostPipeline\s*\(/);
+  assert.doesNotMatch(vesselWorker, /function\s+loadStateFromInput\s*\(/);
+  const vesselPipeline = await source('packages', 'vesselboost', 'src', 'pipeline.js');
+  assert.match(vesselPipeline, /import\s+\{\s*prepareRasWorkerInput\s*\}\s+from\s+['"]@neurodesk\/webapp-components\/worker['"]/);
+  assert.match(vesselPipeline, /prepareRasWorkerInput\s*\(parseNiftiInput\(inputData\)\)/);
+  assert.doesNotMatch(vesselPipeline, /function\s+loadStateFromInput\s*\(/);
 });
 
 test('QSM uses the shared worker plumbing without exposing a raw worker', async () => {
