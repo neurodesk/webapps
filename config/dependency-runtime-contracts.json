@@ -1,0 +1,167 @@
+[
+  {
+    "from": "apps/calmar/web/js/inference-worker.js",
+    "to": "../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/calmar/web/js/inference-worker.js",
+    "to": "../wasm/ort.webgpu.bundle.min.mjs",
+    "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/calmar/web/js/lnm-app.js",
+    "to": "../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/calmar/web/js/modules/atlas-loader.js",
+    "to": "../../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/easy-mp2rage/web/js/app.js",
+    "to": "../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm",
+    "reason": "apps/easy-mp2rage/tools/stage_core.sh stages the committed WASM into web/vendor before build."
+  },
+  {
+    "from": "apps/easy-mp2rage/web/js/worker.js",
+    "to": "../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm",
+    "reason": "apps/easy-mp2rage/tools/stage_core.sh stages the committed WASM into web/vendor before build."
+  },
+  {
+    "from": "apps/musclemap/web/js/controllers/MuscleMapDicomInput.js",
+    "to": "../../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/musclemap/web/js/inference-worker.js",
+    "to": "../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/musclemap/web/js/inference-worker.js",
+    "to": "../wasm/ort.webgpu.bundle.min.mjs",
+    "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/qsmbly/js/controllers/QsmDicomInput.js",
+    "to": "../../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/qsmbly/js/controllers/QsmInputSet.js",
+    "to": "../../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/qsmbly/js/qsm-app-romeo.js",
+    "to": "https://dicompare.neurodesk.org/embed/DicompareController.js",
+    "reason": "Established upstream embed contract. registry/offline-assets.sources.json mirrors it and the composite/offline assembly rewrites the URL."
+  },
+  {
+    "from": "apps/seedseg/web/js/controllers/SeedSegDicomInput.js",
+    "to": "../../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/seedseg/web/js/inference-worker.js",
+    "to": "../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/seedseg/web/js/inference-worker.js",
+    "to": "../wasm/ort.webgpu.bundle.min.mjs",
+    "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/seedseg/web/js/inference-worker.js",
+    "to": "../wasm/qsm_wasm_bg.wasm",
+    "reason": "apps/seedseg prebuild stages this pinned QSM runtime with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/seedseg/web/js/inference-worker.js",
+    "to": "../wasm/qsm_wasm.js",
+    "reason": "apps/seedseg prebuild stages this pinned QSM runtime with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/seedseg/web/js/seedseg-app.js",
+    "to": "https://dicompare.neurodesk.org/embed/DicompareController.js",
+    "reason": "Established upstream embed contract. registry/offline-assets.sources.json mirrors it and the composite/offline assembly rewrites the URL."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/analysis-worker.js",
+    "to": "../python/",
+    "reason": "apps/spinalcordtoolbox/scripts/stage-browser-analysis.mjs generates this browser Python directory before build."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/controllers/SctInputSessions.js",
+    "to": "../../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/inference-worker.js",
+    "to": "../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/inference-worker.js",
+    "to": "../wasm/ort.webgpu.bundle.min.mjs",
+    "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/inference-worker.js",
+    "to": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
+    "reason": "Pinned localforage ESM asset mirrored in registry/offline-assets.sources.json for the offline bundle."
+  },
+  {
+    "from": "apps/spinalcordtoolbox/web/js/modules/sct-viewer.js",
+    "to": "../../freebrowse-viewer/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/vesselboost/web/js/inference-worker.js",
+    "to": "../nifti-js/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "apps/vesselboost/web/js/inference-worker.js",
+    "to": "../preprocessing-wasm/preprocessing.js",
+    "reason": "packages/vesselboost/scripts/stage-browser.mjs stages the committed preprocessing runtime into web/preprocessing-wasm."
+  },
+  {
+    "from": "apps/vesselboost/web/js/inference-worker.js",
+    "to": "../wasm/ort.webgpu.bundle.min.mjs",
+    "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "apps/vesselboost/web/js/inference-worker.js",
+    "to": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
+    "reason": "Pinned localforage ESM asset mirrored in registry/offline-assets.sources.json for the offline bundle."
+  },
+  {
+    "from": "apps/vesselboost/web/js/vesselboost-app.js",
+    "to": "../dcm2niix/index.js",
+    "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
+  },
+  {
+    "from": "packages/seedseg/src/node.js",
+    "to": "../runtime/",
+    "reason": "packages/seedseg build stages the pinned QSM runtime directory with scripts/fetch-app-runtime.mjs."
+  },
+  {
+    "from": "packages/syncro/bin/syncro.js",
+    "to": "../dist/node.js",
+    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
+  },
+  {
+    "from": "packages/syncro/src/node.js",
+    "to": "./registration/syncro-registration.mjs",
+    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
+  },
+  {
+    "from": "packages/syncro/src/node.js",
+    "to": "./registration/syncro-registration.wasm",
+    "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
+  }
+]
