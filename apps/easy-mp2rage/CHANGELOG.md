@@ -1,6 +1,5 @@
 # easy-mp2rage
 
-
 ## 0.8.20261010
 
 ### Minor Changes
@@ -9,6 +8,7 @@
 
 ### Patch Changes
 
+- @neurodesk/easy-mp2rage@0.8.20261010
 - Updated dependencies
   - @neurodesk/easy-mp2rage@0.8.20261010
 

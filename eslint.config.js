@@ -88,4 +88,20 @@ export default [
       'no-restricted-globals': ['error', 'window', 'document'],
     },
   },
+  {
+    // Preserve the reference cubic-spline pole literal and its IEEE-754 rounding.
+    files: ['packages/topofit/src/conform.js'],
+    rules: { 'no-loss-of-precision': 'off' },
+  },
+  {
+    // Playwright requires a destructured fixture argument even when only testInfo is used.
+    files: ['apps/synthseg/e2e/fixture.spec.js'],
+    rules: { 'no-empty-pattern': ['error', { allowObjectPatternsAsParameters: true }] },
+  },
+  {
+    // This diagnostic parser intentionally recognizes ANSI escape sequences.
+    files: ['apps/spinalcordtoolbox/scripts/summarize_test_failures.cjs'],
+    rules: { 'no-control-regex': 'off' },
+  },
+
 ];

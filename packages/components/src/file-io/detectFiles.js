@@ -62,7 +62,7 @@ export function categorizeNeuroFile(file, metadata) {
   if (!isNiftiFile(name)) return isDicomFile(name) ? 'dicom' : 'extra';
   const component = classifyImageComponent(name, metadata);
   if (component) return component;
-  if (/(^|[_\-.])phase([_\-.]|$)|_ph[\._-]/.test(name)) return 'phase';
+  if (/(^|[_\-.])phase([_\-.]|$)|_ph[._-]/.test(name)) return 'phase';
   if (/total|b0|fieldmap|field_map/.test(name)) return 'totalField';
   if (/local|chi/.test(name)) return 'localField';
   if (/mag|magnitude/.test(name)) return 'magnitude';

@@ -15,7 +15,7 @@ test('catalog contains every app workspace without a repeated inventory', async 
     try {
       await access(join(repoRoot, 'apps', entry.name, 'package.json'));
       workspaceIds.push(entry.name);
-    } catch {}
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
   assert.deepEqual(registry.apps.map(({ id }) => id).sort(), workspaceIds.sort());
 });
@@ -133,7 +133,7 @@ test('release workflow runs each app\'s declared release test script', async () 
   const workflow = parse(await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8'));
   const step = workflow.jobs.verify.steps.find(({ name }) => name === 'Test app');
   assert.equal(step.env.RELEASE_TEST, '${{ matrix.release_test }}');
-  assert.match(step.run, /run \"\$RELEASE_TEST\"/);
+  assert.match(step.run, /run "\$RELEASE_TEST"/);
 });
 
 test('SpinalCordToolbox routine releases exclude generated batch parity and worker inference', async () => {

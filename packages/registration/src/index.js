@@ -56,7 +56,7 @@ export async function createRegistration({createModule,wasmBinary,onLog=()=>{}})
           registration.prefix+'1Warp.nii.gz',registration.prefix+'0GenericAffine.mat']);
         return module.FS.readFile(out);
       } finally {
-        for(const file of [path,out])try{module.FS.unlink(file);}catch{}
+        for(const file of [path,out])try{module.FS.unlink(file);}catch { /* ANTs may not create output on failure; cleanup must preserve its original error. */ }
       }
     },
     release(registration) {

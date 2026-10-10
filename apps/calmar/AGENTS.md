@@ -15,6 +15,9 @@ Common issues it catches:
 - Mismatched brackets/parens
 - Invalid ES module syntax
 
+The SynthStrip validation downloader retries a missing model file (`ENOENT`);
+other filesystem errors must remain visible rather than trigger a download.
+
 ## Dependency Maintenance
 
 - Pin dependency versions through pnpm workspace manifests and `pnpm-lock.yaml`. Do not use npm/latest or add a package-lock.

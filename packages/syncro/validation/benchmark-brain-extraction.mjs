@@ -22,7 +22,7 @@ async function processTreeRss(rootPid) {
    const status=await readFile(`/proc/${pid}/status`,'utf8');
    const parent=Number(status.match(/^PPid:\s+(\d+)/m)?.[1]),rssKiB=Number(status.match(/^VmRSS:\s+(\d+)\s+kB/m)?.[1]);
    if(Number.isFinite(parent)&&Number.isFinite(rssKiB))processes.push({pid,parent,rssKiB});
-  } catch {}
+  } catch (error) { if (!['ENOENT', 'ESRCH', 'EACCES'].includes(error.code)) throw error; }
  }));
  const children=new Map(),byPid=new Map(processes.map(process=>[process.pid,process]));
  for(const process of processes)children.set(process.parent,[...(children.get(process.parent)??[]),process]);

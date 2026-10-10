@@ -85,11 +85,11 @@ async function stopExistingServer() {
   const pid = Number.parseInt(recorded.trim(), 10);
   if (Number.isInteger(pid) && pid > 0 && pid !== process.pid && processAlive(pid)) {
     console.log(`Stopping existing dev server on port ${port} (pid ${pid})`);
-    try { process.kill(pid, 'SIGTERM'); } catch {}
+    try { process.kill(pid, 'SIGTERM'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     for (let attempt = 0; attempt < 20 && processAlive(pid); attempt += 1) await sleep(100);
     if (processAlive(pid)) {
       console.log(`Existing dev server did not stop cleanly; forcing shutdown (pid ${pid})`);
-      try { process.kill(pid, 'SIGKILL'); } catch {}
+      try { process.kill(pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     }
   }
   await rm(pidFile, { force: true });
@@ -105,11 +105,15 @@ async function writeBuildInfo() {
     try {
       git('diff-index', '--quiet', 'HEAD', '--');
       dirty = false;
-    } catch {}
+    } catch (error) {
+      if (error.status !== 1) throw error;
+      // git diff-index exits 1 for an ordinary dirty working tree.
+    }
     const payload = { sha, branch, dirty, buildEnv: 'local' };
     await writeFile(join(root, 'build-info.json'), `${JSON.stringify(payload, null, 2)}\n`);
-  } catch {
-    // Not a git checkout — the app falls back to its packaged version string.
+  } catch (error) {
+    // Local build metadata is optional; the app can use its packaged version string.
+    console.warn('Unable to write local build metadata:', error.message);
   }
 }
 
@@ -147,7 +151,9 @@ function stagedFilename(pathname) {
   let name = '';
   try {
     name = decodeURIComponent(pathname.replace(/\/+$/, '').split('/').pop() ?? '');
-  } catch {}
+  } catch {
+    // Malformed URL escapes receive the safe download.bin name below.
+  }
   if (!name) name = 'download.bin';
   return name.replace(/[^A-Za-z0-9._-]/g, '_');
 }
@@ -156,7 +162,10 @@ async function downloadDirectory() {
   const home = join(homedir(), 'Downloads');
   try {
     if ((await stat(home)).isDirectory()) return home;
-  } catch {}
+  } catch (error) {
+    // Downloads can be unavailable in restricted profiles; use the local staging directory.
+    if (!['ENOENT', 'ENOTDIR', 'EACCES'].includes(error.code)) throw error;
+  }
   const local = join(root, 'downloads');
   await mkdir(local, { recursive: true });
   return local;

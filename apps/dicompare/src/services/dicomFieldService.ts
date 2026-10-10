@@ -109,7 +109,7 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
   }
 
   // Create new fetch promise
-  fetchPromise = new Promise(async (resolve, reject) => {
+  fetchPromise = (async () => {
     try {
       const response = await fetch('https://raw.githubusercontent.com/innolitics/dicom-standard/refs/heads/master/standard/attributes.json');
 
@@ -138,17 +138,17 @@ export const fetchDicomFieldList = async (): Promise<DicomFieldDefinition[]> => 
       // Cache the result, enriched with the dicompare registry (adds derived fields)
       const merged = mergeRegistryFields(fieldList);
       cachedFieldList = merged;
-      resolve(merged);
+      return merged;
     } catch (error) {
       console.warn('Failed to fetch DICOM field list from official standard, using fallback data:', error);
 
       // Fallback to mock data if external fetch fails
       const merged = mergeRegistryFields(getFallbackFieldList());
       cachedFieldList = merged;
-      resolve(merged);
-    } finally {
-      fetchPromise = null;
+      return merged;
     }
+  })().finally(() => {
+    fetchPromise = null;
   });
 
   return fetchPromise;

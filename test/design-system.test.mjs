@@ -35,7 +35,7 @@ const RESERVED_SELECTORS = [
   /(^|[\s,{}])\.nd-(?!app-bar)[a-z-]+\s*[,{:>\s]/m, // any .nd-* class rule
   /(^|[\s,}])dialog\s*(\[|\.|,|\{|::backdrop)/m,
   /(^|[\s,}])summary\s*[,{:]/m,
-  /(^|[\s,}])details\s*[,{:\[]/m,
+  /(^|[\s,}])details\s*[,{:[]/m,
   /(^|[\s,}])progress\s*[,{:]/m,
   /input\[type=["']?file["']?\]/m,
   /(^|[\s,}])\.(console|viewer|view|status|toolbar|section|sidebar|tabs?|btn|button|file|upload|drop|hint|modal)[a-z-]*\s*[,{:]/m,

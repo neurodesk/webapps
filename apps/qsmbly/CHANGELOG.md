@@ -6,6 +6,12 @@
 
 - Release the shared endian-aware NIfTI reader integration under a new minor version, preserving the already released registry citation changes and fixing the input-grid test header.
 
+### Patch Changes
+
+- Preserve original operation failures while draining GPU error scopes and reject failed DICOM field fallback tasks without hanging. Resolve correctness findings with switch scopes, safe own-property checks, equivalent regular expressions and documented optional cleanup/cache behavior. Surface actionable release, filesystem and schema preload failures; retain scientific literals and arithmetic.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
+
 ## 0.29.20261010
 
 ### Patch Changes

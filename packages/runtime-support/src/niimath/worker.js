@@ -89,6 +89,7 @@ ${detail}` : ""}`);
               actualOutName = candidate;
               break;
             } catch {
+              // niimath may write the gzip candidate instead; report missing output after both attempts.
             }
           }
           if (!out_bin) {
@@ -116,12 +117,14 @@ ${detail}` : ""}`);
             try {
               mod.FS_unlink(inName);
             } catch {
+              // Failed commands may remove staged files; cleanup must preserve the result already posted.
             }
           }
           for (const name of stagedExtras) {
             try {
               mod.FS_unlink(name);
             } catch {
+              // Failed commands may remove staged files; cleanup must preserve the result already posted.
             }
           }
           for (const name of outputCandidates(outName)) {
@@ -129,6 +132,7 @@ ${detail}` : ""}`);
               try {
                 mod.FS_unlink(name);
               } catch {
+                // Only one output candidate exists; removing the absent alternative is best effort.
               }
             }
           }

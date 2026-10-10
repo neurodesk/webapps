@@ -107,13 +107,15 @@ export function convertValueToDataType(value: any, dataType: FieldDataType): any
       }
       return String(value || '');
 
-    case 'number':
+    case 'number': {
       if (Array.isArray(value)) {
         const first = value.length > 0 ? Number(value[0]) : 0;
         return isNaN(first) ? 0 : first;
       }
       const num = Number(value);
       return isNaN(num) ? 0 : num;
+
+    }
 
     case 'list_string':
       if (Array.isArray(value)) {

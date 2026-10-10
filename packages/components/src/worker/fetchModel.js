@@ -44,7 +44,7 @@ export async function fetchModel(asset, options = {}) {
       if (!candidate.ok || candidate.headers?.get?.('content-type')?.toLowerCase().includes('text/html')) {
         try {
           await candidate.body?.cancel();
-        } catch {}
+        } catch { /* Cancelling an unusable body must not replace the download or integrity failure. */ }
         throw new Error(`Model download failed (${candidate.status}): ${url}`);
       }
       response = candidate;
@@ -137,12 +137,12 @@ async function readResponse(response, integrity = {}, onProgress) {
   } catch (error) {
     try {
       await reader.cancel?.();
-    } catch {}
+    } catch { /* Cancelling an unusable body must not replace the download or integrity failure. */ }
     throw error;
   } finally {
     try {
       reader.releaseLock?.();
-    } catch {}
+    } catch { /* Releasing a failed reader's lock must not replace its download or integrity error. */ }
   }
   const bytes = new Uint8Array(received);
   let offset = 0;

@@ -1,13 +1,7 @@
-# @neurodesk/vesselboost
+# @neurodesk/registration
 
-## 0.6.20261010
-
-### Minor Changes
-
-- Add the portable VesselBoost CLI and shared explicit-state preprocessing/inference pipeline. Require reproducible Rust preprocessing, verify model checksums on cache hits and downloads, and validate portable outputs against the production browser and independent PyTorch reference.
+## 0.1.1
 
 ### Patch Changes
 
 - Preserve original operation failures while draining GPU error scopes and reject failed DICOM field fallback tasks without hanging. Resolve correctness findings with switch scopes, safe own-property checks, equivalent regular expressions and documented optional cleanup/cache behavior. Surface actionable release, filesystem and schema preload failures; retain scientific literals and arithmetic.
-- Updated dependencies
-  - @neurodesk/webapp-components@0.12.2

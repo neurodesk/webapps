@@ -8,6 +8,8 @@
 
 ### Patch Changes
 
+- @neurodesk/synthsr@0.6.20261010
+- @neurodesk/synthstrip@0.1.5
 - Updated dependencies
   - @neurodesk/synthsr@0.6.20261010
   - @neurodesk/synthstrip@0.1.5

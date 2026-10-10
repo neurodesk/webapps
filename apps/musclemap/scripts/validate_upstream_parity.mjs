@@ -34,7 +34,7 @@ async function waitForServer(url, processHandle) {
     try {
       const response = await fetch(url);
       if (response.ok) return;
-    } catch {}
+    } catch { /* Connection refusal is expected until the bounded startup loop succeeds. */ }
     await new Promise(resolvePromise => setTimeout(resolvePromise, 100));
   }
   throw new Error(`Parity validation server did not start: ${url}`);

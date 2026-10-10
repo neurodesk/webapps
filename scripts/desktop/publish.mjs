@@ -1,3 +1,4 @@
+import { readDraftRelease } from '../lib/github-release.mjs';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { setTimeout } from 'node:timers/promises';
@@ -118,8 +119,7 @@ await writeFile(notesPath, `# Neurodesk Webapps ${version}\n\nAll ${registry.app
 if (process.argv.includes('--prepare-only')) {
   console.log(metadataPath);
 } else {
-  let existing;
-  try { existing = JSON.parse(gh(['release', 'view', tag, '--json', 'isDraft'])); } catch {}
+  const existing = readDraftRelease(gh, tag);
   if (existing && !existing.isDraft) throw new Error('Refusing to replace an already published release');
   if (!existing) gh(['release', 'create', tag, '--draft', '--target', revision, '--title', `Neurodesk Webapps ${version}`, '--notes-file', notesPath]);
   // The release-asset API returns transient 500s under load, and each suite

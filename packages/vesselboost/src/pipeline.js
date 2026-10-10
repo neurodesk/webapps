@@ -1590,7 +1590,7 @@ export function createVesselBoostPipeline({
 
         break;
 
-      case 'run-bet':
+      case 'run-bet': {
         const betParams = data || {};
         if (betParams.method === 'synthstrip' || betParams.method === 'synthstrip-fast') {
           // SynthStrip needs modelBaseUrl - derive from app version
@@ -1604,6 +1604,8 @@ export function createVesselBoostPipeline({
         }
 
         break;
+
+      }
 
       case 'run-denoise':
         stepDenoise(data);

@@ -67,12 +67,27 @@ export async function createGPUDeformation(device, model, { microbatchSize = 32 
     if (busy) throw new Error('Concurrent deformation calls are unsupported');
     busy = true;
     device.pushErrorScope('validation');
-    try { return await fn(); }
-    finally {
-      const error = await device.popErrorScope();
-      busy = false;
-      if (error) { poisoned = new Error(error.message); throw poisoned; }
+    let result;
+    let operationError;
+    let failed = false;
+    try {
+      result = await fn();
+    } catch (error) {
+      failed = true;
+      operationError = error;
     }
+    try {
+      const error = await device.popErrorScope();
+      if (error) poisoned = new Error(error.message);
+    } catch (error) {
+      poisoned = error;
+    } finally {
+      busy = false;
+    }
+    // Scope failures poison future calls, but must not replace the operation's error.
+    if (failed) throw operationError;
+    if (poisoned) throw poisoned;
+    return result;
   };
   const dispatch = (p, b, count, rows = 1) => {
     const encoder = device.createCommandEncoder();

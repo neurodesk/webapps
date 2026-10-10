@@ -64,7 +64,7 @@ export class QsmInputSet {
     if (name.endsWith('.nii') || name.endsWith('.nii.gz')) {
       const component = classifyImageComponent(name, metadata);
       if (component) return component;
-      if (/(^|[_\-.])phase([_\-.]|$)|_ph[\._]/.test(name)) return 'phase';
+      if (/(^|[_\-.])phase([_\-.]|$)|_ph[._]/.test(name)) return 'phase';
       if (/total|b0|fieldmap|field_map/.test(name)) return 'totalField';
       if (/local|chi/.test(name)) return 'localField';
       if (/mag/.test(name)) return 'magnitude';

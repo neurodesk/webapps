@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { greedyExecutable, runGreedy } from '../src/node.js';
 
 let executable;
-try { executable = greedyExecutable(); } catch {}
+try { executable = greedyExecutable(); } catch { /* Native Greedy is optional locally; the tests below explicitly skip without it. */ }
 
 test('native runner rejects shell command strings', () => {
   assert.throws(() => runGreedy('--help'), /array of strings/);

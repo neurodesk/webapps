@@ -437,12 +437,16 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
           try {
             const schema = await schemaCacheManager.getSchema(schemaId);
             if (schema?.content) return schema.content;
-          } catch {}
+          } catch (error) {
+            console.warn(`Unable to read cached schema ${schemaId}; trying the library:`, error);
+          }
           // Try library schemas
           try {
             const response = await fetch(`${import.meta.env.BASE_URL}schemas/${schemaId}.json`);
             if (response.ok) return await response.text();
-          } catch {}
+          } catch (error) {
+            console.warn(`Unable to preload library schema ${schemaId}:`, error);
+          }
           return null;
         };
 

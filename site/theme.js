@@ -32,7 +32,7 @@
     if (persist) {
       try {
         localStorage.setItem(storageKey, next);
-      } catch {}
+      } catch { /* Private browsing can block persistence; the selected in-memory theme still applies. */ }
     }
     syncToggles();
     window.dispatchEvent(new CustomEvent('neurodesk-theme-change', { detail: { theme: next } }));

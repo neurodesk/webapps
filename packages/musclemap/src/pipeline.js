@@ -910,7 +910,7 @@ function calculateDixonImfMetrics(fatData, waterData, outputLabels, detectedIndi
   let skippedNonFinite = 0;
   for (let i = 0; i < outputLabels.length; i++) {
     const label = outputLabels[i];
-    if (!sums.hasOwnProperty(label)) continue;
+    if (!Object.hasOwn(sums, label)) continue;
 
     const fat = fatData[i];
     const water = waterData[i];
