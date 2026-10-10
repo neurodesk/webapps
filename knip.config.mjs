@@ -23,7 +23,7 @@ const generatedHtmlScripts = {
 const workspaces = {
   '.': {
     entry: [...commandEntries, ...testEntries, '.github/actions/**/*.{js,mjs,cjs,mts,cts}', 'site/landing.js', 'site/theme.js', 'site/app-shell.js', '*.config.{js,mjs,cjs,ts,mts,cts}', 'exes/nii2tvx/wasm_demo.mjs'],
-    project: ['scripts/**/*.{js,mjs,cjs,mts,cts}', 'test/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'test-utils/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'site/*.{js,mjs}', 'site/shell-adapters/**/*.js', '.github/actions/**/*.{js,mjs,cjs,mts,cts}', '*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}', 'exes/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
+    project: ['config/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}', 'scripts/**/*.{js,mjs,cjs,mts,cts}', 'test/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'test-utils/**/*.{js,mjs,cjs,ts,tsx,mts,cts}', 'site/*.{js,mjs}', 'site/shell-adapters/**/*.js', '.github/actions/**/*.{js,mjs,cjs,mts,cts}', '*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}', 'exes/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
   },
 };
 for (const pkg of packages) {

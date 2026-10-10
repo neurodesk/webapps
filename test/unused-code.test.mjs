@@ -72,6 +72,10 @@ test('all tracked JavaScript and TypeScript files are covered or explicitly excl
   assert.deepEqual(files.filter((file) => !sourceCoverage(file, config.workspaces)), []);
   assert.equal(sourceCoverage('new-tools/unregistered-helper.js', config.workspaces), undefined);
   assert.equal(sourceCoverage('docs/new-live-helper.js', config.workspaces), undefined);
+  assert.equal(sourceCoverage('config/dependency-quality.mjs', config.workspaces), 'covered');
+  assert.equal(sourceCoverage('config/nested/policy.cts', config.workspaces), 'covered');
+  assert.equal(sourceCoverage('new-config/policy.mjs', config.workspaces), undefined);
+  assert.ok(!config.workspaces['.'].entry.some((entry) => entry.startsWith('config/')));
   assert.equal(sourceCoverage('apps/dicompare/src/new-module.mts', config.workspaces), 'covered');
   assert.equal(sourceCoverage('apps/dicompare/src/new-module.cts', config.workspaces), 'covered');
 });

@@ -49,7 +49,9 @@ exclusion cannot silently hide source files. Generated model catalogs are exclud
 The committed easy-mp2rage WASM glue and vesselboost preprocessing glue are excluded
 in their own workspaces. QSMbly's imported NiiVue copy is excluded. Declaration
 files are excluded from unused-file suggestions; unused types remain reported.
-The root project includes native JavaScript demos under `exes`. The canonical
+The root project includes imported configuration modules under `config` and native
+JavaScript demos under `exes`. Configuration modules remain ordinary sources,
+reachable through callers. The canonical
 `templates/app-template` contains scaffolding placeholders and is checked by the
 app-generator tests instead of Knip. `docs/architecture/examples` holds historical
 source snapshots and is excluded. Other new root source directories fail the
