@@ -1,0 +1,142 @@
+[
+  {
+    "id": "lnm-synthstrip",
+    "filename": "models/synthstrip.onnx",
+    "bytes": 10294211,
+    "sha256": "7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/synthstrip.onnx"
+  },
+  {
+    "id": "lnm-stroke-lesion",
+    "filename": "models/lnm-stroke-lesion.onnx",
+    "bytes": 74518462,
+    "sha256": "49f3d047a2299501791c7176cfda770d45d2f411a18ef41dd1105be4d0582cb8",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-stroke-lesion.onnx"
+  },
+  {
+    "id": "lnm-synthmorph-mni",
+    "filename": "models/lnm-synthmorph-mni-48x64x80.onnx",
+    "bytes": 85119961,
+    "sha256": "25ce269d060ee19228e78f9eaa0902e7094cdeab5fb20856ae771d9b6930652f",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-synthmorph-mni-48x64x80.onnx"
+  },
+  {
+    "id": "lnm-mni160",
+    "filename": "templates/lnm-mni160.nii.gz",
+    "bytes": 8514318,
+    "sha256": "cb6119e9ef403301d4e687e3dcb8fad09ad27c3d6dd556a0c387d7ababb78ccd",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/templates/lnm-mni160.nii.gz"
+  },
+  {
+    "id": "yeo7-2mm",
+    "filename": "Yeo7_LiberalMask_2mm.nii.gz",
+    "bytes": 73181,
+    "sha256": "edfd11af848974b2d40936492d72995d41e1582eff114fbfdca07c4fa278e67d",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Yeo7_LiberalMask_2mm.nii.gz"
+  },
+  {
+    "id": "schaefer400-7n-2mm",
+    "filename": "Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz",
+    "bytes": 69474,
+    "sha256": "359da271b5d569ae76112693ef4f303cb744c5e060306ca45eca40bddacc85ac",
+    "url": "https://raw.githubusercontent.com/ThomasYeoLab/CBIG/d1454a611f7de10a3b36665e6fbb3fb6c770d140/stable_projects/brain_parcellation/Schaefer2018_LocalGlobal/Parcellations/MNI/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_2mm.nii.gz"
+  },
+  {
+    "id": "schaefer400-7n-4mm",
+    "filename": "Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz",
+    "bytes": 23769,
+    "sha256": "34a8cb7af015515005cc14a2f4675054f26486ffd089ced2a09ce884a78c5efb",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/atlases/Schaefer2018_400Parcels_7Networks_order_FSLMNI152_4mm.nii.gz"
+  },
+  {
+    "id": "yeo7-fc-pack",
+    "filename": "connectomes/yeo7_fc_pack_dev155.bin",
+    "bytes": 30810780,
+    "sha256": "5db67b0d6ece1ec25f59134c067cac7c6cd0ffe4884685ed7fd7e9bc89e78493",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.bin"
+  },
+  {
+    "id": "yeo7-fc-pack-index",
+    "filename": "connectomes/yeo7_fc_pack_dev155.index.json",
+    "bytes": 581,
+    "sha256": "2299aaa8a77b5b91ddc248db4597b822315ce1f62bf57f6158f097d3650376a2",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/yeo7_fc_pack_dev155.index.json"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-index",
+    "filename": "connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json",
+    "bytes": 53973,
+    "sha256": "0c1802ea2a3179220de79ce1b1a651080ed03492955fd770360156a6f9e91398",
+    "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4cc5b1a5cde5fae1840c54ceddf54e16042adf5e/calmar/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm.index.json"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-001-040",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_000-039.bin",
+    "bytes": 11800000,
+    "sha256": "f43456dac95c7da6d186bd9b573e7ccceda13c73c779a64fc3bac4bf8e96c372",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_000-039.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-041-080",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_040-079.bin",
+    "bytes": 11800000,
+    "sha256": "26cfd86811eabfc58412e2f0b89d79231b117206884f040c6d15219386c3ad01",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_040-079.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-081-120",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_080-119.bin",
+    "bytes": 11800000,
+    "sha256": "5e8fcf2244c7a0bb6d19dfdda6301bc76eb0e4f8771b5bd23f8f18dedaa67c00",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_080-119.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-121-160",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_120-159.bin",
+    "bytes": 11800000,
+    "sha256": "deff7f611271e391c7efb4fba7a3e89d56aa958c35e4f776cdbd7bc5aff61401",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_120-159.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-161-200",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_160-199.bin",
+    "bytes": 11800000,
+    "sha256": "b6f5dbbbe0ee81aa7d76bb5a035484589a5033308336093f4f89e5ca6f828541",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_160-199.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-201-240",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_200-239.bin",
+    "bytes": 11800000,
+    "sha256": "b57e6c25548832cf35db61232f3c0f3870ff7108f9a301fb4e4fb928d868f4be",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_200-239.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-241-280",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_240-279.bin",
+    "bytes": 11800000,
+    "sha256": "21dc89093c987acc3b174aea459994918f0c85d9391ff174bc67ad66f2a0bc3c",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_240-279.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-281-320",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_280-319.bin",
+    "bytes": 11800000,
+    "sha256": "b0679e61c7a46e3dac2085b4cf8ec615d971d8d2f67bfa71383a1dbb013647ee",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_280-319.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-321-360",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_320-359.bin",
+    "bytes": 11800000,
+    "sha256": "63bffd7497bb18438d58b3836fe83fa3821d071f1eaf6a2cdb8fb5f46abc7e26",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_320-359.bin"
+  },
+  {
+    "id": "schaefer400-fc-pack-development-n155-4mm-361-400",
+    "filename": "connectomes/schaefer400_fc_pack_dev155_4mm_360-399.bin",
+    "bytes": 11800000,
+    "sha256": "3fc79b6afeb8b61bfedb508c52319a1ee05f3d48b920b10b36d736f3f310e27c",
+    "url": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/connectomes/schaefer400/schaefer400_fc_pack_dev155_4mm_360-399.bin"
+  }
+]

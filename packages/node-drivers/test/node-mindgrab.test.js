@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
-import { loadMindgrabCpu } from '../src/node/mindgrab.js';
+import { loadMindgrabCpu } from '../src/mindgrab.js';
 import { MINDGRAB_CASES, MINDGRAB_INPUT, REFERENCE_URL, mindgrabOutputs, pinnedFile, sha256 } from '../validation/cases.mjs';
 
 const reference = JSON.parse(await readFile(REFERENCE_URL, 'utf8')).mindgrab;

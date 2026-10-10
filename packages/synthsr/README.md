@@ -116,3 +116,7 @@ it attempts the allocation when the adapter's `maxBufferSize` and
 the conservative 2 GiB ceiling unless they explicitly provide their own policy.
 The GPU graph index and kernels ship inside this npm package; no additional model
 weights are required. Native Node/HPC CPU and CUDA execution still uses `./node`.
+
+The browser adapter needs `@neurodesk/runtime-support` in the consuming app.
+It is a development dependency here so standalone Node deployments omit the
+browser runtime and its dependencies.

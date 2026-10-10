@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/lcmodel",
-  "version": "0.6.20261009",
+  "version": "0.6.20261010",
   "description": "FID-A preprocessing and LCModel fitting of MR spectroscopy for browsers and the command line (Rust ports compiled to WebAssembly)",
   "type": "module",
   "license": "BSD-3-Clause",

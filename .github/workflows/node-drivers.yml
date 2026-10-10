@@ -1,6 +1,6 @@
 name: node-drivers
 
-# The Node drivers in @neurodesk/runtime-support (MindGrab CPU, niimath) must
+# The Node drivers in @neurodesk/node-drivers (MindGrab CPU, niimath) must
 # reproduce the browser outputs pinned in validation/reference.json on every
 # operating system a portable command line ships for.
 
@@ -8,18 +8,14 @@ on:
   pull_request:
     paths:
       - '.github/workflows/node-drivers.yml'
-      - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/node/**'
-      - 'packages/runtime-support/test/node-*.test.js'
-      - 'packages/runtime-support/validation/**'
+      - 'packages/node-drivers/**'
+      - 'pnpm-lock.yaml'
   push:
     branches: [main]
     paths:
       - '.github/workflows/node-drivers.yml'
-      - 'packages/runtime-support/package.json'
-      - 'packages/runtime-support/src/node/**'
-      - 'packages/runtime-support/test/node-*.test.js'
-      - 'packages/runtime-support/validation/**'
+      - 'packages/node-drivers/**'
+      - 'pnpm-lock.yaml'
   workflow_dispatch:
 
 concurrency:
@@ -30,6 +26,7 @@ permissions:
   contents: read
 
 env:
+  ONNXRUNTIME_NODE_INSTALL: skip
   # rordenlab/niimath main after v1.0.20260924 (npm 1.4.20260924); later commits change only the Python wrapper.
   NIIMATH_NATIVE_COMMIT: 95645c2447ae4c5853d23c3e449a5b32e8aafe23
 
@@ -61,7 +58,7 @@ jobs:
       - name: Compare the Node drivers with the browser references
         env:
           MINDGRAB_PARITY: '1'
-        run: pnpm --filter @neurodesk/runtime-support test
+        run: pnpm --filter @neurodesk/node-drivers test
 
   browser:
     name: Browser references still hold
@@ -78,4 +75,4 @@ jobs:
       - name: Install browser
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Rerun the browser CPU backend and niimath WebAssembly
-        run: pnpm --filter @neurodesk/runtime-support validate:browser
+        run: pnpm --filter @neurodesk/node-drivers validate:browser

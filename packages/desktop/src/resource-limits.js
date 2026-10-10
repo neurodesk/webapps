@@ -59,6 +59,7 @@ function synthsegHeader(bytes) {
     if (normalized.readInt32BE(0) !== 348) throw new Error('Invalid NIfTI-1 header size.');
     for (const [start, end] of [[40, 56], [70, 74], [252, 256]]) normalized.subarray(start, end).swap16();
     for (const [start, end] of [[76, 120], [256, 328]]) normalized.subarray(start, end).swap32();
+    normalized.writeInt32LE(348, 0);
   }
   const header = parseNiftiHeader(normalized);
   const dims = [header.nx, header.ny, header.nz];

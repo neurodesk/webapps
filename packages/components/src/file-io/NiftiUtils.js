@@ -36,37 +36,49 @@ export function sameNiftiGrid(first, second, toleranceMm = 0.001) {
   return true;
 }
 
+function headerIsLittleEndian(view) {
+  if (view.byteLength < 348) throw new Error('Input must be a NIfTI-1 image.');
+  if (view.getInt32(0, true) === 348) return true;
+  if (view.getInt32(0, false) === 348) return false;
+  throw new Error('Input must be a NIfTI-1 image.');
+}
+
 export function parseNiftiHeader(headerBuffer) {
   const view = headerBuffer instanceof DataView ? headerBuffer : new DataView(toArrayBuffer(headerBuffer));
+  const littleEndian = headerIsLittleEndian(view);
+  const rawSlope = view.getFloat32(112, littleEndian);
+  const scaled = Number.isFinite(rawSlope) && rawSlope !== 0;
   const dims = [];
   const pixDims = [];
-  for (let i = 0; i < 8; i++) dims.push(view.getInt16(40 + i * 2, true));
-  for (let i = 0; i < 8; i++) pixDims.push(view.getFloat32(76 + i * 4, true));
+  for (let i = 0; i < 8; i++) dims.push(view.getInt16(40 + i * 2, littleEndian));
+  for (let i = 0; i < 8; i++) pixDims.push(view.getFloat32(76 + i * 4, littleEndian));
   return {
     dims,
+    littleEndian,
     nx: dims[1],
     ny: dims[2],
     nz: dims[3],
     pixDims,
     voxelSize: [pixDims[1] || 1, pixDims[2] || 1, pixDims[3] || 1],
-    datatype: view.getInt16(70, true),
-    bitpix: view.getInt16(72, true),
+    datatype: view.getInt16(70, littleEndian),
+    bitpix: view.getInt16(72, littleEndian),
     xyztUnits: view.getUint8(123),
-    voxOffset: view.getFloat32(108, true),
-    sclSlope: view.getFloat32(112, true) || 1,
-    sclInter: view.getFloat32(116, true) || 0,
+    voxOffset: view.getFloat32(108, littleEndian),
+    sclSlope: scaled ? rawSlope : 1,
+    sclInter: scaled ? view.getFloat32(116, littleEndian) || 0 : 0,
     affine: extractAffine(view)
   };
 }
 
 export function extractAffine(view) {
   const dataView = view instanceof DataView ? view : new DataView(toArrayBuffer(view));
-  const sformCode = dataView.getInt16(254, true);
-  const qformCode = dataView.getInt16(252, true);
-  if (sformCode > 0) return extractSformAffine(dataView);
-  if (qformCode > 0) return extractQformAffine(dataView);
+  const littleEndian = headerIsLittleEndian(dataView);
+  const sformCode = dataView.getInt16(254, littleEndian);
+  const qformCode = dataView.getInt16(252, littleEndian);
+  if (sformCode > 0) return extractSformAffine(dataView, littleEndian);
+  if (qformCode > 0) return extractQformAffine(dataView, littleEndian);
   const pixDims = [];
-  for (let i = 0; i < 4; i++) pixDims.push(dataView.getFloat32(76 + i * 4, true));
+  for (let i = 0; i < 4; i++) pixDims.push(dataView.getFloat32(76 + i * 4, littleEndian));
   return [
     new Float64Array([pixDims[1] || 1, 0, 0, 0]),
     new Float64Array([0, pixDims[2] || 1, 0, 0]),
@@ -156,9 +168,18 @@ export function readNiftiFrames(bufferLike, OutputCtor = Float32Array) {
 
 function readScaledVoxels(view, header, total, OutputCtor) {
   const dataStart = Math.ceil(header.voxOffset);
+  const stride = { 2: 1, 4: 2, 8: 4, 16: 4, 64: 8, 256: 1, 512: 2, 768: 4 }[header.datatype];
+  if (!stride) throw new Error(`Unsupported NIfTI datatype: ${header.datatype}`);
+  if (
+    !Number.isSafeInteger(total) || total < 1
+    || !Number.isSafeInteger(dataStart) || dataStart < 348
+    || dataStart + total * stride > view.byteLength
+  ) {
+    throw new Error('Invalid image size.');
+  }
   const output = new OutputCtor(total);
   for (let i = 0; i < total; i++) {
-    output[i] = readVoxel(view, dataStart, i, header.datatype) * header.sclSlope + header.sclInter;
+    output[i] = readVoxel(view, dataStart, i, header.datatype, header.littleEndian) * header.sclSlope + header.sclInter;
   }
   return output;
 }
@@ -189,7 +210,7 @@ export function parseNiftiVolume(bufferLike, options = {}) {
 export function extractNiftiHeader(bufferLike) {
   const buffer = toArrayBuffer(bufferLike);
   const view = new DataView(buffer);
-  const headerSize = Math.ceil(view.getFloat32(108, true) || 352);
+  const headerSize = Math.ceil(view.getFloat32(108, headerIsLittleEndian(view)) || 352);
   return buffer.slice(0, headerSize);
 }
 
@@ -219,10 +240,11 @@ export function createNiftiFromData(data, sourceHeader, options = {}) {
     preserveScaling: options.preserveScaling === true,
   });
   const view = new DataView(output);
+  const littleEndian = headerIsLittleEndian(view);
   if (options.spacing) {
-    view.setFloat32(80, options.spacing[0], true);
-    view.setFloat32(84, options.spacing[1], true);
-    view.setFloat32(88, options.spacing[2], true);
+    view.setFloat32(80, options.spacing[0], littleEndian);
+    view.setFloat32(84, options.spacing[1], littleEndian);
+    view.setFloat32(88, options.spacing[2], littleEndian);
   }
   let min = options.calMin;
   let max = options.calMax;
@@ -239,8 +261,8 @@ export function createNiftiFromData(data, sourceHeader, options = {}) {
     for (const value of data) if (Number.isFinite(value) && value > max) max = value;
   }
   const safeMax = Number.isFinite(max) ? max : 1;
-  view.setFloat32(124, options.clampCalMax === false ? safeMax : Math.max(1, safeMax), true);
-  view.setFloat32(128, Number.isFinite(min) ? min : 0, true);
+  view.setFloat32(124, options.clampCalMax === false ? safeMax : Math.max(1, safeMax), littleEndian);
+  view.setFloat32(128, Number.isFinite(min) ? min : 0, littleEndian);
   return output;
 }
 
@@ -297,28 +319,29 @@ const NIFTI_FORMAT_BY_ARRAY = new Map([
 function createTypedNifti(data, sourceHeader, options) {
   const header = toArrayBuffer(sourceHeader);
   const srcView = new DataView(header);
-  const headerSize = Math.ceil(srcView.getFloat32(108, true) || 352);
+  const littleEndian = headerIsLittleEndian(srcView);
+  const headerSize = Math.ceil(srcView.getFloat32(108, littleEndian) || 352);
   const buffer = new ArrayBuffer(headerSize + data.length * options.bytesPerVoxel);
   const bytes = new Uint8Array(buffer);
   const view = new DataView(buffer);
   bytes.set(new Uint8Array(header).slice(0, headerSize));
 
-  view.setInt16(70, options.datatype, true);
-  view.setInt16(72, options.bitpix, true);
-  view.setInt16(40, 3, true);
-  view.setInt16(48, 1, true);
-  view.setFloat32(108, headerSize, true);
+  view.setInt16(70, options.datatype, littleEndian);
+  view.setInt16(72, options.bitpix, littleEndian);
+  view.setInt16(40, 3, littleEndian);
+  view.setInt16(48, 1, littleEndian);
+  view.setFloat32(108, headerSize, littleEndian);
   if (!options.preserveScaling) {
-    view.setFloat32(112, 1, true);
-    view.setFloat32(116, 0, true);
+    view.setFloat32(112, 1, littleEndian);
+    view.setFloat32(116, 0, littleEndian);
   }
   if (options.dims) {
-    view.setInt16(42, options.dims[0], true);
-    view.setInt16(44, options.dims[1], true);
-    view.setInt16(46, options.dims[2], true);
+    view.setInt16(42, options.dims[0], littleEndian);
+    view.setInt16(44, options.dims[1], littleEndian);
+    view.setInt16(46, options.dims[2], littleEndian);
   }
 
-  writeTypedData(view, headerSize, data, options.datatype);
+  writeTypedData(view, headerSize, data, options.datatype, littleEndian);
   return buffer;
 }
 
@@ -345,43 +368,43 @@ function normalizePixDims(pixDims) {
   return result;
 }
 
-function writeFloat32Data(view, offset, data) {
-  for (let i = 0; i < data.length; i++) view.setFloat32(offset + i * 4, data[i], true);
+function writeFloat32Data(view, offset, data, littleEndian) {
+  for (let i = 0; i < data.length; i++) view.setFloat32(offset + i * 4, data[i], littleEndian);
 }
 
-function writeFloat64Data(view, offset, data) {
-  for (let i = 0; i < data.length; i++) view.setFloat64(offset + i * 8, data[i], true);
+function writeFloat64Data(view, offset, data, littleEndian) {
+  for (let i = 0; i < data.length; i++) view.setFloat64(offset + i * 8, data[i], littleEndian);
 }
 
-function writeTypedData(view, offset, data, datatype) {
+function writeTypedData(view, offset, data, datatype, littleEndian) {
   switch (datatype) {
     case 2: new Uint8Array(view.buffer, offset).set(data); break;
-    case 4: for (let i = 0; i < data.length; i++) view.setInt16(offset + i * 2, data[i], true); break;
-    case 8: for (let i = 0; i < data.length; i++) view.setInt32(offset + i * 4, data[i], true); break;
-    case 16: writeFloat32Data(view, offset, data); break;
-    case 64: writeFloat64Data(view, offset, data); break;
+    case 4: for (let i = 0; i < data.length; i++) view.setInt16(offset + i * 2, data[i], littleEndian); break;
+    case 8: for (let i = 0; i < data.length; i++) view.setInt32(offset + i * 4, data[i], littleEndian); break;
+    case 16: writeFloat32Data(view, offset, data, littleEndian); break;
+    case 64: writeFloat64Data(view, offset, data, littleEndian); break;
     case 256: new Int8Array(view.buffer, offset).set(data); break;
-    case 512: for (let i = 0; i < data.length; i++) view.setUint16(offset + i * 2, data[i], true); break;
-    case 768: for (let i = 0; i < data.length; i++) view.setUint32(offset + i * 4, data[i], true); break;
+    case 512: for (let i = 0; i < data.length; i++) view.setUint16(offset + i * 2, data[i], littleEndian); break;
+    case 768: for (let i = 0; i < data.length; i++) view.setUint32(offset + i * 4, data[i], littleEndian); break;
     default: throw new Error(`Unsupported output datatype: ${datatype}`);
   }
 }
 
-function readVoxel(view, dataStart, index, datatype) {
+function readVoxel(view, dataStart, index, datatype, littleEndian) {
   switch (datatype) {
     case 2: return view.getUint8(dataStart + index);
-    case 4: return view.getInt16(dataStart + index * 2, true);
-    case 8: return view.getInt32(dataStart + index * 4, true);
-    case 16: return view.getFloat32(dataStart + index * 4, true);
-    case 64: return view.getFloat64(dataStart + index * 8, true);
+    case 4: return view.getInt16(dataStart + index * 2, littleEndian);
+    case 8: return view.getInt32(dataStart + index * 4, littleEndian);
+    case 16: return view.getFloat32(dataStart + index * 4, littleEndian);
+    case 64: return view.getFloat64(dataStart + index * 8, littleEndian);
     case 256: return view.getInt8(dataStart + index);
-    case 512: return view.getUint16(dataStart + index * 2, true);
-    case 768: return view.getUint32(dataStart + index * 4, true);
+    case 512: return view.getUint16(dataStart + index * 2, littleEndian);
+    case 768: return view.getUint32(dataStart + index * 4, littleEndian);
     default: throw new Error(`Unsupported NIfTI datatype: ${datatype}`);
   }
 }
 
-function extractSformAffine(view) {
+function extractSformAffine(view, littleEndian) {
   const affine = [
     new Float64Array(4),
     new Float64Array(4),
@@ -389,22 +412,22 @@ function extractSformAffine(view) {
     new Float64Array([0, 0, 0, 1])
   ];
   for (let i = 0; i < 4; i++) {
-    affine[0][i] = view.getFloat32(280 + i * 4, true);
-    affine[1][i] = view.getFloat32(296 + i * 4, true);
-    affine[2][i] = view.getFloat32(312 + i * 4, true);
+    affine[0][i] = view.getFloat32(280 + i * 4, littleEndian);
+    affine[1][i] = view.getFloat32(296 + i * 4, littleEndian);
+    affine[2][i] = view.getFloat32(312 + i * 4, littleEndian);
   }
   return affine;
 }
 
-function extractQformAffine(view) {
+function extractQformAffine(view, littleEndian) {
   const pixDims = [];
-  for (let i = 0; i < 4; i++) pixDims.push(view.getFloat32(76 + i * 4, true));
-  const qb = view.getFloat32(256, true);
-  const qc = view.getFloat32(260, true);
-  const qd = view.getFloat32(264, true);
-  const qx = view.getFloat32(268, true);
-  const qy = view.getFloat32(272, true);
-  const qz = view.getFloat32(276, true);
+  for (let i = 0; i < 4; i++) pixDims.push(view.getFloat32(76 + i * 4, littleEndian));
+  const qb = view.getFloat32(256, littleEndian);
+  const qc = view.getFloat32(260, littleEndian);
+  const qd = view.getFloat32(264, littleEndian);
+  const qx = view.getFloat32(268, littleEndian);
+  const qy = view.getFloat32(272, littleEndian);
+  const qz = view.getFloat32(276, littleEndian);
   const sqr = qb * qb + qc * qc + qd * qd;
   const qa = sqr > 1 ? 0 : Math.sqrt(1 - sqr);
   const qfac = pixDims[0] < 0 ? -1 : 1;

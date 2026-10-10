@@ -6,6 +6,12 @@
 
 - Load each verified FLAMeS fold after the previous inference session is released, rather than retaining all five model graphs. Stream the command line's model preflight checks while preserving early missing or corrupt file refusal. Keep the model pins, inference parameters and output reference gates unchanged, and measure the complete five-fold browser workflow in Chrome and native Safari.
 
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/synthsr@0.6.20261010
+  - @neurodesk/synthstrip@0.1.5
+
 ## 0.2.20261009
 
 ### Patch Changes

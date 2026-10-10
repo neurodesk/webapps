@@ -4,8 +4,8 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import createNiimath from '@niivue/niimath/niimath.js';
-import { loadMindgrabCpu } from '@neurodesk/runtime-support/node/mindgrab';
-import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
+import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
+import { runNiimath } from '@neurodesk/node-drivers/niimath';
 import packageJson from '../package.json' with { type: 'json' };
 import { AIR_TEMPLATE, DEFAULT_MODEL, MODELS, checkAirTemplate, finishReport, parseModel, qcTissues, segmentForQc, sha256Hex } from './pipeline.js';
 

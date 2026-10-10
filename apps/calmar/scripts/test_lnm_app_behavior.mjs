@@ -3219,6 +3219,19 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       `Schaefer FC display must explain skipped cross-grid lesion overlay; got ${app._messages.join(' | ')}`
     );
 
+    const nonemptyOverlap = app.overlapResult;
+    for (const atlasId of ['yeo7', 'schaefer400']) {
+      app.overlapResult = {
+        atlasOption: app.atlasOptions.find(option => option.id === atlasId),
+        parcelResult: { parcels: [] }
+      };
+      const downloadsBefore = selectableAtlasFetched.length;
+      await app.runFcNetworkMap();
+      assert.equal(selectableAtlasFetched.length, downloadsBefore, 'empty atlas overlap must skip FC downloads');
+      assert.match(app._messages.at(-1), /No labelled .* parcels overlap the lesion; network map skipped/);
+    }
+    app.overlapResult = nonemptyOverlap;
+
     app.lesionMaskFile = makeNiftiFile('confirmed-lesion.nii', lesion160Buffer);
     app.lesionMaskConfirmed = true;
     app.structuralFile = makeNiftiFile('structural.nii', lesion160Buffer);

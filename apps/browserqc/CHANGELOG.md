@@ -1,5 +1,14 @@
 # browserqc
 
+## 1.5.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.1
+  - @neurodesk/browserqc@1.5.20261010
+  - @neurodesk/webapp-components@0.12.1
+
 ## 1.5.20261009
 
 ### Minor Changes

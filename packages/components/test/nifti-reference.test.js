@@ -85,3 +85,36 @@ test('derived outputs keep the source geometry and take the new datatype', async
   assert.equal(mask.header.datatype, 2);
   assert.deepEqual(Array.from(mask.data.slice(0, 4)), [0, 1, 0, 1]);
 });
+
+test('zero slope disables the intercept for a binary nibabel image', async () => {
+  const { data, header } = await readNifti(await fixture('uint8-zero-slope-intercept.nii'));
+  assert.deepEqual(Array.from(data), [0, 1]);
+  assert.equal(header.sclSlope, 1);
+  assert.equal(header.sclInter, 0);
+});
+
+test('big-endian sform/scaling and qform match independent nibabel references', async () => {
+  const sform = await readNifti(await fixture('sform-int16-scaled-big-endian.nii'), Float64Array);
+  const little = await readNifti(await fixture('sform-int16-scaled.nii.gz'), Float64Array);
+  assert.equal(sform.header.littleEndian, false);
+  assert.deepEqual(sform.dims, little.dims);
+  assert.deepEqual(Array.from(sform.data), Array.from(little.data));
+  assert.deepEqual(rows(sform.header.affine), rows(little.header.affine));
+  assert.deepEqual(sform.header.voxelSize, little.header.voxelSize);
+  const qform = await readNifti(await fixture('qform-float32-big-endian.nii'));
+  const qlittle = await readNifti(await fixture('qform-float32.nii'));
+  assert.deepEqual(rows(qform.header.affine), rows(qlittle.header.affine));
+  assert.deepEqual(Array.from(qform.data), Array.from(qlittle.data));
+});
+
+test('derived big-endian images preserve geometry and write matching voxel byte order', async () => {
+  const source = await fixture('sform-int16-scaled-big-endian.nii');
+  const header = extractNiftiHeader(source);
+  assert.equal(header.byteLength, 352);
+  const values = Float32Array.from({ length: 24 }, (_, i) => i / 3);
+  const output = await readNifti(createFloat32Nifti(values, header));
+  assert.equal(output.header.littleEndian, false);
+  assert.deepEqual(Array.from(output.data), Array.from(values));
+  assert.deepEqual(rows(output.header.affine), rows(parseNiftiHeader(source).affine));
+  assert.deepEqual(Array.from((await readNifti(createMaskNifti(values, header))).data), Array.from(values, v => v ? 1 : 0));
+});

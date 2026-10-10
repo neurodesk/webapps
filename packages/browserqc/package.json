@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/browserqc",
-  "version": "1.5.20261009",
+  "version": "1.5.20261010",
   "description": "BrowserQC MRI quality control (MindGrab segmentation and niimath QC metrics) for browsers and the command line",
   "type": "module",
   "license": "BSD-2-Clause",
@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",
-    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
     "@niivue/niimath": "1.4.20260928"
   },
   "devDependencies": {

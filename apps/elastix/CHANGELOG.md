@@ -1,9 +1,22 @@
 # elastix
 
+## 0.2.20261010
+
+### Minor Changes
+
+- Advance already released same-day consumers for the shared NIfTI reader fix without reusing immutable release versions.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.1
+  - @neurodesk/runtime-support@0.4.1
+
 ## 0.1.20261010
 
 ### Patch Changes
 
+- Update the shared runtime-support dependency after moving portable Node drivers into their own dependency-free package.
 - Recover OME-Zarr affine transforms with centered, scaled QR and reject invalid or inaccurate coefficients before export. Cancelled TIFF and OME-Zarr reads now stop before display serialization, pass cancellation to supported remote stores, and cannot create a fresh IO worker or delay the next import.
 
 ## 0.1.20261009

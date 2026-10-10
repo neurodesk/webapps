@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { copyFile, link, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { createNiftiFromVolume, decodeNiftiBuffer, readNiftiImageData } from '@neurodesk/webapp-components/file-io/nifti';
-import { runNiimath } from '@neurodesk/runtime-support/node/niimath';
+import { runNiimath } from '@neurodesk/node-drivers/niimath';
 import { Niimath } from '@niivue/niimath';
 import createNiimath from '@niivue/niimath/niimath.js';
 import packageJson from '../package.json' with { type: 'json' };

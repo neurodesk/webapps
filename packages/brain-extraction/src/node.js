@@ -6,7 +6,7 @@ import * as ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
-import { loadMindgrabCpu } from '@neurodesk/runtime-support/node/mindgrab';
+import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
 import packageJson from '../package.json' with { type: 'json' };
 import { runBet } from './bet.js';
 import { betRuntime } from './bet-runtime.js';

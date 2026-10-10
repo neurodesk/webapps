@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import createModule from '@niivue/niimath/niimath.js';
-import { NiimathError, runNiimath } from '../src/node/niimath.js';
+import { NiimathError, runNiimath } from '../src/niimath.js';
 import { NIIMATH_CASES, REFERENCE_URL, niimathInputs, sha256 } from '../validation/cases.mjs';
 
 const reference = JSON.parse(await readFile(REFERENCE_URL, 'utf8')).niimath;

@@ -39,7 +39,7 @@ for WebAssembly without threads or generated glue. The web app runs the same
 qsm-core BET from QSMbly's threaded bundle; BET has no parallel code paths, so
 both compute the same mask. MindGrab runs `@brainchop/mindgrab`'s threaded CPU
 module, the one the web app runs on its CPU backend, through
-`@neurodesk/runtime-support/node/mindgrab`, with the app's options. Its weights
+`@neurodesk/node-drivers/mindgrab`, with the app's options. Its weights
 are compiled into the module, so it downloads nothing. It uses every logical
 core, takes about 45 s and peaks at 2.6 GB on the 1 mm T1 example with eight
 cores. The web app's GPU backends run other modules and are not part of this

@@ -33,7 +33,7 @@
     },
     "mindgrab": {
       "tolerance": {
-        "basis": "The command line runs @brainchop/mindgrab 0.1.20260925's CPU modules, the WebAssembly this browser run used, through @neurodesk/runtime-support/node/mindgrab, whose outputs match Chromium's byte for byte on Linux, Windows and macOS (packages/runtime-support/validation/reference.json). Any difference is a defect.",
+        "basis": "The command line runs @brainchop/mindgrab 0.1.20260925's CPU modules, the WebAssembly this browser run used, through @neurodesk/node-drivers/mindgrab, whose outputs match Chromium's byte for byte on Linux, Windows and macOS (packages/node-drivers/validation/reference.json). Any difference is a defect.",
         "relative": 0,
         "minimumDice": 1
       },

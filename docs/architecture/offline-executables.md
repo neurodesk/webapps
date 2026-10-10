@@ -44,7 +44,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `musclemap` | Muscle segmentation and fat metrics | `apps/musclemap/web/js/inference-worker.js`. Extract orchestration and supply native inference and a model cache. |
 | `vesselboost` | Vessel segmentation | `apps/vesselboost/web/js/inference-worker.js` and Rust preprocessing. Add a headless inference adapter and model provisioning. |
 | `spinalcordtoolbox` | Segmentation, labeling and lesion analysis | Use the existing pinned native SCT container and `sct_deepseg`; a separate portable Node CLI is not planned (#175). The [command-line guide](../../apps/spinalcordtoolbox/README.md#command-line) covers Docker, Windows through Docker and Apptainer, persistent offline model preparation, and the native five-fold versus browser single-fold `lesion_ms` distinction. The shared Standalone action also offers OpenRecon. |
-| `calmar` | Lesion mapping and reporting | `apps/calmar/web/js/inference-pipeline.js`. Add filesystem adapters and offline atlas/model provisioning. |
+| `calmar` | Lesion mapping and reporting | `packages/calmar`: shared prepare/map orchestration, explicit candidate review, CPU models and both offline connectivity packs. |
 | `qsmbly` | QSM reconstruction | `apps/qsmbly/js/qsm-worker-pure.js` and `rust-wasm`. Add native input/output and an execution adapter for the full reconstruction sequence. |
 | `seedseg` | Fiducial marker segmentation | `apps/seedseg/web/js/inference-worker.js`. Add headless inference, local model resolution and packaging. |
 | `deface` | Batch MRI defacing | `apps/deface/src/main.ts` and `src/mindgrab`. Separate reusable execution from UI and provide headless inference. |

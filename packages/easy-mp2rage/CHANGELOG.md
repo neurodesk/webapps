@@ -1,5 +1,17 @@
 # @neurodesk/easy-mp2rage
 
+
+## 0.8.20261010
+
+### Minor Changes
+
+- Advance already released same-day consumers for the shared NIfTI reader fix without reusing immutable release versions.
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.1
+
 ## 0.7.20261010
 
 ### Patch Changes
