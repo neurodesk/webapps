@@ -31,8 +31,8 @@ export function isProduction(path) {
 
 export const uiModules = /^packages\/components\/src\/(ui|elements|viewer|core)\//;
 export const pureModules = /^packages\/components\/src\/(volume|pipeline|qsm)\//;
-export const browserModules = /^packages\/runtime-support\/src\/|^packages\/[^/]+\/src\/browser(?:[.-][^/]*)?\.js$/;
-export const nodeModules = /^packages\/(node-drivers|desktop)\/(src|neuroflow\/runtime)\/|^packages\/[^/]+\/src\/node(?:[.-][^/]*)?\.js$/;
+export const browserModules = /^packages\/runtime-support\/src\/|^packages\/[^/]+\/src\/browser(?:[.-][^/]*)?\.[cm]?[jt]s$/;
+export const nodeModules = /^packages\/(node-drivers|desktop)\/(src|neuroflow\/runtime)\/|^packages\/[^/]+\/src\/node(?:[.-][^/]*)?\.[cm]?[jt]s$/;
 
 // Browser exports intentionally use devDependencies so portable Node installs do
 // not acquire the browser runtime. These are exact existing adapters, not a
@@ -67,6 +67,7 @@ export const sourceMirrors = {
 
 export const cruiseOptions = {
   outputType: 'json',
+  preserveSymlinks: false,
   parser: 'swc',
   tsPreCompilationDeps: 'specify',
   combinedDependencies: false,
@@ -78,6 +79,7 @@ export const cruiseOptions = {
 };
 
 export const resolveOptions = {
+  symlinks: true,
   extensions: ['.js', '.mjs', '.cjs', '.json', '.ts', '.tsx', '.mts', '.cts'],
   conditionNames: ['import', 'require', 'node', 'default'],
   exportsFields: ['exports'],

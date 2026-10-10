@@ -20,16 +20,6 @@
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
   },
   {
-    "from": "apps/easy-mp2rage/web/js/app.js",
-    "to": "../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm",
-    "reason": "apps/easy-mp2rage/tools/stage_core.sh stages the committed WASM into web/vendor before build."
-  },
-  {
-    "from": "apps/easy-mp2rage/web/js/worker.js",
-    "to": "../vendor/easy-mp2rage/wasm/mp2rage_wasm_bg.wasm",
-    "reason": "apps/easy-mp2rage/tools/stage_core.sh stages the committed WASM into web/vendor before build."
-  },
-  {
     "from": "apps/musclemap/web/js/controllers/MuscleMapDicomInput.js",
     "to": "../../dcm2niix/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."

@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compareFindings, dependencyFindings, dependencyGraph } from '@neurodesk/dependency-quality';
+import { compareFindings, dependencyFindings, dependencyGraph, validateRuntimeContracts } from '@neurodesk/dependency-quality';
 
-async function checkFixture(t, files, manifests = new Map(), runtimeContracts = []) {
+async function checkFixture(t, files, manifests = new Map(), runtimeContracts = [], setup = async () => {}) {
   const root = await mkdtemp(join(tmpdir(), 'dependency-canary-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const [path, source] of Object.entries(files)) {
     await mkdir(join(root, path, '..'), { recursive: true });
     await writeFile(join(root, path), source);
   }
-  return dependencyFindings(await dependencyGraph(root, Object.keys(files)), manifests, runtimeContracts);
+  await setup(root);
+  return dependencyFindings(await dependencyGraph(root, Object.keys(files).filter((file) => !file.startsWith('node_modules/'))), manifests, runtimeContracts);
 }
 
 const leaf = 'export const value = 1;\n';
@@ -226,4 +227,46 @@ test('Node builtin type imports do not enter the browser runtime graph', async (
     'apps/example/src/main.ts': "import type { Stats } from 'node:fs';\nexport interface File { stats: Stats }\n",
   });
   assert.equal(findings.filter(({ rule }) => rule === 'browser-to-node').length, 0);
+});
+
+
+test('bare pnpm workspace imports reach canonical browser and UI sources', async (t) => {
+  const findings = await checkFixture(t, {
+    'packages/example/src/node.ts': "import '@fixture/components/ui';\nimport '@fixture/example/browser';\n",
+    'packages/example/src/browser.mjs': leaf,
+    'packages/example/package.json': JSON.stringify({ name: '@fixture/example', exports: { './browser': './src/browser.mjs' } }),
+    'packages/components/src/volume/model.js': "import '@fixture/components/ui';\n",
+    'packages/components/src/ui/widget.js': leaf,
+    'packages/components/package.json': JSON.stringify({ name: '@fixture/components', exports: { './ui': './src/ui/widget.js' } }),
+  }, new Map(), [], async (root) => {
+    await mkdir(join(root, 'node_modules/@fixture'), { recursive: true });
+    await symlink(join(root, 'packages/example'), join(root, 'node_modules/@fixture/example'));
+    await symlink(join(root, 'packages/components'), join(root, 'node_modules/@fixture/components'));
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'node-to-browser').length, 2);
+  assert.equal(findings.filter(({ rule }) => rule === 'core-to-ui').length, 1);
+});
+
+test('a staged ignored file cannot make an exact resolution contract dead', async (t) => {
+  const files = { 'apps/example/src/main.js': "import './staged.js';\n" };
+  const contracts = [{ from: 'apps/example/src/main.js', to: './staged.js', reason: 'Staged before build.' }];
+  const findings = await checkFixture(t, files, new Map(), contracts, async (root) => {
+    await writeFile(join(root, 'apps/example/src/staged.js'), leaf);
+  });
+  assert.equal(findings.length, 0);
+});
+
+test('empty production inventories and missing inventory sources abort analysis', async (t) => {
+  await assert.rejects(checkFixture(t, { 'packages/example/test/check.js': leaf }), /no production sources/);
+  const root = await mkdtemp(join(tmpdir(), 'dependency-inventory-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await assert.rejects(dependencyGraph(root, ['packages/example/src/missing.js']), /omitted inventory|Could not open|no such file|ENOENT/i);
+});
+
+test('runtime contracts reject dead entries and empty reasons', () => {
+  const graph = [{ source: 'apps/example/src/main.js', dependencies: [{ module: './staged.js', couldNotResolve: true }] }];
+  const contract = { from: 'apps/example/src/main.js', to: './staged.js', reason: 'Generated during build.' };
+  assert.doesNotThrow(() => validateRuntimeContracts(graph, [contract]));
+  assert.throws(() => validateRuntimeContracts([], [contract]), /unused runtime resolution contract/);
+  assert.throws(() => validateRuntimeContracts(graph, [{ ...contract, reason: ' ' }]), /specific reason/);
 });

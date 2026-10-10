@@ -62,8 +62,9 @@ queries resolve their underlying files and retain the original import identity.
 `config/dependency-runtime-contracts.json` lists exact existing source/import
 pairs whose files are staged before build, or whose remote assets are mirrored
 for offline use. It names the staging or assembly mechanism for each pair. These
-are resolution contracts, separate from the debt baseline. Staging files locally
-does not change the baseline. Their byte checks, staging behavior, worker startup
+are resolution contracts, separate from the debt baseline. Resolution of workspace files uses the tracked and unignored Git inventory,
+so ignored staging output cannot change the result. Unused contracts fail and
+must be removed. Staging files locally does not change the baseline. Their byte checks, staging behavior, worker startup
 and offline behavior remain covered by the existing runtime tests.
 
 `generatedSources` excludes exact committed third-party bundles, Emscripten glue
@@ -77,7 +78,9 @@ whole packages.
 The check scans tracked and unignored JS, MJS, CJS, TS, TSX, MTS and CTS under
 `apps/` and `packages/`. It does not analyze native Rust/C, HTML script tags,
 CSS dependencies, arbitrary computed URLs, string-built dynamic imports or
-third-party dependency internals. It cannot prove browser API compatibility or
+third-party dependency internals. Every inventoried source must appear in the
+graph, and an empty production inventory fails. Workspace symlinks explicitly
+resolve to canonical package paths. It cannot prove browser API compatibility or
 portable package contents; packaging, runtime and browser tests own those checks.
 
 ## Existing findings and follow-up work

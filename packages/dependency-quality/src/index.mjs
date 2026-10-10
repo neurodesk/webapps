@@ -116,6 +116,11 @@ export async function dependencyGraph(root, files) {
   const result = await cruise(sources, { ...cruiseOptions, baseDir: root }, resolveOptions);
   const graph = JSON.parse(result.output);
   const sourceSet = new Set(sources);
+  const inventory = new Set(files);
+  const returned = new Set(graph.modules.map(({ source }) => source));
+  const missing = sources.filter((source) => !returned.has(source));
+  if (missing.length) throw new Error(`Dependency graph omitted inventory sources: ${missing.join(', ')}`);
+  if (!sources.some(isProduction)) throw new Error('Dependency inventory contains no production sources.');
   // Resolve Vite queries as assets while retaining the original import identity.
   for (const module of graph.modules) {
     if (!sourceSet.has(module.source)) continue;
@@ -126,7 +131,10 @@ export async function dependencyGraph(root, files) {
       }
     }
     const ast = parseFileSync(resolve(root, module.source), {
-      syntax: 'typescript', tsx: /\.[jt]sx$/.test(module.source), decorators: true,
+      ...(/\.[cm]?tsx?$/.test(module.source)
+        ? { syntax: 'typescript', tsx: /\.tsx$/.test(module.source) }
+        : { syntax: 'ecmascript', jsx: /\.jsx$/.test(module.source) }),
+      decorators: true,
     });
     const typeOnly = typeOnlySpecifiers(ast);
     for (const dependency of module.dependencies) {
@@ -143,9 +151,13 @@ export async function dependencyGraph(root, files) {
         ? posix.normalize(posix.join(dirname(module.source), cleanSpecifier(dependency.module)))
         : dependency.resolved;
       const mirror = Object.entries(sourceMirrors).find(([prefix]) => path.startsWith(prefix));
-      if (!mirror) continue;
-      dependency.resolved = mirror[1] + path.slice(mirror[0].length);
-      dependency.couldNotResolve = !existsSync(resolve(root, dependency.resolved));
+      if (mirror) dependency.resolved = mirror[1] + path.slice(mirror[0].length);
+      if (/^(apps|packages)\//.test(dependency.resolved)) {
+        // Ignored staged output must not change analysis between clean and built checkouts.
+        dependency.couldNotResolve = !inventory.has(dependency.resolved)
+          && !(dependency.url && dependency.resolved.endsWith('/')
+            && files.some((file) => file.startsWith(dependency.resolved)));
+      }
     }
   }
   return graph.modules.filter((module) => sourceSet.has(module.source));
@@ -233,7 +245,7 @@ export function dependencyFindings(modules, manifests, runtimeContracts = []) {
       if ((pureModules.test(from) || from.startsWith('packages/components/src/core/')) && uiModules.test(to)
         && !to.startsWith('packages/components/src/core/')) add('core-to-ui', from, to);
       if (pureModules.test(from) && to.startsWith('packages/components/src/core/')) add('core-to-ui', from, to);
-      if (!dependency.typeOnly && browser.has(from) && (nodeModules.test(to) || isBuiltin(specifier) || specifier === 'onnxruntime-node')) {
+      if (!dependency.typeOnly && browser.has(from) && (nodeModules.test(to) || isBuiltin(specifier) || packageName(specifier) === 'onnxruntime-node')) {
         // NIfTI decompression falls back to zlib only inside its Node branch.
         if (!(from === 'packages/components/src/file-io/NiftiUtils.js' && specifier.replace(/^node:/, '') === 'zlib')) {
           add('browser-to-node', from, to);
@@ -267,4 +279,14 @@ export function compareFindings(findings, baseline) {
     added: findings.filter((finding) => !existing.has(findingIdentity(finding))),
     removed: baseline.filter((finding) => !current.has(findingIdentity(finding))),
   };
+}
+
+export function validateRuntimeContracts(graph, contracts) {
+  const live = new Set(graph.flatMap(({ source, dependencies }) => dependencies
+    .filter(({ couldNotResolve }) => couldNotResolve)
+    .map(({ module }) => `${source}\0${module}`)));
+  for (const { from, to, reason } of contracts) {
+    if (!reason?.trim()) throw new Error('Every runtime resolution contract needs a specific reason.');
+    if (!live.has(`${from}\0${to}`)) throw new Error(`Remove unused runtime resolution contract: ${from} -> ${to}`);
+  }
 }
