@@ -916,6 +916,9 @@ importers:
 
   apps/vesselboost:
     dependencies:
+      '@neurodesk/vesselboost':
+        specifier: workspace:*
+        version: link:../../packages/vesselboost
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -1244,6 +1247,15 @@ importers:
       nifti-reader-js:
         specifier: 0.8.0
         version: 0.8.0
+      onnxruntime-node:
+        specifier: 1.29.0
+        version: 1.29.0
+
+  packages/vesselboost:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       onnxruntime-node:
         specifier: 1.29.0
         version: 1.29.0

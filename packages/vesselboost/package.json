@@ -1,0 +1,36 @@
+{
+  "name": "@neurodesk/vesselboost",
+  "version": "0.6.20261010",
+  "description": "VesselBoost preprocessing and vessel segmentation for browsers and portable command lines",
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "vesselboost": "./bin/vesselboost.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "src",
+    "bin",
+    "preprocessing",
+    "model.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node scripts/verify-preprocessing.mjs",
+    "build:wasm": "bash scripts/build-preprocessing.sh",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/pipeline.js && node --check src/node.js && node --check bin/vesselboost.js"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "onnxruntime-node": "1.29.0"
+  }
+}

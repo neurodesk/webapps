@@ -1,0 +1,36 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "vesselboost-v",
+  "displayName": "VesselBoost",
+  "app": "vesselboost",
+  "run": "input.nii.gz results",
+  "readme": {
+    "run": "Segment blood vessels with optional preprocessing",
+    "notes": [
+      "All four pinned VesselBoost checkpoints, SynthStrip and the required Rust preprocessing artifact are included locally.",
+      "No network connection or previously populated cache is required.",
+      "Add --help for the same optional preprocessing and model choices as the browser automation.",
+      "DICOM import and manual mask editing use the web app.",
+      "Research software; inspect vessel masks. Imported source and VesselBoost weights retain NOASSERTION licensing."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "vesselboost"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "vesselboost.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "vesselboost"
+    }
+  },
+  "validationApp": "vesselboost"
+}
