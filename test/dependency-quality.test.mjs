@@ -195,3 +195,35 @@ test('known staged mirrors follow canonical shared sources before build', async 
   assert.ok(findings.some(({ rule, from }) => rule === 'browser-to-node' && from === 'packages/components/src/volume/model.js'));
   assert.equal(findings.filter(({ rule }) => rule === 'unresolved').length, 0);
 });
+
+
+test('explicit type imports do not create runtime cycles', async (t) => {
+  const findings = await checkFixture(t, {
+    'packages/example/src/a.ts': "import type { Shape } from './b';\nexport const value = 1;\n",
+    'packages/example/src/b.ts': "import { value } from './a';\nexport interface Shape { value: number }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 0);
+});
+
+test('mixed type and runtime imports still create runtime cycles', async (t) => {
+  const findings = await checkFixture(t, {
+    'packages/example/src/a.ts': "import { type Shape, value } from './b';\nexport const other = 1;\n",
+    'packages/example/src/b.ts': "import { other } from './a';\nexport const value = other;\nexport interface Shape { value: number }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 2);
+});
+
+test('a type import cannot hide a dynamic runtime import of the same module', async (t) => {
+  const findings = await checkFixture(t, {
+    'packages/example/src/a.ts': "import type { Shape } from './b';\nexport const other = () => import('./b');\n",
+    'packages/example/src/b.ts': "import { other } from './a';\nexport interface Shape { value: number }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 2);
+});
+
+test('Node builtin type imports do not enter the browser runtime graph', async (t) => {
+  const findings = await checkFixture(t, {
+    'apps/example/src/main.ts': "import type { Stats } from 'node:fs';\nexport interface File { stats: Stats }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'browser-to-node').length, 0);
+});

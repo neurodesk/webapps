@@ -69,6 +69,28 @@ function runtimeReferences(ast) {
 
 const importResolver = enhancedResolve.create.sync({ ...resolveOptions, useSyncFileSystemCalls: true, fileSystem: fs });
 
+function typeOnlySpecifiers(ast) {
+  const imports = new Map();
+  const dynamic = new Set();
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(node.type) && node.source) {
+      const typeOnly = node.typeOnly || (node.specifiers?.length > 0 && node.specifiers.every((specifier) => specifier.isTypeOnly));
+      imports.set(node.source.value, (imports.get(node.source.value) ?? true) && Boolean(typeOnly));
+    }
+    if (node.type === 'CallExpression' && node.callee?.type === 'Import' && node.arguments?.[0]?.expression?.type === 'StringLiteral') {
+      dynamic.add(node.arguments[0].expression.value);
+    }
+    Object.values(node).forEach(visit);
+  }
+  visit(ast);
+  return new Set([...imports].filter(([specifier, typeOnly]) => typeOnly && !dynamic.has(specifier)).map(([specifier]) => specifier));
+}
+
 function resolveReference(root, source, specifier, url = false) {
   if (url && !specifier.includes('://')) {
     const target = posix.normalize(posix.join(dirname(source), specifier));
@@ -106,6 +128,10 @@ export async function dependencyGraph(root, files) {
     const ast = parseFileSync(resolve(root, module.source), {
       syntax: 'typescript', tsx: /\.[jt]sx$/.test(module.source), decorators: true,
     });
+    const typeOnly = typeOnlySpecifiers(ast);
+    for (const dependency of module.dependencies) {
+      dependency.typeOnly = (typeOnly.has(dependency.module) || typeOnly.has(`node:${dependency.module}`)) && !dependency.dynamic;
+    }
     for (const { specifier, url } of runtimeReferences(ast)) {
       if (module.dependencies.some((dependency) => dependency.module === specifier)) continue;
       module.dependencies.push({ module: specifier, ...resolveReference(root, module.source, specifier, url), url });
@@ -131,7 +157,9 @@ function reachable(modules, roots) {
   function visit(source) {
     if (reached.has(source)) return;
     reached.add(source);
-    for (const dependency of bySource.get(source)?.dependencies ?? []) visit(dependency.resolved);
+    for (const dependency of bySource.get(source)?.dependencies ?? []) {
+      if (!dependency.typeOnly) visit(dependency.resolved);
+    }
   }
   roots.forEach(visit);
   return reached;
@@ -185,7 +213,9 @@ export function dependencyFindings(modules, manifests, runtimeContracts = []) {
   const nodeRoots = production.filter(({ source }) => nodeModules.test(source) || /^packages\/[^/]+\/bin\//.test(source));
   const browser = reachable(production, browserRoots.map(({ source }) => source));
   const node = reachable(production, nodeRoots.map(({ source }) => source));
-  const cycles = cyclicEdges(production);
+  const cycles = cyclicEdges(production.map((module) => ({
+    ...module, dependencies: module.dependencies.filter((dependency) => !dependency.typeOnly),
+  })));
   const findings = [];
   function add(rule, from, to) { findings.push({ rule, from, to }); }
   for (const { source: from, dependencies } of production) {
@@ -203,13 +233,13 @@ export function dependencyFindings(modules, manifests, runtimeContracts = []) {
       if ((pureModules.test(from) || from.startsWith('packages/components/src/core/')) && uiModules.test(to)
         && !to.startsWith('packages/components/src/core/')) add('core-to-ui', from, to);
       if (pureModules.test(from) && to.startsWith('packages/components/src/core/')) add('core-to-ui', from, to);
-      if (browser.has(from) && (nodeModules.test(to) || isBuiltin(specifier) || specifier === 'onnxruntime-node')) {
+      if (!dependency.typeOnly && browser.has(from) && (nodeModules.test(to) || isBuiltin(specifier) || specifier === 'onnxruntime-node')) {
         // NIfTI decompression falls back to zlib only inside its Node branch.
         if (!(from === 'packages/components/src/file-io/NiftiUtils.js' && specifier.replace(/^node:/, '') === 'zlib')) {
           add('browser-to-node', from, to);
         }
       }
-      if (node.has(from) && ((browserModules.test(to) && !nodeModules.test(to)) || uiModules.test(to))) add('node-to-browser', from, to);
+      if (!dependency.typeOnly && node.has(from) && ((browserModules.test(to) && !nodeModules.test(to)) || uiModules.test(to))) add('node-to-browser', from, to);
       if (cycles.has(`${from}\0${to}`)) add('cycle', from, to);
       if (dependency.couldNotResolve && !runtimeContracts.some((contract) =>
         contract.from === from && contract.to === dependency.module)) add('unresolved', from, dependency.module);
@@ -217,7 +247,7 @@ export function dependencyFindings(modules, manifests, runtimeContracts = []) {
       const runtimeDeclared = [manifest.dependencies, manifest.peerDependencies, manifest.optionalDependencies]
         .some((dependencies) => Object.hasOwn(dependencies ?? {}, name));
       const contract = devRuntimeContracts.some(([path, dependency]) => path === from && dependency === name);
-      if (!runtimeDeclared && !(contract && Object.hasOwn(manifest.devDependencies ?? {}, name))) {
+      if (!runtimeDeclared && !((contract || dependency.typeOnly) && Object.hasOwn(manifest.devDependencies ?? {}, name))) {
         add('undeclared-runtime', from, name);
       }
     }

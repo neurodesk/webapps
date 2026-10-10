@@ -31,7 +31,9 @@ small existing runtime contracts. The checker enforces these rules:
   workspace manifest. Relative imports into another workspace count too.
   Root dependencies and devDependencies do not satisfy a runtime dependency.
 - Production sources cannot import test or tooling sources to bypass runtime rules.
-- New production cycle edges fail, including literal worker URL edges.
+- New production cycle edges fail, including literal worker URL edges. Explicit
+  type-only imports stay outside runtime cycles and browser/Node reachability.
+  Mixed imports and dynamic runtime imports retain their runtime edges.
 - Unresolved production imports fail unless an exact existing staging or remote
   runtime contract explains how the production build resolves them.
 
