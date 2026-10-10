@@ -1,0 +1,38 @@
+name: unused-code
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unused-code-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: node --test test/unused-code.test.mjs
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - run: pnpm quality:unused
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: unused-code
+          path: quality-artifacts/unused-code/
+          if-no-files-found: error
+          retention-days: 14
