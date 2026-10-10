@@ -1,3 +1,4 @@
+import { signingEnabled, verifyWindowsArchive } from './windows-signing.mjs';
 import { fileURLToPath } from 'node:url';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
@@ -7,6 +8,8 @@ import { fileHash } from '../../packages/desktop/src/bundle.js';
 
 export async function prepareReleaseFiles(archive, destination, { version, platform, partBytes = 1_900_000_000, kind = 'desktop' }) {
   if (!Number.isSafeInteger(partBytes) || partBytes < 1 || partBytes >= 2 ** 31) throw new Error('Invalid release part size');
+  const windowsSigned = platform === 'windows-x64' && signingEnabled();
+  if (windowsSigned) verifyWindowsArchive(archive);
   const filename = basename(archive);
   if (!/^[a-zA-Z0-9._-]+$/.test(filename)) throw new Error('Archive filename must be safe in shell commands');
   const bytes = (await stat(archive)).size;
@@ -42,6 +45,7 @@ export async function prepareReleaseFiles(archive, destination, { version, platf
   await writeFile(join(destination, installation), `${heading}\n\nDownload every file below into one folder. ${purpose}\n\n${parts.map(part => part.filename).join('\n')}\n\nRun in ${windows ? 'PowerShell' : 'a terminal'} from that folder:\n\n${command}\n\n${closing}\n`);
   const result = {
     kind, platform, version, bytes,
+    ...(windowsSigned ? { windowsSigning: { archiveSha256: sha256, verified: true } } : {}),
     url: parts.length === 1 ? parts[0].url : baseUrl + installation,
     sha256: parts.length === 1 ? sha256 : await fileHash(join(destination, installation)),
     ...(parts.length > 1 ? { parts, archiveSha256: sha256, archiveFilename: filename } : {}),

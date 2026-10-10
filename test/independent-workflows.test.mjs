@@ -111,7 +111,7 @@ test('native and independent test workflows pin actions and discard checkout cre
       if (job.uses) assert.match(job.uses, /^\.\/\.github\/workflows\/[\w-]+\.yml$/, `${name}: ${job.uses}`);
       for (const step of job.steps || []) {
         if (!step.uses) continue;
-        if (step.uses === './.github/actions/setup-wasm-opt') continue;
+        if (['./.github/actions/setup-wasm-opt', './.github/actions/windows-signing'].includes(step.uses)) continue;
         assert.match(step.uses, /^[\w-]+\/[\w-]+@[0-9a-f]{40}$/, `${name}: ${step.uses}`);
         if (step.uses.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
       }
@@ -123,7 +123,7 @@ test('portable Node command lines build on target runners and publish through on
   const shared=await workflow('node-cli-portable');
   assert.deepEqual(Object.keys(shared.on),['workflow_call']);
   assert.deepEqual(shared.permissions,{contents:'read'});
-  assert.deepEqual(shared.jobs.portable.permissions,{contents:'read'});
+  assert.deepEqual(shared.jobs.portable.permissions,{contents:'read', 'id-token':'write'});
   assert.equal(shared.jobs.release.if,'inputs.publish_release');
   assert.deepEqual(shared.jobs.release.needs,['portable']);
   assert.equal(shared.jobs.release.permissions.contents,'write');

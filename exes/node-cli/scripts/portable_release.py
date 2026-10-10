@@ -30,6 +30,9 @@ from dataclasses import dataclass
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts/lib"))
+import windows_signing
+
 HERE = ROOT / "exes/node-cli"
 DIST = HERE / "dist"
 NODE_PLATFORMS = {"linux": "linux", "windows": "win32", "macos": "darwin"}
@@ -587,6 +590,8 @@ def package_target(target: ReleaseTarget) -> pathlib.Path:
         (stage / "README.txt").write_text(readme_text(target), encoding="utf8")
         if target.installer:
             _sign_macos(stage, target, signing)
+        if target.id.startswith("windows-"):
+            windows_signing.sign_tree(stage, (target.executable, target.private_node))
         manifest = create_manifest(stage, target.version, target.id)
         (stage / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf8")
         if target.installer:
@@ -792,6 +797,8 @@ def verify_target(repo: pathlib.Path, target: ReleaseTarget) -> pathlib.Path:
             extracted = pathlib.Path(temporary)
             _extract_archive(archive, extracted)
             root = extracted / target.directory
+            if target.id.startswith("windows-"):
+                windows_signing.verify_tree(root, (target.executable, target.private_node), native=True)
             report, validation = _exercise(repo, target, root, root / target.executable)
     receipt.write_text(
         f"PASS {target.id}\narchive_sha256={expected}\nself_check={json.dumps(report, sort_keys=True)}\n{validation}{evidence}",
@@ -829,6 +836,8 @@ def verify_release_set(repo: pathlib.Path, package_dir: str, directory: pathlib.
         receipt = (directory / (target.archive_name + ".validation.txt")).read_text(encoding="utf8")
         if not receipt.startswith(f"PASS {target.id}\n"):
             raise ValueError(f"release validation receipt is missing: {target.id}")
+        if target.id.startswith("windows-"):
+            windows_signing.verify_zip(archive, (target.executable, target.private_node))
         if target.installer and not xar_is_signed(archive):
             raise ValueError(f"release installer is unsigned: {target.archive_name}")
         if target.installer and "source=Notarized Developer ID" not in receipt:

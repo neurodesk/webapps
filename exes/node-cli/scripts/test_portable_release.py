@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+from contextlib import ExitStack
+import hashlib
+import zipfile
 import importlib.util
 import json
 import os
@@ -27,6 +30,37 @@ def package_version(package_dir):
 
 
 class PortableReleaseTests(unittest.TestCase):
+    def test_windows_launcher_and_node_are_signed_before_manifest_and_zip(self):
+        target = portable_release.load_target(ROOT, "packages/topofit", "windows-x64")
+        def deploy(stage, target):
+            (stage / "app/node_modules").mkdir(parents=True)
+        def extract(archive, target, stage):
+            (stage / "runtime").mkdir()
+            (stage / target.private_node).write_bytes(b"unsigned node")
+        def launcher(stage, target):
+            (stage / target.executable).write_bytes(b"unsigned launcher")
+        def sign(stage, required):
+            self.assertEqual(required, (target.executable, target.private_node))
+            (stage / target.executable).write_bytes(b"signed launcher")
+            (stage / target.private_node).write_bytes(b"signed node")
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as stack:
+            stack.enter_context(mock.patch.object(portable_release, "DIST", pathlib.Path(temporary)))
+            for name in ("_assert_native_host", "_flatten_node_modules", "_prune_onnx_runtime", "_copy_dependency_licenses", "_run", "_download_runtime"):
+                stack.enter_context(mock.patch.object(portable_release, name))
+            for name, function in (("_deploy_application", deploy), ("_extract_node_files", extract), ("_build_launcher", launcher)):
+                stack.enter_context(mock.patch.object(portable_release, name, side_effect=function))
+            stack.enter_context(mock.patch.object(portable_release.windows_signing, "sign_tree", side_effect=sign))
+            archive = portable_release.package_target(target)
+            with zipfile.ZipFile(archive) as bundle:
+                prefix = target.directory + "/"
+                self.assertEqual(bundle.read(prefix + target.executable), b"signed launcher")
+                self.assertEqual(bundle.read(prefix + target.private_node), b"signed node")
+                manifest = json.loads(bundle.read(prefix + "manifest.json"))
+            hashes = {record["path"]: record["sha256"] for record in manifest["files"]}
+            self.assertEqual(hashes[target.executable], hashlib.sha256(b"signed launcher").hexdigest())
+            self.assertEqual(hashes[target.private_node], hashlib.sha256(b"signed node").hexdigest())
+            self.assertEqual(archive.with_name(archive.name + ".sha256").read_text().split()[0], hashlib.sha256(archive.read_bytes()).hexdigest())
+
     def test_commands_are_resolved_with_the_supplied_path(self):
         environment = {"PATH": "portable-tools"}
         with mock.patch.object(portable_release.shutil, "which", return_value="/portable-tools/pnpm.CMD") as which:

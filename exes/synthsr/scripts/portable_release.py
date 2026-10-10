@@ -19,6 +19,9 @@ import zipfile
 
 NATIVE_ROOT = Path(__file__).resolve().parent.parent
 REPOSITORY_ROOT = NATIVE_ROOT.parent.parent
+sys.path.insert(0, str(REPOSITORY_ROOT / "scripts/lib"))
+import windows_signing
+
 DOCUMENTS = ("README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md")
 PLATFORMS = {
     "linux-x64": {
@@ -108,7 +111,12 @@ def build_archive(platform, version, target_dir, documents_dir, dist_dir):
     if spec["extension"] == ".tar.gz":
         _tar_archive(archive, files, spec["executable"])
     else:
-        _zip_archive(archive, files, spec["executable"])
+        with package_directory() as stage:
+            for name, source in files:
+                shutil.copy2(source, stage / name)
+            windows_signing.sign_tree(stage, (spec["executable"], spec["library"]))
+            staged = [(path.name, path) for path in stage.iterdir()]
+            _zip_archive(archive, staged, spec["executable"])
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_name(archive.name + ".sha256").write_bytes(
         f"{digest}  {archive.name}\n".encode("utf-8")
@@ -139,6 +147,8 @@ def _extract_checked(platform, archive, destination):
     else:
         with zipfile.ZipFile(archive) as bundle:
             names = set(bundle.namelist())
+            if windows_signing.EVIDENCE in names:
+                expected.add(windows_signing.EVIDENCE)
             if names != expected or any(name.endswith("/") for name in names):
                 raise ValueError(f"unexpected archive contents: {sorted(names)}")
             for name in names:
@@ -178,6 +188,8 @@ def verify_archive(platform, archive, fixture=REPOSITORY_ROOT / "apps/synthsr/te
 
     with package_directory() as extracted:
         _extract_checked(platform, archive, extracted)
+        if platform == "windows-x64":
+            windows_signing.verify_tree(extracted, (spec["executable"], spec["library"]), native=True)
         executable = extracted / spec["executable"]
         executable.chmod(0o755)
         environment = os.environ.copy()
