@@ -50,7 +50,7 @@ export function publishedSourceEntries(directory, exports) {
 export function validateLiteralEntries(root, workspaces) {
   for (const [workspace, config] of Object.entries(workspaces)) {
     for (const entry of config.entry) {
-      if (entry.startsWith('!') || /[*?\[\]{}]/.test(entry)) continue;
+      if (entry.startsWith('!') || /[*?[\]{}]/.test(entry)) continue;
       if (!isFile(resolve(root, workspace, entry))) throw new Error(`Missing explicit entry: ${workspace}/${entry}`);
     }
   }
