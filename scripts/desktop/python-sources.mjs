@@ -10,7 +10,7 @@ if (!response.ok) throw new Error(`Pyodide lock: HTTP ${response.status}`);
 const pyodide = await response.json();
 const packages = new Set();
 function include(name) {
-  name = name.toLowerCase().replace(/[_\.]+/g, "-");
+  name = name.toLowerCase().replace(/[_.]+/g, "-");
   if (packages.has(name)) return;
   const entry = pyodide.packages[name];
   if (!entry) throw new Error(`Missing Pyodide package: ${name}`);

@@ -46,7 +46,7 @@ async function loadNifti(filePath) {
 }
 
 async function ensureSynthStrip() {
-  try { await fs.access(SYNTHSTRIP_ONNX); return; } catch {}
+  try { await fs.access(SYNTHSTRIP_ONNX); return; } catch (error) { if (error.code !== 'ENOENT') throw error; }
   console.log('Downloading synthstrip.onnx...');
   const res = await fetch(SYNTHSTRIP_URL);
   await fs.mkdir(path.dirname(SYNTHSTRIP_ONNX), { recursive: true });

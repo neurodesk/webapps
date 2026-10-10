@@ -30,12 +30,14 @@ export const validateFieldValue = (value: any, dataType: FieldDataType): FieldVa
     case 'string':
       return { type: 'string', value: String(value || '') };
 
-    case 'number':
+    case 'number': {
       const numValue = Number(value);
       return {
         type: 'number',
         value: isNaN(numValue) ? 0 : numValue
       };
+
+    }
 
     case 'list_string':
       if (Array.isArray(value)) {

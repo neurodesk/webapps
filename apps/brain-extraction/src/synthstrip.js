@@ -9,7 +9,7 @@ export async function extractSynthstrip({ volume, onProgress }) {
   ort.env.wasm.wasmPaths = { wasm: wasmURL, mjs: wasmModuleURL };
   ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
   let storage;
-  try { storage = await caches.open('neurodesk-models-v1'); } catch {}
+  try { storage = await caches.open('neurodesk-models-v1'); } catch { /* Cache Storage may be disabled; verified network model loading still works. */ }
   const cache = storage && {
     async get(key) { return (await storage.match(key))?.arrayBuffer(); },
     async set(key, bytes) { await storage.put(key, new Response(bytes)); },

@@ -72,7 +72,7 @@ export function dandiAssetSearchUrl(
   const terms = query
     .trim()
     .split(/\s+/)
-    .map((term) => term.replace(/[?*\[\]]/g, ''))
+    .map((term) => term.replace(/[?*[\]]/g, ''))
     .filter(Boolean)
   const glob = terms.length > 0 ? `*${terms.join('*')}*.ome.zarr` : '*.ome.zarr'
   const url = new URL(

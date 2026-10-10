@@ -17,7 +17,7 @@ test('static app More Apps links return to the composite start page', async () =
         await access(join(repoRoot, candidate));
         file = candidate;
         break;
-      } catch {}
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
     assert.ok(file, `${app.id} must expose a source index.html`);
     const html = await readFile(join(repoRoot, file), 'utf8');

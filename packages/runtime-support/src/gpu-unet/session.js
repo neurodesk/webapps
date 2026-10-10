@@ -231,6 +231,9 @@ export async function createGpuSession(bytes, dims, {
         if(!tensor || tensor.type!=='float32' || !same(tensor.dims,[1,1,...dims]))throw new Error('GPU input does not match the session shape.');
         running=true;
         device.pushErrorScope('out-of-memory');device.pushErrorScope('validation');
+        let result;
+        let operationError;
+        let failed = false;
         try {
           const data=await tensor.getData();
           if(data.length!==product(dims))throw new Error('GPU input size mismatch.');
@@ -251,15 +254,27 @@ export async function createGpuSession(bytes, dims, {
             try{const times=new BigUint64Array(queryRead.getMappedRange());session.profile=steps.map((s,i)=>({name:s.name,op:s.op,milliseconds:Number(times[i*2+1]-times[i*2])/1e6}));}finally{queryRead.unmap();}
           }
           if(failure)throw failure;
-          return {[graph.output]:{dims:[1,outputChannels,...dims],type:'float32',getData:async()=>output,dispose(){}}};
-        } finally {
-          const scopes=await Promise.allSettled([device.popErrorScope(),device.popErrorScope()]);
-          running=false;
-          const error=scopes.find(s=>s.status==='fulfilled'&&s.value)?.value;
-          if(error)throw new Error(`${label} GPU inference failed: ${error.message}`);
-          const rejected=scopes.find(s=>s.status==='rejected');
-          if(rejected)throw rejected.reason;
+          result = {[graph.output]:{dims:[1,outputChannels,...dims],type:'float32',getData:async()=>output,dispose(){}}};
+        } catch (error) {
+          failed = true;
+          operationError = error;
         }
+        // Drain both scopes even if a driver throws synchronously while popping one.
+        const scopes = [];
+        for (let i = 0; i < 2; i++) {
+          try {
+            scopes.push({ error: await device.popErrorScope() });
+          } catch (error) {
+            scopes.push({ rejection: error });
+          }
+        }
+        running = false;
+        if (failed) throw operationError;
+        const scopedError = scopes.find(scope => scope.error)?.error;
+        if (scopedError) throw new Error(`${label} GPU inference failed: ${scopedError.message}`);
+        const rejected = scopes.find(scope => Object.hasOwn(scope, 'rejection'));
+        if (rejected) throw rejected.rejection;
+        return result;
       },
       async release(){if(!released){released=true;device.destroy();}},
     };

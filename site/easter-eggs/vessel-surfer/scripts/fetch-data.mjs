@@ -11,7 +11,7 @@ for (const [name, digest] of Object.entries(manifest.files)) {
   const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
   try {
     if (hash(await readFile(path)) === digest) continue;
-  } catch {}
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const url = `https://huggingface.co/datasets/neurodeskorg/webapps/resolve/${manifest.revision}/easter-eggs/vessel-surfer/pial-arteries-v1/${name}`;
   const response = await fetch(url);
   if (!response.ok)

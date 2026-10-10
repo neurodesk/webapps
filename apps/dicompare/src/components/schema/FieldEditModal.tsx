@@ -167,11 +167,12 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             newErrors.constraint = 'At least one of min or max value is required for range constraint';
           }
           break;
-        case 'contains':
+        case 'contains': {
           if (!formData.validationRule.contains?.trim()) {
             newErrors.constraint = 'Substring is required for contains constraint';
           }
           break;
+        }
         case 'contains_any':
           // Values are stored in formData.value (single source of truth)
           if (!formData.value || (Array.isArray(formData.value) && formData.value.length === 0)) {
@@ -310,7 +311,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             max: prev.validationRule.max
           };
           break;
-        case 'contains':
+        case 'contains': {
           // For substring contains, use first element if array, or the string value
           const containsValue = Array.isArray(prev.value) ? prev.value[0] : prev.value;
           newValidationRule = {
@@ -318,6 +319,7 @@ const FieldEditModal: React.FC<FieldEditModalProps> = ({
             contains: typeof containsValue === 'string' ? containsValue : String(containsValue || '')
           };
           break;
+        }
         case 'contains_any':
         case 'contains_all':
         case 'exact':

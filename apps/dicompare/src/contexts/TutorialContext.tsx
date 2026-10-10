@@ -677,7 +677,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         // Auto-advance if element exists, otherwise allow manual Next button
         // Useful for steps that can be skipped if target already exists
         return document.querySelector(waitCondition.selector) !== null;
-      case 'scoresComputedOrMatchedData':
+      case 'scoresComputedOrMatchedData': {
         // Auto-advance if scores computed OR schema selected
         const scoresComputed = document.querySelector('[data-tutorial="scores-computed"]') !== null;
         const hasMatched = workspace.items.some(item =>
@@ -685,6 +685,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           (item.source === 'data' && item.dataUsageMode === 'validation-subject' && item.attachedSchema !== undefined)
         );
         return scoresComputed || hasMatched;
+      }
       case 'none':
         return false; // Manual advance only
       default:
@@ -740,13 +741,14 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return document.querySelector(condition.selector) === null;
       case 'elementExists':
         return document.querySelector(condition.selector) !== null;
-      case 'scoresComputedOrMatchedData':
+      case 'scoresComputedOrMatchedData': {
         const scoresComputed = document.querySelector('[data-tutorial="scores-computed"]') !== null;
         const matched = workspace.items.some(item =>
           (item.attachedData !== undefined) ||
           (item.source === 'data' && item.dataUsageMode === 'validation-subject' && item.attachedSchema !== undefined)
         );
         return scoresComputed || matched;
+      }
       default:
         return false;
     }

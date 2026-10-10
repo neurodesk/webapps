@@ -75,7 +75,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       if (/succeeded|failed/.test(snapshot.state)) break;
       if (performance.now() >= deadline) throw new Error('SeedSeg browser inference exceeded 10 minutes');
       await new Promise(accept => setTimeout(accept, 250));
-    } while (true);
+    } while (!/succeeded|failed/.test(snapshot.state));
     assert.equal(snapshot.state, 'succeeded', JSON.stringify({ snapshot, errors }));
     assert.deepEqual(snapshot.report.provenance.models.map(model => model.sha256), MODEL_ASSETS.slice(0, ensemble).map(asset => asset.sha256));
     const files = {};

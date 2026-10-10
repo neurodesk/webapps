@@ -68,7 +68,7 @@ test('normalizes head metadata from the registry', () => {
   assert.match(themed, /<meta name="description" content="A short explanation\.">/);
   assert.doesNotMatch(themed, /Stale/);
   assert.match(themed, /<meta property="og:url" content="https:\/\/webapps\.neurodesk\.org\/example\/">/);
-  assert.match(themed, /<meta charset="utf-8">\n  <title>/);
+  assert.match(themed, /<meta charset="utf-8">\n {2}<title>/);
   assert.equal(injectCompositeTheme(themed, { ...metadata, url: 'https://webapps.neurodesk.org/example/' }), themed);
 });
 

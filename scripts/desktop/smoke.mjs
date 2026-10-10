@@ -44,7 +44,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
         const status = await page.locator('#statusText, #status, #consoleOutput, #log').allTextContents();
         const text = status.join(' ').slice(-1600);
         if (text !== previousStatus) { console.log(`${app.id} progress: ${text}`); previousStatus = text; }
-      } catch {} finally { reporting = false; }
+      } catch { /* The window can close during diagnostic polling; workflow errors are recorded separately. */ } finally { reporting = false; }
     }, 10000);
     page.on('console', message => console.log(`${app.id} ${message.type()}: ${message.text()}`));
     page.on('pageerror', error => { console.error(`${app.id} pageerror: ${error.stack || error.message}`); errors.push(error.stack || error.message); });
@@ -88,7 +88,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
   } finally {
     clearInterval(progress);
     if (desktop && errors.length) {
-      try { await (await desktop.firstWindow()).screenshot({ path: join(report, `${app.id}-failure.png`) }); } catch {}
+      try { await (await desktop.firstWindow()).screenshot({ path: join(report, `${app.id}-failure.png`) }); } catch { /* A closed or crashed window cannot provide a screenshot; retain the recorded workflow error. */ }
     }
     await desktop?.close();
     await prepared?.close?.();

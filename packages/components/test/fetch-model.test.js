@@ -110,3 +110,11 @@ test('a full cache does not fail a verified download', async () => {
   assert.equal(text(bytes), 'abc');
   assert.deepEqual(cacheErrors, ['QuotaExceededError']);
 });
+
+test('a rejected body cancellation preserves the actionable download error', async () => {
+  await assert.rejects(fetchModel({ url: 'https://example.test/model' }, {
+    fetch: async () => ({ ok: false, status: 503, headers: new Map(), body: {
+      async cancel() { throw new Error('body already closed'); },
+    } }),
+  }), /Model download failed \(503\)/);
+});
