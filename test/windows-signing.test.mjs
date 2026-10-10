@@ -104,6 +104,16 @@ test('mock policy runs on Windows and Linux without Azure permissions or credent
   const flow = await workflow('windows-signing-policy');
   assert.deepEqual(flow.permissions, { contents: 'read' });
   assert.deepEqual(flow.jobs.policy.strategy.matrix.os, ['ubuntu-24.04', 'windows-latest']);
-  assert.match(JSON.stringify(flow.jobs.policy.steps), /test_windows_signing\.py/);
+  const suites = [
+    'python scripts/lib/test_windows_signing.py',
+    'python exes/node-cli/scripts/test_portable_release.py',
+    'python exes/synthsr/scripts/test_portable_release.py',
+  ];
+  for (const command of suites) {
+    const steps = flow.jobs.policy.steps.filter(step => step.run === command);
+    assert.equal(steps.length, 1, `${command} must have its own native exit-code gate`);
+    assert.equal(steps[0]['continue-on-error'], undefined);
+    assert.equal(steps[0].if, undefined);
+  }
   assert.doesNotMatch(JSON.stringify(flow), /Azure\/login|id-token|secrets\./);
 });

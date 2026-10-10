@@ -32,11 +32,12 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.13'
-      - name: Test offline signing policy and packagers
-        run: |
-          python scripts/lib/test_windows_signing.py
-          python exes/node-cli/scripts/test_portable_release.py
-          python exes/synthsr/scripts/test_portable_release.py
+      - name: Test offline signing policy
+        run: python scripts/lib/test_windows_signing.py
+      - name: Test Node portable packager
+        run: python exes/node-cli/scripts/test_portable_release.py
+      - name: Test SynthSR portable packager
+        run: python exes/synthsr/scripts/test_portable_release.py
       - name: Parse PowerShell integration without an account
         if: runner.os == 'Windows'
         shell: pwsh
