@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { forceCpu, proxyAssets } from "./tissue-runtime.mjs";
 import { readFile } from "node:fs/promises";
+import { setTimeout as pause } from "node:timers/promises";
 import { CASES, compare, documents, exampleFiles, headline, readReference, summarize, writeReference } from "../../../packages/lcmodel/validation/reference.mjs";
 
 // Runs every case of packages/lcmodel/validation/reference.mjs through the
@@ -40,9 +41,13 @@ for (const entry of CASES) {
     expect(snapshot.state, JSON.stringify(snapshot.error)).toBe("succeeded");
     const downloads = new Map();
     for (const artifactId of Object.keys(snapshot.report.artifacts)) {
-      const downloaded = page.waitForEvent("download");
-      await dispatch(page, "download", { artifactId });
+      // Pace the fourteen T1 outputs so Chromium accepts every download.
+      if (downloads.size && downloads.size % 10 === 0) await pause(1100);
+      const downloaded = page.waitForEvent("download", { timeout: 30_000 });
+      if (entry.t1) await page.locator(`#resultList [data-stage="${artifactId}"]`).getByRole("button", { name: "Download", exact: true }).click();
+      else await dispatch(page, "download", { artifactId });
       const download = await downloaded;
+      expect(download.suggestedFilename()).toBe(snapshot.report.artifacts[artifactId].filename);
       downloads.set(download.suggestedFilename(), await readFile(await download.path()));
     }
     if (entry.t1) {

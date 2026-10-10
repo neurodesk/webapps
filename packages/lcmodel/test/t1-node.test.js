@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { syntheticNifti } from "../../../test-utils/nifti-fixture.mjs";
 import { readT1, correctFromT1 } from "../src/t1-node.js";
 
@@ -52,4 +53,13 @@ test("DICOM series convert with the bundled dcm2niix and reject two series", asy
   assert.deepEqual(t1.dims, [16, 16, 4]);
   assert.match(t1.name, /\.nii$/);
   await assert.rejects(readT1([...files({ series: 1 }), ...files({ series: 2 })]), /hold 2 images/);
+});
+
+test("the app and CLI pin the MindGrab build covered by the CPU browser references", async () => {
+  const json = async path => JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
+  const app = await json("../../../apps/lcmodel/package.json");
+  const command = await json("../package.json");
+  const reference = await json("../../node-drivers/validation/reference.json");
+  assert.equal(command.dependencies["@brainchop/mindgrab"], app.dependencies["@brainchop/mindgrab"]);
+  assert.equal(command.dependencies["@brainchop/mindgrab"], reference.mindgrab.version);
 });
