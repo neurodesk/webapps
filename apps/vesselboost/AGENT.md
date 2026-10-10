@@ -23,16 +23,16 @@ Common issues it catches:
 - `web/js/vesselboost-app.js` — Main app class, orchestrates everything
 - `web/js/app/config.js` — Model config, version (bumped automatically by CI)
 - `web/js/app/labels.js` — Binary labels + NiiVue colormap
-- `web/js/inference-worker.js` runs the 3D inference pipeline as a module worker and uses the shared worker toolkit for routing, model fetches, and common volume operations.
+- `packages/vesselboost/src/pipeline.js` owns the explicit image state and scientific steps shared by the browser and CLI. `web/js/inference-worker.js` injects browser runtimes and adapts the shared worker protocol.
 - `web/js/controllers/` contains FileIO and DICOM controllers plus narrow pipeline and viewer adapters around the shared implementations.
 - `web/js/modules/` — UI components and inference pipeline modules
 - `rust-preprocessing/` — Rust WASM crate (N4ITK bias correction, NLM denoising, BET)
 
 ## Key Conventions
 
-- Keep the inference worker as an ES module. The optional Rust preprocessing artifact still uses `wasm-pack --target no-modules`; that build target does not make the inference worker a classic worker.
-- Config version is bumped automatically by the GitHub Actions release workflow via `sed` — do not bump manually
-- WASM preprocessing is optional; the app works without it (skips bias correction/denoising)
+- Keep the inference worker as an ES module. The required preprocessing artifact is built with `wasm-pack --target web`, pinned Rust/build tools and Cargo.lock. Native CI must reproduce the committed artifact bytes.
+- Add a changeset and run `pnpm release` for the UTC date app/package version scheme.
+- WASM preprocessing must initialize successfully. Optional steps may be explicitly skipped, but missing/failed preprocessing is never silently bypassed.
 - Default target spacing: 0.3mm isotropic
 
 ## CI/CD

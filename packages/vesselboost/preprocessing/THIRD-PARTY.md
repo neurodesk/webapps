@@ -1,0 +1,47 @@
+# Locked Rust dependencies
+
+The WASM source uses these locked dependencies. Host/build-only dependencies are included for completeness. The imported local preprocessing source retains NOASSERTION; the QSM.rs repository declares MIT.
+
+- adler2 2.0.1: 0BSD OR MIT OR Apache-2.0
+- approx 0.5.1: Apache-2.0
+- autocfg 1.5.0: Apache-2.0 OR MIT
+- bumpalo 3.20.2: MIT OR Apache-2.0
+- bytemuck 1.25.0: Zlib OR Apache-2.0 OR MIT
+- byteorder 1.5.0: Unlicense OR MIT
+- byteordered 0.6.0: MIT OR Apache-2.0
+- cfg-if 1.0.4: MIT OR Apache-2.0
+- crc32fast 1.5.0: MIT OR Apache-2.0
+- delaunator 1.0.2: ISC
+- either 1.15.0: MIT OR Apache-2.0
+- flate2 1.1.9: MIT OR Apache-2.0
+- js-sys 0.3.91: MIT OR Apache-2.0
+- matrixmultiply 0.3.10: MIT/Apache-2.0
+- miniz_oxide 0.8.9: MIT OR Zlib OR Apache-2.0
+- ndarray 0.16.1: MIT OR Apache-2.0
+- nifti 0.17.0: MIT OR Apache-2.0
+- num-complex 0.4.6: MIT OR Apache-2.0
+- num-derive 0.4.2: MIT OR Apache-2.0
+- num-integer 0.1.46: MIT OR Apache-2.0
+- num-traits 0.2.19: MIT OR Apache-2.0
+- once_cell 1.21.3: MIT OR Apache-2.0
+- portable-atomic 1.13.1: Apache-2.0 OR MIT
+- portable-atomic-util 0.2.5: Apache-2.0 OR MIT
+- primal-check 0.3.4: MIT OR Apache-2.0
+- proc-macro2 1.0.106: MIT OR Apache-2.0
+- qsm-core 0.0.0: MIT (QSM.rs repository)
+- quick-error 2.0.1: MIT/Apache-2.0
+- quote 1.0.45: MIT OR Apache-2.0
+- rawpointer 0.2.1: MIT/Apache-2.0
+- rgb 0.8.53: MIT
+- robust 0.2.3: MIT/Apache-2.0
+- rustfft 6.4.1: MIT OR Apache-2.0
+- rustversion 1.0.22: MIT OR Apache-2.0
+- simd-adler32 0.3.8: MIT
+- strength_reduce 0.2.4: MIT OR Apache-2.0
+- syn 2.0.117: MIT OR Apache-2.0
+- transpose 0.2.3: MIT OR Apache-2.0
+- unicode-ident 1.0.24: (MIT OR Apache-2.0) AND Unicode-3.0
+- wasm-bindgen 0.2.114: MIT OR Apache-2.0
+- wasm-bindgen-macro 0.2.114: MIT OR Apache-2.0
+- wasm-bindgen-macro-support 0.2.114: MIT OR Apache-2.0
+- wasm-bindgen-shared 0.2.114: MIT OR Apache-2.0

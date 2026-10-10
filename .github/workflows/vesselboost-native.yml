@@ -1,0 +1,97 @@
+name: vesselboost-native
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/vesselboost-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/vesselboost/**'
+      - 'packages/components/src/worker/**'
+      - 'packages/components/src/volume/**'
+      - 'packages/components/src/file-io/**'
+      - 'apps/vesselboost/**'
+      - 'test/independent-workflows.test.mjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/vesselboost-native.yml'
+      - '.github/workflows/node-cli-portable.yml'
+      - 'exes/node-cli/**'
+      - 'exes/synthsr/scripts/ci_macos_release.sh'
+      - 'exes/synthsr/scripts/notarize_macos.sh'
+      - 'packages/vesselboost/**'
+      - 'packages/components/src/worker/**'
+      - 'packages/components/src/volume/**'
+      - 'packages/components/src/file-io/**'
+      - 'apps/vesselboost/**'
+      - 'test/independent-workflows.test.mjs'
+  workflow_dispatch:
+    inputs:
+      sign_release:
+        description: Sign and notarize the macOS installer, then attach every verified package to the existing VesselBoost release
+        type: boolean
+        default: false
+
+concurrency:
+  group: vesselboost-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  portable:
+    uses: ./.github/workflows/node-cli-portable.yml
+    permissions:
+      contents: write
+    with:
+      package: packages/vesselboost
+      validation_app: vesselboost
+      targets: >-
+        [{"os": "ubuntu-22.04", "platform": "linux-x64"},
+         {"os": "windows-latest", "platform": "windows-x64"},
+         {"os": "macos-15", "platform": "macos-arm64"}]
+      publish_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+      sign_release: ${{ github.event_name == 'workflow_dispatch' && inputs.sign_release }}
+    secrets:
+      APPLEID: ${{ secrets.APPLEID }}
+      APPLEIDPASS: ${{ secrets.APPLEIDPASS }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+      CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+      CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+
+  preprocessing-source:
+    name: Reproduce required Rust preprocessing
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Install exact Rust toolchain and WASM builders
+        run: |
+          rustup toolchain install 1.98.0 --profile minimal --target wasm32-unknown-unknown
+          rustup default 1.98.0
+          cargo install wasm-pack --version 0.13.1 --locked
+          task_bindgen_dir="$(mktemp -d "$RUNNER_TEMP/vesselboost-bindgen.XXXXXX")"
+          curl --fail --location --retry 3 \
+            https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.114/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl.tar.gz \
+            --output "$task_bindgen_dir/bindgen.tar.gz"
+          echo "ce21be002bdbc22ede2a5cf250cb801d2106956fc3c529c75d9452729db3490c  $task_bindgen_dir/bindgen.tar.gz" | sha256sum --check
+          tar -xzf "$task_bindgen_dir/bindgen.tar.gz" -C "$task_bindgen_dir"
+          echo "$task_bindgen_dir/wasm-bindgen-0.2.114-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
+        env:
+          CARGO_BUILD_JOBS: 2
+      - name: Build locked source and compare every committed artifact byte
+        run: |
+          bash packages/vesselboost/scripts/build-preprocessing.sh
+          git diff --exit-code -- packages/vesselboost/preprocessing/
+        env:
+          CARGO_BUILD_JOBS: 2

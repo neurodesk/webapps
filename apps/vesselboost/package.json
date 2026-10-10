@@ -10,12 +10,12 @@
     "test:result-display": "node --no-warnings scripts/test_result_display.mjs",
     "test:mask-edit": "node --no-warnings scripts/test_mask_edit.mjs",
     "test:n4-shrink-policy": "node --no-warnings scripts/test_n4_shrink_policy.mjs",
-    "vendor": "node ../../scripts/vendor-components.mjs",
+    "vendor": "node ../../scripts/vendor-components.mjs && node ../../packages/vesselboost/scripts/stage-browser.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "node ../../scripts/dev-server.mjs --dir web --port 8080",
     "prebuild": "pnpm vendor && pnpm runtime-support && bash web/setup.sh",
-    "build": "node ../../scripts/build-static.mjs",
+    "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app vesselboost",
     "pretest": "pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
     "test:e2e": "playwright test && pnpm build && pnpm test:preprocessing && node scripts/test_example_workflow.mjs",
@@ -27,14 +27,15 @@
   "dependencies": {
     "nifti-reader-js": "^0.8.0",
     "onnxruntime-node": "^1.24.3",
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/vesselboost": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
     "jsdom": "^24.0.0"
   },
   "name": "vesselboost",
-  "version": "0.5.20261010",
+  "version": "0.6.20261010",
   "private": true,
   "type": "module",
   "neurodeskWebapp": {

@@ -1,7 +1,7 @@
 {
   "name": "musclemap",
-  "version": "1.4.20261010",
-  "releaseSeries": "1.4",
+  "version": "1.5.20261010",
+  "releaseSeries": "1.5",
   "private": true,
   "type": "module",
   "description": "MuscleMap \u2014 in-browser muscle segmentation and fat metrics.",
@@ -18,13 +18,13 @@
     "model:generate-reference": ".tmp_model_env/bin/python scripts/generate_upstream_reference.py",
     "model:publish": ".tmp_model_env/bin/python scripts/publish_model.py",
     "model:activate": ".tmp_model_env/bin/python scripts/activate_model_release.py",
-    "vendor": "node ../../scripts/vendor-components.mjs",
+    "vendor": "node ../../scripts/vendor-components.mjs && node scripts/stage-pipeline.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "node ../../scripts/dev-server.mjs --dir web --port 8080 --cache-policy 'no-store, max-age=0'",
     "prebuild": "pnpm models:check && pnpm vendor && pnpm runtime-support && node ../../scripts/fetch-app-runtime.mjs --dest web/wasm ort-web:ort.webgpu.bundle.min.mjs,ort.webgpu.min.js,ort-wasm-simd-threaded.mjs,ort-wasm-simd-threaded.wasm,ort-wasm-simd-threaded.jsep.mjs,ort-wasm-simd-threaded.jsep.wasm && node scripts/prepare_model_assets.mjs",
     "build": "node ../../scripts/build-static.mjs",
-    "pretest": "pnpm models:check && pnpm runtime-support",
+    "pretest": "pnpm models:check && pnpm vendor && pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support && bash web/setup.sh",
     "test": "node --test test/*.test.js",
     "test:e2e": "playwright test",
@@ -32,7 +32,8 @@
     "test:examples": "node --test scripts/test_examples.mjs"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/musclemap": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

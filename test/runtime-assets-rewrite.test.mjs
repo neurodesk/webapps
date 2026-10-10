@@ -160,3 +160,22 @@ test('composite rewrite preserves vendored component file suffixes before removi
   assert.doesNotMatch(`${html}\n${worker}`, /vendor\/webapp-components/);
   await assert.rejects(access(join(appDist, 'vendor', 'webapp-components')));
 });
+
+test('declared single-file runtime deduplication rewrites references and removes the real app copy', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-single-file-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  const body = Buffer.from('globalThis.viewerRuntime = true;');
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  await mkdir(join(root, 'packages/components/src'), { recursive: true });
+  await mkdir(join(siteDist, 'vesselboost/runtime'), { recursive: true });
+  await writeFile(join(siteDist, 'vesselboost/runtime/viewer.js'), body);
+  await writeFile(join(siteDist, 'vesselboost/index.html'), '<script src="./runtime/viewer.js"></script>');
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families: [{ id: 'viewer', version: '1', target: 'viewer/1', deduplicate: true, files: [{ name: 'viewer.js', source_app: 'vesselboost', source: 'runtime/viewer.js', sha256: createHash('sha256').update(body).digest('hex') }] }] }));
+  const registry = { apps: [{ id: 'vesselboost', path: 'vesselboost', app_scoped_runtime_families: [] }] };
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry });
+  assert.equal(await readFile(join(siteDist, 'vesselboost/index.html'), 'utf8'), '<script src="../_runtime/viewer/1/viewer.js"></script>');
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/viewer/1/viewer.js')), body);
+  await assert.rejects(readFile(join(siteDist, 'vesselboost/runtime/viewer.js')), { code: 'ENOENT' });
+});

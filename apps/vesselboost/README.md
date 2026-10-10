@@ -147,3 +147,11 @@ If you use VesselBoost, please cite:
 ## Privacy
 
 All processing happens locally in your browser. No data is uploaded to any server.
+
+## Command line
+
+The Standalone action offers complete Linux, Windows and macOS VesselBoost releases.
+`vesselboost input.nii.gz results --no-bias-correction --threads 4` runs locally;
+`--help` lists the same optional processing steps as browser automation. All pinned
+models and required Rust preprocessing are included for offline use. See
+[the shared package README](../../packages/vesselboost/README.md#command-line).

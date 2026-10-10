@@ -1,9 +1,7 @@
 #!/usr/bin/env node --no-warnings
 
 import assert from 'node:assert/strict';
-import '../web/js/modules/pipeline/n4-shrink-policy.js';
-
-const policy = globalThis.VesselBoostN4Policy;
+import * as policy from '../../../packages/vesselboost/src/n4-shrink-policy.js';
 
 assert.ok(policy, 'N4 shrink policy should attach to globalThis');
 

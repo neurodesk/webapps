@@ -1,0 +1,37 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "musclemap-v",
+  "displayName": "MuscleMap",
+  "app": "musclemap",
+  "run": "image.nii.gz results",
+  "readme": {
+    "run": "Segment muscle labels and calculate volumes",
+    "notes": [
+      "All seven shipped checkpoints are included and verified locally.",
+      "Use --model wholebody-v1.4 (default), wholebody-v1.3, abdomen-v0.0,",
+      "forearm-v0.0, leg-v0.0, pelvis-v0.0 or thigh-v0.0.",
+      "No network connection or previously populated cache is required.",
+      "Threshold and Dixon IMF options are described by --help.",
+      "DICOM import and manual mask editing use the web app."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "musclemap"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "musclemap.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "musclemap"
+    }
+  },
+  "validationApp": "musclemap"
+}

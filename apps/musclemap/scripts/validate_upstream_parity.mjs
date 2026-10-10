@@ -3,11 +3,12 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { metricsCsv } from '../../../packages/musclemap/src/results.js';
 import { MODEL_RELEASES } from '../web/js/app/model-catalog.generated.js';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -142,7 +143,7 @@ async function main() {
     if (stagedModel.asset.precision !== precision) {
       throw new Error(`Published release has no ${precision} model`);
     }
-    candidatePath = resolve(defaultStage, basename(new URL(stagedModel.asset.url).pathname));
+    candidatePath = resolve(argument('--model-file', resolve(defaultStage, basename(new URL(stagedModel.asset.url).pathname))));
     candidate = { ...stagedModel.asset, path: candidatePath };
   }
   const candidateBytes = conversionValue
@@ -173,16 +174,24 @@ async function main() {
     scientificSources[name] = sha256(await readFile(resolve(appDir, 'web', 'js', name)));
   }
 
+  for (const name of ['pipeline.js', 'monai-compat.js', 'sliding-window-policy.js', 'label-codec.js', 'upstream-chunk.js']) {
+    scientificSources[`packages/musclemap/src/${name}`] = sha256(await readFile(resolve(appDir, '../../packages/musclemap/src', name)));
+  }
+
   const port = Number(argument('--port', '4322'));
   const baseUrl = `http://127.0.0.1:${port}`;
   const binaryPort = port + 1;
+  const servedRoot = resolve(appDir, hasArgument('--production') ? 'dist' : 'web');
   const modelFilename = `parity-${port}-${process.pid}.onnx`;
-  const modelLinkPath = resolve(appDir, 'web', 'models', modelFilename);
-  await mkdir(dirname(modelLinkPath), { recursive: true });
-  await symlink(candidatePath, modelLinkPath);
+  const modelPath = resolve(servedRoot, 'models', modelFilename);
+  await mkdir(dirname(modelPath), { recursive: true });
+  // A copy works on Windows without symlink privileges. The pin is verified above.
+  await copyFile(candidatePath, modelPath);
   const modelUrl = `${baseUrl}/models/${modelFilename}`;
   const inputUrl = `http://127.0.0.1:${binaryPort}/input.nii.gz`;
-  const server = spawn('bash', ['web/run.sh', String(port)], {
+  const server = spawn(process.execPath, [resolve(appDir, '../../scripts/dev-server.mjs'),
+    '--dir', servedRoot,
+    '--port', String(port), '--cache-policy', 'no-store, max-age=0'], {
     cwd: appDir,
     stdio: 'ignore'
   });
@@ -205,8 +214,10 @@ async function main() {
     });
     const context = await browser.newContext();
     const page = await context.newPage();
-    page.setDefaultTimeout(0);
+    page.setDefaultTimeout(20 * 60 * 1000);
     let gpuKernelCount = 0;
+    let browserMetrics;
+    let browserLabels;
     await context.route('**/js/inference-worker.js', async route => {
       const response = await route.fetch();
       const source = await response.text();
@@ -220,8 +231,14 @@ ort.env.webgpu.profiling = {
 `;
       await route.fulfill({ response, body: instrumentation + source });
     });
+    page.on('console', message => {
+      if (message.type() === 'error') process.stderr.write(`Browser: ${message.text()}\n`);
+    });
+    page.on('requestfailed', request => process.stderr.write(`Browser fetch failed: ${request.url()} ${request.failure()?.errorText}\n`));
     page.on('crash', () => process.stderr.write('ERROR: parity browser page crashed\n'));
     await page.exposeFunction('__reportParityEvent', event => {
+      if (event.type === 'metrics') browserMetrics = event.metrics;
+      if (event.type === 'detectedLabels') browserLabels = event.labels;
       if (event.type === 'log') process.stdout.write(`${event.message}\n`);
       if (event.type === 'progress') {
         process.stdout.write(`[${Math.round(event.value * 100)}%] ${event.text}\n`);
@@ -270,7 +287,7 @@ ort.env.webgpu.profiling = {
         worker.onerror = event => reject(new Error(event.message));
         worker.onmessage = event => {
           const data = event.data;
-          if (['log', 'progress', 'validationWebGPUKernel'].includes(data.type)) window.__reportParityEvent(data);
+          if (['log', 'progress', 'validationWebGPUKernel', 'metrics', 'detectedLabels'].includes(data.type)) window.__reportParityEvent(data);
           if (data.type === 'error') reject(new Error(data.message));
           if (data.type === 'initialized' && !initialized) {
             if (selectedBackend === 'webgpu' && !data.webgpuAvailable) {
@@ -289,7 +306,7 @@ ort.env.webgpu.profiling = {
                   chunkSize: 1,
                   sourceChunkSize: selectedSourceChunkSize,
                   useWebGPU: selectedBackend === 'webgpu',
-                  calculateMetrics: false
+                  calculateMetrics: true
                 }
               }
             }, [inputData]);
@@ -318,6 +335,8 @@ ort.env.webgpu.profiling = {
     });
     const [download] = await Promise.all([outputDownload, completion]);
     await download.saveAs(outputPath);
+    if (!browserMetrics || !browserLabels) throw new Error('Browser completed without volume metrics');
+    await writeFile(`${outputPath}.csv`, metricsCsv(browserMetrics, browserLabels.map(index => stagedModel.labelSpace.labels[index])));
     if (backend === 'webgpu' && gpuKernelCount === 0) {
       throw new Error('WebGPU validation produced no GPU kernel profiling events');
     }
@@ -326,13 +345,16 @@ ort.env.webgpu.profiling = {
         sha256(await readFile(referencePath)) !== referenceDigest) {
       throw new Error('Parity input or reference changed during validation');
     }
-    const python = spawn(resolve(appDir, '.tmp_model_env', 'bin', 'python'), [
+    const python = spawn(argument('--python', resolve(appDir, '.tmp_model_env', 'bin', 'python')), [
       resolve(scriptDir, 'compare_upstream_output.py'),
       '--reference', referencePath,
       '--candidate', outputPath,
       '--report', reportPath
     ], { cwd: appDir, stdio: 'inherit' });
-    const exitCode = await new Promise(resolvePromise => python.on('exit', resolvePromise));
+    const exitCode = await new Promise((resolvePromise, reject) => {
+      python.once('error', reject);
+      python.once('exit', resolvePromise);
+    });
     const comparison = JSON.parse(await readFile(reportPath, 'utf8'));
     comparison.candidate = {
       precision: candidate.precision,
@@ -367,7 +389,7 @@ ort.env.webgpu.profiling = {
     await browser?.close();
     server.kill('SIGTERM');
     binaryServer?.close();
-    await rm(modelLinkPath, { force: true });
+    await rm(modelPath, { force: true });
   }
 }
 

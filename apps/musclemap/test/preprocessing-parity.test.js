@@ -9,7 +9,7 @@ import { zScoreNormalize } from '../../../packages/components/src/volume/normali
 import '../web/js/monai-compat.js';
 import '../web/js/sliding-window-policy.js';
 
-const workerSource = readFileSync(new URL('../web/js/inference-worker.js', import.meta.url), 'utf8');
+const workerSource = readFileSync(new URL('../../../packages/musclemap/src/pipeline.js', import.meta.url), 'utf8');
 const context = vm.createContext({
   Float32Array,
   Uint8Array,
@@ -18,7 +18,7 @@ const context = vm.createContext({
   zScoreNormalize,
   MuscleMapMonaiCompat: globalThis.MuscleMapMonaiCompat,
   MuscleMapSlidingWindowPolicy: globalThis.MuscleMapSlidingWindowPolicy,
-  ort: { Tensor: class { constructor(type, data, dims) { this.dims = dims; } dispose() {} } }
+  Tensor: class { constructor(type, data, dims) { this.dims = dims; } dispose() {} }
 });
 for (const name of ['prepareSourceChunk', 'computeTilePositions', 'inferSliceLogits']) {
   const match = new RegExp(`^(async )?function ${name}\\(`, 'm').exec(workerSource);
@@ -151,7 +151,7 @@ for (const fixture of stages.cases) {
   });
 }
 
-const compatSource = readFileSync(new URL('../web/js/monai-compat.js', import.meta.url), 'utf8');
+const compatSource = readFileSync(new URL('../../../packages/musclemap/src/monai-compat.js', import.meta.url), 'utf8');
 const axisStart = compatSource.indexOf('  function createTorchAxis(');
 const axisEnd = compatSource.indexOf('\n  function torchGridSourcePoint', axisStart);
 const axisContext = vm.createContext({ Float64Array, DataView, ArrayBuffer, Math, BigInt, Number });

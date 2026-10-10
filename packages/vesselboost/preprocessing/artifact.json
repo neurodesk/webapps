@@ -1,0 +1,30 @@
+{
+  "rust": "1.98.0",
+  "wasmPack": "0.13.1",
+  "wasmBindgen": "0.2.114",
+  "wasmOpt": false,
+  "remapBuildPaths": true,
+  "qsmCommit": "3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d",
+  "files": [
+    {
+      "filename": "preprocessing.js",
+      "bytes": 10853,
+      "sha256": "1ce55de208c1ce314058ce7f2fc3ea17a0bdbc271a020c5e1be89d06b83d2db6"
+    },
+    {
+      "filename": "preprocessing_bg.wasm",
+      "bytes": 141762,
+      "sha256": "ac0acbe36fc21313624b63508740a8d1dc6473eded1a74d884f08e0d51b599f7"
+    },
+    {
+      "filename": "preprocessing.d.ts",
+      "bytes": 4536,
+      "sha256": "333be51a3881a34f0710698b906d1bdc1281441edf24d90780c5c6a8c87372e7"
+    },
+    {
+      "filename": "preprocessing_bg.wasm.d.ts",
+      "bytes": 1040,
+      "sha256": "4b1ccbb2c7a42f610d4a7c9636e68ae295453ad97b9e78470912e4208d049597"
+    }
+  ]
+}

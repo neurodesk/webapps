@@ -85,6 +85,21 @@
         {"name":"qsm_wasm.js","sha256":"3586d143f1257d1a06304fbb74028cbae51c6a716efea26037a996a1941a6eca"},
         {"name":"qsm_wasm_bg.wasm","sha256":"64e10fb3e75dad7d9be2af5ca796524d8ca0efc9740e70fd50cb0782960b340b"}
       ]
+    },
+    {
+      "id": "niivue-legacy",
+      "deduplicate": true,
+      "version": "0.68.1",
+      "target": "niivue/0.68.1",
+      "download_base": "https://unpkg.com/@niivue/niivue@0.68.1/dist",
+      "files": [
+        {
+          "name": "niivue.umd.js",
+          "source_app": "vesselboost",
+          "source": "runtime/niivue.umd.js",
+          "sha256": "eb805352d555858708b5eb52a4b65f8eea37ddb7bc868506ac992126584b7784"
+        }
+      ]
     }
   ]
 }

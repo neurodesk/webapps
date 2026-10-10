@@ -1,0 +1,16 @@
+VesselBoost pipeline extracted from apps/vesselboost in neurodesk/webapps.
+Imported application source and VesselBoost model weights: NOASSERTION.
+No blanket MIT license is asserted for this package.
+
+VesselBoost scientific method:
+Xu M, Ribeiro FL, Barth M, et al. VesselBoost: A Python Toolbox for Small Blood
+Vessel Segmentation in Human Magnetic Resonance Angiography Data. Aperture Neuro.
+2024;4. doi:10.52294/001c.123217.
+
+QSM.rs qsm-core preprocessing, Ashley Stewart, MIT, source commit
+3aa02ca2ba77b4cc069366a7db9847d6b0c9d19d. License: preprocessing/QSM-LICENSE.
+Rust wasm-bindgen 0.2.114 and js-sys 0.3.91 are MIT OR Apache-2.0;
+their license texts are included under preprocessing/.
+Shared webapp-components: MIT, included in its dependency LICENSE.
+ONNX Runtime: MIT, included in its dependency distribution.
+SynthStrip model: Apache-2.0, distinct from VesselBoost source/weights.
