@@ -1300,10 +1300,9 @@ export function createVesselBoostPipeline({
     const modelData = await fetchModel(modelUrl, modelName, 0.12, 0.15);
 
     postProgress(0.27, 'Loading ONNX model...');
-    const executionProviders = sessionOptions.executionProviders;
     postLog('Creating ONNX InferenceSession (wasm - 3D ops require WASM backend)...');
     const session = await ort.InferenceSession.create(modelData, {
-      executionProviders,
+      ...sessionOptions,
       graphOptimizationLevel: 'all',
     });
     postLog(`Session created. Input: ${session.inputNames}, Output: ${session.outputNames}`);

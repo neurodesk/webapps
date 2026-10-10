@@ -129,6 +129,34 @@ test('missing preprocessing fails explicitly even when inference alone is reques
   assert.throws(() => createVesselBoostPipeline({}), /Required VesselBoost preprocessing/);
 });
 
+test('vessel inference forwards the caller requested CPU thread settings to ONNX Runtime', async () => {
+  for (const threads of [1, 4]) {
+    const f = fixture();
+    let received;
+    const sessionOptions = {
+      executionProviders: ['cpu'],
+      intraOpNumThreads: threads,
+      interOpNumThreads: 1,
+    };
+    const pipeline = createVesselBoostPipeline({
+      ...f.options,
+      sessionOptions,
+      fetchModel: async () => new Uint8Array(),
+      ort: {
+        InferenceSession: {
+          async create(_bytes, options) {
+            received = options;
+            throw new Error('stop after capturing runtime options');
+          },
+        },
+      },
+    });
+    await pipeline.dispatch('load', { inputData: f.bytes });
+    await assert.rejects(pipeline.dispatch('run-inference'), /stop after capturing/);
+    assert.deepEqual(received, { ...sessionOptions, graphOptimizationLevel: 'all' });
+  }
+});
+
 test('cancellation during an inference patch releases every tensor and the session', async () => {
   const f = fixture();
   const events = [];
