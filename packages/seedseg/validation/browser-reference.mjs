@@ -3,13 +3,14 @@ import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { extname, join, resolve } from 'node:path';
+import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { chromium } from '@playwright/test';
 import { MODEL_ASSETS } from '../src/assets.js';
 import { outputNames } from '../src/results.js';
 import { createProstateFixture } from '../../../apps/seedseg/test/prostate-fixture.mjs';
+import { resolveSiteFile } from './site-path.mjs';
 
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css', '.wasm': 'application/wasm' };
@@ -23,8 +24,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
       const file = path.startsWith('/validation-models/')
         ? join(modelsDirectory, path.slice('/validation-models/'.length))
-        : resolve(root, `.${path.endsWith('/') ? `${path}index.html` : path}`);
-      if (!path.startsWith('/validation-models/') && !file.startsWith(`${root}/`)) throw new Error('Outside site');
+        : resolveSiteFile(root, path);
       const info = await stat(file);
       response.writeHead(200, { 'Content-Type': types[extname(file)] || 'application/octet-stream',
         'Content-Length': info.size, 'Cross-Origin-Opener-Policy': 'same-origin',
