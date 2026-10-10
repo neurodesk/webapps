@@ -7,6 +7,9 @@ overlap, connectivity and threshold helpers in this package.
 
 ## Command line
 
+Inputs are single-file NIfTI-1 (`.nii` or `.nii.gz`), 3D or singleton 4D,
+with either byte order. NIfTI-2 is not supported by the shared parser.
+
 Portable Linux x64 and Windows x64 archives include Node, ONNX Runtime CPU,
 SynthStrip, SynthStroke, the browser-pinned SynthMorph graph, MNI160, both atlases
 and all connectivity shards. macOS arm64 releases use a signed and notarized

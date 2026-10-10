@@ -9,6 +9,9 @@
   - @neurodesk/node-drivers@0.2.0
   - @neurodesk/synthsr@0.6.20261010
   - @neurodesk/synthstrip@0.1.5
+- @neurodesk/runtime-support@0.4.1
+- @neurodesk/synthsr@0.6.20261010
+- @neurodesk/synthstrip@0.1.5
 
 ## 0.4.20261009
 

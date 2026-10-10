@@ -1,5 +1,12 @@
 # seedseg
 
+## 0.5.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.1
+
 ## 0.5.20261009
 
 ### Patch Changes

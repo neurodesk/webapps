@@ -8,6 +8,10 @@
 
 ### Patch Changes
 
+- Reuse the shared NIfTI-1 reader in the CALMAR command line. Honour both byte orders and disable intercept scaling when the slope is zero; preserve source byte order in derived images.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.1
+  - @neurodesk/calmar@0.6.20261010
 - Updated dependencies [c6e4804]
   - @neurodesk/calmar@0.6.20261010
 

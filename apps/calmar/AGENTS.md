@@ -180,7 +180,9 @@ Keep `ort-web` in Calmar's `app_scoped_runtime_families`. Its WASM thread worker
 workflow. Browser module paths reexport the generated `web/vendor/calmar/src`
 copy; `scripts/stage-pipeline.mjs` stages it after components for dev/build/test.
 Change the shared source and retain existing independent Python, Node and browser
-parity gates. Do not restore an app-local scientific implementation.
+parity gates. NIfTI-1 header/affine/voxel decoding belongs to shared
+`@neurodesk/webapp-components/file-io/nifti`; keep only CALMAR shape, finite-value
+and atlas-grid guards in this package. Do not restore an app-local scientific implementation.
 
 `prepare` ends at an unconfirmed native-space candidate. `map` requires explicit
 review approval and either a matching atlas-space binary mask or a reviewed

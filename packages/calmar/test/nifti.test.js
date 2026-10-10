@@ -30,3 +30,9 @@ test('non-finite and invalid image bytes fail before inference', () => {
   assert.throws(() => decodeVolume(image(true, [NaN, 2])), /non-finite/);
   assert.throws(() => decodeVolume(new Uint8Array(10)), /NIfTI/);
 });
+
+test('zero slope with a nonzero intercept preserves a reviewed binary mask', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const bytes = await readFile(new URL('../../components/test/fixtures/uint8-zero-slope-intercept.nii', import.meta.url));
+  assert.deepEqual(Array.from(decodeVolume(bytes).data), [0, 1]);
+});
