@@ -209,3 +209,19 @@ test('BrowserQC merges science changes while preserving shared UI, assets and it
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('sync records target citations even when the local upstream modal was removed', () => {
+  const root = mkdtempSync(join(process.env.TMPDIR || tmpdir(), 'upstream-citations-test-'));
+  try {
+    const upstream = join(root, 'upstream');
+    const appDir = join(root, 'app');
+    execFileSync('git', ['init', '-q', upstream]);
+    const base = commit(upstream, { 'index.html': '<div id="citationsModal"><a href="https://doi.org/10.1/old">Old</a></div>\n' });
+    const target = commit(upstream, { 'index.html': '<div id="citationsModal"><a href="https://doi.org/10.1/old">Old</a><a href="https://doi.org/10.1/new">New</a></div>\n' });
+    write(appDir, { 'index.html': '<main>Shared shell</main>\n' });
+    mergeUpstream({ upstream, base, target, appDir, config: { citationSnapshot: { file: 'index.html', selector: '#citationsModal', output: 'upstream-citations.json' } } });
+    assert.deepEqual(JSON.parse(readFileSync(join(appDir, 'upstream-citations.json'), 'utf8')), { commit: target, dois: ['10.1/new', '10.1/old'] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
