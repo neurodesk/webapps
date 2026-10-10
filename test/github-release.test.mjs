@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { readDraftRelease } from '../scripts/lib/github-release.mjs';
 
@@ -11,4 +12,11 @@ test('only a missing GitHub release permits creation; failures remain actionable
   }
   assert.throws(() => readDraftRelease(() => 'invalid json', 'tag'), SyntaxError);
   assert.deepEqual(readDraftRelease(() => '{"isDraft":true}', 'tag'), { isDraft: true });
+});
+
+
+test('default execFileSync options preserve release stderr and child exit status', () => {
+  const gh = () => execFileSync(process.execPath, ['-e', 'process.stderr.write("release not found"); process.exit(1);'], { encoding: 'utf8' }).trim();
+  assert.equal(readDraftRelease(gh, 'new-tag'), null);
+  assert.throws(() => execFileSync(process.execPath, ['-e', 'process.exit(1);'], { encoding: 'utf8' }), error => error.status === 1);
 });

@@ -142,7 +142,7 @@ async function readResponse(response, integrity = {}, onProgress) {
   } finally {
     try {
       reader.releaseLock?.();
-    } catch { /* Cancelling an unusable body must not replace the download or integrity failure. */ }
+    } catch { /* Releasing a failed reader's lock must not replace its download or integrity error. */ }
   }
   const bytes = new Uint8Array(received);
   let offset = 0;

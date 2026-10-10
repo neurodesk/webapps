@@ -163,7 +163,8 @@ async function downloadDirectory() {
   try {
     if ((await stat(home)).isDirectory()) return home;
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    // Downloads can be unavailable in restricted profiles; use the local staging directory.
+    if (!['ENOENT', 'ENOTDIR', 'EACCES'].includes(error.code)) throw error;
   }
   const local = join(root, 'downloads');
   await mkdir(local, { recursive: true });
