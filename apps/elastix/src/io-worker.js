@@ -3,9 +3,11 @@ export function createIoWorkerQueue(createWebWorker) {
   let queue = Promise.resolve();
   let generation = 0;
 
-  function run(task) {
+  function run(task, { signal } = {}) {
+    signal?.throwIfAborted();
     const scheduled = generation;
     const assertCurrent = () => {
+      signal?.throwIfAborted();
       if (scheduled !== generation) throw new DOMException("Image IO cancelled", "AbortError");
     };
     const result = queue.then(async () => {
@@ -13,7 +15,7 @@ export function createIoWorkerQueue(createWebWorker) {
       let active = worker;
       if (!active) {
         active = await createWebWorker();
-        if (scheduled !== generation) active.terminate();
+        if (scheduled !== generation || signal?.aborted) active.terminate();
         assertCurrent();
         worker = active;
       }
