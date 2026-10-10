@@ -1,5 +1,11 @@
 # qsmbly
 
+## 0.30.20261010
+
+### Minor Changes
+
+- Release the shared endian-aware NIfTI reader integration under a new minor version, preserving the already released registry citation changes and fixing the input-grid test header.
+
 ## 0.29.20261010
 
 ### Patch Changes
