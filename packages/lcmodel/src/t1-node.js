@@ -11,7 +11,9 @@ export async function readT1(files, log = () => {}) {
   if (dicom.length) {
     const url = new URL("dcm2niix.jpeg.js", import.meta.resolve("@niivue/dcm2niix"));
     const { default: factory } = await import(url.href);
-    images.push(...await convertDicom(dicom, factory, { onLog: log }));
+    const converted = await convertDicom(dicom, factory, { onLog: log });
+    if (!converted.length) throw new Error("No images produced. Choose NIfTI files or a complete DICOM series.");
+    images.push(...converted);
   }
   if (images.length !== 1) throw new Error(images.length ? `These files hold ${images.length} images; choose the one T1 series.` : "No image found among the T1 files.");
   const buffer = await decodeNiftiBuffer(images[0].bytes);
