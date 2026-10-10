@@ -69,10 +69,6 @@ export function formatDims(dims) {
   return dims.map(value => value || 1).join(' × ');
 }
 
-export function formatSpacing(spacing) {
-  return spacing.map(value => (Math.round(value * 100) / 100).toString()).join(' × ');
-}
-
 /** The multipart parts and spec stacks for the loaded table rows. */
 export function assembleJob(rows, options) {
   const files = {};

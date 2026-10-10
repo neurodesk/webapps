@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Remove FireANTs' unused scaffold configuration, NeSVoR's unused spacing formatter,
+  and Zarro's unused backend availability and URL-switching helpers. Remove the
+  obsolete shared UI parity test helper and register release-maintained version
+  records as explicit Knip roots.
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.1
 

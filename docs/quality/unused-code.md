@@ -28,6 +28,8 @@ Ordinary source files are not all entries. The following roots account for exter
 - Tests, end-to-end fixtures, validation programs, bin programs, tools and scripts.
   `scripts/lib` remains ordinary library code, reachable through callers.
 - Site shell, landing page and theme injected by the site build.
+- Topofit and Zarro version records read by `scripts/lib/app-versions.mjs`.
+  They remain explicit roots even though app code does not import them.
 - Explicit workers referenced by string URLs, Electron and Cloudflare entries,
   component showcase and template mains, and the prebuilt FreeBrowse entry.
 - Shared JavaScript sources named in `runtime-assets/manifest.json`.
@@ -73,3 +75,22 @@ Review each candidate with a repository-wide reference search and relevant unit
 or workflow checks. Also check runtime inventories, release version synchronization,
 published exports and source strings in browser tests before deleting a file.
 Keep fixes separate from reporting changes so each deletion has reviewable evidence.
+
+## First cleanup
+
+The first cleanup removes `test-utils/ui-parity.mjs`, FireANTs' scaffold
+`src/config.js`, NeSVoR's `formatSpacing`, and Zarro's `isWebGpuAvailable` and
+`backendSwitchUrl`. Repository-wide reference searches found no callers. The
+active backend reader and stack description functions remain covered by app tests
+and production builds. FireANTs' removed config is not a release version target.
+
+Compared with reporting commit `89c79036`, file candidates fall from 21 to 17 and
+export candidates from 72 to 69. Two files and three exports were deleted. Two
+additional file findings were corrected by registering Topofit and Zarro's
+release-maintained version records as roots. Types, duplicate exports and
+13 dependency plus four devDependency candidates retain their previous counts.
+
+Remaining candidates include upstream-owned modules, staged runtime dependencies,
+and exports referenced inside browser-evaluated source strings. These need caller
+and runtime checks before a later cleanup. Scientific transform and output helpers
+require their parity evidence before changing their public APIs.
