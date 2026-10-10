@@ -50,6 +50,10 @@ workspaces['packages/vesselboost'].project.push('!preprocessing/**');
 workspaces['packages/easy-mp2rage'].project.push('!wasm/**');
 workspaces['packages/nesvor'].entry.push('src/**/verify*.mjs', 'src/**/compare*.mjs', 'src/deformation/fixture.mjs');
 workspaces['apps/surfannotate'].entry.push('icon/render.mjs');
+// Release synchronization reads and updates these version records by filename.
+for (const app of ['topofit', 'zarro']) {
+  workspaces[`apps/${app}`].entry.push('src/config.js');
+}
 
 // Public dist APIs may be compiled from JavaScript or TypeScript source.
 for (const pkg of packages) {
