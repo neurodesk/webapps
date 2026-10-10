@@ -1,6 +1,7 @@
 // Checks that each native archive's validation receipt records its SHA-256, as the Standalone catalog
 // requires before it lists the archive. Fails before a release uploads a receipt the catalog would refuse.
 // Usage: node scripts/check-native-receipts.mjs DIRECTORY...
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -17,6 +18,7 @@ for (const directory of directories) {
     const digest = createHash('sha256').update(await readFile(join(directory, name))).digest('hex');
     const text = await readFile(join(directory, `${name}.validation.txt`), 'utf8');
     checkReceipt({ name, digest, platform, native: { startsWithAppRelease: false }, text });
+    if (platform === 'windows-x64') execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['scripts/lib/windows_signing.py', 'verify', join(directory, name)], { stdio: 'inherit' });
     console.log(`${name}: receipt records ${digest}`);
     checked += 1;
   }

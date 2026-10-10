@@ -71,6 +71,22 @@ class PortableReleaseTests(unittest.TestCase):
                 sorted(["synthsr.exe", "webgpu_dawn.dll", *portable_release.DOCUMENTS]),
             )
 
+    def test_windows_signing_precedes_zip_and_checksum(self):
+        self.payload("windows-x64")
+        def signer(root, required):
+            self.assertEqual(required, ("synthsr.exe", "webgpu_dawn.dll"))
+            (root / "synthsr.exe").write_bytes(b"signed executable")
+            (root / "webgpu_dawn.dll").write_bytes(b"signed dawn")
+            (root / portable_release.windows_signing.EVIDENCE).write_text("mock evidence")
+        with patch.object(portable_release.windows_signing, "sign_tree", side_effect=signer):
+            path = portable_release.build_archive("windows-x64", "1.2.3", self.target, self.docs, self.dist)
+        with zipfile.ZipFile(path) as archive:
+            self.assertEqual(archive.read("synthsr.exe"), b"signed executable")
+            self.assertEqual(archive.read("webgpu_dawn.dll"), b"signed dawn")
+            self.assertEqual(archive.read(portable_release.windows_signing.EVIDENCE), b"mock evidence")
+        self.assertEqual(path.with_name(path.name + ".sha256").read_text().split()[0], hashlib.sha256(path.read_bytes()).hexdigest())
+        self.assertEqual((self.target / "synthsr.exe").read_bytes(), b"executable")
+
     def test_windows_checksum_manifest_uses_portable_lf_line_endings(self):
         self.payload("windows-x64")
         write_text = Path.write_text

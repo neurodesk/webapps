@@ -16,6 +16,9 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'scripts/lib'))
+import windows_signing
+
 CRATE = ROOT / 'exes/greedy'
 VERSION = json.loads((ROOT / 'apps/greedy/package.json').read_text())['version']
 if os.environ.get('RUNNER_TEMP'):
@@ -77,6 +80,7 @@ def package(target):
         for filename in ('README.md', 'LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md'):
             shutil.copy2(CRATE / filename, stage / filename)
         if target == 'windows-x64':
+            windows_signing.sign_tree(stage, (executable,))
             archive = dist / f'{name}.zip'
             with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as bundle:
                 for item in stage.iterdir():
@@ -92,6 +96,8 @@ def package(target):
         else:
             with tarfile.open(archive) as bundle:
                 bundle.extractall(extracted, filter='data')
+        if target == 'windows-x64':
+            windows_signing.verify_tree(extracted / name, (executable,), native=True)
         report = verify(extracted / name / executable)
         native = ROOT / 'packages/greedy/native' / target
         native.mkdir(parents=True, exist_ok=True)

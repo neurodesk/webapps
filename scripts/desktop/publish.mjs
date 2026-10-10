@@ -1,9 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { setTimeout } from 'node:timers/promises';
 import { basename, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import { tmpdir } from 'node:os';
+import { signingEnabled, verifyWindowsArchive } from './windows-signing.mjs';
 import { renderInstallationNotes } from './release-notes.mjs';
 import { fileHash } from '../../packages/desktop/src/bundle.js';
 import { loadAppsRegistry } from '../lib/apps-registry.mjs';
@@ -48,6 +51,22 @@ async function releaseRecord(platform) {
     built.push(partPath);
   }
   if (metadata.parts && complete.digest('hex') !== metadata.archiveSha256) throw new Error(`Reassembled checksum differs for ${platform}`);
+  if (platform === 'windows-x64' && signingEnabled()) {
+    const archiveHash = metadata.archiveSha256 || metadata.sha256;
+    if (metadata.windowsSigning?.verified !== true || metadata.windowsSigning.archiveSha256 !== archiveHash) throw new Error('Windows release lacks archive-bound signing verification');
+    if (!metadata.parts) verifyWindowsArchive(primary);
+    else {
+      const temporary = await mkdtemp(join(tmpdir(), 'desktop-signature-check-'));
+      try {
+        const archive = join(temporary, metadata.archiveFilename);
+        async function* chunks() {
+          for (const part of metadata.parts) yield* createReadStream(find(part.filename));
+        }
+        await pipeline(chunks(), createWriteStream(archive));
+        verifyWindowsArchive(archive);
+      } finally { await rm(temporary, { recursive: true, force: true }); }
+    }
+  }
   return { metadata, built };
 }
 const available = async urls => {

@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { spawn } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { windowsSigningConfig } from './windows-signing.mjs';
 import { prepareReleaseFiles } from './release-files.mjs';
 import { loadBundle, verifyBundle } from '../../packages/desktop/src/bundle.js';
 
@@ -15,6 +16,7 @@ const { build } = require('electron-builder');
 process.env.ELECTRON_BUILDER_COMPRESSION_LEVEL ??= '3';
 await verifyBundle(resources);
 const artifacts = await build({ projectDir, publish: 'never', config: {
+  ...windowsSigningConfig(),
   executableName: 'neurodesk-webapps',
   extraResources: [{ from: resources, to: 'offline' }],
 } });
