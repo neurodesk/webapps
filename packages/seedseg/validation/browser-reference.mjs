@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { extname, join, resolve } from 'node:path';
@@ -68,6 +69,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       await new Promise(accept => setTimeout(accept, 250));
     } while (true);
     assert.equal(snapshot.state, 'succeeded', JSON.stringify({ snapshot, errors }));
+    assert.deepEqual(snapshot.report.provenance.models.map(model => model.sha256), MODEL_ASSETS.slice(0, ensemble).map(asset => asset.sha256));
     const files = {};
     const names = outputNames(ensemble);
     for (const id of Object.keys(snapshot.report.artifacts)) {
@@ -76,6 +78,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
       const download = await waiting;
       assert.equal(download.suggestedFilename(), names[id]);
       files[id] = await readFile(await download.path());
+      assert.equal(createHash('sha256').update(files[id]).digest('hex'), snapshot.report.artifacts[id].sha256);
     }
     if (process.env.SEEDSEG_VALIDATION_ARTIFACTS && ensemble === 4 && topN === 3 && threshold === 0.1) {
       await mkdir(process.env.SEEDSEG_VALIDATION_ARTIFACTS, { recursive: true });
