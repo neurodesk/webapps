@@ -14,6 +14,8 @@
     "test:workflow": "node src/gpu/verify-workflow.mjs"
   },
   "dependencies": {
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
     "onnxruntime-web": "1.29.0"
   }
 }

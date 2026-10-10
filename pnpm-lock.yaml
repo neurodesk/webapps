@@ -299,6 +299,10 @@ importers:
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)
 
   apps/dicom2vid:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
     devDependencies:
       playwright:
         specifier: 1.64.0
@@ -513,6 +517,9 @@ importers:
       '@neurodesk/easy-mp2rage':
         specifier: workspace:*
         version: link:../../packages/easy-mp2rage
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
 
   apps/edgereg:
     dependencies:
@@ -818,6 +825,9 @@ importers:
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
+      '@neurodesk/syncro':
+        specifier: workspace:*
+        version: link:../../packages/syncro
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../../packages/synthsr
@@ -1197,6 +1207,12 @@ importers:
 
   packages/nesvor:
     dependencies:
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -1257,6 +1273,15 @@ importers:
         specifier: 1.29.0
         version: 1.29.0
     devDependencies:
+      '@neurodesk/registration':
+        specifier: workspace:*
+        version: link:../registration
+      '@neurodesk/synthsr':
+        specifier: workspace:*
+        version: link:../synthsr
+      '@neurodesk/synthstrip':
+        specifier: workspace:*
+        version: link:../synthstrip
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12

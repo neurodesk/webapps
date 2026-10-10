@@ -13,16 +13,17 @@
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260813",
+    "@neurodesk/brain-extraction": "workspace:*",
     "@neurodesk/greedy": "workspace:*",
     "@neurodesk/registration": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/syncro": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/synthstrip": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.11",
     "fflate": "^0.8.2",
-    "onnxruntime-web": "1.29.0",
-    "@neurodesk/brain-extraction": "workspace:*"
+    "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",

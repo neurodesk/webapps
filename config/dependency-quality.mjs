@@ -38,6 +38,12 @@ export const nodeModules = /^packages\/(node-drivers|desktop)\/(src|neuroflow\/r
 // not acquire the browser runtime. These are exact existing adapters, not a
 // package-wide exemption for new imports.
 export const devRuntimeContracts = [
+  // SYNcro bundles these helpers; only ONNX Runtime and nifti-reader-js remain external.
+  ['packages/syncro/src/assets.js', '@neurodesk/synthsr'],
+  ['packages/syncro/src/pipeline.js', '@neurodesk/synthsr'],
+  ['packages/syncro/src/node.js', '@neurodesk/registration'],
+  ['packages/syncro/src/node.js', '@neurodesk/synthsr'],
+  ['packages/syncro/src/node.js', '@neurodesk/synthstrip'],
   ['packages/synthsr/src/gpu-session.js', '@neurodesk/runtime-support'],
   ['packages/synthsr/src/gpu-conv3d.js', '@neurodesk/runtime-support'],
   ['packages/synthsr/src/wasm-session.js', '@neurodesk/runtime-support'],

@@ -2,6 +2,10 @@
 
 ## 0.3.20261010
 
+### Patch Changes
+
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
+
 ## 0.3.20261009
 
 ## 0.3.20261007

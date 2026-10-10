@@ -1,4 +1,4 @@
-import { WorkspaceItem } from '../contexts/WorkspaceContext';
+import type { WorkspaceItem } from '../contexts/WorkspaceContext';
 import { Acquisition } from '../types';
 import { getAllFilesFromDirectory } from './fileUploadUtils';
 

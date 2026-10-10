@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.1
 
