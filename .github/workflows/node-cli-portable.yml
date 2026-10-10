@@ -7,6 +7,10 @@ on:
         description: Package directory with release.json, for example packages/topofit
         type: string
         required: true
+      validation_app:
+        description: Build this production app and provision Chromium for live browser reference validation
+        type: string
+        default: ''
       targets:
         description: JSON list of {os, platform} runners, one per release.json target
         type: string
@@ -71,6 +75,24 @@ jobs:
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
         run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        if: inputs.validation_app != ''
+        with:
+          python-version: '3.11'
+      - name: Provision browser reference comparison
+        if: inputs.validation_app != ''
+        run: python -m pip install numpy==1.26.4 nibabel==5.2.1
+      - name: Configure browser reference cache
+        if: inputs.validation_app != ''
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/browser-reference-chromium" >> "$GITHUB_ENV"
+      - name: Install browser reference Chromium
+        if: inputs.validation_app != ''
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build production browser reference app
+        if: inputs.validation_app != ''
+        env:
+          VALIDATION_APP: ${{ inputs.validation_app }}
+        run: pnpm --filter "$VALIDATION_APP" build
       - name: Test portable release code
         run: |
           pnpm --dir "$PACKAGE_DIR" test
@@ -148,6 +170,24 @@ jobs:
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
         run: pnpm install --frozen-lockfile
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        if: inputs.sign_release && inputs.validation_app != ''
+        with:
+          python-version: '3.11'
+      - name: Provision browser reference comparison
+        if: inputs.sign_release && inputs.validation_app != ''
+        run: python -m pip install numpy==1.26.4 nibabel==5.2.1
+      - name: Configure browser reference cache
+        if: inputs.sign_release && inputs.validation_app != ''
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/browser-reference-chromium" >> "$GITHUB_ENV"
+      - name: Install browser reference Chromium
+        if: inputs.sign_release && inputs.validation_app != ''
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Build production browser reference app
+        if: inputs.sign_release && inputs.validation_app != ''
+        env:
+          VALIDATION_APP: ${{ inputs.validation_app }}
+        run: pnpm --filter "$VALIDATION_APP" build
       # SynthSR's signing script builds, notarizes, installs and validates the package
       # through exes/node-cli/Makefile; the secrets reach this step only.
       - name: Sign and notarize installer
