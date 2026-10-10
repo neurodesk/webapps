@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/brain-extraction",
-  "version": "0.4.20261009",
+  "version": "0.4.20261010",
   "private": true,
   "description": "BET, MindGrab and SynthStrip brain extraction for browsers and the command line",
   "type": "module",
@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",
-    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/synthstrip": "workspace:*",
     "onnxruntime-node": "1.29.0"

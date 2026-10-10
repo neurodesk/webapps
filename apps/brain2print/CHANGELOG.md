@@ -1,5 +1,13 @@
 # brain2print
 
+## 0.5.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/brain2print@0.5.20261010
+
 ## 0.5.20261009
 
 ### Minor Changes

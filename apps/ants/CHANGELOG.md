@@ -1,5 +1,13 @@
 # ants
 
+## 0.4.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/ants@0.4.20261010
+
 ## 0.4.20261009
 
 ### Minor Changes

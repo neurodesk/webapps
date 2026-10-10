@@ -1,5 +1,13 @@
 # synthsr
 
+## 0.6.20261010
+
+### Patch Changes
+
+- Updated dependencies
+  - @neurodesk/runtime-support@0.4.0
+  - @neurodesk/synthsr@0.6.20261010
+
 ## 0.6.20261009
 
 ### Patch Changes

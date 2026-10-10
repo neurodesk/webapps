@@ -85,7 +85,7 @@ export function sha256(bytes) {
 
 /** Downloads a pinned file once into os.tmpdir() and checks its digest. */
 export async function pinnedFile({ name, url, sha256: expected }) {
-  const path = join(tmpdir(), 'neurodesk-runtime-support-validation', expected, name);
+  const path = join(tmpdir(), 'neurodesk-node-drivers-validation', expected, name);
   const cached = await readFile(path).catch(() => null);
   if (cached && sha256(cached) === expected) return cached;
   const response = await fetch(url);

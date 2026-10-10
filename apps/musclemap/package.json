@@ -4,7 +4,7 @@
   "releaseSeries": "1.4",
   "private": true,
   "type": "module",
-  "description": "MuscleMap — in-browser muscle segmentation and fat metrics.",
+  "description": "MuscleMap \u2014 in-browser muscle segmentation and fat metrics.",
   "scripts": {
     "models:generate": "node scripts/generate_model_contracts.mjs",
     "models:check": "node scripts/generate_model_contracts.mjs --check",

@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/synthseg",
-  "version": "0.6.20261009",
+  "version": "0.6.20261010",
   "description": "SynthSeg 2.0 brain segmentation for browsers and the command line",
   "type": "module",
   "private": true,

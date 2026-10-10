@@ -7,7 +7,7 @@ niimath's MRIQC-style `--qc` report with the pinned MNI air template.
 `src/pipeline.js` holds the steps both runtimes take. `segmentForQc` runs the
 brain mask and the model on the input's own grid through whichever MindGrab it
 is given: the browser wrapper in the app's segmentation worker, or the Node CPU
-driver from `@neurodesk/runtime-support/node/mindgrab` in the command line.
+driver from `@neurodesk/node-drivers/mindgrab` in the command line.
 `qcTissues` turns the result into niimath's tissue arguments, `finishReport`
 adds BrowserQC's provenance and the BIDS sidecar, and `AIR_TEMPLATE` pins the
 template's URL and SHA-256. `src/models.json` is a copy of the app's model

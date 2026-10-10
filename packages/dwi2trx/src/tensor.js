@@ -3,7 +3,7 @@
 // Both drive the dtifit-enabled niimath build vendored in apps/dwi2trx/vendor/niimath through a
 // `run(args, { inputs, outputs })` function that stages `inputs` (name -> bytes), runs one niimath
 // argv and returns `{ outputs }` (name -> bytes): runNiimath from
-// @neurodesk/runtime-support/node/niimath in Node, a cached module in the browser worker.
+// @neurodesk/node-drivers/niimath in Node, a cached module in the browser worker.
 import { decodeNiftiBuffer, parseNiftiHeader, sameNiftiGrid } from '@neurodesk/webapp-components/file-io/nifti';
 import { b0Index } from './gradients.js';
 

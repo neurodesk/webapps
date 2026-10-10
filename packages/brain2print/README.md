@@ -14,7 +14,7 @@ they write the same files.
 - `src/browser.js` holds the app's runtimes: MindGrab's published wrapper in a
   module worker, and niimath's WebAssembly worker.
 - `src/node.js` and `bin/brain2print.js` are the command line. They use the
-  MindGrab CPU and niimath drivers in `@neurodesk/runtime-support/node`.
+  MindGrab CPU and niimath drivers in `@neurodesk/node-drivers`.
 
 ## Command line
 
