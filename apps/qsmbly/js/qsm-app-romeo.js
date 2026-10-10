@@ -115,7 +115,6 @@ class QSMApp {
     this.hdBetModal = null;
     this.mouseBrainModal = null;
     this.aboutModal = null;
-    this.citationsModal = null;
     this.privacyModal = null;
     this.swiModal = null;
 
@@ -221,7 +220,6 @@ class QSMApp {
     this.betModal = new ModalManager('betSettingsModal');
     this.commandPreviewModal = new ModalManager('commandPreviewModal');
     this.aboutModal = new ModalManager('aboutModal');
-    this.citationsModal = new ModalManager('citationsModal');
     this.privacyModal = new ModalManager('privacyModal');
     this.dicompareModal = new ModalManager('dicompareModal');
     this.swiModal = new ModalManager('swiSettingsModal');
@@ -670,8 +668,6 @@ class QSMApp {
     document.getElementById('closeAbout')?.addEventListener('click', () => this.aboutModal?.close());
 
     // Citations modal
-    document.getElementById('openCitations')?.addEventListener('click', () => this.citationsModal?.open());
-    document.getElementById('closeCitations')?.addEventListener('click', () => this.citationsModal?.close());
 
     // Privacy modal
     document.getElementById('openPrivacy')?.addEventListener('click', () => this.privacyModal?.open());

@@ -6,6 +6,7 @@
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.1
+- Show the complete registry citation list through the shared Cite dialog, include the single-step TGV paper, and check upstream DOI coverage during sync.
 
 ## 0.29.20261009
 
