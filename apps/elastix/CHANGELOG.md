@@ -1,5 +1,11 @@
 # elastix
 
+## 0.1.20261010
+
+### Patch Changes
+
+- Update the shared runtime-support dependency after moving portable Node drivers into their own dependency-free package.
+
 ## 0.1.20261009
 
 ### Minor Changes
