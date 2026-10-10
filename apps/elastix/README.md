@@ -25,9 +25,11 @@ The transform downloads as ITK HDF5 and as an OME-Zarr archive holding an RFC-5
 transformation from the `fixed` to the `moving` coordinate system, in the images'
 intrinsic (OME-Zarr) coordinates. elastix evaluates it for the archive: transformix
 resamples coordinate images, two voxels per axis whose values are their own
-physical coordinate, so with linear interpolation each output voxel is exactly
-that coordinate of the mapped point. A linear transform is fitted from the
-stationary image's corners and written as one `affine`; a B-spline, or any other
+physical coordinate relative to the moving origin, retaining tiny spans even
+on strongly translated grids. The pinned sampler uses float32 internally.
+A centered, scaled QR solve fits a linear transform from the stationary
+image's corners; export rejects non-finite coefficients, degenerate grids
+and residuals beyond the sampler's rounding bound before writing one `affine`; a B-spline, or any other
 non-linear stage from a parameter file, is sampled at every stationary voxel and
 written as a `displacements` field.
 
