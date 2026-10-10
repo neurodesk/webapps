@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Verify typed promise rules with the pinned TypeScript compiler and preserve existing ArrayBuffer stream types.
+- Report rejected asynchronous viewer actions through the existing status bar, await tracked detail updates while keeping loading feedback immediate, and preserve queue rejection delivery. Add type-aware floating-promise and async-callback checks for Zarro's strict TypeScript project, including regression canaries and CI type checking.
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.1
 

@@ -11,18 +11,18 @@ function bytesToBase64Url(bytes: Uint8Array): string {
     .replace(/=+$/, '')
 }
 
-function base64UrlToBytes(value: string): Uint8Array {
+function base64UrlToBytes(value: string): Uint8Array<ArrayBuffer> {
   const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
   return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0))
 }
 
 async function transform(
-  bytes: Uint8Array,
+  bytes: Uint8Array<ArrayBuffer>,
   stream: CompressionStream | DecompressionStream,
   maximumBytes: number,
-): Promise<Uint8Array> {
-  const input = new ReadableStream<Uint8Array>({
+): Promise<Uint8Array<ArrayBuffer>> {
+  const input = new ReadableStream<Uint8Array<ArrayBuffer>>({
     start(controller) {
       controller.enqueue(bytes)
       controller.close()
@@ -53,7 +53,7 @@ async function transform(
 export async function encodeCompactShareState(
   params: URLSearchParams,
 ): Promise<string> {
-  const bytes = new TextEncoder().encode(params.toString())
+  const bytes = new Uint8Array(new TextEncoder().encode(params.toString()))
   if (bytes.byteLength > MAX_DECODED_BYTES) {
     throw new Error('Share state is too large to encode')
   }
