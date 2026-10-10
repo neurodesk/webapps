@@ -283,3 +283,11 @@ test('CPU Node driver parity skips optional CUDA installation', async () => {
   assert.equal(flow.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
   assert.ok(flow.jobs.node.steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
 });
+
+test('Brain2Print browser CPU parity skips optional CUDA installation', async () => {
+  const flow = await workflow('brain2print-native');
+  const job = flow.jobs['browser-reference'];
+  const install = job.steps.find(step => step.run === 'pnpm install --frozen-lockfile');
+  assert.equal(install.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
+  assert.ok(job.steps.some(step => step.run === 'node packages/brain2print/validation/browser-reference.mjs --check'));
+});

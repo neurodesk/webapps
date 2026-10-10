@@ -60,6 +60,8 @@ jobs:
           cache: pnpm
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
       - name: Install browser
         run: node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Rerun the web pipeline on MindGrab's browser CPU backend
