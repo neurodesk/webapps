@@ -98,3 +98,10 @@ NEURODESK_CALMAR_MODEL_DIR=/data/calmar-models node packages/calmar/validation/c
 
 Use `--executable /path/to/extracted/calmar` to test a portable archive. Browser
 validation dependencies are development tools and are not included in archives.
+
+## Source licensing
+
+The imported CALMAR source has no declared licence yet. This package preserves
+the registry’s `NOASSERTION` status as `UNLICENSED` in npm metadata.
+[LICENSE](LICENSE) and [NOTICE](NOTICE) retain that limitation and third-party
+model and dependency provenance. Extraction does not assign a new source licence.

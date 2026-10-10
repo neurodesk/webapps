@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import manifest from '../model.manifest.json' with { type: 'json' };
 import assets from '../assets.lock.json' with { type: 'json' };
@@ -36,7 +37,7 @@ test('command parser refuses unknown, repeated and missing-value flags', () => {
   ]) {
     const result = spawnSync(
       process.execPath,
-      [new URL('../bin/calmar.js', import.meta.url).pathname, ...args],
+      [fileURLToPath(new URL('../bin/calmar.js', import.meta.url)), ...args],
       { encoding: 'utf8' }
     );
     assert.equal(result.status, 1);

@@ -1,0 +1,21 @@
+CALMAR lesion network mapping
+
+Scientific helpers are extracted from neurodesk/calmar-webapp, imported at
+646b2d9b412fd57af3ba8942cd3f83e2fced5653. CALMAR source licensing remains
+unresolved (NOASSERTION); extraction does not assign MIT or another licence.
+
+Third-party model provenance is retained unchanged in model.manifest.json:
+- FreeSurfer SynthStrip, Hoopes et al. 2022, Apache-2.0.
+  https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/
+- SynthStroke baseline, Chalcroft et al., MELBA 2025, MIT.
+  https://huggingface.co/liamchalcroft/synthstroke-baseline/tree/b693a650026359705688fbce409219c4dbb5d6be
+- SynthMorph MNI registration, FreeSurfer, Apache-2.0.
+  The browser-bounded 48x64x80 ONNX graph is pinned with its conversion source.
+
+Yeo7 and Schaefer400 atlas files and development-n155 connectivity packs retain
+their original source terms. model.manifest.json identifies each source and
+conversion; assets.lock.json pins the exact bytes included in the archive.
+No CALMAR source notice relicenses these assets.
+
+Node, ONNX Runtime and npm dependency licence files are copied into the portable
+archive's licenses directory by the shared packager.

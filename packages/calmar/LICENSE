@@ -1,0 +1,10 @@
+CALMAR source licensing status
+
+The imported CALMAR app currently has no declared source licence. Its registry
+entry is NOASSERTION and its README describes the licence as TBD. This package
+preserves that status for relocated scientific sources and command-line code;
+package.json uses UNLICENSED rather than assigning an unconfirmed licence.
+
+This notice grants no additional rights and does not replace the licences of
+third-party dependencies, models, atlases or connectivity data. See NOTICE and
+the included model.manifest.json for their original sources and provenance.

@@ -28,14 +28,11 @@ import {
   decodeNiftiBuffer
 } from './modules/atlas-loader.js';
 import {
-  fcWeightedSum,
-  decodeFcPack,
-  parcelResultToChannelWeights,
-  summaryToNetworkWeights
+  decodeFcPack
 } from './modules/fc-weighted-sum.js';
 import { applyThresholdDetailed } from './modules/threshold.js';
 import { affineFromHeader, resampleAffine } from './modules/resample.js';
-import { centroidOfMask, applyAffineToVoxel, computePrealignAffine, principalAxisAlign } from './modules/prealign.js';
+import { centroidOfMask, applyAffineToVoxel } from './modules/prealign.js';
 import { writeNifti1 } from './modules/nifti-writer.js';
 import { resampleBinaryMask, writeBinaryMaskNifti } from './modules/mask-transform.js';
 import {
@@ -2386,7 +2383,6 @@ export class LesionNetworkMappingApp {
     // console + status bar.
     let lastTick = 0;
     let requestedLabels = null;
-    let weights = null;
     if (atlasOption.weightSource === 'parcel') {
       requestedLabels = this.overlapResult.parcelResult.parcels.map(parcel => String(parcel.label));
       if (requestedLabels.length === 0) {
@@ -2417,16 +2413,6 @@ export class LesionNetworkMappingApp {
       : await loadConnectomeFromManifest(atlasOption.connectomeAssetId, { ...progressOptions, manifest });
     const { index, manifestEntry } = loadResult;
     const pack = this.decodeLoadedConnectome(loadResult, requestedLabels);
-    if (atlasOption.weightSource === 'parcel') {
-      const channelLabels = pack.channelLabels || index.channelLabels || index.parcelLabels || {};
-      weights = parcelResultToChannelWeights(this.overlapResult.parcelResult, channelLabels).weights;
-    } else {
-      const channelLabels = index.networkLabels || manifestEntry.networkLabels || {};
-      const networkOrder = Object.keys(channelLabels)
-        .sort((a, b) => Number(a) - Number(b))
-        .map(key => channelLabels[key]);
-      weights = summaryToNetworkWeights(this.overlapResult.summary, networkOrder);
-    }
     const dims = index.shape.slice(1);
     const atlasAssetId =
       index.atlasAssetId ||
@@ -2443,13 +2429,6 @@ export class LesionNetworkMappingApp {
     }
     const atlasAffine = affineFromHeader(atlas.header);
     const flatAffine = flattenAffine3Rows(atlasAffine);
-    this.updateOutput(
-      `Computing network map: weights=[${
-        Array.from(weights).slice(0, 12).map(w => w.toFixed(2)).join(', ')
-      }${
-        weights.length > 12 ? ', ...' : ''
-      }]`
-    );
     const mapped = await mapReviewedLesion({
       overlap: this.overlapResult,
       atlasOption,
@@ -2463,6 +2442,14 @@ export class LesionNetworkMappingApp {
     }, {
       connectome: async () => ({ pack, index, reference: atlas })
     });
+    const weights = mapped.weights;
+    this.updateOutput(
+      `Computing network map: weights=[${
+        Array.from(weights).slice(0, 12).map(w => w.toFixed(2)).join(', ')
+      }${
+        weights.length > 12 ? ', ...' : ''
+      }]`
+    );
     const fcMap = mapped.data;
 
     // Stash for Phase 5 re-thresholding without recomputing the FC sum.

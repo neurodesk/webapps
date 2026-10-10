@@ -4,6 +4,8 @@ This monorepo contains independently developed applications and packages. There 
 no blanket repository-wide licence. The canonical source commit and declared licence
 for each app are recorded in `registry/apps.yml`.
 
+- `packages/calmar`: source licence unresolved, preserving CALMAR `NOASSERTION` as
+  npm `UNLICENSED` (`packages/calmar/LICENSE`, `packages/calmar/NOTICE`).
 - `packages/components`: MIT (`packages/components/LICENSE`)
 - `apps/musclemap`: MIT (`apps/musclemap/web/LICENSE`)
 - `apps/qsmbly`: MIT (`apps/qsmbly/LICENSE`)
