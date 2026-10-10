@@ -45,3 +45,18 @@ test('command parser refuses unknown, repeated and missing-value flags', () => {
     assert.equal(result.stdout, '');
   }
 });
+
+
+test('release validation refuses absent model configuration before preparation', () => {
+  const env = { ...process.env };
+  delete env.NEURODESK_CALMAR_MODEL_DIR;
+  const result = spawnSync(process.execPath, ['packages/calmar/validation/cli-check.mjs'], {
+    cwd: new URL('../../../', import.meta.url),
+    env,
+    encoding: 'utf8',
+    timeout: 10000,
+  });
+  assert.equal(result.error, undefined);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Set NEURODESK_CALMAR_MODEL_DIR or pass --executable/);
+});

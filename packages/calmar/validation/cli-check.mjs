@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -14,6 +14,11 @@ const { values } = parseArgs({ options: { executable: { type: 'string' } } });
 const command = values.executable
   ? [values.executable]
   : [process.execPath, resolve('packages/calmar/bin/calmar.js')];
+const modelDir =
+  process.env.NEURODESK_CALMAR_MODEL_DIR ||
+  (values.executable && join(await realpath(values.executable), '..', 'models'));
+assert.ok(modelDir, 'Set NEURODESK_CALMAR_MODEL_DIR or pass --executable for bundled models.');
+assert.ok((await stat(modelDir)).isDirectory(), 'CALMAR model directory must be a directory.');
 const work = await mkdtemp(join(tmpdir(), 'calmar-cli-check-'));
 const run = (args) => {
   const result = spawnSync(command[0], [...command.slice(1), ...args], {
@@ -58,9 +63,6 @@ const prepared = join(work, 'prepared');
 const provenance = run(['prepare', example.path, prepared, '--threads', '4']);
 assert.equal(provenance.requiresReview, true);
 const candidate = decodeVolume(await readFile(join(prepared, 'candidate-lesion.nii')));
-const modelDir =
-  process.env.NEURODESK_CALMAR_MODEL_DIR ||
-  (values.executable && join(await realpath(values.executable), '..', 'models'));
 const browserOutput = join(work, 'browser');
 const browserHome = join(work, 'browser-home');
 await mkdir(browserHome);

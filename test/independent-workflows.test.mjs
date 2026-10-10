@@ -277,3 +277,9 @@ test('live browser release checks are opt-in and provision a production app sepa
     assert.equal(release.if, "inputs.sign_release && inputs.validation_app != ''");
   }
 });
+
+test('CPU Node driver parity skips optional CUDA installation', async () => {
+  const flow = await workflow('node-drivers');
+  assert.equal(flow.env.ONNXRUNTIME_NODE_INSTALL, 'skip');
+  assert.ok(flow.jobs.node.steps.some(step => step.run === 'pnpm install --frozen-lockfile'));
+});

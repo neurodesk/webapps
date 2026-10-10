@@ -13,6 +13,7 @@ import {
 } from '../src/node.js';
 import { map, prepare } from '../src/pipeline.js';
 import { assertAtlasGrid } from '../src/nifti.js';
+import { writeNifti1 } from '../src/nifti-writer.js';
 
 test('offline missing models and corrupted installed assets fail without writes', async () => {
   const cacheDir = await mkdtemp(join(tmpdir(), 'calmar-guards-'));
@@ -108,4 +109,22 @@ test('invalid options reach the command operations before file or model access',
     mapLesion({ input: 'missing', output: 'unused', reviewed: true, minCluster: -1 }),
     /cluster/
   );
+});
+
+
+test('native reviewed masks must match their structural T1 before any asset access', async () => {
+  const work = await mkdtemp(join(tmpdir(), 'calmar-native-grid-'));
+  try {
+    const input = join(work, 'mask.nii');
+    const structural = join(work, 'T1.nii');
+    await writeFile(input, new Uint8Array(writeNifti1(new Uint8Array([0, 1]), { dims: [2, 1, 1] })));
+    await writeFile(structural, new Uint8Array(writeNifti1(new Float32Array(4).fill(1), { dims: [2, 2, 1] })));
+    await assert.rejects(
+      mapLesion({ input, structural, output: join(work, 'output'), reviewed: true, offline: true, cacheDir: join(work, 'missing-models') }),
+      /Reviewed native lesion mask must match the --structural T1 dimensions and affine/
+    );
+    assert.deepEqual((await readdir(work)).sort(), ['T1.nii', 'mask.nii']);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
 });

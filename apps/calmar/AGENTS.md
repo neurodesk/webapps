@@ -187,7 +187,9 @@ and atlas-grid guards in this package. Do not restore an app-local scientific im
 `prepare` ends at an unconfirmed native-space candidate. `map` requires explicit
 review approval and either a matching atlas-space binary mask or a reviewed
 native mask plus its structural T1. Preserve the PCA/SynthMorph parameters and
-the human review boundary. `packages/calmar/validation/cli-check.mjs` validates
+the human review boundary. Skip FC downloads when either atlas has no labelled
+overlap, and reject native masks on a different structural grid before assets
+are loaded. `packages/calmar/validation/cli-check.mjs` validates
 each extracted portable release offline; immutable assets and checksums live in
 `packages/calmar/assets.lock.json`, derived from the browser model manifest and
 pinned connectome indexes. Releases follow root date-version instructions and

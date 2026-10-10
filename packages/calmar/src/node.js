@@ -247,7 +247,6 @@ async function extractBrain(volume, settings, options) {
 }
 
 async function reviewedMaskToAtlas(lesion, structural, atlas, settings, options) {
-  assertAtlasGrid(lesion, structural);
   const nativeBrain = await extractBrain(structural, settings, options);
   const reference = await loadAtlas('lnm-mni160', options);
   const aligned = prealignVolumes(structural, nativeBrain, reference);
@@ -311,12 +310,20 @@ export async function mapLesion({ input, output, structural, reviewed = false, .
   let lesion = decodeVolume(await readFile(input));
   if (lesion.data.some((value) => value !== 0 && value !== 1))
     throw new Error('The reviewed lesion must be a binary mask.');
+  const structuralVolume = structural ? decodeVolume(await readFile(structural)) : null;
+  if (structuralVolume) {
+    assertAtlasGrid(
+      lesion,
+      structuralVolume,
+      'Reviewed native lesion mask must match the --structural T1 dimensions and affine.'
+    );
+  }
   const atlasOption = atlasOptions[settings.atlas];
   const atlas = await loadAtlas(atlasOption.overlapAtlasAssetId, options);
   if (structural)
     lesion = await reviewedMaskToAtlas(
       lesion,
-      decodeVolume(await readFile(structural)),
+      structuralVolume,
       atlas,
       settings,
       options

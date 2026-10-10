@@ -87,8 +87,14 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 500));
       snapshot = await page.evaluate(() => neurodeskAutomation.dispatch('snapshot'));
     } while (!['succeeded', 'failed'].includes(snapshot.state) && Date.now() < deadline);
-    if (snapshot.state !== 'succeeded' || !snapshot.report.summary.requiresReview) {
-      throw new Error(JSON.stringify(snapshot));
+    if (snapshot.state === 'failed') {
+      throw new Error(`Browser preparation failed: ${JSON.stringify(snapshot)}`);
+    }
+    if (snapshot.state !== 'succeeded') {
+      throw new Error(`Browser preparation timed out after 15 minutes: ${JSON.stringify(snapshot)}`);
+    }
+    if (!snapshot.report?.summary?.requiresReview) {
+      throw new Error(`Browser preparation did not return a reviewable candidate: ${JSON.stringify(snapshot)}`);
     }
     const [artifactId] = Object.entries(snapshot.report.artifacts).find(
       ([, artifact]) => artifact.role === 'candidate'

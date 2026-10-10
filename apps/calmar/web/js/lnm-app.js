@@ -2362,6 +2362,10 @@ export class LesionNetworkMappingApp {
       return;
     }
     const atlasOption = this.overlapResult.atlasOption || this.getAtlasOption();
+    if (!this.overlapResult.parcelResult.parcels.length) {
+      this.updateOutput(`No labelled ${atlasSpaceName(atlasOption)} parcels overlap the lesion; network map skipped.`);
+      return;
+    }
     const manifest = await this.ensureManifest();
     const connectomeEntry = manifest.connectomeAssets?.find(
       asset => asset.id === atlasOption.connectomeAssetId
@@ -2385,10 +2389,6 @@ export class LesionNetworkMappingApp {
     let requestedLabels = null;
     if (atlasOption.weightSource === 'parcel') {
       requestedLabels = this.overlapResult.parcelResult.parcels.map(parcel => String(parcel.label));
-      if (requestedLabels.length === 0) {
-        this.updateOutput(`No labelled ${atlasSpaceName(atlasOption)} parcels overlap the lesion; network map skipped.`);
-        return;
-      }
     }
     const progressOptions = {
       onProgress: ({ received, total, label }) => {

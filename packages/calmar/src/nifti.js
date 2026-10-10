@@ -25,7 +25,11 @@ export function decodeVolume(bytes) {
   return { data, dims, header, spacing, affine };
 }
 
-export function assertAtlasGrid(lesion, atlas) {
+export function assertAtlasGrid(
+  lesion,
+  atlas,
+  message = 'Lesion must match the selected atlas grid and affine. Register and review the mask before mapping.'
+) {
   if (
     lesion.dims.some((value, axis) => value !== atlas.dims[axis]) ||
     lesion.affine.some((row, axis) =>
@@ -35,8 +39,6 @@ export function assertAtlasGrid(lesion, atlas) {
       )
     )
   ) {
-    throw new Error(
-      'Lesion must match the selected atlas grid and affine. Register and review the mask before mapping.'
-    );
+    throw new Error(message);
   }
 }
