@@ -34,6 +34,11 @@ test('an ignore or empty configuration cannot silently remove owned source', asy
   await assert.rejects(assertCoverage(ignored, ['packages/components/src/index.js']), /No effective correctness rules/);
   const empty = new ESLint({ cwd: root, overrideConfigFile: true, overrideConfig: [{ files: ['**/*.js'], rules: {} }] });
   await assert.rejects(assertCoverage(empty, ['packages/components/src/index.js']), /No effective correctness rules/);
+  const coreOnly = { async calculateConfigForFile() {
+    return { rules: { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2] } };
+  } };
+  await assert.rejects(assertCoverage(coreOnly, ['apps/zarro/src/new-file.ts']), /No effective correctness rules/);
+
 });
 
 test('JS, TypeScript and worker correctness canaries report real errors', async () => {

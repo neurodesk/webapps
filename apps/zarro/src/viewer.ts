@@ -5682,9 +5682,10 @@ async function main(): Promise<void> {
         return
       }
     }
-    (customLayer && !stainLayerRuntimes.has(customLayer.id)
+    const loading = customLayer && !stainLayerRuntimes.has(customLayer.id)
       ? loadSelectedStainLayerRuntime(customLayer.id)
-      : reloadVolume({ reloadSource: true })).catch(reportViewerActionError)
+      : reloadVolume({ reloadSource: true })
+    loading.catch(reportViewerActionError)
   })
   els.downloadNifti.addEventListener('click', () => {
     downloadNifti().catch(reportViewerActionError)

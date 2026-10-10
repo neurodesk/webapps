@@ -63,3 +63,11 @@ Typed promise checking currently covers Zarro only. BrowserQC, Deface,
 Dicompare, DWI2TRX and root agentic tests still need their own project audit and
 promise policy. JavaScript remains covered by the correctness rules; enabling
 `checkJs` for the entire catalog is a separate migration.
+
+CI checks Zarro with the same pinned TypeScript 5.9.3 compiler that builds the
+lint program, so unresolved imports cannot silently weaken promise analysis.
+Its stream buffer annotations require ArrayBuffer storage, normalizing the
+encoded bytes once before streaming; compressed contents are unchanged. NiiVue 1.0.0-rc.14's `setFocus` and `setBudget`
+return its `refocus` barrier, which resolves on supersede, failed swaps and
+disposal. Awaiting these methods does not turn cancelled chunk reads into
+viewer action errors.
