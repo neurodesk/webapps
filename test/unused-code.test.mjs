@@ -132,7 +132,7 @@ test('malformed finding names and duplicate groups fail even after a successful 
   const kinds = ['files', 'exports', 'types', 'duplicates', 'dependencies', 'devDependencies'];
   const report = (kind, item) => ({ issues: [{ file: 'module.js', ...Object.fromEntries(kinds.map((key) => [key, key === kind ? [item] : []])) }] });
   for (const kind of kinds) {
-    for (const symbol of [{}, { name: null }, { name: 7 }, { name: '' }, { name: '  ' }, null, 'invalid']) {
+    for (const symbol of [{}, { name: null }, { name: 7 }, null, 'invalid']) {
       const item = kind === 'duplicates' ? [{ name: 'valid' }, symbol] : symbol;
       assert.throws(() => summarize(report(kind, item)), /Invalid Knip .* issue item/, `${kind}: ${JSON.stringify(symbol)}`);
     }
@@ -143,4 +143,9 @@ test('malformed finding names and duplicate groups fail even after a successful 
   const malformed = report('exports', {});
   const code = `console.log(${JSON.stringify(JSON.stringify(malformed))});`;
   assert.throws(() => runReport({ ...options, prefix: ['-e', code, '--'] }), /Invalid Knip exports issue item/);
+});
+
+test('string export names may be empty or whitespace', () => {
+  const report = { issues: [{ file: 'module.js', files: [], exports: [{ name: '' }, { name: '  ' }], types: [], dependencies: [], devDependencies: [], duplicates: [[{ name: '' }, { name: '  ' }]] }] };
+  assert.match(summarize(report), /Knip found 3 candidates/);
 });
