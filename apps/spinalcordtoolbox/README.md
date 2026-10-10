@@ -34,6 +34,120 @@ bash run.sh
 - **FreeBrowse viewer**: zoom and pan in 2D slices and the 3D render, layout selection, intensity window, per-layer opacity, colormap and visibility, and image download
 - **Privacy**: segmentation stays in the browser; browser analysis stays local; native execution sends selected masks to your chosen compute server
 
+## Command line
+
+Use SCT's native `sct_deepseg` for headless segmentation. The shared **Standalone**
+action already offers the SCT container and the OpenRecon scanner recipe. This
+app uses that existing native distribution instead of a separate portable Node
+CLI with another copy of the segmentation models.
+
+These commands use the same image digest as the compute server and
+`registry/neurocontainers.json`. The image is labelled `7.3.3`, but the installed SCT
+reports `7.3`. Docker Hub lists this digest as Linux AMD64. Docker on Windows uses
+Linux containers; this is not a native Windows SCT executable. Docker on an ARM
+host requires AMD64 emulation. Apptainer runs this image on Linux AMD64.
+
+### Docker
+
+Run the following in a directory containing your spinal MRI as `t2.nii.gz`.
+Pull the image and install both tasks while online. The named volume preserves
+model downloads when each container exits; the image alone does not guarantee
+that every task's models are installed.
+
+```bash
+sct_image='vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83'
+sct_models='/opt/spinalcordtoolbox-7.3.3/data/deepseg_models'
+docker pull --platform linux/amd64 "$sct_image"
+mkdir -p results
+
+sct_docker() {
+  docker run --rm --platform linux/amd64 \
+    --mount "type=volume,source=sct733-models,target=$sct_models" \
+    --mount "type=bind,source=$PWD,target=/work" \
+    --workdir /work "$sct_image" "$@"
+}
+
+sct_docker sct_version
+sct_docker sct_deepseg spinalcord -install
+sct_docker sct_deepseg lesion_ms -install
+```
+
+After preparation, disable container networking and write NIfTI masks plus SCT's
+JSON provenance sidecars to `results/`. No GPU is required.
+
+```bash
+docker run --rm --network none --platform linux/amd64 \
+  --mount "type=volume,source=sct733-models,target=$sct_models,readonly" \
+  --mount "type=bind,source=$PWD,target=/work" \
+  --workdir /work "$sct_image" \
+  sct_deepseg spinalcord -i t2.nii.gz -o results/t2_cord.nii.gz
+
+docker run --rm --network none --platform linux/amd64 \
+  --mount "type=volume,source=sct733-models,target=$sct_models,readonly" \
+  --mount "type=bind,source=$PWD,target=/work" \
+  --workdir /work "$sct_image" \
+  sct_deepseg lesion_ms -i t2.nii.gz -o results/t2_lesion.nii.gz
+```
+
+SCT's native `lesion_ms` default uses the full five-fold ensemble. Add
+`-single-fold` to the lesion command to use fold 1, which is the configuration
+approximated by the browser. The browser also uses different patching and
+resampling, so its output is not voxel-identical even to native single-fold SCT.
+See the [measured comparison below](#ms-lesion-lesion_ms). The lesion task does
+not produce a cord mask; run `spinalcord` separately if one is needed.
+
+### Windows through Docker Desktop
+
+Select Linux containers in Docker Desktop. In PowerShell, in your input
+directory, use the same image and persistent model volume:
+
+```powershell
+$SctImage = 'vnmd/spinalcordtoolbox_7.3.3@sha256:974f6019415df81465ac03102d27b8a23945155b96a45e7b5f525a3d0d55ab83'
+$SctModelMount = 'type=volume,source=sct733-models,target=/opt/spinalcordtoolbox-7.3.3/data/deepseg_models'
+$SctDataMount = "type=bind,source=$($PWD.Path),target=/work"
+New-Item -ItemType Directory -Force results | Out-Null
+docker pull --platform linux/amd64 $SctImage
+docker run --rm --platform linux/amd64 --mount $SctModelMount $SctImage sct_deepseg spinalcord -install
+docker run --rm --platform linux/amd64 --mount $SctModelMount $SctImage sct_deepseg lesion_ms -install
+docker run --rm --network none --platform linux/amd64 --mount $SctModelMount --mount $SctDataMount --workdir /work $SctImage sct_deepseg spinalcord -i t2.nii.gz -o results/t2_cord.nii.gz
+docker run --rm --network none --platform linux/amd64 --mount $SctModelMount --mount $SctDataMount --workdir /work $SctImage sct_deepseg lesion_ms -i t2.nii.gz -o results/t2_lesion.nii.gz
+```
+
+### Apptainer on Linux AMD64
+
+Use the same `sct_image` and `sct_models` variables as above. Pulling from the
+Docker digest preserves the selected image; a writable host model directory
+allows SCT to install tasks despite the SIF image being read-only.
+
+```bash
+apptainer pull sct733.sif "docker://$sct_image"
+mkdir -p sct-models results
+
+sct_apptainer() {
+  apptainer exec --cleanenv \
+    --bind "$PWD:/work" --bind "$PWD/sct-models:$sct_models" \
+    --pwd /work sct733.sif "$@"
+}
+
+sct_apptainer sct_deepseg spinalcord -install
+sct_apptainer sct_deepseg lesion_ms -install
+sct_apptainer sct_deepseg spinalcord -i t2.nii.gz -o results/t2_cord.nii.gz
+sct_apptainer sct_deepseg lesion_ms -i t2.nii.gz -o results/t2_lesion.nii.gz
+```
+
+Keep the SIF and prepared model directory together when moving to an offline
+machine. Apptainer's `--cleanenv` prevents a host `SCT_USE_GPU` setting from
+changing the CPU workflow. These are direct native commands; the compute
+server's Apptainer runner still does not advertise SCT analysis.
+
+Command syntax and ensemble behavior follow the SCT 7.3 documentation for
+[`spinalcord`](https://spinalcordtoolbox.com/7.3/user_section/command-line/deepseg/spinalcord.html)
+and [`lesion_ms`](https://spinalcordtoolbox.com/7.3/user_section/command-line/deepseg/lesion_ms.html).
+See SCT's [Docker](https://spinalcordtoolbox.com/7.3/user_section/installation/docker.html)
+and [Apptainer](https://spinalcordtoolbox.com/7.3/user_section/installation/apptainer.html)
+guides for platform setup. The [Docker Hub metadata](https://hub.docker.com/v2/repositories/vnmd/spinalcordtoolbox_7.3.3/tags/20260902)
+records the digest and architecture.
+
 ## SCT Model Assets
 
 ```bash
