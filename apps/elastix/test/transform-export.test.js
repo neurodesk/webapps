@@ -111,3 +111,61 @@ test("the stored transformation runs from the fixed to the moving coordinate sys
     output: { name: "moving" },
   });
 });
+
+test("identity exports stay finite on strongly translated tiny grids", () => {
+  for (const [origin, span] of [[1000, 1e-5], [100000, 0.001]]) {
+    const points = Array.from({ length: 8 }, (_, corner) => [0, 1, 2]
+      .map((axis) => origin + ((corner >> axis) & 1) * span));
+    const fitted = fitAffine(points, points);
+    fitted.matrix.flat().forEach((value, index) => assert.ok(Math.abs(value - (index % 4 === 0 ? 1 : 0)) < 1e-12));
+    fitted.offset.forEach((value) => assert.ok(Math.abs(value) < 1e-9));
+    assert.ok(fitted.residual < 1e-9);
+  }
+});
+
+test("known nonidentity affines survive translated small oblique and single-slice grids", () => {
+  for (const dimension of [2, 3]) {
+    const matrix = dimension === 2 ? [[2, 0.5], [-0.25, 1.5]] : [[2, 0.5, -0.25], [-0.25, 1.5, 0.5], [0.5, 0.25, 1]];
+    const offset = [3, -7, 11].slice(0, dimension);
+    const grid = {
+      imageType: { dimension },
+      origin: [1000, -2000, 4000].slice(0, dimension),
+      spacing: Array(dimension).fill(2 ** -17),
+      size: dimension === 2 ? [2, 2] : [2, 2, 1],
+      direction: dimension === 2 ? [1, 0.5, -0.5, 1] : [1, 0.5, 0, -0.5, 1, 0.5, 0, -0.5, 1],
+    };
+    const { points } = cornerGrid(grid);
+    const map = (point) => matrix.map((row, axis) => row.reduce((sum, value, column) => sum + value * point[column], offset[axis]));
+    const fitted = fitAffine(points, points.map(map));
+    fitted.matrix.flat().forEach((value, index) => assert.ok(Math.abs(value - matrix.flat()[index]) < 1e-10));
+    fitted.offset.forEach((value, axis) => assert.ok(Math.abs(value - offset[axis]) < 1e-8));
+    const interior = physicalPoint(grid, Array(dimension).fill(0.37));
+    const expected = map(interior);
+    fitted.matrix.forEach((row, axis) => {
+      const actual = row.reduce((sum, value, column) => sum + value * interior[column], fitted.offset[axis]);
+      assert.ok(Math.abs(actual - expected[axis]) < 1e-9);
+    });
+  }
+});
+
+test("invalid or degenerate grids and inaccurate affine fits cannot be serialized", async () => {
+  const { assertAffineFit } = await import("../src/transform-export.js");
+  const flat = [[0, 0], [1, 1], [2, 2], [3, 3]];
+  assert.throws(() => fitAffine(flat, flat), /degenerate/);
+  assert.throws(() => fitAffine([[0, 0], [1, 0], [0, 0]], flat.slice(0, 3)), /degenerate/);
+  assert.throws(() => fitAffine([[0, 0], [1, 0], [0, 1]], [[0, 0], [NaN, 0], [0, 1]]), /invalid/);
+  assert.throws(() => fitAffine([], []), /invalid/);
+  assert.throws(() => assertAffineFit({ matrix: [[Infinity, 0], [0, 1]], offset: [0, 0], residual: 0 }, 1e-8), /finite/);
+  const points = [[0, 0], [1, 0], [0, 1], [1, 1]];
+  const fitted = fitAffine(points, [[0, 0], [1, 0], [0, 1], [2, 1]]);
+  assert.throws(() => assertAffineFit(fitted, 1e-8), /accurate/);
+});
+
+test("coordinate sampling keeps translated tiny grids near zero before float32 interpolation", () => {
+  const tiny = { ...image, origin: [1000, 1000, 1000], spacing: [1e-5, 1e-5, 1e-5], size: [2, 2, 2] };
+  const radius = coordinateRadius([tiny], tiny.origin);
+  assert.equal(radius, 128);
+  const coordinate = coordinateImage(3, 1, radius, "float32", tiny.origin);
+  assert.equal(physicalPoint(coordinate, [0, 0, 0])[1] - tiny.origin[1], coordinate.data[0]);
+  assert.equal(physicalPoint(coordinate, [1, 1, 1])[1] - tiny.origin[1], coordinate.data[7]);
+});

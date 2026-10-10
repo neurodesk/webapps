@@ -95,3 +95,40 @@ test("successful reads serialize on one worker and a failed read permits the nex
   assert.equal(await io.run(() => "valid replacement"), "valid replacement");
   io.reset();
 });
+
+test("an aborted task waiting in the active queue does not create a worker", async () => {
+  const controller = new AbortController();
+  let workers = 0;
+  const io = createIoWorkerQueue(async () => {
+    workers++;
+    return worker("active");
+  });
+  const abandoned = io.run(() => "abandoned", { signal: controller.signal });
+  controller.abort();
+  await assert.rejects(abandoned, { name: "AbortError" });
+  assert.equal(workers, 0);
+  assert.equal(await io.run(() => "replacement"), "replacement");
+  assert.equal(workers, 1);
+  io.reset();
+});
+
+test("abort during worker creation terminates that worker before starting IO", async () => {
+  const controller = new AbortController();
+  const creation = deferred();
+  const started = deferred();
+  const stale = worker("abandoned");
+  let tasks = 0;
+  const io = createIoWorkerQueue(() => {
+    started.resolve();
+    return creation.promise;
+  });
+  const abandoned = io.run(() => { tasks++; }, { signal: controller.signal });
+  const rejected = assert.rejects(abandoned, { name: "AbortError" });
+  await started.promise;
+  controller.abort();
+  creation.resolve(stale);
+  await rejected;
+  assert.equal(stale.terminated, true);
+  assert.equal(tasks, 0);
+  io.reset();
+});

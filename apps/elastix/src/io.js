@@ -22,12 +22,15 @@ import {
   toOmeZarrOzx,
 } from "@fideus-labs/ngff-zarr/browser";
 import { TiffStore } from "@fideus-labs/fiff";
+import FetchStore from "@zarrita/storage/fetch";
+import { createSourceReader } from "./source-reader.js";
 import ZipFileStore from "@zarrita/storage/zip";
 import { createIoWorkerQueue } from "./io-worker.js";
-import { chooseLevel, classifySource, squeezeSingletons, urlName, voxelCount, VOXEL_BUDGET, zarrFolderEntries } from "./sources.js";
+import { squeezeSingletons, voxelCount, VOXEL_BUDGET } from "./sources.js";
 import { outputStem, plainBytes, withTypedParameterArrays } from "./outputs.js";
 import {
   affineTransform,
+  assertAffineFit,
   coordinateImage,
   coordinateParameterObject,
   coordinateRadius,
@@ -67,106 +70,43 @@ function toFile(bytes, name, type = "application/octet-stream") {
 }
 
 /** Write an ITK-Wasm image in the format its file name selects. */
-export async function writeImageFile(image, name) {
-  const { serializedImage } = await onIoWorker((webWorker) => writeImage(image, name, { webWorker }));
+export async function writeImageFile(image, name, { signal } = {}) {
+  signal?.throwIfAborted();
+  const { serializedImage } = await onIoWorker((webWorker) => writeImage(image, name, { webWorker }), { signal });
+  signal?.throwIfAborted();
   return toFile(serializedImage.data, name);
 }
 
 // The display copy keeps the source pixel type; elastix gets float32 so any
 // pair of pixel types registers and the result is never wrapped into an integer range.
-async function prepared(image, name, kind, displayFile, detail = "") {
+async function prepared(image, name, kind, displayFile, detail = "", signal) {
+  signal?.throwIfAborted();
   const scalar = squeezeSingletons(image);
-  const display = displayFile ?? await writeImageFile(scalar, `${outputStem(name)}.nii.gz`);
+  const display = displayFile ?? await writeImageFile(scalar, `${outputStem(name)}.nii.gz`, { signal });
+  signal?.throwIfAborted();
   const float = scalar.imageType.componentType === FloatTypes.Float32 ? scalar : castImage(scalar, { componentType: FloatTypes.Float32 });
   const large = voxelCount(scalar) > VOXEL_BUDGET ? " · above the voxel budget, registration may be slow" : "";
   return { image: float, displayFile: display, name, kind, note: `${describe(scalar)}${detail}${large}` };
 }
 
 /** A NIfTI file (as is, or converted from DICOM by dcm2niix). */
-export async function readNiftiFile(file) {
-  const { image } = await onIoWorker((webWorker) => readImage(file, { webWorker }));
-  return prepared(image, file.name, "nifti", file);
+export async function readNiftiFile(file, { signal } = {}) {
+  signal?.throwIfAborted();
+  const { image } = await onIoWorker((webWorker) => readImage(file, { webWorker }), { signal });
+  signal?.throwIfAborted();
+  return prepared(image, file.name, "nifti", file, "", signal);
 }
 
-// Zip archives may wrap the OME-Zarr root in a folder; read below it.
-function stripZarrPrefix(entries) {
-  const root = Object.keys(entries)
-    .filter((key) => /(^|\/)(zarr\.json|\.zattrs)$/.test(key))
-    .sort((a, b) => a.length - b.length)[0];
-  const prefix = root ? root.slice(0, root.lastIndexOf("/") + 1) : "";
-  if (!prefix) return entries;
-  return Object.fromEntries(Object.entries(entries)
-    .filter(([key]) => key.startsWith(prefix))
-    .map(([key, entry]) => [key.slice(prefix.length), entry]));
-}
-
-function folderStore(entries) {
-  return {
-    async get(key) {
-      const file = entries.get(key.replace(/^\//, ""));
-      return file ? new Uint8Array(await file.arrayBuffer()) : undefined;
-    },
-  };
-}
-
-// bioformats2raw layouts hold the image one group below the root.
-async function readMultiscales(store, options = {}) {
-  try {
-    return await fromOmeZarr(store, options);
-  } catch (error) {
-    try {
-      return await fromOmeZarr(store, { ...options, path: "0" });
-    } catch {
-      throw error;
-    }
-  }
-}
-
-async function readOmeZarr(store, name, kind, options) {
-  const multiscales = await readMultiscales(store, options);
-  const { image: level, level: index } = chooseLevel(multiscales.images);
-  const image = await ngffImageToItkImage(level, { tIndex: 0, cIndex: 0 });
-  const count = multiscales.images.length;
-  return prepared(image, name, kind, null, ` · pyramid level ${index + 1} of ${count}`);
-}
-
-async function fetchFile(url, signal) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new Error(`${urlName(url)} returned HTTP ${response.status}.`);
-  return new File([await response.blob()], urlName(url));
-}
-
-/** Read any source except NIfTI/DICOM files: ITK formats, OME-Zarr or TIFF, local or by URL. */
-export async function readSource(source, { signal } = {}) {
-  const kind = classifySource(source);
-  const name = typeof source === "string" ? urlName(source) : source[0].name;
-  switch (kind) {
-    case "file-url": {
-      const file = await fetchFile(source, signal);
-      return /\.nii(\.gz)?$/i.test(file.name) ? readNiftiFile(file) : readSource([file], { signal });
-    }
-    case "itk": {
-      const { image } = await onIoWorker((webWorker) => readImage(source[0], { webWorker }));
-      return prepared(image, name, kind);
-    }
-    case "tiff":
-      return readOmeZarr(await TiffStore.fromBlob(source[0]), name, kind, { version: "0.5" });
-    case "tiff-url":
-      return readOmeZarr(await TiffStore.fromUrl(source), name, kind, { version: "0.5" });
-    case "ozx":
-      return readOmeZarr(ZipFileStore.fromBlob(source[0], { transformEntries: stripZarrPrefix }), name, kind);
-    case "ozx-url":
-      return readOmeZarr(ZipFileStore.fromUrl(source, { transformEntries: stripZarrPrefix }), name, kind);
-    case "zarr-folder": {
-      const { root, entries } = zarrFolderEntries(source);
-      return readOmeZarr(folderStore(entries), root.split("/").filter(Boolean).pop(), kind);
-    }
-    case "zarr-url":
-      return readOmeZarr(source, name, kind);
-    default:
-      throw new Error("Read NIfTI and DICOM files with readNiftiFile.");
-  }
-}
+export const readSource = createSourceReader({
+  fromOmeZarr,
+  ngffImageToItkImage,
+  TiffStore,
+  ZipFileStore,
+  FetchStore,
+  prepared,
+  readNiftiFile,
+  readItkFile: (file, signal) => onIoWorker((webWorker) => readImage(file, { webWorker }), { signal }),
+});
 
 /** Custom elastix parameter files (.txt or .toml) as a parameter object. */
 export async function readCustomParameters(files) {
@@ -216,11 +156,11 @@ function frameImage(image) {
 }
 
 // elastix's own transformix maps each coordinate image; see transform-export.js.
-async function mappedCoordinates(transformParameterObject, dimension, radius, componentType, grid = {}) {
+async function mappedCoordinates(transformParameterObject, dimension, radius, componentType, grid = {}, center = Array(dimension).fill(0)) {
   const maps = coordinateParameterObject(transformParameterObject);
   const mapped = [];
   for (let axis = 0; axis < dimension; axis += 1) {
-    const moving = coordinateImage(dimension, axis, radius, componentType);
+    const moving = coordinateImage(dimension, axis, radius, componentType, center);
     const { result } = await onIoWorker((webWorker) => transformix(moving, { transformParameterObject: maps, ...grid, webWorker }));
     mapped.push(result.data);
   }
@@ -235,12 +175,20 @@ async function mappedCoordinates(transformParameterObject, dimension, radius, co
 export async function writeTransformOmeZarrFile({ transform, transformParameterObject, fixed, moving }, name) {
   const dimension = fixed.imageType.dimension;
   const dims = spatialDims(dimension);
-  const radius = coordinateRadius([fixed, moving]);
+  const linear = isLinearTransform(transform);
+  const radius = coordinateRadius([fixed, moving], linear ? Array.from(moving.origin) : []);
   const frames = { fixed: await frameImage(fixed), moving: await frameImage(moving) };
-  if (isLinearTransform(transform)) {
+  if (linear) {
     const { grid, points } = cornerGrid(fixed);
-    const mapped = await mappedCoordinates(transformParameterObject, dimension, radius, "float64", grid);
-    const { matrix, offset } = fitAffine(points, points.map((_, corner) => mapped.map((axis) => axis[corner])));
+    // The pinned transformix interpolates internally as float32, even for double output.
+    // Sample coordinates relative to the moving origin so tiny spans retain their precision.
+    const centered = await mappedCoordinates(transformParameterObject, dimension, radius, "float32", grid, Array.from(moving.origin));
+    const mapped = centered.map((values, axis) => Float64Array.from(values, (value) => value + moving.origin[axis]));
+    const fitted = fitAffine(points, points.map((_, corner) => mapped.map((axis) => axis[corner])));
+    const sampleMagnitude = Math.max(...centered.flatMap((values) => Array.from(values, Math.abs)));
+    const rounding = 2 * 2 ** -23 * sampleMagnitude + 512 * Number.EPSILON * radius;
+    assertAffineFit(fitted, rounding);
+    const { matrix, offset } = fitted;
     const affine = itkTransformToNgffTransform([affineTransform(matrix, offset)], dims, true, frames);
     return toFile(await toOmeZarrOzx(namedTransformation(affine)), name, "application/zip");
   }
