@@ -1216,6 +1216,9 @@ apps:
         url: https://github.com/niivue/niivue
   white-matter-lesions:
     about:
+      - "Segment white matter lesions on a single FLAIR image with FLAMeS, a 3D nnU-Net trained on 668 multiple sclerosis scans from three vendors at 1.5 T and 3 T. SynthStrip removes the skull first; the network then runs over overlapping 112 × 128 × 160 patches at 1 × 0.9 × 0.9 mm."
+      - "By default the app runs one of the five published FLAMeS folds without mirroring, to keep a browser run to minutes; the advanced settings offer the five-fold ensemble. Against expert labels one fold reached a mean Dice of 0.73 on 25 held-out scans from the MICCAI 2017 WMH challenge, a vascular cohort outside FLAMeS’s multiple sclerosis training data, and 0.61 on the 22 MSLesSeg test patients; the ensemble reached 0.73 and 0.65. Lesions are counted as 26-connected components; the table lists each lesion's volume and centroid. After you edit the mask, the count, volume and table are recomputed from the edited mask; the run report keeps the model's."
+      - "Outputs are research estimates, not a diagnosis. Check them against the image."
       - Allow several gigabytes of available memory for the five-fold CPU ensemble. Model graphs load one at a time, but inference still keeps large working buffers. Use the default single fold on memory-limited devices; browser, backend and image size affect memory use.
     packages:
       - { name: FLAMeS, url: https://doi.org/10.5281/zenodo.17955359, role: lesion segmentation network (fold 0) }

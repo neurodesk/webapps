@@ -161,9 +161,12 @@ test('the shell About fallback uses registry paragraphs when the app has no Abou
   assert.match(dialog.textContent, /lightniing\.org/);
 });
 
-test('FLAMeS About explains ensemble memory and the single-fold option', () => {
+test('FLAMeS About explains ensemble memory and the single-fold option', async () => {
   const about = information.apps['white-matter-lesions'].about.join(' ');
   assert.match(about, /several gigabytes.*five-fold CPU ensemble/);
   assert.match(about, /single fold.*memory-limited/);
   assert.match(about, /browser, backend and image size affect memory/);
+  const window = await mountShell('white-matter-lesions');
+  window.document.querySelector('.nd-app-bar [data-neurodesk-shell-control="about"]').click();
+  assert.match(window.document.querySelector('dialog[open]').textContent, /several gigabytes/);
 });

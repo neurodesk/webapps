@@ -60,7 +60,6 @@
         </div>
       </details>
 
-      <button id="aboutBtn" type="button" hidden>About</button>
       <button id="privacyBtn" type="button" hidden>Privacy</button>
     </header>
 
@@ -81,11 +80,6 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
     </footer>
 
-    <template id="aboutContent">
-      <p>Segment white matter lesions on a single FLAIR image with FLAMeS, a 3D nnU-Net trained on 668 multiple sclerosis scans from three vendors at 1.5 T and 3 T. SynthStrip removes the skull first; the network then runs over overlapping 112 × 128 × 160 patches at 1 × 0.9 × 0.9 mm.</p>
-      <p>By default the app runs one of the five published FLAMeS folds without mirroring, to keep a browser run to minutes; the advanced settings offer the five-fold ensemble. Against expert labels one fold reached a mean Dice of 0.73 on 25 held-out scans from the MICCAI 2017 WMH challenge, a vascular cohort outside FLAMeS’s multiple sclerosis training data, and 0.61 on the 22 MSLesSeg test patients; the ensemble reached 0.73 and 0.65. Lesions are counted as 26-connected components; the table lists each lesion's volume and centroid. After you edit the mask, the count, volume and table are recomputed from the edited mask; the run report keeps the model's.</p>
-      <p>Outputs are research estimates, not a diagnosis. Check them against the image.</p>
-    </template>
     <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The FLAMeS and SynthStrip models are downloaded once and cached.</p></template>
 
     <script type="module" src="/src/main.js"></script>

@@ -230,14 +230,19 @@ for (const failure of ["download", "empty image"]) {
   });
 }
 
-test("the shared app bar owns About, Cite and the theme", async ({ page }) => {
+test("the shared app bar owns About, Cite and the theme", async ({ page }, testInfo) => {
   await page.goto("./");
   const bar = page.locator(".nd-app-bar:visible");
   await expect(bar).toHaveCount(1);
   await bar.getByRole("button", { name: "About", exact: true }).click();
-  await expect(page.locator("#infoDialog")).toContainText("FLAMeS");
-  await expect(page.locator("#infoDialog")).toContainText("several gigabytes of available memory");
-  await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("dialog[open]")).toContainText("FLAMeS");
+  await expect(page.locator("dialog[open]")).toContainText("several gigabytes of available memory");
+  await page.locator("dialog[open]").getByText(/Allow several gigabytes/).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("about-memory-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("dialog[open]").getByText(/Allow several gigabytes/).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("about-memory-phone.png") });
+  await page.locator("dialog[open]").getByRole("button", { name: "Close", exact: true }).click();
   await bar.getByRole("button", { name: "Cite", exact: true }).click();
   await expect(page.locator("dialog[open]").last()).toContainText("10.1101/2025.05.19.25327707");
   expect(await page.evaluate(() => self.crossOriginIsolated)).toBe(true);
