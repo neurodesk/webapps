@@ -1,4 +1,5 @@
 packages:
+  - "scripts/quality"
   - "packages/*"
   - "apps/*"
   - "site/easter-eggs/*"

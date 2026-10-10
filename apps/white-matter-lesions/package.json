@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:e2e": "pnpm build && playwright test",
-    "lint": "eslint ."
+    "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
     "@neurodesk/runtime-support": "workspace:*",

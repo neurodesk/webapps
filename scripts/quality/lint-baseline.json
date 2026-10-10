@@ -1,0 +1,317 @@
+{
+  "213ec5fa63eca57a1fbaaf8986668eba4b93ae10ae6735a42ae64d9d2e5126ae": {
+    "file": "apps/brain-extraction/src/synthstrip.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 12,
+    "count": 1
+  },
+  "d51a6a39debe97f5c3e4e440e92bdb09414e602adaf6a79eec0fe9359cee229c": {
+    "file": "apps/calmar/scripts/verify_skullstrip_seg.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 49,
+    "count": 1
+  },
+  "8d686e847e6cbf0c8a39ba7112f477c9cc95101644aed4e8473596798da9a90e": {
+    "file": "apps/dicompare/src/components/schema/FieldEditModal.tsx",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 315,
+    "count": 1
+  },
+  "8a092b7b11a3b5fe15c53dd2aa282fc442a58f09360277a5f32f2b1ced1639af": {
+    "file": "apps/dicompare/src/contexts/SchemaContext.tsx",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 440,
+    "count": 2
+  },
+  "94529b0effa7236e4943e64edada80277c0319b3cd9d78b894509143d2e3f958": {
+    "file": "apps/dicompare/src/contexts/TutorialContext.tsx",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 682,
+    "count": 2
+  },
+  "cebe542620d348b5b91100a1e0b8edecc71535374aa3bcf4f4cda5ce539e1b0f": {
+    "file": "apps/dicompare/src/contexts/TutorialContext.tsx",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 683,
+    "count": 1
+  },
+  "cdadff17fd3da95f6e08dd72e1d6264d1d646b523679826400afa13343f0153c": {
+    "file": "apps/dicompare/src/contexts/TutorialContext.tsx",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 745,
+    "count": 1
+  },
+  "5dec2362a545f904e699667b17dd1d3ecfde8cb8aa56c2ce28501f6fd20bced8": {
+    "file": "apps/dicompare/src/services/dicomFieldService.ts",
+    "ruleId": "no-async-promise-executor",
+    "message": "Promise executor functions should not be async.",
+    "line": 112,
+    "count": 1
+  },
+  "e313e15b86e028ae324c71099f1a1badfe2e56b8fe417c412886a0e3d98c4c83": {
+    "file": "apps/dicompare/src/types/fieldValues.ts",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 34,
+    "count": 1
+  },
+  "a7c8e4ee3aa196e93d24bd137c8e7c37a199d83e7d1e2cec459c6e6e883719bc": {
+    "file": "apps/dicompare/src/utils/datatypeInference.ts",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 115,
+    "count": 1
+  },
+  "54cfce249af5cf121117f520aa5a9d191dee4e93ef4b6d303b07e2eb26ed1df6": {
+    "file": "apps/musclemap/scripts/validate_browser_model.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 29,
+    "count": 1
+  },
+  "db9b53df4b03ecc81193323e430c5cd321e24eaafbcaf35f764457967de2a750": {
+    "file": "apps/musclemap/scripts/validate_upstream_parity.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 37,
+    "count": 1
+  },
+  "caa4465265657d3ed421ce0eed19e51ffac0b9130f333d9a11052a1847b2f139": {
+    "file": "apps/qsmbly/js/controllers/QsmInputSet.js",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\..",
+    "line": 67,
+    "count": 1
+  },
+  "e1b98f47a28de62d08c14308c73adbf2220d17f102d06e5b648867b630dad02c": {
+    "file": "apps/spinalcordtoolbox/scripts/summarize_test_failures.cjs",
+    "ruleId": "no-control-regex",
+    "message": "Unexpected control character(s) in regular expression: \\x1b.",
+    "line": 6,
+    "count": 1
+  },
+  "5af1220264afd662e9750daa88c2485ddc23f2b3c41c40e3fc2e6c95f1b49b2a": {
+    "file": "apps/syncro/src/inference-worker.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 16,
+    "count": 1
+  },
+  "fd17ed3b25a65e1efe7057f782f74b8ebf0439cb3e5653095a87652b367bf4d4": {
+    "file": "apps/syncro/src/inference-worker.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 20,
+    "count": 1
+  },
+  "371c65a0669c6b1ff83869b6e44daa7e49d36b034186c242451fa3b3928db08e": {
+    "file": "apps/synthseg/e2e/fixture.spec.js",
+    "ruleId": "no-empty-pattern",
+    "message": "Unexpected empty object pattern.",
+    "line": 35,
+    "count": 1
+  },
+  "0a10a99635a955aeae441ffdb1d6bd90624ba37593219147f9f9efbc9d0f369e": {
+    "file": "apps/zarro/src/dandi_archive.ts",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\[.",
+    "line": 75,
+    "count": 1
+  },
+  "3914069e1e411d4b0b8a2adbebebac3d38053a149708f3838905f142da1ef3f7": {
+    "file": "packages/components/src/file-io/detectFiles.js",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\..",
+    "line": 65,
+    "count": 1
+  },
+  "7dfd570ce9dc723825303848098d0b9d1cf22b10657273e289a7a0ebc34910cc": {
+    "file": "packages/components/src/worker/fetchModel.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 47,
+    "count": 3
+  },
+  "e0375f72047080d96a34b2e3238b399bf03679c98bb7a9a476a82f3eeb0e844d": {
+    "file": "packages/greedy/test/node.test.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 8,
+    "count": 1
+  },
+  "bad84a60b77ee754eb54a992d2d77b84961fc03cc1bd15d9cb48de84817b959f": {
+    "file": "packages/musclemap/src/pipeline.js",
+    "ruleId": "no-prototype-builtins",
+    "message": "Do not access Object.prototype method 'hasOwnProperty' from target object.",
+    "line": 913,
+    "count": 1
+  },
+  "0f44c6082444df65607313ef1c946b29c33b519927251b9e9c72461678606db5": {
+    "file": "packages/nesvor/src/deformation/gpu.js",
+    "ruleId": "no-unsafe-finally",
+    "message": "Unsafe usage of ThrowStatement.",
+    "line": 74,
+    "count": 1
+  },
+  "d20bc5452ae3e5e45385b8cc9709bf2a664b39aed01f12d669e65491979dc9bb": {
+    "file": "packages/registration/src/index.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 59,
+    "count": 1
+  },
+  "d59fe4a73afedd92b6a795115934213fab5961819cdb76242a12a02f6f0565f0": {
+    "file": "packages/runtime-support/src/gpu-unet/session.js",
+    "ruleId": "no-unsafe-finally",
+    "message": "Unsafe usage of ThrowStatement.",
+    "line": 259,
+    "count": 1
+  },
+  "ee92860d4f42391814335d38765df8864011904c32bd83e08cda597a606f6a99": {
+    "file": "packages/runtime-support/src/gpu-unet/session.js",
+    "ruleId": "no-unsafe-finally",
+    "message": "Unsafe usage of ThrowStatement.",
+    "line": 261,
+    "count": 1
+  },
+  "ad7487c4cb5f8af5ab93b196f77157d9e026f624eb41f7fb916e8b4c8d469485": {
+    "file": "packages/runtime-support/src/niimath/worker.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 91,
+    "count": 4
+  },
+  "f394dff895cae9f11f2ed158abad801c0798336f3f45766743b32cdc3bfbc62c": {
+    "file": "packages/seedseg/validation/browser-reference.mjs",
+    "ruleId": "no-constant-condition",
+    "message": "Unexpected constant condition.",
+    "line": 78,
+    "count": 1
+  },
+  "30057bf0ca1d4c4849bb52e4f5412ee82b8e50234af7b04607f5f128373c948b": {
+    "file": "packages/syncro/validation/benchmark-brain-extraction.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 25,
+    "count": 1
+  },
+  "0cdc88412a8cfdc3de0e62cbf822bf4d92a43723cedba4fb4aae17c1a5869b1c": {
+    "file": "packages/topofit/src/conform.js",
+    "ruleId": "no-loss-of-precision",
+    "message": "This number literal will lose precision at runtime.",
+    "line": 3,
+    "count": 1
+  },
+  "08492cf202f889b535d99b4e7829682eb4f5e13d4e795cbf24715fd8d2fffec4": {
+    "file": "packages/vesselboost/src/pipeline.js",
+    "ruleId": "no-case-declarations",
+    "message": "Unexpected lexical declaration in case block.",
+    "line": 1594,
+    "count": 1
+  },
+  "5e416e0dc218a5f744c7bbaa26730786d0fd9d02e60c04e700a44cde26d8172b": {
+    "file": "scripts/desktop/publish.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 122,
+    "count": 1
+  },
+  "328f9f288f0c23e2e0ad29b974588a74b47132b85314b472b1c2102f11df9256": {
+    "file": "scripts/desktop/python-sources.mjs",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\..",
+    "line": 13,
+    "count": 1
+  },
+  "8f48e7179b8bdad547f04ef7d9276c0db78e90aadd5afbf6b4eaee2d9f45a27f": {
+    "file": "scripts/desktop/smoke.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 47,
+    "count": 1
+  },
+  "a38f08c83cf3a1f0beeeed9e2ded90a3946effdbbc8fe8ec6cea70d64b5797f5": {
+    "file": "scripts/desktop/smoke.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 91,
+    "count": 1
+  },
+  "9767a20d4a232052428170929f8931a437ca17f268b209bcf9453e192c6ddf5d": {
+    "file": "scripts/dev-server.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 88,
+    "count": 1
+  },
+  "221bfc3be287633e35da2507272078f0707a70a0c1fbc4edf99f5f4b8c284462": {
+    "file": "scripts/dev-server.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 92,
+    "count": 1
+  },
+  "bc768c8406489d3cc1a8a1b8d96da1bf0175a44bc509ea988666016249e09645": {
+    "file": "scripts/dev-server.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 108,
+    "count": 3
+  },
+  "6b4a175011dfeff3b1cf128e4a7c7e27575810128566da743a9ee25a28d30015": {
+    "file": "site/easter-eggs/vessel-surfer/scripts/fetch-data.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 14,
+    "count": 1
+  },
+  "93fb857bb632b88e5b0f3f6e1319df25487ac76209b25337758d4d42249ebc91": {
+    "file": "site/theme.js",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 35,
+    "count": 1
+  },
+  "777977e7f7ccff09357f1a00ff4b1a9112b24907800d3b5d8c21678855e408c3": {
+    "file": "test/composite-theme.test.mjs",
+    "ruleId": "no-regex-spaces",
+    "message": "Spaces are hard to count. Use {2}.",
+    "line": 71,
+    "count": 1
+  },
+  "dffb4850fe98f911808a632c9f161541057ae458afbd17dca1f24e1fbb149012": {
+    "file": "test/design-system.test.mjs",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\[.",
+    "line": 38,
+    "count": 1
+  },
+  "43ee5b2f7e6e0b400ab2833f26ab49a3c417b0581b82c42805116dcc11cf8270": {
+    "file": "test/navigation.test.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 20,
+    "count": 1
+  },
+  "af72bf0880d488aa7f16f4fdcceb87b2d04972ea639fa877cc056bfb2c3dda2f": {
+    "file": "test/registry.test.mjs",
+    "ruleId": "no-empty",
+    "message": "Empty block statement.",
+    "line": 18,
+    "count": 1
+  },
+  "2d375f1214ec9d5ab50fa443aee0e54487640ba1415814d9c7880fde841a72d0": {
+    "file": "test/registry.test.mjs",
+    "ruleId": "no-useless-escape",
+    "message": "Unnecessary escape character: \\\".",
+    "line": 136,
+    "count": 2
+  }
+}

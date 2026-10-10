@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.js && node --experimental-strip-types src/dwi2trx/validate.test.ts && node --experimental-strip-types src/dwi2trx/input.test.ts && node --experimental-strip-types src/dwi2trx/vectors.test.ts && node --experimental-strip-types src/dwi2trx/genvectors.test.ts && node --experimental-strip-types src/dwi2trx/dtifit.test.ts && node --experimental-strip-types src/dwi2trx/niimath-sform.test.ts",
     "test:e2e": "playwright test",
-    "lint": "eslint ."
+    "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",
