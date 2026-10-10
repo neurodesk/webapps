@@ -833,7 +833,7 @@ async function runSelectedTask() {
   }
 
   log(`\n▶ ${task === "b1only" ? "SA2RAGE → B1 map" : mode + " correction"} …`);
-  const inv2Copy = inv2 ? inv2.data.slice() : uniCopy.slice();
+  const inv2Copy = inv2 ? inv2.data.slice() : new Float32Array();
   const msg = {
     mode,
     uni: uniCopy,
