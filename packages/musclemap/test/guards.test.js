@@ -65,3 +65,22 @@ test('offline missing, corrupted model and nonempty output guards leave files un
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('source CLI self-check writes nothing to a fresh HOME without CI', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'musclemap-no-ci-home-'));
+  const env = { ...process.env };
+  for (const key of ['CI', 'ORT_DISABLE_TELEMETRY', 'NEURODESK_MUSCLEMAP_MODEL_DIR']) delete env[key];
+  for (const key of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) env[key] = home;
+  try {
+    const run = spawnSync(process.execPath, [cli, 'self-check'], { encoding: 'utf8', env, timeout: 30_000 });
+    assert.ifError(run.error);
+    assert.equal(run.status, 0, run.stderr);
+    const report = JSON.parse(run.stdout);
+    assert.equal(report.executable, process.execPath);
+    assert.equal(report.node, process.version);
+    assert.equal(report.onnxRuntime, '1.29.0');
+    assert.deepEqual(await readdir(home, { recursive: true }), []);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
