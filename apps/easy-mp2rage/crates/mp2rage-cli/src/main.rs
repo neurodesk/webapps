@@ -15,8 +15,8 @@ use mp2rage_core::pipeline::{run_b1map, run_sa2rage, Outputs};
 
 fn usage() -> ! {
     eprintln!(
-        "usage:\n  mp2rage-t1map --uni U.nii[.gz] --inv2 I.nii --sa2rage S.nii --out DIR\n  \
-         mp2rage-t1map --uni U.nii --inv2 I.nii --b1-map B.nii [--b1-map-type tfl|percent|relative] \
+        "usage:\n  mp2rage-t1map --uni U.nii[.gz] [--inv2 I.nii] --sa2rage S.nii --out DIR\n  \
+         mp2rage-t1map --uni U.nii [--inv2 I.nii] --b1-map B.nii [--b1-map-type tfl|percent|relative] \
          [--b1-ref-angle 80] [--b1-extend-fov] [--fallback-uncorrected] --out DIR\n\n\
          MP2RAGE params (defaults 7T): --mp-tr 4.3 --mp-ti 0.840 2.370 --mp-fa 5 6 \
          --mp-nz 64 128 --mp-trflash 0.007 --inv-eff 0.96\n\
@@ -94,8 +94,8 @@ fn main() {
             return;
         }
     }
-    let (uni_p, inv2_p, out) = match (path(&m, "uni"), path(&m, "inv2"), path(&m, "out")) {
-        (Some(a), Some(b), Some(c)) => (a, b, c),
+    let (uni_p, out) = match (path(&m, "uni"), path(&m, "out")) {
+        (Some(a), Some(b)) => (a, b),
         _ => usage(),
     };
     let fallback = m.contains_key("fallback-uncorrected");
@@ -114,12 +114,12 @@ fn main() {
         exit(1);
     });
     let uni_v = load_(uni_p);
-    let inv2_v = load_(inv2_p);
+    let inv2_v = path(&m, "inv2").map(|p| load_(p));
     if let Some(r) = &uni_v.role {
         println!("  UNI input: {} (DICOM role detected: {r})", uni_p);
     }
     let uni = &uni_v.c0;
-    let inv2 = &inv2_v.c0;
+    let inv2 = inv2_v.as_ref().map(|v| &v.c0);
 
     let out_data: Outputs = if let Some(sa_p) = path(&m, "sa2rage") {
         let sa = Sa2rageParams {

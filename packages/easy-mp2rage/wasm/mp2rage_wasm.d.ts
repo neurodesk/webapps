@@ -77,6 +77,7 @@ export function parse_dicom_series(concat: Uint8Array, offsets: Uint32Array): Di
 
 /**
  * B1-corrected T1 from MP2RAGE UNI + INV2 + a generic B1 map.
+ * Pass an empty `inv2` slice to derive a mask from |UNI - median(UNI)|.
  * `kind`: 0 = tfl (flip x10), 1 = percent, 2 = relative.
  * `extend_fov`: smoothly extrapolate a too-small B1 FOV to cover the brain.
  */
@@ -85,6 +86,7 @@ export function t1map_b1(uni: Float32Array, inv2: Float32Array, b1_map: Float32A
 /**
  * B1-corrected T1 from MP2RAGE UNI + INV2 + SA2RAGE (2-volume) source.
  *
+ * Pass an empty `inv2` slice to derive a mask from |UNI - median(UNI)|.
  * `dims`/`sa_dims` are `[nx,ny,nz]`; affines are row-major 4x4 (len 16);
  * `mp` = [TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,invEff];
  * `sa` params = [TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,avgT1].

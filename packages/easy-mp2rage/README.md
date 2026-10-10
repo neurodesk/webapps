@@ -95,7 +95,8 @@ The options are the parameters of the `correct` and `denoise` operations in
 
 `--sa2rage` names the SA2RAGE image. Its acquisition values go in
 `--sa2rage-params`, because the automation contract uses the name `sa2rage` for
-both. Without `--inv2`, `correct` masks with UNI, as the web app does.
+both. Without `--inv2`, `correct` masks the contrast `|UNI - median(UNI)|`, as the
+Python reference and web app do. INV2 remains the preferred mask source.
 
 INV1 and INV2 are combined with UNI voxel for voxel, so both commands refuse them
 unless they share UNI's voxel grid: the same dimensions and an affine that
@@ -128,7 +129,8 @@ SA2RAGE acquisition values, the B1 map units, the reference angle of a tfl map,
 Python pipeline in `apps/easy-mp2rage/mp2rage_t1`, not from the WASM core the
 command line runs. `tools/gen_cli_golden.py` runs that pipeline on the golden
 phantom once per command-line option (SA2RAGE and tfl B1 sources, reference
-angles 80, 60 and 40, `--extend-fov`, `--fallback-uncorrected`) and keeps every
+angles 80, 60 and 40, `--extend-fov`, `--fallback-uncorrected`, absent INV2
+with both B1 sources and fallback, and a narrow B1 slab reaching both FOV clamps) and keeps every
 file it writes in `tools/golden/cli/`. For each case the check requires:
 
 - every output file on the phantom's 24x20x18 grid and affine, with one value
@@ -143,11 +145,15 @@ file it writes in `tools/golden/cli/`. For each case the check requires:
 The denoised UNI must equal the Python robust combination exactly at
 regularization 6 and 2. The pinned 7 T example, with default and non-default
 options, must equal the web worker's WASM calls voxel for voxel on UNI's grid.
-Measured worst differences from Python are 2.4e-4 ms (T1) and 1.2e-7 (B1).
+The independent fixtures include a rank-deficient measured plane and the
+even-sized sparse median fallback.
 
-The phantom has no input without INV2: the Python pipeline then masks
-`|UNI - median(UNI)|`, while the web app and the command line mask UNI itself,
-so the two disagree there.
+The no-INV2 mask and the optional FOV extension are local preprocessing
+heuristics. The Python pipeline is their normative reference. See the
+[method decision](../../apps/easy-mp2rage/docs/numerical-policy.md) for the author
+source, rationale and limits. FOV extension fits and fills within relative B1
+0.35 to 1.7; it preserves measured finite values, including values outside that
+range. Extrapolated values are estimates, not additional B1 measurements.
 
 ```bash
 node packages/easy-mp2rage/validation/cli-check.mjs

@@ -1,16 +1,13 @@
 //! Smooth extrapolation of a B1⁺ (transmit) field to voxels outside the
 //! measured field-of-view.
 //!
-//! Physics note: the B1⁺ transmit field is spatially smooth and dominated by
-//! low spatial frequencies (it is the RF transmit magnitude, which varies
-//! slowly over the head — no sharp tissue edges). A low-order 3-D polynomial is
-//! therefore a physically reasonable model, and using it to *fill* brain voxels
-//! that fell outside a small B1-map FOV is far better than leaving them with no
-//! correction (B1 = 0). Measured voxels are always kept as-is; only the missing
-//! ones are filled, and the fill is clamped to a plausible relative-B1 range so
-//! a polynomial cannot blow up where it extrapolates far from the data.
+//! Optional application heuristic: a low-order polynomial estimates missing
+//! B1 values from measured in-mask samples. Measured values stay unchanged.
+//! The clamp bounds the extrapolation; it is not a physiological validity range.
+//! See docs/numerical-policy.md for the reference contract and its limitations.
 
 use ndarray::Array3;
+use nalgebra::{DMatrix, DVector};
 
 /// Number of monomials `x^a y^b z^c` with `a+b+c <= deg` (3-D total degree).
 fn n_terms(deg: usize) -> usize {
@@ -30,53 +27,6 @@ fn exponents(deg: usize) -> Vec<(u32, u32, u32)> {
         }
     }
     e
-}
-
-/// Solve the symmetric system `A x = y` (A is `n x n`, row-major) by Gaussian
-/// elimination with partial pivoting. `A` is small (<= 20x20 for deg 3).
-fn solve(mut a: Vec<f64>, mut y: Vec<f64>, n: usize) -> Option<Vec<f64>> {
-    for col in 0..n {
-        // partial pivot
-        let mut piv = col;
-        let mut best = a[col * n + col].abs();
-        for r in (col + 1)..n {
-            let v = a[r * n + col].abs();
-            if v > best {
-                best = v;
-                piv = r;
-            }
-        }
-        if best < 1e-12 {
-            return None;
-        }
-        if piv != col {
-            for k in 0..n {
-                a.swap(col * n + k, piv * n + k);
-            }
-            y.swap(col, piv);
-        }
-        let d = a[col * n + col];
-        for r in (col + 1)..n {
-            let f = a[r * n + col] / d;
-            if f == 0.0 {
-                continue;
-            }
-            for k in col..n {
-                a[r * n + k] -= f * a[col * n + k];
-            }
-            y[r] -= f * y[col];
-        }
-    }
-    // back-substitute
-    let mut x = vec![0.0f64; n];
-    for r in (0..n).rev() {
-        let mut s = y[r];
-        for k in (r + 1)..n {
-            s -= a[r * n + k] * x[k];
-        }
-        x[r] = s / a[r * n + r];
-    }
-    Some(x)
 }
 
 /// Fill non-finite voxels of `field` that lie inside `mask` with a smooth
@@ -137,7 +87,8 @@ pub fn extend_b1_fov(
         }
         let mut v = fit_vals.clone();
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v[v.len() / 2]
+        let n = v.len();
+        if n % 2 == 1 { v[n / 2] } else { 0.5 * (v[n / 2 - 1] + v[n / 2]) }
     };
 
     // Need clearly more equations than unknowns for a stable fit.
@@ -153,51 +104,41 @@ pub fn extend_b1_fov(
         return out;
     }
 
-    // Build normal equations A = Bᵀ B (+ tiny ridge), rhs = Bᵀ y, where each row
-    // of B is the monomial vector at a fit voxel.
+    // Incremental QR keeps only a p x p triangular factor, not a voxel x p
+    // design matrix. SVD of that factor gives the same minimum-norm least
+    // squares solution as np.linalg.lstsq, including rank-deficient fits.
     let eval_basis = |x: f64, y: f64, z: f64, buf: &mut [f64]| {
         for (t, &(a, b, c)) in exps.iter().enumerate() {
             buf[t] = x.powi(a as i32) * y.powi(b as i32) * z.powi(c as i32);
         }
     };
-    let mut ata = vec![0.0f64; p * p];
-    let mut aty = vec![0.0f64; p];
+    let mut r = DMatrix::<f64>::zeros(p, p);
+    let mut rhs = DVector::<f64>::zeros(p);
     let mut row = vec![0.0f64; p];
     for (idx, &(x, y, z)) in fit_coords.iter().enumerate() {
         eval_basis(x, y, z, &mut row);
-        let yv = fit_vals[idx];
-        for r in 0..p {
-            aty[r] += row[r] * yv;
-            let rr = row[r];
-            for c in 0..p {
-                ata[r * p + c] += rr * row[c];
+        let mut value = fit_vals[idx];
+        for j in 0..p {
+            let norm = r[(j, j)].hypot(row[j]);
+            if norm == 0.0 {
+                continue;
             }
+            let c = r[(j, j)] / norm;
+            let s = row[j] / norm;
+            for k in j..p {
+                let old = r[(j, k)];
+                r[(j, k)] = c * old + s * row[k];
+                row[k] = -s * old + c * row[k];
+            }
+            let old = rhs[j];
+            rhs[j] = c * old + s * value;
+            value = -s * old + c * value;
         }
     }
-    // Tikhonov ridge for numerical safety (keeps the constant term unpenalized-ish).
-    let mut trace = 0.0;
-    for d in 0..p {
-        trace += ata[d * p + d];
-    }
-    let ridge = 1e-9 * (trace / p as f64).max(1.0);
-    for d in 0..p {
-        ata[d * p + d] += ridge;
-    }
-
-    let coef = match solve(ata, aty, p) {
-        Some(c) => c,
-        None => {
-            let med = median();
-            if med.is_finite() {
-                for ((i, j, k), &m) in mask.indexed_iter() {
-                    if m && !field[[i, j, k]].is_finite() {
-                        out[[i, j, k]] = med.clamp(lo, hi);
-                    }
-                }
-            }
-            return out;
-        }
-    };
+    let svd = r.svd(true, true);
+    // NumPy rcond=None: machine precision times max(original matrix shape).
+    let cutoff = f64::EPSILON * fit_vals.len().max(p) as f64 * svd.singular_values.max();
+    let coef = svd.solve(&rhs, cutoff).expect("SVD includes both singular vector matrices");
 
     // Evaluate the polynomial at every missing masked voxel.
     for ((i, j, k), &m) in mask.indexed_iter() {

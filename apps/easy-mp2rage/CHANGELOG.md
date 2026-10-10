@@ -1,5 +1,13 @@
 # easy-mp2rage
 
+## 0.7.20261010
+
+### Patch Changes
+
+- Align Rust/WASM with the Python reference: derive no-INV2 masks from absolute UNI contrast around its median, and use 0.35–1.7 for B1 extension fitting and extrapolation. Match the unregularized minimum-norm polynomial fit and even-sized median fallback. No-INV2 maps and optional extension results can change. Add independent Python goldens for both B1 sources, fallback, both clamp bounds, sparse samples and rank-deficient fits, and rebuild the shared WASM.
+- Updated dependencies
+  - @neurodesk/easy-mp2rage@0.7.20261010
+
 ## 0.7.20261009
 
 ### Patch Changes

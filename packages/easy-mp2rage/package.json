@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/easy-mp2rage",
-  "version": "0.7.20261009",
+  "version": "0.7.20261010",
   "description": "MP2RAGE T1 mapping, B1 correction and UNI denoising for browsers and the command line",
   "type": "module",
   "license": "GPL-3.0-or-later",
