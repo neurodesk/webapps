@@ -7,7 +7,7 @@ for (const name of await readdir(destination)) {
   if (!name.endsWith('.js')) continue;
   const path = resolve(destination, name);
   const source = (await readFile(path, 'utf8'))
-    .replaceAll("'@neurodesk/webapp-components/file-io/nifti'", "'../../webapp-components/src/file-io/NiftiUtils.js'")
-    .replaceAll("'@neurodesk/webapp-components/volume'", "'../../webapp-components/src/volume/index.js'");
+    .replaceAll("'@neurodesk/webapp-components/file-io/nifti'", "'../../../vendor/webapp-components/src/file-io/NiftiUtils.js'")
+    .replaceAll("'@neurodesk/webapp-components/volume'", "'../../../vendor/webapp-components/src/volume/index.js'");
   await writeFile(path, source);
 }
