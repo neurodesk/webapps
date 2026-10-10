@@ -6,7 +6,7 @@ verified bytes and embedded PE certificates, not Windows certificate trust.
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import struct
 import subprocess
 import sys
@@ -135,7 +135,7 @@ def verify_zip(archive, required=()):
         with zipfile.ZipFile(archive) as bundle:
             for member in bundle.infolist():
                 path = PurePosixPath(member.filename.replace('\\', '/'))
-                if path.is_absolute() or '..' in path.parts or member.filename.startswith('\\'):
+                if path.is_absolute() or PureWindowsPath(member.filename).drive or '..' in path.parts:
                     raise ValueError('Unsafe Windows archive path')
                 if path.name != EVIDENCE and path.suffix.lower() not in ('.exe', '.dll', '.node'):
                     continue

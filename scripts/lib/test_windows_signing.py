@@ -126,6 +126,14 @@ class WindowsSigningTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 signing.verify_zip(archive, self.required)
 
+    def test_windows_drive_paths_are_rejected_on_every_host(self):
+        for name in ('C:/escape.exe', 'C:escape.exe', '//host/share/escape.exe'):
+            archive = self.root / 'unsafe.zip'
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                bundle.writestr(name, pe())
+            with patch.dict(os.environ, CONFIGURED), self.subTest(name=name), self.assertRaises(ValueError):
+                signing.verify_zip(archive)
+
     def test_pe_bounds_are_checked(self):
         self.assertTrue(signing.pe_signed(pe()))
         self.assertFalse(signing.pe_signed(pe(False)))
