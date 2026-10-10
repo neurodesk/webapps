@@ -25,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      # This gate needs only root tooling, not downloaded models or runtime postinstalls.
-      - run: pnpm --filter neurodesk-webapps... install --frozen-lockfile --ignore-scripts
+      # Root-command canaries preserve every workspace type/syntax task; install their dependencies without runtime postinstalls.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       - run: pnpm lint:correctness
       - run: pnpm test:lint

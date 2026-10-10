@@ -73,7 +73,7 @@ test('the root lint command rejects new untracked source in shared packages', as
     assert.equal(linked.status, 1);
     assert.match(linked.stderr, /canary\.js:1:1 no-undef/);
     const workspaceChecks = spawnSync(process.execPath, [join(alias, 'scripts/lint-workspaces.mjs')], { cwd: alias, encoding: 'utf8' });
-    assert.equal(workspaceChecks.status, 0, workspaceChecks.stderr);
+    assert.equal(workspaceChecks.status, 0, workspaceChecks.stdout + workspaceChecks.stderr);
     assert.match(workspaceChecks.stdout, /successful/);
   } finally {
     await rm(directory, { recursive: true, force: true });
