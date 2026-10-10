@@ -1,0 +1,4 @@
+MuscleMap shared browser and command-line pipeline.
+Scientific model and method attribution: apps/musclemap/README.md and registry/app-information.yml.
+MONAI compatibility follows the pinned MuscleMap upstream preprocessing contract.
+Model files retain their upstream licenses and are downloaded separately.
