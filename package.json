@@ -36,6 +36,8 @@
     "release": "node scripts/release-apps.mjs",
     "release:dry-run": "node scripts/release-apps.mjs --dry-run",
     "generate:neuroflow": "node scripts/generate-neuroflow.mjs",
+    "quality:mutations": "node scripts/report-mutations.mjs",
+    "quality:mutations:smoke": "node scripts/report-mutations.mjs --smoke",
     "check:dependencies": "node scripts/check-dependencies.mjs",
     "test:dependencies": "node --test test/dependency-quality.test.mjs"
   },
@@ -49,6 +51,7 @@
     "@manypkg/get-packages": "1.1.3",
     "@neurodesk/dependency-quality": "workspace:*",
     "@playwright/test": "1.64.0",
+    "@stryker-mutator/core": "10.0.0",
     "@types/node": "^24.13.3",
     "ai": "7.0.127",
     "ajv": "8.20.0",

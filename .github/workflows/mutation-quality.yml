@@ -1,0 +1,44 @@
+name: mutation-quality
+
+on:
+  pull_request:
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Test the isolated helper and failure handling
+        run: node --test packages/nii2tvx/test/disconnectome.test.js test/mutation-quality.test.mjs
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - name: Prove mutation detection on pull requests
+        if: github.event_name == 'pull_request'
+        run: pnpm quality:mutations:smoke
+      - name: Run the full pilot
+        if: github.event_name != 'pull_request'
+        run: pnpm quality:mutations
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-quality
+          path: quality-artifacts/mutations/
+          if-no-files-found: error
+          retention-days: 14
