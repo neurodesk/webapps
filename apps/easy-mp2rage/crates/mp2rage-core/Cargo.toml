@@ -9,6 +9,7 @@ description = "Pure-Rust MP2RAGE/SA2RAGE T1-mapping core (port of the validated 
 
 [dependencies]
 ndarray = "0.16"
+nalgebra = { version = "=0.34.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 ndarray-npy = "0.9"

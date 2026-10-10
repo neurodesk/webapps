@@ -184,15 +184,18 @@ try {
 
   for (const [name, spec] of Object.entries(goldenManifest.cases)) {
     const output = join(work, `phantom-${name}`);
-    const source = spec.b1_source === 'sa2rage' ? ['--sa2rage', inputs.sa2rage] : ['--b1', inputs.b1, '--b1-type', 'tfl'];
-    const args = ['correct', '--uni', inputs.uni, '--inv2', inputs.inv2, ...source, '--mp2rage', MP2RAGE, ...spec.args, output];
+    const b1Path = spec.b1_input ? join(cliGolden, spec.b1_input) : inputs.b1;
+    const b1Volume = spec.b1_input ? await volume(b1Path) : phantomVolumes.b1;
+    const source = spec.b1_source === 'sa2rage' ? ['--sa2rage', inputs.sa2rage] : ['--b1', b1Path, '--b1-type', 'tfl'];
+    const inv2Args = spec.inv2 ? ['--inv2', inputs.inv2] : [];
+    const args = ['correct', '--uni', inputs.uni, ...inv2Args, ...source, '--mp2rage', MP2RAGE, ...spec.args, output];
     const seconds = run(args);
     const mode = spec.b1_source === 'sa2rage' ? 'sa2rage' : 'b1map';
     const options = webOptions(spec.args);
     const webVolumes = webCorrect(web, {
       uni: phantomVolumes.uni,
-      mask: phantomVolumes.inv2.data,
-      b1: phantomVolumes.b1,
+      mask: spec.inv2 ? phantomVolumes.inv2.data : new Float32Array(),
+      b1: b1Volume,
       sa: mode === 'sa2rage' ? phantomVolumes.sa2rage : null,
       b1Type: 'tfl',
       mp2rage: MP2RAGE.split(',').map(Number),
@@ -205,6 +208,12 @@ try {
       checkGeometry(`${label} ${file}`, written, PHANTOM_DIMS, PHANTOM_AFFINE);
       const difference = worstDifference(written.data, expected.data);
       check(difference <= TOLERANCE[file], `${label} ${file} vs Python golden: worst |diff| ${difference.toExponential(3)} <= ${TOLERANCE[file]} (${seconds.toFixed(1)} s)`);
+      if (name === 'tfl-clamp-extended' && file === 'B1map.nii.gz') {
+        for (const bound of [Math.fround(0.35), Math.fround(1.7)]) {
+          const count = Array.from(written.data).filter((value) => value === bound).length;
+          check(count > 0, `${label} reaches B1 clamp ${bound} at ${count} voxels`);
+        }
+      }
       const webDifference = worstDifference(written.data, webVolumes[key]);
       check(webDifference === 0, `${label} ${file} equals the web app data path (worst |diff| ${webDifference})`);
       if (spec.baseline && file === 'T1map.nii.gz') {
@@ -213,7 +222,7 @@ try {
       }
     }
     const parameters = JSON.parse(await readFile(join(output, 'parameters.json'), 'utf8'));
-    checkParameters(label, parameters, { mode, b1Type: 'tfl', options, maskSource: 'INV2' });
+    checkParameters(label, parameters, { mode, b1Type: 'tfl', options, maskSource: spec.inv2 ? 'INV2' : 'UNI' });
     if (options.sa2rage) check(parameters.sa2rage.join() === options.sa2rage.join(), `${label} parameters.json records sa2rage=${parameters.sa2rage.join(',')}`);
   }
 

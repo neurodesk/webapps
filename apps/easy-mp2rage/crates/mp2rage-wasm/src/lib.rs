@@ -93,6 +93,7 @@ impl T1Result {
 
 /// B1-corrected T1 from MP2RAGE UNI + INV2 + SA2RAGE (2-volume) source.
 ///
+/// Pass an empty `inv2` slice to derive a mask from |UNI - median(UNI)|.
 /// `dims`/`sa_dims` are `[nx,ny,nz]`; affines are row-major 4x4 (len 16);
 /// `mp` = [TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,invEff];
 /// `sa` params = [TR,TI1,TI2,FA1,FA2,NZ1,NZ2,TRFLASH,avgT1].
@@ -111,9 +112,10 @@ pub fn t1map_sa2rage(
 ) -> T1Result {
     let (nx, ny, nz) = (dims[0] as usize, dims[1] as usize, dims[2] as usize);
     let (sx, sy, sz) = (sa_dims[0] as usize, sa_dims[1] as usize, sa_dims[2] as usize);
+    let inv2 = (!inv2.is_empty()).then(|| arr3(inv2, nx, ny, nz));
     let out = run_sa2rage(
         &arr3(uni, nx, ny, nz),
-        &arr3(inv2, nx, ny, nz),
+        inv2.as_ref(),
         &arr3_component(sa, sx, sy, sz, 0),
         &arr3_component(sa, sx, sy, sz, 1),
         &aff(uni_aff),
@@ -132,6 +134,7 @@ pub fn t1map_sa2rage(
 }
 
 /// B1-corrected T1 from MP2RAGE UNI + INV2 + a generic B1 map.
+/// Pass an empty `inv2` slice to derive a mask from |UNI - median(UNI)|.
 /// `kind`: 0 = tfl (flip x10), 1 = percent, 2 = relative.
 /// `extend_fov`: smoothly extrapolate a too-small B1 FOV to cover the brain.
 #[wasm_bindgen]
@@ -156,9 +159,10 @@ pub fn t1map_b1(
         2 => "relative",
         _ => "tfl",
     };
+    let inv2 = (!inv2.is_empty()).then(|| arr3(inv2, nx, ny, nz));
     let out = run_b1map(
         &arr3(uni, nx, ny, nz),
-        &arr3(inv2, nx, ny, nz),
+        inv2.as_ref(),
         &arr3(b1_map, bx, by, bz),
         &aff(uni_aff),
         &aff(b1_aff),

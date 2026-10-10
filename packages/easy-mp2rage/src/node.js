@@ -114,8 +114,8 @@ export async function correct({
   const inv2Volume = inv2 ? await readVolume(inv2, 'INV2') : null;
   if (inv2Volume) assertSameGrid(uniVolume, inv2Volume, 'INV2');
   const dims = Uint32Array.from(grid(uniVolume));
-  // Without INV2 the core masks with UNI itself, as the web app does.
-  const mask = inv2Volume ? inv2Volume.data : uniVolume.data.slice();
+  // An empty INV2 tells the core to use the Python reference UNI contrast mask.
+  const mask = inv2Volume ? inv2Volume.data : new Float32Array();
   const mp = Float64Array.from(mp2rage);
   let mode;
   let result;

@@ -34,6 +34,30 @@ fn median_finite(vals: &[f64]) -> f64 {
     }
 }
 
+/// INV2 is preferred; without it use the Python reference's UNI contrast heuristic.
+/// This is an application mask, not a mask prescribed by Marques' correction method.
+fn input_mask(uni: &Array3<f64>, inv2: Option<&Array3<f64>>) -> Array3<bool> {
+    if let Some(inv2) = inv2 {
+        return brain_mask(inv2, 0.12);
+    }
+    let mut values: Vec<f64> = uni.iter().copied().collect();
+    // np.median propagates NaN; otherwise it includes infinities.
+    let median = if values.iter().any(|v| v.is_nan()) {
+        f64::NAN
+    } else {
+        values.sort_by(|a, b| a.total_cmp(b));
+        let n = values.len();
+        if n == 0 {
+            f64::NAN
+        } else if n % 2 == 1 {
+            values[n / 2]
+        } else {
+            0.5 * (values[n / 2 - 1] + values[n / 2])
+        }
+    };
+    brain_mask(&uni.mapv(|v| (v - median).abs()), 0.12)
+}
+
 #[inline]
 fn isclose_4000(t: f64) -> bool {
     (t - 4000.0).abs() <= 2.0 + 1e-5 * 4000.0
@@ -55,7 +79,7 @@ fn uncorrected_t1_ms(uni: &Array3<f64>, mp: &Mp2rageParams, mask: &Array3<bool>)
 /// SA2RAGE B1 source (port of the `b1_mode == 'sa2rage'` branch).
 pub fn run_sa2rage(
     uni: &Array3<f64>,
-    inv2: &Array3<f64>,
+    inv2: Option<&Array3<f64>>,
     s_a: &Array3<f64>,
     s_b: &Array3<f64>,
     uni_aff: &Affine,
@@ -65,7 +89,7 @@ pub fn run_sa2rage(
     fallback_uncorrected: bool,
 ) -> Outputs {
     let dim = uni.dim();
-    let mask = brain_mask(inv2, 0.12);
+    let mask = input_mask(uni, inv2);
     let t1_uncorr = uncorrected_t1_ms(uni, mp, &mask);
 
     // SA2RAGE ratio -> B1 lookup (sorted by intensity for np.interp)
@@ -153,7 +177,7 @@ pub fn run_sa2rage(
 /// control the conversion to relative B1.
 pub fn run_b1map(
     uni: &Array3<f64>,
-    inv2: &Array3<f64>,
+    inv2: Option<&Array3<f64>>,
     b1_map: &Array3<f64>,
     uni_aff: &Affine,
     b1_aff: &Affine,
@@ -164,7 +188,7 @@ pub fn run_b1map(
     fallback_uncorrected: bool,
 ) -> Outputs {
     let dim = uni.dim();
-    let mask = brain_mask(inv2, 0.12);
+    let mask = input_mask(uni, inv2);
     let t1_uncorr = uncorrected_t1_ms(uni, mp, &mask);
 
     // to relative B1
@@ -185,7 +209,7 @@ pub fn run_b1map(
     // Optionally extend a too-small B1 FOV to cover the whole brain by fitting a
     // smooth low-order polynomial to the measured field (B1⁺ is slowly varying).
     if extend_fov {
-        b1_grid = crate::b1fill::extend_b1_fov(&b1_grid, &mask, 3, (0.3, 2.0));
+        b1_grid = crate::b1fill::extend_b1_fov(&b1_grid, &mask, 3, (0.35, 1.7));
     }
 
     let b1_in = b1_grid.mapv(|v| if v.is_nan() { 0.0 } else { v });
