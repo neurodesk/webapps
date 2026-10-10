@@ -126,3 +126,21 @@ test('only documented project exclusions can satisfy source coverage', () => {
   assert.throws(() => validateProjectExclusions({ 'apps/dicompare': { project: ['**/*.js', '!src/**'] } }), /Undocumented source exclusion/);
   assert.throws(() => validateProjectExclusions({ 'apps/dicompare': { project: ['**/*.js', '!niivue/**'] } }), /Undocumented source exclusion/);
 });
+
+test('malformed finding names and duplicate groups fail even after a successful scan', (t) => {
+  const options = fixture(t);
+  const kinds = ['files', 'exports', 'types', 'duplicates', 'dependencies', 'devDependencies'];
+  const report = (kind, item) => ({ issues: [{ file: 'module.js', ...Object.fromEntries(kinds.map((key) => [key, key === kind ? [item] : []])) }] });
+  for (const kind of kinds) {
+    for (const symbol of [{}, { name: null }, { name: 7 }, { name: '' }, { name: '  ' }, null, 'invalid']) {
+      const item = kind === 'duplicates' ? [{ name: 'valid' }, symbol] : symbol;
+      assert.throws(() => summarize(report(kind, item)), /Invalid Knip .* issue item/, `${kind}: ${JSON.stringify(symbol)}`);
+    }
+  }
+  for (const item of [[], {}, [[{ name: 'nested' }]]]) {
+    assert.throws(() => summarize(report('duplicates', item)), /Invalid Knip duplicates issue item/);
+  }
+  const malformed = report('exports', {});
+  const code = `console.log(${JSON.stringify(JSON.stringify(malformed))});`;
+  assert.throws(() => runReport({ ...options, prefix: ['-e', code, '--'] }), /Invalid Knip exports issue item/);
+});

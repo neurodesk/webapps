@@ -11,10 +11,16 @@ export function summarize(report, diagnostics = '') {
   }
   const findings = [];
   for (const issue of report.issues) {
-    if (typeof issue.file !== 'string') throw new Error('Invalid Knip issue file');
+    if (!issue || typeof issue.file !== 'string' || !issue.file.trim()) throw new Error('Invalid Knip issue file');
     for (const kind of ['files', 'exports', 'types', 'duplicates', 'dependencies', 'devDependencies']) {
       if (!Array.isArray(issue[kind])) throw new Error(`Invalid Knip ${kind} report`);
-      for (const item of issue[kind]) findings.push({ file: issue.file, kind, name: Array.isArray(item) ? item.map((symbol) => symbol.name).join(', ') : item.name ?? item.symbol ?? '', line: Array.isArray(item) ? item[0]?.line : item.line });
+      for (const item of issue[kind]) {
+        const symbols = kind === 'duplicates' ? item : [item];
+        if (!Array.isArray(symbols) || symbols.length === 0 || symbols.some((symbol) => !symbol || Array.isArray(symbol) || typeof symbol.name !== 'string' || !symbol.name.trim())) {
+          throw new Error(`Invalid Knip ${kind} issue item`);
+        }
+        findings.push({ file: issue.file, kind, name: symbols.map((symbol) => symbol.name).join(', '), line: symbols[0].line });
+      }
     }
   }
   const escape = (value) => String(value).replaceAll('|', '\\|').replaceAll('\n', ' ').replaceAll('`', "'");
