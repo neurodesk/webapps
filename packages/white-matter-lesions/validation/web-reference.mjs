@@ -20,8 +20,8 @@ import { lesionResults, outputNames } from '../src/results.js';
 const createSession = (bytes) => ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
 const arrayBuffer = (bytes) => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 
-export async function webReference({ input, output, folds = 1, cacheDir }) {
-  ort.env.wasm.numThreads = Math.min(8, availableParallelism());
+export async function webReference({ input, output, folds = 1, cacheDir, threads = Math.min(8, availableParallelism()) }) {
+  ort.env.wasm.numThreads = threads;
   const { directory } = await downloadModels({ cacheDir });
   const model = (asset) => readFile(join(directory, asset.filename));
   const volume = readVolume(arrayBuffer(await readFile(input)));
@@ -31,12 +31,12 @@ export async function webReference({ input, output, folds = 1, cacheDir }) {
     createSession,
     Tensor: ort.Tensor,
   });
-  const models = [];
-  for (const fold of FLAMES_FOLDS.slice(0, resolveFolds(folds))) models.push(await model(fold));
+  const selected = FLAMES_FOLDS.slice(0, resolveFolds(folds));
   const { probability } = await runFolds({
     volume,
     brainMask: stripped.mask.data,
-    models,
+    folds: selected.length,
+    loadModel: (n) => model(selected[n]),
     createSession,
     Tensor: ort.Tensor,
   });

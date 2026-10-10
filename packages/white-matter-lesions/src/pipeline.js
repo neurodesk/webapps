@@ -374,39 +374,50 @@ export function nonzeroMask(volume) {
   return Uint8Array.from(volume.data, (v) => (v !== 0 ? 1 : 0));
 }
 
-// segmentFlair over one ONNX session per fold, opened when its first patch arrives and released
-// before the next, so one model is in memory at a time. `models` holds each fold's graph bytes.
-export async function runFolds({ volume, brainMask, models, createSession, Tensor, onPatch, signal }) {
+// Load one verified graph after the previous fold's session has released its memory.
+export async function runFolds({ volume, brainMask, folds, loadModel, createSession, Tensor, onPatch, signal }) {
+  if (!Number.isSafeInteger(folds) || folds < 1) throw new Error('A positive fold count is required.');
+  if (typeof loadModel !== 'function') throw new Error('A lazy model loader is required.');
   let session = null;
   let loaded = -1;
+  const release = async () => {
+    const previous = session;
+    session = null;
+    await previous?.release();
+  };
   const open = async (fold) => {
     if (fold === loaded) return;
-    await session?.release();
-    session = null;
-    session = await createSession(models[fold]);
+    await release();
+    signal?.throwIfAborted();
+    const bytes = await loadModel(fold);
+    signal?.throwIfAborted();
+    session = await createSession(bytes);
+    signal?.throwIfAborted();
     loaded = fold;
   };
-  await open(0);
   try {
+    signal?.throwIfAborted();
     return await segmentFlair({
       volume,
       brainMask,
-      folds: models.length,
+      folds,
       runPatch: async (tile, fold) => {
         await open(fold);
         const input = new Tensor('float32', tile, [1, 1, ...PLAN.patch]);
-        const outputs = await session.run({ [session.inputNames[0]]: input });
-        const logits = outputs[session.outputNames[0]];
-        const data = await logits.getData();
-        input.dispose();
-        logits.dispose();
-        return data;
+        let outputs;
+        try {
+          outputs = await session.run({ [session.inputNames[0]]: input });
+          return await outputs[session.outputNames[0]].getData();
+        } finally {
+          input.dispose();
+          for (const output of Object.values(outputs || {})) output.dispose();
+        }
       },
       onPatch,
       signal,
     });
   } finally {
-    await session?.release();
+    await release();
   }
 }
 

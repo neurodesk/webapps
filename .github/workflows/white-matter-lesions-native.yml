@@ -61,3 +61,41 @@ jobs:
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
       CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
       CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+
+  browser-memory:
+    name: Five-fold memory (${{ matrix.browser }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            browser: chrome
+          - os: macos-15
+            browser: safari
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+      - run: pnpm --filter white-matter-lesions build
+      - if: matrix.browser == 'chrome'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: matrix.browser == 'safari'
+        run: sudo safaridriver --enable
+      - name: Measure completed ensemble and check unchanged browser reference
+        run: node apps/white-matter-lesions/validation/browser-memory.mjs --browser '${{ matrix.browser }}' --output '${{ runner.temp }}/flames-memory/receipt.json'
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: flames-memory-${{ matrix.browser }}
+          path: ${{ runner.temp }}/flames-memory/
+          if-no-files-found: error

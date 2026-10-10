@@ -1215,6 +1215,8 @@ apps:
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
   white-matter-lesions:
+    about:
+      - Allow several gigabytes of available memory for the five-fold CPU ensemble. Model graphs load one at a time, but inference still keeps large working buffers. Use the default single fold on memory-limited devices; browser, backend and image size affect memory use.
     packages:
       - { name: FLAMeS, url: https://doi.org/10.5281/zenodo.17955359, role: lesion segmentation network (fold 0) }
       - { name: SynthStrip, url: https://surfer.nmr.mgh.harvard.edu/docs/synthstrip/, role: brain extraction }

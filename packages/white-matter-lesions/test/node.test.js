@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { writeVolume } from '@neurodesk/synthsr';
-import { SYNTHSTRIP } from '../src/assets.js';
+import * as ort from 'onnxruntime-node';
+import { FLAMES_FOLDS, SYNTHSTRIP } from '../src/assets.js';
 import { MODEL_ASSETS, checkInstallation, defaultCacheDir, downloadModels, segment } from '../src/node.js';
 
 const cli = fileURLToPath(new URL('../bin/flames.js', import.meta.url));
@@ -174,4 +175,22 @@ test('command line reports help, rejects unsupported options and checks the CPU 
   assert.equal(report.onnxRuntime, '1.29.0');
   assert.equal(report.executionProvider, 'cpu');
   assert.equal(report.models, undefined);
+});
+
+
+test('selected model preflight fails before opening a session or preprocessing the brain', async (t) => {
+  const { root, cache } = await workspace(t);
+  const input = join(root, 'empty-brain.nii');
+  const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  await writeFile(input, new Uint8Array(writeVolume({ dims: [2, 2, 2], affine: identity, data: new Float32Array(8) })));
+  const original = ort.InferenceSession.create;
+  ort.InferenceSession.create = () => assert.fail('preflight must precede all sessions');
+  t.after(() => { ort.InferenceSession.create = original; });
+  forbidNetwork(t);
+  const options = { input, output: join(root, 'out'), skullStripped: true, folds: 5, cacheDir: cache, offline: true, threads: 1 };
+  await assert.rejects(segment(options), /flames-fold0.onnx is missing/);
+  await mkdir(cache);
+  await writeFile(join(cache, FLAMES_FOLDS[0].filename), 'corrupt graph');
+  await assert.rejects(segment(options), /flames-fold0.onnx failed checksum verification/);
+  assert.deepEqual(await readdir(root), ['empty-brain.nii', 'input.nii', 'models']);
 });
