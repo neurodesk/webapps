@@ -33,7 +33,9 @@ small existing runtime contracts. The checker enforces these rules:
 - Production sources cannot import test or tooling sources to bypass runtime rules.
 - New production cycle edges fail, including literal worker URL edges. Explicit
   type-only imports stay outside runtime cycles and browser/Node reachability.
-  Mixed imports and dynamic runtime imports retain their runtime edges.
+  Mixed imports and dynamic runtime imports retain their runtime edges. Inline
+  `import { type T }` also retains an edge because workspaces use
+  `verbatimModuleSyntax`; use declaration-level `import type` for an erased edge.
 - Unresolved production imports fail unless an exact existing staging or remote
   runtime contract explains how the production build resolves them.
 

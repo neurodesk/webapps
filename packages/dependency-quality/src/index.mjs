@@ -3,7 +3,7 @@ import { parseFileSync } from '@swc/core';
 import enhancedResolve from 'enhanced-resolve';
 import fs from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { isBuiltin } from 'node:module';
 import { dirname, posix, relative, resolve, sep } from 'node:path';
 import {
@@ -79,7 +79,8 @@ function typeOnlySpecifiers(ast) {
       return;
     }
     if (['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(node.type) && node.source) {
-      const typeOnly = node.typeOnly || (node.specifiers?.length > 0 && node.specifiers.every((specifier) => specifier.isTypeOnly));
+      // Inline type specifiers retain side effects under verbatimModuleSyntax.
+      const typeOnly = node.typeOnly;
       imports.set(node.source.value, (imports.get(node.source.value) ?? true) && Boolean(typeOnly));
     }
     if (node.type === 'CallExpression' && node.callee?.type === 'Import' && node.arguments?.[0]?.expression?.type === 'StringLiteral') {
@@ -108,6 +109,7 @@ function resolveReference(root, source, specifier, url = false) {
 }
 
 export async function dependencyGraph(root, files) {
+  root = realpathSync(root);
   if (!getAvailableTranspilers().some((parser) => parser.name === 'swc' && parser.available)) {
     throw new Error('The pinned SWC parser is unavailable; refusing a partial dependency graph.');
   }
@@ -141,12 +143,20 @@ export async function dependencyGraph(root, files) {
       dependency.typeOnly = (typeOnly.has(dependency.module) || typeOnly.has(`node:${dependency.module}`)) && !dependency.dynamic;
     }
     for (const { specifier, url } of runtimeReferences(ast)) {
-      if (module.dependencies.some((dependency) => dependency.module === specifier)) continue;
+      const existing = module.dependencies.find((dependency) => dependency.module === specifier);
+      if (existing) {
+        existing.typeOnly = false;
+        if (url) existing.url = true;
+        continue;
+      }
       module.dependencies.push({ module: specifier, ...resolveReference(root, module.source, specifier, url), url });
     }
   }
   for (const module of graph.modules) {
     for (const dependency of module.dependencies) {
+      if (dependency.resolved.startsWith('../') && !dependency.couldNotResolve) {
+        throw new Error(`Resolved dependency escapes repository: ${module.source} -> ${dependency.resolved}`);
+      }
       const path = dependency.module.startsWith('.')
         ? posix.normalize(posix.join(dirname(module.source), cleanSpecifier(dependency.module)))
         : dependency.resolved;

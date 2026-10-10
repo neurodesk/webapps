@@ -270,3 +270,37 @@ test('runtime contracts reject dead entries and empty reasons', () => {
   assert.throws(() => validateRuntimeContracts([], [contract]), /unused runtime resolution contract/);
   assert.throws(() => validateRuntimeContracts(graph, [{ ...contract, reason: ' ' }]), /specific reason/);
 });
+
+
+test('a type import cannot hide a literal worker URL with the same specifier', async (t) => {
+  const findings = await checkFixture(t, {
+    'apps/example/src/main.ts': "import type { Msg } from './worker.ts';\nnew Worker(new URL('./worker.ts', import.meta.url));\n",
+    'apps/example/src/worker.ts': "import './main.ts';\nexport interface Msg { value: number }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 2);
+});
+
+test('inline type imports retain runtime side effects for verbatimModuleSyntax', async (t) => {
+  const findings = await checkFixture(t, {
+    'apps/example/src/main.ts': "import { type Msg } from './worker.ts';\n",
+    'apps/example/src/worker.ts': "import './main.ts';\nexport interface Msg { value: number }\n",
+  });
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 2);
+});
+
+test('source and asset inventory resolution is stable through a symlinked checkout', async (t) => {
+  const scratch = await mkdtemp(join(tmpdir(), 'dependency-checkout-'));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const root = join(scratch, 'real');
+  await mkdir(join(root, 'apps/example/src'), { recursive: true });
+  await writeFile(join(root, 'apps/example/src/main.js'), "import './worker.js';\nimport './settings.json';\nnew URL('./model.wasm', import.meta.url);\n");
+  await writeFile(join(root, 'apps/example/src/worker.js'), "import './main.js';\n");
+  await writeFile(join(root, 'apps/example/src/settings.json'), '{}');
+  await writeFile(join(root, 'apps/example/src/model.wasm'), 'fixture');
+  const alias = join(scratch, 'alias');
+  await symlink(root, alias);
+  const graph = await dependencyGraph(alias, ['main.js', 'worker.js', 'settings.json', 'model.wasm'].map((file) => 'apps/example/src/' + file));
+  const findings = dependencyFindings(graph, new Map());
+  assert.equal(findings.filter(({ rule }) => rule === 'cycle').length, 2);
+  assert.equal(findings.filter(({ rule }) => rule === 'unresolved').length, 0);
+});

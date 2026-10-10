@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { compareFindings, dependencyFindings, dependencyGraph, validateRuntimeContracts, workspaceManifests } from '@neurodesk/dependency-quality';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const { values } = parseArgs({ options: { report: { type: 'string' } } });
 const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], {
   cwd: root, encoding: 'utf8',
