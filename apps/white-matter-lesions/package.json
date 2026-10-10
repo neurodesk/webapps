@@ -1,6 +1,6 @@
 {
   "name": "white-matter-lesions",
-  "version": "0.2.20261010",
+  "version": "0.3.20261010",
   "private": true,
   "type": "module",
   "scripts": {

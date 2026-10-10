@@ -46,13 +46,18 @@ async function brainMask(volume, cache) {
   return result.mask.data;
 }
 
-async function segment(models, backend, volume, brainMask) {
+async function segment(folds, cache, backend, volume, brainMask) {
   progress(0.3, 'Preparing FLAMeS…');
-  log(`FLAMeS, ${models.length === 1 ? 'fold 0' : `${models.length} folds`}, on ${backend === 'webgpu' ? 'WebGPU' : `WebAssembly, ${ort.env.wasm.numThreads} threads`}`);
+  log(`FLAMeS, ${folds.length === 1 ? 'fold 0' : `${folds.length} folds`}, on ${backend === 'webgpu' ? 'WebGPU' : `WebAssembly, ${ort.env.wasm.numThreads} threads`}`);
   return runFolds({
     volume,
     brainMask,
-    models,
+    folds: folds.length,
+    loadModel: (n) => {
+      const label = folds.length === 1 ? 'FLAMeS model' : `FLAMeS model ${n + 1} of ${folds.length}`;
+      const from = 0.3 + 0.65 * n / folds.length;
+      return download(folds[n], label, from, from, cache);
+    },
     createSession: (bytes) => ort.InferenceSession.create(bytes, { executionProviders: [backend], graphOptimizationLevel: 'all' }),
     Tensor: ort.Tensor,
     onPatch: (n, total) => progress(0.3 + 0.65 * n / total, `Segmenting lesions · patch ${n} of ${total}`),
@@ -71,21 +76,16 @@ self.onmessage = async ({ data: job }) => {
       mask = await brainMask(volume, cache);
     }
     const folds = FLAMES_FOLDS.slice(0, job.folds);
-    const models = [];
-    for (const [n, fold] of folds.entries()) {
-      const label = folds.length === 1 ? 'FLAMeS model' : `FLAMeS model ${n + 1} of ${folds.length}`;
-      models.push(await download(fold, label, 0.2 + 0.1 * n / folds.length, 0.2 + 0.1 * (n + 1) / folds.length, cache));
-    }
     const started = performance.now();
     let backend = job.backend;
     let result;
     try {
-      result = await segment(models, backend, volume, mask);
+      result = await segment(folds, cache, backend, volume, mask);
     } catch (error) {
       if (backend !== 'webgpu') throw error;
       log(`WebGPU failed (${error.message}); continuing on the CPU`);
       backend = 'wasm';
-      result = await segment(models, backend, volume, mask);
+      result = await segment(folds, cache, backend, volume, mask);
     }
     const { probability, windows, resampledShape } = result;
     const outputs = lesionResults(volume, probability);

@@ -33,7 +33,7 @@ async function download(page, index) {
 }
 
 // Holds each run to validation/browser-reference.json and attaches its measurements, which a
-// re-recording copies into that file. The ensemble's browser needs more than 4 GB of memory.
+// re-recording copies into that file. browser-memory.mjs measures resident memory separately.
 for (const folds of [1, 5]) {
   test(`automation segments the MS example with ${folds} fold(s) on the input grid, falling back from a failed WebGPU`, async ({ page }, testInfo) => {
     test.setTimeout(folds * 20 * 60 * 1000);
@@ -127,8 +127,8 @@ test("automation reports a failed model download and leaves the run available", 
   await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(1);
 });
 
-test("the ensemble downloads each fold in turn", async ({ page }) => {
-  test.setTimeout(5 * 60 * 1000);
+test("the ensemble downloads each fold after inference of the previous fold", async ({ page }) => {
+  test.setTimeout(20 * 60 * 1000);
   const secondFold = manifest.base_url + manifest.assets[1].filename;
   await page.route(secondFold, (route) => route.fulfill({ status: 503, body: "" }));
   await page.goto("./");
@@ -137,9 +137,12 @@ test("the ensemble downloads each fold in turn", async ({ page }) => {
   await page.locator("#skullStripped").check();
   await page.locator("#folds").selectOption("5");
   await page.locator("#runButton").click();
-  await expect(page.locator("#statusText")).toHaveText(/Model download failed \(503\): .*flames-fold1\.onnx/, { timeout: 180000 });
+  await expect(page.locator("#statusText")).toHaveText(/Model download failed \(503\): .*flames-fold1\.onnx/, { timeout: 18 * 60 * 1000 });
   await expect(page.locator("#technicalLog")).toContainText("Downloading FLAMeS model 1 of 5…");
   await expect(page.locator("#technicalLog")).toContainText("Downloading FLAMeS model 2 of 5…");
+  const log = await page.locator("#technicalLog").textContent();
+  expect(log.indexOf("Segmenting lesions · patch 1 of")).toBeGreaterThan(log.indexOf("Downloading FLAMeS model 1 of 5…"));
+  expect(log.indexOf("Downloading FLAMeS model 2 of 5…")).toBeGreaterThan(log.indexOf("Segmenting lesions · patch 1 of"));
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
@@ -227,13 +230,19 @@ for (const failure of ["download", "empty image"]) {
   });
 }
 
-test("the shared app bar owns About, Cite and the theme", async ({ page }) => {
+test("the shared app bar owns About, Cite and the theme", async ({ page }, testInfo) => {
   await page.goto("./");
   const bar = page.locator(".nd-app-bar:visible");
   await expect(bar).toHaveCount(1);
   await bar.getByRole("button", { name: "About", exact: true }).click();
-  await expect(page.locator("#infoDialog")).toContainText("FLAMeS");
-  await page.locator("#infoDialog").getByRole("button", { name: "Close" }).click();
+  await expect(page.locator("dialog[open]")).toContainText("FLAMeS");
+  await expect(page.locator("dialog[open]")).toContainText("several gigabytes of available memory");
+  await page.locator("dialog[open]").getByText(/Allow several gigabytes/).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("about-memory-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator("dialog[open]").getByText(/Allow several gigabytes/).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath("about-memory-phone.png") });
+  await page.locator("dialog[open]").getByRole("button", { name: "Close", exact: true }).click();
   await bar.getByRole("button", { name: "Cite", exact: true }).click();
   await expect(page.locator("dialog[open]").last()).toContainText("10.1101/2025.05.19.25327707");
   expect(await page.evaluate(() => self.crossOriginIsolated)).toBe(true);

@@ -52,12 +52,106 @@ test('folds run one session at a time and release every session', async () => {
       },
       async release() {
         events.push(`release ${bytes}`);
+        await new Promise((done) => setTimeout(done, 5));
+        events.push(`released ${bytes}`);
       },
     };
   };
   const dims = [20, 20, 20];
   const volume = { dims, affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], data: Float32Array.from({ length: 8000 }, (_, i) => i % 13) };
-  const result = await runFolds({ volume, brainMask: new Uint8Array(8000).fill(1), models: ['fold0', 'fold1'], createSession, Tensor });
-  assert.deepEqual(events, ['open fold0', 'release fold0', 'open fold1', 'release fold1']);
+  const result = await runFolds({ volume, brainMask: new Uint8Array(8000).fill(1), folds: 2, loadModel: async (n) => { events.push(`load fold${n}`); return `fold${n}`; }, createSession, Tensor });
+  assert.deepEqual(events, ['load fold0', 'open fold0', 'release fold0', 'released fold0', 'load fold1', 'open fold1', 'release fold1', 'released fold1']);
   assert.equal(result.probability.length, 8000);
+});
+
+const testVolume = {
+  dims: [2, 2, 2],
+  affine: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
+  data: Float32Array.from({ length: 8 }, (_, i) => i + 1),
+};
+
+for (const failure of ['load', 'create', 'run', 'getData', 'cancel loading', 'cancel creating', 'cancel patch']) {
+  test(`fold cleanup on ${failure} failure`, async () => {
+    const events = [];
+    const controller = new AbortController();
+    const error = new Error(failure);
+    const voxels = PLAN.patch.reduce((a, b) => a * b, 1);
+    class Tensor {
+      dispose() { events.push('input disposed'); }
+    }
+    const run = runFolds({
+      volume: testVolume,
+      brainMask: new Uint8Array(8).fill(1),
+      folds: 2,
+      signal: controller.signal,
+      Tensor,
+      loadModel: async (fold) => {
+        events.push(`load ${fold}`);
+        if (fold === 1 && failure === 'load') throw error;
+        if (failure === 'cancel loading') controller.abort(error);
+        return fold;
+      },
+      createSession: async (fold) => {
+        if (failure === 'create') throw error;
+        if (failure === 'cancel creating') controller.abort(error);
+        return {
+          inputNames: ['input'], outputNames: ['logits'],
+          run: async () => {
+            if (failure === 'run') throw error;
+            if (failure === 'cancel patch') controller.abort(error);
+            return { logits: {
+              getData: async () => {
+                if (failure === 'getData') throw error;
+                const logits = new Float32Array(2 * voxels);
+                logits[voxels] = 1;
+                return logits;
+              },
+              dispose() { events.push('output disposed'); },
+            } };
+          },
+          release: async () => { events.push(`release ${fold}`); },
+        };
+      },
+    });
+    await assert.rejects(run, (caught) => caught === error);
+    if (['run', 'getData', 'cancel patch'].includes(failure)) {
+      assert.equal(events.filter((event) => event === 'input disposed').length, 1);
+    }
+    if (['getData', 'cancel patch'].includes(failure)) assert.ok(events.includes('output disposed'));
+    if (!['create', 'cancel loading'].includes(failure)) {
+      assert.equal(events.filter((event) => event === 'release 0').length, 1);
+    }
+    if (failure === 'load') assert.ok(events.indexOf('release 0') < events.indexOf('load 1'));
+  });
+}
+
+test('invalid or already cancelled runs load no graphs', async () => {
+  const loadModel = () => assert.fail('must not load');
+  for (const folds of [undefined, 0, -1, 1.5]) {
+    await assert.rejects(runFolds({ folds, loadModel }), /positive fold count/);
+  }
+  await assert.rejects(runFolds({ folds: 1, models: ['eager'] }), /lazy model loader/);
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(runFolds({ folds: 1, loadModel, signal: controller.signal }), { name: 'AbortError' });
+});
+
+test('a failed session release prevents the next graph load without releasing twice', async () => {
+  const events = [];
+  const error = new Error('release failed');
+  const voxels = PLAN.patch.reduce((a, b) => a * b, 1);
+  class Tensor { dispose() {} }
+  await assert.rejects(runFolds({
+    volume: testVolume, brainMask: new Uint8Array(8).fill(1), folds: 2, Tensor,
+    loadModel: async (fold) => { events.push(`load ${fold}`); return fold; },
+    createSession: async () => ({
+      inputNames: ['input'], outputNames: ['logits'],
+      run: async () => ({ logits: {
+        getData: async () => { const data = new Float32Array(2 * voxels); data[voxels] = 1; return data; },
+        dispose() {},
+      } }),
+      release: async () => { events.push('release'); throw error; },
+    }),
+  }), (caught) => caught === error);
+  assert.deepEqual(events, ['load 0', 'release']);
 });

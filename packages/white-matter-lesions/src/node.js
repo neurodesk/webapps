@@ -1,14 +1,18 @@
+import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { availableParallelism, homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import * as ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import packageJson from '../package.json' with { type: 'json' };
 import { ENSEMBLE_SIZES, FLAMES_FOLDS, SYNTHSTRIP } from './assets.js';
 import { nonzeroMask, runFolds } from './pipeline.js';
 import { lesionResults, outputNames } from './results.js';
+
+// Set before loading the native library, including direct users of the Node API.
+process.env.ORT_DISABLE_TELEMETRY ??= '1';
+const ort = await import('onnxruntime-node');
 
 export const MODEL_ASSETS = Object.freeze([SYNTHSTRIP, ...FLAMES_FOLDS]);
 
@@ -42,34 +46,43 @@ async function writeAtomically(path, bytes) {
   }
 }
 
-async function loadAsset(asset, { cacheDir, offline, onProgress }) {
+async function verifyCachedAsset(asset, path) {
+  const hash = createHash('sha256');
+  let size = 0;
+  try {
+    for await (const chunk of createReadStream(path)) {
+      size += chunk.length;
+      hash.update(chunk);
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+  if (size !== asset.bytes || hash.digest('hex') !== asset.sha256) {
+    throw new Error(`Cached ${asset.filename} failed checksum verification. Delete ${path} and download it again.`);
+  }
+  return true;
+}
+
+async function ensureAsset(asset, { cacheDir, offline, onProgress }) {
   const path = join(cacheDir, asset.filename);
   const verified = (bytes) => bytes.length === asset.bytes && sha256(bytes) === asset.sha256;
-  let bytes;
-  try {
-    bytes = await readFile(path);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  if (bytes) {
-    if (!verified(bytes)) throw new Error(`Cached ${asset.filename} failed checksum verification. Delete ${path} and download it again.`);
-    return bytes;
-  }
+  if (await verifyCachedAsset(asset, path)) return path;
   if (offline) {
     throw new Error(`${asset.filename} is missing from the offline model directory ${cacheDir}. Run "flames download-models" while online, or reinstall the complete release.`);
   }
   onProgress(`Downloading ${asset.filename}…`);
   const response = await fetch(asset.url);
   if (!response.ok) throw new Error(`Failed to download ${asset.filename}: HTTP ${response.status}`);
-  bytes = Buffer.from(await response.arrayBuffer());
+  const bytes = Buffer.from(await response.arrayBuffer());
   if (!verified(bytes)) throw new Error(`${asset.filename} download failed checksum verification.`);
   await mkdir(cacheDir, { recursive: true });
   await writeAtomically(path, bytes);
-  return bytes;
+  return path;
 }
 
 export async function downloadModels({ cacheDir = defaultCacheDir(), offline = offlineByDefault(), onProgress = () => {} } = {}) {
-  for (const asset of MODEL_ASSETS) await loadAsset(asset, { cacheDir, offline, onProgress });
+  for (const asset of MODEL_ASSETS) await ensureAsset(asset, { cacheDir, offline, onProgress });
   return { directory: resolve(cacheDir), count: MODEL_ASSETS.length, installedSha256: installedSha256(MODEL_ASSETS) };
 }
 
@@ -131,7 +144,15 @@ export async function segment({
   const destination = resolve(output);
   await assertNewOutput(destination);
   const volume = readVolume(arrayBuffer(await readFile(input)));
-  const load = (asset) => loadAsset(asset, { cacheDir, offline, onProgress: (message) => onProgress(undefined, message) });
+  const options = { cacheDir, offline, onProgress: (message) => onProgress(undefined, message) };
+  const load = async (asset) => {
+    const bytes = await readFile(await ensureAsset(asset, options));
+    // Verify the bytes handed to the runtime too, in case the file changed after preflight.
+    if (bytes.length !== asset.bytes || sha256(bytes) !== asset.sha256) {
+      throw new Error(`Cached ${asset.filename} failed checksum verification.`);
+    }
+    return bytes;
+  };
   const sessionOptions = {
     executionProviders: ['cpu'],
     graphOptimizationLevel: 'all',
@@ -141,9 +162,9 @@ export async function segment({
   const createSession = (bytes) => ort.InferenceSession.create(bytes, sessionOptions);
   // Every model is verified before any computation, so a missing or corrupt file fails at once.
   const selected = FLAMES_FOLDS.slice(0, foldCount);
-  const synthstrip = skullStripped ? null : await load(SYNTHSTRIP);
-  const models = [];
-  for (const fold of selected) models.push(await load(fold));
+  for (const asset of [...(skullStripped ? [] : [SYNTHSTRIP]), ...selected]) {
+    await ensureAsset(asset, options);
+  }
   const started = performance.now();
   let brainMask;
   if (skullStripped) {
@@ -151,7 +172,7 @@ export async function segment({
   } else {
     const stripped = await runSynthstrip({
       volume,
-      loadModel: async () => ({ bytes: synthstrip, hash: SYNTHSTRIP.sha256 }),
+      loadModel: async () => ({ bytes: await load(SYNTHSTRIP), hash: SYNTHSTRIP.sha256 }),
       createSession,
       Tensor: ort.Tensor,
       onProgress: (value, message) => onProgress(0.1 * value, message),
@@ -161,7 +182,8 @@ export async function segment({
   const { probability, windows, resampledShape } = await runFolds({
     volume,
     brainMask,
-    models,
+    folds: selected.length,
+    loadModel: (n) => load(selected[n]),
     createSession,
     Tensor: ort.Tensor,
     onPatch: (n, total) => onProgress(0.1 + 0.9 * n / total, `Segmenting lesions · patch ${n} of ${total}`),

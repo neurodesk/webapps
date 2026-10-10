@@ -27,7 +27,7 @@ const workspace = mountImagingWorkspace({
   viewer: "#viewer",
   status: "#status",
   title: APP.title,
-  controlsContract: { about: "#aboutBtn", privacy: "#privacyBtn" },
+  controlsContract: { privacy: "#privacyBtn" },
 });
 
 let viewer;
@@ -75,7 +75,6 @@ const progress = new ProgressManager();
 bindInfoTooltips(document);
 
 const info = createInfoDialog();
-$("aboutBtn").onclick = () => info.open(`About ${APP.title}`, $("aboutContent"));
 $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 
 let source = null;

@@ -6,8 +6,10 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { writeVolume } from '@neurodesk/synthsr';
-import { SYNTHSTRIP } from '../src/assets.js';
+import { FLAMES_FOLDS, SYNTHSTRIP } from '../src/assets.js';
 import { MODEL_ASSETS, checkInstallation, defaultCacheDir, downloadModels, segment } from '../src/node.js';
+
+const ort = await import('onnxruntime-node');
 
 const cli = fileURLToPath(new URL('../bin/flames.js', import.meta.url));
 
@@ -158,6 +160,22 @@ test('self-check writes nothing to the home directory', async (t) => {
   assert.deepEqual(await readdir(home, { recursive: true }), []);
 });
 
+test('the direct Node API executes without writing to an empty home outside CI', async (t) => {
+  const { root } = await workspace(t);
+  const home = join(root, 'api-home');
+  await mkdir(home);
+  const script = `
+    const { checkInstallation } = await import(${JSON.stringify(new URL('../src/node.js', import.meta.url).href)});
+    console.log(JSON.stringify(await checkInstallation()));
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, HOME: home, TMPDIR: tmpdir() },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).executionProvider, 'cpu');
+  assert.deepEqual(await readdir(home, { recursive: true }), []);
+});
+
 test('command line reports help, rejects unsupported options and checks the CPU runtime', async () => {
   const help = run(['--help']);
   assert.equal(help.status, 0);
@@ -174,4 +192,22 @@ test('command line reports help, rejects unsupported options and checks the CPU 
   assert.equal(report.onnxRuntime, '1.29.0');
   assert.equal(report.executionProvider, 'cpu');
   assert.equal(report.models, undefined);
+});
+
+
+test('selected model preflight fails before opening a session or preprocessing the brain', async (t) => {
+  const { root, cache } = await workspace(t);
+  const input = join(root, 'empty-brain.nii');
+  const identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  await writeFile(input, new Uint8Array(writeVolume({ dims: [2, 2, 2], affine: identity, data: new Float32Array(8) })));
+  const original = ort.InferenceSession.create;
+  ort.InferenceSession.create = () => assert.fail('preflight must precede all sessions');
+  t.after(() => { ort.InferenceSession.create = original; });
+  forbidNetwork(t);
+  const options = { input, output: join(root, 'out'), skullStripped: true, folds: 5, cacheDir: cache, offline: true, threads: 1 };
+  await assert.rejects(segment(options), /flames-fold0.onnx is missing/);
+  await mkdir(cache);
+  await writeFile(join(cache, FLAMES_FOLDS[0].filename), 'corrupt graph');
+  await assert.rejects(segment(options), /flames-fold0.onnx failed checksum verification/);
+  assert.deepEqual(await readdir(root), ['empty-brain.nii', 'input.nii', 'models']);
 });

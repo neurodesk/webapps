@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/white-matter-lesions",
-  "version": "0.2.20261010",
+  "version": "0.3.20261010",
   "description": "FLAMeS white matter lesion segmentation for browsers and the command line",
   "type": "module",
   "license": "Apache-2.0",
