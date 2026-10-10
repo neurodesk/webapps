@@ -3,6 +3,7 @@ import { sameNiftiGrid } from '@neurodesk/webapp-components/file-io';
 function header() {
   const buffer = new ArrayBuffer(352);
   const h = new DataView(buffer);
+  h.setInt32(0, 348, true);
   [96, 82, 18].forEach((d, i) => h.setInt16(42 + i * 2, d, true));
   [1, 0.167, 0.195, 0.8].forEach((d, i) => h.setFloat32(76 + i * 4, d, true));
   h.setInt16(254, 1, true);
