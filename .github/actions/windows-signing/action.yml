@@ -1,0 +1,53 @@
+name: Prepare Windows Artifact Signing
+description: Validate opt-in configuration and establish an Azure OIDC signing session
+inputs:
+  enabled:
+    description: Repository activation flag; empty or false leaves builds unsigned
+    default: ''
+  client-id:
+    description: Azure signing client-id repository variable
+    default: ''
+  tenant-id:
+    description: Azure signing tenant-id repository variable
+    default: ''
+  subscription-id:
+    description: Azure signing subscription-id repository variable
+    default: ''
+  endpoint:
+    description: Azure signing endpoint repository variable
+    default: ''
+  account:
+    description: Azure signing account repository variable
+    default: ''
+  profile:
+    description: Azure signing profile repository variable
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Validate and export signing policy
+      shell: pwsh
+      env:
+        WINDOWS_SIGNING_ENABLED: ${{ inputs.enabled }}
+        AZURE_CLIENT_ID: ${{ inputs.client-id }}
+        AZURE_TENANT_ID: ${{ inputs.tenant-id }}
+        AZURE_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ inputs.endpoint }}
+        AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ inputs.account }}
+        AZURE_ARTIFACT_SIGNING_PROFILE: ${{ inputs.profile }}
+      run: |
+        python scripts/lib/windows_signing.py check-config
+        if ($LASTEXITCODE -ne 0) { throw 'Invalid Windows signing configuration' }
+        foreach ($name in @('WINDOWS_SIGNING_ENABLED', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_SUBSCRIPTION_ID', 'AZURE_ARTIFACT_SIGNING_ENDPOINT', 'AZURE_ARTIFACT_SIGNING_ACCOUNT', 'AZURE_ARTIFACT_SIGNING_PROFILE')) {
+          "$name=$([Environment]::GetEnvironmentVariable($name))" >> $env:GITHUB_ENV
+        }
+    - uses: Azure/login@935127ca5bb3c4b02c9c2c10060028383878f33f # v3
+      if: inputs.enabled == 'true'
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+    - name: Install pinned official signing module
+      if: inputs.enabled == 'true'
+      shell: pwsh
+      run: Install-Module ArtifactSigning -RequiredVersion 0.1.8 -Scope CurrentUser -Repository PSGallery -Force

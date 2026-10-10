@@ -62,6 +62,7 @@ jobs:
     uses: ./.github/workflows/node-cli-portable.yml
     permissions:
       contents: write
+      id-token: write
     with:
       package: packages/brain-extraction
       targets: >-

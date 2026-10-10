@@ -42,6 +42,15 @@ on:
 permissions:
   contents: read
 
+env:
+  WINDOWS_SIGNING_ENABLED: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+  AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+  AZURE_ARTIFACT_SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+
 jobs:
   portable:
     name: ${{ matrix.platform }}
@@ -53,6 +62,7 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+      id-token: write
     defaults:
       run:
         shell: bash
@@ -63,6 +73,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/windows-signing
+        if: runner.os == 'Windows'
+        with:
+          enabled: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          account: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          profile: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

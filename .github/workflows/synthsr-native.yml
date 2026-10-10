@@ -3,6 +3,9 @@ name: synthsr-native
 on:
   pull_request:
     paths:
+      - '.github/actions/windows-signing/**'
+      - 'scripts/windows-signing.ps1'
+      - 'scripts/lib/windows_signing.py'
       - '.github/workflows/synthsr-native.yml'
       - 'exes/synthsr/**'
       - 'exes/nifti/**'
@@ -14,6 +17,9 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/actions/windows-signing/**'
+      - 'scripts/windows-signing.ps1'
+      - 'scripts/lib/windows_signing.py'
       - '.github/workflows/synthsr-native.yml'
       - 'exes/synthsr/**'
       - 'exes/nifti/**'
@@ -36,6 +42,15 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  WINDOWS_SIGNING_ENABLED: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
+  AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+  AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+  AZURE_ARTIFACT_SIGNING_PROFILE: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
+
 jobs:
   portable:
     name: ${{ matrix.platform }}
@@ -49,10 +64,23 @@ jobs:
             platform: windows-x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: ./.github/actions/windows-signing
+        if: runner.os == 'Windows'
+        with:
+          enabled: ${{ github.event_name != 'pull_request' && vars.WINDOWS_SIGNING_ENABLED || 'false' }}
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          endpoint: ${{ vars.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          account: ${{ vars.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          profile: ${{ vars.AZURE_ARTIFACT_SIGNING_PROFILE }}
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: clippy, rustfmt
@@ -148,6 +176,8 @@ jobs:
             test -f "exes/synthsr/dist/portable/$asset.validation.txt"
             (cd exes/synthsr/dist/portable && shasum -a 256 -c "$asset.sha256")
           done
+      - name: Enforce Windows signature policy
+        run: python3 scripts/lib/windows_signing.py verify exes/synthsr/dist/portable/synthsr-$(sed -n 's/^version = "\(.*\)"/\1/p' exes/synthsr/Cargo.toml)-windows-x64.zip
       - name: Sign and notarize installer
         env:
           APPLEID: ${{ secrets.APPLEID }}
