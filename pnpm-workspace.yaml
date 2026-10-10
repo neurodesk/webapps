@@ -4,6 +4,7 @@ packages:
   - "apps/*"
   - "site/easter-eggs/*"
 allowBuilds:
+  '@swc/core': false
   cbor-extract: false
   core-js: false
   electron: false
@@ -30,3 +31,9 @@ overrides:
 
 patchedDependencies:
   '@itk-wasm/dam@1.1.1': patches/@itk-wasm__dam@1.1.1.patch
+
+# Keep dependency-cruiser's optional parser inside its tooling dependency tree.
+packageExtensions:
+  'dependency-cruiser@18.5.0':
+    dependencies:
+      '@swc/core': 1.15.11
