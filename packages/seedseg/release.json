@@ -1,0 +1,37 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "seedseg-v",
+  "displayName": "SeedSeg",
+  "app": "seedseg",
+  "run": "image.nii.gz results",
+  "readme": {
+    "run": "Segment prostate fiducial markers",
+    "notes": [
+      "All four pinned ensemble checkpoints are included and verified locally.",
+      "No network connection or populated cache is required.",
+      "Use --ensemble 1 through 4, or --models 42,123,456,789.",
+      "Use --top-n and --threshold to match the browser automation settings.",
+      "DICOM input and manual mask editing use the web app.",
+      "Software parity uses a synthetic fixture; a representative clinical reference is pending."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "seedseg"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "seedseg.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "seedseg"
+    }
+  },
+  "validationApp": "seedseg"
+}

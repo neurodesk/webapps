@@ -36,6 +36,20 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('seedseg', async page => {
+    const settings = page.locator('#seedseg-section-2 [data-disclosure-toggle]');
+    await settings.tap();
+    await page.locator('#probThreshold').fill('0.25');
+    await page.locator('#nMarkers').fill('2');
+    await page.locator('#model3').uncheck();
+    await settings.tap();
+    await expect(page.locator('#probThreshold')).toBeHidden();
+    await settings.tap();
+    await expect(page.locator('#probThreshold')).toHaveValue('0.25');
+    await expect(page.locator('#nMarkers')).toHaveValue('2');
+    await expect(page.locator('#model3')).not.toBeChecked();
+    await expect(page.locator('#seedseg-log')).toHaveClass(/collapsed/);
+  });
   await check('vesselboost', async page => {
     await page.locator('#fileInput').setInputFiles(nifti('automation-input.nii'));
     await expect(page.locator('#runDownsampleBtn')).toBeEnabled();

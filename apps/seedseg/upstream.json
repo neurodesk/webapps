@@ -8,6 +8,7 @@
   ],
   "integration": [
     "Keep the shared shell, DICOM import, viewer, progress and dialogs that replace upstream's controllers and UI modules.",
-    "Keep model weights on the shared downloader with pinned hashes."
+    "Keep model weights on the shared downloader with pinned hashes.",
+    "Keep packages/seedseg as the shared scientific pipeline and the app worker as a browser adapter; port upstream scientific changes into the shared package."
   ]
 }

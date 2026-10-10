@@ -1,23 +1,24 @@
 {
   "name": "seedseg",
-  "version": "0.5.20261010",
+  "version": "0.6.20261010",
   "private": true,
   "type": "module",
   "description": "Browser-based prostate fiducial marker segmentation.",
   "scripts": {
-    "vendor": "node ../../scripts/vendor-components.mjs",
+    "vendor": "node ../../scripts/vendor-components.mjs && node scripts/stage-pipeline.mjs",
     "runtime-support": "node ../../scripts/vendor-runtime-support.mjs",
     "predev": "pnpm vendor && pnpm runtime-support",
     "dev": "node ../../scripts/dev-server.mjs --dir web --port 8080",
     "prebuild": "pnpm vendor && pnpm runtime-support && node ../../scripts/fetch-app-runtime.mjs --dest web/wasm ort-web:ort.webgpu.bundle.min.mjs,ort-wasm-simd-threaded.jsep.mjs,ort-wasm-simd-threaded.jsep.wasm qsm-wasm:qsm_wasm.js,qsm_wasm_bg.wasm",
-    "build": "node ../../scripts/build-static.mjs",
+    "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app seedseg",
     "lint": "node ../../scripts/check-app-js.mjs web",
     "pretest": "pnpm vendor && pnpm runtime-support",
     "test": "node ../../scripts/check-app-js.mjs web && node --test test/*.test.mjs",
     "test:e2e": "playwright test && node ../../test/examples.smoke.mjs --app seedseg"
   },
   "dependencies": {
-    "@neurodesk/webapp-components": "workspace:*"
+    "@neurodesk/webapp-components": "workspace:*",
+    "@neurodesk/seedseg": "workspace:*"
   },
   "neurodeskWebapp": {
     "static": {

@@ -1,0 +1,4 @@
+SeedSeg browser sources are distributed under the MIT license in LICENSE.
+The four pretrained model assets retain their existing NOASSERTION license
+metadata; this package does not grant a new license for those weights.
+The QSM WASM runtime is QSMbly v0.9.2, pinned by runtime.manifest.json.

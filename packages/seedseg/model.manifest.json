@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "app": "seedseg",
+  "repository": "sbollmann/neurodesk-webapps-assets",
+  "revision": "a8cdbf8c2874e1a2f617ecc6695244a0810eac11",
+  "base_url": "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/a8cdbf8c2874e1a2f617ecc6695244a0810eac11/seedseg/",
+  "license": "NOASSERTION",
+  "preprocessing_contract": "3D consensus inference; see apps/seedseg/web/js/inference-worker.js",
+  "assets": [
+    {"id":"seed42","filename":"seedseg-model-seed42.onnx","bytes":90495381,"sha256":"7dc1ef1875b7027c56950cc3c35f1ffa8d67f7190a49df49811105cd639b784d","source_url":"https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage/69a7b3b11bb961e0a3e7d1d3"},
+    {"id":"seed123","filename":"seedseg-model-seed123.onnx","bytes":90495381,"sha256":"bfe4fe9140383e87a6c0c4cb2a6e9a84c3435f1413fd3644273bd9f1a0c3bdee","source_url":"https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage/69a7b3b0a32ec43a2279789d"},
+    {"id":"seed456","filename":"seedseg-model-seed456.onnx","bytes":90495381,"sha256":"2aa00094e01e978f3d85a882a97f9a1ef59da32341db4aaaf46c0c5388424ae7","source_url":"https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage/69a7b3b13233e4a733e7d719"},
+    {"id":"seed789","filename":"seedseg-model-seed789.onnx","bytes":90495381,"sha256":"e0cf5de01f36b1507e99910a92071bb888166aff4c5c90b902f04105ad8956c5","source_url":"https://files.au-1.osf.io/v1/resources/f7hjv/providers/osfstorage/69a7b3b1a32ec43a2279789f"}
+  ]
+}

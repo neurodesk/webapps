@@ -1,0 +1,39 @@
+{
+  "name": "@neurodesk/seedseg",
+  "version": "0.6.20261010",
+  "type": "module",
+  "license": "MIT",
+  "description": "SeedSeg prostate fiducial-marker ensemble for browsers and portable command lines",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "seedseg": "./bin/seedseg.js"
+  },
+  "exports": {
+    ".": "./src/pipeline.js",
+    "./assets": "./src/assets.js",
+    "./results": "./src/results.js",
+    "./node": "./src/node.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "runtime",
+    "model.manifest.json",
+    "runtime.manifest.json",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "node ../../scripts/fetch-app-runtime.mjs --dest runtime qsm-wasm:qsm_wasm.js,qsm_wasm_bg.wasm",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/pipeline.js && node --check src/node.js && node --check bin/seedseg.js",
+    "pretest": "node ../../scripts/fetch-app-runtime.mjs --dest runtime qsm-wasm:qsm_wasm.js,qsm_wasm_bg.wasm"
+  },
+  "dependencies": {
+    "@neurodesk/webapp-components": "workspace:*",
+    "onnxruntime-node": "1.29.0"
+  }
+}

@@ -24,6 +24,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/lcmodel': 'lcmodel',
   '@neurodesk/musclemap': 'musclemap',
+  '@neurodesk/seedseg': 'seedseg',
   '@neurodesk/synthseg': 'synthseg',
   '@neurodesk/synthsr': 'synthsr',
   '@neurodesk/nesvor': 'nesvor',
