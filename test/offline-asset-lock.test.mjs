@@ -14,11 +14,18 @@ const lock = JSON.parse(await readFile(join(repoRoot, 'registry/offline-assets.l
 test('each app\'s locked asset list matches its offline sources', () => {
   const drift = [];
   for (const id of new Set([...Object.keys(sources.apps), ...Object.keys(lock.apps)])) {
-    const wanted = new Set((sources.apps[id] ?? []).map(source => canonicalUrl(source.url)));
-    const locked = new Set(lock.apps[id] ?? []);
-    const onlyLocked = [...locked].filter(url => !wanted.has(url));
-    const onlySources = [...wanted].filter(url => !locked.has(url));
-    if (onlyLocked.length || onlySources.length) drift.push({ app: id, onlyLocked, onlySources });
+    // Sorted arrays, as assets.mjs compares them, so a duplicate on one side counts as drift.
+    const wanted = (sources.apps[id] ?? []).map(source => canonicalUrl(source.url)).sort();
+    const locked = [...(lock.apps[id] ?? [])].sort();
+    if (JSON.stringify(wanted) === JSON.stringify(locked)) continue;
+    const remaining = [...locked];
+    const onlySources = [];
+    for (const url of wanted) {
+      const index = remaining.indexOf(url);
+      if (index < 0) onlySources.push(url);
+      else remaining.splice(index, 1);
+    }
+    drift.push({ app: id, onlyLocked: remaining, onlySources });
   }
   assert.deepEqual(drift, [], 'Update registry/offline-assets.lock.json apps lists to match the sources');
 });
