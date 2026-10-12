@@ -194,6 +194,10 @@ pub fn parse_dicom(b: &[u8]) -> Res<DicomFile> {
         let (g, e, vr, len) = r.header()?;
         if len == 0xffff_ffff {
             r.skip_undefined(0)?;
+            // Encapsulated (compressed) Pixel Data: keep that it is there, not its fragments.
+            if (g, e) == (0x7fe0, 0x0010) {
+                out.elements.push(Element { group: g, elem: e, vr, value: Vec::new() });
+            }
             continue;
         }
         let end = r.pos.checked_add(len as usize).filter(|&p| p <= b.len()).ok_or("This DICOM file is truncated.")?;

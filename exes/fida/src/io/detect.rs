@@ -723,6 +723,18 @@ mod tests {
     }
 
     #[test]
+    fn compressed_pixel_data_counts_as_pixel_data() {
+        // Modality MR, then encapsulated Pixel Data: undefined length, one empty
+        // item and the sequence delimiter, as JPEG and RLE transfer syntaxes write it.
+        let mut b = dicom_stub(false);
+        b.extend_from_slice(&[0xe0, 0x7f, 0x10, 0x00, b'O', b'B', 0, 0, 0xff, 0xff, 0xff, 0xff]);
+        b.extend_from_slice(&[0xfe, 0xff, 0x00, 0xe0, 0, 0, 0, 0]);
+        b.extend_from_slice(&[0xfe, 0xff, 0xdd, 0xe0, 0, 0, 0, 0]);
+        let d = super::super::dicom_siemens::parse_dicom(&b).unwrap();
+        assert!(super::super::dicom_siemens::describe(&d).ends_with("with pixel data"), "{}", super::super::dicom_siemens::describe(&d));
+    }
+
+    #[test]
     fn act_and_ref_pair_in_every_format() {
         // spec2nii keeps Philips' names when it converts SDAT/SPAR pairs. Two
         // subjects share each folder, so only the names can pair them.
