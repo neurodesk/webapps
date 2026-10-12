@@ -48,6 +48,7 @@ import {
   groupRecords as recordsOf,
   headerFor as headerOf,
   isEdited as editedOf,
+  loadMessages,
   parseCustomBasis,
   planGroup,
   rangeUntouched,
@@ -345,9 +346,7 @@ async function loadWithFida(files, signal) {
   const payload = files.map((f) => ({ name: f.name, bytes: f.bytes.buffer }));
   const loaded = await runJob({ type: "load", files: payload }, payload.map((f) => f.bytes));
   signal?.throwIfAborted();
-  for (const e of loaded.errors) log.log(`${e.file}: ${e.error}`, "warning");
-  for (const e of loaded.ignored) log.log(`${e.file}: ${e.reason}`, "info");
-  for (const name of loaded.unpairedWater ?? []) log.log(`${name}: a water reference with no spectrum to pair it with`, "warning");
+  for (const { text, level } of loadMessages(loaded)) log.log(text, level);
   if (!loaded.datasets.length) {
     const first = loaded.errors[0];
     throw new Error(first ? `${first.file}: ${first.error}` : "No readable spectroscopy data found.");

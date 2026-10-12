@@ -373,7 +373,10 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         // The reader skips dot-files (macOS `._` sidecars), so the check does too.
         let first = v.iter().copied().find(|&i| !split_path(files[i].name).1.starts_with('.')).unwrap_or(v[0]);
         if !dicom_has_spectrum(files[first].bytes) {
-            let reason = "DICOM without Siemens spectroscopy data (an image series, or a format FID-A does not read)";
+            let what = super::dicom_siemens::parse_dicom(files[first].bytes).map(|d| super::dicom_siemens::describe(&d)).unwrap_or_default();
+            let reason = format!(
+                "DICOM without Siemens spectroscopy data (no SpectroscopyData (5600,0020) or CSA non-image data (7FE1,1010)): an image series, or a format FID-A does not read; {what}"
+            );
             det.ignored.extend(v.iter().map(|&i| (files[i].name.to_string(), reason.to_string())));
             continue;
         }
@@ -500,21 +503,23 @@ pub struct Loaded {
     pub out: Spectra,
     pub embedded_water: Option<Spectra>,
     pub voxel: Option<Voxel>,
+    /// Why a format that records the voxel gave none (GE: the header values).
+    pub voxel_note: Option<String>,
 }
 
 /// Read one dataset with its reader.
 pub fn load_dataset(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Loaded> {
     let f = |k: usize| -> Res<&NamedFile> { ds.files.get(k).and_then(|&i| files.get(i)).ok_or_else(|| "internal error: dataset file index".to_string()) };
-    let one = |s: Spectra, voxel: Option<Voxel>| Loaded { out: s, embedded_water: None, voxel };
+    let one = |s: Spectra, voxel: Option<Voxel>| Loaded { out: s, embedded_water: None, voxel, voxel_note: None };
     match ds.format {
         Format::Twix => {
             let r = super::twix::load(f(0)?.bytes)?;
             let voxel = geometry::twix(&r.header);
-            Ok(Loaded { out: r.out, embedded_water: r.out_w, voxel })
+            Ok(Loaded { out: r.out, embedded_water: r.out_w, voxel, voxel_note: None })
         }
         Format::GePfile => {
             let r = super::ge::load(f(0)?.bytes, opts.subspecs)?;
-            Ok(Loaded { out: r.out, embedded_water: Some(r.out_w), voxel: r.voxel })
+            Ok(Loaded { out: r.out, embedded_water: Some(r.out_w), voxel: r.voxel, voxel_note: r.voxel_note })
         }
         Format::SiemensRda => {
             let b = f(0)?.bytes;
@@ -555,7 +560,7 @@ fn load_dicom(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Load
     match super::dicom_siemens::load_folder(&list) {
         Ok((s, _)) => {
             let voxel = list.first().and_then(|(_, b)| geometry::siemens_dicom(&super::dicom_siemens::protocol_text(b)));
-            Ok(Loaded { out: s, embedded_water: None, voxel })
+            Ok(Loaded { out: s, embedded_water: None, voxel, voxel_note: None })
         }
         Err(e) => {
             // IMA files without a Phoenix protocol: io_loadspec_IMA needs the
@@ -566,6 +571,7 @@ fn load_dicom(ds: &Dataset, files: &[NamedFile], opts: &LoadOptions) -> Res<Load
                         out: super::dicom_siemens::load_ima(list[0].1, bo, sw, opts.ima_te, opts.ima_tr)?,
                         embedded_water: None,
                         voxel: None,
+                        voxel_note: None,
                     });
                 }
             }
@@ -588,7 +594,7 @@ fn load_bruker(ds: &Dataset, files: &[NamedFile]) -> Res<Loaded> {
         })
         .collect();
     let r = super::bruker::load(&scan, true, 68)?;
-    Ok(Loaded { out: r.out, embedded_water: r.ref_scan, voxel: None })
+    Ok(Loaded { out: r.out, embedded_water: r.ref_scan, voxel: None, voxel_note: None })
 }
 
 /// Everything in one call: the detected pairs, each loaded (metabolite and
@@ -704,6 +710,16 @@ mod tests {
         b.extend_from_slice(&[0u8; 8]);
         assert!(dicom_has_spectrum(&b));
         assert!(!dicom_has_spectrum(&dicom_stub(false)));
+    }
+
+    #[test]
+    fn an_image_series_is_ignored_with_what_it_is() {
+        let img = dicom_stub(false);
+        let files = [nf("21-PRESS/a.dcm", &img), nf("21-PRESS/b.dcm", &img)];
+        let d = detect(&files);
+        assert!(d.pairs.is_empty(), "{d:#?}");
+        assert_eq!(d.ignored.len(), 2);
+        assert!(d.ignored[0].1.contains("(7FE1,1010)") && d.ignored[0].1.contains("modality MR") && d.ignored[0].1.contains("no pixel data"), "{}", d.ignored[0].1);
     }
 
     #[test]

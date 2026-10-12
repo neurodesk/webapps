@@ -17,6 +17,8 @@ pub struct GeResult {
     pub psd_name: String,
     /// The voxel from the image header (not read by FID-A or GELoad).
     pub voxel: Option<Voxel>,
+    /// Why there is no voxel: the header values it would be built from.
+    pub voxel_note: Option<String>,
 }
 
 /// Header positions (1-based element indices, as in GELoad) per revision.
@@ -125,6 +127,7 @@ struct GeLoad {
     revision: f32,
     psd_name: String,
     voxel: Option<Voxel>,
+    voxel_note: Option<String>,
 }
 
 /// GELoad(fname).
@@ -216,9 +219,24 @@ fn ge_load(data: &[u8]) -> Res<GeLoad> {
     let image_float = |k: usize| b.f32le(off_image + 4 * (k - 1)).ok().map(f64::from);
     let user: Option<Vec<f64>> = (0..6).map(|i| image_float(lay.image_user8 + i)).collect();
     let corners: Option<Vec<f64>> = (0..9).map(|i| image_float(lay.image_tlhc + i)).collect();
-    let voxel = user.zip(corners).and_then(|(u, c)| {
-        geometry::ge_pfile([u[0], u[1], u[2]], [u[3], u[4], u[5]], [[c[0], c[1], c[2]], [c[3], c[4], c[5]], [c[6], c[7], c[8]]])
-    });
+    let (voxel, voxel_note) = match user.zip(corners) {
+        Some((u, c)) => match geometry::ge_pfile([u[0], u[1], u[2]], [u[3], u[4], u[5]], [[c[0], c[1], c[2]], [c[3], c[4], c[5]], [c[6], c[7], c[8]]]) {
+            Some(v) => (Some(v), None),
+            None => {
+                let f = |x: &[f64]| x.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join(", ");
+                let note = format!(
+                    "GE P-file revision {revs}: these image header values do not make a voxel box: size user8-10 ({}) mm, centre user11-13 ({}) mm, corners tlhc ({}), trhc ({}), brhc ({})",
+                    f(&u[0..3]),
+                    f(&u[3..6]),
+                    f(&c[0..3]),
+                    f(&c[3..6]),
+                    f(&c[6..9])
+                );
+                (None, Some(note))
+            }
+        },
+        None => (None, Some(format!("GE P-file revision {revs}: the image header ends before the voxel fields (user8-13, tlhc/trhc/brhc)"))),
+    };
 
     if npoints == 1 && nrows == 1 {
         npoints = 2048;
@@ -334,7 +352,7 @@ fn ge_load(data: &[u8]) -> Res<GeLoad> {
     };
     let full = build(&full_frames, &full_sign, mult);
     let water = build(&water_frames, &water_sign, multw);
-    Ok(GeLoad { full, water, larmor, sw, te, tr, revision: rev, psd_name, voxel })
+    Ok(GeLoad { full, water, larmor, sw, te, tr, revision: rev, psd_name, voxel, voxel_note })
 }
 
 /// FID-A `io_loadspec_GE(filename, subspecs)` on the bytes of a P-file.
@@ -425,7 +443,7 @@ pub fn load(data: &[u8], subspecs: usize) -> Res<GeResult> {
     // out_w.flags.isFourSteps uses out's sizes (FID-A), only when out_w has subspecs (never)
     let out = make(fids, dims, four);
     let out_w = make(fids_w, dims_w, false);
-    Ok(GeResult { out, out_w, revision: g.revision, psd_name: g.psd_name, voxel: g.voxel })
+    Ok(GeResult { out, out_w, revision: g.revision, psd_name: g.psd_name, voxel: g.voxel, voxel_note: g.voxel_note })
 }
 
 #[cfg(test)]

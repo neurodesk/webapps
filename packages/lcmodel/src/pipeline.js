@@ -6,7 +6,7 @@
 import packageJson from "../package.json" with { type: "json" };
 import { assessBasis, parseBasisHeader, recommendBasis, sequenceFamily } from "./basis-select.js";
 import { STATUS, fileStem, groupRecord, planBases, uniqueNames } from "./group.js";
-import { FILES, buildControl, concentrationsCsv, fillGaps, parseCoord, parseTable, presentRows } from "./lcmodel-io.js";
+import { FILES, buildControl, concentrationsCsv, explainDiagnostic, fillGaps, parseCoord, parseTable, presentRows } from "./lcmodel-io.js";
 import { parseRaw } from "./inputs.js";
 import { buildReport } from "./report.js";
 
@@ -81,6 +81,42 @@ export function rawInput({ name, text, waterName = null, water = null, control =
     sequence: raw.sequence,
   };
   return { kind: "raw", name, waterName, text, water, points: raw.points, header };
+}
+
+/** "20 × 20 × 20 mm at -28.7, 77.7, 67.6 mm (RAS), from <header fields>" */
+export function describeVoxel(voxel) {
+  const size = voxel.sizeMm.map((v) => Number(v.toFixed(1))).join(" × ");
+  const centre = voxel.centerMm.map((v) => v.toFixed(1)).join(", ");
+  return `${size} mm at ${centre} mm (RAS), from ${voxel.source}`;
+}
+
+/**
+ * What loading found, as log lines ({ text, level }): files that failed or
+ * were skipped (a skipped folder once, not once per file), unpaired water
+ * references, and for each dataset the parameters the fit will rely on and
+ * where its voxel is, or why it has none.
+ */
+export function loadMessages(loaded) {
+  const lines = [];
+  for (const e of loaded.errors) lines.push({ text: `${e.file}: ${e.error}`, level: "warning" });
+  const skipped = new Map();
+  for (const e of loaded.ignored) {
+    const folder = e.file.includes("/") ? e.file.slice(0, e.file.lastIndexOf("/") + 1) : e.file;
+    const key = `${folder}\0${e.reason}`;
+    const entry = skipped.get(key) ?? { folder, reason: e.reason, count: 0 };
+    entry.count += 1;
+    skipped.set(key, entry);
+  }
+  for (const { folder, reason, count } of skipped.values()) lines.push({ text: `${folder}${count > 1 ? ` (${count} files)` : ""}: ${reason}`, level: "info" });
+  for (const name of loaded.unpairedWater ?? []) lines.push({ text: `${name}: a water reference with no spectrum to pair it with`, level: "warning" });
+  for (const d of loaded.datasets) {
+    const h = d.header ?? {};
+    const sequence = String(h.sequence ?? "").trim();
+    const facts = [sequence && `sequence ${sequence}`, h.fieldT && `${h.fieldT.toFixed(2)} T`, h.teMs && `TE ${Number(h.teMs.toFixed(2))} ms`, h.trMs && `TR ${Number(h.trMs.toFixed(2))} ms`].filter(Boolean).join(", ");
+    const voxel = h.voxel ? `voxel ${describeVoxel(h.voxel)}` : h.voxelNote ? `no voxel: ${h.voxelNote}` : "the format does not record the voxel";
+    lines.push({ text: `${d.name}: ${facts}; ${voxel}`, level: h.voxelNote ? "warning" : "info" });
+  }
+  return lines;
 }
 
 /** The datasets FID-A read, labelled so that subjects in their own folders stay apart. */
@@ -325,7 +361,11 @@ export async function fitDataset(engine, { input, index: k, choice, range, setti
   const coord = { ...parsed, gaps: fillGaps(parsed, lcm.raw, lcm) };
   const tableText = out.outputs[FILES.table] ?? "";
   const table = parseTable(tableText);
-  for (const d of coord.diagnostics) log(`LCModel, ${name}: ${d}`, "info");
+  const basisTeMs = choice === CUSTOM ? bases.custom?.header?.teMs : bases.library.find((b) => b.id === choice)?.teMs;
+  for (const d of coord.diagnostics) {
+    const text = explainDiagnostic(d, { dataTeMs: lcm.teMs, basisTeMs });
+    log(`LCModel, ${name}: ${text}`, /ERROR|FATAL|warning/i.test(d) ? "warning" : "info");
+  }
   return {
     index: k,
     status: STATUS.fitted,

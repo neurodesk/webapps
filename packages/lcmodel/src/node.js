@@ -28,6 +28,7 @@ import {
   groupMeasurements,
   groupRecords,
   headerFor,
+  loadMessages,
   parseCustomBasis,
   planGroup,
   rawAcquisition,
@@ -312,9 +313,7 @@ export async function fit({
     report(undefined, "Reading the data with FID-A…");
     engine = await createEngine(sorted.other, engineOptions);
     const { loaded } = engine;
-    for (const e of loaded.errors) log(`${e.file}: ${e.error}`, "warning");
-    for (const e of loaded.ignored) log(`${e.file}: ${e.reason}`, "info");
-    for (const name of loaded.unpairedWater ?? []) log(`${name}: a water reference with no spectrum to pair it with`, "warning");
+    for (const { text, level } of loadMessages(loaded)) log(text, level);
     if (!loaded.datasets.length) {
       const first = loaded.errors[0];
       throw new Error(first ? `${first.file}: ${first.error}` : "No readable spectroscopy data found.");

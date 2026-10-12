@@ -357,6 +357,26 @@ export function lcmodelError(code, outputs) {
   return `LCModel stopped (${code}).${detail}${diag ? ` Diagnostics: ${diag.replace(/\s+/g, " ")}` : ""}`;
 }
 
+/**
+ * One line of LCModel's diagnostics ("1      ERROR MYBASI 10") with what it
+ * means. MYBASI 10 is LCModel's echo-time check: the basis set's ECHOT and
+ * the control file's differ by 3 ms or more. Information lines (level "info")
+ * do not change the fit.
+ */
+export function explainDiagnostic(line, { dataTeMs = null, basisTeMs = null } = {}) {
+  const m = /\b(info|warning|ERROR|FATAL)\s+([A-Z0-9]+)\s+(\d+)\s*$/i.exec(line);
+  if (!m) return line;
+  const [, level, routine, number] = m;
+  const ms = (x) => (Number.isFinite(x) && x > 0 ? `${Number(x.toFixed(2))} ms` : null);
+  if (routine === "MYBASI" && number === "10") {
+    const basis = ms(basisTeMs);
+    const data = ms(dataTeMs);
+    return `${line}: the basis set's echo time${basis ? ` (${basis})` : ""} differs from the data's${data ? ` (${data})` : ""} by 3 ms or more. LCModel still fits, but coupled metabolites (Glu, Gln, GABA, Ins) can be biased: check the TE the scanner recorded, or supply a basis set simulated at the data's TE.`;
+  }
+  if (/^info$/i.test(level)) return `${line} (LCModel information; the fit is unaffected)`;
+  return `${line} (see LCModel's manual, section 12, for ${routine} ${number})`;
+}
+
 const GABA_PLUS = "GABA+MM3co";
 export const MODEL_NOTES = Object.freeze({
   [GABA_PLUS]: "GABA+ (GABA + MM3co): primary result",

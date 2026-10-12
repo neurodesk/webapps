@@ -134,6 +134,40 @@ impl<'a> Reader<'a> {
 }
 
 /// Parse a DICOM file's top-level elements.
+/// What a DICOM file is, from its header, for a message that has to say why
+/// it was not read: series number and description, modality, image type,
+/// storage class and whether it holds pixel data.
+pub fn describe(d: &DicomFile) -> String {
+    let text = |g: u16, e: u16| d.string(g, e).filter(|s| !s.is_empty());
+    let mut parts = Vec::new();
+    match (text(0x0020, 0x0011), text(0x0008, 0x103e)) {
+        (Some(n), Some(desc)) => parts.push(format!("series {n} \"{desc}\"")),
+        (Some(n), None) => parts.push(format!("series {n}")),
+        (None, Some(desc)) => parts.push(format!("series \"{desc}\"")),
+        (None, None) => {}
+    }
+    if let Some(m) = text(0x0008, 0x0060) {
+        parts.push(format!("modality {m}"));
+    }
+    if let Some(t) = text(0x0008, 0x0008) {
+        parts.push(format!("image type {t}"));
+    }
+    if let Some(uid) = text(0x0008, 0x0016) {
+        let name = match uid.as_str() {
+            "1.2.840.10008.5.1.4.1.1.4" => "MR Image Storage",
+            "1.2.840.10008.5.1.4.1.1.4.1" => "Enhanced MR Image Storage",
+            "1.2.840.10008.5.1.4.1.1.4.2" => "MR Spectroscopy Storage",
+            "1.2.840.10008.5.1.4.1.1.7" => "Secondary Capture",
+            "1.3.12.2.1107.5.9.1" => "Siemens CSA Non-Image Storage",
+            u if u.starts_with("1.2.840.10008.5.1.4.1.1.88.") => "Structured Report",
+            _ => "",
+        };
+        parts.push(if name.is_empty() { format!("SOP class {uid}") } else { format!("SOP class {name} ({uid})") });
+    }
+    parts.push(if d.get(0x7fe0, 0x0010).is_some() { "with pixel data".into() } else { "no pixel data".into() });
+    parts.join(", ")
+}
+
 pub fn parse_dicom(b: &[u8]) -> Res<DicomFile> {
     let start = if b.len() > 132 && &b[128..132] == b"DICM" { 132 } else { 0 };
     let mut r = Reader { b, pos: start, explicit: true, big: false };
@@ -264,7 +298,10 @@ pub fn load_folder(files: &[(String, &[u8])]) -> Res<(Spectra, DicomFile)> {
     let is_xa = info0.get(0x5600, 0x0020).is_some();
     let is_ve = info0.get(0x7fe1, 0x1010).is_some();
     if !is_xa && !is_ve {
-        return Err("Unsupported Siemens DICOM spectroscopy format (no SpectroscopyData and no CSA non-image data).".into());
+        return Err(format!(
+            "No spectrum FID-A reads: neither SpectroscopyData (5600,0020) nor CSA non-image data (7FE1,1010); {}.",
+            describe(info0)
+        ));
     }
     let csa = if is_xa { phoenix_from_file(infos[0].3) } else { phoenix_from_private(info0) };
     let mut cols: Vec<Vec<Complex64>> = Vec::with_capacity(n_avg);

@@ -144,6 +144,7 @@ pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
         };
         let format = pair.metabolite.format;
         let voxel = metab.voxel;
+        let voxel_note = metab.voxel_note;
         let (metab, water) = if splits_editing(format) {
             (drop_empty_transients(&metab.out), water.as_ref().map(drop_empty_transients))
         } else {
@@ -159,6 +160,8 @@ pub fn load(files: &[(String, &[u8])]) -> (Vec<Dataset>, Value) {
         // Where the voxel sits (RAS mm affine), when the format records it.
         if let Some(v) = &voxel {
             h["voxel"] = v.to_json();
+        } else if let Some(note) = &voxel_note {
+            h["voxelNote"] = json!(note);
         }
         // GE and Philips do not record editing; the interface shows what the
         // data say and lets the user override it (Options::edited).

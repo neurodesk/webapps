@@ -29,6 +29,15 @@ const GPU_MAX_VOXELS = 256 ** 3;
  *   onViewAvailable: (available: boolean) => void,
  * }} hooks
  */
+/** Header fields that explain a failed segmentation: type, scaling, orientation codes. */
+function t1HeaderFacts(buffer, header) {
+  const view = new DataView(buffer instanceof ArrayBuffer ? buffer : buffer.buffer);
+  const le = view.getInt32(0, true) === 348;
+  const types = { 2: "uint8", 4: "int16", 8: "int32", 16: "float32", 64: "float64", 256: "int8", 512: "uint16", 768: "uint32" };
+  const type = types[header.datatype] ?? `datatype ${header.datatype}`;
+  return `${type}, scaling ${header.sclSlope} x + ${header.sclInter}, qform code ${view.getInt16(252, le)}, sform code ${view.getInt16(254, le)}`;
+}
+
 export function createTissuePanel(hooks) {
   let t1 = null; // { name, buffer, header, dims, affine }
   let maps = null; // { gm, wm, csf, backend, elapsedMs }
@@ -64,7 +73,9 @@ export function createTissuePanel(hooks) {
   function refresh() {
     $("measureButton").disabled = !canMeasure();
     hooks.onViewAvailable(canMeasure());
-    if (t1 && dataset && !dataset.voxel) summary("This format does not record where the voxel is; enter fractions.", "warning");
+    if (t1 && dataset && !dataset.voxel) {
+      summary(dataset.voxelNote ? "The voxel position could not be read (see the log); enter fractions." : "This format does not record where the voxel is; enter fractions.", "warning");
+    }
   }
 
   /** The loaded spectroscopy dataset's header (null when there is none). */
@@ -72,7 +83,7 @@ export function createTissuePanel(hooks) {
     const next = header?.voxel
       ? { voxel: header.voxel, fieldT: header.fieldT, teMs: header.teMs, trMs: header.trMs, waterTeMs: header.waterTeMs, waterTrMs: header.waterTrMs }
       : header
-        ? { voxel: null, fieldT: header.fieldT, teMs: header.teMs, trMs: header.trMs, waterTeMs: header.waterTeMs, waterTrMs: header.waterTrMs }
+        ? { voxel: null, voxelNote: header.voxelNote ?? null, fieldT: header.fieldT, teMs: header.teMs, trMs: header.trMs, waterTeMs: header.waterTeMs, waterTrMs: header.waterTrMs }
         : null;
     const sameVoxel = JSON.stringify(next?.voxel?.affine) === JSON.stringify(dataset?.voxel?.affine);
     dataset = next;
@@ -109,7 +120,7 @@ export function createTissuePanel(hooks) {
     $("t1Info").hidden = false;
     $("t1Info").textContent = `${t1.name}: ${t1.dims.join(" × ")} voxels, ${header.voxelSize.map((v) => fixed(v, 1)).join(" × ")} mm`;
     $("t1Drop").classList.add("has-files");
-    hooks.log.log(`T1 loaded: ${$("t1Info").textContent}`);
+    hooks.log.log(`T1 loaded: ${$("t1Info").textContent}; ${t1HeaderFacts(buffer, header)}`);
     refresh();
     if (viewer && !$("t1Canvas").hidden) await showOverlay();
   }
@@ -171,8 +182,15 @@ export function createTissuePanel(hooks) {
    * On an isolated page, a T1 too large for the GPU heap takes the CPU.
    */
   async function chooseBackend() {
-    if (t1.dims[0] * t1.dims[1] * t1.dims[2] > GPU_MAX_VOXELS && globalThis.crossOriginIsolated) return "cpu";
     const adapter = await navigator.gpu?.requestAdapter().catch(() => null);
+    const info = adapter?.info;
+    const gpu = info ? [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" ") || "unnamed adapter" : "no WebGPU adapter";
+    hooks.log.log(`Browser: ${navigator.userAgent}; WebGPU: ${gpu}${info?.isFallbackAdapter ? " (software fallback)" : ""}${adapter && !adapter.features.has("shader-f16") ? ", no shader-f16" : ""}`);
+    const voxels = t1.dims[0] * t1.dims[1] * t1.dims[2];
+    if (voxels > GPU_MAX_VOXELS && globalThis.crossOriginIsolated) {
+      hooks.log.log(`The T1 has ${voxels.toLocaleString("en")} voxels, more than the GPU modules' 768 MiB heap holds (256³): segmenting on the CPU`);
+      return "cpu";
+    }
     if (adapter && !adapter.info?.isFallbackAdapter && adapter.features.has("shader-f16")) return "webgpu";
     const gl = new OffscreenCanvas(1, 1).getContext("webgl2");
     const debug = gl?.getExtension("WEBGL_debug_renderer_info");
