@@ -364,7 +364,7 @@ export async function fitDataset(engine, { input, index: k, choice, range, setti
   const basisTeMs = choice === CUSTOM ? bases.custom?.header?.teMs : bases.library.find((b) => b.id === choice)?.teMs;
   for (const d of coord.diagnostics) {
     const text = explainDiagnostic(d, { dataTeMs: lcm.teMs, basisTeMs });
-    log(`LCModel, ${name}: ${text}`, /ERROR|FATAL|warning/i.test(d) ? "warning" : "info");
+    log(`LCModel, ${name}: ${text}`, /ERROR|FATAL|ILLOGICAL|warning/i.test(d) ? "warning" : "info");
   }
   return {
     index: k,
