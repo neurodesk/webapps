@@ -1,5 +1,17 @@
 # greedy
 
+## 0.5.20261012
+
+### Minor Changes
+
+- 8aa9f2f: `greedy-rs` accepts Greedy's `-gm` fixed-image mask for NMI affine, rigid and `-sv` registration.
+
+  Reject unsupported metrics and masks on a different fixed grid even when registration requests zero iterations.
+
+### Patch Changes
+
+- @neurodesk/greedy@0.5.20261012
+
 ## 0.4.20261010
 
 ### Patch Changes

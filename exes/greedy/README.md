@@ -87,6 +87,7 @@ greedy-rs -d 3 -rf fixed.nii.gz -rm ct.nii.gz warped-ct.nii.gz -rb auto -r warp.
 
 - `-V 0` silences the Greedy-style optimizer trace; `-threads N` limits the
   rayon pool (results are identical for any thread count).
+- `-gm MASK` (affine and `-sv`, NMI only) is Greedy's fixed-image mask. It must be on the fixed grid. At every pyramid level the mask is smoothed and resampled like an image, then thresholded at > 0.5, and fixed voxels outside it are excluded from the joint histogram and the gradient. Use it with whole-head images, rather than registering two skull-stripped images whose mask boundaries differ (for example, at the brainstem cut-off).
 - Affine registration uses 12 degrees of freedom by default. `-dof 6` limits
   the result to rigid-body translation and rotation.
 - Reslicing is linear by default. Use `-ri NN` for masks and label maps.

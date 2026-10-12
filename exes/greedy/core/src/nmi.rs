@@ -48,6 +48,28 @@ pub fn bin_image(image: &NiftiImage) -> Result<Vec<u8>> {
         .collect())
 }
 
+/// Greedy's `-gm` fixed-image mask as one boolean per voxel of each pyramid
+/// level (the mask is smoothed and resampled like an image, then > 0.5).
+pub(crate) fn mask_levels(mask: NiftiImage, fixed: &Grid) -> Result<[Vec<bool>; 3]> {
+    if !crate::grids_match(&mask.grid, fixed, 1e-4) {
+        return Err(Error("-gm mask must be on the fixed image grid".into()));
+    }
+    Ok(crate::build_pyramid(mask)?.map(|level| level.data.iter().map(|&v| v > 0.5).collect()))
+}
+
+/// Fixed bin 0 is already excluded from the joint histogram and the gradient,
+/// so zeroing the fixed bins outside the mask restricts the metric to it.
+pub(crate) fn mask_bins(mut bins: Vec<u8>, mask: Option<&[bool]>) -> Vec<u8> {
+    if let Some(mask) = mask {
+        for (bin, &inside) in bins.iter_mut().zip(mask) {
+            if !inside {
+                *bin = 0;
+            }
+        }
+    }
+    bins
+}
+
 /// Greedy's partial-volume sample: the eight trilinear corner bins, their
 /// weights, and each weight's derivative with respect to the voxel coordinate.
 pub(crate) fn histogram_sample<const DERIVATIVES: bool>(

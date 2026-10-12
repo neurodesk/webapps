@@ -2,9 +2,10 @@ use crate::nmi::{
     corner_gradient, histogram_sample, joint_histogram, score_from_histogram,
     score_gradient_from_histogram,
 };
+use crate::nmi::{mask_bins, mask_levels};
 use crate::par::map_z;
 use crate::reslice::{trilinear_scalar, trilinear_scalar_gradient};
-use crate::{Grid, Mat4, NiftiImage, Result, bin_image, build_pyramid};
+use crate::{Error, Grid, Mat4, NiftiImage, Result, bin_image, build_pyramid};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AffineMetric {
@@ -919,13 +920,24 @@ pub fn optimize(
     metric: AffineMetric,
     options: AffineOptions,
 ) -> Result<Mat4> {
+    optimize_masked(fixed, moving, None, initial, metric, options)
+}
+
+fn optimize_masked(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    mask: Option<&[bool]>,
+    initial: Mat4,
+    metric: AffineMetric,
+    options: AffineOptions,
+) -> Result<Mat4> {
     if options.iterations == 0 {
         return Ok(initial);
     }
     let scale = affine_scale(&fixed.grid);
     let x = std::array::from_fn(|index| parameters(initial)[index] * scale[index]);
     let bins = match metric {
-        AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
+        AffineMetric::Nmi => Some((mask_bins(bin_image(fixed)?, mask), bin_image(moving)?)),
         AffineMetric::Ssd => None,
     };
     let jitter = jitter_field(fixed.grid.dims, options.jitter);
@@ -952,6 +964,17 @@ pub fn optimize_rigid(
     metric: AffineMetric,
     options: AffineOptions,
 ) -> Result<Mat4> {
+    optimize_rigid_masked(fixed, moving, None, initial, metric, options)
+}
+
+fn optimize_rigid_masked(
+    fixed: &NiftiImage,
+    moving: &NiftiImage,
+    mask: Option<&[bool]>,
+    initial: Mat4,
+    metric: AffineMetric,
+    options: AffineOptions,
+) -> Result<Mat4> {
     if options.iterations == 0 {
         return Ok(initial);
     }
@@ -965,7 +988,7 @@ pub fn optimize_rigid(
         }
     });
     let bins = match metric {
-        AffineMetric::Nmi => Some((bin_image(fixed)?, bin_image(moving)?)),
+        AffineMetric::Nmi => Some((mask_bins(bin_image(fixed)?, mask), bin_image(moving)?)),
         AffineMetric::Ssd => None,
     };
     let jitter = jitter_field(fixed.grid.dims, options.jitter);
@@ -993,6 +1016,20 @@ pub fn register(
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
+    register_masked(fixed, moving, None, metric, iterations, verbose, jitter)
+}
+
+/// `register` with Greedy's `-gm`: the NMI metric only counts fixed voxels inside `mask`.
+pub fn register_masked(
+    fixed: NiftiImage,
+    moving: NiftiImage,
+    mask: Option<NiftiImage>,
+    metric: AffineMetric,
+    iterations: [usize; 3],
+    verbose: bool,
+    jitter: f64,
+) -> Result<Mat4> {
+    let masks = fixed_masks(mask, &fixed.grid, metric)?;
     if iterations == [0, 0, 0] {
         return Ok(image_centers(&fixed.grid, &moving.grid));
     }
@@ -1014,9 +1051,10 @@ pub fn register(
         },
     )?;
     for level in 0..3 {
-        transform = optimize(
+        transform = optimize_masked(
             &fixed_pyramid[level],
             &moving_pyramid[level],
+            masks.as_ref().map(|m| m[level].as_slice()),
             transform,
             metric,
             AffineOptions {
@@ -1043,6 +1081,20 @@ pub fn register_rigid(
     verbose: bool,
     jitter: f64,
 ) -> Result<Mat4> {
+    register_rigid_masked(fixed, moving, None, metric, iterations, verbose, jitter)
+}
+
+/// `register_rigid` with Greedy's `-gm` fixed-image mask.
+pub fn register_rigid_masked(
+    fixed: NiftiImage,
+    moving: NiftiImage,
+    mask: Option<NiftiImage>,
+    metric: AffineMetric,
+    iterations: [usize; 3],
+    verbose: bool,
+    jitter: f64,
+) -> Result<Mat4> {
+    let masks = fixed_masks(mask, &fixed.grid, metric)?;
     if iterations == [0, 0, 0] {
         return Ok(image_centers(&fixed.grid, &moving.grid));
     }
@@ -1071,9 +1123,10 @@ pub fn register_rigid(
         },
     )?;
     for level in 0..3 {
-        transform = optimize_rigid(
+        transform = optimize_rigid_masked(
             &fixed_pyramid[level],
             &moving_pyramid[level],
+            masks.as_ref().map(|m| m[level].as_slice()),
             transform,
             metric,
             AffineOptions {
@@ -1090,6 +1143,18 @@ pub fn register_rigid(
         }
     }
     Ok(transform)
+}
+
+fn fixed_masks(
+    mask: Option<NiftiImage>,
+    fixed: &Grid,
+    metric: AffineMetric,
+) -> Result<Option<[Vec<bool>; 3]>> {
+    match (mask, metric) {
+        (None, _) => Ok(None),
+        (Some(_), AffineMetric::Ssd) => Err(Error("-gm is supported with -m NMI only".into())),
+        (Some(mask), AffineMetric::Nmi) => mask_levels(mask, fixed).map(Some),
+    }
 }
 
 #[cfg(test)]

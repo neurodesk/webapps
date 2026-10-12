@@ -3,7 +3,8 @@ use greedy_rs_core::{
     ScalarType, Transform, VectorField, affine_matrix, affine_parameters, decode_image,
     decode_series, decode_vector_field, downsample_grid, encode_image, encode_series,
     encode_vector_field, gaussian_smooth, grids_match, image_centers, nmi_score_gradient_affine,
-    register_affine, register_nmi_svf, register_rigid, reslice, reslice_with_background,
+    register_affine, register_affine_masked, register_nmi_svf, register_nmi_svf_masked,
+    register_rigid, register_rigid_masked, reslice, reslice_with_background,
     reslice_with_interpolation, score_affine, ssd_score_gradient,
 };
 
@@ -708,5 +709,155 @@ fn scaled_integer_identity_reslice_preserves_physical_intensity() {
         let output = decode_image(&encode_image(&resliced, false).unwrap()).unwrap();
         assert_eq!(output.scalar_type, ScalarType::F32);
         assert!(output.data.iter().all(|value| (*value - 0.75).abs() < 1e-6));
+    }
+}
+
+fn blob(dims: usize, centre: [f32; 3], radius: f32) -> impl Fn(usize) -> f32 {
+    move |index| {
+        let p = [index % dims, (index / dims) % dims, index / (dims * dims)].map(|v| v as f32);
+        let r2 = (0..3).map(|a| (p[a] - centre[a]).powi(2)).sum::<f32>();
+        100.0 * (-r2 / (2.0 * radius * radius)).exp()
+    }
+}
+
+fn mask_image(dims: usize, inside: impl Fn([usize; 3]) -> bool) -> NiftiImage {
+    NiftiImage {
+        grid: grid([dims; 3]),
+        data: (0..dims * dims * dims)
+            .map(|i| inside([i % dims, (i / dims) % dims, i / (dims * dims)]) as u8 as f32)
+            .collect(),
+        scalar_type: ScalarType::F32,
+    }
+}
+
+#[test]
+fn full_fixed_mask_reproduces_unmasked_svf() {
+    let n = 24;
+    let fixed = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(blob(n, [11.0, 12.0, 12.0], 4.0))
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let moving = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n)
+            .map(blob(n, [13.0, 12.0, 12.0], 4.0))
+            .collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let plain =
+        register_nmi_svf(fixed.clone(), moving.clone(), [5, 5, 2], false, |_, _| {}).unwrap();
+    let all = mask_image(n, |_| true);
+    let masked =
+        register_nmi_svf_masked(fixed, moving, Some(all), [5, 5, 2], false, |_, _| {}).unwrap();
+    assert_eq!(plain.data, masked.data);
+}
+
+#[test]
+fn fixed_mask_ignores_structure_outside_it() {
+    // Both images share a central blob; only the fixed image has a second blob
+    // near the +x edge. Unmasked NMI pulls tissue towards it; masking that
+    // corner out leaves the field there close to zero.
+    let n = 24;
+    let centre = blob(n, [8.0, 12.0, 12.0], 3.0);
+    let extra = blob(n, [19.0, 12.0, 12.0], 2.5);
+    let fixed = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n).map(|i| centre(i) + extra(i)).collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let moving = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n).map(&centre).collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let near_extra = |field: &VectorField| {
+        (0..n * n * n)
+            .filter(|i| i % n >= 16)
+            .map(|i| field.data[i].iter().map(|v| v * v).sum::<f32>().sqrt())
+            .fold(0.0_f32, f32::max)
+    };
+    let plain =
+        register_nmi_svf(fixed.clone(), moving.clone(), [10, 10, 5], false, |_, _| {}).unwrap();
+    let mask = mask_image(n, |[x, _, _]| x < 15);
+    let masked =
+        register_nmi_svf_masked(fixed, moving, Some(mask), [10, 10, 5], false, |_, _| {}).unwrap();
+    assert!(
+        near_extra(&masked) < 0.5 * near_extra(&plain),
+        "{} vs {}",
+        near_extra(&masked),
+        near_extra(&plain)
+    );
+}
+
+#[test]
+fn fixed_mask_requires_nmi_and_the_fixed_grid() {
+    let n = 8;
+    let image = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n).map(|i| i as f32).collect(),
+        scalar_type: ScalarType::F32,
+    };
+    let ssd = register_affine_masked(
+        image.clone(),
+        image.clone(),
+        Some(mask_image(n, |_| true)),
+        AffineMetric::Ssd,
+        [1, 1, 1],
+        false,
+        DEFAULT_AFFINE_JITTER,
+    );
+    assert!(ssd.is_err());
+    let wrong = mask_image(n + 1, |_| true);
+    assert!(
+        register_nmi_svf_masked(
+            image.clone(),
+            image,
+            Some(wrong),
+            [1, 0, 0],
+            false,
+            |_, _| {}
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn zero_iteration_registration_validates_fixed_masks() {
+    let n = 8;
+    let image = NiftiImage {
+        grid: grid([n; 3]),
+        data: (0..n * n * n).map(|i| i as f32).collect(),
+        scalar_type: ScalarType::F32,
+    };
+    for register in [register_affine_masked, register_rigid_masked] {
+        let ssd = register(
+            image.clone(),
+            image.clone(),
+            Some(mask_image(n, |_| true)),
+            AffineMetric::Ssd,
+            [0, 0, 0],
+            false,
+            DEFAULT_AFFINE_JITTER,
+        );
+        assert_eq!(
+            ssd.unwrap_err().to_string(),
+            "-gm is supported with -m NMI only"
+        );
+        let wrong_grid = register(
+            image.clone(),
+            image.clone(),
+            Some(mask_image(n + 1, |_| true)),
+            AffineMetric::Nmi,
+            [0, 0, 0],
+            false,
+            DEFAULT_AFFINE_JITTER,
+        );
+        assert_eq!(
+            wrong_grid.unwrap_err().to_string(),
+            "-gm mask must be on the fixed image grid"
+        );
     }
 }

@@ -21,6 +21,7 @@
 use super::common::{maybe_gunzip, Res};
 use super::geometry::{self, Voxel};
 use crate::spectra::Spectra;
+use std::collections::HashMap;
 
 /// One input file.
 #[derive(Clone, Copy, Debug)]
@@ -272,14 +273,14 @@ fn dicom_identity(ds: &Dataset, files: &[NamedFile]) -> Option<(String, String)>
     Some((d.string(0x0020, 0x000d).unwrap_or_default(), d.string(0x0010, 0x0020).unwrap_or_default()))
 }
 
-fn conflicting_dicom_identity(a: &Dataset, b: &Dataset, files: &[NamedFile]) -> bool {
-    let (Some((a_study, a_patient)), Some((b_study, b_patient))) = (dicom_identity(a, files), dicom_identity(b, files)) else { return false };
+fn conflicting_dicom_identity(a: Option<&(String, String)>, b: Option<&(String, String)>) -> bool {
+    let (Some((a_study, a_patient)), Some((b_study, b_patient))) = (a, b) else { return false };
     (!a_study.is_empty() && !b_study.is_empty() && a_study != b_study)
         || (!a_patient.is_empty() && !b_patient.is_empty() && a_patient != b_patient)
 }
 
-fn same_dicom_study(a: &Dataset, b: &Dataset, files: &[NamedFile]) -> bool {
-    let (Some((a_study, a_patient)), Some((b_study, b_patient))) = (dicom_identity(a, files), dicom_identity(b, files)) else { return false };
+fn same_dicom_study(a: Option<&(String, String)>, b: Option<&(String, String)>) -> bool {
+    let (Some((a_study, a_patient)), Some((b_study, b_patient))) = (a, b) else { return false };
     !a_study.is_empty() && a_study == b_study
         && (a_patient.is_empty() || b_patient.is_empty() || a_patient == b_patient)
 }
@@ -417,6 +418,9 @@ pub fn detect(files: &[NamedFile]) -> Detection {
     // pairing: when several water datasets match by name (subjects in
     // separate folders with the same file names), the one closest in the
     // directory tree wins, so a folder of subjects pairs within each subject.
+    let identities: HashMap<usize, (String, String)> = datasets.iter()
+        .filter_map(|ds| dicom_identity(ds, files).map(|identity| (ds.files[0], identity)))
+        .collect();
     let key = |ds: &Dataset| -> (Format, String) { (ds.format, ds.name.to_ascii_lowercase()) };
     let (water, metab): (Vec<Dataset>, Vec<Dataset>) = datasets.into_iter().partition(|d| d.is_water);
     let mut water: Vec<Option<Dataset>> = water.into_iter().map(Some).collect();
@@ -441,7 +445,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
                         || (!mdir.is_empty() && water_base(&wdir).as_deref() == Some(&mdir))
                 }
             };
-            if hit && !conflicting_dicom_identity(&m, w, files) {
+            if hit && !conflicting_dicom_identity(identities.get(&m.files[0]), identities.get(&w.files[0])) {
                 let shared = shared_dirs(mpath, split_path(files[w.files[0]].name).0);
                 if best.is_none_or(|(_, s)| shared > s) {
                     best = Some((wi, shared));
@@ -465,7 +469,7 @@ pub fn detect(files: &[NamedFile]) -> Detection {
         }
         let here: Vec<usize> = (0..det.pairs.len()).filter(|&k| det.pairs[k].metabolite.format == *fmt && folder(&det.pairs[k].metabolite) == *wf).collect();
         if let [k] = here[..] {
-            if det.pairs[k].water.is_none() && water[wi].as_ref().is_some_and(|w| same_dicom_study(&det.pairs[k].metabolite, w, files)) {
+            if det.pairs[k].water.is_none() && water[wi].as_ref().is_some_and(|w| same_dicom_study(identities.get(&det.pairs[k].metabolite.files[0]), identities.get(&w.files[0]))) {
                 det.pairs[k].water = water[wi].take();
             }
         }

@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Cache Siemens DICOM study and patient identifiers once per dataset during water pairing. Repeated subject names keep the same identity checks without reparsing spectroscopy data for every candidate.
+- b968db1: Siemens VE spectroscopy DICOMs whose `(7FE1,1010)` element has no
+  `SIEMENS CSA NON-IMAGE` private-creator label are recognised as spectra
+  again, as the reader always accepted them.
 - 8321cb9: Tissue correction now works for GE P-files and for high-resolution T1 images.
 
   - GE P-files record the voxel: its centre and size (`user8-13`) and the

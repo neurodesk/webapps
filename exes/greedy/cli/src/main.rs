@@ -10,8 +10,9 @@ use greedy_rs_core::{
     AffineMetric, DEFAULT_AFFINE_JITTER, Error, Grid, Interpolation, Mat4, NiftiImage, NiftiSeries,
     ScalarType, Transform, build_pyramid, decode_image, decode_series, decode_vector_field,
     encode_image, encode_series_header, encode_vector_field, image_centers,
-    nmi_score_gradient_affine, read_matrix, register_affine, register_nmi_svf, register_rigid,
-    reslice, reslice_with_background, score_affine, ssd_score_gradient, write_scalars,
+    nmi_score_gradient_affine, read_matrix, register_affine_masked, register_nmi_svf_masked,
+    register_rigid_masked, reslice, reslice_with_background, score_affine, ssd_score_gradient,
+    write_scalars,
 };
 
 #[derive(Clone, Copy)]
@@ -156,6 +157,7 @@ fn print_help() {
            -n LEVELS       Iterations at each pyramid level (default: 100x50x10)\n\
            -dof 6|12       Rigid or affine registration (default: 12)\n\
            -jitter SIGMA   Affine sample jitter in moving voxels (default: 0.5)\n\
+           -gm MASK        Fixed-image mask: NMI is scored only inside it (fixed grid)\n\
            -threads N      Limit the Rayon worker pool\n\
            -ri LINEAR|NN   Reslice interpolation (default: LINEAR)\n\
            -rb VALUE|AUTO  Reslice outside value (default: 0)\n\
@@ -212,6 +214,7 @@ fn run_affine(args: &[String], jitter: f64) {
     let mut dump_prefix = String::new();
     let mut verbose = true;
     let mut dof = 12;
+    let mut mask = None;
     let mut at = 0;
     while at < args.len() {
         match args[at].as_str() {
@@ -246,6 +249,7 @@ fn run_affine(args: &[String], jitter: f64) {
             }
             "-o" => output = Some(take(args, &mut at, "-o")),
             "-n" => levels = iterations(&take(args, &mut at, "-n")),
+            "-gm" => mask = Some(take(args, &mut at, "-gm")),
             flag => fail(format!("unsupported affine option {flag}")),
         }
         at += 1;
@@ -277,9 +281,10 @@ fn run_affine(args: &[String], jitter: f64) {
             }
         }
     }
+    let mask = mask.map(|path| decode_image(&read(&path)).unwrap_or_else(|e| fail(e)));
     let matrix = match dof {
-        6 => register_rigid(fixed, moving, metric, levels, verbose, jitter),
-        _ => register_affine(fixed, moving, metric, levels, verbose, jitter),
+        6 => register_rigid_masked(fixed, moving, mask, metric, levels, verbose, jitter),
+        _ => register_affine_masked(fixed, moving, mask, metric, levels, verbose, jitter),
     }
     .unwrap_or_else(|e| fail(e));
     let mut text = String::new();
@@ -298,6 +303,7 @@ fn run_deform(args: &[String]) {
     let mut levels = [100, 50, 10];
     let mut stationary = false;
     let mut verbose = true;
+    let mut mask = None;
     let mut dump_moving = false;
     let mut dump_prefix = String::new();
     let mut at = 0;
@@ -328,6 +334,7 @@ fn run_deform(args: &[String]) {
             "-it" => initial = Some(take(args, &mut at, "-it")),
             "-o" => output = Some(take(args, &mut at, "-o")),
             "-n" => levels = iterations(&take(args, &mut at, "-n")),
+            "-gm" => mask = Some(take(args, &mut at, "-gm")),
             flag => fail(format!("unsupported SV registration option {flag}")),
         }
         at += 1;
@@ -368,7 +375,9 @@ fn run_deform(args: &[String]) {
             .unwrap_or_else(|e| fail(format!("{path}: {e}")));
         }
     };
-    let warp = register_nmi_svf(fixed, moving, levels, verbose, dump).unwrap_or_else(|e| fail(e));
+    let mask = mask.map(|path| decode_image(&read(&path)).unwrap_or_else(|e| fail(e)));
+    let warp = register_nmi_svf_masked(fixed, moving, mask, levels, verbose, dump)
+        .unwrap_or_else(|e| fail(e));
     let output = output.unwrap_or_else(|| fail("SV registration requires -o OUTPUT.nii.gz"));
     fs::write(
         &output,

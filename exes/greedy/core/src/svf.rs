@@ -1,5 +1,6 @@
 use crate::nmi::{
-    corner_gradient, histogram_sample, joint_histogram, score_gradient_from_histogram,
+    corner_gradient, histogram_sample, joint_histogram, mask_bins, mask_levels,
+    score_gradient_from_histogram,
 };
 use crate::par::for_each_z;
 use crate::{Error, Grid, NiftiImage, Result, VectorField, bin_image, build_pyramid, grids_match};
@@ -210,8 +211,22 @@ pub fn register_nmi_svf(
     moving: NiftiImage,
     iterations: [usize; 3],
     verbose: bool,
+    dump: impl FnMut(&str, &VectorField),
+) -> Result<VectorField> {
+    register_nmi_svf_masked(fixed, moving, None, iterations, verbose, dump)
+}
+
+/// `register_nmi_svf` with Greedy's `-gm`: the NMI metric and its gradient only
+/// count fixed voxels inside `mask`; smoothing carries the field beyond it.
+pub fn register_nmi_svf_masked(
+    fixed: NiftiImage,
+    moving: NiftiImage,
+    mask: Option<NiftiImage>,
+    iterations: [usize; 3],
+    verbose: bool,
     mut dump: impl FnMut(&str, &VectorField),
 ) -> Result<VectorField> {
+    let masks = mask.map(|m| mask_levels(m, &fixed.grid)).transpose()?;
     if !grids_match(&fixed.grid, &moving.grid, 1e-4) {
         return Err(Error(
             "SV registration requires moving resampled onto the fixed grid".into(),
@@ -235,7 +250,10 @@ pub fn register_nmi_svf(
         if iterations[level] == 0 {
             continue;
         }
-        let fixed_bins = bin_image(&fixed_levels[level])?;
+        let fixed_bins = mask_bins(
+            bin_image(&fixed_levels[level])?,
+            masks.as_ref().map(|m| m[level].as_slice()),
+        );
         let moving_bins = bin_image(&moving_levels[level])?;
         for iteration in 0..iterations[level] {
             let (score, mut gradient) = nmi_gradient(

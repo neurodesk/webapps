@@ -1,5 +1,12 @@
 # syncro
 
+## 0.6.20261012
+
+### Patch Changes
+
+- @neurodesk/greedy@0.5.20261012
+- @neurodesk/syncro@0.6.20261012
+
 ## 0.6.20261010
 
 ### Patch Changes

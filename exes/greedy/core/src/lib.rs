@@ -13,7 +13,8 @@ mod svf;
 pub use affine::{
     AffineMetric, AffineOptions, DEFAULT_JITTER as DEFAULT_AFFINE_JITTER, image_centers,
     matrix as affine_matrix, nmi_score_gradient_affine, optimize as optimize_affine,
-    optimize_rigid, parameters as affine_parameters, register as register_affine, register_rigid,
+    optimize_rigid, parameters as affine_parameters, register as register_affine,
+    register_masked as register_affine_masked, register_rigid, register_rigid_masked,
     score as score_affine, ssd_score_gradient,
 };
 pub use gaussian::smooth as gaussian_smooth;
@@ -30,7 +31,7 @@ pub use reslice::{
     Interpolation, Transform, grids_match, read_matrix, reslice, reslice_with_background,
     reslice_with_interpolation,
 };
-pub use svf::register_nmi_svf;
+pub use svf::{register_nmi_svf, register_nmi_svf_masked};
 
 use std::{error::Error as StdError, fmt};
 
