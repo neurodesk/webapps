@@ -117,7 +117,7 @@ test("a mixed session offers the anatomical series choice and cancellation keeps
   await expect(page.locator("#anatomySeries")).toBeHidden();
   await expect(page.locator("#runButton")).toBeEnabled();
   await page.locator("#dataInput").setInputFiles([...files, ...dicomSeries(), ...dicomSeries({ series: 2 })]);
-  await expect(page.locator("#anatomySeries option")).toHaveCount(3);
+  await expect(page.locator("#anatomySeries option")).toHaveCount(4);
   await page.locator("#anatomySeries").selectOption("1");
   await expect(page.locator("#t1Info")).toContainText("test_scan_2", { timeout: 60000 });
   await expect(page.locator("#t1Canvas")).toBeVisible();

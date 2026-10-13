@@ -173,7 +173,7 @@ test("fit-group rejects anatomy, basis and unpaired water while keeping its fitt
   }
 });
 
-test("cancelled automation anatomy selection preserves the old session and valid roles replace it", async ({ page }) => {
+test("cancelled GUI anatomy selection preserves the old session and explicit automation T1 replaces it", async ({ page }) => {
   test.setTimeout(240000);
   await seed(page, { driftCorrection: false });
   await page.locator("#t1Input").setInputFiles(anatomy);
@@ -182,14 +182,11 @@ test("cancelled automation anatomy selection preserves the old session and valid
   const before = await resident(page);
   const replacement = file("patient-B.RAW", raw.buffer);
   const replacementT1 = file("patient-B.nii", anatomy.buffer);
-  await adopt(page, "spectra", [replacement, control, anatomy, replacementT1]);
-  await adopt(page, "basis", [basis]);
-  await dispatch(page, "start", { operation: "fit" });
+  await page.locator("#dataInput").setInputFiles([replacement, control, anatomy, replacementT1]);
   await expect(page.locator("#anatomySeries")).toBeVisible();
-  await dispatch(page, "cancel");
-  await expect.poll(async () => (await dispatch(page, "snapshot")).state).not.toBe("running");
+  await page.locator("#cancelButton").click();
   await expect(page.locator("#anatomySeries")).toBeHidden();
-  await expect(page.locator("#statusText")).toHaveText("Cancelled");
+  await expect(page.locator("#statusText")).toHaveText("Loading cancelled");
   await expect(page.locator("#cancelButton")).toBeHidden();
   expect(await resident(page)).toEqual(before);
   await adopt(page, "spectra", [replacement, control, anatomy]);
