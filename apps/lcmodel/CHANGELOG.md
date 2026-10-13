@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Keep accompanying anatomical images optional when importing spectroscopy folders. Skip unusable images with a warning, offer None when choosing a series, and clear previous anatomy when skipping. Automation uses only its explicit T1 input and never waits for the graphical series chooser.
+  - @neurodesk/lcmodel@0.8.20261013
 - Invalidate measured tissue correction and map downloads when replacement anatomy is adopted, before waiting for viewer presentation.
   - @neurodesk/lcmodel@0.8.20261013
 - 36d64d0: Reject imports that mix LCModel RAW and vendor spectra before replacing the current session or fit. Continue allowing RAW spectra with anatomical images.

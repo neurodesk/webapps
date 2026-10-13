@@ -290,13 +290,14 @@ function waterSources(files) {
   };
 }
 
-function chooseAnatomy(images, signal) {
+function chooseAnatomy(images, signal, optional) {
   if (images.length === 1) return Promise.resolve(images[0]);
   const field = $("anatomySeriesField");
   const select = $("anatomySeries");
   field.hidden = false;
   $("tissueSection").open = true;
   select.replaceChildren(new Option("Choose the T1 series…", ""), ...images.map((image, index) => new Option(image.name, String(index))));
+  if (optional) select.add(new Option("None", "none"));
   status("Choose the T1 anatomical series to finish importing.");
   return new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -306,7 +307,7 @@ function chooseAnatomy(images, signal) {
     };
     const choose = () => {
       if (select.value === "") return;
-      const image = images[Number(select.value)];
+      const image = select.value === "none" ? null : images[Number(select.value)];
       cleanup();
       resolve(image);
     };
@@ -320,11 +321,24 @@ function chooseAnatomy(images, signal) {
   });
 }
 
-async function prepareAnatomy(images, sources, signal) {
-  if (!images?.length) return null;
-  const image = await chooseAnatomy(images, signal);
+async function stageAnatomy({ request, change, images, sources, signal }) {
+  if (request.kind === "fit-request") {
+    if (!request.inputs.t1?.length) return { kind: "keep" };
+    return { kind: "replace", prepared: await tissue.prepareT1(request.inputs.t1, signal) };
+  }
+  if (change.kind === "water-reference" || !images.length) return { kind: "keep" };
+  const optional = change.kind === "replacement";
+  const image = await chooseAnatomy(images, signal, optional);
+  signal.throwIfAborted();
+  if (!image) return { kind: "clear" };
   const original = new Map(sources.map((source) => [source.name, source.file]));
-  return tissue.prepareT1(image.files.map((name) => original.get(name)), signal);
+  try {
+    return { kind: "replace", prepared: await tissue.prepareT1(image.files.map((name) => original.get(name)), signal) };
+  } catch (error) {
+    signal.throwIfAborted();
+    if (!optional) throw error;
+    return { kind: "clear", warning: `Anatomy skipped: ${error.message}` };
+  }
 }
 
 async function loadFiles(request, signal) {
@@ -361,7 +375,8 @@ async function loadFiles(request, signal) {
       : sorted.basis.length ? parseCustomBasis(sorted.basis[0].name, decode(sorted.basis[0])) : null;
     const control = sorted.control.length ? parseControl(decode(sorted.control[0])) : null;
     let change = { kind: "none" };
-    let nextT1 = automation && request.inputs.t1?.length ? await tissue.prepareT1(request.inputs.t1, importSignal) : null;
+    let images = [];
+    let sources = [];
     if (!automation && input?.kind === "raw" && (water || (!sorted.raw.length && sorted.water.length))) {
       const references = [...sorted.raw, ...sorted.water];
       if (references.length !== 1 || sorted.other.length) throw new Error("Choose one LCModel .H2O or water .RAW reference for this .RAW spectrum.");
@@ -373,7 +388,8 @@ async function loadFiles(request, signal) {
       if (sorted.other.length) {
         candidate = await stageFida(sorted.other, importSignal);
         if (candidate.loaded.datasets.length) throw new Error("Import LCModel .RAW and vendor spectra separately.");
-        nextT1 ??= await prepareAnatomy(candidate.loaded.images, sorted.other, importSignal);
+        images = candidate.loaded.images ?? [];
+        sources = sorted.other;
       }
     } else if (sorted.other.length || water) {
       let assignment = water ? waterSources(files) : null;
@@ -388,7 +404,8 @@ async function loadFiles(request, signal) {
       }
       const loaded = candidate.loaded;
       const imageNames = new Set((loaded.images ?? []).flatMap((image) => image.files));
-      nextT1 ??= await prepareAnatomy(loaded.images, inputs, importSignal);
+      images = loaded.images ?? [];
+      sources = inputs;
       if (loaded.datasets.length) {
         const next = { ...fidaInput(loaded), sources: inputs.filter((s) => !imageNames.has(s.name)).map(({ name, file }) => ({ name, file })), loadOptions: assignment?.options };
         if (assignment) {
@@ -398,14 +415,17 @@ async function loadFiles(request, signal) {
         }
         if (next.index < 0) throw new Error("The selected spectrum could not be paired with this water reference.");
         change = { kind: assignment ? "water-reference" : "replacement", input: next };
-      } else if (!nextT1) {
-        const first = loaded.errors[0];
-        throw new Error(loaded.unpairedWater?.length ? "Only a water reference was found. Load its spectrum first, then add the reference." : first ? `${first.file}: ${first.error}` : "No readable spectroscopy data found.");
       }
     } else if (sorted.water.length) {
       throw new Error("Only a water reference was found. Load its spectrum first, then add the reference.");
     } else if (!basis) {
       throw new Error("No spectroscopy data found among the files.");
+    }
+    const anatomy = await stageAnatomy({ request, change, images, sources, signal: importSignal });
+    if (change.kind === "none" && !basis && anatomy.kind !== "replace") {
+      const loaded = candidate?.loaded;
+      const first = loaded?.errors[0];
+      throw new Error(loaded?.unpairedWater?.length ? "Only a water reference was found. Load its spectrum first, then add the reference." : first ? `${first.file}: ${first.error}` : "No readable spectroscopy data found.");
     }
     if (automation && change.kind !== "replacement") throw new Error("No spectroscopy data found among the supplied spectra files.");
     const next = change.kind === "none" ? null : change.input;
@@ -465,14 +485,17 @@ async function loadFiles(request, signal) {
       if (!$("waterScaling").disabled) $("waterScaling").checked = p.waterScaling ?? true;
       if (!$("ecc").disabled) $("ecc").checked = p.eddyCurrentCorrection ?? true;
     }
+    if (anatomy.kind === "clear") tissue.reset();
+    if (anatomy.warning) log.log(anatomy.warning, "warning");
     if (given.length) tissue.setFractions({ gm: p.fractionGM, wm: p.fractionWM, csf: p.fractionCSF });
+    const nextT1 = anatomy.kind === "replace" ? anatomy.prepared : null;
     const presentation = nextT1 ? tissue.commitT1(nextT1) : null;
     progress.end("Inputs loaded");
     if (nextT1) {
       $("tissueSection").open = true;
       await presentation;
     } else if (next && view === "voxel" && tissue.hasT1) showView("voxel");
-    const message = water ? "Water reference attached to the selected dataset." : next ? `${describeInput()} loaded` : nextT1 ? "T1 loaded." : "Basis set loaded; add spectroscopy data.";
+    const message = anatomy.kind === "clear" ? `${describeInput()} loaded; anatomy skipped.` : water ? "Water reference attached to the selected dataset." : next ? `${describeInput()} loaded` : nextT1 ? "T1 loaded." : "Basis set loaded; add spectroscopy data.";
     progress.end(message);
     status(message);
   } finally {
