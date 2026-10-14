@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
+import { syntheticNifti } from './nifti-fixture.mjs';
 
 export async function inferenceWorker(app, globals = {}) {
   const messages = [];
@@ -12,7 +13,10 @@ export async function inferenceWorker(app, globals = {}) {
     plugins: [{
       name: 'scientific-stubs',
       setup(builder) {
-        builder.onResolve({ filter: /^(@neurodesk\/synth(sr|seg)|onnxruntime-web)/ }, args => ({ path: args.path, namespace: 'science' }));
+        builder.onResolve({ filter: /^(@neurodesk\/synth(sr|seg)|onnxruntime-web)/ }, args => {
+          if (args.path === '@neurodesk/synthseg/input-memory') return;
+          return { path: args.path, namespace: 'science' };
+        });
         builder.onLoad({ filter: /.*/, namespace: 'science' }, args => {
           if (args.path.endsWith('?url')) return { contents: 'export default "https://example.org/runtime";' };
           if (args.path.includes('/browser')) return { contents: 'export const browserRuntime = () => ({}); export const createBrowserSession = async () => ({});' };
@@ -31,8 +35,10 @@ export async function inferenceWorker(app, globals = {}) {
     }],
   });
   const context = vm.createContext({
-    ArrayBuffer, Uint8Array, Response, Headers, crypto: webcrypto,
-    navigator: { hardwareConcurrency: 1 },
+    ArrayBuffer, Uint8Array, File, Blob, Response, Headers, crypto: webcrypto,
+    navigator: { hardwareConcurrency: 1, gpu: { async requestAdapter() {
+      return { limits: { maxBufferSize: 2 ** 31, maxStorageBufferBindingSize: 2 ** 31 } };
+    } } },
     fetch: async () => new Response(new Uint8Array([1, 2, 3])),
     ...globals,
     self: { postMessage: message => messages.push(message) },
@@ -42,7 +48,8 @@ export async function inferenceWorker(app, globals = {}) {
     messages,
     context,
     async run(model) {
-      await context.self.onmessage({ data: { model, options: { backend: 'wasm' }, file: { arrayBuffer: async () => new ArrayBuffer(1) } } });
+      const file = new File([syntheticNifti({ dims: [1, 1, 1], spacing: [1, 1, 1], gzip: false })], 'input.nii');
+      await context.self.onmessage({ data: { model, options: { backend: 'wasm' }, file } });
     },
   };
 }

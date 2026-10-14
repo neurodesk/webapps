@@ -27,6 +27,7 @@ test('SynthSeg input replacement waits for an entered editor callback to finish 
   const context = vm.createContext({
     editor: { cancel: () => oldLoad },
     runs: { begin: () => run },
+    progressManager: { reset() {} },
     $: id => {
       if (!nodes.has(id)) nodes.set(id, {});
       return nodes.get(id);
@@ -37,7 +38,7 @@ test('SynthSeg input replacement waits for an entered editor callback to finish 
     show() { replacementLoads++; visible = 'new input'; },
     file: { name: 'new.nii', arrayBuffer: async () => new ArrayBuffer(0) },
   });
-  vm.runInContext(`let source, sourceGrid, labels, provenance, operation;
+  vm.runInContext(`let source, sourceGrid, labels, provenance, operation, memoryRecommendation;
     let viewRevision = 0, busy = false, webgpu = true;
     ${section(synthseg, 'function clearOutputs()', '\nasync function importImages(')}`, context);
   const loading = vm.runInContext('load(file)', context);
