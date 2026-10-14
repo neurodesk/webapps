@@ -26,6 +26,7 @@
   "graph_optimization": "None; float32 ONNX rebuilt from the Keras checkpoint by exes/synthseg/scripts/export_model.py",
   "classes": 33,
   "norms": {
+    "version": "b23bda1938a5",
     "description": "IXI age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --fast --vol (neurodesk/neurocontainers recipes/synthseg)",
     "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/b23bda1938a5e95e073e34176c1ada526f2382cd/recipes/synthseg/brainquant_norms.json",
     "sha256": "db01bdff445db7b8e1fd5e6eaa837edc0b8e27e2b28d3c8cdb0b89427d8eb710",

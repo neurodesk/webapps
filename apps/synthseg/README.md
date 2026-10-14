@@ -23,6 +23,18 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
 - **Mode** — `fast` (the default) is a single pass and matches the volume norms;
   `default` adds flip averaging and topological correction.
 - **CT** — auto-checked when the loaded image contains negative intensities.
+- **Image preparation** — scans that exceed the GPU buffer limit first use niimath's
+  robust FOV to keep 170 mm below the top of the head and remove excess neck. You can
+  turn this off. Scans that already fit keep their original field of view.
+  If cropping is insufficient, the app offers the smallest fitting processing voxel
+  size in 0.1 mm increments, up to 3 mm. Selecting **Use … mm and segment** reruns
+  preprocessing and inference on that coarser grid. You can also set the processing
+  voxel size directly. Inspect the labels after either adjustment.
+  Coarser grids reduce anatomical detail and can affect segmentation and volume
+  estimates. The Volumes view notes that its 1 mm reference norms have not been
+  validated for these grids. The input remains unchanged; label downloads use the
+  processed grid, with its physical affine, and the JSON records the crop, original
+  and cropped dimensions, and processing voxel size.
 - **Output** — label-overlay opacity, `<stem>_synthseg.nii.gz`, `<stem>_synthseg_vol.csv`
   (mri_synthseg `--vol` soft volumes in mm³), `<stem>_synthseg.json`.
 - **Volumes** — a viewer tab after a run. It charts each structure's
@@ -30,7 +42,9 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
   table below (`src/volume-report.js`, a port of the neurocontainers SynthSeg recipe's
   `brainquant.py` in `@neurodesk/synthseg/brainquant`). The norms come from
   `manifest.norms`, a commit-pinned neurocontainers URL, fetched once and checked
-  against its SHA-256. Without them the labels and the CSV still work and the view
+  against its SHA-256. Its data version is the first 12 characters of the source
+  commit, shown above the charts and saved with the URL and checksum in the JSON
+  report. Without them the labels and the CSV still work and the view
   says why. Research use only.
 - **Edit** — corrects the labels in the viewer with the shared mask editor. Download then
   saves the edited labels (uint8, same name and grid); the JSON report keeps the pipeline's.
@@ -58,6 +72,14 @@ does not validate voxel data or guarantee that a particular adapter has enough
 memory. Runtime adapter checks still apply. DICOM geometry is unavailable until
 conversion, so its check remains deferred to that runtime guard. The native
 engine is exempt from this browser limit.
+
+The interactive browser checks the adapter's buffer limits before loading the
+model, crops oversized scans if enabled, and offers downsampling if needed.
+The desktop's header-only automation preflight remains conservative: it cannot
+estimate a robust FOV without reading intensities and retains the 1 mm limit.
+Downsampling the source file alone still does not reduce SynthSeg's usual 1 mm
+tensor. The interactive fallback changes the processing grid itself, using the
+same Rust interpolation and antialiasing code as the 1 mm path.
 
 ## Develop
 

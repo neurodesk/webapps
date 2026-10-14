@@ -29,6 +29,14 @@ const { buffer, provenance } = await runSynthseg({
 `fast` skips left–right flip averaging and topology postprocessing (roughly half
 the work, slightly noisier labels). `ct` clips Hounsfield units to [0, 80].
 
+The browser can explicitly set `options.voxelSizeMm` between 1 and 3 to use a
+coarser processing grid after exceeding GPU memory. The default remains 1 mm.
+The labels' affine and soft volumes reflect the chosen physical voxel size.
+This fallback changes the scale seen by the model and is not validated against
+the 1 mm volume norms. `./input-memory` plans the required padded buffers and
+prepares oversized inputs with an injected niimath robust FOV crop; it proposes
+a coarser grid without applying it automatically.
+
 ## Command line
 
 The `synthseg` command runs the web app's pipeline on your own computer: the

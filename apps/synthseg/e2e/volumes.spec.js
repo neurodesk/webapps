@@ -73,6 +73,11 @@ test('the Volumes view charts each structure against age and follows the Age and
   const { report } = JSON.parse(await page.locator('#neurodesk-run').textContent());
   expect(report.parameters).toMatchObject({ mode: 'fast', age: 72, sex: 'male' });
   expect(report.measurements.softVolumesMm3).toEqual(volumes);
+  expect(report.measurements.volumeReport.norms).toEqual({
+    version: 'b23bda1938a5',
+    url: manifest.norms.url,
+    sha256: manifest.norms.sha256,
+  });
   const hippocampus = report.measurements.volumeReport.results[0];
   expect(hippocampus).toMatchObject({ id: 'hippocampus_left', flag: '>95th' });
   expect(hippocampus.percentile).toBeCloseTo(98.79403632302876, 9);
@@ -93,6 +98,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   await expect(panel.locator('tbody tr').first()).toHaveAttribute('data-flag', '>95th');
   await expect(panel).toContainText('Research use only. Not for diagnostic use.');
   await expect(panel).toContainText('Total intracranial volume 1592 mL.');
+  await expect(panel).toContainText('Population data: IXI, version b23bda1938a5.');
 
   await page.locator('#age').fill('');
   await page.locator('#sex').selectOption('');
@@ -118,6 +124,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   const saved = JSON.parse(await readFile(await (await json).path(), 'utf8'));
   expect(saved.measurements.volumeReport.subject).toEqual({ age: 95, sex: null });
   expect(saved.measurements.volumeReport.outsideReferenceAge).toBe(true);
+  expect(saved.measurements.volumeReport.norms.version).toBe('b23bda1938a5');
 
   await page.locator('#imageInput').setInputFiles(SMALL);
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'ready');

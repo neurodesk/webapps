@@ -827,18 +827,25 @@ apps:
     about:
       - SynthSeg 2.0 segments brain scans into FreeSurfer labels using the pretrained FreeSurfer 8.1.0 model. It resamples to 1 mm and applies normalization, flip averaging and topological correction.
       - Fast mode skips flip averaging and topological correction. Browser inference requires WebGPU; the native executable also supports CPU inference.
-      - The Volumes view charts each structure's head-size-adjusted volume against age with the 5th–95th and 25th–75th percentiles of the IXI reference cohort, fitted on fast-mode volumes. Research use only. Not for diagnostic use.
+      - Oversized scans first try niimath robust FOV, keeping 170 mm below the top of the head and removing excess neck. If the cropped scan still exceeds the GPU buffer limit, you can choose a coarser processing grid. This experimental fallback reduces detail and changes the anatomical scale seen by the model. It can affect segmentation and volume estimates; these outputs have not been validated against the 1 mm volume norms. The original upload is preserved and the run report records the crop and processing voxel size.
+      - The Volumes view charts each structure's head-size-adjusted volume against age with the 5th–95th and 25th–75th percentiles of the IXI reference cohort, fitted on fast-mode volumes. Population data version b23bda1938a5 is pinned to the neurocontainers source revision and verified by checksum. The version appears with the results and in the saved run report. Research use only. Not for diagnostic use.
     packages:
       - { name: SynthSeg WebAssembly, url: https://github.com/neurodesk/webapps/tree/main/packages/synthseg, role: shared native and browser preprocessing and postprocessing }
       - { name: brainquant norms, url: https://github.com/neurodesk/neurocontainers/blob/b23bda1938a5e95e073e34176c1ada526f2382cd/recipes/synthseg/brainquant_norms.json, role: age and sex volume norms from the neurocontainers SynthSeg recipe }
       - { name: WebGPU FP32 kernels, url: https://github.com/neurodesk/webapps/tree/main/packages/runtime-support/src/gpu-unet, role: segmentation inference }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image and label viewer }
+      - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: robust field-of-view neck cropping }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
       - group: Brain segmentation
         title: SynthSeg
         reference: "Billot B, Greve DN, Puonti O, et al. SynthSeg: Segmentation of brain MRI scans of any contrast and resolution without retraining. Medical Image Analysis. 2023;86:102789."
         doi: 10.1016/j.media.2023.102789
+      - group: Neck cropping
+        title: niimath
+        reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance testing and improve tool quality. Aperture Neuro. 2024;4."
+        doi: 10.52294/001c.94384
+        code: https://github.com/rordenlab/niimath
       - group: Volume norms
         title: IXI dataset
         reference: "IXI Dataset. Information eXtraction from Images, Imperial College London. Licensed under CC BY-SA 3.0. The age norms were fitted on its T1-weighted images by the neurocontainers SynthSeg recipe."

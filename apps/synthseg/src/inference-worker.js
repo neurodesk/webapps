@@ -2,8 +2,22 @@ import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { loadSynthseg, runSynthseg } from '@neurodesk/synthseg';
 import { browserRuntime, createBrowserSession } from '@neurodesk/synthseg/browser';
 import wasmUrl from '@neurodesk/synthseg/wasm?url';
+import { Niimath } from '@niivue/niimath';
+import { InputMemoryError, MAX_BUFFER_BYTES, prepareBrowserInput } from '@neurodesk/synthseg/input-memory';
 
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
+
+async function cropNeck(file) {
+  const niimath = new Niimath();
+  try {
+    await niimath.init();
+    niimath.setOutputDataType('input');
+    const cropped = await niimath.image(file).gz(0).robustfov().run('cropped.nii');
+    return cropped.arrayBuffer();
+  } finally {
+    niimath.dispose();
+  }
+}
 
 async function modelBytes(model) {
   if (!/^[a-f0-9]{64}$/i.test(model.sha256 || '')) {
@@ -26,18 +40,30 @@ async function modelBytes(model) {
 
 self.onmessage = async ({ data: job }) => {
   try {
+    const adapter = await navigator.gpu?.requestAdapter({ powerPreference: 'high-performance' });
+    if (!adapter) throw new Error('WebGPU is unavailable in this browser.');
+    const maxBufferBytes = Math.min(MAX_BUFFER_BYTES, adapter.limits.maxBufferSize, adapter.limits.maxStorageBufferBindingSize);
+    const { buffer: input, preparation } = await prepareBrowserInput({
+      file: job.file,
+      robustFov: job.options.robustFov,
+      voxelSizeMm: job.options.voxelSizeMm,
+      maxBufferBytes,
+      crop: cropNeck,
+      onProgress: progress,
+    });
     const wasm = await loadSynthseg(fetch(wasmUrl));
     const { buffer, provenance, volumes } = await runSynthseg({
-      buffer: await job.file.arrayBuffer(),
+      buffer: input,
       options: job.options,
       wasm,
       loadModel: () => modelBytes(job.model),
       createSession: createBrowserSession,
       onProgress: progress,
-      runtime: { app: 'SynthSeg web 0.6.20261012', ...browserRuntime() },
+      runtime: { app: 'SynthSeg web 0.7.20261014', ...browserRuntime(), preparation },
     });
     self.postMessage({ type: 'result', buffer, provenance, volumes }, [buffer]);
   } catch (error) {
-    self.postMessage({ type: 'error', message: error.message || String(error) });
+    self.postMessage({ type: 'error', message: error.message || String(error),
+      ...(error instanceof InputMemoryError ? { recommendation: error.recommendation } : {}) });
   }
 };

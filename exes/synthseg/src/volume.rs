@@ -60,15 +60,20 @@ pub fn gaussian(data: &[f64], dims: &[usize; 3], sigmas: [f64; 3]) -> Vec<f64> {
 // SynthSeg resample_volume(volume, aff, [1,1,1]): blur when downsampling, linear interpolation on
 // the NumPy arange grid, coordinates clamped to the volume.
 pub fn resample_1mm(v: &Volume<f64>) -> Result<Volume<f64>, String> {
+    resample(v, 1.0)
+}
+
+fn resample(v: &Volume<f64>, voxel_size_mm: f64) -> Result<Volume<f64>, String> {
     let (data, dims, affine) = (&v.data, &v.dims, &v.affine);
-    let factors: [f64; 3] = std::array::from_fn(|a| {
+    let spacing: [f64; 3] = std::array::from_fn(|a| {
         (0..3)
             .fold(0.0, |s, r| s + affine[r][a] * affine[r][a])
             .sqrt()
     });
-    if factors.iter().any(|&s| !(0.05..=20.0).contains(&s)) {
+    if spacing.iter().any(|&s| !(0.05..=20.0).contains(&s)) {
         return Err("Voxel spacing is outside the supported range (0.05–20 mm).".into());
     }
+    let factors = spacing.map(|s| s / voxel_size_mm);
     let starts = factors.map(|f| -(f - 1.0) / (2.0 * f));
     let steps = factors.map(|f| 1.0 / f);
     let shape: [usize; 3] = std::array::from_fn(|a| {
@@ -131,7 +136,7 @@ pub fn resample_1mm(v: &Volume<f64>) -> Result<Volume<f64>, String> {
     Ok(Volume {
         data: out,
         dims: shape,
-        pixdim: [1.0; 3],
+        pixdim: [voxel_size_mm; 3],
         affine: aff,
         codes: [0, 2], // nibabel: qform unknown, sform aligned, when the affine changed
         units: v.units,
@@ -175,9 +180,25 @@ fn percentile(v: &mut [f64], p: f64) -> f64 {
 }
 
 pub fn prepare(v: &Volume<f64>, ct: bool) -> Result<Prepared, String> {
+    prepare_at_resolution(v, ct, 1.0)
+}
+
+/// The browser can explicitly use a coarser grid after its 1 mm input exceeds GPU limits.
+pub fn prepare_at_resolution(
+    v: &Volume<f64>,
+    ct: bool,
+    voxel_size_mm: f64,
+) -> Result<Prepared, String> {
+    if !(1.0..=3.0).contains(&voxel_size_mm) {
+        return Err("Processing voxel size must be between 1 and 3 mm.".into());
+    }
     let resampled;
-    let r = if v.pixdim.iter().any(|&p| !(0.95..=1.05).contains(&p)) {
-        resampled = resample_1mm(v)?;
+    let r = if voxel_size_mm != 1.0 || v.pixdim.iter().any(|&p| !(0.95..=1.05).contains(&p)) {
+        resampled = if voxel_size_mm == 1.0 {
+            resample_1mm(v)?
+        } else {
+            resample(v, voxel_size_mm)?
+        };
         &resampled
     } else {
         v

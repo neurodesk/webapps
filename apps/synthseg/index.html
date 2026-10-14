@@ -48,6 +48,19 @@
             <p id="modeHelp" class="nd-hint">Fast mode matches the volume norms; default adds flip averaging and topology.</p>
           </div>
           <label class="nd-check"><input id="ct" type="checkbox"> Input is CT · Hounsfield units</label>
+          <details class="nd-sidebar-section" id="preparationSection">
+            <summary class="nd-section-title">Image preparation</summary>
+            <div class="nd-section-content">
+              <label class="nd-check"><input id="robustFov" type="checkbox" checked> Crop excess neck on large scans</label>
+              <p class="nd-hint">Robust FOV keeps 170 mm below the top of the head. Check the resulting labels.</p>
+              <div class="nd-field">
+                <label for="voxelSizeMm">Processing voxel size <small>mm</small></label>
+                <input id="voxelSizeMm" type="number" min="1" max="3" step="0.1" value="1" required>
+                <p class="nd-hint">Coarser grids are experimental. Review labels before using volume estimates.</p>
+              </div>
+              <button id="downsampleButton" class="nd-btn nd-btn-secondary" type="button" hidden></button>
+            </div>
+          </details>
           <button id="processButton" class="nd-btn nd-btn-primary" type="button" disabled>Segment brain</button>
         </div>
       </details>

@@ -4,7 +4,7 @@
 import { VOLUME_COLUMNS } from './results.js';
 
 const CITATION = 'Billot et al. (2023) SynthSeg: Segmentation of brain MRI scans of any contrast and resolution without retraining. Med Image Anal. PMID: 36857946';
-const VERSION = '0.6.20261012';
+const VERSION = '0.7.20261014';
 
 export async function runSynthseg({ buffer, options = {}, loadModel, createSession, wasm,
   onProgress = () => {}, runtime = {} }) {
@@ -21,7 +21,7 @@ export async function runSynthseg({ buffer, options = {}, loadModel, createSessi
     output.dispose?.();
   };
   try {
-    onProgress(0.01, 'Reading NIfTI and resampling to 1 mm…');
+    onProgress(0.01, `Reading NIfTI and resampling to ${settings.voxelSizeMm ?? 1} mm…`);
     seg = new wasm.Segmenter(new Uint8Array(buffer), settings);
     mark('preprocess');
     onProgress(0.12, `Prepared ${seg.padded.join(' × ')} voxels`);

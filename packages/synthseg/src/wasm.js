@@ -12,10 +12,13 @@ export async function loadSynthseg(source) {
   const dims = (ptr) => Array.from(new Uint32Array(wasm.memory.buffer, ptr, 3));
 
   class Segmenter {
-    constructor(bytes, { ct = false } = {}) {
+    constructor(bytes, { ct = false, voxelSizeMm = 1 } = {}) {
+      if (!Number.isFinite(voxelSizeMm) || voxelSizeMm < 1 || voxelSizeMm > 3) {
+        throw new Error('Processing voxel size must be between 1 and 3 mm.');
+      }
       const ptr = wasm.alloc(bytes.length);
       u8().set(bytes, ptr);
-      this.seg = wasm.seg_new(ptr, bytes.length, ct ? 1 : 0);
+      this.seg = wasm.seg_new_at_resolution(ptr, bytes.length, ct ? 1 : 0, voxelSizeMm);
       wasm.dealloc(ptr, bytes.length);
       if (!this.seg) throw check();
       this.padded = dims(wasm.seg_padded(this.seg));

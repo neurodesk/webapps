@@ -1,5 +1,19 @@
 # synthseg
 
+## 0.7.20261014
+
+### Minor Changes
+
+- Automatically crop excess neck with niimath robust FOV when a scan exceeds the browser's GPU buffer limit. If the cropped scan still does not fit, offer the smallest fitting processing voxel size before retrying. Preserve the original upload, record the crop and resolution in the run report, and warn that coarser outputs are not validated against the 1 mm volume norms. Keep the normal 1 mm pipeline unchanged for scans that fit.
+
+### Patch Changes
+
+- Give the IXI population norms an explicit data version tied to their immutable
+  source commit. Show the version above the volume charts and in About, and include
+  it with the source URL and checksum in saved reports.
+- Updated dependencies
+  - @neurodesk/synthseg@0.7.20261014
+
 ## 0.6.20261012
 
 ### Patch Changes

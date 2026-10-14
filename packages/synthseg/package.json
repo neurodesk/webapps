@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/synthseg",
-  "version": "0.6.20261012",
+  "version": "0.7.20261014",
   "description": "SynthSeg 2.0 brain segmentation for browsers and the command line",
   "type": "module",
   "private": true,
@@ -14,6 +14,7 @@
   "exports": {
     ".": "./src/index.js",
     "./browser": "./src/browser.js",
+    "./input-memory": "./src/input-memory.js",
     "./brainquant": "./src/brainquant.js",
     "./node": "./src/node.js",
     "./results": "./src/results.js",

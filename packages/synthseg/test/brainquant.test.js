@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import manifest from '../model.manifest.json' with { type: 'json' };
 
 import {
   NORMS_SCHEMA,
@@ -22,6 +24,15 @@ const fixture = (name) => new URL(`./fixtures/${name}`, import.meta.url);
 const rawNorms = JSON.parse(readFileSync(fixture('brainquant_norms.json'), 'utf8'));
 const golden = JSON.parse(readFileSync(fixture('brainquant-golden.json'), 'utf8'));
 const norms = parseNorms(rawNorms);
+
+test('the population data version identifies the immutable, checksummed reference', () => {
+  const commit = new URL(manifest.norms.url).pathname.split('/')[3];
+  assert.match(commit, /^[a-f0-9]{40}$/);
+  assert.equal(manifest.norms.version, commit.slice(0, 12));
+  const bytes = readFileSync(fixture('brainquant_norms.json'));
+  assert.equal(bytes.byteLength, manifest.norms.bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.norms.sha256);
+});
 
 function readVolumes(text) {
   const [header, row] = text.trim().split(/\r?\n/).map((line) => line.split(','));

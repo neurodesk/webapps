@@ -35,7 +35,7 @@ const REQUIRED_METHODS = {
   topofit: ['arxiv.org/abs/2505.14017', 'proceedings.mlr.press/v172/hoopes22a.html', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue', '10.1016/j.neuroimage.2012.11.065', '10.52294/001c.94384'],
   surfannotate: ['10.1016/j.neuroimage.2012.01.021', 'github.com/niivue/niivue'],
   zarro: ['10.1038/s41592-021-01326-w', 'zarr.dev', 'dandiarchive.org'],
-  synthseg: ['10.1016/j.media.2023.102789', 'brain-development.org/ixi-dataset', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  synthseg: ['10.1016/j.media.2023.102789', '10.52294/001c.94384', 'brain-development.org/ixi-dataset', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   synthsr: ['10.1016/j.neuroimage.2021.118206', 'github.com/neurolabusc/py_synthsr'],
   syncro: ['10.1016/j.neuroimage.2021.118206', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', 'sites.google.com/view/greedyreg/about', '10.1016/j.media.2007.06.004', '10.1016/j.neuroimage.2010.07.033', '10.52294/001c.94384'],
   'white-matter-lesions': ['10.1101/2025.05.19.25327707', '10.1038/s41592-020-01008-z', '10.1016/j.neuroimage.2022.119474', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],

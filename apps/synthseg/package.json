@@ -1,6 +1,6 @@
 {
   "name": "synthseg",
-  "version": "0.6.20261012",
+  "version": "0.7.20261014",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,6 +15,7 @@
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/synthseg": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20260909",
     "@niivue/niivue": "1.0.0-rc.11"
   },
   "devDependencies": {

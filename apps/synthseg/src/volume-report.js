@@ -1,6 +1,7 @@
 // The age-normative volume report as data and SVG markup. Pure: norms, volumes and the subject in,
 // numbers, text and SVG strings out, so everything here is Node-tested and the page only places it.
 import { assess, centile, footerLines, headerLines, modelKey, percentileText, scaledAge } from '@neurodesk/synthseg/brainquant';
+import manifest from '@neurodesk/synthseg/manifest' with { type: 'json' };
 
 const WIDTH = 240;
 const HEIGHT = 160;
@@ -24,7 +25,7 @@ export function tickStep(span, count = 4) {
 }
 
 /** Everything the Volumes view shows for one subject: text lines, one chart per structure and the table. */
-export function volumeReport(norms, volumes, subject, { fast = true } = {}) {
+export function volumeReport(norms, volumes, subject, { fast = true, voxelSizeMm = 1 } = {}) {
   const report = assess(norms, volumes, subject);
   const { ageMin, ageMax } = norms.reference;
   const span = subject.age === null ? [ageMin, ageMax] : [Math.min(ageMin, subject.age), Math.max(ageMax, subject.age)];
@@ -58,7 +59,11 @@ export function volumeReport(norms, volumes, subject, { fast = true } = {}) {
   }));
   return {
     report,
-    header: headerLines(report, norms),
+    header: [
+      ...headerLines(report, norms),
+      `Population data: ${norms.reference.cohort}, version ${manifest.norms.version}.`,
+      ...(voxelSizeMm > 1 ? [`This run used ${voxelSizeMm} mm voxels. The 1 mm reference norms have not been validated for this grid.`] : []),
+    ],
     footer: footerLines(report, norms, fast ? [] : [FAST_MODE_NOTE]),
     charts,
     rows,

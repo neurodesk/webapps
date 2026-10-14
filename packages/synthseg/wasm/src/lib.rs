@@ -54,8 +54,27 @@ pub extern "C" fn seg_error_len() -> u32 {
 /// `ptr`/`len` must describe a readable NIfTI byte range.
 #[no_mangle]
 pub unsafe extern "C" fn seg_new(ptr: *const u8, len: usize, ct: u32) -> *mut Segmenter {
+    seg_new_at_resolution(ptr, len, ct, 1.0)
+}
+
+/// # Safety
+/// `ptr`/`len` must describe a readable NIfTI byte range.
+#[no_mangle]
+pub unsafe extern "C" fn seg_new_at_resolution(
+    ptr: *const u8,
+    len: usize,
+    ct: u32,
+    voxel_size_mm: f64,
+) -> *mut Segmenter {
     let read = nifti::read(std::slice::from_raw_parts(ptr, len));
-    match read.and_then(|v| volume::prepare(&v, ct != 0).map(|p| (v.dims, p))) {
+    match read.and_then(|v| {
+        let prep = if voxel_size_mm == 1.0 {
+            volume::prepare(&v, ct != 0)
+        } else {
+            volume::prepare_at_resolution(&v, ct != 0, voxel_size_mm)
+        };
+        prep.map(|p| (v.dims, p))
+    }) {
         Ok((dims, prep)) => Box::into_raw(Box::new(Segmenter {
             padded: prep.padded.map(|d| d as u32),
             input_dims: dims.map(|d| d as u32),

@@ -12,6 +12,11 @@ const golden = JSON.parse(await readFile(new URL('brainquant-golden.json', fixtu
 
 const attribute = (svg, element, name) => svg.match(new RegExp(`<${element} class="[^"]*"[^>]*\\b${name}="([^"]+)"`))?.[1];
 
+test('the population data version is visible above the charts', () => {
+  const { header } = volumeReport(norms, volumes, { age: 45, sex: 'female' });
+  assert.ok(header.includes('Population data: IXI, version b23bda1938a5.'));
+});
+
 test('the report rows carry the reference implementation\'s numbers', () => {
   const expected = golden.cases.find((entry) => entry.age === 72 && entry.sex === 'male');
   const { rows, charts } = volumeReport(norms, volumes, { age: 72, sex: 'male' });
@@ -57,6 +62,14 @@ test('a default-mode run is footnoted, a fast run is not', () => {
   const slow = volumeReport(norms, volumes, { age: 45, sex: 'female' }, { fast: false });
   assert.equal(slow.footer.length, fast.footer.length + 1);
   assert.match(slow.footer[0], /fast mode/);
+});
+
+test('coarser grids carry a warning beside the normative volume results', () => {
+  const standard = volumeReport(norms, volumes, { age: 45, sex: 'female' });
+  const coarse = volumeReport(norms, volumes, { age: 45, sex: 'female' }, { voxelSizeMm: 1.5 });
+  assert.equal(coarse.header.length, standard.header.length + 1);
+  assert.equal(coarse.header.at(-1), 'This run used 1.5 mm voxels. The 1 mm reference norms have not been validated for this grid.');
+  assert.deepEqual(coarse.footer, standard.footer);
 });
 
 test('the chart maps values onto the plot and closes each band', () => {
