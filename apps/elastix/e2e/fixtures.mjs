@@ -6,6 +6,7 @@
 // touches the app's code.
 import { createAxis, createDataset, createMetadata, createNgffImage, createNgffMultiscales, memoryStoreToZip, toMultiscales } from "@fideus-labs/ngff-zarr";
 import { toOmeTiff } from "@fideus-labs/fiff";
+import { tomlValue } from "../../../packages/elastix/validation/parameter-matrix.mjs";
 
 export const SIZE = 128;
 export const SPACING = 0.5;
@@ -107,12 +108,6 @@ export async function syntheticPair() {
     pair[role] = { store, ozx: Buffer.from(memoryStoreToZip(store)), tiff: await omeTiff(pixels, role) };
   }
   return pair;
-}
-
-/** One value of an elastix TOML parameter file: a string, a number, or an array of them. */
-export function tomlValue(text, key) {
-  const match = new RegExp(`^${key} = (.+)$`, "m").exec(text);
-  return match ? JSON.parse(match[1]) : undefined;
 }
 
 /** Sum of the translation parts of elastix TransformParameters files (rotation is ~0 for a pure shift). */

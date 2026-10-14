@@ -1,0 +1,39 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "elastix-v",
+  "displayName": "elastix",
+  "app": "elastix",
+  "run": "moving.nii.gz fixed.nii.gz results --method affine",
+  "readme": {
+    "run": "Register a moving image to a fixed image",
+    "notes": [
+      "Runs the elastix web app's rigid, affine or B-spline preset with the same",
+      "ITK-Wasm elastix 2.1.0 build. Writes the registered image, the elastix",
+      "TransformParameters files, the ITK HDF5 transform (not for B-spline) and the",
+      "OME-Zarr transform. No network connection is required.",
+      "",
+      "The command is elastix-register, so it never shadows a native elastix",
+      "installation. Please cite: Klein S, Staring M, Murphy K, Viergever MA,",
+      "Pluim JPW. elastix: a toolbox for intensity-based medical image",
+      "registration. IEEE Transactions on Medical Imaging. 2010;29(1):196-205."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "elastix-register"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "elastix-register.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "elastix-register"
+    }
+  }
+}

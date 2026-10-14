@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRegistrationRunner, registrationError } from "../src/registration.js";
+import { registrationError } from "@neurodesk/elastix/pipeline";
+import { createRegistrationRunner } from "../src/registration.js";
 
 function fakes() {
   const workers = [];

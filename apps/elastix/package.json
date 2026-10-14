@@ -19,6 +19,7 @@
     "@itk-wasm/elastix": "2.1.0",
     "@itk-wasm/image-io": "1.6.1",
     "@itk-wasm/transform-io": "1.1.0",
+    "@neurodesk/elastix": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/niivue": "1.0.0-rc.13",

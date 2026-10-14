@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["e2e.config.ts", "test/agentic/*.ts", "test-utils/agentic-browser.ts"]
+  "include": ["e2e.config.ts", "test/agentic/**/*.ts", "test-utils/agentic-browser.ts"]
 }

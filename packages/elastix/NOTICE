@@ -1,0 +1,13 @@
+elastix command line (elastix-register)
+Apache-2.0
+
+Registration runs elastix and transformix (Klein, Staring et al., Apache-2.0)
+and ITK (Apache-2.0) compiled to WebAssembly by @itk-wasm/elastix 2.1.0,
+image-io 1.6.1 and transform-io 1.1.0, the builds the elastix web app pins.
+OME-Zarr goes through @fideus-labs/ngff-zarr and TIFF through
+@fideus-labs/fiff (MIT); see app/node_modules in a portable archive.
+https://github.com/InsightSoftwareConsortium/ITKElastix
+
+Please cite: Klein S, Staring M, Murphy K, Viergever MA, Pluim JPW. elastix: a
+toolbox for intensity-based medical image registration. IEEE Transactions on
+Medical Imaging. 2010;29(1):196-205. doi:10.1109/TMI.2009.2035616

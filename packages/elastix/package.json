@@ -1,0 +1,51 @@
+{
+  "name": "@neurodesk/elastix",
+  "version": "0.2.20261012",
+  "description": "elastix rigid, affine and B-spline registration (ITK-Wasm) for browsers and the command line",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "elastix-register": "./bin/elastix-register.js"
+  },
+  "exports": {
+    "./node": "./src/node.js",
+    "./outputs": "./src/outputs.js",
+    "./parameter-maps": "./src/parameter-maps.js",
+    "./pipeline": "./src/pipeline.js",
+    "./source-reader": "./src/source-reader.js",
+    "./sources": "./src/sources.js",
+    "./transform-export": "./src/transform-export.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/node.js && node --check src/node-ngff.js && node --check src/pipeline.js && node --check bin/elastix-register.js"
+  },
+  "dependencies": {
+    "@fideus-labs/fiff": "0.8.2",
+    "@fideus-labs/ngff-zarr": "0.38.0",
+    "@itk-wasm/elastix": "2.1.0",
+    "@itk-wasm/image-io": "1.6.1",
+    "@itk-wasm/transform-io": "1.1.0",
+    "@zarrita/storage": "0.2.0",
+    "itk-wasm": "1.0.0-b.201",
+    "zarrita": "0.7.5"
+  },
+  "devDependencies": {
+    "@neurodesk/webapp-components": "workspace:*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/elastix"
+  }
+}

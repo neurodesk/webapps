@@ -7,7 +7,14 @@ import { ESLint } from 'eslint';
 import config from '../eslint.config.js';
 import { assertCoverage, sourceInventory } from '../scripts/quality/lint-inventory.mjs';
 import { fingerprint, inspect, root } from '../scripts/lint.mjs';
-import { typedPromiseProjects } from '../scripts/quality/typed-projects.mjs';
+import { typedProjectFor, typedPromiseProjects } from '../scripts/quality/typed-projects.mjs';
+
+// Canaries create new files in a project's first source directory.
+const sourceDirectory = ({ name, sources }) => {
+  const directory = sources.find((source) => source.endsWith('/'));
+  assert.ok(directory, `${name} needs a source directory for its canaries`);
+  return directory;
+};
 import { preservedLintFilters } from '../scripts/lint-workspaces.mjs';
 
 const eslint = new ESLint({ cwd: root, overrideConfigFile: join(root, 'eslint.config.js') });
@@ -21,12 +28,15 @@ test('every owned tracked source receives nonempty correctness rules', async () 
     'templates/app-template/src/main.js',
     'apps/zarro/src/cursor_zoom.ts',
     'apps/deface/src/main.ts',
+    'test/agentic/catalog.e2e.ts',
+    'test-utils/agentic-browser.ts',
+    'e2e.config.ts',
   ]) {
     assert.ok(files.includes(path), `${path} must be inventoried`);
   }
   assert.ok(files.length > 1500);
   // Rolled-out projects stay typed; see the inventory in docs/development/correctness-lint.md.
-  for (const name of ['zarro', 'deface']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
+  for (const name of ['zarro', 'deface', 'agentic']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
   await assertCoverage(eslint, files);
 });
 
@@ -41,8 +51,10 @@ test('an ignore or empty configuration cannot silently remove owned source', asy
   const coreOnly = { async calculateConfigForFile() {
     return { rules: { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2] } };
   } };
-  for (const { sources, tsconfig } of typedPromiseProjects) {
-    const file = `${sources}new-file.ts`;
+  for (const project of typedPromiseProjects) {
+    const { tsconfig } = project;
+    const file = `${sourceDirectory(project)}new-file.ts`;
+    const otherProject = typedPromiseProjects.find((other) => other !== project).tsconfig;
     await assert.rejects(assertCoverage(coreOnly, [file]), /No effective correctness rules/);
     const typedConfig = (floating, project) => ({ async calculateConfigForFile() {
       const rules = { 'no-unreachable': [2], 'no-dupe-keys': [2], 'no-constant-condition': [2], '@typescript-eslint/no-misused-promises': [2] };
@@ -51,7 +63,7 @@ test('an ignore or empty configuration cannot silently remove owned source', asy
     await assertCoverage(typedConfig({ ignoreVoid: false }, [`./${tsconfig}`]), [file]);
     await assert.rejects(assertCoverage(typedConfig({ ignoreVoid: true }, [`./${tsconfig}`]), [file]), /void promise/);
     await assert.rejects(assertCoverage(typedConfig({ ignoreVoid: false }, undefined), [file]), /must be typed by/);
-    await assert.rejects(assertCoverage(typedConfig({ ignoreVoid: false }, ['./tsconfig.agentic.json']), [file]), /must be typed by/);
+    await assert.rejects(assertCoverage(typedConfig({ ignoreVoid: false }, [`./${otherProject}`]), [file]), /must be typed by/);
   }
 });
 
@@ -159,7 +171,8 @@ test('each typed project checks new source, async callbacks and ignored promises
   ];
   const directories = [];
   try {
-    for (const { sources } of typedPromiseProjects) {
+    for (const project of typedPromiseProjects) {
+      const sources = sourceDirectory(project);
       const directory = await mkdtemp(join(root, sources, 'promise-canary-'));
       directories.push(directory);
       for (const [name, source] of cases) await writeFile(join(directory, name), source);
@@ -192,8 +205,9 @@ test('each typed project checks new source, async callbacks and ignored promises
 });
 
 test('a typed project that does not compile fails the gate instead of typing promises as any', async () => {
-  for (const { sources, tsconfig } of typedPromiseProjects) {
-    const directory = await mkdtemp(join(root, sources, 'type-canary-'));
+  for (const project of typedPromiseProjects) {
+    const { tsconfig } = project;
+    const directory = await mkdtemp(join(root, sourceDirectory(project), 'type-canary-'));
     try {
       const file = join(directory, 'unresolved.ts');
       await writeFile(file, 'import { load } from "./missing-module.js";\nexport function run() { load(); }\n');
@@ -207,5 +221,19 @@ test('a typed project that does not compile fails the gate instead of typing pro
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
+  }
+});
+
+test('a project file source types exactly that file', async () => {
+  const agentic = typedPromiseProjects.find(({ name }) => name === 'agentic');
+  for (const file of ['e2e.config.ts', 'test-utils/agentic-browser.ts']) {
+    assert.equal(typedProjectFor(file), agentic, file);
+    await assertCoverage(eslint, [file]);
+  }
+  // Neighbours of a file source are not part of the project, in the coverage check or in ESLint.
+  for (const file of ['test-utils/agentic-browser.test.ts', 'test-utils/other.ts', 'e2e.config.mts']) {
+    assert.equal(typedProjectFor(file), undefined, file);
+    const config = await eslint.calculateConfigForFile(file);
+    assert.equal(config.rules['@typescript-eslint/no-floating-promises'], undefined, file);
   }
 });

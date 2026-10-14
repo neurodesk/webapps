@@ -1,11 +1,11 @@
-// Pure helpers for writing the registration transform as OME-Zarr (RFC-5).
-// elastix itself evaluates the transform: transformix resamples a
-// "coordinate image" whose voxels hold their own physical coordinate along
-// one axis. Linear interpolation recovers that coordinate of T(point) to
-// the sampler's precision. A linear
-// transform is then fitted exactly from the stationary image's corners; any
-// other is sampled at every stationary voxel as a displacement field. No DOM
-// or ITK-Wasm imports, so Node tests exercise it directly.
+// The registration transform for OME-Zarr (RFC-5), shared by the web app and
+// the command line. elastix itself evaluates the transform: transformix
+// resamples a "coordinate image" whose voxels hold their own physical
+// coordinate along one axis. Linear interpolation recovers that coordinate of
+// T(point) to the sampler's precision. A linear transform is then fitted
+// exactly from the stationary image's corners; any other is sampled at every
+// stationary voxel as a displacement field. transformix is injected, so there
+// are no DOM or ITK-Wasm imports and Node tests exercise it directly.
 
 // ITK parameterizations that are affine maps. Anything else (B-spline,
 // displacement and velocity fields) is written as a displacement field.
@@ -234,4 +234,43 @@ export function displacementFieldImage(vectors, image) {
 /** The transformation as the store's only one: from the stationary (fixed) image to the moving one. */
 export function namedTransformation(transformation) {
   return { ...transformation, name: "fixed_to_moving", input: { name: "fixed" }, output: { name: "moving" } };
+}
+
+// transformix maps one coordinate image per axis. `transformix(image, options)`
+// is ITK-Wasm's transformix, injected by the browser or Node runtime.
+async function mappedCoordinates(transformix, transformParameterObject, dimension, radius, componentType, grid = {}, center = Array(dimension).fill(0)) {
+  const maps = coordinateParameterObject(transformParameterObject);
+  const mapped = [];
+  for (let axis = 0; axis < dimension; axis += 1) {
+    const moving = coordinateImage(dimension, axis, radius, componentType, center);
+    const { result } = await transformix(moving, { transformParameterObject: maps, ...grid });
+    mapped.push(result.data);
+  }
+  return mapped;
+}
+
+/**
+ * The stationary-to-moving transform, evaluated by transformix: one affine
+ * (`matrix`, `offset`) when every stage is linear, else a displacement field
+ * image sampled on the stationary grid. Each runtime serializes the estimate
+ * as RFC-5 OME-Zarr itself.
+ */
+export async function estimateTransform({ transform, transformParameterObject, fixed, moving }, { transformix }) {
+  const dimension = fixed.imageType.dimension;
+  const linear = isLinearTransform(transform);
+  const radius = coordinateRadius([fixed, moving], linear ? Array.from(moving.origin) : []);
+  if (linear) {
+    const { grid, points } = cornerGrid(fixed);
+    // The pinned transformix interpolates internally as float32, even for double output.
+    // Sample coordinates relative to the moving origin so tiny spans retain their precision.
+    const centered = await mappedCoordinates(transformix, transformParameterObject, dimension, radius, "float32", grid, Array.from(moving.origin));
+    const mapped = centered.map((values, axis) => Float64Array.from(values, (value) => value + moving.origin[axis]));
+    const fitted = fitAffine(points, points.map((_, corner) => mapped.map((axis) => axis[corner])));
+    const sampleMagnitude = Math.max(...centered.flatMap((values) => Array.from(values, Math.abs)));
+    const rounding = 2 * 2 ** -23 * sampleMagnitude + 512 * Number.EPSILON * radius;
+    assertAffineFit(fitted, rounding);
+    return { type: "affine", matrix: fitted.matrix, offset: fitted.offset };
+  }
+  const mapped = await mappedCoordinates(transformix, transformParameterObject, dimension, radius, "float32");
+  return { type: "displacements", field: displacementFieldImage(displacementVectors(mapped, fixed), fixed) };
 }

@@ -576,6 +576,9 @@ importers:
       '@itk-wasm/transform-io':
         specifier: 1.1.0
         version: 1.1.0
+      '@neurodesk/elastix':
+        specifier: workspace:*
+        version: link:../../packages/elastix
       '@neurodesk/runtime-support':
         specifier: workspace:*
         version: link:../../packages/runtime-support
@@ -1185,6 +1188,37 @@ importers:
       '@niivue/niimath':
         specifier: 1.4.20260909
         version: 1.4.20260909
+
+  packages/elastix:
+    dependencies:
+      '@fideus-labs/fiff':
+        specifier: 0.8.2
+        version: 0.8.2(@fideus-labs/ngff-zarr@0.38.0)(@fideus-labs/worker-pool@2.1.0)
+      '@fideus-labs/ngff-zarr':
+        specifier: 0.38.0
+        version: 0.38.0
+      '@itk-wasm/elastix':
+        specifier: 2.1.0
+        version: 2.1.0
+      '@itk-wasm/image-io':
+        specifier: 1.6.1
+        version: 1.6.1
+      '@itk-wasm/transform-io':
+        specifier: 1.1.0
+        version: 1.1.0
+      '@zarrita/storage':
+        specifier: 0.2.0
+        version: 0.2.0
+      itk-wasm:
+        specifier: 1.0.0-b.201
+        version: 1.0.0-b.201
+      zarrita:
+        specifier: 0.7.5
+        version: 0.7.5
+    devDependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/fireants:
     dependencies:
@@ -10497,7 +10531,7 @@ snapshots:
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   '@jridgewell/trace-mapping@0.3.9':
     dependencies:

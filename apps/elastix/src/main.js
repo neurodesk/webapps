@@ -31,9 +31,9 @@ import {
   writeTransformOmeZarrFile,
   writeTransformParameterFiles,
 } from "./io.js";
-import { assertCompatiblePair, classifySource } from "./sources.js";
-import { chainParameterFiles, METHOD_LABELS, presetSettings, sortParameterFiles, stageNames } from "./parameter-maps.js";
-import { outputNames } from "./outputs.js";
+import { assertCompatiblePair, classifySource } from "@neurodesk/elastix/sources";
+import { METHOD_LABELS, parameterFileNames, presetSettings, sortParameterFiles, stageNames } from "@neurodesk/elastix/parameter-maps";
+import { hdf5Writable, outputNames } from "@neurodesk/elastix/outputs";
 import { createRegistrationRunner } from "./registration.js";
 import { loadSlotSource } from "./slot-loader.js";
 
@@ -398,11 +398,11 @@ const registration = createRegistrationRunner({
   createWebWorker: () => createWebWorker(null),
 });
 
-function resultRows(names, parameterNames) {
+function resultRows(names, parameterNames, hdf5) {
   return {
     registered: { description: "Registered NIfTI", file: names.nifti },
     omeZarr: { description: "Registered OME-Zarr", file: names.omeZarr, viewable: false },
-    transform: { description: "Transform (ITK HDF5)", file: names.transform, viewable: false },
+    ...(hdf5 ? { transform: { description: "Transform (ITK HDF5)", file: names.transform, viewable: false } } : {}),
     transformOmeZarr: { description: "Transform (OME-Zarr)", file: names.transformOmeZarr, viewable: false },
     ...Object.fromEntries(parameterNames.map((name, index) => [`parameters${index}`, {
       description: `TransformParameters.${index}.toml`,
@@ -413,7 +413,7 @@ function resultRows(names, parameterNames) {
 }
 
 async function writeParameters(signal) {
-  output.files.parameters ??= await abortable(writeTransformParameterFiles(output.chained.maps, output.chained.names), signal);
+  output.files.parameters ??= await abortable(writeTransformParameterFiles(output.transformParameterObject, output.names.stem), signal);
   return output.files.parameters;
 }
 
@@ -467,9 +467,9 @@ async function register({
   const nifti = await abortable(writeImageFile(run.result, names.nifti), signal);
   await viewers.registered.loadVolumes([{ url: nifti, name: nifti.name }]);
   signal?.throwIfAborted();
-  const chained = chainParameterFiles(run.transformParameterObject, names.stem);
-  const rows = resultRows(names, chained.names);
-  output = { ...run, fixed: fixed.image, moving: moving.image, names, chained, rows, files: { nifti } };
+  const parameterNames = parameterFileNames(names.stem, run.transformParameterObject.length);
+  const rows = resultRows(names, parameterNames, hdf5Writable(run.transform));
+  output = { ...run, fixed: fixed.image, moving: moving.image, names, rows, files: { nifti } };
   results.render(rows);
   $("outputSection").open = true;
   const elapsedMs = performance.now() - started;
@@ -526,12 +526,12 @@ registerAppAutomation({
         $("gridSpacing").value = String(parameters.gridSpacing);
         const provenance = await register({ ...parameters, signal: stepSignal, report });
         const files = output.files;
-        files.transform = await abortable(writeTransformFile(output.transform, output.names.transform), stepSignal);
+        if (output.rows.transform) files.transform = await abortable(writeTransformFile(output.transform, output.names.transform), stepSignal);
         const parameterFiles = await writeParameters(stepSignal);
         return {
           artifacts: [
             { role: "registered", file: files.nifti },
-            { role: "transform", file: files.transform },
+            ...(files.transform ? [{ role: "transform", file: files.transform }] : []),
             ...parameterFiles.map((file) => ({ role: "parameters", file })),
           ],
           provenance: { algorithm: "elastix", implementation: "@itk-wasm/elastix 2.1.0", ...provenance },

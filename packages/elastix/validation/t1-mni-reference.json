@@ -1,0 +1,738 @@
+{
+  "example": "t1-mni",
+  "inputs": {
+    "t1_brain.nii.gz": "553e242f330381aa7a5bdac5db27e971d9ee8001e63375d3b01fb00ec0e31bff",
+    "MNI152_T1_1mm_brain.nii.gz": "32d5be33460f995a5d305507053c8862c823d9ca6bfb543381308df14590f212"
+  },
+  "elastixWasmSha256": "780e1219d49d0fb086f5899e7a353aeddf52122767978401593f24cb274cbb6f",
+  "browser": {
+    "path": "apps/elastix/e2e/reference.spec.js: the app's file inputs, registration and IO workers, built assets",
+    "app": "elastix 0.2.20261012",
+    "browser": "Chromium 156.0.8078.4",
+    "presets": {
+      "rigid": {
+        "seconds": 21,
+        "artifacts": {
+          "files": [
+            "t1_brain_TransformParameters.0.toml",
+            "t1_brain_TransformParameters.1.toml",
+            "t1_brain_registered.nii.gz",
+            "t1_brain_transform.h5",
+            "t1_brain_transform.ome.zarr.ozx"
+          ],
+          "registered": {
+            "geometry": {
+              "dims": [
+                3,
+                182,
+                218,
+                182
+              ],
+              "pixdim": [
+                1,
+                1,
+                1
+              ],
+              "qformCode": 1,
+              "sformCode": 1,
+              "quatern": [
+                0,
+                1,
+                0,
+                90,
+                -126,
+                -72
+              ],
+              "srow": [
+                -1,
+                0,
+                0,
+                90,
+                0,
+                1,
+                0,
+                -126,
+                0,
+                0,
+                1,
+                -72
+              ]
+            },
+            "datatype": 16,
+            "voxelSha256": "1a96c3665a8d95e43246d926f2eb42e89c5babc4739777fe29b181d35615108c",
+            "onFixedGrid": true,
+            "mean": 41.729262612406224,
+            "std": 93.4328438711871,
+            "fixedCorrelation": 0.4471963680769822
+          },
+          "parameters": [
+            {
+              "name": "t1_brain_TransformParameters.0.toml",
+              "sha256": "0c778637ac70d15702bb60245be7669c0b20cba2e1741cd83d84811bc822b05c"
+            },
+            {
+              "name": "t1_brain_TransformParameters.1.toml",
+              "sha256": "4b8e2a177f537cf0529ffaeb486d678006706c77e797f72c91f499148e91b360"
+            }
+          ],
+          "transform": [
+            {
+              "type": "Euler3D",
+              "parametersSha256": "d4c302fd8ab14d9111d57d49610cea835b76b3415d91a9d17e7ed9bd03896713",
+              "fixedParametersSha256": "558cd3b9a9de44a7f2a238866c387ce156510fe964131fca2aad76cad45def76"
+            },
+            {
+              "type": "Translation",
+              "parametersSha256": "e61b2c08e50fe7dfcac6bb4deae61d4107af83b6e16513066116241fde20f198",
+              "fixedParametersSha256": "cbb43772f49fee23df7254e29e7ea6c605268521223c241bb81c73644101f02b"
+            }
+          ],
+          "transformOmeZarr": {
+            "documents": {
+              "zarr.json": {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                  "ome": {
+                    "version": "0.6",
+                    "coordinateTransformations": [
+                      {
+                        "type": "affine",
+                        "name": "fixed_to_moving",
+                        "input": {
+                          "name": "fixed"
+                        },
+                        "output": {
+                          "name": "moving"
+                        },
+                        "affine": [
+                          [
+                            0.9993776991881061,
+                            0.0023425092345559172,
+                            -0.03519574647450313,
+                            2.6434214950096333
+                          ],
+                          [
+                            -0.0016868443778868232,
+                            0.9998246997182815,
+                            0.018647620691120206,
+                            -74.11650222373112
+                          ],
+                          [
+                            0.03523323857817195,
+                            -0.01857662897917537,
+                            0.9992064345031152,
+                            5.170547569968974
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "consolidated_metadata": {
+                  "kind": "inline",
+                  "must_understand": false,
+                  "metadata": {}
+                }
+              }
+            },
+            "arrays": {}
+          }
+        }
+      },
+      "affine": {
+        "seconds": 28,
+        "artifacts": {
+          "files": [
+            "t1_brain_TransformParameters.0.toml",
+            "t1_brain_TransformParameters.1.toml",
+            "t1_brain_TransformParameters.2.toml",
+            "t1_brain_registered.nii.gz",
+            "t1_brain_transform.h5",
+            "t1_brain_transform.ome.zarr.ozx"
+          ],
+          "registered": {
+            "geometry": {
+              "dims": [
+                3,
+                182,
+                218,
+                182
+              ],
+              "pixdim": [
+                1,
+                1,
+                1
+              ],
+              "qformCode": 1,
+              "sformCode": 1,
+              "quatern": [
+                0,
+                1,
+                0,
+                90,
+                -126,
+                -72
+              ],
+              "srow": [
+                -1,
+                0,
+                0,
+                90,
+                0,
+                1,
+                0,
+                -126,
+                0,
+                0,
+                1,
+                -72
+              ]
+            },
+            "datatype": 16,
+            "voxelSha256": "46e7dea5408626df7362ce96319dc370ec7d8865d6bed45bc95afc3020103cb9",
+            "onFixedGrid": true,
+            "mean": 57.739212150043755,
+            "std": 105.61325967072852,
+            "fixedCorrelation": 0.5518464108194642
+          },
+          "parameters": [
+            {
+              "name": "t1_brain_TransformParameters.0.toml",
+              "sha256": "0c778637ac70d15702bb60245be7669c0b20cba2e1741cd83d84811bc822b05c"
+            },
+            {
+              "name": "t1_brain_TransformParameters.1.toml",
+              "sha256": "4b8e2a177f537cf0529ffaeb486d678006706c77e797f72c91f499148e91b360"
+            },
+            {
+              "name": "t1_brain_TransformParameters.2.toml",
+              "sha256": "f936dc49dc19ba153b8d60709b03c41afbb04768573772b597889c40f6146c83"
+            }
+          ],
+          "transform": [
+            {
+              "type": "Affine",
+              "parametersSha256": "d66764468776697335567b9ae099033cc5a32bfa0e240960d2dd813918cf4442",
+              "fixedParametersSha256": "68dd7cd288a929a6c0a0f6e5b234dd4622919eac217b7e37edcf1d723ece7adc"
+            },
+            {
+              "type": "Euler3D",
+              "parametersSha256": "d4c302fd8ab14d9111d57d49610cea835b76b3415d91a9d17e7ed9bd03896713",
+              "fixedParametersSha256": "558cd3b9a9de44a7f2a238866c387ce156510fe964131fca2aad76cad45def76"
+            },
+            {
+              "type": "Translation",
+              "parametersSha256": "e61b2c08e50fe7dfcac6bb4deae61d4107af83b6e16513066116241fde20f198",
+              "fixedParametersSha256": "cbb43772f49fee23df7254e29e7ea6c605268521223c241bb81c73644101f02b"
+            }
+          ],
+          "transformOmeZarr": {
+            "documents": {
+              "zarr.json": {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                  "ome": {
+                    "version": "0.6",
+                    "coordinateTransformations": [
+                      {
+                        "type": "affine",
+                        "name": "fixed_to_moving",
+                        "input": {
+                          "name": "fixed"
+                        },
+                        "output": {
+                          "name": "moving"
+                        },
+                        "affine": [
+                          [
+                            0.8655547726878804,
+                            0.031287804177279874,
+                            -0.027816303527157565,
+                            -1.7705991173402396
+                          ],
+                          [
+                            0.013205522990358142,
+                            0.8579655561578982,
+                            0.012551667281935798,
+                            -42.62143259436391
+                          ],
+                          [
+                            0.03020878243182903,
+                            -0.016485252001318517,
+                            0.9725139155901598,
+                            4.737964741533787
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "consolidated_metadata": {
+                  "kind": "inline",
+                  "must_understand": false,
+                  "metadata": {}
+                }
+              }
+            },
+            "arrays": {}
+          }
+        }
+      },
+      "bspline": {
+        "seconds": 119,
+        "artifacts": {
+          "files": [
+            "t1_brain_TransformParameters.0.toml",
+            "t1_brain_TransformParameters.1.toml",
+            "t1_brain_TransformParameters.2.toml",
+            "t1_brain_TransformParameters.3.toml",
+            "t1_brain_registered.nii.gz",
+            "t1_brain_transform.ome.zarr.ozx"
+          ],
+          "registered": {
+            "geometry": {
+              "dims": [
+                3,
+                182,
+                218,
+                182
+              ],
+              "pixdim": [
+                1,
+                1,
+                1
+              ],
+              "qformCode": 1,
+              "sformCode": 1,
+              "quatern": [
+                0,
+                1,
+                0,
+                90,
+                -126,
+                -72
+              ],
+              "srow": [
+                -1,
+                0,
+                0,
+                90,
+                0,
+                1,
+                0,
+                -126,
+                0,
+                0,
+                1,
+                -72
+              ]
+            },
+            "datatype": 16,
+            "voxelSha256": "fe41631bad9d9b122ca0c09b59ef38ddee5df92d5271878bff286ce7e46d3098",
+            "onFixedGrid": true,
+            "mean": 61.08665316109365,
+            "std": 110.12378736294613,
+            "fixedCorrelation": 0.7018855287666587
+          },
+          "parameters": [
+            {
+              "name": "t1_brain_TransformParameters.0.toml",
+              "sha256": "0c778637ac70d15702bb60245be7669c0b20cba2e1741cd83d84811bc822b05c"
+            },
+            {
+              "name": "t1_brain_TransformParameters.1.toml",
+              "sha256": "4b8e2a177f537cf0529ffaeb486d678006706c77e797f72c91f499148e91b360"
+            },
+            {
+              "name": "t1_brain_TransformParameters.2.toml",
+              "sha256": "f936dc49dc19ba153b8d60709b03c41afbb04768573772b597889c40f6146c83"
+            },
+            {
+              "name": "t1_brain_TransformParameters.3.toml",
+              "sha256": "6203f22789c5e09560c111538c1aa92495d1c502e362e631410ecfbabc07eccf"
+            }
+          ],
+          "transform": null,
+          "transformOmeZarr": {
+            "documents": {
+              "zarr.json": {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                  "ome": {
+                    "version": "0.6",
+                    "coordinateTransformations": [
+                      {
+                        "type": "displacements",
+                        "name": "fixed_to_moving",
+                        "input": {
+                          "name": "fixed"
+                        },
+                        "output": {
+                          "name": "moving"
+                        },
+                        "path": "displacements",
+                        "interpolation": "linear"
+                      }
+                    ]
+                  }
+                },
+                "consolidated_metadata": {
+                  "kind": "inline",
+                  "must_understand": false,
+                  "metadata": {
+                    "displacements": {
+                      "zarr_format": 3,
+                      "node_type": "group",
+                      "attributes": {
+                        "ome": {
+                          "version": "0.6",
+                          "multiscales": [
+                            {
+                              "name": "displacements",
+                              "coordinateSystems": [
+                                {
+                                  "name": "intrinsic",
+                                  "axes": [
+                                    {
+                                      "name": "c",
+                                      "type": "displacement",
+                                      "discrete": true
+                                    },
+                                    {
+                                      "name": "z",
+                                      "type": "space",
+                                      "orientation": {
+                                        "type": "anatomical",
+                                        "value": "inferior-to-superior"
+                                      }
+                                    },
+                                    {
+                                      "name": "y",
+                                      "type": "space",
+                                      "orientation": {
+                                        "type": "anatomical",
+                                        "value": "posterior-to-anterior"
+                                      }
+                                    },
+                                    {
+                                      "name": "x",
+                                      "type": "space",
+                                      "orientation": {
+                                        "type": "anatomical",
+                                        "value": "right-to-left"
+                                      }
+                                    }
+                                  ]
+                                }
+                              ],
+                              "datasets": [
+                                {
+                                  "path": "scale0",
+                                  "coordinateTransformations": [
+                                    {
+                                      "type": "sequence",
+                                      "name": "scale0_to_intrinsic",
+                                      "input": {
+                                        "path": "scale0"
+                                      },
+                                      "output": {
+                                        "name": "intrinsic"
+                                      },
+                                      "transformations": [
+                                        {
+                                          "type": "scale",
+                                          "scale": [
+                                            1,
+                                            1,
+                                            1,
+                                            1
+                                          ]
+                                        },
+                                        {
+                                          "type": "translation",
+                                          "translation": [
+                                            0,
+                                            -72,
+                                            126,
+                                            -90
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "consolidated_metadata": {
+                        "kind": "inline",
+                        "must_understand": false,
+                        "metadata": {}
+                      }
+                    },
+                    "displacements/scale0": {
+                      "zarr_format": 3,
+                      "node_type": "array",
+                      "shape": [
+                        3,
+                        182,
+                        218,
+                        182
+                      ],
+                      "data_type": "float32",
+                      "chunk_grid": {
+                        "name": "regular",
+                        "configuration": {
+                          "chunk_shape": [
+                            3,
+                            182,
+                            218,
+                            182
+                          ]
+                        }
+                      },
+                      "chunk_key_encoding": {
+                        "name": "default",
+                        "configuration": {
+                          "separator": "/"
+                        }
+                      },
+                      "codecs": [
+                        {
+                          "name": "bytes",
+                          "configuration": {
+                            "endian": "little"
+                          }
+                        },
+                        {
+                          "name": "blosc",
+                          "configuration": {
+                            "cname": "zstd",
+                            "clevel": 5,
+                            "shuffle": "shuffle",
+                            "typesize": 4,
+                            "blocksize": 0
+                          }
+                        }
+                      ],
+                      "fill_value": 0,
+                      "attributes": {},
+                      "storage_transformers": []
+                    }
+                  }
+                }
+              },
+              "displacements/zarr.json": {
+                "zarr_format": 3,
+                "node_type": "group",
+                "attributes": {
+                  "ome": {
+                    "version": "0.6",
+                    "multiscales": [
+                      {
+                        "name": "displacements",
+                        "coordinateSystems": [
+                          {
+                            "name": "intrinsic",
+                            "axes": [
+                              {
+                                "name": "c",
+                                "type": "displacement",
+                                "discrete": true
+                              },
+                              {
+                                "name": "z",
+                                "type": "space",
+                                "orientation": {
+                                  "type": "anatomical",
+                                  "value": "inferior-to-superior"
+                                }
+                              },
+                              {
+                                "name": "y",
+                                "type": "space",
+                                "orientation": {
+                                  "type": "anatomical",
+                                  "value": "posterior-to-anterior"
+                                }
+                              },
+                              {
+                                "name": "x",
+                                "type": "space",
+                                "orientation": {
+                                  "type": "anatomical",
+                                  "value": "right-to-left"
+                                }
+                              }
+                            ]
+                          }
+                        ],
+                        "datasets": [
+                          {
+                            "path": "scale0",
+                            "coordinateTransformations": [
+                              {
+                                "type": "sequence",
+                                "name": "scale0_to_intrinsic",
+                                "input": {
+                                  "path": "scale0"
+                                },
+                                "output": {
+                                  "name": "intrinsic"
+                                },
+                                "transformations": [
+                                  {
+                                    "type": "scale",
+                                    "scale": [
+                                      1,
+                                      1,
+                                      1,
+                                      1
+                                    ]
+                                  },
+                                  {
+                                    "type": "translation",
+                                    "translation": [
+                                      0,
+                                      -72,
+                                      126,
+                                      -90
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "consolidated_metadata": {
+                  "kind": "inline",
+                  "must_understand": false,
+                  "metadata": {
+                    "scale0": {
+                      "zarr_format": 3,
+                      "node_type": "array",
+                      "shape": [
+                        3,
+                        182,
+                        218,
+                        182
+                      ],
+                      "data_type": "float32",
+                      "chunk_grid": {
+                        "name": "regular",
+                        "configuration": {
+                          "chunk_shape": [
+                            3,
+                            182,
+                            218,
+                            182
+                          ]
+                        }
+                      },
+                      "chunk_key_encoding": {
+                        "name": "default",
+                        "configuration": {
+                          "separator": "/"
+                        }
+                      },
+                      "codecs": [
+                        {
+                          "name": "bytes",
+                          "configuration": {
+                            "endian": "little"
+                          }
+                        },
+                        {
+                          "name": "blosc",
+                          "configuration": {
+                            "cname": "zstd",
+                            "clevel": 5,
+                            "shuffle": "shuffle",
+                            "typesize": 4,
+                            "blocksize": 0
+                          }
+                        }
+                      ],
+                      "fill_value": 0,
+                      "attributes": {},
+                      "storage_transformers": []
+                    }
+                  }
+                }
+              },
+              "displacements/scale0/zarr.json": {
+                "zarr_format": 3,
+                "node_type": "array",
+                "shape": [
+                  3,
+                  182,
+                  218,
+                  182
+                ],
+                "data_type": "float32",
+                "chunk_grid": {
+                  "name": "regular",
+                  "configuration": {
+                    "chunk_shape": [
+                      3,
+                      182,
+                      218,
+                      182
+                    ]
+                  }
+                },
+                "chunk_key_encoding": {
+                  "name": "default",
+                  "configuration": {
+                    "separator": "/"
+                  }
+                },
+                "codecs": [
+                  {
+                    "name": "bytes",
+                    "configuration": {
+                      "endian": "little"
+                    }
+                  },
+                  {
+                    "name": "blosc",
+                    "configuration": {
+                      "cname": "zstd",
+                      "clevel": 5,
+                      "shuffle": "shuffle",
+                      "typesize": 4,
+                      "blocksize": 0
+                    }
+                  }
+                ],
+                "fill_value": 0,
+                "attributes": {}
+              }
+            },
+            "arrays": {
+              "displacements/scale0": {
+                "shape": [
+                  3,
+                  182,
+                  218,
+                  182
+                ],
+                "valuesSha256": "bd7895d0d7ac60323c26939b8deb7e72cbe9ad3217bab7e6614b9122a0576ca7",
+                "maxAbs": 100.14976501464844
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

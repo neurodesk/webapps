@@ -47,11 +47,13 @@ package `pnpm lint` command for scoped inventory and baseline handling; direct
 ## Typed promise handling
 
 `scripts/quality/typed-projects.mjs` lists the TypeScript projects whose
-`src/**/*.{ts,tsx,mts,cts}` sources are checked against their real strict
-TypeScript project for `@typescript-eslint/no-floating-promises` and
-`@typescript-eslint/no-misused-promises`. New source files in those directories
-receive both rules. The coverage check fails when either rule is missing, when
-`void promise` counts as handled, or when a file is typed by another project.
+sources are checked against their real strict TypeScript project for
+`@typescript-eslint/no-floating-promises` and
+`@typescript-eslint/no-misused-promises`. A source is a directory, covering every
+`**/*.{ts,tsx,mts,cts}` file below it, or a single file. New source files in
+those directories receive both rules; the project's `include` must cover them.
+The coverage check fails when either rule is missing, when `void promise`
+counts as handled, or when a file is typed by another project.
 
 The lint parser does not report semantic errors: an unresolved import becomes
 `any` and hides the promise it returns. Before linting, `scripts/lint.mjs`
@@ -82,9 +84,13 @@ entire catalog is a separate migration.
 | Zarro (`apps/zarro/src`) | 29 | `apps/zarro/tsconfig.json` compiles | 0 | Typed since PR #245 |
 | Deface (`apps/deface/src`) | 7 | `apps/deface/tsconfig.json` compiles | 2: 1 floating, 1 misused, both in `main.ts` | Typed; findings fixed |
 | BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Deferred; upstream-synced, record adaptations in `upstream.json` |
-| Root agentic tests | 3 | `tsconfig.agentic.json` compiles | 0 | Deferred; its `test:e2e:types` uses TypeScript 7 |
+| Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 19 | No tsconfig; a strict project has 47 errors | 10 floating, all in `main.ts` | Deferred; needs a compiling project first |
 | Dicompare (`apps/dicompare/src`) | 142 | `apps/dicompare/tsconfig.json` compiles | 85: 38 floating, 47 misused, in 30 files | Deferred; upstream-owned, record adaptations in `upstream.json` |
+
+The root agentic tests had no findings: their promises are already awaited.
+Their project now includes `test/agentic/**/*.ts` so a new file in a
+subdirectory is typed rather than rejected by the parser.
 
 Deface's findings were both teardown paths. `pagehide` discarded the
 `cleanup()` promise, so a teardown failure became an unhandled rejection; it

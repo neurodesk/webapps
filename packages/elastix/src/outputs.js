@@ -30,6 +30,17 @@ export function plainBytes(view) {
   return new Uint8Array(source);
 }
 
+/**
+ * Whether the ITK HDF5 writer can take this transform list. The pinned
+ * @itk-wasm/transform-io 1.1.0 runs out of bounds writing a BSpline transform
+ * (it crashed the web app's tab on the B-spline preset), so a run with a
+ * B-spline stage offers its transform as TransformParameters files and the
+ * OME-Zarr displacement field only.
+ */
+export function hdf5Writable(transforms) {
+  return !transforms.some((transform) => transform.transformType.transformParameterization === "BSpline");
+}
+
 function typedOrEmpty(transform, value, count) {
   if (count > 0 || ArrayBuffer.isView(value)) return value;
   return transform.transformType.parametersValueType === "float32" ? new Float32Array(0) : new Float64Array(0);

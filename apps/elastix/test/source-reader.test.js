@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createSourceReader, cancellableStore } from "../src/source-reader.js";
+import { createSourceReader, cancellableStore } from "@neurodesk/elastix/source-reader";
 import { createIoWorkerQueue } from "../src/io-worker.js";
 
 function deferred() {

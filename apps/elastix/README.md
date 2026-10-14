@@ -72,6 +72,26 @@ and a synthetic 2D pair with a known shift as local OME-Zarr, local OME-TIFF, a
 remote OME-Zarr folder and a remote TIFF served by range request, plus a
 two-level pyramidal OME-TIFF.
 
+## Command line
+
+`elastix-register` from `packages/elastix` runs the same presets with Node, on
+the same ITK-Wasm pipelines:
+
+```bash
+elastix-register moving.nii.gz fixed.nii.gz results --method affine
+```
+
+It writes the downloads under the web app's names, except the registered
+OME-Zarr image. It has no DICOM import. Portable archives for Linux x64,
+Windows x64 and macOS arm64 bundle their own Node runtime. Their release check
+holds every output to this app's own downloads, recorded by
+`e2e/reference.spec.js`. See
+[packages/elastix/README.md](../../packages/elastix/README.md).
+
+B-spline runs offer no ITK HDF5 transform: `@itk-wasm/transform-io` 1.1.0
+fails writing a BSpline transform. Use the TransformParameters files or the
+OME-Zarr transform.
+
 ## Archive dependencies
 
 ITK-Wasm's Node data archive manager is pinned to the maintained

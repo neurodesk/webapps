@@ -2,21 +2,11 @@
 // cannot be interrupted, so cancelling rejects the run and terminates its
 // worker; a cancelled run can never resolve into, or hide the cancel control
 // of, the run after it. ITK-Wasm calls are injected so Node tests use fakes.
-import { buildParameterObject, stageNames } from "./parameter-maps.js";
+import { buildParameterObject, stageNames } from "@neurodesk/elastix/parameter-maps";
+import { registrationError } from "@neurodesk/elastix/pipeline";
 
 function cancelled() {
   return new DOMException("Registration cancelled", "AbortError");
-}
-
-/**
- * An uncaught C++ exception in the elastix module rejects with a bare number
- * (a pointer); say what usually causes it instead of showing that number.
- */
-export function registrationError(error) {
-  if (typeof error === "number") {
-    return new Error("elastix stopped with an internal error. Check that both images overlap and hold one scalar channel.");
-  }
-  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function createRegistrationRunner({ elastix, defaultParameterMap, createWebWorker, onActiveChange = () => {} }) {

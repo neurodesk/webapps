@@ -20,6 +20,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/dwi2trx': 'dwi2trx',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',
   '@neurodesk/edgereg': 'edgereg',
+  '@neurodesk/elastix': 'elastix',
   '@neurodesk/fireants': 'fireants',
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/lcmodel': 'lcmodel',

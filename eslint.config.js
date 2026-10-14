@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tsParser from '@neurodesk/code-quality';
 import tsPlugin from '@neurodesk/code-quality/plugin';
 import globals from 'globals';
-import { typedPromiseProjects } from './scripts/quality/typed-projects.mjs';
+import { typedPromiseProjects, typedSourceGlobs } from './scripts/quality/typed-projects.mjs';
 
 // Correctness only. Existing findings are reviewed in scripts/quality/lint-baseline.json.
 // The inventory runner checks every tracked source, including files hidden by an ignore.
@@ -79,11 +79,11 @@ export default [
     },
   },
   // Each typed project's real TS5 program supplies the promise types; scripts/lint.mjs compiles it first.
-  ...typedPromiseProjects.map(({ sources, tsconfig }) => ({
-    files: [`${sources}**/*.{ts,tsx,mts,cts}`],
+  ...typedPromiseProjects.map((project) => ({
+    files: typedSourceGlobs(project),
     languageOptions: {
       parserOptions: {
-        project: [`./${tsconfig}`],
+        project: [`./${project.tsconfig}`],
         tsconfigRootDir: import.meta.dirname,
       },
     },
