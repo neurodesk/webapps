@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync } from 'node:child_process';
 import { appendFile } from 'node:fs/promises';
-import { createAppPlan, changedPathsFromGit } from './lib/app-plan.mjs';
+import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
@@ -21,24 +20,9 @@ if (only && only !== 'affected') {
   if (unknown.length) throw new Error(`Unknown app ids: ${unknown.join(', ')}`);
   changedPaths = [...ids].map((id) => `apps/${id}/package.json`);
 }
-// changedPathsFromGit diffs from the merge base, so manifests are compared there too.
-const head = option('--head') || 'HEAD';
-const manifestPaths = (only && only !== 'affected' ? [] : changedPaths).filter((path) => /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml)$|^pnpm-lock\.yaml$/.test(path));
-const git = (args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
-let mergeBase = '';
-try {
-  mergeBase = manifestPaths.length ? git(['merge-base', option('--base'), head]).trim() : '';
-} catch {
-  // Without a merge base no manifest can be compared; the planner treats each as shared.
-}
-const manifests = new Map();
-for (const path of mergeBase ? manifestPaths : []) {
-  try {
-    manifests.set(path, { before: git(['show', `${mergeBase}:${path}`]), after: git(['show', `${head}:${path}`]) });
-  } catch {
-    // An added or deleted manifest is a code change like any other.
-  }
-}
+const manifests = only && only !== 'affected'
+  ? new Map()
+  : changedManifests({ base: option('--base'), head: option('--head') || 'HEAD', cwd: repoRoot, changedPaths });
 let graph;
 let fallbackReason = '';
 try {

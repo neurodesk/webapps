@@ -194,9 +194,6 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@niivue/dcm2niix':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@niivue/niimath':
         specifier: 1.4.20260928
         version: 1.4.20260928
@@ -284,9 +281,6 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@niivue/dcm2niix':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@niivue/niivue':
         specifier: 1.0.0-rc.9
         version: 1.0.0-rc.9
@@ -504,9 +498,6 @@ importers:
       '@neurodesk/webapp-components':
         specifier: workspace:*
         version: link:../../packages/components
-      '@niivue/dcm2niix':
-        specifier: ^1.2.0
-        version: 1.2.0
       '@niivue/niimath':
         specifier: file:./vendor/niimath
         version: file:apps/dwi2trx/vendor/niimath

@@ -18,7 +18,6 @@
     "@neurodesk/deface": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/dcm2niix": "^1.2.0",
     "@niivue/niivue": "1.0.0-rc.9"
   },
   "devDependencies": {

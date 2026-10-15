@@ -16,13 +16,13 @@ const attribute = (svg, element, name) => svg.match(new RegExp(`<${element} clas
 
 test('the population data version is visible above the charts', () => {
   const { header } = volumeReport(norms, volumes, { age: 45, sex: 'female' }, IXI);
-  assert.ok(header.includes('Population data: IXI, version c3e75dbe830b.'));
+  assert.ok(header.includes('Population data: IXI, version 347cf6fb6135.'));
 });
 
 test('the report names the reference it compared against and why', () => {
   const { header, footer } = volumeReport(ahead, volumes, { age: 30, sex: 'male' }, { reference: { id: 'ahead', reason: 'the scanner field strength is 6.98 T' } });
   assert.ok(header.some((line) => line.startsWith('Reference: AHEAD 7 T (n=105,')));
-  assert.ok(header.includes('Population data: AHEAD, version c3e75dbe830b.'));
+  assert.ok(header.includes('Population data: AHEAD, version 347cf6fb6135.'));
   assert.equal(footer[0], 'The AHEAD reference was chosen because the scanner field strength is 6.98 T.');
 });
 

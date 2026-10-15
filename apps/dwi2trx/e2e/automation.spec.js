@@ -79,3 +79,23 @@ test('hardware tractography returns tensor maps and a hashed TRX for the referen
     expect(createHash('sha256').update(bytes).digest('hex')).toBe(artifact.sha256);
   }
 });
+
+test('a tensor fit failure started from the button reaches the status bar once, without a page error', async ({ page }) => {
+  test.setTimeout(120_000);
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  await page.goto('/');
+  const { image, bval, bvec } = diffusion();
+  const files = [[image, 'dwi.nii'], [bval, 'dwi.bval'], [bvec, 'dwi.bvec']].map(([file, name]) => ({ ...file, name, mimeType: 'application/octet-stream' }));
+  await page.locator('#filePicker').setInputFiles(files);
+  await expect(page.locator('#statusText')).toContainText('7 volumes', { timeout: 60_000 });
+  await page.route('**/tensor-worker*.js', (route) => route.fulfill({ status: 503, body: 'Worker unavailable for failure check' }));
+  await page.locator('#maskFitBtn').click();
+  await expect(page.locator('#statusText')).toContainText('Tensor fit failed');
+  await expect(page.locator('#statusText')).toHaveClass(/error/);
+  await expect(page.locator('#maskFitBtn')).toBeEnabled();
+  // The fit reported its own failure; the click handler must not add a second, generic one.
+  await expect(page.locator('#consoleOutput')).toContainText('Tensor fit failed');
+  expect((await page.locator('#consoleOutput').innerText()).match(/Tensor fit failed/g)).toHaveLength(1);
+  expect(pageErrors).toEqual([]);
+});

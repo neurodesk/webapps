@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 export const typedPromiseProjects = [
   { name: 'zarro', sources: ['apps/zarro/src/'], tsconfig: 'apps/zarro/tsconfig.json' },
   { name: 'deface', sources: ['apps/deface/src/'], tsconfig: 'apps/deface/tsconfig.json' },
+  { name: 'dwi2trx', sources: ['apps/dwi2trx/src/'], tsconfig: 'apps/dwi2trx/tsconfig.json' },
   {
     name: 'agentic',
     sources: ['test/agentic/', 'test-utils/agentic-browser.ts', 'e2e.config.ts'],

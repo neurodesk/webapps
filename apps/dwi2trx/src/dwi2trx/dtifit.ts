@@ -31,7 +31,7 @@ let inFlight = false
 export async function runNiimath(
   args: string[],
   { inputs = {}, outputs = [] }: { inputs?: Record<string, Uint8Array>; outputs?: string[] },
-): Promise<{ outputs: Record<string, Uint8Array> }> {
+): Promise<{ outputs: Record<string, Uint8Array<ArrayBuffer>> }> {
   if (inFlight) throw new Error('niimath is busy.')
   inFlight = true
   try {

@@ -90,7 +90,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   expect(report.measurements.softVolumesMm3).toEqual(volumes);
   expect(report.measurements.volumeReport.norms).toEqual({
     id: 'ixi',
-    version: 'c3e75dbe830b',
+    version: '347cf6fb6135',
     url: manifest.norms.ixi.url,
     sha256: manifest.norms.ixi.sha256,
   });
@@ -119,7 +119,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   await expect(panel.locator('tbody tr').first()).toHaveAttribute('data-flag', '>95th');
   await expect(panel).toContainText('Research use only. Not for diagnostic use.');
   await expect(panel).toContainText('Total intracranial volume 1592 mL.');
-  await expect(panel).toContainText('Population data: IXI, version c3e75dbe830b.');
+  await expect(panel).toContainText('Population data: IXI, version 347cf6fb6135.');
   await expect(panel).toContainText('The IXI reference was chosen because the scanner field strength is unknown.');
 
   await page.locator('#age').fill('');
@@ -146,7 +146,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   const saved = JSON.parse(await readFile(await (await json).path(), 'utf8'));
   expect(saved.measurements.volumeReport.subject).toEqual({ age: 95, sex: null });
   expect(saved.measurements.volumeReport.outsideReferenceAge).toBe(true);
-  expect(saved.measurements.volumeReport.norms.version).toBe('c3e75dbe830b');
+  expect(saved.measurements.volumeReport.norms.version).toBe('347cf6fb6135');
 
   await page.locator('#imageInput').setInputFiles(SMALL);
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'ready');
@@ -172,7 +172,7 @@ test('the Reference field switches the Volumes view to the AHEAD 7 T norms', asy
   await page.locator('#reference').selectOption('ahead');
   await expect(page.locator('#referenceHint')).toBeHidden();
   await expect(panel).toContainText('Reference: AHEAD 7 T (n=105, 60 F / 45 M, age 18-80 y, CC BY 4.0)');
-  await expect(panel).toContainText('Population data: AHEAD, version c3e75dbe830b.');
+  await expect(panel).toContainText('Population data: AHEAD, version 347cf6fb6135.');
   await expect(panel).toContainText('The AHEAD reference was chosen because it was selected manually.');
   await expect(panel.locator('figure')).toHaveCount(10);
   expect(requests()).toEqual({ ixi: 1, ahead: 1 });
@@ -182,7 +182,7 @@ test('the Reference field switches the Volumes view to the AHEAD 7 T norms', asy
   const saved = JSON.parse(await readFile(await (await json).path(), 'utf8'));
   expect(saved.measurements.volumeReport.norms).toEqual({
     id: 'ahead',
-    version: 'c3e75dbe830b',
+    version: '347cf6fb6135',
     url: manifest.norms.ahead.url,
     sha256: manifest.norms.ahead.sha256,
   });

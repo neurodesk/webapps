@@ -9,15 +9,17 @@ The report was run from `origin/main` at `4b28789c` with
 `pnpm quality:unused` (Knip 6.41.0).
 The scan exited successfully. `diagnostics.log` was empty, so there were no scan warnings.
 
-| Kind | Before | After the source removals | After the dependency removals |
-| --- | ---: | ---: | ---: |
-| files | 17 | 16 | 16 |
-| exports | 69 | 40 | 40 |
-| types | 14 | 14 | 14 |
-| duplicates | 1 | 1 | 1 |
-| dependencies | 18 | 18 | 15 |
-| devDependencies | 28 | 28 | 7 |
-| total | 147 | 117 | 93 |
+| Kind | Before | After the source removals | After the dependency removals | After the dcm2niix removals |
+| --- | ---: | ---: | ---: | ---: |
+| files | 17 | 16 | 16 | 16 |
+| exports | 69 | 40 | 40 | 40 |
+| types | 14 | 14 | 14 | 14 |
+| duplicates | 1 | 1 | 1 | 1 |
+| dependencies | 18 | 18 | 15 | 12 |
+| devDependencies | 28 | 28 | 7 | 8 |
+| total | 147 | 117 | 93 | 91 |
+
+The last column was run on `origin/main` at `4192b28f`. Its one new devDependency, `packages/deface` `@neurodesk/webapp-components`, arrived with the Deface command line (`2e1b66d4`) after the earlier reports and is not yet classified.
 
 Each candidate has one of these dispositions:
 
@@ -79,7 +81,7 @@ After the removals, the report produced no new candidates: no helper became unus
 | `apps/vesselboost` `onnxruntime-node`, `jsdom` | Redundant, removed | Nothing in the app references them. `packages/vesselboost` declares its own `onnxruntime-node` for `src/node.js`. |
 | `apps/spinalcordtoolbox` `nifti-reader-js` | Redundant, removed | `web/nifti-js/index.js` is staged from `packages/runtime-support/src/nifti-js`, not from npm. Only planning documents name the package. |
 | `apps/dwi2trx` `fflate` | Redundant, removed | Nothing in the app imports it. `@dipy/gpu-streamlines` declares its own `fflate` dependency. Keep the NOTICE entry, because the bundle still contains fflate. |
-| `apps/browserqc`, `apps/deface`, `apps/dwi2trx` `@niivue/dcm2niix` | Runtime (unresolved) | The apps use `@neurodesk/runtime-support/dcm2niix-client`, which declares the package. Each Vite config names it in `optimizeDeps.exclude`. Removal needs a production build and e2e DICOM import per app, because Vite resolves the worker's import from the app. BrowserQC is also upstream-synchronized. |
+| `apps/browserqc`, `apps/deface`, `apps/dwi2trx` `@niivue/dcm2niix` | Redundant, removed | All three import only `@neurodesk/runtime-support/dcm2niix-client`, which declares the package. Neither Vite nor Node resolves it from the app. See [dcm2niix removals](#dcm2niix-removals). |
 | `apps/synthsr` `onnxruntime-node`, `packages/synthstrip` `onnxruntime-node` (devDependencies) | Runtime | Loaded by `createRequire(import.meta.url)('onnxruntime-node')` in `test/wasm.test.js` and `test/browser.test.js`. Knip does not follow that call. |
 | `apps/dicom2vid`, `apps/easy-mp2rage` `@neurodesk/webapp-components` | Runtime | `scripts/vendor-components.mjs` and `scripts/build-static.mjs` copy the package into `web/vendor/webapp-components`. The workspace dependency also places the app in the CI plan of the shared package. |
 | `apps/easy-mp2rage` `@neurodesk/easy-mp2rage` | Runtime | `tools/stage_core.sh` copies the package's WASM core into `web/vendor`. |
@@ -101,15 +103,39 @@ The search covered static, dynamic and `createRequire` imports, package scripts,
 - None of the removed packages is a workspace package, so `scripts/lib/workspace-graph.mjs` has the same edges and no app leaves another package's CI plan.
 - The lockfile change removes importer entries only. Every package keeps its locked version, because each is still resolved for another importer: `fflate` 0.8.3 for `@dipy/gpu-streamlines`, `onnxruntime-node` for `packages/vesselboost` and SCT, and `ajv` for `packages/desktop`.
 
+## dcm2niix removals
+
+BrowserQC, Deface and dwi2trx dropped their `@niivue/dcm2niix` declarations. Each was checked on `origin/main` at `4192b28f`.
+
+- **Import path.** No app source imports `@niivue/dcm2niix`. BrowserQC and Deface import `readImageFiles`, `runDcm2niix` and `traverseDataTransferItems` from `@neurodesk/runtime-support/dcm2niix-client`. dwi2trx imports `runDcm2niix` from it, statically in `main.ts` and dynamically in `src/dwi2trx/input.ts`. That module (`packages/runtime-support/src/dcm2niix-client/index.ts`) is the only importer. Vite follows the workspace symlink to its real path, so it resolves the import from `packages/runtime-support/node_modules`.
+- **Staging and runtime assets.** None of the three apps stages dcm2niix. `scripts/vendor-runtime-support.mjs` and the `dcm2niix/` rewrites in `scripts/lib/runtime-assets.mjs` serve the static apps, which copy `packages/runtime-support/src/dcm2niix`. The JPEG WASM that #313 deduplicates is matched by checksum in the built site, not by the app's dependency. `registry/offline-assets.sources.json` has no dcm2niix entry for these apps.
+- **`optimizeDeps.exclude`.** The three Vite configs keep `@niivue/dcm2niix` in the list. Vite matches excluded dependencies by name, so the entry still keeps the package out of the development prebundle.
+- **Production build.** `pnpm --filter <app> build` produced byte-identical `dist/` trees, compared by `sha256sum` of every file, before and after the removal for all three apps. Each bundle still emits `assets/dcm2niix.jpeg-CR3ddVLp.wasm`.
+- **DICOM import.** Synthetic slices from `test-utils/dicom-fixture.mjs` were loaded through each app's file input in Chromium. The check ran against `vite preview` of the new builds and against the development server. BrowserQC and Deface converted two series and offered both in the series picker (`dcm2niix: 2 NIfTI … pick one.`). dwi2trx converted one series and then refused it as expected: `No diffusion series found — the DICOMs emitted no bval/bvec`. That message is reached only after dcm2niix returns output. Each run fetched the dcm2niix WASM with HTTP 200 and raised no page errors. In development the worker loaded unbundled from the pnpm store.
+- **CI plan.** `@niivue/dcm2niix` is not a workspace package, so `scripts/lib/workspace-graph.mjs` keeps the same edges. All three apps still reach `@neurodesk/runtime-support` through their workspace dependency. The lockfile change removes three importer entries, and `@niivue/dcm2niix@1.2.0` stays locked for runtime-support, dicompare and lcmodel.
+- **BrowserQC upstream.** BrowserQC's upstream (`niivue/browserqc`) now uses `@niivue/nv-ext-dcm2niix` and no longer declares `@niivue/dcm2niix`. The monorepo copy uses the shared importer (`upstream.json` integration rules), so the removed declaration has no upstream counterpart to keep in sync.
+
 ## Upstream-owned candidates
 
 QSMbly, SeedSeg, dicompare and BrowserQC are synchronized from upstream repositories (`upstream.json`). Their findings are classified here and left unedited. Fix them upstream, or in a scoped upstream-sync PR that follows the integration rules.
 
+On 2026-10-15 every finding was checked against the upstream default branch: `astewartau/dicompare-web` at `7c56841` (the commit the monorepo copy pins) and `astewartau/qsmbly` at `da6a417`. A finding counts as upstream-owned only if the upstream file has it too and upstream has no import of the file or use of the name outside it. The verified findings were reported upstream:
+
+- dicompare: [astewartau/dicompare-web#25](https://github.com/astewartau/dicompare-web/issues/25), covering 14 files, 28 exports, 1 duplicate, 14 types and 4 dependencies.
+- QSMbly: [astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157), covering the two barrel modules.
+
+Three findings are monorepo-authored and stay with the monorepo:
+
+- dicompare `technicalLog.ts` `formatLogLines` and `useErrorSignal` (`93381e89`). The upstream repository has no such file.
+- QSMbly `QsmEchoViewer` in `js/controllers/QsmEchoViewer.js`. Shared imaging consolidation added the file (`55603365`), and the upstream repository has no such file.
+
+BrowserQC and SeedSeg have no upstream-owned findings. BrowserQC's only candidate was `@niivue/dcm2niix`, removed above. SeedSeg's `@neurodesk/seedseg` is the monorepo's own staging dependency (see [Dependencies](#dependencies)).
+
 | File | Kind | Candidates |
 | --- | --- | --- |
-| `apps/qsmbly/js/controllers/QsmEchoViewer.js` | exports | `QsmEchoViewer` |
-| `apps/qsmbly/js/modules/file-io/index.js` | files | upstream barrel module |
-| `apps/qsmbly/js/modules/mask/index.js` | files | upstream barrel module |
+| `apps/qsmbly/js/controllers/QsmEchoViewer.js` | exports | `QsmEchoViewer`: monorepo-authored (`55603365`), not upstream code |
+| `apps/qsmbly/js/modules/file-io/index.js` | files | upstream barrel module ([astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157)) |
+| `apps/qsmbly/js/modules/mask/index.js` | files | upstream barrel module ([astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157)) |
 | `apps/dicompare/src/components/common/ConstraintInputWidgets.tsx` | files | (file) |
 | `apps/dicompare/src/components/common/DataTypeSelector.tsx` | files | (file) |
 | `apps/dicompare/src/components/common/TypeSpecificInputs.tsx` | files | (file) |
@@ -154,7 +180,8 @@ The `upstream.json` integration rules require some erased type imports (`Process
 
 ## Remaining work
 
-- Before removing `@niivue/dcm2niix` from BrowserQC, Deface or dwi2trx, verify a production build and a DICOM import for each app.
-- Send the dicompare and QSMbly findings upstream, or remove them in a scoped upstream-sync PR. Then remove the dicompare `technicalLog.ts` exports.
-- TopoFit's affine helpers and the NeSVoR output re-exports need an owner decision with parity evidence.
+- Remove the upstream findings once astewartau/dicompare-web#25 and astewartau/qsmbly#157 are fixed upstream and the weekly sync merges them.
+- Remove the monorepo-authored dicompare `technicalLog.ts` exports and QSMbly `QsmEchoViewer` export in a scoped PR that follows each app's `upstream.json` integration rules.
+- Classify the new `packages/deface` `@neurodesk/webapp-components` devDependency.
+- TopoFit's affine helpers and the NeSVoR output re-exports are kept by owner decision (2026-10-14).
 - The calmar and SCT test APIs would stop appearing in the report if those tests used literal imports. Knip already follows literal imports.

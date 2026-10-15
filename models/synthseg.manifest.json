@@ -27,17 +27,17 @@
   "classes": 33,
   "norms": {
     "ixi": {
-      "version": "c3e75dbe830b",
+      "version": "347cf6fb6135",
       "description": "IXI (1.5 T and 3 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --fast --vol (neurodesk/neurocontainers recipes/synthseg)",
-      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c3e75dbe830bd5439810724718fdeaeb5d0c3a2e/recipes/synthseg/brainquant_norms.json",
+      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms.json",
       "sha256": "c9bdc4dfa6ea3266d58ec729916ed9c7c1c981cc903bf26543c17f41e52e8acd",
       "bytes": 12272,
       "license": "CC-BY-SA-3.0"
     },
     "ahead": {
-      "version": "c3e75dbe830b",
+      "version": "347cf6fb6135",
       "description": "AHEAD (7 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --fast --vol (neurodesk/neurocontainers recipes/synthseg)",
-      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c3e75dbe830bd5439810724718fdeaeb5d0c3a2e/recipes/synthseg/brainquant_norms_7t.json",
+      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms_7t.json",
       "sha256": "f597123515ccccb6f8f2302670eb5be1dc73354d6b9791651bd4569a76d7ab95",
       "bytes": 12257,
       "license": "CC-BY-4.0"

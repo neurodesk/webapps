@@ -8,7 +8,6 @@
  * Run: node --experimental-strip-types src/dwi2trx/niimath-sform.test.ts
  */
 import assert from 'node:assert/strict'
-// @ts-expect-error - the vendored WASM glue has no bundled types here
 import niimathInit from '@niivue/niimath/niimath.js'
 
 const LE = true
@@ -53,7 +52,7 @@ mod.FS_createDataFile('.', 'in.nii', qformOnlyNifti(), true, true)
 const code = mod.callMain(['in.nii', '-add', '0', '-gz', '0', 'out.nii'])
 assert.equal(code, 0, `niimath exit ${code}`)
 
-const out = mod.FS_readFile('out.nii') as Uint8Array
+const out = mod.FS_readFile('out.nii')
 const dv = new DataView(out.buffer, out.byteOffset, out.byteLength)
 assert.equal(dv.getInt16(252, LE), 1, 'qform preserved')
 assert.equal(dv.getInt16(254, LE), 1, 'sform filled from qform (was 0)')

@@ -12,7 +12,7 @@ declare module '@niivue/niimath/niimath.js' {
       canRead: boolean,
       canWrite: boolean,
     ): void
-    FS_readFile(name: string): Uint8Array
+    FS_readFile(name: string): Uint8Array<ArrayBuffer>
     FS_unlink(name: string): void
     callMain(args: string[]): number
   }

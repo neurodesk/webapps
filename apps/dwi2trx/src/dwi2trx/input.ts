@@ -14,7 +14,7 @@ import {
   MAX_INPUT_BYTES,
 } from './input-limits.ts'
 import type { DwiInput } from './state.ts'
-import { isValidNifti1, parseNiftiHeader } from '@neurodesk/webapp-components/file-io'
+import { isValidNifti1, parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti'
 import { countDirections } from '@neurodesk/dwi2trx/gradients'
 import {
   baseName,

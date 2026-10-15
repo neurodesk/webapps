@@ -25,7 +25,14 @@
       "default": "./src/ui/index.js"
     },
     "./file-io": "./src/file-io/index.js",
-    "./file-io/nifti": "./src/file-io/NiftiUtils.js",
+    "./file-io/download": {
+      "types": "./src/file-io/download-api.d.ts",
+      "default": "./src/file-io/download.js"
+    },
+    "./file-io/nifti": {
+      "types": "./src/file-io/NiftiUtils.d.ts",
+      "default": "./src/file-io/NiftiUtils.js"
+    },
     "./file-io/mesh": "./src/file-io/mesh.js",
     "./fetch": {
       "types": "./src/net/fetchWithRetry.d.ts",

@@ -22,6 +22,7 @@ permissions:
   contents: read
 
 concurrency:
+  # Keep the nightly full-catalog backstop independent of narrowed push runs.
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 

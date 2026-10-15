@@ -2187,14 +2187,14 @@
         "license": "Apache-2.0"
       },
       {
-        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c3e75dbe830bd5439810724718fdeaeb5d0c3a2e/recipes/synthseg/brainquant_norms.json",
+        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms.json",
         "kind": "reference-data",
         "sha256": "c9bdc4dfa6ea3266d58ec729916ed9c7c1c981cc903bf26543c17f41e52e8acd",
         "bytes": 12272,
         "license": "CC-BY-SA-3.0"
       },
       {
-        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/c3e75dbe830bd5439810724718fdeaeb5d0c3a2e/recipes/synthseg/brainquant_norms_7t.json",
+        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms_7t.json",
         "kind": "reference-data",
         "sha256": "f597123515ccccb6f8f2302670eb5be1dc73354d6b9791651bd4569a76d7ab95",
         "bytes": 12257,

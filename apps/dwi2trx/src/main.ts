@@ -12,7 +12,7 @@ import '@neurodesk/webapp-components/styles/imaging-workspace.css'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
 import { createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui'
 import NiiVueGPU, { SHOW_RENDER, SLICE_TYPE } from '@niivue/niivue'
-import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation'
+import { registerAppAutomation, registerViewer, createNiivueAdapter, type OperationContext, type OperationResult } from '@neurodesk/webapp-components/automation'
 import { runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client'
 import {
   countB0,
@@ -43,8 +43,10 @@ import {
   type DwiInput,
 } from './dwi2trx/state'
 import { baseName, flipBvecX } from './dwi2trx/validate'
+import { createFailureReporter } from './dwi2trx/failures'
 import { TENSOR_MAPS, mapFileName } from '@neurodesk/dwi2trx'
-import { downloadBlob, extractAffine } from '@neurodesk/webapp-components/file-io'
+import { downloadBlob } from '@neurodesk/webapp-components/file-io/download'
+import { extractAffine } from '@neurodesk/webapp-components/file-io/nifti'
 import {
   buildGradientScheme,
   buildSchemeFromSamples,
@@ -174,6 +176,11 @@ function setStatus(msg: string, error = false, detail?: string): void {
   technicalLog.log(detail ? `${msg} ${detail}` : msg, error ? 'error' : 'info')
 }
 
+const { showFailure, logSupersededFailure, reportFailure } = createFailureReporter({
+  setStatus,
+  log: (message, level) => technicalLog.log(message, level),
+})
+
 /** Show/hide the spinning busy indicator beside the status text during slow
  *  work (mindgrab, the dtifit fit, DICOM conversion). */
 function busy(on: boolean): void {
@@ -233,16 +240,16 @@ function gotoTab(step: Step): void {
 }
 
 maskFitBtn.addEventListener('click', () => {
-  void runFit().catch(() => {})
+  runFit().catch(reportFailure('Tensor fit'))
 })
 trackBtn.addEventListener('click', () => {
-  void runTrack().catch(() => {})
+  runTrack().catch(reportFailure('Streamline tracking'))
 })
 fiberColor.addEventListener('change', () => {
-  void applyFiberColor() // self-guards on a loaded tract
+  applyFiberColor().catch(reportFailure('Fiber colour')) // self-guards on a loaded tract
 })
 displayMode.addEventListener('change', () => {
-  void applyDisplayMode() // self-guards on the FA+V1 maps being loaded
+  applyDisplayMode().catch(reportFailure('Display mode')) // self-guards on the FA+V1 maps being loaded
 })
 sliceTypeSel.addEventListener('change', () => {
   nv.sliceType = Number(sliceTypeSel.value)
@@ -251,14 +258,14 @@ sliceTypeSel.addEventListener('change', () => {
 aboutBtn.addEventListener('click', () => aboutDlg.showModal())
 privacyBtn.addEventListener('click', () => privacyDlg.showModal())
 showVecBtn.addEventListener('click', () => {
-  void showVectors()
+  showVectors().catch(reportFailure('Show vectors'))
 })
 vecScale.addEventListener('input', () => updateVecScale(Number(vecScale.value)))
 vecShowAntipodal.addEventListener('change', () => {
-  if (loadedVecScheme) void refreshLoadedPreview(loadedVecScheme)
+  if (loadedVecScheme) refreshLoadedPreview(loadedVecScheme).catch(reportFailure('Vector preview'))
 })
 genVecBtn.addEventListener('click', () => {
-  void openGenVectors()
+  openGenVectors().catch(reportFailure('Vector generation'))
 })
 genVecAddShell.addEventListener('click', () => {
   genShells.push(suggestNextShell(genShells)) // √b rule: +1000 b, √-scaled count
@@ -289,7 +296,7 @@ genVecScale.addEventListener('input', () =>
 genVecShowAntipodal.addEventListener('change', () => {
   if (!genScheme) return
   // This is a render-only option: do not invalidate or regenerate the DVS.
-  void refreshGeneratedPreview(genScheme)
+  refreshGeneratedPreview(genScheme).catch(reportFailure('Vector preview'))
 })
 // Invalidate both a pending debounce and any async preview work when dismissed.
 genVecDlg.addEventListener('close', () => {
@@ -329,6 +336,10 @@ function det3(m: ArrayLike<number>[]): number {
     m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
   )
 }
+/** Fresh writer output (fflate's zipSync) is ArrayBuffer-backed; File requires it. */
+function isArrayBufferBacked(bytes: Uint8Array): bytes is Uint8Array<ArrayBuffer> {
+  return bytes.buffer instanceof ArrayBuffer
+}
 // dcm2niix names carry folder, protocol and acquisition time: keep them out of outputs.
 function outputBase(input: DwiInput): string {
   return input.source === 'dicom' ? 'dwi' : baseName(input.nifti.name) || 'dwi'
@@ -344,7 +355,7 @@ saveMapsBtn.addEventListener('click', () => {
   download(state.maps.v1, mapFileName(base, 'V1'))
 })
 faSlider.addEventListener('input', () => {
-  if (shownView === 'maps') setFaFloor() // ignore while the raw DWI is shown
+  if (shownView === 'maps') setFaFloor().catch(reportFailure('FA floor')) // ignore while the raw DWI is shown
 })
 
 // --- Gradient connectome preview (shared by both vector modals) ---
@@ -388,7 +399,7 @@ function getVecViewer(): Promise<NiiVueGPU> {
   if (!vecViewerPromise) {
     const pending = makeRenderViewer(vecCanvas)
     vecViewerPromise = pending
-    void pending.catch(() => {
+    pending.catch(() => {
       if (vecViewerPromise === pending) vecViewerPromise = null
     })
   }
@@ -399,7 +410,7 @@ function getGenViewer(): Promise<NiiVueGPU> {
   if (!genViewerPromise) {
     const pending = makeRenderViewer(genVecCanvas)
     genViewerPromise = pending
-    void pending.catch(() => {
+    pending.catch(() => {
       if (genViewerPromise === pending) genViewerPromise = null
     })
   }
@@ -481,12 +492,15 @@ function makeNodeScaleUpdater(
       // slider update must not become an unhandled rejection.
     } finally {
       running = false
-      if (pending !== null) requestAnimationFrame(() => void pump())
+      if (pending !== null) requestAnimationFrame(schedulePump)
     }
+  }
+  function schedulePump(): void {
+    pump().catch(reportFailure('Vector preview'))
   }
   return (value: number) => {
     pending = value
-    if (!running) requestAnimationFrame(() => void pump())
+    if (!running) requestAnimationFrame(schedulePump)
   }
 }
 const updateVecScale = makeNodeScaleUpdater(() => vecViewerPromise)
@@ -641,7 +655,9 @@ function scheduleGenerate(): void {
   genVecSavePhilipsBtn.disabled = true
   setSaveDatState(null)
   clearTimeout(genTimer)
-  genTimer = setTimeout(() => void runGenerate(), 250)
+  genTimer = setTimeout(() => {
+    runGenerate().catch(reportFailure('Vector generation'))
+  }, 250)
 }
 
 /** Put the plotted scheme's description in the footer, with the active method
@@ -784,7 +800,7 @@ main.addEventListener('dragleave', (e) => {
 })
 main.addEventListener('drop', (e) => {
   e.preventDefault()
-  void handleDrop(e as DragEvent)
+  handleDrop(e as DragEvent)
 })
 
 function handleDrop(e: DragEvent): void {
@@ -793,7 +809,7 @@ function handleDrop(e: DragEvent): void {
   if (!dt) return
   // collectFiles must read dt.items synchronously (they expire after the event),
   // so call it now and let loadInputFiles await the result.
-  void loadInputFiles(collectFiles(dt))
+  loadInputFiles(collectFiles(dt)).catch(reportFailure('Loading'))
 }
 
 // File-picker fallback: drag-drop is finicky on touch / some Linux file
@@ -801,7 +817,7 @@ function handleDrop(e: DragEvent): void {
 // the same way (select a NIfTI+bval+bvec triple, or the DICOM files).
 filePicker.addEventListener('change', () => {
   if (filePicker.files?.length) {
-    void loadInputFiles(Promise.resolve(Array.from(filePicker.files)))
+    loadInputFiles(Promise.resolve(Array.from(filePicker.files))).catch(reportFailure('Loading'))
   }
   filePicker.value = '' // let the user re-pick the same files
 })
@@ -859,6 +875,12 @@ let nv: NiiVueGPU
 // than racing it. `doSyncView` awaits this; the constructor itself is sync, so
 // `nv` is assigned (no TDZ) even while the attach is pending.
 let nvReady: Promise<void> = Promise.resolve()
+// Canvas swaps run one-at-a-time through this chain so two overlapping
+// nv.loadVolumes() calls (rapid Back/Next, or a fit completing mid-nav) can't
+// leave shownView disagreeing with what's actually on the canvas. Declared before
+// the startup await below: a drop during startup reaches syncView first.
+let viewChain: Promise<void> = Promise.resolve()
+
 try {
   nv = new NiiVueGPU({
     isDragDropEnabled: false, // we handle drops to preserve the workflow state
@@ -986,16 +1008,16 @@ async function runFit(context: ProcessingContext = {}): Promise<TensorResult> {
         /out of bounds|null function|out of memory|allocation failed|table index/i.test(
           msg,
         )
-      setStatus(
+      showFailure(
+        err,
         outOfMemory
           ? 'Too large for in-browser tensor fitting (WebAssembly memory limit).'
           : `Tensor fit failed: ${msg}`,
-        true,
         outOfMemory
           ? 'Try a cropped or lower-resolution acquisition, or a native pipeline.'
           : undefined,
       )
-    }
+    } else logSupersededFailure(err, 'Tensor fit')
     throw err
   } finally {
     fitting = false
@@ -1123,7 +1145,9 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     const meanLen = (totalPts / lines.length).toFixed(1)
     const streamlineCount = lines.length
     const count = streamlineCount.toLocaleString()
-    state.tracts = new File([writeTrx(lines, voxelToRasmm, dims3)], trxName)
+    const trx = writeTrx(lines, voxelToRasmm, dims3)
+    if (!isArrayBufferBacked(trx)) throw new Error('The TRX writer returned shared memory, which cannot become a file.')
+    state.tracts = new File([trx], trxName)
     // Free the voxel-space lines now that the TRX is serialized — the 3D preview
     // below allocates a large cylinder mesh, and there is no need to hold both.
     lines.length = 0
@@ -1175,11 +1199,12 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     return { file: state.tracts, measurements: { streamlines: streamlineCount, points: totalPts, seeds: nSeeds, processedSeeds, seedCap: MAX_SEEDS, capped, truncated, partial: capped || truncated }, provenance: { algorithm: '@dipy/gpu-streamlines', seedFa, density, parameters: params, bvecXFlipped: det3(extractAffine(header)) > 0 } }
   } catch (err) {
     if (seq === loadSeq)
-      setStatus(
+      showFailure(
+        err,
         `Streamline tracking failed: ${(err as Error).message}`,
-        true,
         'Raise the Seed and Stop FA thresholds, or lower Density/step size, to use less memory.',
       )
+    else logSupersededFailure(err, 'Streamline tracking')
     throw err
   } finally {
     device?.destroy() // free the WebGPU device on every path (incl. errors)
@@ -1188,11 +1213,6 @@ async function runTrack({ signal, progress }: ProcessingContext = {}) {
     if (seq === loadSeq) busy(false) // don't clear a newer load/fit's spinner
   }
 }
-
-// Canvas swaps run one-at-a-time through this chain so two overlapping
-// nv.loadVolumes() calls (rapid Back/Next, or a fit completing mid-nav) can't
-// leave shownView disagreeing with what's actually on the canvas.
-let viewChain: Promise<void> = Promise.resolve()
 
 /** Load the volumes the current step should show, serialized + skipping redundant reloads. */
 function syncView(): Promise<void> {
@@ -1290,7 +1310,7 @@ async function showMaps(maps: TensorMaps): Promise<void> {
   ])
   nv.volumeIsNearestInterpolation = true // crisp V1 direction lines
   await applyDisplayMode() // honour the "Display" dropdown
-  setFaFloor() // apply the initial slider value (volumes are the maps here)
+  await setFaFloor() // apply the initial slider value (volumes are the maps here)
 }
 
 /**
@@ -1308,16 +1328,16 @@ async function applyDisplayMode(): Promise<void> {
   const modulate = idx === 2 || idx === 4
   await nv.setModulationImage(v1.id ?? '', modulate ? (fa.id ?? '') : '')
   nv.volumeIsV1SliceShader = idx > 2
-  nv.updateGLVolume()
+  await nv.updateGLVolume()
 }
 
 /** Slider [0..100] → FA floor [0..1] on volume 0 (FA): hides low-anisotropy voxels. */
-function setFaFloor(): void {
+async function setFaFloor(): Promise<void> {
   const fa = nv.volumes[0]
   if (!fa) return
   fa.calMin = Number(faSlider.value) / 100
   fa.calMax = 1
-  nv.updateGLVolume()
+  await nv.updateGLVolume()
 }
 
 exampleControl = createExampleSelector({
@@ -1345,16 +1365,22 @@ window.addEventListener('pagehide', () => exampleControl?.destroy())
 render()
 
 
-interface AutomationRequest {
-  inputs: Record<string, File[]>
-  inputDetails: Record<string, { sidecars: File[] }>
-  parameters: Record<string, number>
-  signal: AbortSignal
-  progress: NonNullable<ProcessingContext['progress']>
+/** Every dwi2trx automation input is uploaded files (automation.json `source: files`). */
+function uploadedFiles(inputs: OperationContext['inputs'], role: string): File[] {
+  const files = inputs[role] ?? []
+  if (!Array.isArray(files)) throw new Error(`${role} must contain uploaded files`)
+  return files
 }
 
-async function runAutomation(request: AutomationRequest, track: boolean) {
-  const { inputs, inputDetails, parameters, signal, progress } = request
+async function runAutomation(request: OperationContext, track: boolean): Promise<OperationResult> {
+  const { inputDetails, parameters, signal, progress } = request
+  const inputs = {
+    image: uploadedFiles(request.inputs, 'image'),
+    bval: uploadedFiles(request.inputs, 'bval'),
+    bvec: uploadedFiles(request.inputs, 'bvec'),
+    mask: uploadedFiles(request.inputs, 'mask'),
+    metadata: uploadedFiles(request.inputs, 'metadata'),
+  }
   signal.throwIfAborted()
   if (fitting || tracking) throw new Error('Wait for the current processing step to finish.')
   exampleControl?.cancel()
@@ -1391,8 +1417,8 @@ registerAppAutomation({
   app: 'dwi2trx',
   convertDicom: runDcm2niix,
   operations: {
-    fit: (request: AutomationRequest) => runAutomation(request, false),
-    tractography: (request: AutomationRequest) => runAutomation(request, true),
+    fit: (request) => runAutomation(request, false),
+    tractography: (request) => runAutomation(request, true),
   },
 })
 registerViewer('image', createNiivueAdapter(nv, {
