@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
+import { JSDOM } from 'jsdom';
+import { loadAppsRegistry, SUPPORT_STATUSES } from '../scripts/lib/apps-registry.mjs';
 import { renderLandingPage } from '../scripts/lib/landing-page.mjs';
 
 test('landing page renders categorized, searchable app cards', async () => {
@@ -30,4 +31,25 @@ test('landing page renders categorized, searchable app cards', async () => {
   assert.ok(!html.includes('href="https://github.com/neurodesk"'));
   assert.ok(!html.includes('https://neurodesk.org/overview/'));
   assert.ok(!html.includes('https://neurodesk.org/getting-started/'));
+});
+
+test('app cards omit experimental badges for every support status', async () => {
+  const registry = await loadAppsRegistry();
+  for (const support_status of SUPPORT_STATUSES) {
+    const app = { ...registry.apps[0], support_status };
+    const html = renderLandingPage({ ...registry, apps: [app] });
+    const { document } = new JSDOM(html).window;
+    const cards = [...document.querySelectorAll('[data-app-card]')];
+
+    assert.equal(cards.length, app.categories.length);
+    for (const card of cards) {
+      assert.equal(card.querySelector('h3').textContent, app.title);
+      assert.equal(card.getAttribute('href'), `./${app.path}/`);
+      const category = registry.site.categories.find(({ id }) => id === card.dataset.category);
+      assert.equal(card.querySelector('.app-card__topline').textContent.trim(), category.title,
+        'Catalog cards show the task category; support status is internal metadata.');
+      assert.doesNotMatch(card.textContent, /\bexperimental\b/i,
+        'Remove the Experimental badge from app cards.');
+    }
+  }
 });

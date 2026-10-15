@@ -12,15 +12,11 @@ function renderCard(app, category, categories) {
   const tags = app.keywords.slice(0, 3)
     .map((keyword) => `<li>${escape(keyword)}</li>`)
     .join('');
-  const status = app.support_status === 'experimental'
-    ? '<span class="app-card__status">Experimental</span>'
-    : '';
 
   return `
           <a class="app-card" href="./${escape(app.path)}/" data-app-card data-app-id="${escape(app.id)}" data-category="${escape(category.id)}" data-search="${escape(searchText.toLocaleLowerCase())}">
             <span class="app-card__topline">
               <span class="app-card__category">${escape(category.title)}</span>
-              ${status}
             </span>
             <span class="app-card__title-row">
               <h3>${escape(app.title)}</h3>

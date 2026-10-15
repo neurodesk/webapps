@@ -77,6 +77,9 @@ try {
     try {
       const response = await page.goto(`${origin}/${app.path}${app.path ? '/' : ''}`, { waitUntil: 'domcontentloaded' });
       expect(response.status()).toBe(200);
+      if (app.id === 'catalog') {
+        await expect(page.locator('[data-app-card]').filter({ hasText: /\bexperimental\b/i })).toHaveCount(0);
+      }
       if (app.id !== 'catalog') await expect(page.locator('.nd-app-bar:visible').first()).toBeVisible();
       for (const phase of ['entry', 'workspace']) {
         if (phase === 'workspace') {

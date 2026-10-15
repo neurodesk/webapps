@@ -25,6 +25,30 @@ All 16 registered apps were reviewed on 9 September 2026, starting from `e6ef75e
 
 ## Rules and enforcement
 
+### Catalog badges, 15 October 2026
+
+The catalog shows task categories without an Experimental badge. `support_status`
+remains internal registry metadata. The landing-page test renders every support
+status, and the mobile suite checks that the production catalog has no such label.
+AGENTS.md records the rule for future changes.
+
+The 31-app production build, 61 targeted unit and contract tests, and correctness
+lint passed. Catalog browser checks passed at 1440 and 390 pixels, including all
+seven apps with experimental metadata, search, category filtering and navigation
+to elastix and back. Desktop and phone screenshots were reviewed in both themes.
+The mobile suite passed for the catalog and elastix. The elastix interface audit
+passed on desktop and phone using the checksum-verified example cache.
+The elastix workflow check also passed.
+
+The full mobile suite reported failures in unchanged MuscleMap, Spinal Cord
+Toolbox, CALMaR, QSMbly and SeedSeg pages, including loading and screenshot
+timeouts. The full interface audit encountered failed hosted example downloads;
+a retry with verified cached examples still found missing MuscleMap example
+controls. Both audit attempts were stopped. The full workflow suite passed for
+13 apps and failed in SeedSeg, VesselBoost, QSMbly and Disconnectome because of
+blocked controls or incomplete loading. These failures remain outside the catalog
+badge change.
+
 ### Shared visual refresh, 14 October 2026
 
 The shared shell and workspace now use Inter, neutral surfaces, the logo green

@@ -8,6 +8,7 @@ Every remote URL the apps or the offline bundle fetch (`registry/offline-assets.
 
 Before changing UI, adding controls, or scaffolding an app, read [the design system](docs/architecture/design-system.md) and [the interface standard](docs/architecture/interface-standard.md). The design system sets the look (Inter, neutral greys, the logo green for action only) and the shared vocabulary; the app template is its reference.
 
+- Keep `support_status` as internal registry metadata, with no Experimental badge on webapp cards. `test/landing-page.test.mjs` and the catalog checks in `test/mobile-layout.smoke.mjs` enforce this.
 - Build every sidebar, viewer, console, status bar and dialog from the classes in `@neurodesk/webapp-components/styles/imaging-workspace.css` and the custom elements and native builders in `@neurodesk/webapp-components/ui` (`createFileField`, `createViewerToolbar`, `createConsole`, `createInfoDialog`, `createResultList`). Start from `templates/app-template`, which is the complete canonical layout.
 - Do not write app CSS for those regions, hardcode colours, override `--nd-color-*` tokens, set `color-scheme`, or add `<dialog>` markup. If the vocabulary lacks something, add it to the shared stylesheet with a test, then use it. `test/design-system.test.mjs` fails on each of these.
 - Keep sources readable: one rule or statement per line. Minified app HTML, CSS or JS hides drift from review.
