@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
@@ -6,7 +7,7 @@ import YAML from 'yaml';
 
 const workflow = async (name) => YAML.parse(await readFile(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
 const ci = await workflow('ci');
-const events = ['pull_request', 'push', 'schedule', 'workflow_dispatch'];
+const events = Object.keys(ci.on);
 
 function evaluate(expression, event, overrides = {}) {
   if (typeof expression !== 'string') return expression;
@@ -75,9 +76,10 @@ test('scientific CPU and hardware GPU tests keep independent builds and test-dat
   for (const name of ['browser-e2e', 'browser-e2e-gpu']) {
     const job = ci.jobs[name];
     const steps = commands(job);
-    assert.ok(steps.some((command) => command.includes('scripts/e2e-test-data.mjs')), name);
-    assert.ok(steps.includes('pnpm --filter ${{ matrix.app }} build'), name);
-    assert.ok(steps.includes('pnpm --filter ${{ matrix.app }} test:e2e'), name);
+    const data = steps.findIndex((command) => command.includes('scripts/e2e-test-data.mjs'));
+    const build = steps.indexOf('pnpm --filter ${{ matrix.app }} build');
+    const run = steps.indexOf('pnpm --filter ${{ matrix.app }} test:e2e');
+    assert.ok(data >= 0 && build > data && run > build, `${name} downloads data before building, then tests the build`);
     const step = job.steps.find((entry) => entry.run === 'pnpm --filter ${{ matrix.app }} test:e2e');
     assert.equal(step.env.NEURODESK_E2E_PREBUILT, '1', name);
   }
@@ -106,6 +108,27 @@ test('every deterministic interface check runs before optional agent checks', ()
   }
 });
 
+test('correctness lint runs on every CI event with no duplicate routine gate', async () => {
+  const quality = await workflow('code-quality');
+  for (const event of ['pull_request', 'push']) {
+    assert.ok(Object.hasOwn(quality.on, event), event);
+    assert.deepEqual(quality.on[event], ci.on[event], `${event} correctness has the same branch coverage and no path filter`);
+    assert.equal(quality.on[event]?.paths, undefined);
+    assert.equal(quality.on[event]?.['paths-ignore'], undefined);
+  }
+  const standalone = quality.jobs.correctness.steps.find((step) => step.run === 'pnpm lint:correctness');
+  assert.ok(standalone);
+  assert.equal(standalone.if, undefined);
+  const full = ci.jobs['workspace-contracts'].steps.find((step) => step.run === 'pnpm lint:correctness');
+  assert.ok(full);
+  for (const event of events) {
+    assert.equal(evaluate(full.if, event), !['pull_request', 'push'].includes(event), event);
+  }
+  const workspace = ci.jobs['workspace-contracts'].steps.find((step) => step.run === 'node scripts/lint-workspaces.mjs');
+  assert.ok(workspace);
+  assert.equal(workspace.if, undefined);
+});
+
 test('contract and correctness owners replace duplicate invocations without losing native parity', async () => {
   const workspace = commands(ci.jobs['workspace-contracts']);
   assert.equal(workspace.filter((command) => command === 'pnpm test:contracts').length, 1);
@@ -117,7 +140,23 @@ test('contract and correctness owners replace duplicate invocations without losi
   assert.ok(composite.includes('node --test test/runtime-assets.test.mjs'), 'built runtime assembly remains independently tested');
   const source = await readFile(new URL('../package.json', import.meta.url), 'utf8');
   const pkg = JSON.parse(source);
+  assert.equal(pkg.scripts.lint, 'pnpm lint:correctness && node scripts/lint-workspaces.mjs');
   assert.ok(pkg.scripts['test:contracts'].includes('test/*.test.mjs'));
+  for (const name of ['test:lint', 'test:dependencies']) {
+    assert.match(pkg.scripts[name], /^node --test(?: test\/[\w-]+\.test\.mjs)+$/);
+    for (const file of pkg.scripts[name].slice('node --test '.length).split(' ')) {
+      await readFile(new URL(`../${file}`, import.meta.url));
+      assert.ok(!pkg.scripts['test:contracts'].includes(`/${file.slice('test/'.length)}`), `${name}: ${file} is covered by contracts`);
+    }
+  }
+  const packageTest = pkg.scripts['test:packages'].split(' && ')[0];
+  assert.match(packageTest, /^pnpm (?:--filter '[^']+' )+run test$/);
+  const filters = [...packageTest.matchAll(/--filter '([^']+)'/g)].flatMap((match) => ['--filter', match[1]]);
+  const selected = JSON.parse(execFileSync('pnpm', [...filters, 'list', '--depth', '-1', '--json'], {
+    cwd: new URL('../', import.meta.url),
+    encoding: 'utf8',
+  }));
+  assert.ok(selected.some((entry) => entry.name === '@neurodesk/nii2tvx'), 'shared package tests include native/WASM parity');
   for (const file of ['deployed-isolation', 'runtime-assets-rewrite', 'runtime-worker-scope', 'agentic-catalog', 'agentic-provider', 'chromium-cdp', 'playwright-discovery', 'lint-coverage', 'dependency-quality', 'unused-code', 'mutation-quality']) {
     assert.ok(!pkg.scripts['test:contracts'].includes(`/${file}.test.mjs`), `${file} is not excluded from contracts`);
     for (const name of ['ci', 'code-quality', 'dependency-quality', 'unused-code', 'mutation-quality']) {

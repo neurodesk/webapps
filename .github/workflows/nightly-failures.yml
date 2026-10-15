@@ -17,9 +17,9 @@ permissions:
   actions: read
   issues: write
 
-# Serialize issue creation and updates for the same workflow.
+# Serialize scheduled reports; skipped events must not replace a pending report.
 concurrency:
-  group: nightly-failure-report-${{ github.event.workflow_run.workflow_id }}
+  group: nightly-failure-report-${{ github.event.workflow_run.workflow_id }}-${{ github.event.workflow_run.event == 'schedule' && 'schedule' || github.run_id }}
   cancel-in-progress: false
 
 jobs:

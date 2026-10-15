@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
-import { createGitHubClient, logExcerpt, reportNightlyFailure, SCHEDULED_WORKFLOWS } from '../scripts/lib/nightly-failures.mjs';
+import { createGitHubClient, logExcerpt, reportNightlyFailure, sanitize, SCHEDULED_WORKFLOWS } from '../scripts/lib/nightly-failures.mjs';
 
 const run = {
   id: 123, workflow_id: 45, run_attempt: 2, event: 'schedule', status: 'completed', conclusion: 'failure',
@@ -223,4 +224,53 @@ test('human-authored issue and comment markers cannot suppress reports', async (
     comments: [{ user: { login: 'someone' }, body: '<!-- nightly-run:123:attempt:2 -->' }],
   });
   assert.equal((await report(commentClient)).updated, true);
+});
+
+test('push and manual completions cannot displace pending scheduled reports in concurrency', async () => {
+  const workflow = YAML.parse(await readFile(new URL('../.github/workflows/nightly-failures.yml', import.meta.url), 'utf8'));
+  const group = (event, reporterId, workflowId = 45) => workflow.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => runInNewContext(expression, {
+    github: { run_id: reporterId, event: { workflow_run: { workflow_id: workflowId, event } } },
+  }));
+  assert.equal(group('schedule', 100), 'nightly-failure-report-45-schedule');
+  assert.equal(group('schedule', 101), group('schedule', 100));
+  assert.notEqual(group('push', 102), group('schedule', 100));
+  assert.notEqual(group('workflow_dispatch', 103), group('schedule', 100));
+  assert.notEqual(group('push', 102), group('push', 104));
+  assert.notEqual(group('schedule', 100, 46), group('schedule', 100));
+});
+
+test('mixed failures and cancellation prioritize the failure and retain the coverage warning', async () => {
+  const client = fakeClient({ jobs: [failedJob, { id: 457, name: 'cancelled suite', conclusion: 'cancelled' }] });
+  await report(client);
+  const body = writes(client)[0].body.body;
+  assert.match(body, /## Scheduled failure: ci/);
+  assert.match(body, /Coverage is incomplete/);
+  const lookup = client.calls.find(call => call.list && call.path.startsWith('/issues?'));
+  assert.equal(new URL('https://api.github.com' + lookup.path).searchParams.get('creator'), 'github-actions[bot]');
+});
+
+test('excerpts prioritize the latest GitHub error annotation over setup errors and cleanup messages', () => {
+  const padding = Array.from({ length: 35 }, (_, i) => `ordinary log ${i}`).join('\n');
+  const annotated = `error: benign setup probe\n${padding}\n##[error]first failure\n${padding}\n##[error]actionable root cause\n${padding}\nfailed cleanup retry\n${padding}`;
+  const excerpt = logExcerpt({ text: annotated, truncated: false });
+  assert.match(excerpt, /actionable root cause/);
+  assert.doesNotMatch(excerpt, /benign setup probe|first failure|failed cleanup retry/);
+  const generic = logExcerpt({ text: `error: benign setup probe\n${padding}\nException: real scientific failure\n${padding}`, truncated: false });
+  assert.match(generic, /real scientific failure/);
+  assert.doesNotMatch(generic, /benign setup probe/);
+});
+
+test('Hugging Face, API and JWT credentials are redacted before rendering', () => {
+  const tokens = ['hf_exampleToken123456789', 'sk-proj-exampleToken123456789', 'sk-ant-exampleToken123456789', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.exampleSignature'];
+  const rendered = sanitize(`Download credentials ${tokens.join(' ')} then retry`);
+  for (const token of tokens) assert.ok(!rendered.includes(token));
+  assert.equal(rendered, 'Download credentials [redacted] [redacted] [redacted] [redacted] then retry');
+});
+
+test('cancelled jobs with interrupted steps include bounded logs to diagnose timeouts', async () => {
+  const client = fakeClient({ jobs: [{ id: 456, name: 'browser', conclusion: 'cancelled', steps: [{ number: 3, name: 'Long test', conclusion: 'cancelled' }] }], logs: { text: '##[error]The job exceeded the maximum execution time', truncated: false } });
+  await report(client, { conclusion: 'cancelled' });
+  assert.equal(client.calls.filter(call => call.logs).length, 1);
+  assert.match(writes(client)[0].body.body, /maximum execution time/);
+  assert.match(writes(client)[0].body.body, /job\/456#step:3:1/);
 });

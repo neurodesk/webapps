@@ -49,6 +49,27 @@ test data affect comparisons.
 
 Repeated checks against a separately built release or deployed artifact are
 intentional. A matching command name alone is not enough to remove a check.
+Correctness lint also runs in scheduled/manual `ci`, where the independent
+PR/push quality workflow does not run automatically.
+
+## Scheduled failure reports
+
+`nightly-failures.yml` observes completed scheduled workflows on the default
+branch. It opens one bot-authored issue per failing workflow, comments on new
+run attempts and reopens the issue if a later run fails. Reprocessing the same
+attempt does not add a duplicate comment. Successful runs do not close issues;
+this avoids a delayed success hiding a newer failure.
+
+Reports include failed steps, bounded log excerpts, artifact links, the commit
+and a rerun command. Cancelled nightlies report incomplete coverage. Superseded
+Pages deployments are excluded unless they also have a failed job. The reporter
+checks out trusted default-branch code and never downloads or executes artifacts.
+Skipped reports for PR/push completions cannot replace a pending nightly report.
+
+For read-only verification, set `GH_TOKEN` or `GITHUB_TOKEN` and
+`GITHUB_REPOSITORY`, then run
+`node scripts/report-nightly-failure.mjs --run-id RUN_ID --dry-run`.
+This renders a report without creating or changing an issue.
 
 ## Boundaries
 

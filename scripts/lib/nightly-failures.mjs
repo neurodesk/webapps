@@ -13,6 +13,7 @@ export function sanitize(value, limit = 1000) {
     .split('\u001b').map((part, index) => index ? part.replace(/^\[[0-?]*[ -/]*[@-~]/, '') : part).join('')
     .replace(/\p{Cc}|[\u202a-\u202e\u2066-\u2069]/gu, character => ['\t', '\n', '\r'].includes(character) ? character : '')
     .replace(/(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|AKIA[A-Z0-9]{16})/g, '[redacted]')
+    .replace(/\b(?:hf_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]{10,}|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\b/g, '[redacted]')
     .replace(/\b(Bearer|Basic)\s+[^\s]+/gi, '$1 [redacted]')
     .replace(/\b(token|password|secret|api[_-]?key)(\s*[:=]\s*)[^\s]+/gi, '$1$2[redacted]')
     .replace(/https?:\/\/[^\s<>]+/g, (value) => {
@@ -92,8 +93,9 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
 
 export function logExcerpt({ text, truncated }) {
   const lines = text.split('\n');
-  const errorIndex = lines.findIndex(line => /##\[error\]|error:|failed|exception|timed? ?out/i.test(line));
-  const selected = errorIndex < 0 ? [] : lines.slice(Math.max(0, errorIndex - 3), errorIndex + 12);
+  const annotationIndex = lines.findLastIndex(line => /##\[error\]/i.test(line));
+  const errorIndex = annotationIndex >= 0 ? annotationIndex : lines.findLastIndex(line => /(?:\berror:|\b(?:failed|exception|timed? ?out)\b)/i.test(line));
+  const selected = errorIndex < 0 ? [] : lines.slice(Math.max(0, errorIndex - 8), errorIndex + 12);
   const tail = lines.slice(-22);
   const excerpt = sanitize([
     ...selected,
@@ -120,7 +122,7 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
   if (!failed.length && !incomplete && !BAD_CONCLUSIONS.has(run.conclusion)) return { skipped: 'No failures or incomplete coverage' };
   const workflowMarker = `<!-- nightly-workflow:${workflowId} -->`;
   const attemptMarker = `<!-- nightly-run:${runId}:attempt:${attempt} -->`;
-  const issues = dryRun ? [] : await client.list('/issues?state=all&sort=created&direction=desc');
+  const issues = dryRun ? [] : await client.list('/issues?state=all&creator=github-actions%5Bbot%5D&sort=created&direction=desc');
   const matching = issues.filter(issue => !issue.pull_request && issue.user?.login === 'github-actions[bot]' && issue.body?.startsWith(workflowMarker));
   const issue = matching.find(issue => issue.state === 'open') ?? matching[0];
   if (issue) {
@@ -132,7 +134,8 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     const comments = await client.list(`/issues/${numeric(issue.number)}/comments`);
     if (comments.some(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(attemptMarker))) return duplicate();
   }
-  const lines = [attemptMarker, `## Scheduled ${incomplete ? 'incomplete coverage' : 'failure'}: ${plain(run.name)}`,
+  const hasFailure = failed.length > 0 || BAD_CONCLUSIONS.has(run.conclusion);
+  const lines = [attemptMarker, `## Scheduled ${hasFailure ? 'failure' : 'incomplete coverage'}: ${plain(run.name)}`,
     '', `[Run ${runId}, attempt ${attempt}](${runUrl})`,
     `- Conclusion: ${plain(run.conclusion)}. Event: schedule.`,
     `- Commit: ${plain(run.head_sha)}. Branch: ${plain(run.head_branch)}.`,
@@ -150,7 +153,8 @@ export async function reportNightlyFailure({ run, repository, defaultBranch, cli
     const steps = (job.steps ?? []).filter(step => BAD_CONCLUSIONS.has(step.conclusion) || step.conclusion === 'cancelled');
     for (const step of steps.slice(0, 25)) section.push(`- [Step ${numeric(step.number)}: ${plain(step.name)}](${jobUrl}#step:${numeric(step.number)}:1) (${plain(step.conclusion)})`);
     if (steps.length > 25) section.push(`- ${steps.length - 25} additional steps are listed in the job.`);
-    if (BAD_CONCLUSIONS.has(job.conclusion)) {
+    const interruptedStep = job.conclusion === 'cancelled' && (job.steps ?? []).some(step => step.conclusion === 'cancelled' || step.status === 'in_progress');
+    if (BAD_CONCLUSIONS.has(job.conclusion) || interruptedStep) {
       try {
         const logs = await client.request(`/actions/jobs/${jobId}/logs`, { logs: true });
         section.push('', '<pre>', logExcerpt(logs), '</pre>');

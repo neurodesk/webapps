@@ -85,8 +85,11 @@ jobs:
         # Build nii2tvx first so its package suite exercises native/WebAssembly parity.
         # The components' browser checks run in composite-site.
         run: pnpm test:packages
+      - name: Check correctness on full CI runs
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        run: pnpm lint:correctness
       - name: Lint every workspace package
-        # code-quality owns the central correctness gate.
+        # code-quality owns correctness lint on pull requests and pushes.
         run: node scripts/lint-workspaces.mjs
 
   app-tests:
