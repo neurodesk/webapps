@@ -9,10 +9,10 @@ on:
   workflow_dispatch:
     inputs:
       agentic_mode:
-        description: Agentic checks to run after building the catalog
+        description: Optional agentic checks to run after building the catalog
         type: choice
-        options: [interactions, pipeline]
-        default: interactions
+        options: [none, interactions, pipeline]
+        default: none
       agentic_apps:
         description: Comma-separated app ids; leave empty for the full catalog
         type: string

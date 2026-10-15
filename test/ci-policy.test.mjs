@@ -47,6 +47,30 @@ test('routine events omit slow repeats while nightly, manual and release retain 
   assert.ok(!JSON.stringify(release).includes('NEURODESK_E2E_SKIP_SLOW'));
 });
 
+test('manual CI defaults to full deterministic coverage with agent checks opt-in', () => {
+  const input = ci.on.workflow_dispatch.inputs.agentic_mode;
+  assert.deepEqual(input.options, ['none', 'interactions', 'pipeline']);
+  assert.equal(input.default, 'none');
+  const manual = {
+    inputs: { agentic_mode: input.default },
+    needs: { 'app-plan': { outputs: { has_browser_apps: 'true', has_gpu_apps: 'true', all_apps: 'true', has_site: 'true' } } },
+  };
+  assert.equal(evaluate(ci.env.NEURODESK_E2E_SKIP_SLOW, 'workflow_dispatch', manual), '');
+  for (const job of ['composite-site', 'browser-e2e', 'browser-e2e-gpu']) {
+    assert.equal(evaluate(ci.jobs[job].if, 'workflow_dispatch', manual), true, job);
+  }
+  const steps = ci.jobs['composite-site'].steps;
+  const interactions = steps.find((step) => step.run?.includes('pnpm test:e2e:agent'));
+  const pipeline = steps.find((step) => step.run?.includes('pnpm test:e2e:pipeline'));
+  for (const mode of input.options) {
+    const context = { ...manual, inputs: { agentic_mode: mode } };
+    assert.equal(evaluate(interactions.if, 'workflow_dispatch', context), mode === 'interactions', mode);
+    assert.equal(evaluate(pipeline.if, 'workflow_dispatch', context), mode === 'pipeline', mode);
+  }
+  assert.equal(evaluate(interactions.if, 'schedule', { inputs: {} }), true);
+  assert.equal(evaluate(pipeline.if, 'schedule', { inputs: {} }), false);
+});
+
 test('scientific CPU and hardware GPU tests keep independent builds and test-data provisioning', () => {
   for (const name of ['browser-e2e', 'browser-e2e-gpu']) {
     const job = ci.jobs[name];
