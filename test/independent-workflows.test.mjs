@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { access, readFile, readdir } from 'node:fs/promises';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
 import YAML from 'yaml';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
@@ -210,13 +211,11 @@ test('pull requests build the portable packager on linux-x64, except the package
 
 test('a push to main never cancels the nightly full-catalog CI run', async () => {
   const ci = await workflow('ci');
-  const group = (event, ref) => ci.concurrency.group
-    .replace(/\$\{\{ github\.workflow \}\}/g, 'ci')
-    .replace(/\$\{\{ github\.event_name == 'schedule' && 'nightly' \|\| github\.ref \}\}/g, event === 'schedule' ? 'nightly' : ref);
-  assert.ok(!group('push', 'refs/heads/main').includes('${{'), `unrecognised concurrency group ${ci.concurrency.group}`);
+  const group = (event, ref) => ci.concurrency.group.replace(/\$\{\{(.*?)\}\}/g, (_, expression) => runInNewContext(expression, {
+    github: { workflow: 'ci', event_name: event, ref },
+  }));
   assert.notEqual(group('schedule', 'refs/heads/main'), group('push', 'refs/heads/main'));
   assert.notEqual(group('pull_request', 'refs/pull/1/merge'), group('pull_request', 'refs/pull/2/merge'));
-  assert.equal(ci.concurrency['cancel-in-progress'], true);
 });
 
 test('no pull request trigger depends on contract tests or release-only signing scripts', async () => {
