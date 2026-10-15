@@ -86,7 +86,7 @@ jobs:
         # The components' browser checks run in composite-site.
         run: pnpm test:packages
       - name: Check correctness on full CI runs
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: ${{ !cancelled() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
         run: pnpm lint:correctness
       - name: Lint every workspace package
         # code-quality owns correctness lint on pull requests and pushes.

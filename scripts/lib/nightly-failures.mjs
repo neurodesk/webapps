@@ -93,13 +93,21 @@ export function createGitHubClient({ token, repository, fetchImpl = fetch }) {
 
 export function logExcerpt({ text, truncated }) {
   const lines = text.split('\n');
-  const annotationIndex = lines.findLastIndex(line => /##\[error\]/i.test(line));
-  const errorIndex = annotationIndex >= 0 ? annotationIndex : lines.findLastIndex(line => /(?:\berror:|\b(?:failed|exception|timed? ?out)\b)/i.test(line));
-  const selected = errorIndex < 0 ? [] : lines.slice(Math.max(0, errorIndex - 8), errorIndex + 12);
-  const tail = lines.slice(-22);
+  const annotation = /(?:##\[error\]|::error(?:\s[^\r\n]*?)?::)/i;
+  const generic = /(?:Process completed with exit code \d+\.?|(?:The )?operation was cancel(?:led|ed)\.?|(?:The )?job was cancel(?:led|ed)\.?)\s*$/i;
+  const annotationIndex = lines.findLastIndex(line => annotation.test(line) && !generic.test(line));
+  const diagnosticIndex = lines.findLastIndex(line => !generic.test(line) && /(?:\berror:|\bexception\b|\btime(?:d)?[ -]?out\b)/i.test(line));
+  const failureIndex = lines.findLastIndex(line => !generic.test(line) && /\bfailed\b/i.test(line));
+  const usefulIndex = diagnosticIndex >= 0 ? diagnosticIndex : failureIndex;
+  const errorIndex = annotationIndex >= 0 ? annotationIndex : usefulIndex;
+  const start = errorIndex < 0 ? 0 : Math.max(0, errorIndex - 8);
+  const end = errorIndex < 0 ? 0 : Math.min(lines.length, errorIndex + 12);
+  const tailStart = Math.max(0, lines.length - 22);
+  const selected = lines.slice(errorIndex >= 0 && tailStart <= end ? Math.min(start, tailStart) : start, end);
+  const tail = lines.slice(Math.max(tailStart, end));
   const excerpt = sanitize([
     ...selected,
-    ...(selected.length ? ['... last available log lines ...'] : []),
+    ...(selected.length && tailStart > end ? ['... last available log lines ...'] : []),
     ...tail,
   ].join('\n'), 4500);
   return excerpt + (truncated ? '\n[Log download stopped at 2 MiB; open the job for the complete log.]' : '');

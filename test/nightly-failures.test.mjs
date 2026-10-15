@@ -274,3 +274,45 @@ test('cancelled jobs with interrupted steps include bounded logs to diagnose tim
   assert.match(writes(client)[0].body.body, /maximum execution time/);
   assert.match(writes(client)[0].body.body, /job\/456#step:3:1/);
 });
+
+test('exit-code and cancellation annotations do not hide the substantive diagnostic', () => {
+  const padding = Array.from({ length: 40 }, (_, i) => `ordinary output ${i}`).join('\n');
+  for (const marker of ['##[error]', '::error::', '::error title=Test failed::']) {
+    const excerpt = logExcerpt({ text: `${marker}Expected scientific parity, received Dice 0.91\n${padding}\n##[error]Process completed with exit code 1.\n##[error]The operation was canceled.`, truncated: false });
+    assert.match(excerpt, /Expected scientific parity, received Dice 0.91/);
+    assert.match(excerpt, /Process completed with exit code 1/);
+  }
+  const genericError = logExcerpt({ text: `Error: expected atlas grid 182x218x182\n${padding}\n##[error]Process completed with exit code 1.`, truncated: false });
+  assert.match(genericError, /expected atlas grid 182x218x182/);
+});
+
+test('overlapping diagnostic context and log tail render each line once', () => {
+  const excerpt = logExcerpt({ text: 'setup line\n##[error]unique diagnostic\ncleanup line\nProcess completed with exit code 1.', truncated: false });
+  assert.equal(excerpt.match(/unique diagnostic/g).length, 1);
+  assert.equal(excerpt.match(/cleanup line/g).length, 1);
+  assert.equal(excerpt.match(/setup line/g).length, 1);
+});
+
+test('large mixed job matrices retain failed diagnostics before cancelled siblings', async () => {
+  const cancelled = Array.from({ length: 40 }, (_, i) => ({ id: 1000 + i, name: `cancelled sibling ${i}`, conclusion: 'cancelled', steps: [{ number: 1, name: 'Interrupted test', conclusion: 'cancelled' }] }));
+  const client = fakeClient({ jobs: [...cancelled, failedJob], logs: { text: '##[error]scientific parity regression', truncated: false } });
+  await report(client);
+  const body = writes(client)[0].body.body;
+  assert.ok(body.indexOf('browser') < body.indexOf('cancelled sibling'));
+  assert.match(body, /scientific parity regression/);
+  assert.match(body, /additional affected jobs omitted/);
+  assert.equal(client.calls.filter(call => call.logs)[0].path, '/actions/jobs/456/logs');
+  assert.ok(body.length < 60000);
+});
+
+test('explicit assertion diagnostics outrank later failed-test duration summaries', () => {
+  const padding = Array.from({ length: 40 }, (_, i) => `ordinary cleanup ${i}`).join('\n');
+  const excerpt = logExcerpt({
+    text: `2026-10-15T00:00:00Z Error: expect(locator).toHaveAttribute(expected) failed\nLocator: getByRole('button', { name: 'Run' })\nExpected: enabled\nReceived: disabled\n${padding}\n6.8s failed labels are preserved in the viewer\n${padding}\n##[error]Process completed with exit code 1.`,
+    truncated: false,
+  });
+  assert.match(excerpt, /Error: expect\(locator\)\.toHaveAttribute\(expected\) failed/);
+  assert.match(excerpt, /Expected: enabled/);
+  assert.match(excerpt, /Received: disabled/);
+  assert.doesNotMatch(excerpt, /6.8s failed labels/);
+});

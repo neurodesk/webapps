@@ -15,6 +15,7 @@ function evaluate(expression, event, overrides = {}) {
   const source = expression.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replaceAll('needs.app-plan.', "needs['app-plan'].");
   return runInNewContext(source, {
     github: { event_name: event, workflow: 'ci', ref: 'refs/heads/main' },
+    cancelled: () => false,
     inputs: { agentic_mode: 'interactions' },
     needs: { 'app-plan': { outputs: { has_gpu_apps: 'true', all_apps: 'false' } } },
     ...overrides,
@@ -121,7 +122,10 @@ test('correctness lint runs on every CI event with no duplicate routine gate', a
   assert.equal(standalone.if, undefined);
   const full = ci.jobs['workspace-contracts'].steps.find((step) => step.run === 'pnpm lint:correctness');
   assert.ok(full);
+  // A status function overrides GitHub's implicit success() guard after a package failure.
+  assert.match(full.if, /!cancelled\(\)/);
   for (const event of events) {
+    assert.equal(evaluate(full.if, event, { cancelled: () => true }), false, `${event} respects cancellation`);
     assert.equal(evaluate(full.if, event), !['pull_request', 'push'].includes(event), event);
   }
   const workspace = ci.jobs['workspace-contracts'].steps.find((step) => step.run === 'node scripts/lint-workspaces.mjs');
