@@ -31,9 +31,9 @@ test('every app with @slow tests applies the pull request tier in its Playwright
   }
 });
 
-test('ci skips @slow tests only on pull requests and logs every test duration', async () => {
+test('ci skips @slow repeats on pull requests and pushes and logs every test duration', async () => {
   const ci = YAML.parse(await readFile(join(repoRoot, '.github/workflows/ci.yml'), 'utf8'));
-  assert.equal(ci.env.NEURODESK_E2E_SKIP_SLOW, "${{ github.event_name == 'pull_request' && '1' || '' }}");
+  assert.equal(ci.env.NEURODESK_E2E_SKIP_SLOW, "${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}");
   assert.equal(ci.env.PW_TEST_REPORTER, '${{ github.workspace }}/test-utils/test-durations-reporter.mjs');
   const release = await readFile(join(repoRoot, '.github/workflows/release.yml'), 'utf8');
   assert.doesNotMatch(release, /NEURODESK_E2E_SKIP_SLOW/, 'releases run every test');

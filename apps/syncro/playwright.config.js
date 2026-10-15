@@ -1,3 +1,4 @@
+import { withBrowserBuild } from '../../test-utils/playwright-build.mjs';
 import { defineConfig } from "@playwright/test";
 import { e2eTier } from "../../test-utils/e2e-tier.mjs";
 import { gpuBrowser } from "../../test-utils/hardware-gpu.mjs";
@@ -14,7 +15,7 @@ export default defineConfig({
   expect: { timeout: 20000 },
   webServer: {
     timeout: 120000,
-    command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
+    command: withBrowserBuild(`pnpm preview --host 127.0.0.1 --port ${port} --strictPort`),
     url: baseURL,
     reuseExistingServer: !process.env.CI,
   },

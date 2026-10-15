@@ -1,3 +1,4 @@
+import { withBrowserBuild } from './playwright-build.mjs';
 import { defineConfig, devices } from '@playwright/test';
 import { e2eTier } from './e2e-tier.mjs';
 
@@ -31,7 +32,7 @@ export function vitePreviewPlaywrightConfig({
     ...e2eTier,
     testDir: './e2e',
     webServer: {
-      command: `pnpm build && pnpm preview --port ${port} --strictPort --host ${host}`,
+      command: withBrowserBuild(`pnpm preview --port ${port} --strictPort --host ${host}`),
       url: baseURL,
       reuseExistingServer: false,
       timeout: 180_000

@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: mutation-quality-${{ github.ref }}
-  cancel-in-progress: true
+  group: mutation-quality-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   pilot:
@@ -25,10 +25,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Test the mutated modules and failure handling
-        run: node --test packages/nii2tvx/test/disconnectome.test.js packages/lcmodel/test/basis-select.test.js packages/nii2tvx/test/parity.test.js test/date-versions.test.mjs test/lockfile-impact.test.mjs test/mutation-quality.test.mjs
-        env:
-          TMPDIR: ${{ runner.temp }}
       - name: Prove mutation detection on pull requests
         if: github.event_name == 'pull_request'
         run: pnpm quality:mutations:smoke

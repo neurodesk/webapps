@@ -20,8 +20,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: standalone-links-${{ github.ref }}
-  cancel-in-progress: true
+  group: standalone-links-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   links:

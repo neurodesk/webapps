@@ -18,7 +18,7 @@
     "build": "node ../../scripts/build-static.mjs && node ../../scripts/theme-app-dist.mjs --app vesselboost",
     "pretest": "pnpm runtime-support",
     "pretest:e2e": "pnpm vendor && pnpm runtime-support",
-    "test:e2e": "playwright test && pnpm build && pnpm test:preprocessing && node scripts/test_example_workflow.mjs",
+    "test:e2e": "node ../../test-utils/playwright-build.mjs \"playwright test && pnpm test:preprocessing && node scripts/test_example_workflow.mjs\"",
     "test:preprocessing": "node scripts/test_preprocessing_workflow.mjs",
     "test:examples": "node --test scripts/test_examples.mjs",
     "test:example-data": "node --test scripts/test_example_data.mjs",

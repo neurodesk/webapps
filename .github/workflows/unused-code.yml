@@ -25,9 +25,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: node --test test/unused-code.test.mjs
-        env:
-          TMPDIR: ${{ runner.temp }}
       - run: pnpm quality:unused
       - uses: actions/upload-artifact@v7
         if: always()

@@ -1,3 +1,4 @@
+import { withBrowserBuild } from '../../test-utils/playwright-build.mjs';
 import { defineConfig } from "@playwright/test";
 
 // Serve the BUILT output so the shared preview headers are exercised, and run
@@ -10,7 +11,7 @@ export default defineConfig({
   testDir: "./e2e",
   webServer: [
     {
-      command: "pnpm build && pnpm preview --port 4173 --strictPort",
+      command: withBrowserBuild("pnpm preview --port 4173 --strictPort"),
       url: "http://localhost:4173",
       reuseExistingServer: !process.env.CI,
     },

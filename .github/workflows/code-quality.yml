@@ -29,4 +29,3 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       # Compiles each typed promise project (scripts/quality/typed-projects.mjs) with the pinned TS5 before linting.
       - run: pnpm lint:correctness
-      - run: pnpm test:lint

@@ -1,3 +1,4 @@
+import { withBrowserBuild } from '../../test-utils/playwright-build.mjs';
 import { defineConfig } from '@playwright/test';
 
 // Serve the BUILT output so the shared preview headers and worker/wasm asset paths are
@@ -5,7 +6,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   webServer: {
-    command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 4178 --strictPort',
+    command: withBrowserBuild('pnpm preview --host 127.0.0.1 --port 4178 --strictPort'),
     url: 'http://127.0.0.1:4178/carotid-flow/',
     reuseExistingServer: !process.env.CI,
     timeout: 180000,

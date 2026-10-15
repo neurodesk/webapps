@@ -1,0 +1,42 @@
+name: scheduled workflow failure reports
+
+on:
+  workflow_run:
+    workflows:
+      - ci
+      - deploy-github-pages
+      - mutation-quality
+      - sct-full-tests
+      - standalone
+      - standalone-links
+      - upstream sync
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+# Serialize issue creation and updates for the same workflow.
+concurrency:
+  group: nightly-failure-report-${{ github.event.workflow_run.workflow_id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: github.event.workflow_run.event == 'schedule' && github.event.workflow_run.head_branch == github.event.repository.default_branch && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # workflow_run is privileged: never check out the triggering run's branch or artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22.22.0
+      - name: Report scheduled failures
+        run: node scripts/report-nightly-failure.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

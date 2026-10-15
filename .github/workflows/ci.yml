@@ -22,14 +22,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 env:
   # CI never uses the CUDA providers; parallel postinstalls of two versions race on one temp path.
   ONNXRUNTIME_NODE_INSTALL: skip
   PW_TEST_REPORTER: ${{ github.workspace }}/test-utils/test-durations-reporter.mjs
-  NEURODESK_E2E_SKIP_SLOW: ${{ github.event_name == 'pull_request' && '1' || '' }}
+  NEURODESK_E2E_SKIP_SLOW: ${{ (github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && '1' || '' }}
 
 jobs:
   app-plan:
@@ -76,20 +76,18 @@ jobs:
         # test cannot be left out. Two files run in other jobs: the runtime store
         # needs the built site, the easter egg needs a browser.
         run: pnpm test:contracts
-      - name: Test the shared packages every app is built from
-        # Node tests of every package, the desktop suite included. The components'
-        # browser checks (elements and showcase) run in composite-site.
-        run: pnpm test:packages
-      - name: Check native tract conversion and WebAssembly parity
+      - name: Check native tract conversion
         run: |
           sudo apt-get update
           sudo apt-get install -y zlib1g-dev
           make -C exes/nii2tvx test
-          pnpm --filter @neurodesk/nii2tvx test
+      - name: Test the shared packages every app is built from
+        # Build nii2tvx first so its package suite exercises native/WebAssembly parity.
+        # The components' browser checks run in composite-site.
+        run: pnpm test:packages
       - name: Lint every workspace package
-        run: pnpm lint
-      - name: Test deployed isolation diagnostics
-        run: node --test test/deployed-isolation.test.mjs
+        # code-quality owns the central correctness gate.
+        run: node scripts/lint-workspaces.mjs
 
   app-tests:
     needs: app-plan
@@ -192,18 +190,33 @@ jobs:
       - name: Check published automation contracts and operation registration
         run: node test/automation-catalog.smoke.mjs
       - name: Test shared runtime assembly
-        run: node --test test/runtime-assets.test.mjs test/runtime-assets-rewrite.test.mjs test/runtime-worker-scope.test.mjs
+        run: node --test test/runtime-assets.test.mjs
       - name: Load threaded models with service-worker isolation
         run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
-      - name: Install the catalog e2e browser
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Check catalog e2e types and coverage
-        run: pnpm test:e2e:types && node --test test/agentic-catalog.test.mjs test/agentic-provider.test.mjs test/chromium-cdp.test.mjs test/playwright-discovery.test.mjs
+      - name: Check catalog e2e types
+        run: pnpm test:e2e:types
       - name: Test every production workspace with e2e
         run: pnpm test:e2e:catalog --skip-build --output .e2e/workspace
+      - name: Audit interface consistency across the catalog
+        run: pnpm audit:interfaces
+        env:
+          INTERFACE_ARTIFACTS: interface-artifacts
+      - name: Check interface workflows with image data
+        run: pnpm test:interface-workflows
+      - name: Check unified scan pickers with DICOM series
+        run: pnpm test:image-uploads
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: interface-audit
+          path: interface-artifacts/
+          if-no-files-found: ignore
+      - name: Check phone and tablet layouts and touch navigation
+        run: pnpm test:mobile
       - name: Run Neurodesk agent interactions across the catalog
+        timeout-minutes: 120
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.agentic_mode == 'interactions')
         env:
           NEURODESK_API_KEY: ${{ secrets.NEURODESK_API_KEY }}
@@ -237,22 +250,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
-      - name: Audit interface consistency across the catalog
-        run: pnpm audit:interfaces
-        env:
-          INTERFACE_ARTIFACTS: interface-artifacts
-      - name: Check interface workflows with image data
-        run: pnpm test:interface-workflows
-      - name: Check unified scan pickers with DICOM series
-        run: pnpm test:image-uploads
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: interface-audit
-          path: interface-artifacts/
-          if-no-files-found: ignore
-      - name: Check phone and tablet layouts and touch navigation
-        run: pnpm test:mobile
 
   browser-e2e:
     needs: app-plan

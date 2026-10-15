@@ -1,3 +1,4 @@
+import { withBrowserBuild } from '../../test-utils/playwright-build.mjs';
 import { defineConfig } from "@playwright/test";
 import { e2eTier } from "../../test-utils/e2e-tier.mjs";
 
@@ -7,7 +8,7 @@ export default defineConfig({
   ...e2eTier,
   testDir: "./e2e",
   webServer: {
-    command: "pnpm build && pnpm preview --host 127.0.0.1 --port 4173 --strictPort",
+    command: withBrowserBuild("pnpm preview --host 127.0.0.1 --port 4173 --strictPort"),
     url: "http://localhost:4173",
     reuseExistingServer: !process.env.CI,
   },

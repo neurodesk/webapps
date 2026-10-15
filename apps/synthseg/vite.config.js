@@ -21,6 +21,11 @@ function localModel() {
 
 export default neurodeskViteConfig({
   appId: 'synthseg',
+  ...(process.env.SYNTHSEG_ASSET_DIR ? {
+    define: {
+      'import.meta.env.VITE_SYNTHSEG_ASSET_BASE': JSON.stringify(process.env.VITE_SYNTHSEG_ASSET_BASE || '/synthseg/model-assets/'),
+    },
+  } : {}),
   plugins: [localModel()],
   server: { host: '127.0.0.1', port: 5175 },
   preview: { host: '127.0.0.1', port: 5175 },
