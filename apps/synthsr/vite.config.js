@@ -19,7 +19,13 @@ function localModels() {
   return { name: 'synthsr-local-models', configureServer: serve, configurePreviewServer: serve };
 }
 export default neurodeskViteConfig({
-  appId: 'synthsr', plugins: [localModels(), nativeReleaseVersion(), standalonePackage(), isolationFallback()],
+  appId: 'synthsr',
+  ...(process.env.SYNTHSR_ASSET_DIR ? {
+    define: {
+      'import.meta.env.VITE_SYNTHSR_ASSET_BASE': JSON.stringify(process.env.VITE_SYNTHSR_ASSET_BASE || '/synthsr/model-assets/'),
+    },
+  } : {}),
+  plugins: [localModels(), nativeReleaseVersion(), standalonePackage(), isolationFallback()],
   server: { host: '127.0.0.1', port: 5174 },
   preview: { host: '127.0.0.1', port: 5174 },
   build: { target: 'esnext' },

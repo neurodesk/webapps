@@ -6,7 +6,6 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   webServer: {
-    env: process.env.TOPOFIT_ASSET_DIR ? { VITE_TOPOFIT_ASSET_BASE: '/model-assets/' } : {},
     command: withBrowserBuild('pnpm preview --port 4173 --strictPort'),
     url: 'http://localhost:4173',
     reuseExistingServer: !process.env.CI,

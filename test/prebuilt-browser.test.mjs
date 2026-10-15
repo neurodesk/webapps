@@ -93,23 +93,31 @@ test('every production Playwright server omits its build only in prebuilt mode',
   assert.ok(checked >= 20, `Checked ${checked} production server configs`);
 });
 
-test('SynthSeg resolves its local model URL at build time, including builds outside Playwright', () => {
-  const define = env => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', `
-    const config = await (await import('./apps/synthseg/vite.config.js')).default;
-    console.log(JSON.stringify(config.define || {}));
-  `], {
-    cwd: root,
-    env: { ...process.env, SYNTHSEG_ASSET_DIR: '', VITE_SYNTHSEG_ASSET_BASE: '', ...env },
-    encoding: 'utf8',
-  }));
-  assert.deepEqual(define({}), {});
-  assert.deepEqual(define({ SYNTHSEG_ASSET_DIR: '/models' }), {
-    'import.meta.env.VITE_SYNTHSEG_ASSET_BASE': JSON.stringify('/synthseg/model-assets/'),
+for (const [app, prefix, localBase] of [
+  ['synthseg', 'SYNTHSEG', '/synthseg/model-assets/'],
+  ['synthsr', 'SYNTHSR', '/synthsr/model-assets/'],
+  ['topofit', 'TOPOFIT', '/model-assets/'],
+]) {
+  test(`${app} resolves its local model URL in builds outside Playwright`, () => {
+    const assetDir = `${prefix}_ASSET_DIR`;
+    const assetBase = `VITE_${prefix}_ASSET_BASE`;
+    const define = env => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', `
+      const config = await (await import('./apps/${app}/vite.config.js')).default;
+      console.log(JSON.stringify(config.define || {}));
+    `], {
+      cwd: root,
+      env: { ...process.env, [assetDir]: '', [assetBase]: '', ...env },
+      encoding: 'utf8',
+    }));
+    assert.deepEqual(define({}), {});
+    assert.deepEqual(define({ [assetDir]: '/models' }), {
+      [`import.meta.env.${assetBase}`]: JSON.stringify(localBase),
+    });
+    assert.deepEqual(define({ [assetDir]: '/models', [assetBase]: '/custom/' }), {
+      [`import.meta.env.${assetBase}`]: JSON.stringify('/custom/'),
+    });
   });
-  assert.deepEqual(define({ SYNTHSEG_ASSET_DIR: '/models', VITE_SYNTHSEG_ASSET_BASE: '/custom/' }), {
-    'import.meta.env.VITE_SYNTHSEG_ASSET_BASE': JSON.stringify('/custom/'),
-  });
-});
+}
 
 test('prebuilt mode preserves the collected browser test inventory', () => {
   for (const app of ['synthseg', 'brain-extraction', 'white-matter-lesions']) {

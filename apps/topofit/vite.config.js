@@ -25,6 +25,11 @@ function localModels() {
 // One shared owner supplies the app path, dev shell, theme, and isolation policy.
 export default neurodeskViteConfig({
   appId: 'topofit',
+  ...(process.env.TOPOFIT_ASSET_DIR ? {
+    define: {
+      'import.meta.env.VITE_TOPOFIT_ASSET_BASE': JSON.stringify(process.env.VITE_TOPOFIT_ASSET_BASE || '/model-assets/'),
+    },
+  } : {}),
   plugins: [localModels(), isolationFallback()],
   build: { target: 'es2022', outDir: 'dist', assetsInlineLimit: 0 },
   optimizeDeps: { exclude: ['@niivue/niimath', 'onnxruntime-web'] },
