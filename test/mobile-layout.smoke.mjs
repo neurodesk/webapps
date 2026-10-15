@@ -52,11 +52,13 @@ async function checkLayout(page, label) {
       }).slice(0, 8).map(describe),
       smallNavigation: [...document.querySelectorAll('.nd-app-bar__action')].filter(visible)
         .filter(element => element.getBoundingClientRect().width < 44 || element.getBoundingClientRect().height < 44).map(describe),
+      distortedInfoIcons: [...document.querySelectorAll('.nd-info-icon')].filter(visible)
+        .filter(element => Math.abs(element.getBoundingClientRect().width - element.getBoundingClientRect().height) > 1).map(describe),
       smallInputs: [...document.querySelectorAll('input:not([type]), input[type="text"], input[type="number"], input[type="url"], select, textarea')]
         .filter(visible).filter(element => Number.parseFloat(getComputedStyle(element).fontSize) < 16).map(describe),
     };
   });
-  const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.smallInputs.length;
+  const failed = result.pageOverflow || result.dialogOverflow.length || result.overflow.length || result.smallNavigation.length || result.distortedInfoIcons.length || result.smallInputs.length;
   if (failed) failures.push(`${label}: ${JSON.stringify(result)}`);
   if (screenshotDir) await page.screenshot({ path: join(screenshotDir, `${label.replaceAll('/', '-')}.png`) });
   console.log(`${failed ? 'FAIL' : 'PASS'} ${label}${failed ? ' ' + JSON.stringify(result) : ''}`);

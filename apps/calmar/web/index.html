@@ -87,11 +87,11 @@
           <div class="param-group">
             <div class="param-label-row">
               <label class="param-label" for="structuralFileInput">Structural T1 (NIfTI / DICOM)</label>
-              <button type="button" class="help-icon" aria-label="Structural T1 help">i
-                <span class="help-popover" role="tooltip">
+              <span class="nd-info-icon" aria-label="Structural T1 help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
                   Choose a structural T1. Loading the image only displays it; processing starts when you click Run analysis.
                 </span>
-              </button>
+              </span>
             </div>
             <input type="file" data-neurodesk-input="image" id="structuralFileInput" multiple>
           </div>
@@ -113,11 +113,11 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           2. Run analysis
 
-        </button><button type="button" class="help-icon" aria-label="Run analysis help">i
-            <span class="help-popover" role="tooltip">
+        </button><span class="nd-info-icon" aria-label="Run analysis help" tabindex="0">i
+            <span class="nd-info-tooltip" role="tooltip">
               Runs the selected chain: brain extraction, prealign when needed, lesion segmentation, registration, atlas overlap, FC map, and thresholding.
             </span>
-          </button></h2>
+          </span></h2>
         <div class="section-content" data-disclosure-panel>
           <div class="param-group">
             <label class="param-label" for="atlasSelect">Atlas</label>
@@ -200,11 +200,11 @@
           </div>
           <div class="panel-title-row">
             <h3>Direct lesion overlap</h3>
-            <button type="button" class="help-icon" aria-label="Direct lesion overlap help">i
-              <span class="help-popover" role="tooltip">
+            <span class="nd-info-icon" aria-label="Direct lesion overlap help" tabindex="0">i
+              <span class="nd-info-tooltip" role="tooltip">
                 Atlas labels listed here contain lesion voxels directly. Lesion % is the share of lesion voxels in each label.
               </span>
-            </button>
+            </span>
           </div>
           <div id="outsideAtlasWarning" class="warning hidden"></div>
           <table id="networkOverlapTable" class="results-table">
@@ -220,11 +220,11 @@
           <div id="directFunctionProfileResults" class="function-profile-results hidden">
             <div class="panel-title-row">
               <h3>Functional associations from direct lesion overlap</h3>
-              <button type="button" class="help-icon" aria-label="Direct functional associations help">i
-                <span class="help-popover" role="tooltip">
+              <span class="nd-info-icon" aria-label="Direct functional associations help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
                   Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
                 </span>
-              </button>
+              </span>
             </div>
             <table id="directFunctionProfileTable" class="results-table function-profile-table">
               <thead>
@@ -241,11 +241,11 @@
           <div class="threshold-controls" id="thresholdControls">
             <div class="panel-title-row">
               <h3>Threshold connectivity map</h3>
-              <button type="button" class="help-icon" aria-label="Threshold connectivity map help">i
-                <span class="help-popover" role="tooltip">
+              <span class="nd-info-icon" aria-label="Threshold connectivity map help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
                   The connectivity map is a group-FC weighted t-map derived from the direct lesion-overlap profile. The slider keeps the chosen top percentage of voxels; use magnitude to rank by t-map strength.
                 </span>
-              </button>
+              </span>
             </div>
             <div class="param-row">
               <div class="param-label-row">
@@ -261,11 +261,11 @@
             <div id="affectedNetworkResults" class="affected-network-results hidden">
               <div class="panel-title-row">
                 <h3>Connectivity-map effects</h3>
-                <button type="button" class="help-icon" aria-label="Connectivity-map effects help">i
-                  <span class="help-popover" role="tooltip">
+                <span class="nd-info-icon" aria-label="Connectivity-map effects help" tabindex="0">i
+                  <span class="nd-info-tooltip" role="tooltip">
                     Atlas labels listed here contain voxels surviving the thresholded connectivity map. Map % is the share of thresholded map voxels in each label.
                   </span>
-                </button>
+                </span>
               </div>
               <table id="affectedNetworkTable" class="results-table">
                 <thead>
@@ -280,11 +280,11 @@
               <div id="mapFunctionProfileResults" class="function-profile-results hidden">
                 <div class="panel-title-row">
                   <h3>Functional associations from connectivity-map effects</h3>
-                  <button type="button" class="help-icon" aria-label="Connectivity-map functional associations help">i
-                    <span class="help-popover" role="tooltip">
+                  <span class="nd-info-icon" aria-label="Connectivity-map functional associations help" tabindex="0">i
+                    <span class="nd-info-tooltip" role="tooltip">
                       Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
                     </span>
-                  </button>
+                  </span>
                 </div>
                 <table id="mapFunctionProfileTable" class="results-table function-profile-table">
                   <thead>
@@ -367,11 +367,11 @@
             <option value="2">Sagittal</option>
           </select>
           <button class="tool-button" id="maskInterpolateButton" type="button" title="Interpolate mask between boundary slices">Interp</button>
-          <button type="button" class="help-icon mask-interp-help" id="maskInterpolateHelp" aria-label="Interpolate mask help">i
-            <span class="help-popover" role="tooltip">
+          <span class="nd-info-icon" id="maskInterpolateHelp" aria-label="Interpolate mask help" tabindex="0">i
+            <span class="nd-info-tooltip" role="tooltip">
               Draw the lesion on at least two slices in the selected orientation. Interp finds the first and last non-empty slices, fills the slices between them with NiiVue mask interpolation, and thresholds the result back to lesion voxels.
             </span>
-          </button>
+          </span>
         </div>
         <div class="mask-toolbar-group mask-review-actions" role="group" aria-label="Mask review actions">
           <button class="tool-button tool-confirm" id="confirmLesionMaskButton" type="button" title="Confirm edited lesion mask and continue analysis">Confirm mask</button>

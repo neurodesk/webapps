@@ -1,7 +1,8 @@
 import { prealignVolumes } from '@neurodesk/calmar/alignment';
 import { prepare as prepareCandidate, atlasOverlap, map as mapReviewedLesion, filterSummaryByMinCluster } from '@neurodesk/calmar/pipeline';
-import { createExampleSelector, bindSectionDisclosures } from '@neurodesk/webapp-components/ui';
+import { createExampleSelector, bindSectionDisclosures, bindInfoTooltips } from '@neurodesk/webapp-components/ui';
 bindSectionDisclosures(document);
+bindInfoTooltips(document);
 
 import { SimpleFileIOController, readSingleImage } from '@neurodesk/webapp-components/file-io';
 import { ViewerController } from '@neurodesk/webapp-components';

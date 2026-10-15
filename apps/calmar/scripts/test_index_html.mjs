@@ -115,7 +115,7 @@ assert.deepEqual(
     assert.equal(input.dataset.neurodeskInput, 'image', `${id} is a shared scan input`);
     assert.equal(input.multiple, true, `${id} accepts a DICOM series`);
   }
-  const structuralHelp = $('#stepLoadSection .help-icon[aria-label="Structural T1 help"] .help-popover');
+  const structuralHelp = $('#stepLoadSection .nd-info-icon[aria-label="Structural T1 help"] .nd-info-tooltip');
   assert.match(text(structuralHelp), /Loading the image only displays it; processing starts when you click Run analysis\./);
   // The hidden compatibility hooks behind the compact buttons.
   for (const id of ['lesionFileInput', 'manualMaskFileInput']) {
@@ -244,7 +244,7 @@ assert.deepEqual(
   assert.equal(symmetric.type, 'checkbox');
   assert.equal(text(symmetric.closest('label')), 'Use |t| magnitude');
 
-  const helpFor = name => text($(`#resultsSection .help-icon[aria-label="${name}"] .help-popover`));
+  const helpFor = name => text($(`#resultsSection .nd-info-icon[aria-label="${name}"] .nd-info-tooltip`));
   assert.match(helpFor('Direct lesion overlap help'), /^Atlas labels listed here contain lesion voxels directly\./);
   assert.match(helpFor('Threshold connectivity map help'), /group-FC weighted t-map derived from the direct lesion-overlap profile/);
   assert.match(helpFor('Connectivity-map effects help'), /surviving the thresholded connectivity map/);
@@ -275,11 +275,11 @@ assert.deepEqual(
 
 // ---- help lives behind compact popovers ----
 {
-  const helpIcons = $$('.help-icon');
+  const helpIcons = $$('.nd-info-icon');
   assert.ok(helpIcons.length >= 8);
   for (const icon of helpIcons) {
     assert.ok(icon.getAttribute('aria-label'), 'every help icon is labelled');
-    const popover = icon.querySelector('.help-popover');
+    const popover = icon.querySelector('.nd-info-tooltip');
     assert.equal(popover?.getAttribute('role'), 'tooltip', `${icon.getAttribute('aria-label')} opens a tooltip`);
   }
   assert.equal($('p.param-help'), null, 'no always-visible helper paragraphs');
@@ -312,7 +312,7 @@ assert.deepEqual(
   assert.equal(toolbar.getAttribute('aria-label'), 'Lesion mask drawing tools');
   assert.ok(toolbar.classList.contains('hidden'), 'hidden until a mask is under review');
   const groups = Array.from(toolbar.querySelectorAll(':scope > [role="group"]'));
-  const controls = group => Array.from(group.querySelectorAll('button, input, select')).map(element => element.id);
+  const controls = group => Array.from(group.querySelectorAll('button, input, select, .nd-info-icon')).map(element => element.id);
   assert.deepEqual(
     groups.map(group => [group.getAttribute('aria-label'), controls(group)]),
     [
@@ -323,7 +323,7 @@ assert.deepEqual(
     ]
   );
   assert.deepEqual(
-    Array.from(toolbar.querySelectorAll('button:not(.help-icon)')).map(button => [label(button), button.title]),
+    Array.from(toolbar.querySelectorAll('button')).map(button => [label(button), button.title]),
     [
       ['Paint', 'Paint lesion voxels'],
       ['Erase', 'Erase lesion voxels'],
@@ -345,7 +345,7 @@ assert.deepEqual(
   );
   const interpolateHelp = $('#maskInterpolateHelp');
   assert.equal(interpolateHelp.getAttribute('aria-label'), 'Interpolate mask help');
-  assert.match(text(interpolateHelp.querySelector('.help-popover')), /first and last non-empty slices.*NiiVue mask interpolation/);
+  assert.match(text(interpolateHelp.querySelector('.nd-info-tooltip')), /first and last non-empty slices.*NiiVue mask interpolation/);
 
   // The approval banner is a prompt only: it carries no buttons of its own.
   const banner = $('#maskApprovalBanner');
