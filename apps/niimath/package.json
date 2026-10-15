@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "node ../../scripts/check-app-js.mjs .",
     "test": "node ../../scripts/check-app-js.mjs .",
-    "test:e2e": "node ../../test-utils/playwright-build.mjs \"node ../../test/examples.smoke.mjs --app niimath && playwright test\""
+    "test:e2e": "node ../../test-utils/run-browser-tests.mjs \"node ../../test/examples.smoke.mjs --app niimath && playwright test\""
   },
   "devDependencies": {
     "@playwright/test": "1.64.0",

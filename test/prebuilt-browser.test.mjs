@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { withBrowserBuild } from '../test-utils/playwright-build.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const helper = join(root, 'test-utils/playwright-build.mjs');
+const helper = join(root, 'test-utils/run-browser-tests.mjs');
 const shellQuote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
 test('browser server commands build locally and only serve the CI bundle when prebuilt', () => {
