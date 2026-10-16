@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dicomFile, dicomSeries, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
-import { indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
+import { dicomFile, dicomSeries, explicit, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
+import { MAX_PREFIX_BYTES, PREFIX_BYTES, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
 import { seriesLabel, seriesSummary } from '../src/series-text.js';
 
 const arrayBuffer = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length);
@@ -65,6 +65,7 @@ test('an Implicit VR file still yields its modality and protocol name', () => {
     implicit(0x0018, 0x1030, 't1_mpr '),
     implicit(0x0020, 0x000e, '1.2.3\0'),
     implicit(0x0028, 0x0010, uint16(64)),
+    implicit(0x0028, 0x0011, uint16(64)),
   ]);
   const record = readRecord(new File([buffer], 'i.dcm'), 'i.dcm', arrayBuffer(buffer));
   assert.deepEqual([record.fields.modality, record.fields.protocolName, record.fields.seriesUid, record.fields.rows], ['MR', 't1_mpr', '1.2.3', 64]);
@@ -92,4 +93,66 @@ test('the series list line names the series, modality and image count', async ()
   const [series] = (await indexFiles(dicomSeries({ series: 9, slices: 4 }).map((file) => toFile(file)))).series;
   assert.equal(seriesLabel(series), '9 · test_scan_9 · MR · 4 images');
   assert.equal(seriesSummary(series), 'T1 · 16 × 16 · TR 2000 ms · TE 20 ms · slice 1 mm · 1 field varies');
+});
+
+// One series slice with a private element of `privateBytes` between group 0008 and the
+// series and image tags, as vendors' large private headers sit.
+function withEarlyPrivateElement(privateBytes) {
+  const [slice] = dicomSeries({ series: 8, slices: 1 });
+  const at = slice.buffer.indexOf(Buffer.from([0x10, 0x00, 0x10, 0x00, 0x50, 0x4e]));
+  const bulk = Buffer.concat([explicit(0x0009, 0x0010, 'LO', 'VENDOR'), explicit(0x0009, 0x1001, 'OB', Buffer.alloc(privateBytes))]);
+  return { name: slice.name, buffer: Buffer.concat([slice.buffer.subarray(0, at), bulk, slice.buffer.subarray(at)]) };
+}
+
+// The bytes a File hands out, so a test can see how far indexing read.
+function counted(file) {
+  const read = { bytes: 0 };
+  const slice = file.slice.bind(file);
+  file.slice = (start, end) => {
+    const part = slice(start, end);
+    read.bytes += part.size;
+    return part;
+  };
+  return { file, read };
+}
+
+test('an image whose series and size tags sit past a 140 KB private element is still indexed', async () => {
+  const { series, skipped } = await indexFiles([toFile(withEarlyPrivateElement(140 * 1024))]);
+  assert.deepEqual(skipped, []);
+  assert.equal(series.length, 1);
+  assert.deepEqual([series[0].number, series[0].rows, series[0].cols], [8, 16, 16]);
+});
+
+test('an image whose tags lie beyond the read cap is skipped for that reason', async () => {
+  const { file, read } = counted(toFile(withEarlyPrivateElement(MAX_PREFIX_BYTES)));
+  const { series, skipped } = await indexFiles([file]);
+  assert.equal(series.length, 0);
+  assert.deepEqual(skipped, [{ path: 'scan/scan8_1.dcm', reason: 'no image tags in the first 8 MB' }]);
+  assert.ok(read.bytes < 2 * MAX_PREFIX_BYTES, `read ${read.bytes} bytes`);
+});
+
+test('a DICOM file with neither preamble nor extension is indexed', async () => {
+  const [slice] = dicomSeries({ series: 2, slices: 1 });
+  const raw = slice.buffer.subarray(slice.buffer.indexOf(Buffer.from([0x08, 0x00, 0x08, 0x00, 0x43, 0x53])));
+  const { series, skipped } = await indexFiles([toFile({ name: 'IM0001', buffer: raw }, 'scan/IM0001')]);
+  assert.deepEqual(skipped, []);
+  assert.equal(series.length, 1);
+  assert.equal(series[0].files[0].path, 'scan/IM0001');
+  assert.deepEqual([series[0].number, series[0].rows], [2, 16]);
+});
+
+test('text, JSON, NIfTI and JPEG files are skipped after one prefix read', async () => {
+  const nifti = Buffer.alloc(16 * 1024 * 1024);
+  nifti.writeInt32LE(348, 0);
+  nifti.write('n+1\0', 344, 'latin1');
+  const others = [
+    { name: 'notes', buffer: Buffer.from('subject 01, session 2\n'.repeat(20)) },
+    { name: 'dataset_description.json', buffer: Buffer.from(JSON.stringify({ Name: 'x', BIDSVersion: '1.9.0' }).repeat(10)) },
+    { name: 'T1w.nii', buffer: nifti },
+    { name: 'photo.jpg', buffer: Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]), Buffer.from('JFIF\0'), Buffer.alloc(300000, 7)]) },
+  ].map((file) => counted(toFile(file)));
+  const { series, skipped } = await indexFiles(others.map(({ file }) => file));
+  assert.equal(series.length, 0);
+  assert.deepEqual(skipped.map(({ reason }) => reason), Array(4).fill('not a DICOM file'));
+  for (const { file, read } of others) assert.ok(read.bytes <= PREFIX_BYTES, `${file.name} read ${read.bytes} bytes`);
 });

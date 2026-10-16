@@ -11,6 +11,7 @@ import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
 import { classifySeries } from '@neurodesk/dicom2vid/series.js';
 
 export const PREFIX_BYTES = 131072;
+export const MAX_PREFIX_BYTES = 8 * 1024 * 1024;
 const BATCH = 32;
 
 const TAG = {
@@ -73,14 +74,29 @@ function datasetKey(map) {
   return [...map].map(([tag, element]) => `${tag}=${comparable(element)}`).join(',');
 }
 
-const looksLikeDicom = (bytes, name) => /\.(dcm|ima)$/i.test(name)
-  || (bytes.length >= 132 && bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d);
+// A file without the preamble must open on a file meta (0002) or identifying (0008)
+// element, as pydicom also requires; anything else is rejected before it is parsed.
+function looksLikeDicom(bytes, name) {
+  if (/\.(dcm|ima)$/i.test(name)) return true;
+  if (bytes.length >= 132 && bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d) return true;
+  const group = bytes[0] | (bytes[1] << 8);
+  return bytes.length >= 8 && (group === 0x0002 || group === 0x0008);
+}
 
+const isUid = (value) => /^\d+(\.\d+)*$/.test(value);
+const isSize = (value) => Number.isInteger(value) && value > 0;
+
+// The record in this prefix of the file, or null when its series and size tags may lie
+// past the end of the prefix.
 export function readRecord(file, path, buffer) {
   const bytes = new Uint8Array(buffer);
   if (!looksLikeDicom(bytes, file.name)) throw new Error('not a DICOM file');
   const { map, complete } = parseDicomHeader(buffer);
-  if (!map.has(TAG.Rows) || !map.has(TAG.SeriesInstanceUID)) throw new Error('no image in this DICOM file');
+  const found = map.has(TAG.Rows) && map.has(TAG.Columns) && map.has(TAG.SeriesInstanceUID);
+  if (!found && !complete && bytes.length < file.size) return null;
+  if (!found || !isUid(text(map, TAG.SeriesInstanceUID)) || !isSize(number(map, TAG.Rows)) || !isSize(number(map, TAG.Columns))) {
+    throw new Error('no image in this DICOM file');
+  }
   const values = new Map();
   for (const [tag, element] of map) {
     if (!PER_INSTANCE.has(tag)) values.set(tag, comparable(element));
@@ -209,7 +225,18 @@ export function relativePath(file) {
 
 const nextTask = () => new Promise(resolve => setTimeout(resolve));
 
-// Reads a header prefix of every file in batches, yielding between them so thousands of
+// Reads a longer prefix, doubling, until the record's tags are in it; vendors' private
+// headers can put them past the first prefix.
+async function readFileRecord(file) {
+  const path = relativePath(file);
+  for (let size = PREFIX_BYTES; size <= MAX_PREFIX_BYTES; size *= 2) {
+    const record = readRecord(file, path, await file.slice(0, size).arrayBuffer());
+    if (record) return record;
+  }
+  throw new Error(`no image tags in the first ${MAX_PREFIX_BYTES / 1024 / 1024} MB`);
+}
+
+// Reads the header of every file in batches, yielding between them so thousands of
 // files never freeze the page. onProgress(done, total) follows each batch.
 export async function indexFiles(files, { signal, onProgress = () => {} } = {}) {
   const records = [];
@@ -217,15 +244,10 @@ export async function indexFiles(files, { signal, onProgress = () => {} } = {}) 
   for (let start = 0; start < files.length; start += BATCH) {
     signal?.throwIfAborted();
     const batch = files.slice(start, start + BATCH);
-    const reads = await Promise.allSettled(batch.map(file => file.slice(0, PREFIX_BYTES).arrayBuffer()));
+    const reads = await Promise.allSettled(batch.map(readFileRecord));
     batch.forEach((file, i) => {
-      const path = relativePath(file);
-      try {
-        if (reads[i].status === 'rejected') throw reads[i].reason;
-        records.push(readRecord(file, path, reads[i].value));
-      } catch (error) {
-        skipped.push({ path, reason: error.message });
-      }
+      if (reads[i].status === 'fulfilled') records.push(reads[i].value);
+      else skipped.push({ path: relativePath(file), reason: reads[i].reason.message });
     });
     onProgress(Math.min(start + BATCH, files.length), files.length);
     await nextTask();
