@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
+import { mockExampleIntegrity } from '../../../test-utils/example-fixture-catalog.mjs';
 
 test('cancelling DICOM import retains the prior scan and allows another upload', async ({ page }) => {
   await page.goto('./');
@@ -69,8 +70,11 @@ test('shared examples load through the image workflow and preserve input on fail
   const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
   const { fileURLToPath } = await import('node:url');
   const fixture = fileURLToPath(new URL('../test/fixtures/validation.nii.gz', import.meta.url));
+  // Keep t2-head's digest distinct so the failure must reach the network, not the fixture cache.
+  const positiveExamples = examples.filter(example => ['t1-head', 'brain-ct'].includes(example.id));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
+  await mockExampleIntegrity(page, positiveExamples.flatMap(example => example.files), await readFile(fixture));
   await expect(page.locator('#exampleSelect option:not([data-action])')).toHaveText(['Choose an example…', ...examples.map(example => example.label)]);
   await expect(page.locator('#exampleSelect option[data-action]')).toHaveText(['Choose files…', 'Choose folder…']);
   await expect(page.locator('#exampleBtn')).toHaveCount(0);

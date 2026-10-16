@@ -1,3 +1,4 @@
+import { mockExampleIntegrity } from "../../../test-utils/example-fixture-catalog.mjs";
 import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mjs';
 import { affineDifference, downsampledExamplePair, ncc, readVolume, resampleToGrid } from '../../../test-utils/registration-similarity.mjs';
 import { test, expect } from "@playwright/test";
@@ -5,6 +6,12 @@ import { readFile } from "node:fs/promises";
 
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
+
+async function configureExampleFixtures(page, files) {
+  for (const file of examples.flatMap(example => example.files)) {
+    await mockExampleIntegrity(page, [file], files ? files[file.url.split("/").pop()] : fixture);
+  }
+}
 
 function serveExamples(page, bodyFor) {
   return page.context().route("**/reg/**", (route) => route.fulfill({
@@ -24,8 +31,9 @@ test.beforeEach(async ({ page }, testInfo) => {
   await serveExamples(page, () => fixture);
 });
 
-async function registerSelectedExample(page, timeout) {
+async function registerSelectedExample(page, timeout, files) {
   await page.goto("/");
+  if (files) await configureExampleFixtures(page, files);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator("#movingInfo")).toContainText("t1_brain.nii.gz · brain extracted");
@@ -76,12 +84,13 @@ test("SyN registration aligns the example T1 with the MNI template on the templa
   test.setTimeout(600_000);
   const { moving, fixed, files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  expectAligned(await registerSelectedExample(page, 480_000), moving, fixed);
+  expectAligned(await registerSelectedExample(page, 480_000, files), moving, fixed);
 });
 
 test("cancelling a registration releases the controls and a new run still completes", async ({ page }) => {
   test.setTimeout(300_000);
   await page.goto("/");
+  await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await page.locator("#runButton").click();
@@ -98,6 +107,7 @@ test("cancelling a registration releases the controls and a new run still comple
 
 test("custom images are flagged and can be brain extracted per image", async ({ page }) => {
   await page.goto("/");
+  await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await page.locator("#movingInput").setInputFiles({ name: "custom.nii.gz", mimeType: "application/gzip", buffer: fixture });

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { readVolume } from '@neurodesk/synthsr';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
+import { mockExampleIntegrity } from '../../../test-utils/example-fixture-catalog.mjs';
 import { dice, maskVoxels } from '../../../test-utils/dice.mjs';
 import { BET_MIN_DICE, loadHeadReference } from '../../../packages/brain-extraction/test/head-reference.mjs';
 import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
@@ -127,6 +128,7 @@ test('editing the BET mask in the viewer replaces its download', async ({ page }
 test('examples load through the picker and BET downloads a brain mask (regression pin on the MNI152 fixture)', async ({ page }) => {
   for (const example of examples) await page.context().route(example.files[0].url, route => route.fulfill({ path: fixture }));
   await page.goto('./');
+  await mockExampleIntegrity(page, examples.flatMap(example => example.files), await readFile(fixture));
   const picker = page.getByLabel('Input', { exact: true });
   for (const example of examples) {
     await picker.selectOption(example.id);
@@ -153,6 +155,7 @@ test('failed example download can retry the same example', async ({ page }) => {
     ? route.fulfill({ status: 503, body: 'Unavailable' })
     : route.fulfill({ path: fixture }));
   await page.goto('./');
+  await mockExampleIntegrity(page, example.files, await readFile(fixture));
   const picker = page.getByLabel('Input', { exact: true });
   await picker.selectOption(example.id);
   await expect(page.locator('#statusText')).toContainText('HTTP 503');
@@ -172,6 +175,7 @@ test('cancelling an example aborts its request and permits the same selection ag
     await route.fulfill({ path: fixture }).catch(() => {});
   });
   await page.goto('./');
+  await mockExampleIntegrity(page, example.files, await readFile(fixture));
   const picker = page.getByLabel('Input', { exact: true });
   await picker.selectOption(example.id);
   await expect(picker).toBeDisabled();
