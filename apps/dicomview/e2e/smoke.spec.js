@@ -121,9 +121,15 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
 
   await page.locator('#schemaSelect').selectOption({ label: 'QSM Consensus Guidelines' });
   await expect(button).toHaveText('Check compliance');
+  // Cancelling a check ends the worker; the next check must start a new one.
+  await button.click();
+  await page.locator('#cancelButton').click({ timeout: 2000 }).catch(() => {});
+  await expect(status(page)).toHaveText(/cancelled|checked against/, { timeout: 120000 });
+  await expect(button).toBeEnabled();
   await button.click();
   await expect(status(page)).toHaveText('1 acquisition checked against QSM Consensus Guidelines', { timeout: 120000 });
-  await expect(page.locator('#complianceReport .dicompare-summary')).toContainText('Passed');
+  await expect(page.locator('#complianceReport .dicompare-error')).toHaveCount(0);
+  await expect(page.locator('#complianceReport .dicompare-summary')).toContainText('5 Passed');
   await expect(page.locator('#complianceReport .dicompare-status-fail').first()).toBeVisible();
 });
 
