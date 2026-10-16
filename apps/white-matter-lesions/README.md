@@ -10,6 +10,11 @@ and offered for download. **Edit** on the mask row corrects the mask in the view
 Apply recomputes the lesion count, volume and table from the edited mask. The probability map
 and run report stay as the model produced them.
 
+The Output section lists the lesion count and the total, largest, median and smallest lesion
+volume. In the viewer toolbar, ‹ and › centre the crosshair on each lesion's centroid in turn,
+largest first, wrapping at either end; **Overlay** hides the mask or probability map so the
+FLAIR beneath can be checked. Both follow an edited mask.
+
 ## Pipeline
 
 1. An input finer than 1 × 0.9 × 0.9 mm along any axis is downsampled to it, with nnU-Net's

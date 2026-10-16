@@ -20,17 +20,23 @@ const bytesOf = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOf
 const buffer = (bytes) => `new Uint8Array(${JSON.stringify([...bytes])}).buffer`;
 
 // Supply deterministic worker results; use the real output controls and NiiVue renderer.
-async function segmentWithMockedWorker(page, { input = volume(flair), resampledFlair = null } = {}) {
+async function segmentWithMockedWorker(page, {
+  input = volume(flair),
+  resampledFlair = null,
+  lesionProbability = probability,
+  lesions = [{ ml: 0.064, world: [-0.5, -0.5, -0.5] }],
+} = {}) {
   await page.route(/\/worker-[^/]+\.js$/, (route) => route.fulfill({
     contentType: "text/javascript",
     headers: { "cross-origin-embedder-policy": "require-corp" },
     body: `self.onmessage = () => self.postMessage({
       type: "result",
-      mask: ${buffer(volume(Uint8Array.from(probability, (p) => p > 0.5)))},
-      probability: ${buffer(volume(probability))},
+      mask: ${buffer(volume(Uint8Array.from(lesionProbability, (p) => p > 0.5)))},
+      probability: ${buffer(volume(lesionProbability))},
       resampledFlair: ${resampledFlair ? buffer(resampledFlair) : "null"},
       tsv: "lesion\\tvoxels\\n1\\t64\\n",
-      summary: { count: 1, totalMl: 0.064 }, provenance: {}
+      summary: { count: ${lesions.length}, totalMl: ${lesions.reduce((sum, { ml }) => sum + ml, 0)} },
+      lesions: ${JSON.stringify(lesions)}, provenance: {}
     });`,
   }));
   await page.goto("./");
@@ -74,6 +80,74 @@ test("lesion probability colors lesions without tinting the background", async (
   await page.screenshot({ path: testInfo.outputPath("probability-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: testInfo.outputPath("probability-phone.png"), fullPage: true });
+});
+
+test("the viewer steps through lesions, largest first, and the overlay can be hidden", async ({ page }, testInfo) => {
+  // A 4 mm cube at voxel 15.5 and a 2 mm cube at voxel 23.5: world -0.5 and 7.5 mm.
+  const twoLesions = new Float32Array(flair.length);
+  for (const [start, size] of [[14, 4], [23, 2]]) {
+    for (let z = start; z < start + size; z++) {
+      for (let y = start; y < start + size; y++) {
+        for (let x = start; x < start + size; x++) twoLesions[x + 32 * (y + 32 * z)] = 0.9;
+      }
+    }
+  }
+  await segmentWithMockedWorker(page, {
+    lesionProbability: twoLesions,
+    lesions: [{ ml: 0.064, world: [-0.5, -0.5, -0.5] }, { ml: 0.008, world: [7.5, 7.5, 7.5] }],
+  });
+  const stats = page.getByRole("table", { name: "Lesion statistics" });
+  await expect(stats.locator("tr")).toHaveText(["Lesions2", "Total volume0.07 ml", "Largest0.064 ml", "Median0.036 ml", "Smallest0.008 ml"]);
+  const navigator = page.getByRole("group", { name: "Lesions" });
+  const next = navigator.getByRole("button", { name: "Next lesion" });
+  const previous = navigator.getByRole("button", { name: "Previous lesion" });
+  await expect(navigator).toContainText("2 lesions");
+  const crosshair = async () => (await page.locator("#location").textContent()).match(/-?\d+(\.\d+)?/g)?.slice(0, 3).map(Number);
+  await next.click();
+  await expect(navigator).toContainText("Lesion 1 of 2 · 0.064 ml");
+  await expect.poll(crosshair).toEqual([-0.5, -0.5, -0.5]);
+  await next.click();
+  await expect(navigator).toContainText("Lesion 2 of 2 · 0.008 ml");
+  await expect.poll(crosshair).toEqual([7.5, 7.5, 7.5]);
+  await next.click();
+  await expect(navigator).toContainText("Lesion 1 of 2");
+  await previous.click();
+  await expect(navigator).toContainText("Lesion 2 of 2");
+
+  const redFraction = async () => {
+    const screenshot = await page.locator("#gl1").screenshot();
+    return page.evaluate(async (base64) => {
+      const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(bitmap, 0, 0);
+      const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+      let red = 0;
+      for (let i = 0; i < data.length; i += 4) if (data[i] > data[i + 1] + 60 && data[i] > data[i + 2] + 60) red++;
+      return red / (bitmap.width * bitmap.height);
+    }, screenshot.toString("base64"));
+  };
+  const overlay = page.getByRole("button", { name: "Overlay", exact: true });
+  await expect(overlay).toHaveAttribute("aria-pressed", "true");
+  // The crosshair is red too, so the hidden mask shows as fewer red pixels, not none.
+  const shown = await redFraction();
+  await page.screenshot({ path: testInfo.outputPath("lesions-desktop.png") });
+  await overlay.click();
+  await expect(overlay).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(redFraction, { message: "the hidden mask leaves the FLAIR" }).toBeLessThan(shown - 0.0005);
+  const rows = page.locator("#resultList .nd-volume-toggle");
+  await rows.filter({ hasText: "Lesion probability" }).getByRole("button", { name: "View", exact: true }).click();
+  await expect(overlay).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(crosshair, { message: "switching results keeps the lesion in view" }).toEqual([7.5, 7.5, 7.5]);
+  await rows.filter({ hasText: "FLAIR" }).getByRole("button", { name: "View", exact: true }).click();
+  await expect(overlay).toBeHidden();
+  await expect(navigator).toBeVisible();
+  await rows.filter({ hasText: "Lesion mask" }).getByRole("button", { name: "View", exact: true }).click();
+  await overlay.click();
+  await expect(overlay).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(redFraction, { message: "the mask is drawn again" }).toBeCloseTo(shown, 4);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath("lesions-phone.png"), fullPage: true });
 });
 
 test("editing the lesion mask replaces its download and recomputes the lesion summary", async ({ page }) => {

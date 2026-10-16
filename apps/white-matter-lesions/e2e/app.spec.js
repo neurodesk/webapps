@@ -64,6 +64,8 @@ for (const folds of [1, 5]) {
     const [, count, ml] = (await page.locator("#statusText").textContent()).match(/(\d+) lesions · ([\d.]+) ml/);
     expect(report.measurements.count).toBe(Number(count));
     expect(report.measurements.totalMl.toFixed(2)).toBe(ml);
+    await expect(page.getByRole("group", { name: "Lesions" })).toContainText(`${count} lesions`);
+    await expect(page.getByRole("table", { name: "Lesion statistics" }).locator("tr").first()).toHaveText(`Lesions${count}`);
     await expect(page.locator("#technicalLog")).toContainText("continuing on the CPU");
     await expect(page.locator("#technicalLog")).toContainText(folds === 1 ? "FLAMeS, fold 0, on WebAssembly" : "FLAMeS, 5 folds, on WebAssembly");
     await expect(page.locator("#resultList .nd-volume-toggle")).toHaveCount(4);

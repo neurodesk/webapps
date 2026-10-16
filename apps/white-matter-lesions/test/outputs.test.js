@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyMaskEdit, segmentationOutputs } from "../src/outputs.js";
+import { applyMaskEdit, lesionStatistics, segmentationOutputs } from "../src/outputs.js";
 
 const pipeline = () => segmentationOutputs("flair.nii.gz", {
   mask: new Uint8Array([1]),
   probability: new Uint8Array([2]),
   tsv: "lesion\tvoxels\n1\t3\n2\t1\n",
   summary: { count: 2, totalMl: 0.032 },
+  lesions: [{ ml: 0.024, world: [1, 2, 3] }, { ml: 0.008, world: [4, 5, 6] }],
 });
 const affine = [[2, 0, 0, -4], [0, 2, 0, -4], [0, 0, 2, -4], [0, 0, 0, 1]];
 
@@ -28,6 +29,7 @@ test("an applied edit replaces the mask and recomputes its summary and table", a
   assert.equal(next.mask.file, edited);
   assert.equal(next.mask.original, outputs.mask.file);
   assert.equal(next.mask.edited, true);
+  assert.deepEqual(next.mask.lesions, [{ ml: 0.016, world: [-3, -4, -4] }]);
   assert.equal(next.mask.description, "Lesion mask · 1 lesion · 0.02 ml");
   assert.equal(next.table.edited, true);
   assert.equal(next.table.file.name, "flair_lesions.tsv");
@@ -39,4 +41,21 @@ test("an applied edit replaces the mask and recomputes its summary and table", a
   assert.equal(again.mask.original, outputs.mask.file);
   assert.equal(again.table.original, outputs.table.file);
   assert.equal(again.mask.description, "Lesion mask · 0 lesions · 0.00 ml");
+});
+
+test("a segmentation keeps its ranked lesions with the mask", () => {
+  assert.deepEqual(pipeline().mask.lesions, [{ ml: 0.024, world: [1, 2, 3] }, { ml: 0.008, world: [4, 5, 6] }]);
+});
+
+test("lesion statistics give the count, total and the spread of single volumes", () => {
+  const lesions = [6.1234, 0.0021, 0.05, 0.3].map((ml) => ({ ml, world: [0, 0, 0] }));
+  assert.deepEqual(lesionStatistics(lesions), [
+    ["Lesions", "4"],
+    ["Total volume", "6.48 ml"],
+    ["Largest", "6.123 ml"],
+    ["Median", "0.175 ml"],
+    ["Smallest", "0.002 ml"],
+  ]);
+  assert.deepEqual(lesionStatistics(lesions.slice(0, 3))[3], ["Median", "0.050 ml"]);
+  assert.deepEqual(lesionStatistics([]), [["Lesions", "0"]]);
 });

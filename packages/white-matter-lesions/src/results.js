@@ -17,6 +17,7 @@ export function resampledFlairName(inputName) {
 
 // The downloads of one segmentation, on the grid it ran on. When the input was resampled to the
 // FLAMeS grid, that FLAIR is one of them, so the mask can be checked and edited over it.
+// `lesions` are the table's rows, largest first, for the viewer to step through.
 export function lesionResults(volume, probability, { resampled = false } = {}) {
   const lesionMask = threshold(probability);
   const { lesions } = labelLesions(lesionMask, volume.dims);
@@ -28,5 +29,10 @@ export function lesionResults(volume, probability, { resampled = false } = {}) {
     tsv: table.tsv,
     resampledFlair: resampled ? writeVolume(volume, 'FLAIR resampled to the FLAMeS grid') : null,
     summary: { count: table.rows.length, totalMl: table.totalMl },
+    lesions: lesionList(table.rows),
   };
+}
+
+export function lesionList(rows) {
+  return rows.map(({ ml, world }) => ({ ml, world }));
 }

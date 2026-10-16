@@ -12,6 +12,7 @@ import {
   ProgressManager,
   createMaskEditor,
 } from "@neurodesk/webapp-components/ui";
+import { createElement } from "@neurodesk/webapp-components/core";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { decodeNiftiBuffer, parseNiftiHeader } from "@neurodesk/webapp-components/file-io/nifti";
 import { registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
@@ -19,7 +20,7 @@ import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix
 import { readVolume } from "@neurodesk/synthsr";
 import { MAX_INPUT_VOXELS } from "@neurodesk/white-matter-lesions";
 import { APP } from "./config.js";
-import { applyMaskEdit, lesionSummary, segmentationOutputs } from "./outputs.js";
+import { applyMaskEdit, lesionStatistics, lesionSummary, segmentationOutputs } from "./outputs.js";
 import examples from "../examples.json";
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +40,13 @@ let viewRevision = 0;
 let editor = null;
 // A token for the open edit, so a reset that discards it also ignores its late callbacks.
 let editing = null;
+// The FLAIR on screen, so switching results keeps the crosshair, and whether the Overlay toggle shows results.
+let shownFlair = null;
+let overlayVisible = true;
+const OVERLAY_OPACITY = 0.7;
+// The lesions of the current mask, largest first, and the one the crosshair was sent to.
+let lesions = [];
+let lesionIndex = -1;
 const layouts = {
   multiplanar: () => {
     viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
@@ -49,6 +57,19 @@ const layouts = {
   coronal: () => { viewer.sliceType = SLICE_TYPE.CORONAL; },
   sagittal: () => { viewer.sliceType = SLICE_TYPE.SAGITTAL; },
 };
+const previousLesion = createElement("button", { type: "button", className: "nd-tool-btn", text: "‹", "aria-label": "Previous lesion", onClick: () => jumpToLesion(-1) });
+const nextLesion = createElement("button", { type: "button", className: "nd-tool-btn", text: "›", "aria-label": "Next lesion", onClick: () => jumpToLesion(1) });
+const lesionLabel = createElement("span", { className: "nd-viewer-label", "aria-live": "polite" });
+const lesionNavigator = createElement("div", { className: "nd-tool-group", role: "group", "aria-label": "Lesions", hidden: true }, [previousLesion, lesionLabel, nextLesion]);
+const overlayToggle = createElement("button", {
+  type: "button",
+  className: "nd-tool-btn",
+  text: "Overlay",
+  title: "Show or hide the overlay to check the FLAIR beneath",
+  "aria-pressed": "true",
+  hidden: true,
+  onClick: () => setOverlayVisible(!overlayVisible),
+});
 const toolbar = createViewerToolbar({
   window: false,
   overlay: false,
@@ -69,6 +90,7 @@ const toolbar = createViewerToolbar({
       toolbar.setActive(view.id);
     },
   })),
+  actions: [lesionNavigator, overlayToggle],
 });
 $("viewer").prepend(toolbar);
 const log = createConsole({ id: "technicalLog" });
@@ -138,7 +160,46 @@ function closeEdit() {
   editing = null;
   const cancelled = editor?.cancel();
   results.setEditingEnabled(!editor || editor.session.state === 'idle');
+  overlayToggle.disabled = false;
   return cancelled;
+}
+
+function setLesions(next = []) {
+  lesions = next;
+  lesionIndex = -1;
+  const stats = $("lesionStats");
+  stats.hidden = !outputs.mask;
+  stats.tBodies[0].replaceChildren(...lesionStatistics(lesions).map(([label, value]) => createElement("tr", {}, [
+    createElement("th", { scope: "row", text: label }),
+    createElement("td", { className: "nd-numeric", text: value }),
+  ])));
+  lesionNavigator.hidden = !lesions.length;
+  renderLesionNavigator();
+}
+
+function renderLesionNavigator() {
+  const lesion = lesions[lesionIndex];
+  lesionLabel.textContent = lesion
+    ? `Lesion ${lesionIndex + 1} of ${lesions.length} · ${lesion.ml.toFixed(3)} ml`
+    : `${lesions.length} ${lesions.length === 1 ? "lesion" : "lesions"}`;
+}
+
+// Steps through the lesions, largest first, wrapping at either end, and centres the crosshair on one.
+async function jumpToLesion(step) {
+  if (!lesions.length) return;
+  lesionIndex = lesionIndex < 0
+    ? (step > 0 ? 0 : lesions.length - 1)
+    : (lesionIndex + step + lesions.length) % lesions.length;
+  renderLesionNavigator();
+  const nv = await ensureViewer();
+  nv.setCrosshairPos(lesions[lesionIndex].world);
+  nv.drawScene();
+}
+
+function setOverlayVisible(visible) {
+  overlayVisible = visible;
+  overlayToggle.setAttribute("aria-pressed", String(visible));
+  if (viewer?.volumes.length > 1) void viewer.setVolume(1, { opacity: visible ? OVERLAY_OPACITY : 0 });
 }
 
 async function editResult(stage, result) {
@@ -146,6 +207,8 @@ async function editResult(stage, result) {
   const session = {};
   editing = session;
   results.setEditingEnabled(false);
+  setOverlayVisible(true);
+  overlayToggle.disabled = true;
   try {
     await show(stage);
     if (editing !== session) return;
@@ -159,6 +222,7 @@ async function editResult(stage, result) {
 
 function renderOutputs() {
   results.render(outputs);
+  setLesions(outputs.mask?.lesions);
   $("outputSection").open = Object.keys(outputs).length > 1;
 }
 
@@ -206,7 +270,8 @@ function show(stage) {
     const nv = await ensureViewer();
     const flair = outputs.flair.file;
     const layers = [{ url: flair, name: flair.name }];
-    if (stage === "mask") layers.push({ url: outputs.mask.file, name: outputs.mask.file.name, colormap: "red", opacity: 0.7 });
+    const opacity = overlayVisible ? OVERLAY_OPACITY : 0;
+    if (stage === "mask") layers.push({ url: outputs.mask.file, name: outputs.mask.file.name, colormap: "red", opacity });
     if (stage === "probability") layers.push({
       url: outputs.probability.file,
       name: outputs.probability.file.name,
@@ -214,10 +279,15 @@ function show(stage) {
       calMin: 0.1,
       calMax: 1,
       isTransparentBelowCalMin: true,
-      opacity: 0.7,
+      opacity,
     });
+    // Reloading recentres the slices; keep the crosshair where it was, e.g. on a lesion.
+    const crosshair = shownFlair === flair && nv.getCrosshairPos();
     await nv.loadVolumes(layers);
     if (revision !== viewRevision) return;
+    if (crosshair) nv.setCrosshairPos(crosshair);
+    shownFlair = flair;
+    overlayToggle.hidden = layers.length < 2;
     $("gl1").hidden = false;
     $("emptyState").hidden = true;
     $("viewerNotice").hidden = true;

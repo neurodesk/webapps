@@ -27,6 +27,7 @@ test('results threshold the probability, keep the grid and tabulate each lesion'
   assert.deepEqual(readVolume(results.probability).data, probability);
   assert.equal(new TextDecoder().decode(new Uint8Array(results.mask, 148, 18)), 'FLAMeS lesion mask');
   assert.deepEqual(results.summary, { count: 2, totalMl: 0.016 });
+  assert.deepEqual(results.lesions, [{ ml: 0.008, world: [-4, -4, -4] }, { ml: 0.008, world: [2, 2, 2] }]);
   assert.equal(results.tsv, 'lesion\tvoxels\tvolume_ml\tx_mm\ty_mm\tz_mm\n1\t1\t0.0080\t-4.0\t-4.0\t-4.0\n2\t1\t0.0080\t2.0\t2.0\t2.0\n');
 });
 
