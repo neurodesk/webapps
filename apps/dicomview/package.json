@@ -1,6 +1,6 @@
 {
   "name": "dicomview",
-  "version": "0.0.20261016",
+  "version": "0.1.20261016",
   "private": true,
   "type": "module",
   "license": "MIT",
