@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 2,
+  "app": "dicomview",
+  "title": "dicomview",
+  "description": "Pass-through demonstration. No scientific processing is applied.",
+  "defaultOperation": "copy-input",
+  "operations": {
+    "copy-input": {
+      "title": "Copy input",
+      "description": "Return the unchanged input image for testing the app integration.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "One NIfTI image.",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "output": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}
