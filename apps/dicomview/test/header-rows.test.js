@@ -51,15 +51,22 @@ test('sequence items follow their sequence, indented and flagged with it', () =>
 });
 
 test('Implicit VR values are read as the dictionary says, private creators included', () => {
+  const groupLength = Buffer.alloc(4);
+  groupLength.writeUInt32LE(18);
   const implicitFile = dicomFile('1.2.840.10008.1.2', [
+    implicit(0x0018, 0x0000, groupLength),
     implicit(0x0019, 0x0010, 'SIEMENS MR HEADER '),
     implicit(0x0019, 0x1015, Buffer.alloc(8)),
     implicit(0x0028, 0x0107, uint16(507)),
     implicit(0x0028, 0x1050, '210 '),
+    implicit(0x00e1, 0x0010, 'ELSCINT1'),
+    implicit(0x00e1, 0x1001, uint16(3)),
   ]);
   const byTag = new Map(rows(implicitFile).map((row) => [row.tag, row]));
+  assert.deepEqual([byTag.get('(00E1,1001)').keyword, byTag.get('(00E1,1001)').value], ['DataDictionaryVersion (ELSCINT1)', '3'], 'upper-case private dictionary keys match');
   assert.deepEqual([byTag.get('(0028,0107)').vr, byTag.get('(0028,0107)').value], ['US', '507']);
   assert.equal(byTag.get('(0028,1050)').value, '210');
+  assert.deepEqual([byTag.get('(0018,0000)').keyword, byTag.get('(0018,0000)').value], ['GroupLength', '18']);
   assert.equal(byTag.get('(0019,0010)').value, 'SIEMENS MR HEADER');
   assert.equal(byTag.get('(0019,1015)').keyword, 'Private (SIEMENS MR HEADER)');
 });

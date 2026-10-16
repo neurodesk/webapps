@@ -76,7 +76,6 @@ function datasetKey(map) {
 const looksLikeDicom = (bytes, name) => /\.(dcm|ima)$/i.test(name)
   || (bytes.length >= 132 && bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d);
 
-// One file's record from the start of its bytes, or a thrown reason to skip it.
 export function readRecord(file, path, buffer) {
   const bytes = new Uint8Array(buffer);
   if (!looksLikeDicom(bytes, file.name)) throw new Error('not a DICOM file');
@@ -193,7 +192,6 @@ function bySeries(a, b) {
     || a.uid.localeCompare(b.uid);
 }
 
-// Records grouped by SeriesInstanceUID, ordered by study, series number and instance.
 export function indexDicom(records, skipped = []) {
   const groups = new Map();
   for (const record of records) {

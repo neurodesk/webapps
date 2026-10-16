@@ -5,6 +5,7 @@
 import { DicompareController } from './vendor/dicompare/DicompareController.js';
 import workerUrl from './vendor/dicompare/dicompare-worker.js?url';
 import schemaIndex from './vendor/dicompare/schemas/index.json';
+import { relativePath } from './dicom-index.js';
 
 // The dicompare schema library, bundled as assets; only a schema's name is inlined.
 const schemaUrls = import.meta.glob(['./vendor/dicompare/schemas/*.json', '!**/index.json'], { query: '?url', import: 'default', eager: true });
@@ -35,32 +36,37 @@ export class ProtocolSession extends DicompareController {
   }
 
   // Acquisitions of these files, as dicompare groups them. onProgress(fraction, message).
+  // The file bytes stay local to one run, so a cancelled run cannot leak into the next.
   async summarize(files, { signal, onProgress }) {
     const report = (scale, offset) => (progress) => onProgress(offset + scale * (progress.percentage ?? 0) / 100, progress.currentOperation);
     return abortable((async () => {
-      await this.retainDicomFiles(files);
+      const contents = [];
+      for (const file of files) {
+        contents.push(await file.arrayBuffer());
+        signal.throwIfAborted();
+      }
       await this.ensureInitialized(report(0.5, 0));
+      signal.throwIfAborted();
       const result = await this._sendRequest({
         type: 'analyzeFiles',
-        payload: {
-          fileNames: this.dicomFiles.map(file => file.name),
-          fileContents: this.dicomFiles.map(file => file.data),
-        },
+        payload: { fileNames: files.map(relativePath), fileContents: contents },
       }, report(0.5, 0.5));
       const acquisitions = result.acquisitions ?? result;
-      this.acquisitions = Array.isArray(acquisitions)
+      return Array.isArray(acquisitions)
         ? acquisitions
         : Object.entries(acquisitions).map(([name, data]) => ({ ...data, protocolName: name }));
-      return this.acquisitions;
     })(), signal, () => this.terminate());
   }
 
-  // Each summarised acquisition checked against one acquisition of the schema.
-  async check(schema, schemaAcquisitionIndex, { signal }) {
+  // Each acquisition checked against one acquisition of the schema. A cancelled run ended
+  // the worker, so the check starts a new one.
+  async check(acquisitions, schema, schemaAcquisitionIndex, { signal }) {
     const schemaContent = JSON.stringify(schema);
     return abortable((async () => {
+      await this.ensureInitialized();
       const results = [];
-      for (const acquisition of this.acquisitions) {
+      for (const acquisition of acquisitions) {
+        signal.throwIfAborted();
         const acquisitionName = acquisition.protocolName || 'Acquisition';
         try {
           const checks = await this._sendRequest({

@@ -49,7 +49,9 @@ test('the example opens as one series that converts, downloads and explains its 
   await expect(page.locator('#fileInfo')).toHaveText('120 images · 1 series');
   await expect(status(page)).toHaveText(EXAMPLE_SERIES, { timeout: 120000 });
   await expect(page.locator('#seriesList')).toContainText('2 · t1_mpr_tra_gk_v4 · MR · 120 images');
+  const background = (selector) => page.locator(selector).evaluate((node) => getComputedStyle(node).backgroundColor);
   await expect(page.locator('#seriesList .nd-view-btn.active')).toHaveCount(1);
+  expect(await background('#seriesList .nd-view-btn.active')).not.toBe(await background('#seriesList .nd-download-btn'));
   await expect(page.locator('#seriesInfo')).toHaveText('T1 · 512 × 512 · TR 1900 ms · TE 2.97 ms · TI 1100 ms · FA 15° · slice 1.5 mm · 9 fields vary');
   await expect(page.locator('#imageLabel')).toHaveText(/\.nii$/);
 

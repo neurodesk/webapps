@@ -59,6 +59,18 @@ test('a compressed transfer syntax still yields its header, and a cut prefix is 
   assert.equal(prefix.map.has(0x00280010), false, 'a truncated element is left out, not misread');
 });
 
+test('a prefix cut inside a sequence item stops there instead of reading value bytes as elements', () => {
+  const value = Buffer.concat([explicit(0x0010, 0x0010, 'PN', 'GARBAGE'), Buffer.alloc(64)]);
+  const buffer = dicomFile('1.2.840.10008.1.2.1', [
+    explicit(0x0028, 0x0010, 'US', uint16(64)),
+    explicit(0x5200, 0x9230, 'SQ', undefinedSequence([item(explicit(0x0099, 0x0001, 'OB', value), true)])),
+  ]);
+  const cut = buffer.indexOf(Buffer.from('GARBAGE')) + 16;
+  const header = parseDicomHeader(arrayBuffer(buffer.subarray(0, cut)));
+  assert.equal(header.complete, false);
+  assert.deepEqual([...header.map.keys()], [0x00280010, 0x52009230]);
+});
+
 test('Implicit VR elements take their VR from the dictionary the caller supplies', () => {
   const body = [
     implicit(0x0008, 0x0060, 'MR'),

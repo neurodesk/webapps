@@ -167,7 +167,6 @@ function viewTab(id) {
   return toolbar.viewTabs.querySelector(`[data-view="${id}"]`);
 }
 
-// ---- input ----
 
 const seriesList = createResultList({
   element: $('seriesList'),
@@ -180,6 +179,8 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
   const controller = begin('viewer', 'Reading DICOM headers…');
   const abort = () => controller.abort(signal.reason);
   signal?.addEventListener('abort', abort, { once: true });
+  // Choosing a listed series would cancel the read that is replacing the list.
+  seriesList.inert = true;
   try {
     const index = await indexFiles(files, {
       signal: controller.signal,
@@ -200,6 +201,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
     throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
+    seriesList.inert = false;
   }
 }
 
@@ -210,13 +212,11 @@ function commit(index) {
   state.conversions = new Map();
   state.acquisitions = null;
   headerCache = new WeakMap();
-  protocol?.clearFiles();
   const images = index.series.reduce((sum, series) => sum + series.files.length, 0);
   const skipped = index.skipped.length ? ` · ${index.skipped.length} skipped` : '';
   $('fileInfo').hidden = false;
   $('fileInfo').textContent = `${images} images · ${index.series.length} series${skipped}`;
   $('dropZone').classList.add('has-files');
-  $('emptyState').hidden = true;
   $('protocolButton').disabled = false;
   $('protocolSummary').replaceChildren();
   $('complianceReport').replaceChildren();
@@ -240,7 +240,8 @@ bindFileDrop($('dropZone'), async (files) => importFiles(await files));
 
 const exampleControl = createExampleSelector({
   examples,
-  onStatus: status,
+  // The selector reports "loaded" once its files are in; by then a conversion may own the status bar.
+  onStatus: (message, error) => (jobs.size && !error ? log.log(message) : status(message, error)),
   onLoad: async (_example, { signal, fetchFiles, assertCurrent }) => {
     const files = await fetchFiles();
     assertCurrent();
@@ -249,7 +250,6 @@ const exampleControl = createExampleSelector({
 });
 $('exampleControl').replaceWith(exampleControl);
 
-// ---- series and images ----
 
 function selectSeries(uid) {
   if (uid === state.seriesUid && jobs.has('viewer')) return;
@@ -298,14 +298,21 @@ async function showSeries(series) {
   }
 }
 
-async function showOutput() {
+// Loads run one after another and skip images no longer chosen, so a slow load of an
+// earlier series cannot finish over the selected one.
+let viewerLoads = initialized;
+function showOutput() {
   const output = state.outputs?.[state.output];
-  if (!output) return;
+  if (!output) return Promise.resolve();
   $('imageLabel').textContent = output.image.name;
   if (state.view === 'header' && $('headerSource').value === 'sidecar') void renderHeader();
-  await initialized;
-  if (!viewerReady) return;
-  await viewer.loadVolumes([{ url: output.image, name: output.image.name }]);
+  const load = viewerLoads.then(async () => {
+    if (!viewerReady || state.outputs?.[state.output] !== output) return;
+    await viewer.loadVolumes([{ url: output.image, name: output.image.name }]);
+    $('emptyState').hidden = true;
+  });
+  viewerLoads = load.catch(() => {});
+  return load;
 }
 
 $('outputSelect').addEventListener('change', () => {
@@ -321,7 +328,7 @@ function sidecarFile({ image, sidecar }) {
 async function downloadSeries(uid) {
   const series = state.index?.series.find((candidate) => candidate.uid === uid);
   if (!series) return;
-  if (uid !== state.seriesUid) selectSeries(uid);
+  if (uid !== state.seriesUid || !state.conversions.has(uid)) selectSeries(uid);
   try {
     const outputs = await state.conversions.get(uid);
     for (const output of outputs) {
@@ -333,7 +340,6 @@ async function downloadSeries(uid) {
   }
 }
 
-// ---- header explorer ----
 
 let dictionaryPromise = null;
 function loadDictionary() {
@@ -424,7 +430,6 @@ $('downloadHeader').onclick = () => {
   downloadBlob(new Blob([rowsToCsv(shownRows)], { type: 'text/csv' }), `${headerFileStem()}.csv`);
 };
 
-// ---- protocol (dicompare) ----
 
 let protocol = null;
 const schemas = new Map();
@@ -479,7 +484,7 @@ async function runProtocol() {
     if (schemaId) {
       report('protocol', 1, 'Checking compliance…');
       schema = await loadSchema(schemaId);
-      const complianceResults = await protocol.check(schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
+      const complianceResults = await protocol.check(state.acquisitions, schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
       renderer.render($('complianceReport'), { acquisitions: state.acquisitions, complianceResults, schema });
     } else {
       $('complianceReport').replaceChildren();
@@ -497,7 +502,6 @@ async function runProtocol() {
 
 $('protocolButton').addEventListener('click', () => { void runProtocol(); });
 
-// ---- automation ----
 
 registerAppAutomation({
   app: APP.id,

@@ -30,14 +30,22 @@ const isPrivateCreator = (tag) => (tag >>> 16) % 2 === 1 && (tag & 0xffff) >= 0x
 // '(0029,"SIEMENS CSA HEADER",10)' for private ones.
 export function createDictionary(dictionary) {
   const byTag = new Map();
+  const byPrivate = new Map();
   for (const [key, entry] of Object.entries(dictionary)) {
     const match = /^\(([0-9A-F]{4}),([0-9A-F]{4})\)$/.exec(key);
     if (match) byTag.set(Number.parseInt(match[1] + match[2], 16), entry);
+    // Private keys mix upper- and lower-case hex.
+    const privateMatch = /^\(([0-9A-Fa-f]{4}),"(.*)",([0-9A-Fa-f]{2})\)$/.exec(key);
+    if (privateMatch) byPrivate.set(`${privateMatch[1].toUpperCase()}|${privateMatch[2]}|${privateMatch[3].toUpperCase()}`, entry);
   }
   return {
     entry: (tag) => byTag.get(tag),
-    privateEntry: (group, creator, element) => dictionary[`(${hex(group, 4).toLowerCase()},"${creator}",${hex(element & 0xff, 2).toLowerCase()})`],
-    vrOf: (tag) => (isPrivateCreator(tag) ? 'LO' : firstVr(byTag.get(tag)?.vr)),
+    privateEntry: (group, creator, element) => byPrivate.get(`${hex(group, 4)}|${creator}|${hex(element & 0xff, 2)}`),
+    vrOf: (tag) => {
+      if (isPrivateCreator(tag)) return 'LO';
+      if ((tag & 0xffff) === 0) return 'UL';
+      return firstVr(byTag.get(tag)?.vr);
+    },
   };
 }
 
@@ -115,7 +123,6 @@ export function headerRows(header, dictionary, varyingTags = new Set()) {
   return datasetRows(header.map, dictionary, 0, varyingTags, rows);
 }
 
-// A BIDS sidecar as rows: keys are the keywords, nested values are JSON.
 export function sidecarRows(sidecar) {
   return Object.entries(sidecar ?? {}).map(([key, value]) => ({
     tag: '',
@@ -137,7 +144,7 @@ export function filterRows(rows, { query = '', varyingOnly = false } = {}) {
     || (bare && row.tag.replace(/[(),]/g, '').toLowerCase().includes(bare))));
 }
 
-const csvCell = (value) => (/[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
+const csvCell = (value) => (/[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
 
 export function rowsToCsv(rows) {
   const lines = [['tag', 'keyword', 'vr', 'value', 'depth', 'varies'].join(',')];

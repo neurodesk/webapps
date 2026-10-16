@@ -164,8 +164,10 @@ function parseDataset(ctx, start, end, { stopGroupAbove = null, topLevel = false
 
     if (vr === 'SQ') {
       const seqEnd = length === 0xffffffff ? end : Math.min(off + length, end);
-      const { items, next } = parseSequence(ctx, off, seqEnd, length === 0xffffffff);
+      const { items, next, truncated } = parseSequence(ctx, off, seqEnd, length === 0xffffffff);
       map.set(tag, { vr, items });
+      // A header prefix can end inside a sequence; what follows the cut is not an element.
+      if ((truncated || (length !== 0xffffffff && off + length > end)) && ctx.header) return { map, next, stop: 'truncated' };
       off = next;
       continue;
     }
@@ -221,8 +223,9 @@ function parseSequence(ctx, start, end, undefinedLength) {
       return { items, next: off - 8 };
     }
     const itemEnd = len === 0xffffffff ? end : Math.min(off + len, end);
-    const { map, next } = parseDataset(ctx, off, itemEnd);
+    const { map, next, stop } = parseDataset(ctx, off, itemEnd);
     items.push(map);
+    if (stop === 'truncated' || (len !== 0xffffffff && off + len > end)) return { items, next, truncated: true };
     if (len === 0xffffffff) {
       // next points at the item delimiter (fffe,e00d); consume it.
       off = consumeDelimiter(view, next, end, littleEndian, T.ItemEnd);
@@ -230,7 +233,7 @@ function parseSequence(ctx, start, end, undefinedLength) {
       off = itemEnd;
     }
   }
-  return { items, next: off };
+  return { items, next: off, truncated: undefinedLength };
 }
 
 function consumeDelimiter(view, off, end, littleEndian, expectedTag) {
