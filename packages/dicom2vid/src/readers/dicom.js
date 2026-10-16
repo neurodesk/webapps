@@ -134,14 +134,12 @@ function parseDataset(ctx, start, end, { stopGroupAbove = null, topLevel = false
     if (ctx.header && topLevel && tag === T.PixelData) {
       return { map, next: off, stop: 'pixels' };
     }
-    off += 4;
-
     // Item/sequence delimiters handled by the caller; stop if we hit one.
     if (group === 0xfffe) {
-      // length follows (4 bytes); consume and return so caller can react.
-      off -= 4;
       return { map, next: off, stop: 'delimiter' };
     }
+    const elementStart = off;
+    off += 4;
 
     let vr;
     let length;
@@ -153,6 +151,7 @@ function parseDataset(ctx, start, end, { stopGroupAbove = null, topLevel = false
       vr = String.fromCharCode(view.getUint8(off), view.getUint8(off + 1));
       off += 2;
       if (LONG_VR.has(vr)) {
+        if (off + 6 > end) return { map, next: elementStart, stop: 'truncated' };
         off += 2; // reserved
         length = view.getUint32(off, littleEndian);
         off += 4;

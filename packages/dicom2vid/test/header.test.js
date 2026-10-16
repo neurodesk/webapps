@@ -87,3 +87,26 @@ test('Implicit VR elements take their VR from the dictionary the caller supplies
   const unknown = parseDicomHeader(arrayBuffer(buffer)).map.get(0x00189117);
   assert.equal(unknown.vr, 'UN', 'without a dictionary a defined-length sequence stays opaque');
 });
+
+test('a prefix cut at any byte, inside element headers, items or delimiters, is read without throwing', () => {
+  const pixels = explicit(0x7fe0, 0x0010, 'OW', Buffer.alloc(4));
+  const buffer = dicomFile('1.2.840.10008.1.2.1', [
+    explicit(0x0008, 0x0060, 'CS', 'MR'),
+    explicit(0x0029, 0x1010, 'OB', Buffer.from([1, 2, 3, 4])),
+    explicit(0x0040, 0xa730, 'SQ', undefinedSequence([
+      item(explicit(0x0040, 0xa040, 'CS', 'TEXT'), true),
+      item(explicit(0x0040, 0xa160, 'UT', 'free text')),
+    ])),
+    explicit(0x0040, 0xa731, 'SQ', item(explicit(0x0008, 0x0100, 'SH', '113000'))),
+    explicit(0x0042, 0x0011, 'UN', Buffer.from([5, 6])),
+    pixels,
+  ]);
+  const whole = [...parseDicomHeader(arrayBuffer(buffer)).map.keys()];
+  for (let cut = 132; cut < buffer.length - pixels.length; cut++) {
+    let header;
+    assert.doesNotThrow(() => { header = parseDicomHeader(arrayBuffer(buffer.subarray(0, cut))); }, `cut at ${cut}`);
+    assert.equal(header.complete, false, `cut at ${cut}`);
+    const keys = [...header.map.keys()];
+    assert.deepEqual(keys, whole.slice(0, keys.length), `cut at ${cut} reads only whole elements`);
+  }
+});
