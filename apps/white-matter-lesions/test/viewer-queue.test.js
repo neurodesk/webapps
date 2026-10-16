@@ -13,7 +13,7 @@ function section(start, end) {
 }
 
 // Runs main.js's own show, jumpToLesion and setOverlayVisible against a NiiVue whose load waits.
-function viewerWithPendingLoad() {
+function viewerWithPendingLoad({ previousFlair } = {}) {
   let finishLoad;
   const nv = {
     volumes: [{}, { opacity: 0.7 }],
@@ -45,7 +45,7 @@ function viewerWithPendingLoad() {
     renderLesionNavigator() {},
   });
   vm.runInContext(`
-    let viewQueue = Promise.resolve(), viewRevision = 0, viewer = nv, shownFlair = flair;
+    let viewQueue = Promise.resolve(), viewRevision = 0, viewer = nv, shownFlair = previousFlair ?? flair;
     let overlayVisible = true, lesionIndex = -1;
     const OVERLAY_OPACITY = 0.7;
     const source = flair;
@@ -57,7 +57,7 @@ function viewerWithPendingLoad() {
     };
     ${section("function setLesions(", "\nasync function editResult(")}
     ${section("function show(stage)", "\nasync function loadFiles(")}
-  `, Object.assign(context, { flair }));
+  `, Object.assign(context, { flair, previousFlair }));
   return { context, nv, finishLoad: () => finishLoad() };
 }
 
@@ -91,6 +91,20 @@ test("a view superseded while loading still keeps the crosshair for the view aft
   nv.crosshair = [-0.5, -0.5, -0.5];
   vm.runInContext('show("mask")', context);
   await new Promise((resolve) => setImmediate(resolve));
+  vm.runInContext('show("probability")', context);
+  finishLoad();
+  await new Promise((resolve) => setImmediate(resolve));
+  finishLoad();
+  await settle(context);
+  assert.equal(nv.volumes[1].name, "probability.nii");
+  assert.deepEqual([...nv.crosshair], [-0.5, -0.5, -0.5]);
+});
+
+test("a lesion chosen while the first results load on a resampled FLAIR survives switching results", async () => {
+  const { context, nv, finishLoad } = viewerWithPendingLoad({ previousFlair: { name: "original.nii" } });
+  vm.runInContext('show("mask")', context);
+  await new Promise((resolve) => setImmediate(resolve));
+  vm.runInContext("jumpToLesion(1)", context);
   vm.runInContext('show("probability")', context);
   finishLoad();
   await new Promise((resolve) => setImmediate(resolve));
