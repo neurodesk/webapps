@@ -85,3 +85,17 @@ test("a lesion chosen while a result loads is where the crosshair ends", async (
   await settle(context);
   assert.deepEqual([...nv.crosshair], [-0.5, -0.5, -0.5]);
 });
+
+test("a view superseded while loading still keeps the crosshair for the view after it", async () => {
+  const { context, nv, finishLoad } = viewerWithPendingLoad();
+  nv.crosshair = [-0.5, -0.5, -0.5];
+  vm.runInContext('show("mask")', context);
+  await new Promise((resolve) => setImmediate(resolve));
+  vm.runInContext('show("probability")', context);
+  finishLoad();
+  await new Promise((resolve) => setImmediate(resolve));
+  finishLoad();
+  await settle(context);
+  assert.equal(nv.volumes[1].name, "probability.nii");
+  assert.deepEqual([...nv.crosshair], [-0.5, -0.5, -0.5]);
+});

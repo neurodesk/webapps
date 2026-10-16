@@ -13,7 +13,8 @@ and run report stay as the model produced them.
 The Output section lists the lesion count and the total, largest, median and smallest lesion
 volume. In the viewer toolbar, ‹ and › centre the crosshair on each lesion's centroid in turn,
 largest first, wrapping at either end; **Overlay** hides the mask or probability map so the
-FLAIR beneath can be checked. Both follow an edited mask.
+FLAIR beneath can be checked. The statistics and the lesion list follow an edited mask; the
+probability map does not change.
 
 ## Pipeline
 

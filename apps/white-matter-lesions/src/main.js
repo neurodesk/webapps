@@ -291,12 +291,13 @@ function show(stage) {
       isTransparentBelowCalMin: true,
       opacity,
     });
-    // Reloading recentres the slices; keep the crosshair where it was, e.g. on a lesion.
+    // Reloading recentres the slices; keep the crosshair where it was, e.g. on a lesion, even when
+    // a newer view supersedes this load, since that view starts from where this one leaves it.
     const crosshair = shownFlair === flair && nv.getCrosshairPos();
     await nv.loadVolumes(layers);
-    if (revision !== viewRevision) return;
     if (crosshair) nv.setCrosshairPos(crosshair);
     shownFlair = flair;
+    if (revision !== viewRevision) return;
     overlayToggle.hidden = layers.length < 2;
     $("gl1").hidden = false;
     $("emptyState").hidden = true;
