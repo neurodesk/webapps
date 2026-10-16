@@ -155,11 +155,6 @@
     "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
   },
   {
-    "from": "apps/vesselboost/web/js/inference-worker.js",
-    "to": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
-    "reason": "Pinned localforage ESM asset mirrored in registry/offline-assets.sources.json for the offline bundle."
-  },
-  {
     "from": "apps/vesselboost/web/js/vesselboost-app.js",
     "to": "../dcm2niix/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
