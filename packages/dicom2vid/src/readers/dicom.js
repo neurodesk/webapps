@@ -14,6 +14,7 @@ import { makeVolume } from '../volume.js';
 const TS_IMPLICIT_LE = '1.2.840.10008.1.2';
 const TS_EXPLICIT_LE = '1.2.840.10008.1.2.1';
 const TS_EXPLICIT_BE = '1.2.840.10008.1.2.2';
+const TS_DEFLATED_LE = '1.2.840.10008.1.2.1.99';
 
 // ---- tags (group * 0x10000 + element) ----
 const T = {
@@ -62,7 +63,9 @@ const T = {
 
 // VRs that carry a 2-byte reserved field then a 4-byte length in Explicit VR.
 const LONG_VR = new Set(['OB', 'OW', 'OF', 'OD', 'OL', 'OV', 'SQ', 'UT', 'UN', 'UC', 'UR', 'SV', 'UV']);
-const NUM_VR = new Set(['US', 'SS', 'UL', 'SL', 'FL', 'FD', 'AT', 'OW', 'OB', 'OL', 'OF', 'OD']);
+const NUM_VR = new Set(['US', 'SS', 'UL', 'SL', 'FL', 'FD', 'AT']);
+// Binary values kept as bytes: pixel-like data, unknown elements and 64-bit integers.
+const BYTES_VR = new Set(['OB', 'OW', 'OF', 'OD', 'OL', 'OV', 'UN', 'SV', 'UV']);
 
 // Minimal VR dictionary used only for Implicit VR decoding.
 const IMPLICIT_VR = new Map([
@@ -105,15 +108,20 @@ function decodeNumbers(vr, view, off, len, littleEndian) {
   else if (vr === 'SL') { for (let i = 0; i + 4 <= len; i += 4) out.push(view.getInt32(off + i, littleEndian)); }
   else if (vr === 'FL') { for (let i = 0; i + 4 <= len; i += 4) out.push(view.getFloat32(off + i, littleEndian)); }
   else if (vr === 'FD') { for (let i = 0; i + 8 <= len; i += 8) out.push(view.getFloat64(off + i, littleEndian)); }
+  else if (vr === 'AT') { for (let i = 0; i + 4 <= len; i += 4) out.push((view.getUint16(off + i, littleEndian) * 0x10000 + view.getUint16(off + i + 2, littleEndian)) >>> 0); }
   return out;
 }
 
 // Parse a dataset (a run of elements) into a Map keyed by numeric tag.
-// Returns the Map. `end` is an absolute byte offset limit. When stopGroupAbove is
-// set, parsing stops as soon as a tag with a higher group number is seen; DICOM
-// elements are stored in ascending tag order, so this is a safe header-only fast
-// path (all tags we need for grouping/geometry are group <= 0x0028).
-function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGroupAbove = null) {
+// Returns { map, next, stop }. `end` is an absolute byte offset limit. `ctx` carries the
+// buffer and encoding ({ view, bytes, implicitVR, littleEndian }), plus:
+//   stopGroupAbove: stop at the first tag of a higher group. DICOM elements are stored in
+//     ascending tag order, so this is a safe header-only fast path.
+//   header: stop before the top-level pixel data and skip, rather than reject, encapsulated
+//     pixel data in nested items (an icon image); `stop` then reports why parsing ended.
+//   vrOf(tag): the VR of an Implicit VR element this reader does not know.
+function parseDataset(ctx, start, end, { stopGroupAbove = null, topLevel = false } = {}) {
+  const { view, bytes, implicitVR, littleEndian } = ctx;
   const map = new Map();
   let off = start;
   while (off + 8 <= end) {
@@ -121,7 +129,10 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
     const element = view.getUint16(off + 2, littleEndian);
     const tag = (group * 0x10000 + element) >>> 0;
     if (stopGroupAbove !== null && group !== 0xfffe && group > stopGroupAbove) {
-      return { map, next: off };
+      return { map, next: off, stop: 'group' };
+    }
+    if (ctx.header && topLevel && tag === T.PixelData) {
+      return { map, next: off, stop: 'pixels' };
     }
     off += 4;
 
@@ -129,7 +140,7 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
     if (group === 0xfffe) {
       // length follows (4 bytes); consume and return so caller can react.
       off -= 4;
-      return { map, next: off };
+      return { map, next: off, stop: 'delimiter' };
     }
 
     let vr;
@@ -137,7 +148,7 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
     if (implicitVR) {
       length = view.getUint32(off, littleEndian);
       off += 4;
-      vr = IMPLICIT_VR.get(tag) || (length === 0xffffffff ? 'SQ' : 'UN');
+      vr = IMPLICIT_VR.get(tag) || ctx.vrOf?.(tag) || (length === 0xffffffff ? 'SQ' : 'UN');
     } else {
       vr = String.fromCharCode(view.getUint8(off), view.getUint8(off + 1));
       off += 2;
@@ -153,7 +164,7 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
 
     if (vr === 'SQ') {
       const seqEnd = length === 0xffffffff ? end : Math.min(off + length, end);
-      const { items, next } = parseSequence(view, off, seqEnd, length === 0xffffffff, implicitVR, littleEndian, bytes);
+      const { items, next } = parseSequence(ctx, off, seqEnd, length === 0xffffffff);
       map.set(tag, { vr, items });
       off = next;
       continue;
@@ -164,7 +175,7 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
       // or an undefined-length item. We do not support compressed pixels.
       if (tag === T.PixelData) {
         map.set(tag, { vr, encapsulated: true });
-        throw new DicomError('This DICOM uses a compressed transfer syntax (encapsulated pixel data). Decode it to uncompressed DICOM/NIfTI locally first.');
+        if (!ctx.header) throw new DicomError('This DICOM uses a compressed transfer syntax (encapsulated pixel data). Decode it to uncompressed DICOM/NIfTI locally first.');
       }
       // Skip to sequence delimiter.
       off = skipUndefinedLength(view, off, end, littleEndian);
@@ -174,14 +185,14 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
     const valEnd = off + length;
     if (valEnd > end) {
       // Truncated element; stop parsing gracefully.
-      break;
+      return { map, next: off, stop: 'truncated' };
     }
 
     if (tag === T.PixelData) {
       map.set(tag, { vr, pixelOffset: off, pixelLength: length });
-    } else if (NUM_VR.has(vr) && vr !== 'OB' && vr !== 'OW') {
+    } else if (NUM_VR.has(vr)) {
       map.set(tag, { vr, numbers: decodeNumbers(vr, view, off, length, littleEndian) });
-    } else if (vr === 'OB' || vr === 'OW' || vr === 'UN') {
+    } else if (BYTES_VR.has(vr)) {
       map.set(tag, { vr, bytes: new Uint8Array(bytes.buffer, bytes.byteOffset + off, length) });
     } else {
       const str = decodeString(new Uint8Array(bytes.buffer, bytes.byteOffset + off, length));
@@ -189,10 +200,11 @@ function parseDataset(view, start, end, implicitVR, littleEndian, bytes, stopGro
     }
     off = valEnd;
   }
-  return { map, next: off };
+  return { map, next: off, stop: off >= end ? 'end' : 'truncated' };
 }
 
-function parseSequence(view, start, end, undefinedLength, implicitVR, littleEndian, bytes) {
+function parseSequence(ctx, start, end, undefinedLength) {
+  const { view, littleEndian } = ctx;
   const items = [];
   let off = start;
   while (off + 8 <= end) {
@@ -209,7 +221,7 @@ function parseSequence(view, start, end, undefinedLength, implicitVR, littleEndi
       return { items, next: off - 8 };
     }
     const itemEnd = len === 0xffffffff ? end : Math.min(off + len, end);
-    const { map, next } = parseDataset(view, off, itemEnd, implicitVR, littleEndian, bytes);
+    const { map, next } = parseDataset(ctx, off, itemEnd);
     items.push(map);
     if (len === 0xffffffff) {
       // next points at the item delimiter (fffe,e00d); consume it.
@@ -253,43 +265,7 @@ export class DicomError extends Error {}
 // allows parsing a small prefix of a file for series grouping without decoding
 // pixel data or per-frame sequences.
 export function parseDicom(arrayBuffer, { headerOnly = false } = {}) {
-  const bytes = new Uint8Array(arrayBuffer);
-  const view = new DataView(arrayBuffer);
-  if (bytes.length < 132) {
-    throw new DicomError('File too small to be a DICOM image');
-  }
-
-  let start = 0;
-  let hasMeta = false;
-  if (bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d) {
-    start = 132;
-    hasMeta = true;
-  }
-
-  let transferSyntax = TS_EXPLICIT_LE;
-  let dataStart = start;
-
-  if (hasMeta) {
-    // File meta group is always Explicit VR Little Endian. Parse until group != 2.
-    let off = start;
-    while (off + 8 <= bytes.length) {
-      const group = view.getUint16(off, true);
-      if (group !== 0x0002) break;
-      const element = view.getUint16(off + 2, true);
-      const tag = (group * 0x10000 + element) >>> 0;
-      const vr = String.fromCharCode(bytes[off + 4], bytes[off + 5]);
-      let len;
-      let valOff;
-      if (LONG_VR.has(vr)) { len = view.getUint32(off + 8, true); valOff = off + 12; }
-      else { len = view.getUint16(off + 6, true); valOff = off + 8; }
-      if (tag === T.TransferSyntaxUID) {
-        transferSyntax = decodeString(new Uint8Array(arrayBuffer, valOff, len));
-      }
-      off = valOff + len;
-      dataStart = off;
-    }
-  }
-
+  const { meta, dataStart, transferSyntax } = parseFileMeta(arrayBuffer);
   if (transferSyntax === TS_EXPLICIT_BE) {
     throw new DicomError('Explicit VR Big Endian is not supported. Convert to Little Endian first.');
   }
@@ -298,10 +274,44 @@ export function parseDicom(arrayBuffer, { headerOnly = false } = {}) {
     throw new DicomError(`Unsupported (likely compressed) transfer syntax ${transferSyntax}. Decode to uncompressed DICOM/NIfTI locally first.`);
   }
   const implicitVR = transferSyntax === TS_IMPLICIT_LE;
+  const ctx = { view: meta.view, bytes: meta.bytes, implicitVR, littleEndian: true };
+  const { map } = parseDataset(ctx, dataStart, meta.bytes.length, { stopGroupAbove: headerOnly ? 0x0028 : null });
+  return { map, view: meta.view, bytes: meta.bytes, transferSyntax, implicitVR };
+}
 
-  const { map } = parseDataset(view, dataStart, bytes.length, implicitVR, true, bytes,
-    headerOnly ? 0x0028 : null);
-  return { map, view, bytes, transferSyntax, implicitVR };
+// Every element before the pixel data: the file meta group and the dataset, with nested
+// sequence items. Any little-endian transfer syntax is read, compressed ones included,
+// because the pixels are never touched; a buffer may be just the start of a file.
+// vrOf(tag) supplies the VR of Implicit VR elements, e.g. from a DICOM dictionary.
+// complete is false when the buffer ended before the pixel data.
+export function parseDicomHeader(arrayBuffer, { vrOf } = {}) {
+  const { meta, dataStart, transferSyntax, hasPreamble } = parseFileMeta(arrayBuffer);
+  if (transferSyntax === TS_EXPLICIT_BE || transferSyntax === TS_DEFLATED_LE) {
+    throw new DicomError(`Transfer syntax ${transferSyntax} is not supported.`);
+  }
+  const implicitVR = transferSyntax === TS_IMPLICIT_LE
+    || (!hasPreamble && !/^[A-Z]{2}$/.test(String.fromCharCode(meta.bytes[4], meta.bytes[5])));
+  const ctx = { view: meta.view, bytes: meta.bytes, implicitVR, littleEndian: true, vrOf, header: true };
+  const { map, stop } = parseDataset(ctx, dataStart, meta.bytes.length, { topLevel: true });
+  return { meta: meta.map, map, transferSyntax, implicitVR, complete: stop === 'pixels' };
+}
+
+// The preamble, the file meta group (always Explicit VR Little Endian) and the transfer
+// syntax it names; files without a preamble are taken to be Explicit VR Little Endian.
+function parseFileMeta(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+  if (bytes.length < 132) {
+    throw new DicomError('File too small to be a DICOM image');
+  }
+  const hasPreamble = bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d;
+  if (!hasPreamble) {
+    return { meta: { map: new Map(), view, bytes }, dataStart: 0, transferSyntax: TS_EXPLICIT_LE, hasPreamble };
+  }
+  const ctx = { view, bytes, implicitVR: false, littleEndian: true };
+  const { map, next } = parseDataset(ctx, 132, bytes.length, { stopGroupAbove: 0x0002 });
+  const transferSyntax = map.get(T.TransferSyntaxUID)?.str ?? TS_EXPLICIT_LE;
+  return { meta: { map, view, bytes }, dataStart: next, transferSyntax, hasPreamble };
 }
 
 // ---- accessors ----
