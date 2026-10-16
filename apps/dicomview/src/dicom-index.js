@@ -40,9 +40,12 @@ const TAG = {
 // "varies across the series" about acquisition parameters.
 const PER_INSTANCE = new Set([0x00020003, 0x00080018, 0x00200013]);
 
+// An Implicit VR file leaves the reader's unknown string elements (Modality, ProtocolName)
+// as bytes; every summary attribute read as bytes is a string.
 function text(map, tag) {
   const element = map.get(tag);
   if (!element) return '';
+  if (element.bytes) return String.fromCharCode(...element.bytes.subarray(0, 256)).replace(/[\0 ]+$/, '').trim();
   if (element.str !== undefined) return element.str.trim();
   return element.numbers?.join('\\') ?? '';
 }

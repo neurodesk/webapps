@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
+import { dicomFile, dicomSeries, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
 import { indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
 import { seriesLabel, seriesSummary } from '../src/series-text.js';
 
@@ -57,6 +57,17 @@ test('a tag past where one prefix was cut is not reported as varying', () => {
   const [series] = indexDicom(records).series;
   assert.equal(series.varyingTags.has(0x00280030), false, 'PixelSpacing is missing only from the cut prefix');
   assert.equal(series.varyingTags.has(0x00200032), true);
+});
+
+test('an Implicit VR file still yields its modality and protocol name', () => {
+  const buffer = dicomFile('1.2.840.10008.1.2', [
+    implicit(0x0008, 0x0060, 'MR'),
+    implicit(0x0018, 0x1030, 't1_mpr '),
+    implicit(0x0020, 0x000e, '1.2.3\0'),
+    implicit(0x0028, 0x0010, uint16(64)),
+  ]);
+  const record = readRecord(new File([buffer], 'i.dcm'), 'i.dcm', arrayBuffer(buffer));
+  assert.deepEqual([record.fields.modality, record.fields.protocolName, record.fields.seriesUid, record.fields.rows], ['MR', 't1_mpr', '1.2.3', 64]);
 });
 
 test('files that are not DICOM images are skipped with a reason', async () => {
