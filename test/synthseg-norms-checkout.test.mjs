@@ -7,11 +7,16 @@ import { join } from 'node:path';
 import test from 'node:test';
 import manifest from '../packages/synthseg/model.manifest.json' with { type: 'json' };
 
-test('a Windows-style Git checkout preserves both checksum-pinned SynthSeg norms', async (t) => {
+test('a Windows-style Git checkout preserves the checksum-pinned SynthSeg norms', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'synthseg-norms-checkout-'));
   t.after(() => rm(root, { recursive: true, force: true, maxRetries: 3 }));
   const directory = 'packages/synthseg/test/fixtures';
-  const fixtures = { ixi: 'brainquant_norms.json', ahead: 'brainquant_norms_7t.json' };
+  const fixtures = {
+    'ixi-fast': 'brainquant_norms.json',
+    'ahead-fast': 'brainquant_norms_7t.json',
+    'ixi-normal': 'brainquant_norms_normal.json',
+    'ahead-normal': 'brainquant_norms_7t_normal.json',
+  };
   const paths = ['.gitattributes', ...Object.values(fixtures).map((name) => `${directory}/${name}`)];
   await mkdir(join(root, directory), { recursive: true });
   for (const path of paths) await cp(new URL(`../${path}`, import.meta.url), join(root, path));

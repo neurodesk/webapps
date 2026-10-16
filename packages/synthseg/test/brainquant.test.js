@@ -29,7 +29,12 @@ const rawNorms = JSON.parse(readFileSync(fixture('brainquant_norms.json'), 'utf8
 const golden = JSON.parse(readFileSync(fixture('brainquant-golden.json'), 'utf8'));
 const norms = parseNorms(rawNorms);
 
-const pinnedFixtures = { ixi: 'brainquant_norms.json', ahead: 'brainquant_norms_7t.json' };
+const pinnedFixtures = {
+  'ixi-fast': 'brainquant_norms.json',
+  'ahead-fast': 'brainquant_norms_7t.json',
+  'ixi-normal': 'brainquant_norms_normal.json',
+  'ahead-normal': 'brainquant_norms_7t_normal.json',
+};
 
 test('each population data version identifies an immutable, checksummed reference', () => {
   assert.deepEqual(Object.keys(manifest.norms), Object.keys(pinnedFixtures));
@@ -67,11 +72,13 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-test('both pinned references parse and norm the same structures from the same columns', () => {
-  const [ixi, ahead] = Object.values(pinnedFixtures).map((name) => parseNorms(JSON.parse(readFileSync(fixture(name), 'utf8'))));
+test('every pinned reference parses and norms the same structures from the same columns', () => {
+  const [ixi, ahead, ...normal] = Object.values(pinnedFixtures).map((name) => parseNorms(JSON.parse(readFileSync(fixture(name), 'utf8'))));
   const shape = (parsed) => parsed.structures.map(({ id, columns }) => ({ id, columns }));
-  assert.deepEqual(shape(ahead), shape(ixi));
-  assert.equal(ahead.icvColumn, ixi.icvColumn);
+  for (const other of [ahead, ...normal]) {
+    assert.deepEqual(shape(other), shape(ixi));
+    assert.equal(other.icvColumn, ixi.icvColumn);
+  }
   assert.deepEqual(
     [ixi.reference.cohort, ixi.reference.fieldStrength, ahead.reference.cohort, ahead.reference.fieldStrength],
     ['IXI', '1.5 T and 3 T', 'AHEAD', '7 T'],
@@ -354,14 +361,14 @@ test('fieldStrengthFromSidecar reads MagneticFieldStrength in tesla', () => {
   assert.equal(fieldStrengthFromSidecar({ MagneticFieldStrength: '3' }), null);
 });
 
-test('Auto picks AHEAD from 5 T, IXI below it or without a field strength, and an explicit choice wins', () => {
+test('Auto picks AHEAD from 5 T, IXI below it or without a field strength, an explicit choice wins, and the mode picks the norms', () => {
   assert.equal(ULTRA_HIGH_FIELD_T, 5);
-  assert.deepEqual(selectReference('auto', 6.98), { id: 'ahead', reason: 'the scanner field strength is 6.98 T' });
-  assert.deepEqual(selectReference('auto', 5), { id: 'ahead', reason: 'the scanner field strength is 5 T' });
-  assert.deepEqual(selectReference('auto', 2.89), { id: 'ixi', reason: 'the scanner field strength is 2.89 T' });
-  assert.deepEqual(selectReference('auto', null), { id: 'ixi', reason: 'the scanner field strength is unknown' });
-  assert.deepEqual(selectReference('ixi', 6.98), { id: 'ixi', reason: 'it was selected manually' });
-  assert.deepEqual(selectReference('ahead', 2.89), { id: 'ahead', reason: 'it was selected manually' });
+  assert.deepEqual(selectReference('auto', 6.98, true), { id: 'ahead-fast', cohort: 'ahead', reason: 'the scanner field strength is 6.98 T and SynthSeg ran in fast mode' });
+  assert.deepEqual(selectReference('auto', 5, false), { id: 'ahead-normal', cohort: 'ahead', reason: 'the scanner field strength is 5 T and SynthSeg ran in default mode' });
+  assert.deepEqual(selectReference('auto', 2.89, true), { id: 'ixi-fast', cohort: 'ixi', reason: 'the scanner field strength is 2.89 T and SynthSeg ran in fast mode' });
+  assert.deepEqual(selectReference('auto', null, false), { id: 'ixi-normal', cohort: 'ixi', reason: 'the scanner field strength is unknown and SynthSeg ran in default mode' });
+  assert.deepEqual(selectReference('ixi', 6.98, true), { id: 'ixi-fast', cohort: 'ixi', reason: 'it was selected manually and SynthSeg ran in fast mode' });
+  assert.deepEqual(selectReference('ahead', 2.89, false), { id: 'ahead-normal', cohort: 'ahead', reason: 'it was selected manually and SynthSeg ran in default mode' });
 });
 
 test('the report names the AHEAD reference, its field strength and why it was chosen', () => {
@@ -372,7 +379,7 @@ test('the report names the AHEAD reference, its field strength and why it was ch
     'Reference: AHEAD 7 T (n=105, 60 F / 45 M, age 18-80 y, CC BY 4.0), SynthSeg 2.0, fast mode, FreeSurfer 8.2.0 mri_synthseg --vol on skull-stripped images, corrected to whole-head volumes.',
   );
   assert.equal(
-    referenceNote(ahead, selectReference('auto', 6.98).reason),
-    'The AHEAD reference was chosen because the scanner field strength is 6.98 T.',
+    referenceNote(ahead, selectReference('auto', 6.98, true).reason),
+    'The AHEAD reference was chosen because the scanner field strength is 6.98 T and SynthSeg ran in fast mode.',
   );
 });

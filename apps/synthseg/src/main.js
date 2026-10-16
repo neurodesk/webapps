@@ -324,15 +324,15 @@ function setFieldStrength(value) {
   $('reference').value = 'auto';
   showReferenceHint();
 }
-/** The reference norms the report uses: the Reference field, Auto deciding from the field strength. */
+/** The reference norms the report uses: the Reference field, Auto deciding from the field strength, and the run's mode. */
 function reference() {
-  return selectReference($('reference').value, fieldStrengthT);
+  return selectReference($('reference').value, fieldStrengthT, volumesFast);
 }
 function showReferenceHint() {
-  const { id } = reference();
+  const { cohort } = reference();
   const hint = $('referenceHint');
   hint.hidden = !source || $('reference').value !== 'auto';
-  hint.textContent = `Auto: ${$('reference').querySelector(`option[value="${id}"]`).textContent} · ${
+  hint.textContent = `Auto: ${$('reference').querySelector(`option[value="${cohort}"]`).textContent} · ${
     fieldStrengthT === null ? 'field strength unknown' : `scanner ${fieldStrengthT} T`}`;
 }
 // Each reference's norms are fetched once, when a report first needs them, and checked against the manifest.
@@ -357,7 +357,7 @@ async function reportSummary() {
   const referenceRecord = { choice: $('reference').value, fieldStrengthT, reason: selected.reason };
   try {
     const norms = await loadNorms(selected.id);
-    const { report } = volumeReport(norms, volumes, used, { reference: selected, fast: volumesFast, voxelSizeMm: volumesVoxelSizeMm });
+    const { report } = volumeReport(norms, volumes, used, { reference: selected, voxelSizeMm: volumesVoxelSizeMm });
     return {
       norms: { id: selected.id, version, url, sha256 },
       reference: referenceRecord,
@@ -405,7 +405,7 @@ async function renderVolumes() {
     const norms = await loadNorms(selected.id);
     if (revision !== renderRevision || !volumes) return;
     const used = subject();
-    const view = volumeReport(norms, volumes, used, { reference: selected, fast: volumesFast, voxelSizeMm: volumesVoxelSizeMm });
+    const view = volumeReport(norms, volumes, used, { reference: selected, voxelSizeMm: volumesVoxelSizeMm });
     const lines = view.header.map((text) => element('p', { text }));
     lines.at(-1).className = 'nd-report-lead';
     const legend = element('ul', { className: 'nd-chart-legend' }, legendEntries(used.age !== null).map(({ label, svg }) => element('li', {}, [svgElement(svg), label])));

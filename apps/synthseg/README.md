@@ -24,9 +24,13 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
   AHEAD (7 T). **Auto**, the default and what a new image resets to, reads
   `MagneticFieldStrength` from the same sidecar and uses AHEAD from 5 T upward, like the
   container's `select_norms`. Below 5 T, and for NIfTI input, which has no field
-  strength, it uses IXI. The report names the reference and why it was chosen.
-- **Mode** — `fast` (the default) is a single pass and matches the volume norms;
-  `default` adds flip averaging and topological correction.
+  strength, it uses IXI. Each reference has fast-mode and default-mode norms, and the
+  report uses the ones that match the run's Mode. The report names the reference and why
+  it was chosen.
+- **Mode** — `fast` (the default) is a single pass; `default` adds flip averaging and
+  topological correction. Each mode is compared with norms segmented in that mode,
+  because default mode measures cortex, ventricles and hippocampus several percent
+  differently.
 - **CT** — auto-checked when the loaded image contains negative intensities.
 - **Image preparation** — scans that exceed the GPU buffer limit first use niimath's
   robust FOV to keep 170 mm below the top of the head and remove excess neck. You can
@@ -49,7 +53,8 @@ entries with `node scripts/freesurfer-lut.mjs <FreeSurferColorLUT.txt>`.
   head-size-adjusted volume against age over the chosen reference's percentile bands, with a
   table below (`src/volume-report.js`, a port of the neurocontainers SynthSeg recipe's
   `brainquant.py` in `@neurodesk/synthseg/brainquant`). Each reference's norms come from
-  `manifest.norms.ixi` or `manifest.norms.ahead`, commit-pinned neurocontainers URLs,
+  `manifest.norms`, keyed `<cohort>-<mode>` (`ixi-fast`, `ixi-normal`, `ahead-fast`,
+  `ahead-normal`), commit-pinned neurocontainers URLs,
   each fetched once when first needed and checked against its SHA-256. The data version
   is the first 12 characters of the source commit, shown above the charts and saved with
   the reference id, URL, checksum, Reference choice and reason in the JSON report. Without them the labels and the CSV still work and the view
