@@ -82,8 +82,8 @@ The segmentation options are the web app's automation parameters for `segment`
 apart from the app's volume-report `age`, `sex` and `reference`). The command
 line writes raw segmentation measurements; population percentiles and reference
 selection belong to the browser's volume report. `--mode fast`, the default,
-skips flip averaging and topology postprocessing; the app's volume norms were
-fitted on fast-mode volumes. `--mode default` adds both. `--ct` treats the
+skips flip averaging and topology postprocessing. `--mode default` adds both.
+The app compares each mode with volume norms fitted in that mode. `--ct` treats the
 input as CT in Hounsfield units and `--no-ct` as MRI. Without either, the input
 counts as CT when any voxel is negative, as the app decides. The decision is
 recorded in the report.
