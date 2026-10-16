@@ -184,22 +184,32 @@ function renderLesionNavigator() {
     : `${lesions.length} ${lesions.length === 1 ? "lesion" : "lesions"}`;
 }
 
+// Queued behind show(), so a result still loading cannot undo the change.
+function inViewer(change) {
+  viewQueue = viewQueue.then(change).catch((error) => log.log(error.message, "error"));
+}
+
 // Steps through the lesions, largest first, wrapping at either end, and centres the crosshair on one.
-async function jumpToLesion(step) {
+function jumpToLesion(step) {
   if (!lesions.length) return;
   lesionIndex = lesionIndex < 0
     ? (step > 0 ? 0 : lesions.length - 1)
     : (lesionIndex + step + lesions.length) % lesions.length;
   renderLesionNavigator();
-  const nv = await ensureViewer();
-  nv.setCrosshairPos(lesions[lesionIndex].world);
-  nv.drawScene();
+  const { world } = lesions[lesionIndex];
+  inViewer(async () => {
+    const nv = await ensureViewer();
+    nv.setCrosshairPos(world);
+    nv.drawScene();
+  });
 }
 
 function setOverlayVisible(visible) {
   overlayVisible = visible;
   overlayToggle.setAttribute("aria-pressed", String(visible));
-  if (viewer?.volumes.length > 1) void viewer.setVolume(1, { opacity: visible ? OVERLAY_OPACITY : 0 });
+  inViewer(async () => {
+    if (viewer?.volumes.length > 1) await viewer.setVolume(1, { opacity: overlayVisible ? OVERLAY_OPACITY : 0 });
+  });
 }
 
 async function editResult(stage, result) {
