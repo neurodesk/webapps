@@ -2,7 +2,8 @@
 // through indexing, conversion, the header explorer and dicompare, and their failure,
 // cancellation and retry paths.
 import { test, expect } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 
 const [example] = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
@@ -193,6 +194,19 @@ test('chosen files list every series, skip what is not DICOM, and switch series 
   await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
   await expect(page.locator('#seriesInfo')).toContainText('16 × 16 · TR 2000 ms · TE 20 ms');
   await expect(page.locator('#technicalLog')).toContainText('Skipped notes.txt: not a DICOM file');
+});
+
+test('Choose folder reads every series in a directory tree', async ({ page }, testInfo) => {
+  const root = testInfo.outputPath('session');
+  for (const series of [4, 9]) {
+    const dir = path.join(root, `series-${series}`);
+    mkdirSync(dir, { recursive: true });
+    for (const { name, buffer } of dicomSeries({ series, slices: 3 })) writeFileSync(path.join(dir, name), buffer);
+  }
+  await page.goto('./');
+  await page.locator('#folderInput').setInputFiles(root);
+  await expect(page.locator('#fileInfo')).toHaveText('6 images · 2 series');
+  await expect(page.locator('#seriesList .nd-volume-toggle')).toHaveCount(2);
 });
 
 test('the automation operation returns the series index and the converted image', async ({ page }) => {
