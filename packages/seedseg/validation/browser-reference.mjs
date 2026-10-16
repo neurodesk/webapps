@@ -41,7 +41,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
     const browserEnv = { ...process.env };
     for (const key of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) browserEnv[key] = browserHome;
     browser = await chromium.launch({ headless: true, env: browserEnv });
-    const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
+    const context = await browser.newContext({ acceptDownloads: true });
     const origin = `http://127.0.0.1:${server.address().port}`;
     await context.route(/cloudflareinsights\.com|googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
     await context.route('**/seedseg-model-*.onnx', route => {
@@ -63,6 +63,7 @@ export async function browserReference({ modelsDirectory, ensemble, threshold, t
     page.on('requestfailed', request => console.error(`Browser request failed: ${request.url()} ${request.failure()?.errorText}`));
     await page.goto(`${origin}${prefix}`);
     await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation));
+    await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
     await page.locator('#neurodesk-input-transfer').setInputFiles({ name: 'synthetic-prostate-t1.nii', mimeType: 'application/x-nifti', buffer: createProstateFixture() });
     await page.evaluate(() => neurodeskAutomation.dispatch('adopt', { role: 'image' }));
     await page.evaluate(parameters => neurodeskAutomation.dispatch('start', { operation: 'segment', parameters }), {

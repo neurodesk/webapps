@@ -104,7 +104,7 @@ try {
   const env = { ...process.env };
   for (const key of ['HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME']) env[key] = browserHome;
   browser = await chromium.launch({ headless: true, env });
-  const context = await browser.newContext({ acceptDownloads: true, serviceWorkers: 'block' });
+  const context = await browser.newContext({ acceptDownloads: true });
   await context.route(/cloudflareinsights\.com|googletagmanager\.com|google-analytics\.com/, (route) => route.fulfill({ body: '' }));
   const fetched = new Set();
   context.on('request', (request) => {

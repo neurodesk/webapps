@@ -34,21 +34,22 @@ const site = await serveSite(resolve('apps/calmar/dist'), {
 await mkdir(output, { recursive: true });
 
 async function referencePage(browser) {
-  const page = await browser.newPage({ serviceWorkers: 'block' });
+  const context = await browser.newContext();
+  const page = await context.newPage();
   page.on('pageerror', (error) => console.log(error.message));
   page.on('requestfailed', (request) =>
     console.log(`Request failed ${request.url()}: ${request.failure()?.errorText}`)
   );
   page.on('crash', () => console.log('Reference page crashed.'));
   page.on('console', (message) => console.log(message.text()));
-  await page.route(viewerUrl, (route) =>
+  await context.route(viewerUrl, (route) =>
     route.fulfill({ body: viewer, contentType: 'application/javascript' })
   );
-  await page.route('**/__structural-image.nii.gz', (route) => route.fulfill({ body: inputBytes }));
+  await context.route('**/__structural-image.nii.gz', (route) => route.fulfill({ body: inputBytes }));
   for (const asset of assets) {
     // Large ONNX bodies exceed Chromium's DevTools message limit when base64-fulfilled.
     // Redirect to an actual streaming HTTP response with the same verified bytes.
-    await page.route(asset.url, (route) =>
+    await context.route(asset.url, (route) =>
       route.fulfill({
         status: 302,
         headers: {
@@ -122,7 +123,7 @@ try {
   }
   if (process.env.CALMAR_REVIEWED_INPUT) {
     const reviewed = await readFile(process.env.CALMAR_REVIEWED_INPUT);
-    await page.route('**/__reviewed-mask.nii', (route) => route.fulfill({ body: reviewed }));
+    await page.context().route('**/__reviewed-mask.nii', (route) => route.fulfill({ body: reviewed }));
     await page.evaluate(async (mapOnly) => {
       if (mapOnly) {
         await app.setStructural(

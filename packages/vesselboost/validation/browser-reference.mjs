@@ -96,12 +96,13 @@ export async function browserReference({
         XDG_DATA_HOME: browserHome,
       },
     });
-    const page = await browser.newPage({ serviceWorkers: 'block' });
+    const context = await browser.newContext();
+    const page = await context.newPage();
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('console', (message) => console.log(message.text()));
     // Cap only inference concurrency, preserving the production runtime and workload.
-    await page.route('**/js/inference-worker.js', async (route) => {
+    await context.route('**/js/inference-worker.js', async (route) => {
       const response = await route.fetch();
       await route.fulfill({
         response,
@@ -109,7 +110,7 @@ export async function browserReference({
       });
     });
     for (const asset of MODEL_ASSETS)
-      await page.route(asset.url, (route) =>
+      await context.route(asset.url, (route) =>
         route.fulfill({
           status: 302,
           headers: {
