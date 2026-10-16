@@ -19,6 +19,7 @@ import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
 import { APP } from './config.js';
 import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
+import { ProtocolSession, SCHEMAS } from './protocol-session.js';
 import { protocolTables } from './protocol-table.js';
 import { describeSeries, seriesLabel, seriesSummary } from './series-text.js';
 import examples from '../examples.json';
@@ -143,7 +144,7 @@ const initialized = (async () => {
     $('viewerNotice').hidden = false;
     $('viewerNotice').textContent = `Images cannot be shown in this browser: ${error.message}. Headers and protocol still work.`;
   }
-  progress.reset('Drag and drop files');
+  if (!jobs.size && !state.index) progress.reset('Drag and drop files');
 })();
 
 function currentSeries() {
@@ -426,18 +427,11 @@ $('downloadHeader').onclick = () => {
 // ---- protocol (dicompare) ----
 
 let protocol = null;
-let protocolModule = null;
 const schemas = new Map();
 const renderer = new DicompareReportRenderer();
 
-function loadProtocolModule() {
-  protocolModule ??= import('./protocol-session.js');
-  return protocolModule;
-}
-
-async function loadSchema(id) {
+function loadSchema(id) {
   if (!schemas.has(id)) {
-    const { SCHEMAS } = await loadProtocolModule();
     const url = SCHEMAS.find((schema) => schema.id === id).url;
     const loaded = fetch(url).then((response) => {
       if (!response.ok) throw new Error(`Schema ${id}: HTTP ${response.status}`);
@@ -449,16 +443,10 @@ async function loadSchema(id) {
   return schemas.get(id);
 }
 
-void loadProtocolModule().then(({ SCHEMAS }) => {
-  $('schemaSelect').append(...SCHEMAS.map((schema) => new Option(schema.name, schema.id)));
-});
-
-function refreshProtocolButton() {
-  $('protocolButton').textContent = $('schemaSelect').value ? 'Check compliance' : 'Summarize protocol';
-}
+$('schemaSelect').append(...SCHEMAS.map((schema) => new Option(schema.name, schema.id)));
 
 $('schemaSelect').addEventListener('change', async () => {
-  refreshProtocolButton();
+  $('protocolButton').textContent = $('schemaSelect').value ? 'Check compliance' : 'Summarize protocol';
   const id = $('schemaSelect').value;
   $('schemaAcquisitionField').hidden = true;
   if (!id) return;
@@ -473,34 +461,26 @@ $('schemaSelect').addEventListener('change', async () => {
   }
 });
 
-async function runProtocol({ signal } = {}) {
-  if (!state.index) throw new Error('Load DICOM files before summarising the protocol.');
+async function runProtocol() {
   const controller = begin('protocol', 'Starting dicompare…');
-  const abort = () => controller.abort(signal.reason);
-  signal?.addEventListener('abort', abort, { once: true });
   const schemaId = $('schemaSelect').value;
   $('protocolButton').disabled = true;
   try {
-    const { ProtocolSession } = await loadProtocolModule();
     protocol ??= new ProtocolSession((message) => log.log(message));
     if (!state.acquisitions) {
-      const index = state.index;
-      const files = index.series.flatMap((series) => series.files.map((record) => record.file));
-      const acquisitions = await protocol.summarize(files, {
+      const files = state.index.series.flatMap((series) => series.files.map((record) => record.file));
+      state.acquisitions = await protocol.summarize(files, {
         signal: controller.signal,
         onProgress: (fraction, message) => report('protocol', fraction, message),
       });
-      if (state.index !== index) throw new DOMException('The files changed', 'AbortError');
-      state.acquisitions = acquisitions;
-      $('protocolSummary').replaceChildren(...protocolTables(acquisitions, document));
+      $('protocolSummary').replaceChildren(...protocolTables(state.acquisitions, document));
     }
     let schema = null;
-    let compliance = null;
     if (schemaId) {
       report('protocol', 1, 'Checking compliance…');
       schema = await loadSchema(schemaId);
-      compliance = await protocol.check(schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
-      renderer.render($('complianceReport'), { acquisitions: state.acquisitions, complianceResults: compliance, schema });
+      const complianceResults = await protocol.check(schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
+      renderer.render($('complianceReport'), { acquisitions: state.acquisitions, complianceResults, schema });
     } else {
       $('complianceReport').replaceChildren();
     }
@@ -508,17 +488,14 @@ async function runProtocol({ signal } = {}) {
     showView('protocol');
     const count = `${state.acquisitions.length} acquisition${state.acquisitions.length === 1 ? '' : 's'}`;
     finish('protocol', controller, schema ? `${count} checked against ${schema.name}` : `${count} summarised`);
-    return { acquisitions: state.acquisitions, compliance };
   } catch (error) {
     finish('protocol', controller, 'Protocol summary', { error });
-    throw error;
   } finally {
-    signal?.removeEventListener('abort', abort);
     $('protocolButton').disabled = !state.index;
   }
 }
 
-$('protocolButton').addEventListener('click', () => { void runProtocol().catch(() => {}); });
+$('protocolButton').addEventListener('click', () => { void runProtocol(); });
 
 // ---- automation ----
 
