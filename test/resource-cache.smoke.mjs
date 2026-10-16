@@ -41,6 +41,7 @@ const selectorBundle = await build({
 });
 const slowResponses = new Set();
 let deployOnRuntimeNavigation;
+let cacheRuntimeHttp = false;
 const workerFetchSource = `
 self.onmessage = async () => {
   try {
@@ -80,6 +81,7 @@ const server = createServer(async (request, response) => {
         await deploy();
       }
       const body = await readFile(join(runtimeDist, relative));
+      if (relative === 'assets/engine.wasm' && cacheRuntimeHttp) response.setHeader('Cache-Control', 'public, max-age=31536000');
       if (relative.startsWith('assets/')) transferred.set(pathname, (transferred.get(pathname) || 0) + body.length);
       const type = relative.endsWith('.js') ? 'text/javascript' : relative.endsWith('.json') ? 'application/json' : relative.endsWith('.html') ? 'text/html' : relative.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream';
       return send(body, type);
@@ -297,6 +299,12 @@ try {
   assert.deepEqual(await loadRuntime(page), firstRuntime);
   assert.equal(bytesTransferred(), beforeUnchangedDeployment, 'unchanged runtime checksum survives a deployment');
   const controllerBeforeUpgrade = await page.evaluate(() => navigator.serviceWorker.controller.scriptURL);
+  cacheRuntimeHttp = true;
+  const httpCachePage = await context.newPage();
+  await httpCachePage.goto(origin);
+  const beforeHttpCachePrime = bytesTransferred();
+  assert.equal(await httpCachePage.evaluate(async () => (await (await fetch('/runtime/assets/engine.wasm', { cache: 'reload' })).arrayBuffer()).byteLength), wasm.length, 'uncontrolled page primes the HTTP cache with the old runtime');
+  assert.equal(bytesTransferred() - beforeHttpCachePrime, wasm.length, 'HTTP cache prime downloads the old runtime body');
   const beforeChangedDeployment = bytesTransferred();
   deployOnRuntimeNavigation = () => prepareRuntime(updatedWasm, 'Changed runtime deployment');
   await page.goto(`${origin}/runtime/`);
@@ -304,6 +312,9 @@ try {
   assert.equal(await page.title(), 'Changed runtime deployment');
   assert.equal(await readFile(join(runtimeDist, 'coi-serviceworker.js'), 'utf8'), workerBeforeUpgrade, 'deployment changes only the external map, leaving the controlling worker unchanged');
   assert.equal(await page.evaluate(() => navigator.serviceWorker.controller.scriptURL), controllerBeforeUpgrade);
+  assert.equal(await httpCachePage.evaluate(async () => (await (await fetch('/runtime/assets/engine.wasm')).arrayBuffer()).byteLength), wasm.length, 'browser HTTP cache still contains the fresh old runtime at the unchanged URL');
+  assert.equal(bytesTransferred(), beforeChangedDeployment, 'HTTP cache probe transfers no bytes despite changed server content');
+  await httpCachePage.close();
   const nextRuntime = await loadRuntime(page);
   assert.equal(nextRuntime.bytes, updatedWasm.length, 'an existing controlling worker uses the new document runtime map');
   assert.equal(nextRuntime.exports, firstRuntime.exports);
@@ -311,6 +322,10 @@ try {
   assert.deepEqual(await loadWorkerRuntime(page), nextRuntime, 'new deployment dedicated workers receive the new runtime bytes');
   assert.equal(bytesTransferred() - beforeChangedDeployment, updatedWasm.length, 'new deployment dedicated workers reuse the new verified binary');
   assert.deepEqual(await loadWorkerRuntime(page, true), nextRuntime, 'new deployment nested workers never receive old cached runtime bytes');
+  cacheRuntimeHttp = false;
+  const cacheSession = await context.newCDPSession(page);
+  await cacheSession.send('Network.clearBrowserCache');
+  await cacheSession.detach();
   const beforeRuntimeCorruption = bytesTransferred();
   assert.ok(await corruptCache(page, digest(updatedWasm)) > 0, 'test corrupts the persistent WASM body');
   assert.deepEqual(await loadRuntime(page), nextRuntime);

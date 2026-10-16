@@ -181,7 +181,7 @@ if (typeof window === 'undefined') {
                 console.warn("Runtime cache read failed:", error);
             }
         }
-        const response = await fetch(request);
+        const response = await fetch(request, { cache: "reload" });
         if (response.status !== 200 || response.type === "opaque" || response.headers.has("Content-Range")) return response;
         const body = await verifiedBody(response, asset);
         if (!body) throw new Error(`Runtime integrity check failed for ${request.url}`);
