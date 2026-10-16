@@ -45,3 +45,63 @@ export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patien
       buffer: Buffer.concat([Buffer.alloc(128), Buffer.from('DICM'), ...body]) };
   });
 }
+
+// Element builders for headers the series fixture does not cover: nested sequences,
+// private groups, Implicit VR and other transfer syntaxes.
+const LONG = new Set(['OB', 'OW', 'SQ', 'UN', 'UT']);
+
+// An Explicit VR element; an SQ value from undefinedSequence() keeps its undefined length.
+export function explicit(group, element, vr, value) {
+  let data = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
+  if (data.length % 2) data = Buffer.concat([data, Buffer.from([vr === 'UI' ? 0 : 32])]);
+  const undefinedLength = vr === 'SQ' && value.undefinedLength;
+  const head = Buffer.alloc(LONG.has(vr) ? 12 : 8);
+  head.writeUInt16LE(group);
+  head.writeUInt16LE(element, 2);
+  head.write(vr, 4);
+  if (LONG.has(vr)) head.writeUInt32LE(undefinedLength ? 0xffffffff : data.length, 8);
+  else head.writeUInt16LE(data.length, 6);
+  return Buffer.concat([head, data]);
+}
+
+export function implicit(group, element, value) {
+  const data = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
+  const head = Buffer.alloc(8);
+  head.writeUInt16LE(group);
+  head.writeUInt16LE(element, 2);
+  head.writeUInt32LE(data.length, 4);
+  return Buffer.concat([head, data]);
+}
+
+export function item(body, undefinedLength = false) {
+  const head = Buffer.alloc(8);
+  head.writeUInt16LE(0xfffe);
+  head.writeUInt16LE(0xe000, 2);
+  head.writeUInt32LE(undefinedLength ? 0xffffffff : body.length, 4);
+  const end = Buffer.from([0xfe, 0xff, 0x0d, 0xe0, 0, 0, 0, 0]);
+  return Buffer.concat([head, body, ...(undefinedLength ? [end] : [])]);
+}
+
+export function undefinedSequence(items) {
+  const end = Buffer.from([0xfe, 0xff, 0xdd, 0xe0, 0, 0, 0, 0]);
+  return Object.assign(Buffer.concat([...items, end]), { undefinedLength: true });
+}
+
+export function dicomFile(transferSyntax, body) {
+  return Buffer.concat([
+    Buffer.alloc(128),
+    Buffer.from('DICM'),
+    explicit(2, 0x10, 'UI', transferSyntax),
+    ...body,
+  ]);
+}
+
+export const uint16 = (value) => {
+  const buffer = Buffer.alloc(2);
+  buffer.writeUInt16LE(value);
+  return buffer;
+};
+
+export function arrayBuffer(buffer) {
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+}
