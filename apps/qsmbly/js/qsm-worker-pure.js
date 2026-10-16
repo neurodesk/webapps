@@ -194,13 +194,12 @@ function computeRobustRange(data, mask, lowPct = 2, highPct = 98) {
 
 async function initializeWasm() {
   try {
-    // Construct URLs relative to worker location. Cache-bust by app version so a
-    // deployed update fetches fresh WASM rather than a stale cached module (which
-    // would throw "<fn> is not a function" when new JS meets old WASM).
+    // Version the JS glue; the runtime manifest owns WASM identity and caching.
+    // Keep the binary URL exact so the worker cache can verify and reuse it.
     const baseUrl = self.location.href.replace(/\/js\/.*$/, '');
     const v = `?v=${QSMConfig.VERSION}`;
     const jsUrl = `${baseUrl}/wasm/qsm_wasm.js${v}`;
-    const wasmBinaryUrl = `${baseUrl}/wasm/qsm_wasm_bg.wasm${v}`;
+    const wasmBinaryUrl = `${baseUrl}/wasm/qsm_wasm_bg.wasm`;
 
     const module = await import(jsUrl);
     await module.default(wasmBinaryUrl);
