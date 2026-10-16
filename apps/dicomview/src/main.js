@@ -56,7 +56,7 @@ const toolbar = createViewerToolbar({
     { id: 'axial', label: 'Axial' },
     { id: 'coronal', label: 'Coronal' },
     { id: 'sagittal', label: 'Sagittal' },
-    { id: 'header', label: 'Header', disabled: true },
+    { id: 'header', label: 'Header', hidden: true },
     { id: 'protocol', label: 'Protocol', hidden: true },
   ].map((view) => ({ ...view, onClick: () => showView(view.id) })),
 });
@@ -220,7 +220,7 @@ function commit(index) {
   $('protocolButton').disabled = false;
   $('protocolSummary').replaceChildren();
   $('complianceReport').replaceChildren();
-  viewTab('header').disabled = false;
+  viewTab('header').hidden = false;
   viewTab('protocol').hidden = true;
   if (state.view === 'protocol') showView('header');
   seriesList.render(Object.fromEntries(index.series.map((series) => [series.uid, { description: seriesLabel(series) }])));
