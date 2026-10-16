@@ -70,8 +70,10 @@ $('aboutBtn').onclick = () => info.open('About DICOM View', $('aboutContent'));
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
 
 // What the user is looking at. Conversions are cached per series, failed or cancelled
-// ones dropped so selecting the series again retries.
+// ones dropped so selecting the series again retries. generation counts committed
+// inputs: a result computed from an earlier input is never written over a later one.
 const state = {
+  generation: 0,
   index: null,
   seriesUid: null,
   instance: 0,
@@ -82,10 +84,20 @@ const state = {
   acquisitions: null,
 };
 
-// Two jobs can run at once: reading and converting images, and dicompare. The status bar
-// shows the most recent; its × cancels that one, and the other's message returns after.
+// Jobs run in lanes: reading headers ('index'), converting images ('viewer') and dicompare
+// ('protocol'). Reading a new input cancels every lane; otherwise the image and protocol
+// lanes run side by side. The status bar shows the most recent; its × cancels that one,
+// and the other's message returns after.
 const jobs = new Map();
 let shown = null;
+
+function syncProtocolButton() {
+  $('protocolButton').disabled = !state.index || jobs.has('index') || jobs.has('protocol');
+}
+
+function assertGeneration(generation) {
+  if (state.generation !== generation) throw new DOMException('A new input replaced this one', 'AbortError');
+}
 
 function status(message, error = false) {
   progress.setText(message);
@@ -100,6 +112,7 @@ function begin(lane, message) {
   shown = lane;
   progress.begin(message);
   status(message);
+  syncProtocolButton();
   return controller;
 }
 
@@ -113,6 +126,7 @@ function report(lane, fraction, message) {
 function finish(lane, controller, message, { error = null } = {}) {
   if (jobs.get(lane)?.controller !== controller) return;
   jobs.delete(lane);
+  syncProtocolButton();
   const cancelled = error?.name === 'AbortError';
   const text = cancelled ? `${message} cancelled` : error ? error.message : message;
   const [other] = jobs;
@@ -128,7 +142,7 @@ function finish(lane, controller, message, { error = null } = {}) {
 }
 
 $('cancelButton').onclick = () => {
-  if (shown === 'viewer') exampleControl.cancel();
+  if (shown === 'index') exampleControl.cancel();
   jobs.get(shown)?.controller.abort();
 };
 
@@ -176,7 +190,7 @@ const seriesList = createResultList({
 
 async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
   for (const lane of jobs.keys()) jobs.get(lane).controller.abort();
-  const controller = begin('viewer', 'Reading DICOM headers…');
+  const controller = begin('index', 'Reading DICOM headers…');
   const abort = () => controller.abort(signal.reason);
   signal?.addEventListener('abort', abort, { once: true });
   // Choosing a listed series would cancel the read that is replacing the list.
@@ -184,7 +198,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
   try {
     const index = await indexFiles(files, {
       signal: controller.signal,
-      onProgress: (done, total) => report('viewer', done / total, `Reading headers ${done} of ${total}`),
+      onProgress: (done, total) => report('index', done / total, `Reading headers ${done} of ${total}`),
     });
     if (!index.series.length) {
       const reason = index.skipped[0]?.reason;
@@ -192,12 +206,12 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
     }
     assertCurrent();
     commit(index);
-    finish('viewer', controller, `${index.series.length} series in ${files.length} files`);
+    finish('index', controller, `${index.series.length} series in ${files.length} files`);
     for (const { path, reason } of index.skipped) log.log(`Skipped ${path}: ${reason}`, 'warning');
     const first = index.series.find((series) => series.kind !== 'localizer') ?? index.series[0];
     selectSeries(first.uid);
   } catch (error) {
-    finish('viewer', controller, 'Reading DICOM headers', { error });
+    finish('index', controller, 'Reading DICOM headers', { error });
     throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
@@ -206,6 +220,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
 }
 
 function commit(index) {
+  state.generation += 1;
   state.index = index;
   state.seriesUid = null;
   state.outputs = null;
@@ -217,7 +232,7 @@ function commit(index) {
   $('fileInfo').hidden = false;
   $('fileInfo').textContent = `${images} images · ${index.series.length} series${skipped}`;
   $('dropZone').classList.add('has-files');
-  $('protocolButton').disabled = false;
+  syncProtocolButton();
   $('protocolSummary').replaceChildren();
   $('complianceReport').replaceChildren();
   viewTab('header').hidden = false;
@@ -285,10 +300,12 @@ function convert(series, signal) {
 }
 
 async function showSeries(series) {
+  const { generation } = state;
   const controller = begin('viewer', `${describeSeries(series)} · converting…`);
   try {
     const outputs = await convert(series, controller.signal);
     controller.signal.throwIfAborted();
+    assertGeneration(generation);
     if (state.seriesUid !== series.uid) return;
     state.outputs = outputs;
     $('outputSelect').replaceChildren(...outputs.map(({ image }, index) => new Option(image.name, String(index))));
@@ -469,17 +486,19 @@ $('schemaSelect').addEventListener('change', async () => {
 });
 
 async function runProtocol() {
+  const { generation } = state;
   const controller = begin('protocol', 'Starting dicompare…');
   const schemaId = $('schemaSelect').value;
-  $('protocolButton').disabled = true;
   try {
     protocol ??= new ProtocolSession((message) => log.log(message));
     if (!state.acquisitions) {
       const files = state.index.series.flatMap((series) => series.files.map((record) => record.file));
-      state.acquisitions = await protocol.summarize(files, {
+      const acquisitions = await protocol.summarize(files, {
         signal: controller.signal,
         onProgress: (fraction, message) => report('protocol', fraction, message),
       });
+      assertGeneration(generation);
+      state.acquisitions = acquisitions;
       $('protocolSummary').replaceChildren(...protocolTables(state.acquisitions, document));
     }
     let schema = null;
@@ -487,6 +506,7 @@ async function runProtocol() {
       report('protocol', 1, 'Checking compliance…');
       schema = await loadSchema(schemaId);
       const complianceResults = await protocol.check(state.acquisitions, schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
+      assertGeneration(generation);
       renderer.render($('complianceReport'), { acquisitions: state.acquisitions, complianceResults, schema });
     } else {
       $('complianceReport').replaceChildren();
@@ -497,8 +517,6 @@ async function runProtocol() {
     finish('protocol', controller, schema ? `${count} checked against ${schema.name}` : `${count} summarised`);
   } catch (error) {
     finish('protocol', controller, 'Protocol summary', { error });
-  } finally {
-    $('protocolButton').disabled = !state.index;
   }
 }
 

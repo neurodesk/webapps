@@ -221,6 +221,34 @@ test('chosen files list every series, skip what is not DICOM, and switch series 
   await expect(page.locator('#technicalLog')).toContainText('Skipped notes.txt: not a DICOM file');
 });
 
+test('protocol actions wait while a replacement folder is read', async ({ page }) => {
+  await page.goto('./');
+  const files = (series) => dicomSeries({ series, slices: 2 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(files(1));
+  await expect(page.locator('#fileInfo')).toHaveText('2 images · 1 series');
+  await page.locator('#protocolSection > summary').click();
+  const button = page.locator('#protocolButton');
+  await expect(button).toBeEnabled();
+  await page.evaluate(() => {
+    const read = Blob.prototype.arrayBuffer;
+    const pending = [];
+    window.pendingReads = () => pending.length;
+    Blob.prototype.arrayBuffer = function () {
+      return new Promise((resolve, reject) => pending.push(() => read.call(this).then(resolve, reject)));
+    };
+    window.finishRead = () => {
+      Blob.prototype.arrayBuffer = read;
+      for (const release of pending) release();
+    };
+  });
+  await page.locator('#dicomInput').setInputFiles(files(2));
+  await page.waitForFunction(() => window.pendingReads() > 0);
+  await expect(button).toBeDisabled();
+  await page.evaluate(() => window.finishRead());
+  await expect(page.locator('#seriesList')).toContainText('test_scan_2');
+  await expect(button).toBeEnabled();
+});
+
 test('Choose folder reads every series in a directory tree', async ({ page }, testInfo) => {
   const root = testInfo.outputPath('session');
   for (const series of [4, 9]) {
