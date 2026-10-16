@@ -2199,6 +2199,20 @@
         "sha256": "f597123515ccccb6f8f2302670eb5be1dc73354d6b9791651bd4569a76d7ab95",
         "bytes": 12257,
         "license": "CC-BY-4.0"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_normal.json",
+        "kind": "reference-data",
+        "sha256": "78fb642e811a733276468819273c9612d210770bf388cb69e21e7e07a907f7ff",
+        "bytes": 12275,
+        "license": "CC-BY-SA-3.0"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_7t_normal.json",
+        "kind": "reference-data",
+        "sha256": "4c6745ec015503275cabf126093536611936a1a7bcdf7301190738e16d35c975",
+        "bytes": 12296,
+        "license": "CC-BY-4.0"
       }
     ],
     "syncro": [

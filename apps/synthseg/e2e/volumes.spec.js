@@ -178,7 +178,7 @@ test('the Reference field switches the Volumes view to the AHEAD 7 T norms', asy
   await expect(page.locator('#referenceHint')).toBeHidden();
   await expect(panel).toContainText('Reference: AHEAD 7 T (n=105, 60 F / 45 M, age 18-80 y, CC BY 4.0)');
   await expect(panel).toContainText('Population data: AHEAD, version 347cf6fb6135.');
-  await expect(panel).toContainText('The AHEAD reference was chosen because it was selected manually.');
+  await expect(panel).toContainText('The AHEAD reference was chosen because it was selected manually and SynthSeg ran in fast mode.');
   await expect(panel.locator('figure')).toHaveCount(10);
   expect(requests()).toMatchObject({ 'ixi-fast': 1, 'ahead-fast': 1 });
 

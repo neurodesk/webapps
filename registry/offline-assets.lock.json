@@ -1103,6 +1103,22 @@
       "license": "CC-BY-4.0",
       "dependencies": []
     },
+    "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_normal.json": {
+      "sha256": "78fb642e811a733276468819273c9612d210770bf388cb69e21e7e07a907f7ff",
+      "bytes": 12275,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "reference-data",
+      "license": "CC-BY-SA-3.0",
+      "dependencies": []
+    },
+    "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_7t_normal.json": {
+      "sha256": "4c6745ec015503275cabf126093536611936a1a7bcdf7301190738e16d35c975",
+      "bytes": 12296,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "reference-data",
+      "license": "CC-BY-4.0",
+      "dependencies": []
+    },
     "https://raw.githubusercontent.com/neurolabusc/py_synthsr/04ab5548f4609c2b44ca51b3f4bc319b585dafa7/FLAIR.nii.gz": {
       "sha256": "87edd267540bcdb9734e4a42458c82c2aa8582c61ef6518a792bfdc1e89b5386",
       "bytes": 2547127,
@@ -3632,7 +3648,9 @@
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/models/synthseg-2.0.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
       "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms.json",
-      "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms_7t.json"
+      "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms_7t.json",
+      "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_normal.json",
+      "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_7t_normal.json"
     ],
     "syncro": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx",
