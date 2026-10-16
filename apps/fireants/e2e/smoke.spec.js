@@ -36,7 +36,7 @@ async function recordRegistrationRequests(page) {
 }
 
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {

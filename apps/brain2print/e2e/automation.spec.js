@@ -74,8 +74,8 @@ function expectPrintableBrain(files, input) {
 
 test('automation can cancel the real segmentation worker while its runtime is loading', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.route('**/brainchop/**', () => {});
-  const runtime = page.waitForRequest(/brainchop\//);
+  await page.context().route('**/brainchop/**', () => {});
+  const runtime = page.context().waitForEvent('request', request => /brainchop\//.test(request.url()));
   await start(page, small);
   await runtime;
   await dispatch(page, 'cancel');

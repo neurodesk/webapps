@@ -340,7 +340,6 @@ function loadNorms(id) {
   if (!normsLoads.has(id)) {
     const pin = manifest.norms[id];
     const load = fetchModel({ url: pin.url, integrity: { bytes: pin.bytes, sha256: pin.sha256 } }, {
-      cache: 'neurodesk-synthseg-norms-v1',
       requestFailureMessage: 'Could not download the reference volumes.',
     }).then((bytes) => parseNorms(JSON.parse(new TextDecoder().decode(bytes))));
     load.catch(() => normsLoads.delete(id));

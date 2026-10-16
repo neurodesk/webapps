@@ -46,7 +46,7 @@ export async function verifyMobileMeasurement(page, origin) {
     '0/.zarray': array,
     '0/.zattrs': {},
   };
-  await page.route('**/mobile-fixture/**', route => {
+  await page.context().route('**/mobile-fixture/**', route => {
     const path = new URL(route.request().url()).pathname.split('/mobile-fixture/')[1];
     if (path === '.zmetadata') return route.fulfill({ json: { zarr_consolidated_format: 1, metadata } });
     if (path in metadata) return route.fulfill({ json: metadata[path] });

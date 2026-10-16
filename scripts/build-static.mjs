@@ -12,6 +12,7 @@ import { writeCoiServiceWorker } from "./lib/runtime-support.mjs";
 import { headersFile } from "./lib/vite-app-config.mjs";
 import { publishAppContract } from './lib/app-automation.mjs';
 import { stageOperationParameters } from './lib/operation-parameters-runtime.mjs';
+import { writeRuntimeCacheManifest } from './lib/runtime-cache.mjs';
 
 // pnpm preserves the outer shell's INIT_CWD for `pnpm --filter app build`,
 // while the lifecycle process cwd is always the package being built.
@@ -68,3 +69,5 @@ await cp(join(appDir, '../../packages/components/src'), join(dist, 'vendor/webap
 await stageOperationParameters({ repoRoot: join(appDir, '..', '..'), componentsSrc: join(dist, 'vendor/webapp-components/src') });
 await publishAppContract({ app: { id: basename(appDir) }, version: manifest.version, distDir: dist });
 await publishAppContract({ app: { id: basename(appDir) }, version: manifest.version, distDir: join(dist, 'vendor') });
+
+await writeRuntimeCacheManifest({ distDir: dist });

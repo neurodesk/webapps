@@ -6,37 +6,12 @@ import { loadLcmodel } from "@neurodesk/lcmodel";
 import { lcmodelError } from "@neurodesk/lcmodel/lcmodel-io";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 
-const CACHE = "neurodesk-lcmodel-basis-v1";
 let module = null;
 let reportProgress = () => {};
 
 async function lcmodel() {
   module ??= loadLcmodel(fetch(wasmUrl), { onProgress: (text, fraction) => reportProgress(text, fraction) });
   return module;
-}
-
-async function cacheStore() {
-  let storage;
-  try {
-    storage = await caches.open(CACHE);
-  } catch {
-    return null;
-  }
-  return {
-    async get(key) {
-      return (await storage.match(key))?.arrayBuffer();
-    },
-    async set(key, bytes) {
-      try {
-        await storage.put(key, new Response(bytes));
-      } catch {
-        /* quota */
-      }
-    },
-    async delete(key) {
-      await storage.delete(key);
-    },
-  };
 }
 
 async function gunzipText(bytes) {
@@ -47,7 +22,6 @@ async function gunzipText(bytes) {
 /** A library basis set: download (checksummed, cached), inflate to text. */
 async function basisText({ url, bytes, sha256, label }) {
   const data = await fetchModel({ url, integrity: { bytes, sha256 } }, {
-    cache: await cacheStore(),
     onProgress: ({ fraction }) => reportProgress(`Downloading the ${label} basis set`, 0.05 + 0.25 * (fraction ?? 0)),
   });
   return gunzipText(data);

@@ -8,7 +8,9 @@
       {
         "role": "image",
         "name": "FLAIR.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/synthsr/flair/FLAIR.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/synthsr/flair/FLAIR.nii.gz",
+        "sha256": "87edd267540bcdb9734e4a42458c82c2aa8582c61ef6518a792bfdc1e89b5386",
+        "bytes": 2547127
       }
     ]
   },
@@ -21,7 +23,9 @@
       {
         "role": "image",
         "name": "T1_head.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
+        "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+        "bytes": 5176902
       }
     ]
   },
@@ -34,7 +38,9 @@
       {
         "role": "image",
         "name": "chris_t2.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
+        "sha256": "8b763fcadd7a9ae677d4c5cab86b32831c03cddf146504291e7a5082fd9feee1",
+        "bytes": 4294255
       }
     ]
   },
@@ -47,7 +53,9 @@
       {
         "role": "image",
         "name": "CT_Philips.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/CT_Philips.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/CT_Philips.nii.gz",
+        "sha256": "6b6ebf958bfe2972f27c3f8dc06bd3763eb7646186bd2e5251f37f9aa7a16971",
+        "bytes": 7816605
       }
     ]
   }

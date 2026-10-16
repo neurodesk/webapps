@@ -1,7 +1,7 @@
 // The host's proxy is available to Node fetch, but Chromium does not inherit it.
 export async function proxyAssets(page) {
   if (!process.env.NEURODESK_TEST_PROXY_FETCH) return;
-  await page.route("https://huggingface.co/**", async route => {
+  await page.context().route("https://huggingface.co/**", async route => {
     const response = await fetch(route.request().url());
     await route.fulfill({
       status: response.status,

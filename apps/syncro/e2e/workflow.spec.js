@@ -2,7 +2,7 @@ import { verifyStandaloneDialog } from '../../../test-utils/standalone-dialog.mj
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {unzipSync} from 'fflate';
-test.beforeEach(async({page})=>{await page.route('**/MNI152_T1_1mm_brain.nii.gz',async route=>route.fulfill({body:await readFile(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz',import.meta.url))}));});
+test.beforeEach(async({page})=>{await page.context().route('**/MNI152_T1_1mm_brain.nii.gz',async route=>route.fulfill({body:await readFile(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz',import.meta.url))}));});
 function scan(name,translation=0,value=20){
  const buffer=Buffer.alloc(352+4096);
  buffer.writeInt32LE(348,0);
@@ -34,7 +34,7 @@ test('built runtime asset URLs return executable modules and WebAssembly',async(
  }
 });
 test('geometry error keeps the explicit lesion input available before inference',async({page})=>{
- const modelRequests=[];page.on('request',r=>{if(r.url().includes('.onnx'))modelRequests.push(r.url());});
+ const modelRequests=[];page.context().on('request',r=>{if(r.url().includes('.onnx'))modelRequests.push(r.url());});
  await page.goto('./');
  expect(await page.evaluate(()=>crossOriginIsolated)).toBe(true);
  await page.locator('#input').setInputFiles(scan('anatomical.nii'));
@@ -61,7 +61,7 @@ test('cancellation restores input controls and invalid input cannot reuse an old
  await expect(page.locator('#synthsrBackend')).toHaveValue('webgpu');
  await expect(page.locator('#brainExtractor')).toHaveValue('mindgrab');
  await expect(page.locator('#normalization')).toHaveValue('greedy');
- await page.route('**/MNI152_T1_1mm_brain.nii.gz',()=>{});
+ await page.context().route('**/MNI152_T1_1mm_brain.nii.gz',()=>{});
  await page.locator('#runButton').click();
  await expect(page.locator('#synthsrBackend')).toBeDisabled();
  await expect(page.locator('#brainExtractor')).toBeDisabled();
@@ -86,7 +86,7 @@ test('cancellation restores input controls and invalid input cannot reuse an old
 });
 
 test('failed tutorial loading returns the selector to its neutral action',async({page})=>{
- await page.route('https://huggingface.co/datasets/neurodeskorg/webapps/**',route=>route.abort());
+ await page.context().route('https://huggingface.co/datasets/neurodeskorg/webapps/**',route=>route.abort());
  await page.goto('./');
  await page.locator('#tutorial').selectOption('trace-only');
  await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state','error');

@@ -118,7 +118,7 @@ try {
 
   const themeContext = await browser.newContext();
   const themePage = await themeContext.newPage();
-  await themePage.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
+  await themePage.context().route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
     (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
   await themePage.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
   const themeToggle = themePage.locator('[data-neurodesk-theme-toggle]');
@@ -150,7 +150,7 @@ try {
   await themeContext.close();
 
   const landing = await browser.newPage();
-  await landing.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
+  await landing.context().route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
     (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
   await landing.goto(`${origin}/`, { waitUntil: 'domcontentloaded' });
   const cards = await landing.locator('a.app-card').count();
@@ -217,7 +217,7 @@ try {
 
   for (const app of appsUnderTest) {
     const page = await browser.newPage();
-    await page.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
+    await page.context().route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
       (route) => route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }));
     const pageErrors = [];
     const responseErrors = [];

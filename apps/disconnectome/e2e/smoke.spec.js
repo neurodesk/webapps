@@ -122,11 +122,11 @@ test('example download failure can be retried', async ({ page }) => {
   await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60_000 });
   const examples = page.locator('[data-neurodesk-examples]');
   const selector = page.locator('select[data-neurodesk-example]');
-  await page.route('**/disconnectome/examples/**', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.context().route('**/disconnectome/examples/**', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
   await selector.selectOption('wm2017');
   await expect(examples).toHaveAttribute('data-example-state', 'error');
   await expect(page.locator('#runButton')).toBeDisabled();
-  await page.unroute('**/disconnectome/examples/**');
+  await page.context().unroute('**/disconnectome/examples/**');
   await selector.selectOption('wm2017');
   await expect(examples).toHaveAttribute('data-example-state', 'ready', { timeout: 120_000 });
   await expect(page.locator('#runButton')).toBeEnabled();

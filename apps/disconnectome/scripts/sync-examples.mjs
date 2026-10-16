@@ -25,7 +25,7 @@ const lesions = {
 const asset = (filename) => {
   const entry = manifest.examples.find((item) => item.filename === filename);
   if (!entry) throw new Error(`Not in the manifest: ${filename}`);
-  return { url: manifest.base_url + filename, sha256: entry.sha256 };
+  return { url: manifest.base_url + filename, sha256: entry.sha256, bytes: entry.bytes };
 };
 
 const examples = Object.entries(lesions).map(([subject, { modality, geometry }]) => {

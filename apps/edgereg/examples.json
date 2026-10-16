@@ -8,12 +8,16 @@
       {
         "role": "moving",
         "name": "t1_crop.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/t1_crop.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/t1_crop.nii.gz",
+        "sha256": "534a240d1d41881bd33ae5b48ac22051836968775275f1261c4115dca0099649",
+        "bytes": 4183263
       },
       {
         "role": "stationary",
         "name": "MNI152_T1_1mm.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/MNI152_T1_1mm.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/templates/MNI152_T1_1mm.nii.gz",
+        "sha256": "d1f03e160c2548592a01d98d44d7e0ffa8a8ef58bc9b07d26369e214ba170edb",
+        "bytes": 10963667
       }
     ]
   }

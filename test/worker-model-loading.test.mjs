@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { inferenceWorker } from '../test-utils/inference-worker-harness.mjs';
+import { inferenceWorker as createInferenceWorker } from '../test-utils/inference-worker-harness.mjs';
+
+const inferenceWorker = (app, globals) => createInferenceWorker(app, {
+  URL,
+  location: { origin: 'https://apps.example.org' },
+  ...globals,
+});
 
 const bytes = new Uint8Array([1, 2, 3]);
 const hash = '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81';
@@ -41,7 +47,9 @@ for (const app of ['synthsr', 'synthseg']) {
     assert.deepEqual(new Uint8Array(worker.context.loadedModel.bytes), bytes);
     assert.equal(worker.context.loadedModel.hash, hash);
     assert.equal(worker.messages.at(-1).type, 'result');
-    assert.deepEqual(calls, [`neurodesk-${app}-v1`, model.url, model.url]);
+    assert.deepEqual(calls, ['neurodesk-verified-assets-v1',
+      `https://apps.example.org/__neurodesk_cache__/sha256/${hash}`,
+      `https://apps.example.org/__neurodesk_cache__/sha256/${hash}`]);
     const progress = worker.messages.find(message => message.type === 'progress');
     assert.equal(progress.value, 0.25);
     assert.match(progress.message, /Loading model · .* MB/);

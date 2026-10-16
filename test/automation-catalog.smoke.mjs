@@ -16,7 +16,7 @@ try {
   for (const app of (await loadAppsRegistry()).apps) {
     const page = await browser.newPage();
     try {
-      await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.abort());
+      await page.context().route(/googletagmanager\.com|google-analytics\.com/, route => route.abort());
       await page.goto(`${origin}/${app.path}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForFunction(() => Boolean(globalThis.neurodeskAutomation), null, { timeout: 60000 });
       const actual = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('describe'));

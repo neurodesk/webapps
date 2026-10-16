@@ -15,8 +15,8 @@ try {
     const context = await browser.newContext();
     try {
       const page = await context.newPage();
-      await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
-      if (app.id === 'browserqc') await page.route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
+      await page.context().route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+      if (app.id === 'browserqc') await page.context().route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
       const response = await page.goto(new URL(`${app.path}/`, base).href, { waitUntil: 'domcontentloaded' });
       assert.ok(response?.ok(), `${app.id} page must load`);
       const bar = page.locator('.nd-app-bar:visible').first();
@@ -32,11 +32,11 @@ try {
       let stylesheetRequest;
       if (app.id === 'calmar') {
         const stylesReady = new Promise(resolve => { releaseStyles = resolve; });
-        await page.route('**/shell-adapters/components/styles/imaging-workspace.css', async route => {
+        await page.context().route('**/shell-adapters/components/styles/imaging-workspace.css', async route => {
           await stylesReady;
           await route.continue();
         });
-        stylesheetRequest = page.waitForRequest('**/shell-adapters/components/styles/imaging-workspace.css');
+        stylesheetRequest = page.context().waitForEvent('request', request => request.url().endsWith('/shell-adapters/components/styles/imaging-workspace.css'));
       }
       await bar.getByRole('button', { name: 'Standalone', exact: true }).click();
       const dialog = page.locator('#neurodeskStandaloneDialog');

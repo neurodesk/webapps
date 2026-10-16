@@ -3,6 +3,7 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { isUrlWithinServiceWorkerScope } from './runtime-support.mjs';
 import { stageOperationParameters } from './operation-parameters-runtime.mjs';
+import { writeCompositeRuntimeCacheManifests } from './runtime-cache.mjs';
 
 const TEXT_EXTENSIONS = new Set(['.html', '.js', '.mjs']);
 
@@ -195,4 +196,5 @@ export async function assembleRuntimeAssetStore({ repoRoot, siteDist, registry }
   }
   await deduplicateSources({ manifest, files, siteDist, registry });
   await removeAppCopies(siteDist, registry);
+  await writeCompositeRuntimeCacheManifests({ siteDist, registry });
 }

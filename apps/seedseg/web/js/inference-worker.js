@@ -31,7 +31,6 @@ installWorkerRouter({
           const url = `${settings.modelBaseUrl}/${asset.filename}`;
           const bytes = await fetchModel({ url, urls: [url, url], cacheKey: asset.url,
             integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, {
-            cache: 'SeedSegVerifiedModels',
             onInvalidCache: error => messages.log(`Discarding cached model: ${error.message}`),
             onCacheError: error => messages.log(`Model cache unavailable: ${error.message}`),
             onProgress: ({ fraction }) => {

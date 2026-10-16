@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
 - Updated dependencies [7443048]
   - @neurodesk/webapp-components@0.14.1
 

@@ -396,3 +396,49 @@ test('a replaced file field takes over the menu and loses its box', () => {
   assert.equal(control.select.querySelectorAll('option[data-action="files"]').length, 1, 'actions are not duplicated');
   control.destroy();
 });
+
+test('pinned examples share verified cached files across controls and keep loading events offline', async t => {
+  const previousFetch = globalThis.fetch;
+  const previousCaches = globalThis.caches;
+  const previousLocation = globalThis.location;
+  t.after(() => {
+    globalThis.fetch = previousFetch;
+    globalThis.caches = previousCaches;
+    globalThis.location = previousLocation;
+  });
+  const cache = new Map();
+  globalThis.location = new URL('https://apps.example.org/first-app/');
+  globalThis.caches = { async open() { return {
+    async match(key) { return cache.has(key) ? new Response(cache.get(key)) : undefined; },
+    async put(key, response) { cache.set(key, await response.arrayBuffer()); },
+    async delete(key) { cache.delete(key); },
+  }; } };
+  const scan = new Uint8Array([1, 2, 3]);
+  let downloads = 0;
+  globalThis.fetch = async () => { downloads++; return new Response(scan); };
+  const states = [];
+  const imported = [];
+  const pinned = [{ ...examples[0], files: [{ ...examples[0].files[0], bytes: 3,
+    sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81' }] }];
+  for (let index = 0; index < 2; index++) {
+    const { control, choose } = setup(async (_example, { fetchFiles }) => {
+      const files = await fetchFiles();
+      imported.push([files[0].name, files[0].size]);
+    });
+    control.examples = index === 0 ? pinned : [{ ...pinned[0], files: [{ ...pinned[0].files[0], url: 'https://mirror.example.org/brain.nii' }] }];
+    const ready = new Promise((resolve, reject) => control.addEventListener('nd-example-status', event => {
+      states.push(event.detail.state);
+      if (event.detail.state === 'ready') resolve();
+      if (event.detail.state === 'error') reject(Error(event.detail.message));
+    }));
+    choose();
+    await ready;
+    control.destroy();
+    globalThis.fetch = async () => { throw Error('offline'); };
+    globalThis.location = new URL('https://apps.example.org/another-app/');
+  }
+  assert.equal(downloads, 1);
+  assert.equal(cache.size, 1);
+  assert.deepEqual(imported, [['brain.nii', 3], ['brain.nii', 3]]);
+  assert.deepEqual(states, ['loading', 'ready', 'loading', 'ready']);
+});

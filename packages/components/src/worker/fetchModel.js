@@ -1,14 +1,19 @@
 /**
  * Returns model bytes as an ArrayBuffer after integrity verification.
- * options.cache accepts null, a Cache Storage name, or a get/set adapter with optional delete.
- * Named cache opening is optional. Cache writes publish only verified bytes.
+ * SHA-256-pinned assets use a shared, content-addressed Cache Storage by default.
+ * options.cache accepts null to opt out, a Cache Storage name, or a get/set adapter with optional delete.
+ * Cache Storage opening and writes are optional. Cache writes publish only verified bytes.
  * options.requestFailureMessage replaces the error message after all request URLs fail,
  * retaining the last error as cause. AbortError and errors reading or verifying bytes are unchanged.
  */
+export const VERIFIED_ASSET_CACHE = 'neurodesk-verified-assets-v1';
+
+const persistenceRequested = Symbol.for('neurodesk.storage.persistenceRequested');
+
 export async function fetchModel(asset, options = {}) {
   const {
     fetch: fetchImpl = globalThis.fetch,
-    cache = null,
+    cache,
     signal,
     onProgress = () => {},
   } = options;
@@ -16,22 +21,58 @@ export async function fetchModel(asset, options = {}) {
   if (!normalized?.url) throw new Error('fetchModel requires an asset URL');
   if (typeof fetchImpl !== 'function') throw new Error('fetchModel requires fetch');
 
-  const cacheKey = normalized.cacheKey || normalized.url;
-  const namedCache = typeof cache === 'string';
-  const storage = namedCache ? await openCache(cache) : cache;
-  const cached = storage ? await (namedCache ? storage.match(cacheKey) : storage.get(cacheKey)) : null;
+  signal?.throwIfAborted();
+  const origin = globalThis.location?.origin;
+  const sharedCache = cache === undefined && /^[a-f0-9]{64}$/i.test(normalized.integrity?.sha256 || '')
+    && /^https?:\/\//.test(origin || '');
+  const cacheKey = sharedCache
+    ? new URL(`/__neurodesk_cache__/sha256/${normalized.integrity.sha256.toLowerCase()}`, origin).href
+    : normalized.cacheKey || normalized.url;
+  const namedCache = sharedCache || typeof cache === 'string';
+  const reportCacheError = error => {
+    if (options.onCacheError) options.onCacheError(error);
+    else console.warn('Could not persist verified asset:', error);
+  };
+  const storage = namedCache ? await openCache(sharedCache ? VERIFIED_ASSET_CACHE : cache, reportCacheError) : cache;
+  let cached;
+  try {
+    cached = storage ? await (namedCache ? storage.match(cacheKey) : storage.get(cacheKey)) : null;
+  } catch (error) {
+    if (!sharedCache) throw error;
+    reportCacheError(error);
+  }
+  signal?.throwIfAborted();
   if (cached) {
+    let bytes;
+    let invalidCacheError;
     try {
-      const bytes = namedCache
-        ? await readResponse(cached, normalized.integrity, onProgress)
+      bytes = namedCache
+        ? await readResponse(cached, normalized.integrity, onProgress, signal)
         : toArrayBuffer(cached);
-      await verifyModel(bytes, normalized.integrity);
-      return bytes;
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (!(error instanceof InvalidModelBytes) && !sharedCache) throw error;
+      if (error instanceof InvalidModelBytes) invalidCacheError = error;
+      else reportCacheError(error);
+    }
+    try {
+      if (bytes) await verifyModel(bytes, normalized.integrity);
+      signal?.throwIfAborted();
+      if (bytes) {
+        if (sharedCache) requestPersistence(reportCacheError);
+        return bytes;
+      }
     } catch (error) {
       if (!(error instanceof InvalidModelBytes)) throw error;
-      await storage.delete?.(cacheKey);
-      options.onInvalidCache?.(error);
+      invalidCacheError = error;
     }
+    try {
+      await storage.delete?.(cacheKey);
+    } catch (error) {
+      if (!sharedCache) throw error;
+      reportCacheError(error);
+    }
+    if (invalidCacheError) options.onInvalidCache?.(invalidCacheError);
   }
 
   const urls = normalized.urls || [normalized.url];
@@ -39,6 +80,7 @@ export async function fetchModel(asset, options = {}) {
   let selectedUrl;
   let lastError;
   for (const url of urls) {
+    signal?.throwIfAborted();
     try {
       const candidate = await fetchImpl(url, { signal, cache: options.requestCache });
       if (!candidate.ok || candidate.headers?.get?.('content-type')?.toLowerCase().includes('text/html')) {
@@ -51,6 +93,8 @@ export async function fetchModel(asset, options = {}) {
       selectedUrl = url;
       break;
     } catch (error) {
+      signal?.throwIfAborted();
+      if (error.name === 'AbortError') throw error;
       lastError = error;
     }
   }
@@ -61,9 +105,10 @@ export async function fetchModel(asset, options = {}) {
     }
     throw error;
   }
-  const bytes = await readResponse(response, normalized.integrity, onProgress);
+  const bytes = await readResponse(response, normalized.integrity, onProgress, signal);
 
   await verifyModel(bytes, normalized.integrity);
+  signal?.throwIfAborted();
   if (storage) {
     try {
       if (namedCache) {
@@ -74,9 +119,11 @@ export async function fetchModel(asset, options = {}) {
         await storage.set(cacheKey, bytes.slice(0));
       }
     } catch (error) {
-      options.onCacheError?.(error);
+      reportCacheError(error);
     }
   }
+  if (sharedCache && storage) requestPersistence(reportCacheError);
+  signal?.throwIfAborted();
   options.onDownloaded?.({ url: selectedUrl, bytes: bytes.byteLength });
   return bytes;
 }
@@ -104,16 +151,29 @@ function toArrayBuffer(value) {
 
 class InvalidModelBytes extends Error {}
 
-async function openCache(name) {
+async function openCache(name, reportError) {
   try {
     return await globalThis.caches?.open(name) || null;
-  } catch {
+  } catch (error) {
+    reportError(error);
     return null;
   }
 }
 
-async function readResponse(response, integrity = {}, onProgress) {
-  if (!response.body?.getReader) return response.arrayBuffer();
+function requestPersistence(reportError) {
+  const storage = globalThis.navigator?.storage;
+  if (globalThis.window !== globalThis || !storage?.persist || globalThis[persistenceRequested]) return;
+  globalThis[persistenceRequested] = true;
+  Promise.resolve().then(() => storage.persist()).catch(reportError);
+}
+
+async function readResponse(response, integrity = {}, onProgress, signal) {
+  signal?.throwIfAborted();
+  if (!response.body?.getReader) {
+    const bytes = await response.arrayBuffer();
+    signal?.throwIfAborted();
+    return bytes;
+  }
   const total = integrity.bytes || Number(response.headers?.get?.('content-length')) || 0;
   const reader = response.body.getReader();
   const chunks = [];
@@ -121,7 +181,9 @@ async function readResponse(response, integrity = {}, onProgress) {
   let lastProgress = -1;
   try {
     for (;;) {
+      signal?.throwIfAborted();
       const { done, value } = await reader.read();
+      signal?.throwIfAborted();
       if (done) break;
       received += value.byteLength;
       if (integrity.bytes && received > integrity.bytes) {

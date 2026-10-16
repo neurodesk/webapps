@@ -8,7 +8,7 @@ const examples = JSON.parse(await readFile(new URL("../examples.json", import.me
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {
@@ -21,7 +21,7 @@ function serveExamples(page, bodyFor) {
 // Pipelines are staged into the build; a request to the jsDelivr default
 // means a pipeline base URL was not set before the first call.
 test.beforeEach(async ({ page }) => {
-  page.on("request", (request) => {
+  page.context().on("request", (request) => {
     if (request.url().includes("cdn.jsdelivr.net")) throw new Error(`Pipeline fetched from a CDN: ${request.url()}`);
   });
 });
@@ -182,7 +182,7 @@ for (const failure of ["download", "empty image"]) {
     const example = examples[0];
     let attempts = 0;
     await serveExamples(page, () => fixture);
-    await page.route(example.files[0].url, (route) => {
+    await page.context().route(example.files[0].url, (route) => {
       attempts++;
       return attempts === 1
         ? route.fulfill({ status: failure === "download" ? 503 : 200, body: "" })
@@ -206,7 +206,7 @@ test("cancelling an example download leaves no image and permits retry", async (
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   await serveExamples(page, () => fixture);
-  await page.route(example.files[0].url, async (route) => {
+  await page.context().route(example.files[0].url, async (route) => {
     await held;
     await route.fulfill({ body: fixture, headers: { "access-control-allow-origin": "*" } });
   });

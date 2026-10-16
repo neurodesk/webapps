@@ -8,7 +8,7 @@ test.use({ isMobile: true, hasTouch: true });
 for (const width of [320, 390]) {
   test(`populated reference and test-data actions remain separate at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 844 });
-    await page.route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
+    await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
     const folders = [];
     for (const series of [42, 43]) {
       const folder = testInfo.outputPath(`series-${series}`);

@@ -8,7 +8,9 @@
       {
         "role": "image",
         "name": "MSLesSeg_P57_T1_FLAIR.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d16b3a04f7b7799420bbcd4ab3c7890b11d7f700/white-matter-lesions/examples/MSLesSeg_P57_T1_FLAIR.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d16b3a04f7b7799420bbcd4ab3c7890b11d7f700/white-matter-lesions/examples/MSLesSeg_P57_T1_FLAIR.nii.gz",
+        "sha256": "179472456b8591364c0a1d4912d95c69e2b5743c87a9397aa9409fb58436f70c",
+        "bytes": 1827303
       }
     ]
   }

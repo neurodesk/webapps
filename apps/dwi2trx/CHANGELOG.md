@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
+  - @neurodesk/dwi2trx@0.5.20261016
 - 7443048: Failures of actions started from the interface (fiber colour, display mode, FA floor,
   the vector previews and generator, loading files) now appear in the status bar and the
   technical log instead of being lost as unhandled rejections. A tensor fit or tracking

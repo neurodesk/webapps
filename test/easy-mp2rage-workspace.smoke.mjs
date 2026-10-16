@@ -36,7 +36,7 @@ try {
     });
     const errors = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route(/googletagmanager\.com|google-analytics\.com/, (route) =>
+    await page.context().route(/googletagmanager\.com|google-analytics\.com/, (route) =>
       route.fulfill({ body: "" })
     );
     await page.goto(`${site.origin}/`);
@@ -60,7 +60,7 @@ try {
       });
     if (width === 1440) {
       const url = "**/MP2RAGE_UNI.nii.gz";
-      await page.route(url, (route) =>
+      await page.context().route(url, (route) =>
         route.fulfill({ status: 503, body: "Unavailable" })
       );
       await page
@@ -71,7 +71,7 @@ try {
         "error"
       );
       await expect(page.locator("#run")).toBeDisabled();
-      await page.unroute(url);
+      await page.context().unroute(url);
     }
     await page
       .locator("[data-neurodesk-example]")

@@ -166,7 +166,7 @@ test("the Segment button runs on the CPU when the only GPU is a software rendere
 test("a delayed example never replaces a selected image", async ({ page }) => {
   let releaseExample;
   const held = new Promise(resolve => { releaseExample = resolve; });
-  await page.route("**/browserqc/t1_crop.nii.gz", async route => {
+  await page.context().route("**/browserqc/t1_crop.nii.gz", async route => {
     await held;
     await route.fulfill({ body: readFileSync(fixture), contentType: "application/gzip" }).catch(() => {});
   });
@@ -182,7 +182,7 @@ test("a delayed example never replaces a selected image", async ({ page }) => {
 });
 
 test("a failed replacement disables segmentation of the previous image", async ({ page }) => {
-  await page.route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
+  await page.context().route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
   await page.goto("/");
   await page.locator("[data-neurodesk-example]").selectOption("t1-brain");
   await expect(page.locator("#segmentButton")).toBeEnabled({ timeout: 30000 });
@@ -195,7 +195,7 @@ test("a failed replacement disables segmentation of the previous image", async (
 
 
 test("the scan picker converts DICOM and retains mesh settings", async ({ page }, testInfo) => {
-  await page.route("**/browserqc/t1_crop.nii.gz", route => route.abort());
+  await page.context().route("**/browserqc/t1_crop.nii.gz", route => route.abort());
   await page.goto("/");
   await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
   await page.setInputFiles("#imageInput", dicomSeries({ extension: "" }));

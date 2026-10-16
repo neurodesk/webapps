@@ -5,7 +5,7 @@ import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
 
 test('DICOM analysis executes the Python worker and returns real acquisition metadata', async ({ page }) => {
-  await page.route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
+  await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
   await page.goto('./');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries({ series: 31 }));
@@ -29,7 +29,7 @@ test('DICOM analysis executes the Python worker and returns real acquisition met
 
 
 test('protocol comparison uses the explicit schema acquisition and reports validation results', async ({ page }) => {
-  await page.route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
+  await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
   await page.goto('./');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await page.locator('#neurodesk-input-transfer').setInputFiles(dicomSeries({ series: 32 }));

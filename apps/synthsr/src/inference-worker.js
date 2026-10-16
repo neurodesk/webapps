@@ -29,7 +29,6 @@ async function modelBytes(model) {
     url: model.url,
     integrity: { bytes: model.bytes, sha256: model.sha256 },
   }, {
-    cache: 'neurodesk-synthsr-v1',
     requestFailureMessage: 'Could not download SynthSR weights. Check the connection or choose a local model file.',
     onProgress: ({ received, fraction }) => progress(
       0.12 + 0.13 * Math.min(1, fraction ?? 1),

@@ -44,7 +44,7 @@ async function colors(page) {
 test("a T1 opens immediately without spectroscopy and failed replacement keeps it visible", async ({ page }) => {
   await page.goto("/");
   const deferredViewerRequests = [];
-  page.on("request", (request) => {
+  page.context().on("request", (request) => {
     if (/niivue[^/]*\.js/i.test(request.url())) deferredViewerRequests.push(request.url());
   });
   await uploadAnatomy(page);

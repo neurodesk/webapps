@@ -32,7 +32,7 @@ try {
       const result = { app: app.id, width: viewport.width, exampleSource: cachedExamples ? 'checksum-verified-cache' : 'hosted-network', failures: [] };
       try {
         if (cachedExamples) {
-          await page.route(url => cachedExamples.has(url.href), route => {
+          await context.route(url => cachedExamples.has(url.href), route => {
             const asset = cachedExamples.get(route.request().url());
             return route.fulfill({
               body: asset.body,
@@ -41,7 +41,7 @@ try {
             });
           });
         }
-        await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+        await context.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
         const response = await page.goto(`${site.origin}/${app.path}/`, { waitUntil: 'domcontentloaded' });
         expect(response.status()).toBe(200);
         await expect(page.locator('.nd-app-bar:visible').first()).toBeVisible();

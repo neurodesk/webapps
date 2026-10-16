@@ -18,7 +18,7 @@ try {
   page.on('console', message => {
     if (message.type() === 'error') console.error(message.text());
   });
-  await page.route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
+  await page.context().route(/googletagmanager\.com|google-analytics\.com/, route => route.fulfill({ body: '' }));
   await page.goto(deployedUrl || `${site.origin}/`);
   await page.waitForFunction(() => crossOriginIsolated && navigator.serviceWorker.controller !== null);
   const openSection = async id => {

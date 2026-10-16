@@ -19,7 +19,7 @@ const REGRESSION_PIN_MNI_BET_MASK_SHA256 = '107a46c3a2f42f4a7796dc5a5b2a6660a302
 test('BET agrees with the FreeSurfer SynthSeg brain mask and downloads images with original geometry', async ({ page }) => {
   const reference = await loadHeadReference();
   const requests = [];
-  page.on('request', request => requests.push(request.url()));
+  page.context().on('request', request => requests.push(request.url()));
   await page.goto('./');
   await page.locator('#imageInput').setInputFiles(reference.imagePath);
   await expect(page.locator('#runButton')).toBeEnabled();
@@ -125,7 +125,7 @@ test('editing the BET mask in the viewer replaces its download', async ({ page }
 });
 
 test('examples load through the picker and BET downloads a brain mask (regression pin on the MNI152 fixture)', async ({ page }) => {
-  for (const example of examples) await page.route(example.files[0].url, route => route.fulfill({ path: fixture }));
+  for (const example of examples) await page.context().route(example.files[0].url, route => route.fulfill({ path: fixture }));
   await page.goto('./');
   const picker = page.getByLabel('Input', { exact: true });
   for (const example of examples) {
@@ -149,7 +149,7 @@ test('examples load through the picker and BET downloads a brain mask (regressio
 test('failed example download can retry the same example', async ({ page }) => {
   const example = examples[0];
   let attempts = 0;
-  await page.route(example.files[0].url, route => ++attempts === 1
+  await page.context().route(example.files[0].url, route => ++attempts === 1
     ? route.fulfill({ status: 503, body: 'Unavailable' })
     : route.fulfill({ path: fixture }));
   await page.goto('./');
@@ -167,7 +167,7 @@ test('cancelling an example aborts its request and permits the same selection ag
   const example = examples[0];
   let releaseRequest;
   let attempts = 0;
-  await page.route(example.files[0].url, async route => {
+  await page.context().route(example.files[0].url, async route => {
     if (++attempts === 1) await new Promise(resolve => { releaseRequest = resolve; });
     await route.fulfill({ path: fixture }).catch(() => {});
   });
@@ -175,7 +175,7 @@ test('cancelling an example aborts its request and permits the same selection ag
   const picker = page.getByLabel('Input', { exact: true });
   await picker.selectOption(example.id);
   await expect(picker).toBeDisabled();
-  const failed = page.waitForEvent('requestfailed', request => request.url() === example.files[0].url);
+  const failed = page.context().waitForEvent('requestfailed', request => request.url() === example.files[0].url);
   await page.getByRole('button', { name: 'Cancel example download' }).click();
   await failed;
   await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'cancelled');
@@ -191,7 +191,7 @@ test('cancel terminates a waiting method load and a fresh BET run succeeds', asy
   await page.goto('./');
   await page.locator('#imageInput').setInputFiles(fixture);
   await expect(page.locator('#runButton')).toBeEnabled();
-  await page.route('**/*synthstrip*.js', route => new Promise(resolve => setTimeout(resolve, 1500)).then(() => route.continue().catch(() => {})));
+  await page.context().route('**/*synthstrip*.js', route => new Promise(resolve => setTimeout(resolve, 1500)).then(() => route.continue().catch(() => {})));
   await page.locator('#method').selectOption('synthstrip');
   await page.locator('#runButton').click();
   await page.locator('#cancelButton').click();

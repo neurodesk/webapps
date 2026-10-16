@@ -8,14 +8,14 @@ test('cancelling DICOM import retains the prior scan and allows another upload',
   await expect(page.locator('#processButton')).toBeEnabled();
   let intercepted;
   const request = new Promise(resolve => { intercepted = resolve; });
-  await page.route('**/*dcm2niix*.wasm', route => { intercepted(route); });
+  await page.context().route('**/*dcm2niix*.wasm', route => { intercepted(route); });
   await input.setInputFiles(dicomSeries());
   const held = await request;
   await page.locator('#cancelBtn').click();
   await held.abort();
   await expect(page.locator('#fileInfo')).toContainText('validation.nii.gz');
   await expect(page.locator('#processButton')).toBeEnabled();
-  await page.unroute('**/*dcm2niix*.wasm');
+  await page.context().unroute('**/*dcm2niix*.wasm');
   await input.setInputFiles(dicomSeries());
   await expect(page.locator('#fileInfo')).toContainText('16 × 16 × 4', { timeout: 60000 });
 });
@@ -76,7 +76,7 @@ test('shared examples load through the image workflow and preserve input on fail
   await expect(page.locator('#exampleBtn')).toHaveCount(0);
   for (const id of ['t1-head', 'brain-ct']) {
     const example = examples.find(example => example.id === id);
-    await page.route(example.files[0].url, route => route.fulfill({ path: fixture, contentType: 'application/octet-stream' }));
+    await page.context().route(example.files[0].url, route => route.fulfill({ path: fixture, contentType: 'application/octet-stream' }));
     await page.locator('#exampleSelect').selectOption(id);
     await expect(page.locator('#fileInfo')).toContainText(example.files[0].name);
     await expect(page.locator('#processButton')).toBeEnabled();
@@ -88,7 +88,7 @@ test('shared examples load through the image workflow and preserve input on fail
   await page.locator('#synthesisSection > summary').click();
   await expect(page.locator('#exampleSelect')).toHaveValue('');
   const failedExample = examples.find(example => example.id === 't2-head');
-  await page.route(failedExample.files[0].url, route => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.context().route(failedExample.files[0].url, route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.locator('#exampleSelect').selectOption('t2-head');
   await expect(page.locator('#statusText')).toContainText('Could not download');
   await expect(page.locator('#exampleSelect')).toHaveValue('');

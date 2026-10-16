@@ -72,9 +72,9 @@ try {
     // This suite measures layout, not inference. Avoid blocking Chromium's
     // renderer on BrowserQC's automatic full sample segmentation.
     if (app.id === 'browserqc') {
-      await page.route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
+      await context.route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
     }
-    await page.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
+    await context.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
       route => route.fulfill({ status: 200, body: '' }));
     try {
       const response = await page.goto(`${origin}/${app.path}${app.path ? '/' : ''}`, { waitUntil: 'domcontentloaded' });

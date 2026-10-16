@@ -2,6 +2,7 @@
 // cross-origin isolation, worker loading, and app boot. Runs against `vite preview`
 // (see playwright.config.js) so it exercises the built, header-served output.
 import { test, expect } from "@playwright/test";
+import { readFile } from 'node:fs/promises';
 import { decodeCompactShareState } from "../src/compact_share_state.ts";
 
 async function openTools(page) {
@@ -11,7 +12,7 @@ async function openTools(page) {
 }
 
 test('slice crosshairs have only one renderer after panning and layout changes', async ({ page }, testInfo) => {
-  await page.route('**/crosshair-fixture/**', async route => {
+  await page.context().route('**/crosshair-fixture/**', async route => {
     const path = new URL(route.request().url()).pathname;
     const metadata = path.endsWith('/.zgroup')
       ? { zarr_format: 2 }
@@ -102,7 +103,7 @@ async function readDownload(download) {
   return Buffer.concat(chunks);
 }
 
-test('hosted cell microscopy example streams and exports image values', async ({ page }) => {
+test('hosted cell microscopy example persists across reload and exports image values', async ({ page }) => {
   test.setTimeout(180_000);
   await page.goto('./');
   await page.locator('[data-neurodesk-example]').selectOption('microscopy-stack');
@@ -119,12 +120,29 @@ test('hosted cell microscopy example streams and exports image values', async ({
   const values = new Uint16Array(bytes.buffer, bytes.byteOffset + header.voxelOffset, (bytes.byteLength - header.voxelOffset) / 2);
   expect(values.some(value => value > 0)).toBe(true);
   expect(values.some(value => value !== values[0])).toBe(true);
+  const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
+  const declaredUrls = new Set(examples.flatMap(example => example.files.map(file => file.url)));
+  const repeatedRequests = [];
+  const declaredAsset = url => declaredUrls.has(url.href);
+  const blockDeclaredAsset = async route => {
+    repeatedRequests.push(route.request().url());
+    return route.abort('internetdisconnected');
+  };
+  await page.context().route(declaredAsset, blockDeclaredAsset);
+  try {
+    await page.reload();
+    await page.locator('[data-neurodesk-example]').selectOption('microscopy-stack');
+    await expect(page.locator('[data-neurodesk-examples]')).toHaveAttribute('data-example-state', 'ready', { timeout: 120_000 });
+    expect(repeatedRequests).toEqual([]);
+  } finally {
+    await page.context().unroute(declaredAsset, blockDeclaredAsset);
+  }
 });
 
 test('a rate-limited example host is retried instead of failing the example', async ({ page }) => {
   test.setTimeout(180_000);
   let limited = 0;
-  await page.route('**/examples/zarro/microscopy-stack/**', async (route) => {
+  await page.context().route('**/examples/zarro/microscopy-stack/**', async (route) => {
     if (limited < 3) {
       limited++;
       return route.fulfill({ status: 429, headers: { 'Retry-After': '1' }, body: 'Too Many Requests' });
@@ -352,7 +370,7 @@ test("large NIfTI export reports progress and can be cancelled", async ({ page }
       ],
     }],
   };
-  await page.route("**/large-export/**", async (route) => {
+  await page.context().route("**/large-export/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/.zmetadata")) {
       await route.fulfill({ status: 404, body: "not consolidated" });
@@ -480,7 +498,7 @@ test("translated OME-Zarr URLs load as one composite volume", async ({ page }) =
   let gatedLodLevel = 1;
   let gatedDapiLodRequests = 0;
   const group = JSON.stringify({ zarr_format: 2 });
-  await page.route("**/test-mosaic/**", async (route) => {
+  await page.context().route("**/test-mosaic/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const isDapi = path.includes("/dapi/");
@@ -1270,7 +1288,7 @@ test("DANDI assets are grouped by stain and selectable as a chunk set", async ({
     "bcb68179-4c76-422d-b292-7e2a214b27ad",
   ];
   let requestedGlob = "";
-  await page.route("https://api.dandiarchive.org/api/dandisets/000108/versions/draft/assets/**", async (route) => {
+  await page.context().route("https://api.dandiarchive.org/api/dandisets/000108/versions/draft/assets/**", async (route) => {
     requestedGlob = new URL(route.request().url()).searchParams.get("glob") ?? "";
     await route.fulfill({
       contentType: "application/json",
@@ -1351,7 +1369,7 @@ test("generic uint16 share contrast is replaced from streamed signal", async ({ 
   for (let index = 64; index < 32 * 32 * 32; index++) {
     values.writeUInt16LE(500 + ((index * 37) % 6001), index * 2);
   }
-  await page.route("**/test-auto-window/**", async (route) => {
+  await page.context().route("**/test-auto-window/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/.zgroup")) {
       await route.fulfill({ contentType: "application/json", body: group });
@@ -1722,7 +1740,7 @@ test("zoom control represents OME-Zarr levels directly", async ({ page }) => {
     [1, 1, 64, 64, 411],
     [1, 1, 32, 32, 206],
   ];
-  await page.route("**/test-pyramid/**", async (route) => {
+  await page.context().route("**/test-pyramid/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/.zgroup")) {
       await route.fulfill({

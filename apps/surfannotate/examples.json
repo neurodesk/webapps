@@ -8,7 +8,9 @@
       {
         "role": "surface",
         "name": "lh.pial",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1c3a4b2c508b01171540e3870272d39f66b04004/topofit/0.5.1/onnx-20260911/validation/browser/end-to-end/lh.pial"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/1c3a4b2c508b01171540e3870272d39f66b04004/topofit/0.5.1/onnx-20260911/validation/browser/end-to-end/lh.pial",
+        "sha256": "068982cfa4533bb5ca228c7743b0fa93da1b055df6391444f8505d426b39be96",
+        "bytes": 8847582
       }
     ]
   }

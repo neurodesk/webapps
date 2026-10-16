@@ -46,6 +46,38 @@ The package provides the shared workspace, worker protocol, executor, viewer,
 volume operations, NIfTI I/O, and UI bindings. Scientific task definitions and
 model defaults remain app-owned.
 
+## Verified downloads
+
+`fetchModel` from `@neurodesk/webapp-components/worker` downloads model and example bytes,
+checks their declared size and SHA-256, and reuses verified downloads across apps on the
+same origin. `nd-example-selector` uses the same downloader and keeps HTTP 429 retries.
+
+```js
+const bytes = await fetchModel({
+  url: model.url,
+  integrity: { bytes: model.bytes, sha256: model.sha256 },
+}, { signal, onProgress });
+```
+
+When `cache` is omitted, assets with a 64-character SHA-256 pin use Cache Storage
+`neurodesk-verified-assets-v1`. The key is the absolute same-origin URL
+`/__neurodesk_cache__/sha256/<lowercase sha256>`, independent of the download URL,
+app path, release version, and `asset.cacheKey`. Every cache hit is verified again.
+Invalid entries are removed and downloaded again. Failed, partial, or cancelled
+downloads are never published.
+
+Set `cache: null` to opt out. Unpinned downloads do not use the automatic cache.
+Explicit Cache Storage names and get/set adapters keep their supplied URL or
+`asset.cacheKey` identity and their existing read/delete error behavior.
+Automatic storage failures fall back to verified network downloads. Opening and
+writing explicit Cache Storage also remain optional. `onCacheError(error)` reports
+optional storage failures, or the downloader logs a warning when no hook is supplied.
+
+On a window, the downloader requests persistent browser storage once per page when
+it caches or reuses a verified asset. Workers leave that request to the page.
+Persistence is best effort. Browsers can deny the request, evict cached bytes, or
+clear them when users clear site data. Existing app caches and user data are retained.
+
 ## Development
 
 ```bash

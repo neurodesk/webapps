@@ -60,7 +60,7 @@ test('CPU segmentation can be cancelled and retried to produce native-grid label
 });
 
 test('QC failure after real segmentation fails the operation instead of publishing a partial report', async ({ page }) => {
-  await page.route('**/browserqc/avg152T1.nii.gz', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.context().route('**/browserqc/avg152T1.nii.gz', route => route.fulfill({ status: 503, body: 'Unavailable' }));
   await page.goto('./');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await adopt(page, 'image', fixture);
@@ -82,7 +82,7 @@ test('QC failure after real segmentation fails the operation instead of publishi
 });
 
 test('an air template with other bytes fails QC instead of publishing metrics', async ({ page }) => {
-  await page.route('**/browserqc/avg152T1.nii.gz', route => route.fulfill({ status: 200, contentType: 'application/gzip', body: Buffer.from('not the template') }));
+  await page.context().route('**/browserqc/avg152T1.nii.gz', route => route.fulfill({ status: 200, contentType: 'application/gzip', body: Buffer.from('not the template') }));
   await page.goto('./');
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await adopt(page, 'image', fixture);

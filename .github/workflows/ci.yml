@@ -195,6 +195,8 @@ jobs:
         run: node test/automation-catalog.smoke.mjs
       - name: Test shared runtime assembly
         run: node --test test/runtime-assets.test.mjs
+      - name: Verify resources persist across browser restarts
+        run: pnpm test:resource-cache
       - name: Load threaded models with service-worker isolation
         run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath

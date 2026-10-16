@@ -32,7 +32,7 @@ test('full-volume CPU activation allocations fit Chromium limits', async ({page}
 for (const backend of ['wasm','webgpu']) test(`shared SynthSR stage: ${backend} matches the reference`,async({page})=>{
  test.skip(!process.env.SYNTHSR_MODEL,'Set SYNTHSR_MODEL to the checksum-pinned ONNX model.');
  test.setTimeout(300000);
- await page.route('**/test-model/synthsr-v2.onnx',route=>route.fulfill({path:process.env.SYNTHSR_MODEL}));
+ await page.context().route('**/test-model/synthsr-v2.onnx',route=>route.fulfill({path:process.env.SYNTHSR_MODEL}));
  await page.goto('./');
  if (backend === 'webgpu') {
   const info = await readAdapterInfo(page);

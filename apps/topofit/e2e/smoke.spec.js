@@ -85,7 +85,7 @@ test('input, cancellation, and privacy workflow preserve the scan', async ({ pag
   await page.locator('#imageInput').setInputFiles(niftiFixture());
   await expect(page.locator('#runButton')).toBeEnabled();
   await expect(page.locator('#statusText')).toContainText('ready to reconstruct');
-  await page.route('**/trega-synth-random.onnx*', () => {});
+  await page.context().route('**/trega-synth-random.onnx*', () => {});
   await page.locator('#runButton').click();
   await expect(page.locator('#cancelButton')).toBeVisible();
   await page.locator('#cancelButton').click();
@@ -99,8 +99,8 @@ test('input, cancellation, and privacy workflow preserve the scan', async ({ pag
 test('production inference worker starts the verified model request', async ({ page }) => {
   await page.goto('/');
   await page.locator('#imageInput').setInputFiles(niftiFixture(true));
-  const modelRequest = page.waitForRequest(/trega-synth-random\.onnx/, { timeout: 10_000 });
-  await page.route('**/trega-synth-random.onnx*', (route) => route.fulfill({ body: '' }));
+  const modelRequest = page.context().waitForEvent('request', { predicate: request => /trega-synth-random\.onnx/.test(request.url()), timeout: 10_000 });
+  await page.context().route('**/trega-synth-random.onnx*', (route) => route.fulfill({ body: '' }));
   await page.locator('#runButton').click();
   await modelRequest;
   await expect(page.locator('#statusText')).toContainText('Model size mismatch');
@@ -108,7 +108,7 @@ test('production inference worker starts the verified model request', async ({ p
 
 test('optional example is rejected when its checksum differs', async ({ page }) => {
   await page.goto('/');
-  await page.route(exampleUrl, (route) => route.fulfill({ body: 'not the scan' }));
+  await page.context().route(exampleUrl, (route) => route.fulfill({ body: Buffer.alloc(examples[0].files[0].bytes) }));
   await page.locator('[data-neurodesk-example]').selectOption('openneuro-t1');
   await expect(page.locator('#statusText')).toContainText('checksum for sub-01_T1w.nii.gz did not match');
 });
@@ -117,7 +117,7 @@ test('cancelling a pending example preserves the selected image and permits retr
   let release;
   const held = new Promise(resolve => { release = resolve; });
   let attempts = 0;
-  await page.route(exampleUrl, async route => {
+  await page.context().route(exampleUrl, async route => {
     attempts++;
     if (attempts === 1) await held;
     await route.fulfill({ status: 503 }).catch(() => {});
@@ -127,7 +127,7 @@ test('cancelling a pending example preserves the selected image and permits retr
   await expect(page.locator('#runButton')).toBeEnabled();
   const original = await page.locator('#fileInfo').textContent();
   const picker = page.locator('[data-neurodesk-example]');
-  const request = page.waitForRequest(exampleUrl);
+  const request = page.context().waitForEvent('request', request => request.url() === exampleUrl);
   await picker.selectOption('openneuro-t1');
   await request;
   await page.getByRole('button', { name: 'Cancel example download' }).click();

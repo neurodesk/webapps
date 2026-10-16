@@ -6,6 +6,8 @@
 
 - @neurodesk/synthsr@0.6.20261016
 - @neurodesk/synthstrip@0.1.5
+- @neurodesk/synthsr@0.6.20261016
+- @neurodesk/synthstrip@0.1.5
 
 ## 0.3.20261015
 

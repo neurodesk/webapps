@@ -48,6 +48,8 @@ test('every declared example is available in the locked offline inventory', asyn
       assert.ok(lock.apps[app.id].includes(example.url), `${app.id}: register ${example.name} offline lock`);
       assert.match(lock.assets[example.url].sha256, /^[a-f0-9]{64}$/);
       assert.ok(lock.assets[example.url].bytes > 0);
+      assert.equal(example.sha256, lock.assets[example.url].sha256, `${app.id}: pin ${example.name} checksum for verified persistent caching`);
+      assert.equal(example.bytes, lock.assets[example.url].bytes, `${app.id}: pin ${example.name} size`);
     }
   }
 });

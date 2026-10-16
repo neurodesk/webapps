@@ -33,7 +33,7 @@ function diffusion() {
 test('explicit roles fit a known tensor through the real CPU worker and download measured FA', async ({ page }) => {
   test.setTimeout(180_000);
   // Exercise the documented unmasked fallback without running a full neural model on SwiftShader.
-  await page.route('**/brainchop/**', (route) => route.fulfill({ status: 503, body: 'Model unavailable for fallback check' }));
+  await page.context().route('**/brainchop/**', (route) => route.fulfill({ status: 503, body: 'Model unavailable for fallback check' }));
   await page.goto('/');
   for (const [role, file] of Object.entries(diffusion())) {
     await page.locator('#neurodesk-input-transfer').setInputFiles({ ...file, mimeType: 'application/octet-stream' });
@@ -89,7 +89,7 @@ test('a tensor fit failure started from the button reaches the status bar once, 
   const files = [[image, 'dwi.nii'], [bval, 'dwi.bval'], [bvec, 'dwi.bvec']].map(([file, name]) => ({ ...file, name, mimeType: 'application/octet-stream' }));
   await page.locator('#filePicker').setInputFiles(files);
   await expect(page.locator('#statusText')).toContainText('7 volumes', { timeout: 60_000 });
-  await page.route('**/tensor-worker*.js', (route) => route.fulfill({ status: 503, body: 'Worker unavailable for failure check' }));
+  await page.context().route('**/tensor-worker*.js', (route) => route.fulfill({ status: 503, body: 'Worker unavailable for failure check' }));
   await page.locator('#maskFitBtn').click();
   await expect(page.locator('#statusText')).toContainText('Tensor fit failed');
   await expect(page.locator('#statusText')).toHaveClass(/error/);

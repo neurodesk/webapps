@@ -3,10 +3,9 @@ import { Tensor, browserRuntime } from './onnx-runtime.js';
 import manifest from '@neurodesk/topofit/manifest';
 import cortexAtlas from '@neurodesk/topofit/cortex-atlas-manifest';
 import { fetchModel } from '@neurodesk/webapp-components/worker';
-import { createAssetLoader, openModelCache } from './model-assets.js';
+import { createAssetLoader } from './model-assets.js';
 
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
-const cachePromise = openModelCache();
 
 // ONNX Runtime never runs in this worker: its wasm heap cannot shrink, so the alignment
 // and feature sessions each live in a worker that closes when the session is released.
@@ -90,7 +89,7 @@ function reconstructHemispheres({ mode, loadAsset }) {
 
 self.onmessage = async ({ data: job }) => {
   try {
-    const loadAsset = createAssetLoader({ baseUrl: job.assetBase, cache: cachePromise, onProgress: progress });
+    const loadAsset = createAssetLoader({ baseUrl: job.assetBase, onProgress: progress });
     const result = await runTopofit({
       buffer: await job.file.arrayBuffer(),
       model: job.model,
@@ -101,9 +100,8 @@ self.onmessage = async ({ data: job }) => {
       roiBuffer: job.roiBuffer,
       loadAtlas: async () => fetchModel({
         url: cortexAtlas.url,
-        cacheKey: cortexAtlas.url,
         integrity: cortexAtlas,
-      }, { cache: await cachePromise }),
+      }),
       loadAsset,
       createSession,
       reconstructHemispheres: reconstructHemispheres({ mode: job.hemispheres, loadAsset }),

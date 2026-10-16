@@ -13,7 +13,7 @@ try {
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.route('**/examples.json', async route => {
+  await page.context().route('**/examples.json', async route => {
     catalogRequested = true;
     await catalogResponse;
     await route.fulfill({ status: 503, body: 'Catalog unavailable' });

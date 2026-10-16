@@ -9,25 +9,29 @@
         "role": "uni",
         "name": "MP2RAGE_UNI.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_UNI.nii.gz",
-        "sha256": "9d6823388d2b24bdbed27773fea461f8f25a6723dbe8b74c33b1400d358d8c27"
+        "sha256": "9d6823388d2b24bdbed27773fea461f8f25a6723dbe8b74c33b1400d358d8c27",
+        "bytes": 11235272
       },
       {
         "role": "inv1",
         "name": "MP2RAGE_INV1.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_INV1.nii.gz",
-        "sha256": "4883c1c3bc2c195b3812c481163c172b205c9026e030e35de33c076427c0324e"
+        "sha256": "4883c1c3bc2c195b3812c481163c172b205c9026e030e35de33c076427c0324e",
+        "bytes": 6647924
       },
       {
         "role": "inv2",
         "name": "MP2RAGE_INV2.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/MP2RAGE_INV2.nii.gz",
-        "sha256": "cf63efa154f2765e50531651c64e75bd3cdc8b2b1a11166f94e851976684ab56"
+        "sha256": "cf63efa154f2765e50531651c64e75bd3cdc8b2b1a11166f94e851976684ab56",
+        "bytes": 7930922
       },
       {
         "role": "b1",
         "name": "B1map_relative.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ce91e4ce4213f1e572275c634002e966604b1626/examples/easy-mp2rage/marques-brain/B1_relative.nii.gz",
-        "sha256": "3b9782220d5a2470494bc1acea1acf63ad31836aaa4613a1829377c61c618098"
+        "sha256": "3b9782220d5a2470494bc1acea1acf63ad31836aaa4613a1829377c61c618098",
+        "bytes": 10760495
       }
     ],
     "parameters": {

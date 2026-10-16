@@ -41,7 +41,7 @@ async function observeWorker(page) {
     };
   });
   // These cases stop after preprocessing; the real-model fixture suite checks inference.
-  await page.route(/synthseg-2\.0\.onnx/, (route) => route.abort());
+  await page.context().route(/synthseg-2\.0\.onnx/, (route) => route.abort());
 }
 
 test('an oversized scan crops its neck before loading the model at 1 mm', async ({ page }) => {
@@ -117,7 +117,7 @@ test('cropping can be disabled and preparation choices survive closing the secti
 test('cancelling a neck crop prevents its worker from publishing a retry offer', async ({ page }) => {
   await observeWorker(page);
   let release;
-  await page.route(/niimath-.*\.wasm/, async (route) => {
+  await page.context().route(/niimath-.*\.wasm/, async (route) => {
     await new Promise((resolve) => { release = resolve; });
     await route.continue().catch(() => {});
   });

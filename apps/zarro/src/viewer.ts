@@ -19,7 +19,7 @@ import {
 } from '@neurodesk/webapp-components/ui'
 import examples from '../examples.json'
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace'
-import { fetchWithRetry } from '@neurodesk/webapp-components/fetch'
+import { createExampleAssetFetch } from './example_asset_fetch.js'
 import * as zarr from 'zarrita'
 import './styles.css'
 import {
@@ -2533,23 +2533,17 @@ function recordRequest(label: string): void {
 }
 
 function createTrackedZarrFetch(): (request: Request) => Promise<Response> {
+  const exampleAssets = examples.flatMap((example) => example.files)
   return async (request: Request): Promise<Response> => {
-    const response = await fetchWithRetry(request, {}, {
+    const fetchAsset = createExampleAssetFetch(exampleAssets, {
       onRetry: ({ status }) => recordRequest(`${status} retry ${shortZarrPath(new URL(request.url).pathname)}`),
     })
+    const { response, wireBytes } = await fetchAsset(request)
     const method = request.method || 'GET'
     const url = new URL(response.url || request.url)
     const pathname = url.pathname
     const range = request.headers.get('Range')
-    const contentLength = Number(response.headers.get('Content-Length') ?? 0)
-
-    if (
-      method !== 'HEAD' &&
-      Number.isFinite(contentLength) &&
-      contentLength > 0
-    ) {
-      stats.wireBytes += contentLength
-    }
+    stats.wireBytes += wireBytes
     if (response.status === 206) {
       stats.rangeHits++
     } else if (response.status === 200 && method !== 'HEAD') {

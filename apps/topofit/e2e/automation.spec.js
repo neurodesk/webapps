@@ -13,7 +13,7 @@ async function start(page) {
 
 test('automation surfaces the real inference worker model-integrity error', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.route('**/trega-synth-random.onnx*', (route) => route.fulfill({ body: '' }));
+  await page.context().route('**/trega-synth-random.onnx*', (route) => route.fulfill({ body: '' }));
   await start(page);
   await expect.poll(async () => (await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'))).state, { timeout: 90_000 }).toBe('failed');
   const result = await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('snapshot'));
@@ -24,8 +24,8 @@ test('automation surfaces the real inference worker model-integrity error', asyn
 
 test('automation cancellation terminates a real worker awaiting its model', async ({ page }) => {
   test.setTimeout(120_000);
-  await page.route('**/trega-synth-random.onnx*', () => {});
-  const model = page.waitForRequest(/trega-synth-random\.onnx/, { timeout: 90_000 });
+  await page.context().route('**/trega-synth-random.onnx*', () => {});
+  const model = page.context().waitForEvent('request', { predicate: request => /trega-synth-random\.onnx/.test(request.url()), timeout: 90_000 });
   await start(page);
   await model;
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('cancel'));

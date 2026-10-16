@@ -9,7 +9,7 @@ const examples = JSON.parse(await readFile(new URL("../examples.json", import.me
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {
@@ -100,7 +100,7 @@ test("a failed example download keeps the loaded pair and can retry", async ({ p
   const select = page.locator("[data-neurodesk-example]");
   await select.selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
-  await page.route("**/t1_crop.nii.gz", route => route.fulfill({ status: 503 }));
+  await page.context().route("**/t1_crop.nii.gz", route => route.fulfill({ status: 503 }));
   await select.selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
   await expect(select).toHaveValue("");

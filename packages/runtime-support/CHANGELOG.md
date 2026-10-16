@@ -1,5 +1,13 @@
 # @neurodesk/runtime-support
 
+## 0.6.3
+
+### Patch Changes
+
+- Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+
 ## 0.6.2
 
 ### Patch Changes

@@ -5,19 +5,17 @@ import {readVolume,runSynthsr} from '@neurodesk/synthsr';
 import {createBrowserSession,browserRuntime} from '@neurodesk/synthsr/browser';
 import {runSynthstrip} from '@neurodesk/synthstrip';
 import {createBrowserSession as createStripSession} from '@neurodesk/synthstrip/browser';
+import { fetchModel } from '@neurodesk/webapp-components/worker';
 import {assets,browserSynthstrip} from '../../../packages/syncro/src/assets.js';
 import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
 ort.env.wasm.wasmPaths={wasm:wasmURL,mjs:wasmModuleURL};
 ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||1):1;
-const sha=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b)),v=>v.toString(16).padStart(2,'0')).join('');
 async function model(name,base) {
  const asset=name==='synthstrip'?browserSynthstrip:assets[name];
  const url=name==='synthstrip'?asset.url:base?new URL('synthsr-v2.onnx',base).href:asset.url;
- let cache;try{cache=await caches.open(name==='synthsr'?'neurodesk-synthsr-v1':'neurodesk-models-v1');}catch { /* Cache Storage is optional; the checksummed model remains available from the network. */ }
- let bytes;
- const response=await cache?.match(url)||await fetch(url);if(!response.ok)throw new Error(`Unable to download the ${name} model. Check your connection and try again.`);bytes=await response.arrayBuffer();
- if(bytes.byteLength!==asset.bytes||await sha(bytes)!==asset.sha256){await cache?.delete(url);throw new Error(`${name} model checksum mismatch.`);}
- try{await cache?.put(url,new Response(bytes));}catch { /* Cache Storage is optional; the checksummed model remains available from the network. */ }
+ const bytes = await fetchModel({ url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, {
+  requestFailureMessage: `Unable to download the ${name} model. Check your connection and try again.`,
+ });
  return {bytes,hash:asset.sha256};
 }
 self.onmessage=async({data:job})=>{

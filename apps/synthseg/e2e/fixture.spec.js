@@ -140,7 +140,7 @@ async function checkCase(page, { input, reference, mode, limit, pinned }) {
     save();
   };
   page.on('console', onConsole);
-  await page.route('**/assets/inference-worker-*.js', instrumentPosteriors, { times: 1 });
+  await page.context().route('**/assets/inference-worker-*.js', instrumentPosteriors, { times: 1 });
   evidence.results.push(result);
   save();
   await page.goto('./');

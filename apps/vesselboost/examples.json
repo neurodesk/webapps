@@ -9,7 +9,8 @@
         "role": "image",
         "name": "sub-000_ses-20110101_angio.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/0a35af062d07f36ff2935f8c1454e1ca2f80da86/examples/vesselboost/lausanne-tof/sub-000_ses-20110101_angio.nii.gz",
-        "sha256": "8e1e772825aafbdf898e0c06e9482640098d9722514b59566957bc3ff22cc2b2"
+        "sha256": "8e1e772825aafbdf898e0c06e9482640098d9722514b59566957bc3ff22cc2b2",
+        "bytes": 28408253
       }
     ]
   }
