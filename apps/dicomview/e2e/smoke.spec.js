@@ -249,6 +249,22 @@ test('protocol actions wait while a replacement folder is read', async ({ page }
   await expect(button).toBeEnabled();
 });
 
+test('a folder whose series fails to convert never keeps the previous folder\'s image', async ({ page }) => {
+  await page.goto('./');
+  const valid = dicomSeries({ series: 7, slices: 4 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(valid);
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  await expect(page.locator('#emptyState')).toBeHidden();
+  const pixelData = 12 + 16 * 16 * 2;
+  const headersOnly = dicomSeries({ series: 3, slices: 4 })
+    .map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer: buffer.subarray(0, buffer.length - pixelData) }));
+  await page.locator('#dicomInput').setInputFiles(headersOnly);
+  await expect(page.locator('#fileInfo')).toHaveText('4 images · 1 series');
+  await expect(page.locator('#statusText')).not.toContainText('converting', { timeout: 60000 });
+  await expect(page.locator('#emptyState')).toBeVisible();
+  await expect(page.locator('#imageLabel')).toHaveText('');
+});
+
 test('Choose folder reads every series in a directory tree', async ({ page }, testInfo) => {
   const root = testInfo.outputPath('session');
   for (const series of [4, 9]) {

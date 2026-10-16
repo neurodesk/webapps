@@ -225,6 +225,7 @@ function commit(index) {
   state.seriesUid = null;
   state.outputs = null;
   state.conversions = new Map();
+  void clearImage();
   state.acquisitions = null;
   headerCache = new WeakMap();
   const images = index.series.reduce((sum, series) => sum + series.files.length, 0);
@@ -274,6 +275,7 @@ function selectSeries(uid) {
   state.instance = 0;
   state.output = 0;
   state.outputs = null;
+  void clearImage();
   for (const row of seriesList.querySelectorAll('.nd-volume-toggle')) {
     row.querySelector('.nd-view-btn').classList.toggle('active', row.dataset.stage === uid);
   }
@@ -332,6 +334,19 @@ function showOutput() {
   });
   viewerLoads = load.catch(() => {});
   return load;
+}
+
+// Queued behind any load in flight, so an image of an earlier series or folder never
+// stays on screen beside the header of the one now selected.
+function clearImage() {
+  $('imageLabel').textContent = '';
+  const clear = viewerLoads.then(async () => {
+    if (!viewerReady || state.outputs) return;
+    await viewer.removeAllVolumes();
+    $('emptyState').hidden = false;
+  });
+  viewerLoads = clear.catch(() => {});
+  return clear;
 }
 
 $('outputSelect').addEventListener('change', () => {
