@@ -10,7 +10,7 @@ import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix'];
+export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -49,7 +49,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
-  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel'].includes(id)) {
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'dicomview'].includes(id)) {
     const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
     const selector = page.getByRole('combobox', { name: 'Input', exact: true });
     await expect(selector).toBeEnabled({ timeout: 120000 });
@@ -351,6 +351,16 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     assert.equal(header.length, 66);
     assert.equal(row.slice(1).filter(value => Number(value) > 0).length, 31);
     return { filename: result.filename, damaged: 31 };
+  }
+  if (id === 'dicomview') {
+    await expect(page.locator('#statusText')).toHaveText('Series 2: t1_mpr_tra_gk_v4 · 1 image', { timeout: 120000 });
+    const image = nifti(await download('#seriesList button:has-text("Download")'));
+    // dicompare runs on the bundled Pyodide and wheels, with no network.
+    await page.locator('#protocolSection').evaluate(section => { section.open = true; });
+    await page.locator('#protocolButton').click();
+    await expect(page.locator('#statusText')).toHaveText('1 acquisition summarised', { timeout: 600000 });
+    await expect(page.locator('#protocolSummary')).toContainText('RepetitionTime');
+    return image;
   }
   if (id === 'carotid-flow') {
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 60000 });

@@ -1357,10 +1357,27 @@ apps:
         url: https://github.com/niivue/niivue
 
   dicomview:
+    privacy: Your DICOM files and their headers stay on your computer. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
     packages:
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion and BIDS sidecars }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcmjs data dictionary, url: https://github.com/dcmjs-org/dcmjs, role: DICOM tag names and value representations }
+      - { name: dicompare (Python, via Pyodide), url: https://github.com/astewartau/dicompare, role: protocol summary and schema validation }
+      - { name: Pyodide, url: https://pyodide.org, role: runs the Python package in the browser }
     citations:
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+      - group: Protocol validation
+        title: dicompare
+        reference: "Stewart AW, Amorosino G, Veraart J, Heinsfeld AS, Bollmann S, Pestilli F. dicompare [Computer software]."
+        url: https://github.com/astewartau/dicompare
+      - group: Browser runtime
+        title: Pyodide
+        reference: "Pyodide Contributors. Pyodide: Python distribution for the browser and Node.js based on WebAssembly [Computer software]."
+        url: https://pyodide.org

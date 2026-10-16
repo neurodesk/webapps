@@ -26,6 +26,7 @@ const REQUIRED_METHODS = {
   qsmbly: ['10.1002/nbm.3570', '10.1002/nbm.4461', '10.1016/j.neuroimage.2018.06.030', '10.1016/j.neuroimage.2020.116579', '10.1016/j.neuroimage.2019.116389', '10.1002/mp.17747', '10.1007/978-3-030-59713-9_13', '10.1016/j.neuroimage.2021.118376', '10.1016/j.neuroimage.2019.116064', '10.1016/j.neuroimage.2022.119729', '10.1002/hbm.24750', '10.1002/mrm.29722', '10.1002/hbm.10062', '10.1016/j.neuroimage.2024.120769', '10.1002/mrm.28563', '10.1002/mrm.26963', '10.1002/mrm.23000', '10.1002/nbm.1670', '10.1002/mrm.22135', '10.1002/mrm.22816', '10.1016/j.neuroimage.2015.02.041', '10.1016/j.neuroimage.2020.117701', '10.1016/j.jneumeth.2016.03.001'],
   seedseg: ['10.1101/2023.10.26.564293', '10.1007/978-3-319-46723-8_49', '10.1016/j.jneumeth.2016.03.001'],
   dicompare: ['github.com/astewartau/dicompare', 'pyodide.org', '10.1016/j.jneumeth.2016.03.001'],
+  dicomview: ['10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue', 'github.com/astewartau/dicompare', 'pyodide.org'],
   deface: ['10.52294/001c.94384', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1098/rstb.2001.0915', '10.1016/j.jneumeth.2016.03.001'],
   'easy-mp2rage': ['10.1016/j.neuroimage.2009.10.002', '10.1371/journal.pone.0069294', '10.1002/mrm.23145', '10.1371/journal.pone.0099676'],
   niimath: ['10.52294/001c.94384', '10.1016/j.jneumeth.2016.03.001'],

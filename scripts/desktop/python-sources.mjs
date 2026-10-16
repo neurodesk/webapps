@@ -33,7 +33,7 @@ for (const [name, version] of [['pydicom', '2.4.5'], ['tabulate', '0.9.0'], ['ni
   assets.push({ url: wheel.url, sha256: wheel.digests.sha256, bytes: wheel.size, kind: 'python-wheel', license: metadata.info.license });
   wheels.push(wheel.url);
 }
-for (const id of ['dicompare', 'seedseg', 'qsmbly']) {
+for (const id of ['dicompare', 'seedseg', 'qsmbly', 'dicomview']) {
   const existing = sources.apps[id].filter(asset => !['python-runtime', 'python-wheel'].includes(asset.kind));
   sources.apps[id] = [...existing, ...assets];
 }
