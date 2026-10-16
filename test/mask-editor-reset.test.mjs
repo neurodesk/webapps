@@ -98,6 +98,7 @@ for (const app of ['brain-extraction', 'white-matter-lesions']) {
     const context = vm.createContext({
       editor: { session: { state: 'applying' }, cancel: () => pending.promise },
       results: { setEditingEnabled: noop, render: noop },
+      overlayToggle: {},
       renderOutputs: noop,
       exampleControl: { cancel: noop },
       start: () => current, begin: () => current,
