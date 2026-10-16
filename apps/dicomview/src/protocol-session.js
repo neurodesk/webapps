@@ -33,6 +33,39 @@ function abortable(promise, signal, onAbort) {
 export class ProtocolSession extends DicompareController {
   constructor(log) {
     super({ schemaUrl: 'chosen-per-check', workerUrl, updateOutput: log });
+    this.lifetime = 0;
+    this.startup = null;
+  }
+
+  // The controller's start-up awaits the script fetch and then creates a worker, even if
+  // terminate() ran meanwhile, and two start-ups both assign this.worker. Here callers
+  // share one start-up, and one that outlived a terminate() creates nothing.
+  _createWorker() {
+    if (this.worker) return Promise.resolve();
+    if (!this.startup) {
+      const { lifetime } = this;
+      const startup = (async () => {
+        const response = await fetch(this.workerUrl);
+        if (!response.ok) throw new Error(`Failed to load dicompare worker from ${this.workerUrl}`);
+        const script = await response.text();
+        if (lifetime !== this.lifetime) throw new DOMException('Cancelled', 'AbortError');
+        this._workerBlobUrl = URL.createObjectURL(new Blob([script], { type: 'application/javascript' }));
+        this.worker = new Worker(this._workerBlobUrl);
+        this.worker.onmessage = this._handleMessage.bind(this);
+        this.worker.onerror = (error) => console.error('[DicompareController] Worker error:', error);
+      })();
+      this.startup = startup;
+      startup.catch(() => {}).finally(() => {
+        if (this.startup === startup) this.startup = null;
+      });
+    }
+    return this.startup;
+  }
+
+  terminate() {
+    this.lifetime += 1;
+    this.startup = null;
+    super.terminate();
   }
 
   // Acquisitions of these files, as dicompare groups them. onProgress(fraction, message).

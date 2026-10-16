@@ -94,6 +94,22 @@ test('the example opens as one series that converts, downloads and explains its 
 
 test('dicompare fails, cancels and retries, then summarises the example and checks a schema', async ({ page }) => {
   test.setTimeout(900000);
+  // Live workers started from blob: URLs: dicompare's, and inlined ones the viewer may start.
+  await page.addInitScript(() => {
+    const Native = window.Worker;
+    window.blobWorkers = new Set();
+    window.Worker = class extends Native {
+      constructor(url, options) {
+        super(url, options);
+        if (String(url).startsWith('blob:')) window.blobWorkers.add(this);
+      }
+
+      terminate() {
+        window.blobWorkers.delete(this);
+        super.terminate();
+      }
+    };
+  });
   await page.goto('./');
   await picker(page).selectOption(example.id);
   await expect(status(page)).toHaveText(EXAMPLE_SERIES, { timeout: 180000 });
@@ -108,14 +124,23 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect(status(page)).toHaveClass(/error/);
   await page.unroute(workerScript);
 
+  // Hold each fetch of the worker script, so the cancel lands while start-up is still
+  // fetching and the retry's fetch completes after the cancelled one's.
+  const held = [];
+  await page.route(workerScript, (route) => { held.push(route); });
+  const workersBefore = await page.evaluate(() => window.blobWorkers.size);
   await button.click();
-  await expect(page.locator('#cancelButton')).toBeVisible();
+  await expect.poll(() => held.length).toBe(1);
   await page.locator('#cancelButton').click();
   await expect(status(page)).toHaveText('Protocol summary cancelled');
   await expect(button).toBeEnabled();
-
   await button.click();
+  await expect.poll(() => held.length).toBe(2);
+  await held[0].continue();
+  await held[1].continue();
+  await page.unroute(workerScript);
   await expect(status(page)).toHaveText('1 acquisition summarised', { timeout: 600000 });
+  expect(await page.evaluate(() => window.blobWorkers.size), 'the cancelled start-up created no worker').toBe(workersBefore + 1);
   await expect(page.locator('#protocolReport')).toBeVisible();
   await expect(page.locator('#protocolSummary caption')).toHaveText('acq-t1mprtragkv4 · 120 files');
   await expect(page.locator('#protocolSummary tr', { hasText: 'RepetitionTime' })).toContainText('1900');
