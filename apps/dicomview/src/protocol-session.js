@@ -1,16 +1,16 @@
 // dicompare in a Pyodide worker, started only when the protocol is first summarised.
-// The worker script is bundled from the dicompare app, so the standalone build needs no
-// request to dicompare.neurodesk.org; Pyodide itself comes from its CDN, or from the
-// offline bundle's /_offline/python/ in the desktop app.
-import { DicompareController } from '../../dicompare/public/embed/DicompareController.js';
-import workerUrl from '../../dicompare/public/embed/dicompare-worker.js?url';
-import schemaIndex from '../../dicompare/public/schemas/index.json';
+// scripts/stage-dicompare.mjs copies dicompare's embedding kit into src/vendor, so the
+// standalone build needs no request to dicompare.neurodesk.org; Pyodide itself comes from
+// its CDN, or from the offline bundle's /_offline/python/ in the desktop app.
+import { DicompareController } from './vendor/dicompare/DicompareController.js';
+import workerUrl from './vendor/dicompare/dicompare-worker.js?url';
+import schemaIndex from './vendor/dicompare/schemas/index.json';
 
 // The dicompare schema library, bundled as assets; only a schema's name is inlined.
-const schemaUrls = import.meta.glob(['../../dicompare/public/schemas/*.json', '!**/index.json', '!**/doi-mapping*.json'], { query: '?url', import: 'default', eager: true });
-const schemaNames = import.meta.glob(['../../dicompare/public/schemas/*.json', '!**/index.json', '!**/doi-mapping*.json'], { import: 'name', eager: true });
+const schemaUrls = import.meta.glob(['./vendor/dicompare/schemas/*.json', '!**/index.json'], { query: '?url', import: 'default', eager: true });
+const schemaNames = import.meta.glob(['./vendor/dicompare/schemas/*.json', '!**/index.json'], { import: 'name', eager: true });
 export const SCHEMAS = schemaIndex.map((path) => {
-  const key = `../../dicompare/public/schemas/${path.split('/').pop()}`;
+  const key = `./vendor/dicompare/schemas/${path.split('/').pop()}`;
   return { id: path.split('/').pop().replace(/\.json$/, ''), name: schemaNames[key], url: schemaUrls[key] };
 });
 

@@ -18,6 +18,7 @@ apps/*/public/brainchop/
 apps/*/public/greedy-wasm/
 apps/*/public/cfireants/
 apps/syncro/public/mindgrab/
+apps/dicomview/src/vendor/
 apps/*/public/registration/
 exes/*/dist/
 exes/*/models/
