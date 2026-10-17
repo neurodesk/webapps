@@ -1397,6 +1397,9 @@ importers:
         specifier: file:./vendor/freebrowse
         version: file:packages/runtime-support/vendor/freebrowse(@niivue/niivue@1.0.0-rc.17)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
     devDependencies:
+      jsdom:
+        specifier: 24.1.3
+        version: 24.1.3
       vite:
         specifier: ^6.3.2
         version: 6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)

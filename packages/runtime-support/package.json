@@ -33,6 +33,7 @@
     "build:freebrowse-viewer": "node scripts/build-freebrowse-viewer.mjs"
   },
   "devDependencies": {
+    "jsdom": "24.1.3",
     "vite": "^6.3.2"
   }
 }
