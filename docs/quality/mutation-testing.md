@@ -49,7 +49,10 @@ uncovered mutations from mutations that survive assertions.
 Only the module's listed files are copied into Stryker's sandbox. Concurrency is two.
 The sandbox stays inside the checkout at `.stryker-tmp` and is cleaned even on
 failure. Node test fixtures use the host's `TMPDIR` storage volume locally and
-the runner temporary directory in CI. The reporting adapter clears the inherited
+the runner temporary directory in CI. Each Stryker run gets its own directory
+there as `TMPDIR`, removed when the run ends: Stryker kills a timed-out suite
+before its cleanup hooks run, and the workspace graph's fixture trees would
+otherwise stay behind. The reporting adapter clears the inherited
 `NODE_TEST_CONTEXT` marker so nested node:test suites execute independently.
 
 ## CI and failures

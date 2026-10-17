@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { moduleById, modules, output, smoke as smokeTarget } from './lib/mutation-modules.mjs';
@@ -49,10 +50,18 @@ export function runMutations({ cwd = process.cwd(), smoke = false, config = 'str
   for (const { id, mutate } of runs) {
     const args = [...prefix, 'run', config];
     if (mutate) args.push('--mutate', mutate);
-    const env = { ...process.env, MUTATION_MODULE: id };
+    // Stryker kills a timed-out suite before its cleanup hooks run, so each run's
+    // temporary files go to a directory removed here, whatever the suites left.
+    const scratch = mkdtempSync(join(tmpdir(), `mutation-${id}-`));
+    const env = { ...process.env, MUTATION_MODULE: id, TMPDIR: scratch, TMP: scratch, TEMP: scratch };
     // Nested node:test processes must execute their suites independently.
     delete env.NODE_TEST_CONTEXT;
-    const result = spawnSync(executable, args, { cwd, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    let result;
+    try {
+      result = spawnSync(executable, args, { cwd, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
     log += `### ${id}\n${result.stdout ?? ''}\n${result.stderr ?? ''}\n`;
     writeFileSync(resolve(artifacts, 'stryker.log'), log);
     if (result.stdout) console.log(result.stdout);
