@@ -1,8 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { SchemaMetadata, DEFAULT_SCHEMA_METADATA } from './workspace/types';
 
-export type { SchemaMetadata };
-
 interface SchemaMetadataContextType {
   schemaMetadata: SchemaMetadata;
   setSchemaMetadata: (metadata: SchemaMetadata) => void;

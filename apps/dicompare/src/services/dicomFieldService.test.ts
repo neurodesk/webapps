@@ -1,17 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, test, expect, afterEach, vi } from 'vitest';
 import { searchDicomFields } from './dicomFieldService';
-
-// Force the offline/fallback path so the test never depends on the Innolitics
-// network fetch. The registry merge is applied to the fallback list too, so
-// derived fields must still appear.
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.doUnmock('../data/fieldRegistry.json');
-});
-
-beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
 });
 
 describe('derived fields in the field suggestion service', () => {
@@ -45,23 +37,19 @@ describe('derived fields in the field suggestion service', () => {
 
 
 describe('field list request lifecycle', () => {
-  test('coalesces concurrent requests and caches the fetched registry', async () => {
+  test('coalesces concurrent requests and caches the bundled registry without fetching', async () => {
     vi.resetModules();
-    let complete!: (response: Response) => void;
-    const fetch = vi.fn(() => new Promise<Response>(resolve => { complete = resolve; }));
+    const fetch = vi.fn().mockRejectedValue(new Error('No network allowed'));
     vi.stubGlobal('fetch', fetch);
     const { fetchDicomFieldList } = await import('./dicomFieldService');
-    const first = fetchDicomFieldList();
-    const second = fetchDicomFieldList();
-    expect(fetch).toHaveBeenCalledTimes(1);
-    complete(new Response(JSON.stringify([{ tag: '0018,0081', name: 'Echo Time', keyword: 'EchoTime', valueRepresentation: 'DS' }])));
-    const [a, b] = await Promise.all([first, second]);
-    expect(a).toBe(b);
-    expect(await fetchDicomFieldList()).toBe(a);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    const [first, second] = await Promise.all([fetchDicomFieldList(), fetchDicomFieldList()]);
+    expect(first).toBe(second);
+    expect(first.some(field => field.keyword === 'EchoTime')).toBe(true);
+    expect(await fetchDicomFieldList()).toBe(first);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  test('rejects a failure inside the fallback path and permits retry', async () => {
+  test('rejects registry enrichment failures and permits retry', async () => {
     vi.resetModules();
     const primary = new Error('registry enrichment failed');
     let broken = true;

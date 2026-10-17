@@ -24,7 +24,6 @@ export type WorkerRequest =
   | { id: RequestId; type: 'attachGradientFiles'; payload: { acquisitions: any[]; files: Array<{ name: string; content: string }> } }
   | { id: RequestId; type: 'searchFields'; payload: { query: string; limit: number } }
   | { id: RequestId; type: 'getFieldInfo'; payload: { fieldOrTag: string } }
-  | { id: RequestId; type: 'generateSchema'; payload: { acquisitions: any[]; metadata: any } }
   | { id: RequestId; type: 'generateTestDicoms'; payload: { acquisition: any; testData: any[]; fields: any[] } }
   | { id: RequestId; type: 'categorizeFields'; payload: { fields: any[]; testData: any[] } }
   | { id: RequestId; type: 'runPython'; payload: { code: string } }

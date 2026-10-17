@@ -1,4 +1,4 @@
-import { FieldDataType, ValidationRule } from '../types';
+import { FieldDataType } from '../types';
 
 // Discriminated union for field values
 export type FieldValue =
@@ -14,15 +14,6 @@ export const isStringField = (value: FieldValue): value is { type: 'string'; val
 
 export const isNumberField = (value: FieldValue): value is { type: 'number'; value: number } =>
   value.type === 'number';
-
-export const isListStringField = (value: FieldValue): value is { type: 'list_string'; value: string[] } =>
-  value.type === 'list_string';
-
-export const isListNumberField = (value: FieldValue): value is { type: 'list_number'; value: number[] } =>
-  value.type === 'list_number';
-
-export const isJsonField = (value: FieldValue): value is { type: 'json'; value: Record<string, any> } =>
-  value.type === 'json';
 
 // Validation and type casting
 export const validateFieldValue = (value: any, dataType: FieldDataType): FieldValue => {
@@ -91,39 +82,4 @@ export const validateFieldValue = (value: any, dataType: FieldDataType): FieldVa
 // Convert FieldValue back to any (for backward compatibility)
 export const extractFieldValue = (fieldValue: FieldValue): any => {
   return fieldValue.value;
-};
-
-// Validate a field value against a validation rule
-export const validateAgainstRule = (fieldValue: FieldValue, rule?: ValidationRule): boolean => {
-  if (!rule || rule.type === 'exact') {
-    return true; // Exact values are always considered valid
-  }
-
-  switch (rule.type) {
-    case 'tolerance':
-      if (isNumberField(fieldValue)) {
-        const target = Number(rule.value || 0);
-        const tolerance = Number(rule.tolerance || 0);
-        return Math.abs(fieldValue.value - target) <= tolerance;
-      }
-      return false;
-
-    case 'range':
-      if (isNumberField(fieldValue)) {
-        const min = rule.min !== undefined ? Number(rule.min) : -Infinity;
-        const max = rule.max !== undefined ? Number(rule.max) : Infinity;
-        return fieldValue.value >= min && fieldValue.value <= max;
-      }
-      return false;
-
-    case 'contains':
-      if (isStringField(fieldValue)) {
-        const searchTerm = rule.contains || '';
-        return fieldValue.value.includes(searchTerm);
-      }
-      return false;
-
-    default:
-      return true;
-  }
 };

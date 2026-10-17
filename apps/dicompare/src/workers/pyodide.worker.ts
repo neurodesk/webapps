@@ -542,32 +542,6 @@ json.dumps(info, default=str)
   sendSuccess(id, JSON.parse(result as string));
 }
 
-async function handleGenerateSchema(
-  id: string,
-  payload: { acquisitions: any[]; metadata: any }
-): Promise<void> {
-  if (!pyodide) throw new Error('Pyodide not initialized');
-
-  const { acquisitions, metadata } = payload;
-
-  // JSON-serialize on JS side to avoid Pyodide proxy conversion issues with nested objects
-  pyodide.globals.set('_ui_acquisitions_json', JSON.stringify(acquisitions));
-  pyodide.globals.set('_schema_metadata_json', JSON.stringify(metadata));
-
-  const result = await pyodide.runPython(`
-import json
-from dicompare.interface import build_schema_from_ui_acquisitions
-
-acqs = json.loads(_ui_acquisitions_json)
-meta = json.loads(_schema_metadata_json)
-
-schema = build_schema_from_ui_acquisitions(acqs, meta)
-json.dumps(schema, default=str)
-  `);
-
-  sendSuccess(id, JSON.parse(result as string));
-}
-
 async function handleGenerateTestDicoms(
   id: string,
   payload: { acquisition: any; testData: any[]; fields: any[] }
@@ -718,9 +692,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         break;
       case 'getFieldInfo':
         await handleGetFieldInfo(id, request.payload);
-        break;
-      case 'generateSchema':
-        await handleGenerateSchema(id, request.payload);
         break;
       case 'generateTestDicoms':
         await handleGenerateTestDicoms(id, request.payload);

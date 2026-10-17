@@ -1,9 +1,5 @@
 import React, { createContext, useContext, ReactNode } from 'react';
-import { useFileProcessing, UseFileProcessingReturn, ProcessingTarget } from '../hooks/useFileProcessing';
-import { ProcessingProgress } from './workspace/types';
-
-export type { ProcessingTarget };
-export type { ProcessingProgress };
+import { useFileProcessing, UseFileProcessingReturn } from '../hooks/useFileProcessing';
 
 interface ProcessingContextType extends UseFileProcessingReturn {}
 

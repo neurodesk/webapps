@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dicompare.org/metaschema/v1",
+  "title": "DiCompare Schema Format",
+  "description": "JSON Schema for validating DiCompare protocol schema files",
+  "type": "object",
+  "required": ["name", "acquisitions"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-readable name of the protocol"
+    },
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the protocol"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version identifier for the schema"
+    },
+    "authors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of authors/contributors"
+    },
+    "acquisitions": {
+      "type": "object",
+      "description": "Dictionary of acquisition definitions",
+      "additionalProperties": { "$ref": "#/$defs/acquisition" }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Protocol-level validation rules (apply across all acquisitions)",
+      "items": { "$ref": "#/$defs/rule" }
+    }
+  },
+  "$defs": {
+    "acquisition": {
+      "type": "object",
+      "description": "Definition of a single acquisition/sequence type",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "Brief description of the acquisition"
+        },
+        "detailed_description": {
+          "type": "string",
+          "description": "Extended description with markdown formatting"
+        },
+        "fields": {
+          "type": "array",
+          "description": "List of DICOM field constraints for this acquisition",
+          "items": { "$ref": "#/$defs/field" }
+        },
+        "series": {
+          "type": "array",
+          "description": "Series-level field constraints",
+          "items": { "$ref": "#/$defs/series" }
+        },
+        "rules": {
+          "type": "array",
+          "description": "Acquisition-specific validation rules",
+          "items": { "$ref": "#/$defs/rule" }
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tags specific to this acquisition"
+        },
+        "images": {
+          "type": "array",
+          "description": "Representative images for this acquisition",
+          "items": { "$ref": "#/$defs/image" }
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "description": "DICOM field constraint definition",
+      "required": ["field"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "description": "DICOM field name/keyword (e.g., 'EchoTime', 'FlipAngle')"
+        },
+        "tag": {
+          "type": "string",
+          "pattern": "^([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}|private|derived|custom)$",
+          "description": "DICOM tag in format 'XXXX,XXXX' (e.g., '0018,0081'), or 'private'/'derived'/'custom' for non-standard fields"
+        },
+        "vr": {
+          "type": "string",
+          "description": "DICOM Value Representation (e.g., 'DS', 'CS', 'IS')"
+        },
+        "dataType": {
+          "type": "string",
+          "enum": ["string", "number", "list_string", "list_number", "json"],
+          "description": "Data type for validation"
+        },
+        "value": {
+          "description": "Expected exact value (string, number, or array)"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning"],
+          "description": "Compliance severity when this constraint is not met. 'error' (default) marks the constraint as a requirement; 'warning' records it as reference information — the value describes what the reference protocol used, but differing does not make data non-compliant."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-text rationale for this constraint — why this value was chosen, or what the consequence of deviating from it is. Documentation only; it does not affect validation."
+        },
+        "tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Allowed deviation from expected value (for numeric fields)"
+        },
+        "min": {
+          "type": "number",
+          "description": "Minimum allowed value (inclusive) for numeric fields"
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum allowed value (inclusive) for numeric fields"
+        },
+        "contains": {
+          "type": "string",
+          "description": "Substring that must be present in the field value"
+        },
+        "contains_any": {
+          "type": "array",
+          "items": {},
+          "description": "List of values/substrings where at least one must match"
+        },
+        "contains_all": {
+          "type": "array",
+          "items": {},
+          "description": "List of values that must all be present (for list fields)"
+        },
+        "errorMin": {
+          "type": "number",
+          "description": "Graded fail edge below the target. A value between 'errorMin' and the target ('min'/'value') is a warning; below 'errorMin' it is a failure. Optional; when absent, values below the target only warn (never fail). Its presence switches the field to graded (three-way pass/warn/fail) validation."
+        },
+        "errorMax": {
+          "type": "number",
+          "description": "Graded fail edge above the target. A value between the target ('max'/'value') and 'errorMax' is a warning; above 'errorMax' it is a failure. Optional; when absent, values above the target only warn (never fail). Its presence switches the field to graded validation."
+        },
+        "errorTolerance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Graded tolerance (half-width). A value within 'tolerance' passes, within 'errorTolerance' warns, and beyond fails. Optional; requires 'tolerance'. Its presence switches the field to graded validation."
+        },
+        "reference": {
+          "type": "number",
+          "description": "The value the reference protocol actually used, recorded for documentation. Does not affect validation."
+        },
+        "warningMessage": {
+          "type": "string",
+          "description": "Custom message shown when this field produces a warning (a value in the graded warn band, or a reference/advisory constraint that is not met). Overrides the auto-generated text. The placeholder '%V' is replaced with the actual value(s) found, and '%%' with a literal '%'."
+        },
+        "errorMessage": {
+          "type": "string",
+          "description": "Custom message shown when this field fails (a value beyond the error edge, or a required constraint that is not met). Overrides the auto-generated text. The placeholder '%V' is replaced with the actual value(s) found, and '%%' with a literal '%'."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "tolerance": { "type": "number" } },
+            "required": ["tolerance"]
+          },
+          "then": {
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "oneOf": [
+                  { "type": "number" },
+                  { "type": "array", "items": { "type": "number" } }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": { "required": ["errorTolerance"] },
+          "then": { "required": ["tolerance"] }
+        }
+      ]
+    },
+    "series": {
+      "type": "object",
+      "description": "Series-level constraint definition",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Series identifier/name"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Free-text rationale for this series — why it is prescribed, or what role it plays in the acquisition. Documentation only; it does not affect validation."
+        },
+        "fields": {
+          "type": "array",
+          "description": "Field constraints specific to this series",
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/field" },
+              {
+                "description": "Series fields carry no 'notes' of their own — rationale is recorded once on the series, which is the unit a reader reasons about.",
+                "properties": { "notes": false }
+              }
+            ]
+          }
+        },
+        "images": {
+          "type": "array",
+          "description": "Representative images for this series",
+          "items": { "$ref": "#/$defs/image" }
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "description": "Custom Python validation rule",
+      "required": ["id", "name", "implementation", "fields"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_/.-]*$",
+          "description": "Unique identifier for the rule (lowercase with underscores, hyphens, slashes, or dots)"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the rule"
+        },
+        "description": {
+          "type": "string",
+          "description": "Explanation of what the rule validates"
+        },
+        "implementation": {
+          "type": "string",
+          "description": "Python code implementing the validation logic"
+        },
+        "parameters": {
+          "type": ["object", "null"],
+          "description": "Configured parameter values for this rule instance, injected into the implementation as the `params` dict (also `ctx.params`)"
+        },
+        "parameterDefinitions": {
+          "type": "array",
+          "description": "Typed parameter declarations (from the validation function library) used to render configuration inputs when editing the rule",
+          "items": {
+            "type": "object",
+            "required": ["name", "type"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Parameter name as read by the implementation via params[name]"
+              },
+              "label": {
+                "type": "string",
+                "description": "Human-readable label shown in configuration UIs"
+              },
+              "type": {
+                "type": "string",
+                "enum": ["number", "string", "boolean", "enum"],
+                "description": "Input type for the parameter"
+              },
+              "description": {
+                "type": "string",
+                "description": "Explanation of what the parameter controls"
+              },
+              "default": {
+                "description": "Default value used when the parameter is not configured"
+              },
+              "min": {
+                "type": "number",
+                "description": "Minimum allowed value (number type)"
+              },
+              "max": {
+                "type": "number",
+                "description": "Maximum allowed value (number type)"
+              },
+              "options": {
+                "type": "array",
+                "description": "Allowed values (enum type)"
+              },
+              "unit": {
+                "type": "string",
+                "description": "Unit hint shown next to the input (e.g. 'ms')"
+              }
+            }
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of DICOM fields used by this rule"
+        },
+        "optional_fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fields made available to the rule when present but whose absence is not an error (e.g. vendor-specific fields in a rule that branches on Manufacturer)"
+        },
+        "testCases": {
+          "type": "array",
+          "description": "Test cases to validate the rule implementation",
+          "items": { "$ref": "#/$defs/testCase" }
+        }
+      }
+    },
+    "testCase": {
+      "type": "object",
+      "description": "Test case for validating a rule",
+      "required": ["id", "name", "data", "expectedResult"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the test case"
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable name for the test case"
+        },
+        "description": {
+          "type": "string",
+          "description": "Explanation of what this test case validates"
+        },
+        "data": {
+          "type": "object",
+          "description": "Mock DICOM data for testing",
+          "additionalProperties": {
+            "type": "array"
+          }
+        },
+        "expectedResult": {
+          "type": "string",
+          "enum": ["pass", "fail", "warning"],
+          "description": "Expected outcome of the rule validation"
+        },
+        "params": {
+          "type": "object",
+          "description": "Parameter overrides for this test case, overlaid on the rule's configured/default parameters (lets a test prove that a threshold moves)"
+        }
+      }
+    },
+    "image": {
+      "type": "object",
+      "description": "Representative image for an acquisition or series",
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL to a representative image file (.nii, .nii.gz, .dcm, .IMA, .png, .jpg, etc.)"
+        },
+        "label": {
+          "type": "string",
+          "description": "Short label for the image (e.g., 'Sagittal view', 'Example volume')"
+        },
+        "description": {
+          "type": "string",
+          "description": "Longer description of what the image shows"
+        }
+      }
+    }
+  }
+}

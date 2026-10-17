@@ -22,6 +22,7 @@ import { generateSchemaViewerPrintHtml, openPrintWindow, exportToPdf, isElectron
 import PrintOptionsModal from '../components/common/PrintOptionsModal';
 import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
 import { getSchemaDoi, doiUrl, SchemaDoiEntry } from '../utils/schemaDoi';
+import { copyText } from '../utils/clipboard';
 import ImageManagerModal from '../components/schema/ImageManagerModal';
 import VolumeThumbnail from '../components/common/VolumeThumbnail';
 import { log, logError } from '../utils/technicalLog';
@@ -269,10 +270,10 @@ const SchemaViewerPage: React.FC = () => {
     log(`Exported schema ${a.download}.`, 'success');
   };
 
-  const handleCopyDoi = () => {
+  const handleCopyDoi = async () => {
     const url = doiUrl(doi?.concept_doi);
     if (!url) return;
-    navigator.clipboard.writeText(url);
+    if (!(await copyText(url))) return;
     setCopiedDoi(true);
     setTimeout(() => setCopiedDoi(false), 2000);
   };
@@ -307,6 +308,9 @@ const SchemaViewerPage: React.FC = () => {
           alert('Please allow popups to print the schema.');
         }
       }
+    } catch (err) {
+      console.error('Failed to print schema:', err);
+      alert(`Failed to generate report: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPdfExporting(false);
       setShowPrintOptions(false);

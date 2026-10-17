@@ -235,24 +235,3 @@ export function processSchemaFieldForUI(schemaField: any): any {
     fieldType  // Preserve explicit field type or infer from tag
   };
 }
-
-/**
- * Process series field value for schema data
- */
-export function processSchemaSeriesFieldValue(schemaField: any, fieldName?: string, tag?: string): any {
-  const dataType = inferDataTypeFromField(schemaField);
-  const validationRule = buildValidationRuleFromSchema(schemaField);
-
-  const graded = dataType === 'number' ? fromSchemaField(schemaField) : null;
-
-  return {
-    value: schemaField.value,
-    field: fieldName || schemaField.field || schemaField.name,
-    dataType,
-    validationRule,
-    ...(graded ? { graded } : {}),
-    ...(schemaField.severity === 'warning' ? { severity: 'warning' as const } : {}),
-    ...(schemaField.warningMessage ? { warningMessage: schemaField.warningMessage as string } : {}),
-    ...(schemaField.errorMessage ? { errorMessage: schemaField.errorMessage as string } : {})
-  };
-}

@@ -4,6 +4,25 @@
 
 ### Patch Changes
 
+- Merge upstream astewartau/dicompare-web 7c56841..d3d0879:
+
+  - Describe the third-party requests in Privacy
+  - Scope the third-party requests to the website
+  - fix: keep graded constraints and messages on imported series fields
+  - fix: handle promise rejections that were silently dropped (#26)
+  - chore: remove unused files, exports, types and dependencies
+  - fix: show schema upload errors in the workspace schema library
+  - fix: save graded constraints and custom messages when exporting schemas
+  - fix: keep a rule's enabledSystemFields through import and save
+  - Merge remote-tracking branch 'origin/fix/unhandled-promise-rejections' into chore/remove-unused-code
+  - Merge pull request #27 from astewartau/fix/series-field-graded-import
+  - Merge pull request #28 from astewartau/fix/unhandled-promise-rejections
+  - Merge pull request #29 from astewartau/chore/remove-unused-code
+  - Merge pull request #30 from astewartau/fix/graded-schema-export
+  - chore: bump version to 0.15.4
+  - fix: make no third-party requests from the desktop app
+  - Merge pull request #31 from astewartau/fix/desktop-no-external-requests
+  - Merge pull request #24 from stebo85/fix/privacy-third-party
 - Updated dependencies [b547d52]
   - @neurodesk/webapp-components@0.14.3
 

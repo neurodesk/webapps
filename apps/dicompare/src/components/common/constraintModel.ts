@@ -93,9 +93,6 @@ export function canError(c: GradedConstraint): boolean {
 export function boundaries(c: GradedConstraint): number[] {
   return [c.value, c.min, c.max, c.errorMin, c.errorMax, c.reference].filter(num) as number[];
 }
-export function failEdges(c: GradedConstraint): { lo: number; hi: number } {
-  return { lo: num(c.errorMin) ? c.errorMin : -Infinity, hi: num(c.errorMax) ? c.errorMax : +Infinity };
-}
 export function computeDomain(c: GradedConstraint): [number, number] {
   const marks = boundaries(resolved(c));
   if (num(c.value)) marks.push(c.value);

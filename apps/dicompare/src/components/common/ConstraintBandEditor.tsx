@@ -13,8 +13,6 @@ import {
  * a context menu, drag empty space to pan, scroll to zoom, double-click to fit.
  */
 
-export type { GradedConstraint } from './constraintModel';
-
 interface Props {
   fieldName: string;
   unit?: string;

@@ -36,7 +36,6 @@ export interface DicomField {
 // Enhanced field types for validation
 export type FieldDataType = 'number' | 'string' | 'list_string' | 'list_number' | 'json';
 export type ValidationConstraint = 'exact' | 'tolerance' | 'contains' | 'range' | 'contains_any' | 'contains_all';
-export type ComplianceStatus = 'OK' | 'ERROR' | 'WARNING' | 'NA';
 
 // Schema Image Types
 export interface SchemaImage {
@@ -217,44 +216,9 @@ export interface AcquisitionComplianceResult {
   seriesResults: SeriesComplianceResult[];
 }
 
-export interface ComplianceReport {
-  id: string;
-  templateName: string;
-  templateVersion: string;
-  analysisDate: string;
-  overallStatus: 'pass' | 'fail' | 'warning' | 'na';
-  summary: {
-    totalAcquisitions: number;
-    passedAcquisitions: number;
-    failedAcquisitions: number;
-    totalSeries: number;
-    passedSeries: number;
-    failedSeries: number;
-  };
-  acquisitionResults: AcquisitionComplianceResult[];
-}
-
-// Data Loading Types
-export interface DicomFile {
-  id: string;
-  filename: string;
-  size: number;
-  path: string;
-  metadata: { [key: string]: any };
-}
-
 export interface ProcessingProgress {
   currentFile: number;
   totalFiles: number;
   currentOperation: string;
   percentage: number;
-}
-
-// UI State Types
-export interface AppState {
-  currentAcquisitions: Acquisition[];
-  selectedTemplate: Template | null;
-  complianceReport: ComplianceReport | null;
-  isProcessing: boolean;
-  processingProgress: ProcessingProgress | null;
 }

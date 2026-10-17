@@ -128,18 +128,6 @@ export async function* iterateDirectoryFiles(
 }
 
 /**
- * Count files in a directory without loading content.
- * Useful for progress estimation.
- */
-export async function countDirectoryFiles(handle: FileSystemDirectoryHandle): Promise<number> {
-  let count = 0;
-  for await (const _ of iterateDirectoryFiles(handle)) {
-    count++;
-  }
-  return count;
-}
-
-/**
  * Get file metadata (size) from a handle without reading content.
  */
 export async function getFileSize(handle: FileSystemFileHandle): Promise<number> {
@@ -244,17 +232,4 @@ export function isDicomFile(name: string): boolean {
  */
 export function isZipFile(name: string): boolean {
   return name.toLowerCase().endsWith('.zip');
-}
-
-/**
- * Check if a file is a protocol file (Siemens, Philips, etc.)
- */
-export function isProtocolFile(name: string): boolean {
-  const lowerName = name.toLowerCase();
-  return (
-    lowerName.endsWith('.pro') ||
-    lowerName.endsWith('.exar1') ||
-    lowerName.endsWith('.examcard') ||
-    lowerName === 'lxprotocol'
-  );
 }

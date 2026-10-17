@@ -297,10 +297,15 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     if (!nvRef.current || !volumes[index]) return;
     setSelectedVolumeIndex(index);
     const vols = nvRef.current.volumes;
-    for (let i = vols.length - 1; i >= 0; i--) {
-      nvRef.current.removeVolume(vols[i]);
+    try {
+      for (let i = vols.length - 1; i >= 0; i--) {
+        nvRef.current.removeVolume(vols[i]);
+      }
+      await loadVolume(nvRef.current, volumes[index]);
+    } catch (err) {
+      console.error('Failed to load volume:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load volume');
     }
-    await loadVolume(nvRef.current, volumes[index]);
   };
 
   // --- Control handlers ---

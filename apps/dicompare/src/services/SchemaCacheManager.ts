@@ -1,14 +1,15 @@
 import { SchemaMetadata } from '../types/schema';
 import Ajv2020 from 'ajv/dist/2020';
+// Bundled from the pinned dicompare version (src/version.ts) so schema
+// validation matches the library and needs no network. Regenerate with:
+//   npm run sync:metaschema
+import bundledMetaschema from '../data/metaschema.json';
 
 interface StoredSchema {
   metadata: SchemaMetadata;
   content: string;
 }
 
-// Metaschema URLs - local in development, GitHub raw in production
-const METASCHEMA_URL_DEV = 'http://localhost:3001/metaschema.json';
-const METASCHEMA_URL_PROD = 'https://raw.githubusercontent.com/astewartau/dicompare/main/dicompare/metaschema.json';
 
 export class SchemaCacheManager {
   private dbName = 'DicompareSchemasDB';
@@ -106,41 +107,12 @@ export class SchemaCacheManager {
 
   /**
    * Load the DiCompare metaschema for validation.
-   * Uses local server in development, GitHub raw in production.
    */
   private async loadMetaschema(): Promise<object> {
-    if (this.metaschema) {
-      return this.metaschema;
+    if (!this.metaschema) {
+      this.metaschema = bundledMetaschema;
     }
-
-    const isDevelopment = window.location.hostname === 'localhost' ||
-                          window.location.hostname === '127.0.0.1';
-
-    const metaschemaUrl = isDevelopment ? METASCHEMA_URL_DEV : METASCHEMA_URL_PROD;
-
-    try {
-      console.log(`📋 Loading metaschema from ${isDevelopment ? 'local server' : 'GitHub'}...`);
-      const response = await fetch(metaschemaUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch metaschema: ${response.status} ${response.statusText}`);
-      }
-      this.metaschema = await response.json();
-      console.log('✅ Metaschema loaded successfully');
-      return this.metaschema!;
-    } catch (error) {
-      console.warn(`⚠️ Failed to load metaschema from ${metaschemaUrl}:`, error);
-      // If local fails in dev, try production URL as fallback
-      if (isDevelopment) {
-        console.log('📋 Falling back to GitHub metaschema...');
-        const fallbackResponse = await fetch(METASCHEMA_URL_PROD);
-        if (fallbackResponse.ok) {
-          this.metaschema = await fallbackResponse.json();
-          console.log('✅ Metaschema loaded from GitHub fallback');
-          return this.metaschema!;
-        }
-      }
-      throw error;
-    }
+    return this.metaschema;
   }
 
   /**

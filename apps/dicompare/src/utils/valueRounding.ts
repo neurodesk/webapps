@@ -53,26 +53,3 @@ export function roundDicomValue(value: any): any {
 
   return value;
 }
-
-/**
- * Round all numeric values in a DICOM field object
- */
-export function roundFieldValues(field: any): any {
-  if (!field || typeof field !== 'object') {
-    return field;
-  }
-
-  const rounded = { ...field };
-
-  // Round the main value
-  if ('value' in rounded) {
-    rounded.value = roundDicomValue(rounded.value);
-  }
-
-  // Round values array if present
-  if ('values' in rounded && Array.isArray(rounded.values)) {
-    rounded.values = rounded.values.map(roundDicomValue);
-  }
-
-  return rounded;
-}

@@ -12,22 +12,6 @@ export interface ValidationFieldValues {
   [fieldName: string]: any[];
 }
 
-export interface TestDataGenerationResult {
-  testData: TestDataRow[];
-  validationFieldValues: ValidationFieldValues;
-  maxValidationRows: number;
-  warnings: {
-    conflicts: Array<{
-      fieldName: string;
-      existingValue: any;
-      testValue: any;
-      validationName: string;
-    }>;
-    noPassingTestWarnings: string[];
-    fieldConflictWarnings: string[];
-  };
-}
-
 /**
  * Extracts field values from validation function test cases
  * Returns validation field values, max rows needed, and any warnings

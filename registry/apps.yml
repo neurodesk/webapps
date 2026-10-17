@@ -176,7 +176,7 @@ apps:
     runtime: react-vite
     model_manifest: null
     asset_manifest_schema: null
-    source: astewartau/dicompare-web@7c56841fe414384d60bfda822c65836aff10fd7f
+    source: astewartau/dicompare-web@d3d08798068c2515060ff76d95c2b5e116e39578
     license: NOASSERTION
     maintainers: [astewartau]
     support_status: active

@@ -3,10 +3,10 @@
  * Consolidates the repeated pattern from generatePreview, handleDownloadJson, and generateJsonForSave.
  */
 
-import { dicompareWorkerAPI as dicompareAPI } from '../services/DicompareWorkerAPI';
 import { SchemaMetadata } from '../contexts/WorkspaceContext';
 import { Acquisition } from '../types';
 import { log } from './technicalLog';
+import { buildSchemaFromAcquisitions } from './schemaBuilder';
 
 export interface SchemaGenerationOptions {
   acquisitions: Acquisition[];
@@ -30,19 +30,16 @@ export async function generateSchemaJson(
 ): Promise<GeneratedSchema> {
   const { acquisitions, metadata, description } = options;
 
-  const schema = await dicompareAPI.generateSchemaJS(acquisitions, {
+  const schema = buildSchemaFromAcquisitions(acquisitions, {
     name: metadata.name || 'Untitled Schema',
     description: description ?? metadata.description ?? '',
     version: metadata.version || '1.0',
     authors: metadata.authors || [],
   });
 
-  // Remove statistics from exported schema
-  const { statistics, ...schemaContent } = schema;
-
   return {
-    json: JSON.stringify(schemaContent, null, 2),
-    schema: schemaContent,
+    json: JSON.stringify(schema, null, 2),
+    schema,
   };
 }
 

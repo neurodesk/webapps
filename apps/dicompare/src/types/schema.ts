@@ -13,12 +13,6 @@ export interface SchemaMetadata {
   tags?: string[];
 }
 
-export interface ParsedSchema {
-  metadata: SchemaMetadata;
-  rules: ValidationRule[];
-  fields: SchemaField[];
-}
-
 export interface ValidationRule {
   fieldPath: string;
   type: 'exact' | 'range' | 'tolerance' | 'contains' | 'required';
@@ -36,19 +30,6 @@ export interface SchemaField {
   required: boolean;
   dataType: string;
   validation?: ValidationRule[];
-}
-
-export interface ComplianceReport {
-  schemaId: string;
-  timestamp: string;
-  overallStatus: 'pass' | 'fail' | 'warning';
-  fieldResults: ComplianceFieldResult[];
-  summary: {
-    total: number;
-    passed: number;
-    failed: number;
-    warnings: number;
-  };
 }
 
 export interface ComplianceFieldResult {

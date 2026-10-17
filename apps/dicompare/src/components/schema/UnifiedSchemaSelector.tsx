@@ -8,6 +8,7 @@ import { DraggableSchema, DraggableAcquisition } from './DraggableComponents';
 import { isAnalysisTag, getAnalysisTagDisplayName, splitTagsWithCounts } from '../../utils/tagUtils';
 import { fetchExternalSchema } from '../../utils/externalSchemaFetch';
 import { log, logError } from '../../utils/technicalLog';
+import { copyText } from '../../utils/clipboard';
 
 interface AcquisitionScore {
   schemaId: string;
@@ -124,6 +125,18 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     return newId;
   };
 
+  // File drop / picker entry point. processUpload rethrows (handleUrlImport relies
+  // on that), so surface failures here instead of leaving an unhandled rejection.
+  const uploadSchemaFile = async (file: File) => {
+    setUrlError(null);
+    try {
+      await processUpload(file);
+    } catch (e) {
+      console.error('Failed to upload schema:', e);
+      setUrlError(e instanceof Error ? e.message : 'Failed to upload schema');
+    }
+  };
+
   // Scroll the list back to the top when a fresh upload is surfaced there.
   useEffect(() => {
     if (recentUpload && listScrollRef.current) {
@@ -159,10 +172,10 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const [copiedSchemaId, setCopiedSchemaId] = useState<string | null>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const copySchemaLink = (schemaId: string, e: React.MouseEvent) => {
+  const copySchemaLink = async (schemaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${window.location.origin}${import.meta.env.BASE_URL}schema/${schemaId}`;
-    navigator.clipboard.writeText(url);
+    if (!(await copyText(url))) return;
     setCopiedSchemaId(schemaId);
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setCopiedSchemaId(null), 2000);
@@ -633,14 +646,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.name.endsWith('.json')) {
-        processUpload(file);
+        uploadSchemaFile(file);
       }
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      processUpload(e.target.files[0]);
+      uploadSchemaFile(e.target.files[0]);
       // Reset so re-uploading the same file still fires onChange.
       e.target.value = '';
     }

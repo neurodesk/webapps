@@ -25,20 +25,6 @@ export function getAnalysisTagDisplayName(tag: string): string {
 }
 
 /**
- * Split an array of tags into analysis tags and regular tags.
- * Both arrays are sorted alphabetically.
- */
-export function splitTags(tags: string[]): { analysisTags: string[]; regularTags: string[] } {
-  const analysisTags = tags
-    .filter(isAnalysisTag)
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  const regularTags = tags
-    .filter(t => !isAnalysisTag(t))
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  return { analysisTags, regularTags };
-}
-
-/**
  * Split tags with counts into analysis and regular categories.
  * Both arrays are sorted alphabetically by tag name.
  */

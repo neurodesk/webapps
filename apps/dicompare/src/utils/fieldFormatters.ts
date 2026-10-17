@@ -1,5 +1,4 @@
 import { DicomField, SeriesField, ValidationRule } from '../types';
-import { FieldValue, validateFieldValue, extractFieldValue } from '../types/fieldValues';
 import { describeConstraint, shape, type GradedConstraint } from '../components/common/constraintModel';
 
 /**
@@ -58,42 +57,6 @@ export function formatFieldDisplay(
   return '-';
 }
 
-// Type-safe version that works with FieldValue
-export function formatTypedFieldValue(
-  fieldValue: FieldValue,
-  validationRule?: ValidationRule,
-  options: FormatOptions = { showConstraint: false, showValue: true }
-): string {
-  // If we're showing constraint and there's a non-exact constraint, show constraint format
-  if (options.showConstraint && validationRule && validationRule.type !== 'exact') {
-    return formatValidationRule(validationRule);
-  }
-
-  // Otherwise, show the typed value
-  if (options.showValue !== false) {
-    return formatTypedValue(fieldValue);
-  }
-
-  return '-';
-}
-
-function formatTypedValue(fieldValue: FieldValue): string {
-  switch (fieldValue.type) {
-    case 'string':
-      return fieldValue.value || '-';
-    case 'number':
-      return String(fieldValue.value);
-    case 'list_string':
-      return fieldValue.value.length > 0 ? `[${fieldValue.value.join(', ')}]` : '-';
-    case 'list_number':
-      return fieldValue.value.length > 0 ? `[${fieldValue.value.join(', ')}]` : '-';
-    case 'json':
-      return JSON.stringify(fieldValue.value, null, 2);
-    default:
-      return '-';
-  }
-}
-
 // Backward compatibility - formatFieldValue for DicomField
 export function formatFieldValue(field: DicomField): string {
   // Scalar numeric fields carry a graded constraint: render its concise target
@@ -141,10 +104,6 @@ export function formatSeriesFieldValue(fieldValue: any, validationRule?: Validat
 
   // Standard format: direct value (string, array, number, etc.)
   return formatRawValue(fieldValue);
-}
-
-export function formatConstraint(field: DicomField): string {
-  return formatValidationRule(field.validationRule);
 }
 
 export function formatDataType(dataType: string): string {
@@ -222,16 +181,6 @@ export function formatFieldTypeInfo(
     : (validationRule?.type || 'exact');
   const formattedConstraint = constraintType.replace(/_/g, ' ');
   return `${formattedType} • ${formattedConstraint}`;
-}
-
-// Format the display value based on the validation rule
-export function formatConstraintValue(value: any, validationRule?: ValidationRule): string {
-  if (!validationRule || validationRule.type === 'exact') {
-    return formatRawValue(value);
-  }
-
-  // For non-exact constraints, show the constraint format
-  return formatValidationRule(validationRule);
 }
 
 function formatRawValue(value: any): string {

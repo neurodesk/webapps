@@ -18,11 +18,6 @@ export interface TestCase {
 
 export type FieldDataType = 'string' | 'number' | 'list_string' | 'list_number';
 
-export interface FieldDefinition {
-  name: string;
-  dataType: FieldDataType;
-}
-
 export interface ValidationFunction {
   id: string;
   name: string;

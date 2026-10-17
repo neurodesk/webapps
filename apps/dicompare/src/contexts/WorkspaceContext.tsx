@@ -22,8 +22,6 @@ export type {
   WorkspaceItem,
   SchemaMetadata,
   ProcessingProgress,
-  PendingAttachmentSelection,
-  PendingMatchingOperation,
 } from './workspace/types';
 
 import {
@@ -265,7 +263,17 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({ children }
         it.acquisition && (wantTestData ? acqIsTestData(it) : acqIsReference(it))
       );
       const existingAcqs = candidates.map(it => it.acquisition) as Acquisition[];
-      const bindings = await computeGradientBindings(existingAcqs, fileArray);
+      let bindings: Awaited<ReturnType<typeof computeGradientBindings>>;
+      try {
+        bindings = await computeGradientBindings(existingAcqs, fileArray);
+      } catch (err) {
+        console.error('Failed to read gradient file:', err);
+        const names = fileArray.map(f => f.name).join(', ');
+        setGradientNotice(
+          `Couldn't read the gradient file (${names}): ${err instanceof Error ? err.message : String(err)}`
+        );
+        return;
+      }
       if (bindings.length === 0) {
         const names = fileArray.map(f => f.name).join(', ');
         setGradientNotice(

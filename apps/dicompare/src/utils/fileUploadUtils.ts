@@ -185,99 +185,29 @@ export async function processUploadedFiles(
 }
 
 /**
- * Check total file size and count to determine if it exceeds browser limits.
- * This extracts zip files to get accurate totals.
- */
-export async function checkFileSizeLimit(files: FileList): Promise<FileSizeInfo> {
-  const filesArray = Array.from(files);
-
-  // Extract zip files to get accurate file count and size
-  const extractedFiles: File[] = [];
-  const nonZipFiles: File[] = [];
-
-  for (const file of filesArray) {
-    if (file.name.toLowerCase().endsWith('.zip')) {
-      try {
-        const extracted = await extractZipFile(file);
-        extractedFiles.push(...extracted);
-      } catch (error) {
-        console.error(`Failed to extract ${file.name}:`, error);
-      }
-    } else {
-      nonZipFiles.push(file);
-    }
-  }
-
-  const allFiles = [...nonZipFiles, ...extractedFiles];
-
-  // Filter to actual DICOM files
-  const actualFiles = allFiles.filter(file => {
-    if (file.size === 0) return false;
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.txt') || name.endsWith('.json') || name.endsWith('.xml') || name.endsWith('.csv')) {
-      return false;
-    }
-    return true;
-  });
-
-  const totalBytes = actualFiles.reduce((sum, file) => sum + file.size, 0);
-  const totalGB = totalBytes / (1024 * 1024 * 1024);
-
-  return {
-    totalBytes,
-    totalGB,
-    fileCount: actualFiles.length,
-    exceedsLimit: totalBytes > MAX_TOTAL_SIZE_BYTES
-  };
-}
-
-/**
- * Check if FileList contains any valid DICOM files or zip files (quick check without processing)
- */
-export function hasValidDicomFiles(files: FileList): boolean {
-  const filesArray = Array.from(files);
-  return filesArray.some(file => {
-    if (file.size === 0) return false;
-    const name = file.name.toLowerCase();
-    // Allow .zip files as they may contain DICOM files
-    if (name.endsWith('.zip')) return true;
-    // Skip known non-DICOM files
-    return !name.endsWith('.txt') && !name.endsWith('.json') && !name.endsWith('.xml') && !name.endsWith('.csv');
-  });
-}
-
-/**
- * Recursively get all files from a directory entry (for drag-and-drop folder uploads)
+ * Recursively get all files from a directory entry (for drag-and-drop folder uploads).
+ * Rejects if any directory or file entry can't be read.
  */
 export async function getAllFilesFromDirectory(dirEntry: FileSystemDirectoryEntry): Promise<File[]> {
   const files: File[] = [];
+  const reader = dirEntry.createReader();
+  const readBatch = () =>
+    new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+  const readFile = (entry: FileSystemFileEntry) =>
+    new Promise<File>((resolve, reject) => entry.file(resolve, reject));
 
-  return new Promise((resolve) => {
-    const reader = dirEntry.createReader();
+  // readEntries returns results in batches; keep reading until an empty batch.
+  for (;;) {
+    const entries = await readBatch();
+    if (entries.length === 0) return files;
 
-    const readEntries = () => {
-      reader.readEntries(async (entries) => {
-        if (entries.length === 0) {
-          resolve(files);
-          return;
-        }
-
-        for (const entry of entries) {
-          if (entry.isFile) {
-            const file = await new Promise<File>((fileResolve) => {
-              (entry as FileSystemFileEntry).file(fileResolve);
-            });
-            files.push(file);
-          } else if (entry.isDirectory) {
-            const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-            files.push(...subFiles);
-          }
-        }
-
-        readEntries();
-      });
-    };
-
-    readEntries();
-  });
+    for (const entry of entries) {
+      if (entry.isFile) {
+        files.push(await readFile(entry as FileSystemFileEntry));
+      } else if (entry.isDirectory) {
+        const subFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+        files.push(...subFiles);
+      }
+    }
+  }
 }

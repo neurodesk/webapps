@@ -29,9 +29,6 @@ export const DEFAULT_BATCH_CONFIG: BatchConfig = {
   maxBatchFileCount: 5000, // Max 5000 files per batch
 };
 
-// Threshold below which we skip batching entirely
-export const NO_BATCH_THRESHOLD_BYTES = 1.5 * 1024 * 1024 * 1024; // 1.5GB
-
 export class FileHandleManager {
   private handles: ManagedFileHandle[] = [];
   private _totalSize: number = 0;

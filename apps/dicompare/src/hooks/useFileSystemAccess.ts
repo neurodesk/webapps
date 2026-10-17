@@ -12,7 +12,7 @@ import {
   DirectoryPickerOptions,
   OpenFilePickerOptions,
 } from '../utils/fileSystemAccessUtils';
-import { FileHandleManager, BatchConfig, DEFAULT_BATCH_CONFIG } from '../utils/fileHandleManager';
+import { FileHandleManager } from '../utils/fileHandleManager';
 import { log } from '../utils/technicalLog';
 
 export interface UseFileSystemAccessReturn {
@@ -178,20 +178,4 @@ export function useFileSystemAccess(): UseFileSystemAccessReturn {
     pickFilesWithHandles,
     clearError,
   };
-}
-
-/**
- * Utility hook for batch configuration
- */
-export function useBatchConfig(initialConfig?: Partial<BatchConfig>) {
-  const [config, setConfig] = useState<BatchConfig>({
-    ...DEFAULT_BATCH_CONFIG,
-    ...initialConfig,
-  });
-
-  const updateConfig = useCallback((updates: Partial<BatchConfig>) => {
-    setConfig(prev => ({ ...prev, ...updates }));
-  }, []);
-
-  return { config, updateConfig };
 }

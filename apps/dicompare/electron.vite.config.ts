@@ -24,6 +24,22 @@ function copyPyodidePlugin() {
   }
 }
 
+// The desktop app makes no network requests of its own: Pyodide and its wheels
+// are bundled (copyPyodidePlugin), and the website's analytics are removed here.
+// Fails the build if the markers go missing, so the script can't slip back in.
+const ANALYTICS_BLOCK = /<!-- Cloudflare Web Analytics -->[\s\S]*?<!-- End Cloudflare Web Analytics -->\n?/
+function stripWebAnalyticsPlugin() {
+  return {
+    name: 'strip-web-analytics',
+    transformIndexHtml(html: string) {
+      if (!ANALYTICS_BLOCK.test(html)) {
+        throw new Error('strip-web-analytics: Cloudflare Web Analytics markers not found in index.html')
+      }
+      return html.replace(ANALYTICS_BLOCK, '')
+    }
+  }
+}
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -58,7 +74,7 @@ export default defineConfig({
       copyPublicDir: true
     },
     publicDir: 'public',
-    plugins: [react(), copyPyodidePlugin()],
+    plugins: [react(), copyPyodidePlugin(), stripWebAnalyticsPlugin()],
     server: {
       port: 3001
     },

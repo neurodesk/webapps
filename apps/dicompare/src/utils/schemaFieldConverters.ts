@@ -38,35 +38,46 @@ export function fieldToSchemaField(
   options: { includeNotes?: boolean } = {}
 ): SchemaFieldOutput {
   const { includeNotes = true } = options;
+  // The schema stores the DICOM keyword ("EchoTime"); `name` can be the
+  // human-readable description ("Echo Time") for fields added via search.
   const schemaField: SchemaFieldOutput = {
-    field: field.name || field.keyword || field.tag || ''
+    field: field.keyword || field.name || field.tag || ''
   };
 
-  if (field.tag) {
-    schemaField.tag = field.tag;
-  }
+  // Fields without a DICOM tag record their type in `tag` ('derived', 'private',
+  // 'custom') so it survives a reload (see processSchemaFieldForUI).
+  schemaField.tag = field.tag || field.fieldType || 'derived';
 
   // Scalar numeric fields are the graded editor's domain: its constraint (value /
   // min / max / tolerance / error edges / reference / severity) is authoritative.
   if (field.graded) {
     Object.assign(schemaField, toSchemaField(field.graded));
   } else {
-    if (field.value !== undefined && field.value !== null && field.value !== '') {
-      schemaField.value = field.value;
+    const r = field.validationRule;
+    let value = field.value;
+    let constrained = false; // a non-value constraint stands in for `value`
+    if (r?.type === 'tolerance' && r.tolerance !== undefined && r.tolerance !== null) {
+      if (r.value !== undefined && r.value !== null) value = r.value;
+      schemaField.tolerance = r.tolerance;
+      if (r.errorTolerance !== undefined) schemaField.errorTolerance = r.errorTolerance; // list_number warn band
+    } else if (r?.type === 'range') {
+      // min/max are the constraint; an observed value alongside them is not
+      if (r.min !== undefined) schemaField.min = r.min;
+      if (r.max !== undefined) schemaField.max = r.max;
+      constrained = true;
+    } else if (r?.type === 'contains' && r.contains) {
+      schemaField.contains = r.contains;
+      constrained = true;
+    } else if (r?.type === 'contains_any' && r.contains_any) {
+      schemaField.contains_any = r.contains_any;
+      constrained = true;
+    } else if (r?.type === 'contains_all' && r.contains_all) {
+      schemaField.contains_all = r.contains_all;
+      constrained = true;
     }
-    if (field.validationRule) {
-      const r = field.validationRule;
-      if (r.type === 'tolerance' && r.tolerance !== undefined) {
-        schemaField.tolerance = r.tolerance;
-        if (r.errorTolerance !== undefined) schemaField.errorTolerance = r.errorTolerance; // list_number warn band
-      }
-      if (r.type === 'range') { // previously dropped — range constraints were silently lost
-        if (r.min !== undefined) schemaField.min = r.min;
-        if (r.max !== undefined) schemaField.max = r.max;
-      }
-      if (r.type === 'contains' && r.contains) schemaField.contains = r.contains;
-      if (r.type === 'contains_any' && r.contains_any) schemaField.contains_any = r.contains_any;
-      if (r.type === 'contains_all' && r.contains_all) schemaField.contains_all = r.contains_all;
+    // '' is kept: an empty value is a real constraint (e.g. no ContrastBolusAgent).
+    if (!constrained && value !== undefined && value !== null) {
+      schemaField.value = value;
     }
     // Only the non-default severity is serialized (omitted = 'error').
     if (field.severity === 'warning') {
@@ -93,14 +104,6 @@ export function fieldToSchemaField(
   }
 
   return schemaField;
-}
-
-/**
- * Convert an acquisition-level DicomField to schema field format.
- * Alias for fieldToSchemaField for semantic clarity.
- */
-export function acquisitionFieldToSchemaField(field: DicomField): SchemaFieldOutput {
-  return fieldToSchemaField(field);
 }
 
 /**

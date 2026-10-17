@@ -2,8 +2,6 @@ import React, { createContext, useContext, useState, useCallback, useRef, ReactN
 import { WorkspaceItem } from './workspace/types';
 import { dicomFileCache } from '../utils/dicomFileCache';
 
-export type { WorkspaceItem };
-
 interface ItemManagementContextType {
   items: WorkspaceItem[];
   selectedId: string | null;

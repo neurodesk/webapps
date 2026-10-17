@@ -1,7 +1,6 @@
 import type { UnifiedSchema } from '../hooks/useSchemaService';
 import { Acquisition, DicomField } from '../types';
 import { inferDataTypeFromValue, processSchemaFieldForUI } from './datatypeInference';
-import { buildValidationRuleFromField } from './fieldFormatters';
 
 /**
  * Normalizes a raw schema rule into the SelectedValidationFunction shape used
@@ -25,8 +24,8 @@ export const schemaRuleToValidationFunction = (rule: any) => ({
   customDescription: rule.description,
   customFields: rule.fields || [],
   customImplementation: rule.implementation,
-  customTestCases: [],
-  enabledSystemFields: []
+  customTestCases: rule.testCases || [],
+  enabledSystemFields: Array.isArray(rule.enabledSystemFields) ? rule.enabledSystemFields : []
 });
 
 /**
@@ -115,6 +114,9 @@ export const convertSchemaToAcquisition = async (
             value: processedField.value ?? field.defaultValue ?? '',
             validationRule: processedField.validationRule || { type: 'exact' as const },
             severity: processedField.severity,
+            ...(processedField.graded ? { graded: processedField.graded } : {}),
+            ...(processedField.warningMessage ? { warningMessage: processedField.warningMessage } : {}),
+            ...(processedField.errorMessage ? { errorMessage: processedField.errorMessage } : {}),
             // No notes: rationale on a series is carried by series.notes below.
             fieldType: processedField.fieldType || field.fieldType  // Preserve field type (standard/derived)
           };
@@ -173,82 +175,4 @@ export const convertSchemaToAcquisitions = async (
   }
 
   return acquisitions;
-};
-
-/**
- * Converts raw schema acquisition data to an Acquisition object ready for AcquisitionContext.
- * This is the same logic used by handleCopyFromSchema in BuildSchema.tsx.
- *
- * @param acquisitionName - The name/key of the acquisition in the schema
- * @param targetAcquisition - The raw acquisition data from parsed schema JSON
- * @param schemaId - Optional schema ID for identification purposes
- * @param tags - Optional tags to include on the acquisition
- */
-export const convertRawAcquisitionToContext = (
-  acquisitionName: string,
-  targetAcquisition: any,
-  schemaId?: string,
-  tags?: string[]
-): Acquisition => {
-  const newAcquisition: Acquisition = {
-    id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    protocolName: acquisitionName,
-    seriesDescription: targetAcquisition.description || (schemaId ? `Imported from ${schemaId}` : ''),
-    detailedDescription: targetAcquisition.detailed_description || '',
-    totalFiles: 0,
-    acquisitionFields: [],
-    series: [],
-    validationFunctions: [],
-    tags: tags || targetAcquisition.tags || [],
-    images: targetAcquisition.images || [],
-    metadata: targetAcquisition.metadata || {}
-  };
-
-  // Process acquisition-level fields
-  if (targetAcquisition.fields && Array.isArray(targetAcquisition.fields)) {
-    newAcquisition.acquisitionFields = targetAcquisition.fields.map((field: any) => {
-      const processedField = processSchemaFieldForUI(field);
-      return {
-        ...processedField,
-        level: 'acquisition' as const
-      };
-    });
-  }
-
-  // Process series-level fields and instances
-  if (targetAcquisition.series && Array.isArray(targetAcquisition.series)) {
-    newAcquisition.series = targetAcquisition.series.map((series: any) => {
-      const seriesFields: any[] = [];
-
-      if (series.fields && Array.isArray(series.fields)) {
-        series.fields.forEach((f: any) => {
-          const validationRule = buildValidationRuleFromField(f) || { type: 'exact' as const };
-
-          seriesFields.push({
-            tag: f.tag,
-            name: f.field || f.name,
-            value: f.value,
-            validationRule,
-            severity: f.severity === 'warning' ? 'warning' : undefined,
-            // No notes: rationale on a series is carried by series.notes below.
-            fieldType: f.fieldType
-          });
-        });
-      }
-
-      return {
-        name: series.name,
-        fields: seriesFields,
-        images: series.images || [],
-        notes: series.notes,
-      };
-    });
-  }
-
-  // Process validation rules
-  if (targetAcquisition.rules && Array.isArray(targetAcquisition.rules)) {
-    newAcquisition.validationFunctions = targetAcquisition.rules.map(schemaRuleToValidationFunction);
-  }
-
-  return newAcquisition;
 };

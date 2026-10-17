@@ -7,7 +7,7 @@ interface StatusIconProps {
   className?: string;
 }
 
-export const StatusIcon: React.FC<StatusIconProps> = ({ status, className = "h-4 w-4" }) => {
+const StatusIcon: React.FC<StatusIconProps> = ({ status, className = "h-4 w-4" }) => {
   switch (status) {
     case 'pass':
       return <CheckCircle className={`${className} text-green-600`} />;

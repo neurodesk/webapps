@@ -42,7 +42,13 @@ export function useDropZone({ onDrop, disabled = false }: UseDropZoneOptions): U
 
     if (disabled) return;
 
-    const files = await processDroppedFiles(e);
+    let files: File[];
+    try {
+      files = await processDroppedFiles(e);
+    } catch (err) {
+      console.error('Failed to read dropped files:', err);
+      return;
+    }
     if (files.length > 0) {
       onDrop(filesToFileList(files));
     }

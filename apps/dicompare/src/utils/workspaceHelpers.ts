@@ -92,24 +92,26 @@ export function filesToFileList(files: File[]): FileList {
  * Returns a flat array of all files.
  */
 export async function processDroppedFiles(e: React.DragEvent): Promise<File[]> {
-  const items = Array.from(e.dataTransfer.items);
-  const files: File[] = [];
+  // The DataTransfer is only readable synchronously during the drop event, so
+  // pull every entry/file out of it before the first await.
+  const dropped: Array<FileSystemDirectoryEntry | File> = [];
+  for (const item of Array.from(e.dataTransfer.items)) {
+    if (item.kind !== 'file') continue;
+    const entry = item.webkitGetAsEntry();
+    if (entry?.isDirectory) {
+      dropped.push(entry as FileSystemDirectoryEntry);
+    } else {
+      const file = item.getAsFile();
+      if (file) dropped.push(file);
+    }
+  }
 
-  for (const item of items) {
-    if (item.kind === 'file') {
-      const entry = item.webkitGetAsEntry();
-      if (entry) {
-        if (entry.isDirectory) {
-          const dirFiles = await getAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
-          files.push(...dirFiles);
-        } else {
-          const file = item.getAsFile();
-          if (file) files.push(file);
-        }
-      } else {
-        const file = item.getAsFile();
-        if (file) files.push(file);
-      }
+  const files: File[] = [];
+  for (const d of dropped) {
+    if (d instanceof File) {
+      files.push(d);
+    } else {
+      files.push(...(await getAllFilesFromDirectory(d)));
     }
   }
   return files;
