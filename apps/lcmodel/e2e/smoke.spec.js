@@ -215,7 +215,7 @@ test("an uploaded .BASIS file becomes the selected basis set", async ({ page, re
 test("a failed download can retry the same example", async ({ page }) => {
   const example = byId["lcmodel-test"];
   let attempts = 0;
-  await page.route(example.files[0].url, (route) => {
+  await page.context().route(example.files[0].url, (route) => {
     attempts++;
     return attempts === 1 ? route.fulfill({ status: 503, body: "" }) : route.continue();
   });

@@ -371,7 +371,7 @@ for (const rawGzip of [false, true]) {
     const modelPath = join(process.env.NESVOR_MASK_FIXTURE_DIR, manifest.file);
     if (rawGzip) {
       const body = readFileSync(new URL('../dist/ort/ort-wasm-simd-threaded.asyncify.wasm.gz', import.meta.url));
-      await page.route('**/ort/ort-wasm-simd-threaded.asyncify.wasm.gz', route => route.fulfill({ body, contentType: 'application/octet-stream' }));
+      await page.context().route('**/ort/ort-wasm-simd-threaded.asyncify.wasm.gz', route => route.fulfill({ body, contentType: 'application/octet-stream' }));
     }
     const server = createServer((_request, response) => {
       response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': statSync(modelPath).size, 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' });
@@ -379,7 +379,7 @@ for (const rawGzip of [false, true]) {
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     try {
-      await page.route(new URL(manifest.file, manifest.base_url).href, route => route.fulfill({ status: 302, headers: { location: `http://127.0.0.1:${server.address().port}/model`, 'Access-Control-Allow-Origin': '*' } }));
+      await page.context().route(new URL(manifest.file, manifest.base_url).href, route => route.fulfill({ status: 302, headers: { location: `http://127.0.0.1:${server.address().port}/model`, 'Access-Control-Allow-Origin': '*' } }));
       const fixture = JSON.parse(readFileSync(join(process.env.NESVOR_MASK_FIXTURE_DIR, 'stack.json')));
       const affine = [[fixture.resolution[0],0,0,0],[0,fixture.resolution[1],0,0],[0,0,fixture.resolution[2],0],[0,0,0,1]];
       await page.goto('/');

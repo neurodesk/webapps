@@ -21,9 +21,8 @@ import numpy as np
 import torch
 from monai.inferers import sliding_window_inference
 from monai.inferers.utils import compute_importance_map, dense_patch_slices
-from monai.transforms import NormalizeIntensity
 from scipy import ndimage
-from scipy.special import expit, softmax
+from scipy.special import softmax
 
 
 def show(name, value, digits=6):
@@ -53,37 +52,19 @@ show("ROBUST_DEFAULT_SUM", np.clip((data300 - lo300) / (hi300 - lo300), 0, 1).as
 subsampled = data[mask][::4]
 show("ROBUST_SUBSAMPLED_LO_HI", np.percentile(subsampled, [10, 90], method="lower"))
 
-# ---- nonzeroZScore ---------------------------------------------------------
-z_in = np.array([0, 4, 0, 10, 7, 0, 1, 2, 0, 12], dtype=np.float32)
-show("NONZERO_ZSCORE", NormalizeIntensity(nonzero=True)(torch.from_numpy(z_in.copy())[None]).numpy()[0])
-nonzero = z_in[z_in != 0]
-show("NONZERO_ZSCORE_MEAN_STD", [nonzero.mean(), nonzero.std()])
-
 # ---- zScoreNormalize (all voxels, population std) -------------------------
+z_in = np.array([0, 4, 0, 10, 7, 0, 1, 2, 0, 12], dtype=np.float32)
 show("ZSCORE_ALL", (z_in - z_in.mean()) / z_in.std())
 
-# ---- softmaxStrokeChannel / collapseBinarySoftmaxLogits ---------------------
+# ---- collapseBinarySoftmaxLogits --------------------------------------------
 bg = np.array([0.0, 2.0, -1.5, 800.0, -800.0, 3.25])
 stroke = np.array([0.0, -1.0, 4.0, -800.0, 800.0, 3.0])
 show("SOFTMAX_STROKE", softmax(np.stack([bg, stroke]), axis=0)[1], digits=7)
-show("SOFTMAX_BACKGROUND", softmax(np.stack([bg, stroke]), axis=0)[0], digits=7)
-show("SIGMOID_ONE_CHANNEL", expit(stroke), digits=7)
-three = np.stack([bg, stroke, np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0])])
-show("SOFTMAX_THREE_CHANNEL_INDEX_2", softmax(three, axis=0)[2], digits=7)
 
-# ---- fOrderToNDHWC / extractMultiChannelPatch / zero padding ----------------
+# ---- fOrderToNDHWC ------------------------------------------------------------
 dims = (2, 3, 4)
 flat = np.arange(24, dtype=np.float64)
 show("F_ORDER_TO_C_ORDER", flat.reshape(dims, order="F").ravel(order="C"))
-
-vol_dims = (5, 4, 3)
-chan_a = ramp(60, 7, 61).astype(np.float64).reshape(vol_dims, order="F")
-chan_b = ramp(60, 11, 59).astype(np.float64).reshape(vol_dims, order="F")
-patch = np.stack([chan_a[2:5, 1:3, 0:2], chan_b[2:5, 1:3, 0:2]])
-show("MULTI_CHANNEL_PATCH", patch.ravel(order="C"))
-padded = np.pad(chan_a, ((0, 3), (0, 0), (0, 1)))
-show("ZERO_PADDED_DIMS", list(padded.shape))
-show("ZERO_PADDED_SUM_AND_CORNER", [padded.sum(), padded[4, 3, 2], padded[7, 3, 3], padded[5, 0, 0]])
 
 # ---- sliding window: positions ---------------------------------------------
 def monai_positions(image, roi, overlap):
@@ -145,34 +126,6 @@ tta_mean = tta_sum / 8
 show("TTA_STATS_MIN_MAX_MEAN", [tta_mean.min(), tta_mean.max(), tta_mean.mean()])
 print("TTA_LABELS =", json.dumps((tta_mean >= 0.5).astype(int).ravel(order="F").tolist()))
 print("NO_TTA_LABELS =", json.dumps((predictor(torch.from_numpy(np.ascontiguousarray(tta_patch))[None, None])[0, 0].numpy() >= 0.5).astype(int).ravel(order="F").tolist()))
-
-# ---- DeepISLES two-channel sliding window ----------------------------------
-adc = ramp(128, 31, 113).astype(np.float32)
-trace = ramp(128, 17, 101).astype(np.float32)
-adc[::5] = 0
-trace[::7] = 0
-normalise = NormalizeIntensity(nonzero=True, channel_wise=True)
-channels = normalise(torch.from_numpy(np.stack([adc.reshape(sw_dims, order="F"), trace.reshape(sw_dims, order="F")])))
-
-
-def two_channel_predictor(batch):
-    gain = torch.from_numpy(position_gain)
-    logits_stroke = batch[:, 0:1] * gain - batch[:, 1:2] * 0.5
-    logits_background = batch[:, 1:2] * 0.25
-    return torch.softmax(torch.cat([logits_background, logits_stroke], dim=1), dim=1)[:, 1:2]
-
-
-deepisles = sliding_window_inference(
-    torch.as_tensor(channels)[None],
-    roi_size=(4, 4, 4),
-    sw_batch_size=1,
-    predictor=two_channel_predictor,
-    overlap=0.5,
-    mode="gaussian",
-    sigma_scale=2.0,
-)[0, 0].numpy()
-print("DEEPISLES_LABELS =", json.dumps((deepisles >= 0.5).astype(int).ravel(order="F").tolist()))
-show("DEEPISLES_PROB_MAX", deepisles.max())
 
 # ---- connected components (26-connectivity) --------------------------------
 cc_dims = (5, 4, 3)

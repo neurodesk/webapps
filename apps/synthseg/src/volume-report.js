@@ -1,6 +1,7 @@
 // The age-normative volume report as data and SVG markup. Pure: norms, volumes and the subject in,
 // numbers, text and SVG strings out, so everything here is Node-tested and the page only places it.
 import { assess, centile, footerLines, headerLines, modelKey, percentileText, referenceNote, scaledAge } from '@neurodesk/synthseg/brainquant';
+import { VOLUME_COLUMNS } from '@neurodesk/synthseg/results';
 import manifest from '@neurodesk/synthseg/manifest' with { type: 'json' };
 
 const WIDTH = 240;
@@ -8,10 +9,17 @@ const HEIGHT = 160;
 const MARGIN = { top: 8, right: 8, bottom: 28, left: 40 };
 const SAMPLES = 61;
 const QUANTILES = [0.05, 0.25, 0.5, 0.75, 0.95];
-const FAST_MODE_NOTE = 'The reference volumes come from fast mode; this run used the default mode.';
 
 const ml = (mm3) => mm3 / 1000;
 const round = (value) => Number(value.toFixed(1));
+
+/** Raw soft volumes remain useful even when the population assessment rejects a run. */
+export function rawVolumeRows(volumes) {
+  return VOLUME_COLUMNS.map((title) => ({
+    title,
+    volumeMl: Number.isFinite(volumes[title]) ? ml(volumes[title]).toFixed(2) : 'n/a',
+  }));
+}
 
 /** Round step for about `count` ticks across `span`: 1, 2, 5 or 10 times a power of ten. */
 export function tickStep(span, count = 4) {
@@ -28,7 +36,7 @@ export function tickStep(span, count = 4) {
  * Everything the Volumes view shows for one subject: text lines, one chart per structure and the table.
  * `reference` is the selectReference result the norms were loaded for.
  */
-export function volumeReport(norms, volumes, subject, { reference, fast = true, voxelSizeMm = 1 }) {
+export function volumeReport(norms, volumes, subject, { reference, voxelSizeMm = 1 }) {
   const report = assess(norms, volumes, subject);
   const { ageMin, ageMax } = norms.reference;
   const span = subject.age === null ? [ageMin, ageMax] : [Math.min(ageMin, subject.age), Math.max(ageMax, subject.age)];
@@ -67,7 +75,7 @@ export function volumeReport(norms, volumes, subject, { reference, fast = true, 
       `Population data: ${norms.reference.cohort}, version ${manifest.norms[reference.id].version}.`,
       ...(voxelSizeMm > 1 ? [`This run used ${voxelSizeMm} mm voxels. The 1 mm reference norms have not been validated for this grid.`] : []),
     ],
-    footer: footerLines(report, norms, [referenceNote(norms, reference.reason), ...(fast ? [] : [FAST_MODE_NOTE])]),
+    footer: footerLines(report, norms, [referenceNote(norms, reference.reason)]),
     charts,
     rows,
   };

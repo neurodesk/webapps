@@ -1,16 +1,16 @@
 /**
  * Console Output Module
- * Handles logging output to the UI console panel.
+ * Writes CALMaR's technical log: timestamped lines with level and source.
  */
 export class CalmarConsoleOutput {
-  constructor(outputElementId = 'consoleOutput', options = {}) {
-    if (typeof outputElementId === 'object' && outputElementId !== null) {
-      options = outputElementId;
-      outputElementId = options.outputElementId || 'consoleOutput';
-    }
+  constructor({
+    outputElementId = 'technicalConsoleOutput',
+    copyButtonId = 'copyTechnicalConsole',
+    mirrorToBrowserConsole = true
+  } = {}) {
     this.outputElementId = outputElementId;
-    this.copyButtonId = options.copyButtonId || 'copyConsole';
-    this.mirrorToBrowserConsole = options.mirrorToBrowserConsole !== false;
+    this.copyButtonId = copyButtonId;
+    this.mirrorToBrowserConsole = mirrorToBrowserConsole;
   }
 
   escapeHtml(value) {
@@ -31,13 +31,13 @@ export class CalmarConsoleOutput {
       const time = new Date().toLocaleTimeString('en-US', { hour12: false });
       const line = document.createElement('div');
       const level = options.level || 'info';
-      line.className = `console-line console-line-${level}`;
+      line.className = `nd-console-line nd-console-${level}`;
       const source = options.source
         ? `<span class="console-source">[${this.escapeHtml(options.source)}]</span> `
         : '';
       line.innerHTML =
-        `<span class="console-time">[${time}]</span> ` +
-        `${source}<span class="console-message">${this.escapeHtml(text)}</span>`;
+        `<span class="nd-console-time">[${time}]</span> ` +
+        `${source}<span class="nd-console-message">${this.escapeHtml(text)}</span>`;
       outputElement.appendChild(line);
       outputElement.scrollTop = outputElement.scrollHeight;
     }
@@ -47,7 +47,7 @@ export class CalmarConsoleOutput {
   async copyToClipboard() {
     const outputElement = document.getElementById(this.outputElementId);
     if (!outputElement) return false;
-    const lines = outputElement.querySelectorAll('.console-line');
+    const lines = outputElement.querySelectorAll('.nd-console-line');
     const text = Array.from(lines).map(line => line.textContent).join('\n');
     try {
       await this.writeTextToClipboard(text);

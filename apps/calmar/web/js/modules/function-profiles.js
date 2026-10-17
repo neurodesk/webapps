@@ -159,8 +159,9 @@ export function renderFunctionalProfileTable(tableEl, rankedTerms, {
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  for (const label of ['Term', 'Score', driverHeader]) {
+  for (const [label, className] of [['Term', ''], ['Score', 'nd-numeric'], [driverHeader, '']]) {
     const th = document.createElement('th');
+    if (className) th.className = className;
     th.textContent = label;
     headerRow.appendChild(th);
   }
@@ -182,8 +183,8 @@ export function renderFunctionalProfileTable(tableEl, rankedTerms, {
   for (const item of rankedTerms) {
     const row = document.createElement('tr');
     appendCell(row, item.term);
-    appendCell(row, Number(item.score).toFixed(3), 'function-profile-score');
-    appendCell(row, contributorLabel(item.contributors), 'function-profile-drivers');
+    appendCell(row, Number(item.score).toFixed(3), 'nd-numeric');
+    appendCell(row, contributorLabel(item.contributors));
     tbody.appendChild(row);
   }
   tableEl.appendChild(tbody);

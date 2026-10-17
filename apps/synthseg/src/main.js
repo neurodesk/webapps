@@ -21,7 +21,7 @@ import manifest from '@neurodesk/synthseg/manifest';
 import { fieldStrengthFromSidecar, parseNorms, selectReference, subjectFromSidecar } from '@neurodesk/synthseg/brainquant';
 import { LABELS_ARTIFACT, TISSUES, TISSUE_ARTIFACT, TISSUE_NAMES, outputNames, outputStem, volumesCsv } from '@neurodesk/synthseg/results';
 import { editedResult, gridOf, labelNames, labelsResult, looksLikeCt, sameGrid } from './logic.js';
-import { legendEntries, volumeReport } from './volume-report.js';
+import { legendEntries, rawVolumeRows, volumeReport } from './volume-report.js';
 import freesurferLut from '@neurodesk/webapp-components/automation/freesurfer-lut';
 import './styles.css';
 
@@ -324,15 +324,15 @@ function setFieldStrength(value) {
   $('reference').value = 'auto';
   showReferenceHint();
 }
-/** The reference norms the report uses: the Reference field, Auto deciding from the field strength. */
+/** The reference norms the report uses: the Reference field, Auto deciding from the field strength, and the run's mode. */
 function reference() {
-  return selectReference($('reference').value, fieldStrengthT);
+  return selectReference($('reference').value, fieldStrengthT, volumesFast);
 }
 function showReferenceHint() {
-  const { id } = reference();
+  const { cohort } = reference();
   const hint = $('referenceHint');
   hint.hidden = !source || $('reference').value !== 'auto';
-  hint.textContent = `Auto: ${$('reference').querySelector(`option[value="${id}"]`).textContent} · ${
+  hint.textContent = `Auto: ${$('reference').querySelector(`option[value="${cohort}"]`).textContent} · ${
     fieldStrengthT === null ? 'field strength unknown' : `scanner ${fieldStrengthT} T`}`;
 }
 // Each reference's norms are fetched once, when a report first needs them, and checked against the manifest.
@@ -340,7 +340,6 @@ function loadNorms(id) {
   if (!normsLoads.has(id)) {
     const pin = manifest.norms[id];
     const load = fetchModel({ url: pin.url, integrity: { bytes: pin.bytes, sha256: pin.sha256 } }, {
-      cache: 'neurodesk-synthseg-norms-v1',
       requestFailureMessage: 'Could not download the reference volumes.',
     }).then((bytes) => parseNorms(JSON.parse(new TextDecoder().decode(bytes))));
     load.catch(() => normsLoads.delete(id));
@@ -357,7 +356,7 @@ async function reportSummary() {
   const referenceRecord = { choice: $('reference').value, fieldStrengthT, reason: selected.reason };
   try {
     const norms = await loadNorms(selected.id);
-    const { report } = volumeReport(norms, volumes, used, { reference: selected, fast: volumesFast, voxelSizeMm: volumesVoxelSizeMm });
+    const { report } = volumeReport(norms, volumes, used, { reference: selected, voxelSizeMm: volumesVoxelSizeMm });
     return {
       norms: { id: selected.id, version, url, sha256 },
       reference: referenceRecord,
@@ -382,12 +381,12 @@ function svgElement(markup) {
   // The HTML parser puts <svg> in the SVG namespace; an XML parse without xmlns would not.
   return new DOMParser().parseFromString(markup, 'text/html').body.firstElementChild;
 }
-function renderTable(rows) {
-  const headings = ['Structure', 'Volume (mL)', 'Adjusted (mL)', 'z', 'Percentile', 'Flag'];
+function renderTable(rows, raw = false) {
+  const headings = raw ? ['Structure', 'Volume (mL)'] : ['Structure', 'Volume (mL)', 'Adjusted (mL)', 'z', 'Percentile', 'Flag'];
   const numeric = [false, true, true, true, true, false];
   const head = element('tr', {}, headings.map((text, index) => element('th', { text, className: numeric[index] ? 'nd-numeric' : '' })));
   const body = rows.map((row) => {
-    const cells = [row.title, row.volumeMl, row.adjustedMl, row.z, row.percentile, row.flag];
+    const cells = raw ? [row.title, row.volumeMl] : [row.title, row.volumeMl, row.adjustedMl, row.z, row.percentile, row.flag];
     const line = element('tr', {}, cells.map((text, index) => element('td', { text, className: numeric[index] ? 'nd-numeric' : '' })));
     if (row.flag) line.dataset.flag = row.flag;
     return line;
@@ -401,27 +400,28 @@ async function renderVolumes() {
   if (!volumes || panel.hidden) return;
   const revision = ++renderRevision;
   const selected = reference();
-  let norms;
   try {
-    norms = await loadNorms(selected.id);
+    const norms = await loadNorms(selected.id);
+    if (revision !== renderRevision || !volumes) return;
+    const used = subject();
+    const view = volumeReport(norms, volumes, used, { reference: selected, voxelSizeMm: volumesVoxelSizeMm });
+    const lines = view.header.map((text) => element('p', { text }));
+    lines.at(-1).className = 'nd-report-lead';
+    const legend = element('ul', { className: 'nd-chart-legend' }, legendEntries(used.age !== null).map(({ label, svg }) => element('li', {}, [svgElement(svg), label])));
+    const charts = element('div', { className: 'nd-chart-grid' }, view.charts.map((chart) => {
+      const figure = element('figure', { className: 'nd-chart-figure' }, [element('figcaption', { text: chart.caption }), svgElement(chart.svg)]);
+      if (chart.flagged) figure.dataset.flag = '';
+      return figure;
+    }));
+    const notes = element('div', { className: 'nd-report-notes' }, view.footer.map((text) => element('p', { text })));
+    panel.replaceChildren(...lines, legend, charts, renderTable(view.rows), notes);
   } catch (error) {
-    if (revision !== renderRevision) return;
-    panel.replaceChildren(element('p', { className: 'nd-message error', text: `The reference volumes could not be loaded: ${error.message} The labels and the volume table remain available.` }));
-    return;
+    if (revision !== renderRevision || !volumes) return;
+    panel.replaceChildren(
+      element('p', { className: 'nd-message error', text: `The population report is unavailable: ${error.message} The labels and raw volumes remain available.` }),
+      renderTable(rawVolumeRows(volumes), true),
+    );
   }
-  if (revision !== renderRevision || !volumes) return;
-  const used = subject();
-  const view = volumeReport(norms, volumes, used, { reference: selected, fast: volumesFast, voxelSizeMm: volumesVoxelSizeMm });
-  const lines = view.header.map((text) => element('p', { text }));
-  lines.at(-1).className = 'nd-report-lead';
-  const legend = element('ul', { className: 'nd-chart-legend' }, legendEntries(used.age !== null).map(({ label, svg }) => element('li', {}, [svgElement(svg), label])));
-  const charts = element('div', { className: 'nd-chart-grid' }, view.charts.map((chart) => {
-    const figure = element('figure', { className: 'nd-chart-figure' }, [element('figcaption', { text: chart.caption }), svgElement(chart.svg)]);
-    if (chart.flagged) figure.dataset.flag = '';
-    return figure;
-  }));
-  const notes = element('div', { className: 'nd-report-notes' }, view.footer.map((text) => element('p', { text })));
-  panel.replaceChildren(...lines, legend, charts, renderTable(view.rows), notes);
 }
 function subjectChanged() {
   $('subjectHint').hidden = true;

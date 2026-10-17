@@ -11,25 +11,29 @@
         "role": "magnitude",
         "name": "sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz",
         "sha256": "451510366b5d994d9fd0f24e69e2ab40e44534a61c2d1e3a26b791caa8d862b5",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.nii.gz",
+        "bytes": 6090918
       },
       {
         "role": "metadata",
         "name": "sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json",
         "sha256": "af2ec5f5eff02b3fa0bbe7b7d18dfe95a58a09fdc914efc1394424e0fa8fdbcc",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-mag_T2starw.json",
+        "bytes": 1926
       },
       {
         "role": "phase",
         "name": "sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz",
         "sha256": "169d30497c751724ace39864fb796fd341201a1282be0b0ac44938c22cfcdfa7",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.nii.gz",
+        "bytes": 13678105
       },
       {
         "role": "metadata",
         "name": "sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.json",
         "sha256": "6624f63dfb76f3121c4c91a42fd89ba956870516b1ec0c4fa8f3c007dd9384b4",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.json"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/ee7566df698ad9b1d0cd1e8fe65ac9ccc671657f/examples/qsmbly/real-brain-qsm/sub-170705134431std1312211075243167001_ses-1_run-1_part-phase_T2starw.json",
+        "bytes": 1968
       }
     ]
   }

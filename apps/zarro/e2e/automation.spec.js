@@ -3,7 +3,9 @@ const dispatch = (page, command, request = {}) => page.evaluate(({ command, requ
 
 test('OME-Zarr operation loads real chunks and retains geometry, crosshair and layout controls', async ({ page }) => {
   let chunks = 0;
-  await page.route('**/automation-store/**', async route => {
+  let serviceWorkerRequests = 0;
+  await page.context().route('**/automation-store/**', async route => {
+    if (route.request().serviceWorker()) serviceWorkerRequests++;
     const path = new URL(route.request().url()).pathname;
     let metadata;
     if (path.endsWith('/.zgroup')) metadata = { zarr_format: 2 };
@@ -22,12 +24,14 @@ test('OME-Zarr operation loads real chunks and retains geometry, crosshair and l
     return route.fulfill({ status: 404, body: 'missing' });
   });
   await page.goto('./?backend=webgl2');
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await expect(page.locator('#neurodesk-input-transfer')).toHaveCount(1);
   await dispatch(page, 'start', { operation: 'open-url', inputs: { store: { url: 'http://localhost:4173/automation-store/' } } });
   await expect.poll(async () => (await dispatch(page, 'snapshot')).state, { timeout: 30000 }).toBe('succeeded');
   const { report } = await dispatch(page, 'snapshot');
   expect(report.summary.geometry.dimensions).toEqual([4, 4, 4]);
   expect(chunks).toBeGreaterThan(0);
+  expect(serviceWorkerRequests).toBeGreaterThan(0);
   const moved = await dispatch(page, 'viewers.crosshair', { viewerId: 'main', position: { frame: 'mm', value: [1, 2, 1] } });
   expect(moved.position).toEqual({ frame: 'mm', value: [1, 2, 1] });
   expect(await dispatch(page, 'viewers.regions', { viewerId: 'main' })).toEqual([]);

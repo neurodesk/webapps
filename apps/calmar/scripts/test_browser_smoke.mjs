@@ -133,6 +133,8 @@ test('Phase 1c.4 browser smoke: phantom -> Yeo overlap -> CSV download', { timeo
       await page.waitForFunction(() => Boolean(window.app && window.app.viewerController), { timeout: 15000 });
       await openAllDisclosures(page);
 
+      // The phantom sits on the Yeo 2 mm grid; Schaefer 400 is the default atlas.
+      await page.selectOption('#atlasSelect', 'yeo7');
       // Drop the phantom mask. The change handler is async; wait until app.lesionFile is populated.
       await page.setInputFiles('#lesionFileInput', PHANTOM_PATH);
       await page.waitForFunction(() => Boolean(window.app.lesionFile), { timeout: 15000 });
@@ -213,7 +215,9 @@ test('Phase 1c.4 browser smoke: phantom -> Yeo overlap -> CSV download', { timeo
       const fcStart = Date.now();
       let fcDone = false;
       while (Date.now() - fcStart < FC_TIMEOUT_MS) {
-        fcDone = await page.evaluate(() => Boolean(window.app && window.app.networkMapFile));
+        fcDone = await page.evaluate(() => Boolean(
+          window.app?.networkMapFile && !document.getElementById('downloadNetworkMapButton').disabled
+        ));
         if (fcDone) break;
         await sleep(500);
       }
@@ -308,6 +312,7 @@ test('Phase 8 browser smoke: phantom -> Run full pipeline (manual branch)', { ti
       await page.waitForFunction(() => Boolean(window.app && window.app.viewerController), { timeout: 15000 });
       await openAllDisclosures(page);
 
+      await page.selectOption('#atlasSelect', 'yeo7');
       await page.setInputFiles('#lesionFileInput', PHANTOM_PATH);
       await page.waitForFunction(() => Boolean(window.app.lesionFile), { timeout: 15000 });
 
@@ -345,6 +350,14 @@ test('Phase 8 browser smoke: phantom -> Run full pipeline (manual branch)', { ti
         rows => rows.length
       );
       assert.ok(overlapRowCount > 0, 'Overlap table should have at least one row after the chain.');
+      await page.waitForFunction(() => !document.getElementById('resultsReport').hidden, null, { timeout: 15000 });
+      const resultsView = await page.evaluate(() => ({
+        active: Array.from(document.querySelectorAll('.view-tab.active')).map(tab => tab.dataset.view),
+        reportHasTable: Boolean(document.querySelector('#resultsReport #networkOverlapTable')),
+        sidebarHasTable: Boolean(document.querySelector('.app-sidebar table'))
+      }));
+      assert.deepEqual(resultsView, { active: ['results'], reportHasTable: true, sidebarHasTable: false },
+        'a finished analysis shows its tables in the viewer Results view');
 
       const fcEnabled = await page.$eval('#downloadNetworkMapButton', el => !el.disabled);
       assert.ok(fcEnabled, 'Download network map button should be enabled.');
@@ -427,12 +440,12 @@ test('Phase 2a.1.5 browser smoke: structural T1 -> SynthStrip -> brain mask down
         }
         if (!synthDone) {
           const inPageConsole = await page
-            .$eval('#consoleOutput', el => el ? el.innerText : '(missing)')
+            .$eval('#technicalConsoleOutput', el => el ? el.innerText : '(missing)')
             .catch(() => '(unavailable)');
           throw new Error(
             `Brain mask did not appear within ${SYNTH_TIMEOUT_MS}ms\n` +
             `--- captured browser-console messages ---\n${consoleMessages.slice(-30).join('\n')}\n` +
-            `--- in-page #consoleOutput widget ---\n${inPageConsole}`
+            `--- in-page #technicalConsoleOutput widget ---\n${inPageConsole}`
           );
         }
         t.diagnostic(`SynthStrip elapsed: ${((Date.now() - synthStart) / 1000).toFixed(1)}s`);
@@ -866,6 +879,7 @@ test('Phase 10 browser smoke: T1 -> Run full pipeline (auto branch)',
             el => !el.disabled
           );
           assert.ok(threshEnabled, '#downloadThresholdedNetworkMapButton must be enabled.');
+          await page.waitForFunction(() => !document.getElementById('resultsReport').hidden, null, { timeout: 15000 });
           t.diagnostic(`Auto-branch full pipeline OK. Summary: "${threshSummary}".`);
         } else if (registerErrored || registerStalled) {
           // Headless Chromium's WASM route either OOMed or hung. That's

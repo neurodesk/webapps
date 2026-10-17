@@ -168,6 +168,18 @@ DEEPISLES_MODE_SPECS = {
         ),
         probability_threshold=0.5,
     ),
+    "deepisles-seals-fold0-fp16-onnx": DeepIslesModeSpec(
+        id="deepisles-seals-fold0-fp16-onnx",
+        backend="deepisles-prediction",
+        input_contrasts=("TRACE", "ADC"),
+        patch_size=(128, 128, 128),
+        overlap=0.5,
+        tta=True,
+        channel_order=("TRACE", "ADC"),
+        min_component_size=0,
+        source="DeepISLES SEALS nnU-Net fold 0, fp16 ONNX browser candidate (scripts/run_seals_onnx.py)",
+        prediction_glob="{subject}_seals_onnx/{subject}_deepisles-seals-fold0-fp16_onnx_pred.nii.gz",
+    ),
     "deepisles-nvauto-15fold": DeepIslesModeSpec(
         id="deepisles-nvauto-15fold",
         backend="deepisles-prediction",

@@ -166,21 +166,17 @@ assert.deepEqual(stroke.conversionInputShape, [1, 1, 128, 128, 128],
 assert.equal(stroke.conversionOpset, 17,
   'lnm-stroke-lesion must document the ONNX opset');
 
-const deepIsles = manifest.modelAssets.find(a => a.id === 'lnm-deepisles-nvauto-browser-seed');
-assert.ok(deepIsles,
-  "manifest must register 'lnm-deepisles-nvauto-browser-seed' as the DeepISLES candidate asset");
-assert.equal(deepIsles.supportStatus, 'benchmark-only',
-  'DeepISLES candidate must not count as supported until gap analysis and browser budget gates pass');
+const deepIsles = manifest.modelAssets.find(a => a.id === 'lnm-deepisles-seals-fold0');
+assert.ok(deepIsles, "manifest must register 'lnm-deepisles-seals-fold0' as the DWI/ADC seed");
+assert.equal(deepIsles.supportStatus, 'supported');
 assert.equal(deepIsles.inputModality, 'DWI_ADC',
-  'DeepISLES candidate must declare that it uses DWI/ADC rather than T1');
-assert.deepEqual(deepIsles.inputContrasts, ['ADC', 'TRACE'],
-  'DeepISLES candidate must pin ADC + TRACE inputs');
-assert.deepEqual(deepIsles.preprocessing?.channelOrder, ['ADC', 'TRACE'],
-  'DeepISLES candidate must pin ADC,TRACE channel order');
-assert.deepEqual(deepIsles.patchSize, [192, 192, 128],
-  'DeepISLES candidate must document upstream NVAUTO patch geometry');
-assert.equal(deepIsles.overlap, 0.625,
-  'DeepISLES candidate must document upstream NVAUTO overlap');
+  'the DeepISLES seed must declare that it uses DWI/ADC rather than T1');
+assert.deepEqual(deepIsles.preprocessing?.channelOrder, ['TRACE', 'ADC'],
+  'SEALS channel 0 is DWI/TRACE and channel 1 is ADC');
+assert.deepEqual(deepIsles.patchSize, [128, 128, 128], "SEALS' nnU-Net patch");
+assert.equal(deepIsles.upstream?.license, 'Apache-2.0');
+assert.equal(deepIsles.upstream?.archiveMd5, 'be5b6dfcd66b55c2e6dc6db9a5880f7f',
+  'the DeepISLES weights archive is pinned');
 
 // Phase 3: the SynthMorph registration target — an MNI152 brain at the
 // 160x160x192 1mm grid the model was trained against. Lives under

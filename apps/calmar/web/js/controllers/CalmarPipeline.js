@@ -13,18 +13,14 @@ export class CalmarPipeline extends PipelineExecutor {
       resultFileName: (stage, data) => `${data.taskId || 'lnm'}_${stage}.nii`,
       initializingMessage: null,
       readyMessage: null,
-      workerLog: message => (options.updateDebugOutput || options.updateOutput || (() => {}))(
-        message,
-        { source: 'worker', audience: 'technical' },
-      ),
+      workerLog: message => this.updateOutput(message, { source: 'worker' }),
     });
-    this.updateDebugOutput = options.updateDebugOutput || this.updateOutput;
   }
 
   handleMessage(message) {
     super.handleMessage(message);
     if (message.type === 'initialized') {
-      this.updateDebugOutput('ONNX Runtime ready', { source: 'worker', audience: 'technical' });
+      this.updateOutput('ONNX Runtime ready', { source: 'worker' });
     }
   }
 

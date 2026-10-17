@@ -514,9 +514,9 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
   const mids = writeSurfaceFiles(replayVertices, replayFaces).filter(({ id }) => id.endsWith('-mid'));
   files.push(...mids.map(({ id, name, mediaType }) => ({ id, name, mediaType })));
   const atlasPath = join(root, 'atlas/fsaverage-cortex.bin');
-  await page.route('**/fsaverage-cortex.bin', (route) => route.fulfill({ path: atlasPath, contentType: 'application/octet-stream' }));
+  await page.context().route('**/fsaverage-cortex.bin', (route) => route.fulfill({ path: atlasPath, contentType: 'application/octet-stream' }));
   const paths = new Map(files.map((file) => [file.name, join(root, outputs.includes(file) ? 'outputs' : 'surfaces', file.name)]));
-  await page.route('**/__topofit_fixture__/*', (route) => {
+  await page.context().route('**/__topofit_fixture__/*', (route) => {
     const name = new URL(route.request().url()).pathname.split('/').pop();
     const mid = mids.find((file) => file.name === name);
     if (mid) return route.fulfill({ body: Buffer.from(mid.bytes), contentType: 'application/octet-stream' });
@@ -642,7 +642,7 @@ test('real reconstructed cortex displays patch QC and clearly named patches', as
 
 test('analysis runs in its own worker and can be repeated or cancelled without reconstruction', async ({ page }) => {
   const modelRequests = [];
-  page.on('request', (request) => { if (/\.onnx(?:[?]|$)/.test(request.url())) modelRequests.push(request.url()); });
+  page.context().on('request', (request) => { if (/\.onnx(?:[?]|$)/.test(request.url())) modelRequests.push(request.url()); });
   await deliverSurfaces(page);
   const leftWhite = page.getByRole('checkbox', { name: 'Show Left white surface', exact: true });
   await leftWhite.check();
@@ -661,7 +661,7 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   const manifest = page.locator('#technicalLog .nd-console-message').filter({ hasText: 'Processing manifest' }).last();
   await expect(manifest).toContainText('original-qc');
   await expect(manifest).toContainText('lh.mid.normals.csv');
-  await page.route('**/fsaverage-cortex.bin', () => {});
+  await page.context().route('**/fsaverage-cortex.bin', () => {});
   await page.locator('#findPatches').check();
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#statusText')).toContainText('Analyzing reconstructed surfaces');
@@ -670,8 +670,8 @@ test('analysis runs in its own worker and can be repeated or cancelled without r
   await expect(page.locator('#statusText')).toContainText('Surface analysis cancelled');
   await expect(page.getByText('Left mid-surface normals', { exact: true })).toBeVisible();
   await expect(page.locator('#analyzeButton')).toBeEnabled();
-  await page.unroute('**/fsaverage-cortex.bin');
-  await page.route('**/fsaverage-cortex.bin', (route) => route.fulfill({ body: '' }));
+  await page.context().unroute('**/fsaverage-cortex.bin');
+  await page.context().route('**/fsaverage-cortex.bin', (route) => route.fulfill({ body: '' }));
   await page.locator('#analyzeButton').click();
   await expect(page.locator('#statusText')).toContainText('Model size mismatch');
   await expect(page.getByText('Left mid-surface normals', { exact: true })).toBeVisible();

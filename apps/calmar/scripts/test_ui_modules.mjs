@@ -30,9 +30,9 @@ function makeFakeElement(id) {
       (this.listeners[event] ||= []).push(fn);
     },
     querySelectorAll(sel) {
-      // Only used by ConsoleOutput.copyToClipboard for '.console-line';
+      // Only used by ConsoleOutput.copyToClipboard for '.nd-console-line';
       // return all appended children.
-      return sel === '.console-line' ? this.children : [];
+      return sel === '.nd-console-line' ? this.children : [];
     },
     set innerHTML(v) { if (v === '') this.children = []; },
     get innerHTML() { return ''; },
@@ -91,11 +91,11 @@ function setupDom(elementsById = {}) {
 
 // ---- ConsoleOutput ----
 {
-  const consoleEl = makeFakeElement('consoleOutput');
-  setupDom({ consoleOutput: consoleEl });
+  const consoleEl = makeFakeElement('technicalConsoleOutput');
+  setupDom({ technicalConsoleOutput: consoleEl });
   const { CalmarConsoleOutput: ConsoleOutput } = await import(path.join(ROOT, 'web/js/modules/ui/CalmarConsoleOutput.js'));
 
-  const co = new ConsoleOutput('consoleOutput');
+  const co = new ConsoleOutput();
   co.log('first message');
   co.log('second message');
   assert.equal(consoleEl.children.length, 2,
@@ -105,7 +105,7 @@ function setupDom(elementsById = {}) {
   co.log('second message', { level: 'warning' });
   co.log('second message', { level: 'warning', source: 'worker' });
   assert.equal(consoleEl.children.length, 4, 'changed level or source must remain visible');
-  // Each line is an element with .console-line class info inside innerHTML.
+  // Each line is an element with .nd-console-line class info inside innerHTML.
   assert.ok(consoleEl.children[0]._innerHtml.includes('first message'),
     'first message must appear in the line innerHTML');
   // scrollTop is set to scrollHeight to autoscroll.
@@ -122,13 +122,13 @@ function setupDom(elementsById = {}) {
 
   // copyToClipboard uses navigator.clipboard when available.
   co.log('copy me');
-  const copyBtn = makeFakeElement('copyConsole');
+  const copyBtn = makeFakeElement('copyTechnicalConsole');
   let clipboardText = null;
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
     value: { clipboard: { writeText: async (text) => { clipboardText = text; } } }
   });
-  setupDom({ consoleOutput: consoleEl, copyConsole: copyBtn });
+  setupDom({ technicalConsoleOutput: consoleEl, copyTechnicalConsole: copyBtn });
   assert.equal(await co.copyToClipboard(), true,
     'copyToClipboard must report success when navigator.clipboard works');
   assert.match(clipboardText, /copy me/,
@@ -141,7 +141,7 @@ function setupDom(elementsById = {}) {
     configurable: true,
     value: { clipboard: { writeText: async () => { throw new Error('permission denied'); } } }
   });
-  setupDom({ consoleOutput: consoleEl, copyConsole: copyBtn });
+  setupDom({ technicalConsoleOutput: consoleEl, copyTechnicalConsole: copyBtn });
   const originalCreateElement = document.createElement.bind(document);
   document.createElement = (tag) => {
     const el = originalCreateElement(tag);
@@ -155,23 +155,23 @@ function setupDom(elementsById = {}) {
   assert.equal(document._lastCommand, 'copy',
     'fallback path must invoke document.execCommand("copy")');
 
-  // Custom log viewers can carry source/level metadata and copy via their own button.
-  const techEl = makeFakeElement('technicalConsoleOutput');
-  const techCopyBtn = makeFakeElement('copyTechnicalConsole');
+  // A configured log viewer carries source/level metadata and copies via its own button.
+  const techEl = makeFakeElement('otherConsoleOutput');
+  const techCopyBtn = makeFakeElement('copyOtherConsole');
   let techClipboardText = null;
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
     value: { clipboard: { writeText: async (text) => { techClipboardText = text; } } }
   });
-  setupDom({ technicalConsoleOutput: techEl, copyTechnicalConsole: techCopyBtn });
+  setupDom({ otherConsoleOutput: techEl, copyOtherConsole: techCopyBtn });
   const techConsole = new ConsoleOutput({
-    outputElementId: 'technicalConsoleOutput',
-    copyButtonId: 'copyTechnicalConsole'
+    outputElementId: 'otherConsoleOutput',
+    copyButtonId: 'copyOtherConsole'
   });
   techConsole.log('worker detail', { source: 'worker', level: 'error' });
   assert.equal(techEl.children.length, 1,
     'custom log viewer must append lines to its configured output element');
-  assert.match(techEl.children[0]._cls, /console-line-error/,
+  assert.match(techEl.children[0]._cls, /nd-console-error/,
     'log level must be reflected in the line class');
   assert.match(techEl.children[0]._innerHtml, /console-source[^>]*>\[worker\]/,
     'log source must be rendered for diagnostic logs');
@@ -183,7 +183,7 @@ function setupDom(elementsById = {}) {
 
   // No-op when the DOM element doesn't exist (use a fresh ID).
   setupDom({});
-  const co2 = new ConsoleOutput('missingId');
+  const co2 = new ConsoleOutput({ outputElementId: 'missingId' });
   // Must not throw.
   co2.log('orphan');
   co2.clear();

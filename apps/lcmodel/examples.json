@@ -8,7 +8,9 @@
       {
         "role": "spectrum",
         "name": "P17920.7",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/ge-press-phantom/P17920.7"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/ge-press-phantom/P17920.7",
+        "sha256": "e2c9aec2b310567ebf91239c96e5b25b875ccdbd96f8d338133d1267f11d20f5",
+        "bytes": 20080220
       }
     ]
   },
@@ -21,27 +23,37 @@
       {
         "role": "spectrum",
         "name": "sub-01_PRESS_35_act.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.sdat",
+        "sha256": "fd14521b8b7e9f1fa4d1fd8930e6e4b7a4e26d535f71eab9e922d4a40c7759b0",
+        "bytes": 16384
       },
       {
         "role": "spectrum",
         "name": "sub-01_PRESS_35_act.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_act.spar",
+        "sha256": "78b78cb9ec4d5b509563384629390702cc2caf1cc133df529beb56e4d7ae1f4f",
+        "bytes": 3080
       },
       {
         "role": "water",
         "name": "sub-01_PRESS_35_ref.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.sdat",
+        "sha256": "996ddb02f55c4bb65204e92f25d5a112dd72b300659a13d0aacb28040af3b59d",
+        "bytes": 16384
       },
       {
         "role": "water",
         "name": "sub-01_PRESS_35_ref.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_PRESS_35_ref.spar",
+        "sha256": "7cf63c7064d481a9330ef25b42bf012b605e62936428de5b2eed4e3438eceb34",
+        "bytes": 3080
       },
       {
         "role": "t1",
         "name": "sub-01_T1w_defaced.nii.gz",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/698a5aa0f5b571c7b6e86ac60246c0d90c010d0b/lcmodel/examples/philips-press-t1/sub-01_T1w_defaced.nii.gz",
+        "sha256": "15f4f19fef726947de2cdf53e86be76bb9fe6539630e382aca0b042b04fc23a5",
+        "bytes": 4438531
       }
     ]
   },
@@ -54,12 +66,16 @@
       {
         "role": "spectrum",
         "name": "specialDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC.dat",
+        "sha256": "2ffbf866b159c2090afcc6cb595181632b07956bbbe6591e1270cf8a74df5731",
+        "bytes": 168955936
       },
       {
         "role": "water",
         "name": "specialDLPFC_w.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC_w.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-special/specialDLPFC_w.dat",
+        "sha256": "857a102e6e0153f5ea1be7b9eb606c26139f819a9ac5df43eea50912ca3e0aa5",
+        "bytes": 8949792
       }
     ]
   },
@@ -72,7 +88,9 @@
       {
         "role": "spectrum",
         "name": "megapressDLPFC.dat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-megapress/megapressDLPFC.dat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/siemens-megapress/megapressDLPFC.dat",
+        "sha256": "d29c2a2b181873f66615433de0d7ff369af17d252202e6447c0624cfc7712e70",
+        "bytes": 86369696
       }
     ]
   },
@@ -85,22 +103,30 @@
       {
         "role": "spectrum",
         "name": "sub-01_megapress_act.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.sdat",
+        "sha256": "8d62c50e7b71f4babcecd0d24254059fa4874d522b668753b47b9c462c18ad26",
+        "bytes": 5242880
       },
       {
         "role": "spectrum",
         "name": "sub-01_megapress_act.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_act.spar",
+        "sha256": "90d05989a05e69996f68cc0a436f82d63083137ffe369d7dd89d288c8fd21698",
+        "bytes": 3085
       },
       {
         "role": "water",
         "name": "sub-01_megapress_ref.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.sdat",
+        "sha256": "b0e1f8186bfe4353aaf543b6b3a7aea978424c5bcbbfb09e197f6465678d3766",
+        "bytes": 5242880
       },
       {
         "role": "water",
         "name": "sub-01_megapress_ref.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/philips-megapress/sub-01_megapress_ref.spar",
+        "sha256": "e311b2b2c08116010c7c1ea29a29e91b1a414f146fd71213245ebd26c9e3bfda",
+        "bytes": 3085
       }
     ]
   },
@@ -113,42 +139,58 @@
       {
         "role": "spectrum",
         "name": "sub-01_PRESS_35_act.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.sdat",
+        "sha256": "fd14521b8b7e9f1fa4d1fd8930e6e4b7a4e26d535f71eab9e922d4a40c7759b0",
+        "bytes": 16384
       },
       {
         "role": "spectrum",
         "name": "sub-01_PRESS_35_act.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_act.spar",
+        "sha256": "78b78cb9ec4d5b509563384629390702cc2caf1cc133df529beb56e4d7ae1f4f",
+        "bytes": 3080
       },
       {
         "role": "water",
         "name": "sub-01_PRESS_35_ref.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.sdat",
+        "sha256": "996ddb02f55c4bb65204e92f25d5a112dd72b300659a13d0aacb28040af3b59d",
+        "bytes": 16384
       },
       {
         "role": "water",
         "name": "sub-01_PRESS_35_ref.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-01_PRESS_35_ref.spar",
+        "sha256": "7cf63c7064d481a9330ef25b42bf012b605e62936428de5b2eed4e3438eceb34",
+        "bytes": 3080
       },
       {
         "role": "spectrum",
         "name": "sub-02_PRESS_35_act.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.sdat",
+        "sha256": "d556e5226843df34e5700b1d2b41b3705154acd3a145bf22712dbd3b6ac0a28e",
+        "bytes": 16384
       },
       {
         "role": "spectrum",
         "name": "sub-02_PRESS_35_act.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_act.spar",
+        "sha256": "8be05e3dc8a5c82d51ad28f8ace87ddff95da126a07a57aa37d6a63925fd3d52",
+        "bytes": 3091
       },
       {
         "role": "water",
         "name": "sub-02_PRESS_35_ref.sdat",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.sdat"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.sdat",
+        "sha256": "76bffbd98a104b0c759deca10cb15c8f2b6652a0c9e7ae336c8c71b15bc07cc0",
+        "bytes": 16384
       },
       {
         "role": "water",
         "name": "sub-02_PRESS_35_ref.spar",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.spar"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/06722850204dad69d8c0b57dc16272570df984bc/lcmodel/examples/philips-press-group/sub-02_PRESS_35_ref.spar",
+        "sha256": "e12e4d4bb83fcaf5c993c3a7b76fc25eb7675b0f1d722b346b51933a85dbd558",
+        "bytes": 3091
       }
     ]
   },
@@ -163,14 +205,16 @@
         "name": "sub-01_PRESS_35.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35.nii.gz",
         "sha256": "4dfa483da8df68510ea54008e0464c2b4e1a8f7990bc4798b65f143d389dbeff",
-        "license": "MIT"
+        "license": "MIT",
+        "bytes": 16016
       },
       {
         "role": "water",
         "name": "sub-01_PRESS_35_water.nii.gz",
         "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/2a18766f2c4b5c9086e3512cd6f2a56841da9a4f/lcmodel/examples/nifti-mrs-press/sub-01_PRESS_35_water.nii.gz",
         "sha256": "b8c5398be85219e87c696685f48874b8f34c961e8503aabbc028d40e01fbbfcf",
-        "license": "MIT"
+        "license": "MIT",
+        "bytes": 16124
       }
     ]
   },
@@ -183,17 +227,23 @@
       {
         "role": "spectrum",
         "name": "data.raw",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/data.raw"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/data.raw",
+        "sha256": "b5c55a2b43249a15a2eb19620833e631ba3986d463006dd0e2ff792eddfec560",
+        "bytes": 31835
       },
       {
         "role": "basis",
         "name": "3t.basis",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/3t.basis"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/3t.basis",
+        "sha256": "bdad9e7fbf607c39d269a03e6f16a0f726f47553f3b76006f65633f643c36671",
+        "bytes": 468081
       },
       {
         "role": "control",
         "name": "control.file",
-        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/control.file"
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/fdd562269124c0465a3e6ac25180db51d1695e0f/lcmodel/examples/lcmodel-test/control.file",
+        "sha256": "ee1547fe2d46116aff671652aba39d41e13c89266a3a8435c748774104627184",
+        "bytes": 121
       }
     ]
   }

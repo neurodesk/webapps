@@ -113,7 +113,7 @@ test('the lab export without a second carotid reports why', async ({ page }) => 
 for (const failure of ['download', 'empty image']) {
   test(`a failed ${failure} can retry the same example`, async ({ page }) => {
     let attempts = 0;
-    await page.route(example.files[0].url, route => {
+    await page.context().route(example.files[0].url, route => {
       attempts++;
       if (attempts > 1) return route.fallback();
       return route.fulfill({ status: failure === 'download' ? 503 : 200, body: '' });

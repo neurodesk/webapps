@@ -12,9 +12,6 @@ import * as ort from '../wasm/ort.webgpu.bundle.min.mjs';
 import { createWorkerEmitter, fetchModel as fetchModelAsset, getOptimalWasmThreads, installWorkerRouter } from '../vendor/webapp-components/src/worker/index.js';
 import { prepareInput, segmentPrepared } from '../vendor/spinalcordtoolbox/src/segment.js';
 
-// Cache Storage name for verified model bytes, keyed by their pinned URL.
-const MODEL_CACHE = 'SCTModelCache';
-
 let nifti;
 let dependenciesReady;
 
@@ -102,7 +99,6 @@ async function fetchModel({ url, modelName, sha256, bytes }, progressBase, progr
   const modelBytes = await fetchModelAsset(
     { url, urls: [url, url], cacheKey: url, integrity: { bytes, sha256 } },
     {
-      cache: MODEL_CACHE,
       onInvalidCache: error => postLog(`Discarding cached model: ${error.message}`),
       onCacheError: () => postLog('Warning: Could not cache model (storage full?)'),
       onProgress: ({ received, total, fraction }) => {

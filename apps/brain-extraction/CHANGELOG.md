@@ -1,9 +1,27 @@
 # brain-extraction
 
+## 0.4.20261017
+
+### Patch Changes
+
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/runtime-support@0.6.4
+  - @neurodesk/synthsr@0.6.20261017
+  - @neurodesk/synthstrip@0.1.5
+  - @neurodesk/brain-extraction@0.4.20261017
+
 ## 0.4.20261016
 
 ### Patch Changes
 
+- Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
+  - @neurodesk/synthsr@0.6.20261016
+  - @neurodesk/synthstrip@0.1.5
+  - @neurodesk/brain-extraction@0.4.20261016
 - 245a946: Run SynthStrip brain extraction through the streamed browser session, layer by layer in slabs,
   as SYNcro does. An image covering a whole head at 1 mm conforms to SynthStrip's 256³ grid, where
   one whole-graph ONNX Runtime session ran out of WebAssembly memory with "std::bad_alloc".

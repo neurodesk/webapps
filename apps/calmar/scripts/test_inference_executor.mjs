@@ -49,12 +49,11 @@ const { CalmarPipeline } = await import(path.join(ROOT, 'web/js/controllers/Calm
 function makeExecutor() {
   FakeWorker.instances.length = 0;
   const events = {
-    output: [], debugOutput: [], progress: [], stageData: [], complete: 0,
+    output: [], progress: [], stageData: [], complete: 0,
     error: [], initialized: 0, stepComplete: [], volumeInfo: []
   };
   const exec = new CalmarPipeline({
-    updateOutput: (m) => events.output.push(m),
-    updateDebugOutput: (m, options) => events.debugOutput.push({ message: m, options }),
+    updateOutput: (m, options) => events.output.push({ message: m, options }),
     setProgress: (v, l) => events.progress.push([v, l]),
     onStageData: (d) => { events.stageData.push(d); },
     onComplete: () => { events.complete++; },
@@ -81,27 +80,19 @@ function makeExecutor() {
   assert.equal(exec.isReady(), true);
   assert.equal(events.initialized, 1);
   assert.equal(exec.webgpuAvailable, true);
-  assert.equal(events.output.length, 0,
-    'worker initialization chatter must stay out of the clinician log');
-  assert.ok(events.debugOutput.some(e => e.message === 'ONNX Runtime ready'),
-    'worker initialization must be captured in the technical log');
+  assert.deepEqual(events.output, [{ message: 'ONNX Runtime ready', options: { source: 'worker' } }],
+    'worker initialization is logged once, as a worker message');
 }
 
-// ---- Test 1b: worker log messages route to the technical log only ----
+// ---- Test 1b: worker log messages reach the log tagged as worker output ----
 {
   const { exec, events, getWorker } = makeExecutor();
   const initPromise = exec.initialize();
   const w = getWorker();
   w._deliver({ type: 'initialized' });
   await initPromise;
-  const outputCount = events.output.length;
   w._deliver({ type: 'log', message: 'Session created. Input=x, Output=y' });
-  assert.equal(events.output.length, outputCount,
-    'model/process log messages must not be shown in the clinician log');
-  const logEntry = events.debugOutput.at(-1);
-  assert.equal(logEntry.message, 'Session created. Input=x, Output=y');
-  assert.deepEqual(logEntry.options, { source: 'worker', audience: 'technical' },
-    'model/process log messages must carry diagnostic routing metadata');
+  assert.deepEqual(events.output.at(-1), { message: 'Session created. Input=x, Output=y', options: { source: 'worker' } });
 }
 
 // ---- Test 2: loadVolume posts 'load' message with the buffer transferred ----
@@ -238,7 +229,7 @@ function makeExecutor() {
   assert.equal(events.error.length, 1);
   assert.match(events.error[0], /synthetic worker failure/);
   // updateOutput surfaces 'Error: ...' line and progress is reset.
-  assert.ok(events.output.some(m => /Error: synthetic worker failure/.test(m)));
+  assert.ok(events.output.some(({ message }) => /Error: synthetic worker failure/.test(message)));
   assert.deepEqual(events.progress[events.progress.length - 1], [0, 'Failed']);
 }
 

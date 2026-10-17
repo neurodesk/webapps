@@ -35,6 +35,10 @@ env:
 jobs:
   app-plan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Reads main's finished ci runs to find the last tested commit.
+      actions: read
     outputs:
       apps: ${{ steps.plan.outputs.apps }}
       has_apps: ${{ steps.plan.outputs.has_apps }}
@@ -57,8 +61,11 @@ jobs:
       - name: Generate affected app plan
         id: plan
         env:
-          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          # A push to main is superseded by the next one, so it diffs from the
+          # last commit ci finished green on main, not from its own `before`.
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && 'last-success' || '' }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/app-plan.mjs --base "$BASE_SHA" --head "$HEAD_SHA"
 
   workspace-contracts:
@@ -195,6 +202,8 @@ jobs:
         run: node test/automation-catalog.smoke.mjs
       - name: Test shared runtime assembly
         run: node --test test/runtime-assets.test.mjs
+      - name: Verify resources persist across browser restarts
+        run: pnpm test:resource-cache
       - name: Load threaded models with service-worker isolation
         run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath

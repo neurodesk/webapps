@@ -5,19 +5,8 @@
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import { openAtlas } from '@neurodesk/nii2tvx';
 
-const CACHE = 'neurodesk-disconnectome-v1';
 // Keyed by URL, so switching atlas and switching back does not download or inflate twice.
 const opened = new Map();
-
-async function cacheStore() {
-  let storage;
-  try { storage = await caches.open(CACHE); } catch { return null; } // private mode
-  return {
-    async get(key) { return (await storage.match(key))?.arrayBuffer(); },
-    async set(key, bytes) { try { await storage.put(key, new Response(bytes)); } catch { /* quota */ } },
-    async delete(key) { await storage.delete(key); },
-  };
-}
 
 self.onmessage = async ({ data: job }) => {
   const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
@@ -29,7 +18,6 @@ self.onmessage = async ({ data: job }) => {
         // fetchModel verifies the checksum on a cache hit too, so a corrupted cache entry is
         // evicted and refetched rather than opened.
         const data = await fetchModel({ url, integrity: { bytes, sha256 } }, {
-          cache: await cacheStore(),
           onProgress: ({ fraction }) => progress(0.05 + 0.65 * (fraction ?? 0),
             `Downloading the ${label} atlas · ${((fraction ?? 0) * 100).toFixed(0)}%`),
         });

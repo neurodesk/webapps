@@ -1,9 +1,21 @@
 # musclemap
 
+## 1.5.20261017
+
+### Patch Changes
+
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/musclemap@1.5.20261017
+
 ## 1.5.20261016
 
 ### Patch Changes
 
+- Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/musclemap@1.5.20261016
 - Updated dependencies [7443048]
   - @neurodesk/webapp-components@0.14.1
   - @neurodesk/musclemap@1.5.20261016

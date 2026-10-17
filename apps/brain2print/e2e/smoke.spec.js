@@ -1,3 +1,4 @@
+import { mockExampleIntegrity } from "../../../test-utils/example-fixture-catalog.mjs";
 // Real browser smoke test. Proves the deployed contract that Node tests cannot:
 // cross-origin isolation, worker loading, and app boot. Runs against `vite preview`
 // (see playwright.config.js) so it exercises the built, header-served output.
@@ -8,6 +9,8 @@ import { test, expect } from "@playwright/test";
 import { dicomSeries } from "../../../test-utils/dicom-fixture.mjs";
 import { hardwareGpu } from "../../../test-utils/hardware-gpu.mjs";
 import { inspectStl, labels, voxelVolume } from "./mesh-geometry.js";
+
+const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 
 const dispatch = (page, command, request = {}) => page.evaluate(({ command, request }) => globalThis.neurodeskAutomation.dispatch(command, request), { command, request });
 
@@ -166,12 +169,13 @@ test("the Segment button runs on the CPU when the only GPU is a software rendere
 test("a delayed example never replaces a selected image", async ({ page }) => {
   let releaseExample;
   const held = new Promise(resolve => { releaseExample = resolve; });
-  await page.route("**/browserqc/t1_crop.nii.gz", async route => {
+  await page.context().route("**/browserqc/t1_crop.nii.gz", async route => {
     await held;
     await route.fulfill({ body: readFileSync(fixture), contentType: "application/gzip" }).catch(() => {});
   });
   await page.goto("/");
   await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
+  await mockExampleIntegrity(page, examples[0].files, readFileSync(fixture));
   await page.locator("[data-neurodesk-example]").selectOption("t1-brain");
   await page.setInputFiles("#imageInput", fixture);
   await expect(page.locator("#statusText")).toHaveText("small.nii.gz loaded", { timeout: 30000 });
@@ -182,8 +186,9 @@ test("a delayed example never replaces a selected image", async ({ page }) => {
 });
 
 test("a failed replacement disables segmentation of the previous image", async ({ page }) => {
-  await page.route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
+  await page.context().route("**/browserqc/t1_crop.nii.gz", route => route.fulfill({ body: readFileSync(fixture) }));
   await page.goto("/");
+  await mockExampleIntegrity(page, examples[0].files, readFileSync(fixture));
   await page.locator("[data-neurodesk-example]").selectOption("t1-brain");
   await expect(page.locator("#segmentButton")).toBeEnabled({ timeout: 30000 });
   await page.setInputFiles("#imageInput", { name: "broken.nii", mimeType: "application/octet-stream", buffer: Buffer.from("invalid nifti") });
@@ -195,7 +200,7 @@ test("a failed replacement disables segmentation of the previous image", async (
 
 
 test("the scan picker converts DICOM and retains mesh settings", async ({ page }, testInfo) => {
-  await page.route("**/browserqc/t1_crop.nii.gz", route => route.abort());
+  await page.context().route("**/browserqc/t1_crop.nii.gz", route => route.abort());
   await page.goto("/");
   await expect(page.locator("#imageInput")).toBeEnabled({ timeout: 30000 });
   await page.setInputFiles("#imageInput", dicomSeries({ extension: "" }));

@@ -1,3 +1,4 @@
+import { mockExampleIntegrity } from "../../../test-utils/example-fixture-catalog.mjs";
 import { affineDifference, downsampledExamplePair, ncc, readVolume, resampleToGrid } from "../../../test-utils/registration-similarity.mjs";
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -7,8 +8,14 @@ import { readTransformArchive, resampleThroughArchive } from "./ome-zarr-transfo
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
+async function configureExampleFixtures(page, files) {
+  for (const file of examples.flatMap(example => example.files)) {
+    await mockExampleIntegrity(page, [file], files ? files[file.url.split("/").pop()] : fixture);
+  }
+}
+
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {
@@ -21,13 +28,14 @@ function serveExamples(page, bodyFor) {
 // Pipelines are staged into the build; a request to the jsDelivr default
 // means a pipeline base URL was not set before the first call.
 test.beforeEach(async ({ page }) => {
-  page.on("request", (request) => {
+  page.context().on("request", (request) => {
     if (request.url().includes("cdn.jsdelivr.net")) throw new Error(`Pipeline fetched from a CDN: ${request.url()}`);
   });
 });
 
-async function selectExample(page) {
+async function selectExample(page, files) {
   await page.goto("/");
+  if (files) await configureExampleFixtures(page, files);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator("#movingInfo")).toContainText("t1_brain.nii.gz");
@@ -66,7 +74,7 @@ test("affine registration aligns the example T1 with the MNI template and writes
   test.setTimeout(600_000);
   const { moving, fixed, files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  await selectExample(page);
+  await selectExample(page, files);
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 480_000 });
   for (const label of ["Registered NIfTI", "Registered OME-Zarr", "Transform (ITK HDF5)", "Transform (OME-Zarr)", "TransformParameters.2.toml"]) {
@@ -113,7 +121,7 @@ test("affine + B-spline registration adds a deformable stage that keeps the alig
   test.setTimeout(600_000);
   const { moving, fixed, files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  await selectExample(page);
+  await selectExample(page, files);
   await page.locator("#method").selectOption("bspline");
   await page.locator("#advancedSettings > summary").click();
   await page.locator("#gridSpacing").fill("20");
@@ -146,7 +154,7 @@ test("cancelling a registration releases the controls and a new run still comple
   test.setTimeout(600_000);
   const { files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  await selectExample(page);
+  await selectExample(page, files);
   await page.locator("#runButton").click();
   await expect(page.locator("#cancelButton")).toBeVisible();
   await page.locator("#cancelButton").click();
@@ -163,7 +171,7 @@ test("elastix parameter files replace the method preset", async ({ page }) => {
   test.setTimeout(600_000);
   const { files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  await selectExample(page);
+  await selectExample(page, files);
   await page.locator("#advancedSettings > summary").click();
   await page.locator("#parameterInput").setInputFiles(fileURLToPath(new URL("fixtures/parameters_Rigid.txt", import.meta.url)));
   await expect(page.locator("#parameterInfo")).toHaveText("1 parameter file · EulerTransform");
@@ -182,13 +190,14 @@ for (const failure of ["download", "empty image"]) {
     const example = examples[0];
     let attempts = 0;
     await serveExamples(page, () => fixture);
-    await page.route(example.files[0].url, (route) => {
+    await page.context().route(example.files[0].url, (route) => {
       attempts++;
       return attempts === 1
         ? route.fulfill({ status: failure === "download" ? 503 : 200, body: "" })
         : route.fulfill({ body: fixture, headers: { "access-control-allow-origin": "*" } });
     });
     await page.goto("/");
+    await configureExampleFixtures(page);
     const picker = page.getByRole("combobox", { name: "Input", exact: true });
     await picker.selectOption(example.id);
     await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
@@ -206,11 +215,12 @@ test("cancelling an example download leaves no image and permits retry", async (
   let release;
   const held = new Promise((resolve) => { release = resolve; });
   await serveExamples(page, () => fixture);
-  await page.route(example.files[0].url, async (route) => {
+  await page.context().route(example.files[0].url, async (route) => {
     await held;
     await route.fulfill({ body: fixture, headers: { "access-control-allow-origin": "*" } });
   });
   await page.goto("/");
+  await configureExampleFixtures(page);
   const picker = page.getByRole("combobox", { name: "Input", exact: true });
   await picker.selectOption(example.id);
   await page.getByRole("button", { name: "Cancel example download", exact: true }).click();

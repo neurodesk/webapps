@@ -149,3 +149,65 @@ test('ModalManager still toggles an overlay in a document without event support'
     globalThis.document = previous;
   }
 });
+
+test('closed ModalManagers start inert and remain inert after repeated close', () => {
+  const { overlay } = setup();
+  const el = overlay('m', FORM);
+  const modal = new ModalManager({ element: el });
+  assert.equal(el.hasAttribute('inert'), true);
+  assert.equal(el.getAttribute('aria-hidden'), 'true');
+  assert.deepEqual(getFocusable(el), []);
+  modal.close();
+  modal.close();
+  assert.equal(el.hasAttribute('inert'), true);
+});
+
+test('initially open ModalManagers are interactive, including custom active classes', () => {
+  const { overlay } = setup();
+  const el = overlay('m', FORM);
+  el.classList.add('open');
+  el.setAttribute('inert', '');
+  const modal = new ModalManager({ element: el, activeClass: 'open' });
+  assert.equal(modal.isOpen(), true);
+  assert.equal(el.hasAttribute('inert'), false);
+  assert.equal(el.getAttribute('aria-hidden'), 'false');
+  modal.close();
+  assert.equal(el.hasAttribute('inert'), true);
+});
+
+test('reopening clears inert before focus; close and Escape restore focus and inertness', () => {
+  const { doc, opener, overlay, press } = setup();
+  const el = overlay('m', FORM);
+  const modal = new ModalManager({ element: el });
+  const close = el.querySelector('#close');
+  close.addEventListener('focus', () => assert.equal(el.hasAttribute('inert'), false));
+  close.addEventListener('click', () => modal.close());
+  for (const dismiss of [() => close.click(), () => press('Escape'), () => close.click()]) {
+    modal.open();
+    modal.open();
+    assert.equal(el.hasAttribute('inert'), false);
+    assert.equal(el.getAttribute('aria-hidden'), 'false');
+    assert.equal(doc.activeElement, close);
+    dismiss();
+    assert.equal(modal.isOpen(), false);
+    assert.equal(el.hasAttribute('inert'), true);
+    assert.equal(el.getAttribute('aria-hidden'), 'true');
+    assert.equal(doc.activeElement, opener);
+    assert.deepEqual(getFocusable(el), []);
+  }
+});
+
+test('focus candidates and restoration exclude inert ancestors', () => {
+  const { doc, opener, overlay } = setup();
+  const parent = doc.createElement('div');
+  opener.replaceWith(parent);
+  parent.append(opener);
+  opener.focus();
+  const el = overlay('m', '<div inert><button id="unavailable">Unavailable</button></div><button id="available">Available</button>');
+  assert.deepEqual(getFocusable(el).map(node => node.id), ['available']);
+  openDialog(el);
+  assert.equal(doc.activeElement.id, 'available');
+  parent.setAttribute('inert', '');
+  closeDialog(el);
+  assert.notEqual(doc.activeElement, opener);
+});

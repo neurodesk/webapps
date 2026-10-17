@@ -1,9 +1,29 @@
 # synthseg
 
+## 0.11.20261017
+
+### Minor Changes
+
+- ad1a2ac: The Volumes view compares a default-mode run with IXI and AHEAD norms fitted on default-mode SynthSeg volumes, and a fast-mode run with the fast-mode norms. The report footnote names the mode. Before, default-mode runs were compared with fast-mode norms, which put healthy cortical grey matter about 2 standard deviations low.
+
+### Patch Changes
+
+- 38b2b4b: Keep the raw volume table visible and explain why when the population volume report cannot be computed or its reference cannot be loaded.
+- Updated dependencies [b547d52]
+- Updated dependencies [ad1a2ac]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/synthseg@0.11.20261017
+  - @neurodesk/runtime-support@0.6.4
+
 ## 0.10.20261016
 
 ### Patch Changes
 
+- Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
+  - @neurodesk/synthseg@0.10.20261016
 - 6ec972a: Pin the IXI and AHEAD volume norms to neurocontainers commit 347cf6fb, the merge of the 7 T reference into main. The files are byte-identical to the previous pin, so every report is unchanged; only the population data version shown in the report and About changes.
 - Updated dependencies [7443048]
 - Updated dependencies [6ec972a]

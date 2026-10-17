@@ -15,31 +15,17 @@ ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.min(8, navigator.hardw
 const progress = (value, message) => self.postMessage({ type: 'progress', value, message });
 const log = (message) => self.postMessage({ type: 'log', message });
 
-async function modelCache() {
-  try {
-    const storage = await caches.open('neurodesk-models-v1');
-    return {
-      async get(key) { return (await storage.match(key))?.arrayBuffer(); },
-      async set(key, bytes) { await storage.put(key, new Response(bytes)); },
-      async delete(key) { await storage.delete(key); },
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function download(asset, label, from, to, cache) {
+async function download(asset, label, from, to) {
   progress(from, `Downloading ${label}…`);
   return fetchModel({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, {
-    cache,
     onProgress: ({ fraction }) => progress(from + (to - from) * (fraction || 0), `Downloading ${label}…`),
   });
 }
 
-async function brainMask(volume, cache) {
+async function brainMask(volume) {
   const result = await runSynthstrip({
     volume,
-    loadModel: async () => ({ bytes: await download(SYNTHSTRIP, 'brain extraction model', 0.02, 0.08, cache), hash: SYNTHSTRIP.sha256 }),
+    loadModel: async () => ({ bytes: await download(SYNTHSTRIP, 'brain extraction model', 0.02, 0.08), hash: SYNTHSTRIP.sha256 }),
     // Layer by layer in slabs: one whole-graph session outgrows the 4 GB WebAssembly heap at 256³.
     createSession: (bytes, dims) => createStripSession(bytes, dims, ort),
     Tensor: ort.Tensor,
@@ -48,7 +34,7 @@ async function brainMask(volume, cache) {
   return result.mask.data;
 }
 
-async function segment(folds, cache, backend, volume, brainMask) {
+async function segment(folds, backend, volume, brainMask) {
   progress(0.3, 'Preparing FLAMeS…');
   log(`FLAMeS, ${folds.length === 1 ? 'fold 0' : `${folds.length} folds`}, on ${backend === 'webgpu' ? 'WebGPU' : `WebAssembly, ${ort.env.wasm.numThreads} threads`}`);
   return runFolds({
@@ -58,7 +44,7 @@ async function segment(folds, cache, backend, volume, brainMask) {
     loadModel: (n) => {
       const label = folds.length === 1 ? 'FLAMeS model' : `FLAMeS model ${n + 1} of ${folds.length}`;
       const from = 0.3 + 0.65 * n / folds.length;
-      return download(folds[n], label, from, from, cache);
+      return download(folds[n], label, from, from);
     },
     createSession: (bytes) => ort.InferenceSession.create(bytes, { executionProviders: [backend], graphOptimizationLevel: 'all' }),
     Tensor: ort.Tensor,
@@ -74,24 +60,23 @@ self.onmessage = async ({ data: job }) => {
       { skullStripped: job.skullStripped },
     );
     if (resampledFrom) log(`Resampled the FLAIR from ${resampledFrom.join(' × ')} to ${volume.dims.join(' × ')} voxels, FLAMeS's 1 × 0.9 × 0.9 mm grid`);
-    const cache = await modelCache();
     let mask = nonzero;
     if (job.skullStripped) {
       progress(0.2, 'Using nonzero voxels as the brain');
     } else {
-      mask = await brainMask(volume, cache);
+      mask = await brainMask(volume);
     }
     const folds = FLAMES_FOLDS.slice(0, job.folds);
     const started = performance.now();
     let backend = job.backend;
     let result;
     try {
-      result = await segment(folds, cache, backend, volume, mask);
+      result = await segment(folds, backend, volume, mask);
     } catch (error) {
       if (backend !== 'webgpu') throw error;
       log(`WebGPU failed (${error.message}); continuing on the CPU`);
       backend = 'wasm';
-      result = await segment(folds, cache, backend, volume, mask);
+      result = await segment(folds, backend, volume, mask);
     }
     const { probability, windows, resampledShape } = result;
     const outputs = lesionResults(volume, probability, { resampled: Boolean(resampledFrom) });

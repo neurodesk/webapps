@@ -2,6 +2,7 @@
 import { appendFile } from 'node:fs/promises';
 import { createAppPlan, changedManifests, changedPathsFromGit } from './lib/app-plan.mjs';
 import { loadAppsRegistry, repoRoot } from './lib/apps-registry.mjs';
+import { resolveTestedBase, TESTED_BASE } from './lib/tested-base.mjs';
 import { loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from './lib/workspace-graph.mjs';
 
 function option(name) {
@@ -10,9 +11,20 @@ function option(name) {
 }
 
 const registry = await loadAppsRegistry();
-let changedPaths = process.argv.includes('--all')
+const head = option('--head') || 'HEAD';
+let base = option('--base');
+// `--base last-success`: diff from the last commit ci finished green on the
+// branch, so merges whose own push run was cancelled are still tested.
+let baseFallback = '';
+if (base === TESTED_BASE) {
+  const tested = await resolveTestedBase({ head, branch: option('--branch') || 'main', cwd: repoRoot });
+  console.error(`App planner: ${tested.reason}`);
+  base = tested.base;
+  if (!base) baseFallback = tested.reason;
+}
+let changedPaths = process.argv.includes('--all') || baseFallback
   ? []
-  : changedPathsFromGit({ base: option('--base'), head: option('--head') || 'HEAD', cwd: repoRoot });
+  : changedPathsFromGit({ base, head, cwd: repoRoot });
 const only = option('--only');
 if (only && only !== 'affected') {
   const ids = new Set(only.split(',').map((id) => id.trim()).filter(Boolean));
@@ -22,9 +34,9 @@ if (only && only !== 'affected') {
 }
 const manifests = only && only !== 'affected'
   ? new Map()
-  : changedManifests({ base: option('--base'), head: option('--head') || 'HEAD', cwd: repoRoot, changedPaths });
+  : changedManifests({ base, head, cwd: repoRoot, changedPaths });
 let graph;
-let fallbackReason = '';
+let fallbackReason = baseFallback;
 try {
   graph = await loadConservativeWorkspaceGraph(repoRoot);
 } catch (error) {

@@ -26,7 +26,7 @@ async function segmentWithMockedWorker(page, {
   lesionProbability = probability,
   lesions = [{ ml: 0.064, world: [-0.5, -0.5, -0.5] }],
 } = {}) {
-  await page.route(/\/worker-[^/]+\.js$/, (route) => route.fulfill({
+  await page.context().route(/\/worker-[^/]+\.js$/, (route) => route.fulfill({
     contentType: "text/javascript",
     headers: { "cross-origin-embedder-policy": "require-corp" },
     body: `self.onmessage = () => self.postMessage({

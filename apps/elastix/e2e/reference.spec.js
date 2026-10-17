@@ -13,7 +13,7 @@ const minutes = 60_000;
 test("web app registrations of the pinned example match the browser reference", { tag: "@slow" }, async ({ page, browser }) => {
   test.skip(mode !== "check" && mode !== "write", "set ELASTIX_BROWSER_REFERENCE=check or write");
   test.setTimeout(40 * minutes);
-  page.on("request", (request) => {
+  page.context().on("request", (request) => {
     if (request.url().includes("cdn.jsdelivr.net")) throw new Error(`Pipeline fetched from a CDN: ${request.url()}`);
   });
   const example = await pinnedExample();

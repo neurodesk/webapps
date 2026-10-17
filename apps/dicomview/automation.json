@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "app": "dicomview",
+  "title": "DICOM View",
+  "description": "List the series in a set of DICOM files and convert the first imaging series to NIfTI.",
+  "defaultOperation": "index-series",
+  "operations": {
+    "index-series": {
+      "title": "Index series",
+      "description": "Group DICOM files into series, summarise each, and convert the series the viewer opens first with dcm2niix.",
+      "mode": "batch",
+      "inputs": {
+        "dicom": {
+          "source": "files",
+          "type": "neuro:dicom-series",
+          "formats": [
+            "dicom"
+          ],
+          "description": "DICOM files, from one or more series.",
+          "minimum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "series": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "application/octet-stream",
+          "minimum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

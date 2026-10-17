@@ -107,7 +107,8 @@ assert.deepEqual(
   assert.deepEqual(inputLabels, {
     structuralFileInput: 'Structural T1 (NIfTI / DICOM)',
     deepIslesDwiFileInput: 'DWI/TRACE (NIfTI / DICOM)',
-    deepIslesAdcFileInput: 'ADC (NIfTI / DICOM)'
+    deepIslesAdcFileInput: 'ADC (NIfTI / DICOM)',
+    deepIslesB0FileInput: 'b0 (NIfTI / DICOM)'
   });
   for (const id of Object.keys(inputLabels)) {
     const input = document.getElementById(id);
@@ -211,20 +212,46 @@ assert.deepEqual(
 {
   const results = $('#resultsSection');
   assert.ok(results.classList.contains('collapsed'), 'results start collapsed');
+  assert.deepEqual(Array.from(results.querySelectorAll('h3')).map(text), ['Threshold connectivity map'],
+    'the sidebar keeps only the result controls');
+  assert.equal(results.querySelector('table'), null, 'no result table in the sidebar');
+  const minCluster = $('#networkThresholdMinCluster');
+  assert.equal(text($('label[for="networkThresholdMinCluster"]')), 'Min cluster size (voxels)');
+  assert.deepEqual([minCluster.type, minCluster.value, minCluster.min], ['number', '30', '0']);
+  assert.ok(precedes(minCluster, results.querySelector('h3')), 'min cluster size leads the result controls');
+
+  const report = $('#resultsReport');
+  assert.equal(report.parentElement, $('.viewer-canvas-wrapper'), 'the report sits in the viewer, over the canvas');
+  assert.ok(report.classList.contains('nd-viewer-report'));
+  assert.equal(report.hidden, true, 'the report starts hidden');
   assert.deepEqual(
-    Array.from(results.querySelectorAll('h3')).map(text),
+    Array.from(report.querySelectorAll('h3')).map(text),
     [
       'Direct lesion overlap',
       'Functional associations from direct lesion overlap',
-      'Threshold connectivity map',
       'Connectivity-map effects',
       'Functional associations from connectivity-map effects'
     ]
   );
-  const minCluster = $('#networkThresholdMinCluster');
-  assert.equal(text($('label[for="networkThresholdMinCluster"]')), 'Min cluster size (voxels)');
-  assert.deepEqual([minCluster.type, minCluster.value, minCluster.min], ['number', '30', '0']);
-  assert.ok(precedes(minCluster, results.querySelector('h3')), 'min cluster size leads the results it filters');
+  assert.deepEqual(
+    ids(Array.from(report.querySelectorAll('[id]')).filter(element => !element.parentElement.closest('table'))),
+    [
+      'outsideAtlasWarning',
+      'networkOverlapTable',
+      'directFunctionProfileResults',
+      'directFunctionProfileTable',
+      'networkThresholdSummary',
+      'affectedNetworkResults',
+      'affectedNetworkTable',
+      'mapFunctionProfileResults',
+      'mapFunctionProfileTable'
+    ],
+    'the report keeps the result ids in reading order'
+  );
+  for (const table of report.querySelectorAll('table')) {
+    assert.ok(table.classList.contains('nd-data-table'), `#${table.id} uses the shared data table`);
+    assert.ok(table.parentElement.classList.contains('nd-table-scroll'), `#${table.id} scrolls inside .nd-table-scroll`);
+  }
 
   const columns = id => Array.from(document.getElementById(id).querySelectorAll('thead th')).map(text);
   assert.deepEqual(columns('networkOverlapTable'), ['Atlas label', 'Voxels', 'Lesion %']);
@@ -244,10 +271,10 @@ assert.deepEqual(
   assert.equal(symmetric.type, 'checkbox');
   assert.equal(text(symmetric.closest('label')), 'Use |t| magnitude');
 
-  const helpFor = name => text($(`#resultsSection .nd-info-icon[aria-label="${name}"] .nd-info-tooltip`));
-  assert.match(helpFor('Direct lesion overlap help'), /^Atlas labels listed here contain lesion voxels directly\./);
+  const helpFor = name => text($(`:is(#resultsSection, #resultsReport) .nd-info-icon[aria-label="${name}"] .nd-info-tooltip`));
+  assert.match(helpFor('Direct lesion overlap help'), /^Atlas labels listed here contain lesion voxels directly\. Lesion % /);
   assert.match(helpFor('Threshold connectivity map help'), /group-FC weighted t-map derived from the direct lesion-overlap profile/);
-  assert.match(helpFor('Connectivity-map effects help'), /surviving the thresholded connectivity map/);
+  assert.match(helpFor('Connectivity-map effects help'), /surviving the thresholded connectivity map\. Map % /);
   for (const name of ['Direct functional associations help', 'Connectivity-map functional associations help']) {
     assert.equal(
       helpFor(name),
@@ -292,8 +319,9 @@ assert.deepEqual(
   assert.equal($('#gl1').tagName, 'CANVAS');
   assert.deepEqual(
     $$('.view-tabs .view-tab').map(tab => [tab.dataset.view, text(tab)]),
-    [['multiplanar', '3-Plane'], ['axial', 'Axial'], ['coronal', 'Coronal'], ['sagittal', 'Sagittal'], ['render', '3D']]
+    [['multiplanar', '3-Plane'], ['axial', 'Axial'], ['coronal', 'Coronal'], ['sagittal', 'Sagittal'], ['render', '3D'], ['results', 'Results']]
   );
+  assert.equal($('.view-tab[data-view="results"]').disabled, true, 'Results is disabled until there is a result');
   assert.deepEqual(
     $$('[aria-label="Viewer layers"] label').map(element => [element.querySelector('input').id, text(element)]),
     [
@@ -355,27 +383,20 @@ assert.deepEqual(
   assert.equal(banner.querySelector('button'), null, 'confirm and download stay in the toolbar');
 }
 
-// ---- logs: two collapsed consoles below the viewer ----
+// ---- log: one collapsed technical log below the viewer ----
 {
-  const consoles = $$('.app-main .console-stack > [data-disclosure]');
-  assert.deepEqual(ids(consoles), ['analysisLog', 'technicalLogDetails']);
-  assert.ok(precedes($('.viewer-canvas-wrapper'), consoles[0]), 'consoles sit below the viewer');
-  const expected = [
-    ['Analysis log', 'consoleOutput', ['copyConsole', 'clearConsole']],
-    ['Technical log', 'technicalConsoleOutput', ['copyTechnicalConsole', 'clearTechnicalConsole']]
-  ];
-  consoles.forEach((element, i) => {
-    const [title, outputId, actionIds] = expected[i];
-    assert.ok(element.classList.contains('console-container'));
-    assert.ok(element.classList.contains('collapsed'), `${title} is collapsed by default`);
-    const toggle = element.querySelector('.console-header [data-disclosure-toggle]');
-    assert.equal(text(toggle), title);
-    assert.equal(element.querySelector('[data-disclosure-panel]').id, outputId);
-    const actions = Array.from(element.querySelectorAll('.console-header .nd-console-actions button'));
-    assert.deepEqual(ids(actions), actionIds, 'Copy and Clear live in the console header');
-    assert.deepEqual(actions.map(text), ['Copy', 'Clear']);
-  });
-  assert.equal($('.app-sidebar .console-output'), null, 'no second log in the sidebar');
+  const consoles = $$('[data-disclosure-panel].nd-console-output, .console-output, #consoleOutput, #analysisLog');
+  assert.deepEqual(ids(consoles), ['technicalConsoleOutput'], 'the technical log is the only log');
+  const element = $('#technicalLogDetails');
+  assert.equal(element.parentElement, $('.app-main'));
+  assert.ok(precedes($('.viewer-canvas-wrapper'), element), 'the log sits below the viewer');
+  assert.ok(element.classList.contains('nd-console-container'));
+  assert.ok(element.classList.contains('collapsed'), 'the technical log is collapsed by default');
+  assert.equal(text(element.querySelector('.nd-console-header [data-disclosure-toggle]')), 'Technical log');
+  assert.equal(element.querySelector('[data-disclosure-panel]').id, 'technicalConsoleOutput');
+  const actions = Array.from(element.querySelectorAll('.nd-console-header .nd-console-actions button'));
+  assert.deepEqual(ids(actions), ['copyTechnicalConsole', 'clearTechnicalConsole'], 'Copy and Clear live in the console header');
+  assert.deepEqual(actions.map(text), ['Copy', 'Clear']);
 }
 
 // ---- About and Privacy copy ----
@@ -468,7 +489,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
 {
   assert.deepEqual(viewerCalls[0], ['attachTo', 'gl1'], 'NiiVue attaches to the #gl1 canvas');
   assert.equal(text($('#statusText')), 'Drag and drop files');
-  assert.match(text($('#consoleOutput')), /Ready\.$/, 'the analysis log reports readiness');
+  assert.match(text($('#technicalConsoleOutput')), /Ready\.$/, 'the technical log reports readiness');
   assert.equal(text($('#appVersion')), `v${VERSION} (abc1234, feature/x)`, 'header version label');
   assert.equal(text($('#aboutAppVersion')), `v${VERSION} (abc1234, feature/x)`, 'About version label');
   const selector = $('#stepLoadSection .section-content').firstElementChild;
@@ -537,10 +558,8 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     ['runLesionSegmentation'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
   ]);
-  // A DWI-space DeepISLES seed never opens T1 mask review on its own.
-  app.deepIslesSeedCompatibleWithNativeT1 = false;
-  await expectClick('runDeepIslesSegmentationButton', [['runDeepIslesSegmentation']]);
-  app.deepIslesSeedCompatibleWithNativeT1 = true;
+  // A DeepISLES seed opens review on the structural image, also from a
+  // DWI grid (projected by scanner coordinates).
   await expectClick('runDeepIslesSegmentationButton', [
     ['runDeepIslesSegmentation'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
@@ -549,7 +568,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   await expectClick('runRegistrationButton', [['runRegistration']]);
   await expectClick('checkAtlasAlignmentButton', [['showRegistrationQc']]);
   await expectClick('applyRegistrationToLesionButton', [['applyRegistrationToLesion']]);
-  await expectClick('computeOverlapButton', [['runAtlasOverlap']]);
+  await expectClick('computeOverlapButton', [['runAtlasOverlap', { showResults: true }]]);
   await expectClick('computeNetworkMapButton', [['runFcNetworkMap']]);
   await expectClick('downloadOverlapCsv', [['exportCsv']]);
   await expectClick('downloadNetworkMapButton', [['downloadNetworkMap']]);
@@ -619,6 +638,22 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   assert.deepEqual($$('.view-tab.active').map(tab => tab.dataset.view), ['multiplanar'], '3D is replaced by 3-plane during review');
   app.maskReviewActive = false;
 
+  // The Results tab swaps the canvas for the report; an image tab swaps it back.
+  calls.length = 0;
+  $('.view-tab[data-view="results"]').dispatchEvent(new dom.window.Event('click'));
+  assert.equal($('#resultsReport').hidden, true, 'no report without a result');
+  app.overlapResult = { summary: { networks: [] } };
+  app.refreshResultsView();
+  assert.equal($('.view-tab[data-view="results"]').disabled, false);
+  $('.view-tab[data-view="results"]').dispatchEvent(new dom.window.Event('click'));
+  assert.equal($('#resultsReport').hidden, false, 'Results shows the report');
+  assert.deepEqual($$('.view-tab.active').map(tab => tab.dataset.view), ['results']);
+  $('.view-tab[data-view="coronal"]').dispatchEvent(new dom.window.Event('click'));
+  assert.equal($('#resultsReport').hidden, true, 'an image tab hides the report');
+  assert.deepEqual(calls, [['setViewType', 'coronal']], 'only image tabs change the NiiVue layout');
+  app.overlapResult = null;
+  app.refreshResultsView();
+
   // Viewer checkboxes.
   viewerCalls.length = 0;
   $('#crosshairToggle').checked = false;
@@ -638,7 +673,7 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   assert.equal(app.getAtlasOption().displayName, 'Yeo 7 networks');
   assert.equal(app.overlapResult, null, 'results from the previous atlas are dropped');
   assert.equal($('#downloadOverlapCsv').disabled, true);
-  assert.match(text($('#consoleOutput')), /Atlas set to Yeo 7 networks\.$/);
+  assert.match(text($('#technicalConsoleOutput')), /Atlas set to Yeo 7 networks\.$/);
   $('#atlasSelect').value = 'schaefer400';
   fire('atlasSelect', 'change');
   assert.equal(app.selectedAtlasOptionId, 'schaefer400');
@@ -653,6 +688,15 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   fire('lesionFileInput', 'change');
   assert.deepEqual(handled.map(([kind]) => kind), ['structural', 'lesion']);
   assert.equal(handled[0][1], $('#structuralFileInput').files);
+
+  // Diffusion inputs: each lands in its own DeepISLES slot.
+  const diffusion = [];
+  const scan = { name: 'scan.nii' };
+  app.readScanInput = async () => scan;
+  app.setDeepIslesInput = async (kind, file) => diffusion.push([kind, file]);
+  for (const id of ['deepIslesDwiFileInput', 'deepIslesAdcFileInput', 'deepIslesB0FileInput']) fire(id, 'change');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(diffusion, [['dwi', scan], ['adc', scan], ['b0', scan]]);
 }
 
 // ---- dialogs ----
@@ -670,18 +714,18 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   }
 }
 
-// ---- consoles: Copy and Clear ----
+// ---- technical log: every message once, Clear empties it ----
 {
+  click('clearTechnicalConsole');
   app.updateOutput('Starting MNI registration (SynthMorph deformable)...');
-  assert.match(text($('#consoleOutput')), /MNI registration started\.$/, 'the analysis log shows the condensed message');
-  assert.match(
-    text($('#technicalConsoleOutput')),
-    /Starting MNI registration \(SynthMorph deformable\)\.\.\.$/,
-    'the technical log keeps the full message'
+  app.updateOutput("Stage 'register' (registration) failed: synthetic failure");
+  const lines = $$('#technicalConsoleOutput .nd-console-line');
+  assert.deepEqual(
+    lines.map(line => line.querySelector('.nd-console-message').textContent),
+    ['Starting MNI registration (SynthMorph deformable)...', "Stage 'register' (registration) failed: synthetic failure"],
+    'a former analysis-log message lands in the technical log once, in full'
   );
-  click('clearConsole');
-  assert.equal(text($('#consoleOutput')), '');
-  assert.notEqual(text($('#technicalConsoleOutput')), '', 'clearing one log leaves the other');
+  assert.ok(lines[1].classList.contains('nd-console-error'), 'a failure keeps its error level');
   click('clearTechnicalConsole');
   assert.equal(text($('#technicalConsoleOutput')), '');
 }

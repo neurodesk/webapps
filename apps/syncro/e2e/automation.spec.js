@@ -20,21 +20,21 @@ shifted.writeInt16LE(1, 254);
 shifted.writeFloatLE(1000, 292);
 
 test.beforeEach(async ({ page }) => {
-  await page.route('**/MNI152_T1_1mm_brain.nii.gz', async (route) => route.fulfill({
+  await page.context().route('**/MNI152_T1_1mm_brain.nii.gz', async (route) => route.fulfill({
     body: await readFile(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz', import.meta.url)),
   }));
   for (const [filename, path] of [
     ['synthsr-v2.onnx', process.env.SYNTHSR_MODEL],
     ['synthstrip-browser.onnx', process.env.SYNTHSTRIP_MODEL],
   ]) {
-    if (path) await page.route(`**/${filename}`, (route) => route.fulfill({ path }));
+    if (path) await page.context().route(`**/${filename}`, (route) => route.fulfill({ path }));
   }
 });
 
 test('automation rejects an explicitly paired lesion on the wrong grid before inference', async ({ page }) => {
   test.setTimeout(90_000);
   const models = [];
-  page.on('request', (request) => { if (request.url().includes('.onnx')) models.push(request.url()); });
+  page.context().on('request', (request) => { if (request.url().includes('.onnx')) models.push(request.url()); });
   await page.goto('./');
   for (const [role, buffer] of [['primary', image], ['lesion', shifted]]) {
     await page.locator('#neurodesk-input-transfer').setInputFiles({ name: `${role}.nii`, mimeType: 'application/nifti', buffer });

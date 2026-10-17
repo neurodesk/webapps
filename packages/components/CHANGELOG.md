@@ -1,5 +1,17 @@
 # @neurodesk/webapp-components
 
+## 0.14.3
+
+### Patch Changes
+
+- b547d52: CALMaR shows its result tables in a Results view in the viewer instead of the sidebar, so the Lesion % and Map % columns are no longer cut off. The Results tab opens once an analysis finishes and stays disabled until there is an atlas overlap, during lesion-mask review and after Start over. The separate Analysis log is gone: every message now appears once, in full and with its level, in the technical log. Captions above shared data tables are styled as muted, left-aligned notes.
+
+## 0.14.2
+
+### Patch Changes
+
+- Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+
 ## 0.14.1
 
 ### Patch Changes

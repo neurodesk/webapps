@@ -155,11 +155,6 @@
     "reason": "The app prebuild script stages this pinned ORT asset with scripts/fetch-app-runtime.mjs."
   },
   {
-    "from": "apps/vesselboost/web/js/inference-worker.js",
-    "to": "https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm",
-    "reason": "Pinned localforage ESM asset mirrored in registry/offline-assets.sources.json for the offline bundle."
-  },
-  {
     "from": "apps/vesselboost/web/js/vesselboost-app.js",
     "to": "../dcm2niix/index.js",
     "reason": "scripts/vendor-runtime-support.mjs stages this shared runtime; scripts/lib/runtime-assets.mjs rewrites it in the composite site."
@@ -188,5 +183,20 @@
     "from": "packages/syncro/src/node.js",
     "to": "./registration/syncro-registration.wasm",
     "reason": "packages/syncro/scripts/build.mjs bundles dist/node.js and stages registration runtime files relative to the built Node adapter."
+  },
+  {
+    "from": "apps/dicomview/src/protocol-session.js",
+    "to": "./vendor/dicompare/DicompareController.js",
+    "reason": "apps/dicomview/scripts/stage-dicompare.mjs stages dicompare's embedding kit and schema library in apps/dicomview/src/vendor/dicompare before the dev and build scripts run."
+  },
+  {
+    "from": "apps/dicomview/src/protocol-session.js",
+    "to": "./vendor/dicompare/dicompare-worker.js?url",
+    "reason": "apps/dicomview/scripts/stage-dicompare.mjs stages dicompare's embedding kit and schema library in apps/dicomview/src/vendor/dicompare before the dev and build scripts run."
+  },
+  {
+    "from": "apps/dicomview/src/protocol-session.js",
+    "to": "./vendor/dicompare/schemas/index.json",
+    "reason": "apps/dicomview/scripts/stage-dicompare.mjs stages dicompare's embedding kit and schema library in apps/dicomview/src/vendor/dicompare before the dev and build scripts run."
   }
 ]

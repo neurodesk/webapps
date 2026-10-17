@@ -1,7 +1,7 @@
 {
   "name": "niimath",
   "private": true,
-  "version": "1.3.20261016",
+  "version": "1.3.20261017",
   "type": "module",
   "license": "BSD-2-Clause",
   "scripts": {

@@ -1,3 +1,5 @@
+import { VERIFIED_ASSET_CACHE } from "../../../packages/components/src/worker/fetchModel.js";
+import { mockExampleIntegrity } from "../../../test-utils/example-fixture-catalog.mjs";
 // Real browser smoke test. Proves the deployed contract that Node tests cannot:
 // cross-origin isolation, worker loading, and app boot. Runs against `vite preview`
 // (see playwright.config.js) so it exercises the built, header-served output.
@@ -8,8 +10,14 @@ import { affineDifference, downsampledExamplePair, ncc, readVolume, resampleToGr
 const examples = JSON.parse(await readFile(new URL("../examples.json", import.meta.url), "utf8"));
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
 
+async function configureExampleFixtures(page, files) {
+  for (const file of examples.flatMap(example => example.files)) {
+    await mockExampleIntegrity(page, [file], files ? files[file.url.split("/").pop()] : fixture);
+  }
+}
+
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {
@@ -43,6 +51,7 @@ test("affine registration aligns the example T1 with the MNI template on the tem
   const { moving, fixed, files } = await downsampledExamplePair(examples[0], 2);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
   await page.goto("/");
+  await configureExampleFixtures(page, files);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator("#movingInfo")).toHaveText("t1_crop.nii.gz");
@@ -71,6 +80,7 @@ test("affine registration aligns the example T1 with the MNI template on the tem
 
 test("cancellation keeps controls locked until registration exits", async ({ page }) => {
   await page.goto("/");
+  await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator("#resultList")).toBeEmpty();
@@ -88,6 +98,7 @@ test("cancellation keeps controls locked until registration exits", async ({ pag
 
 test("a failed replacement cannot register the previous moving image", async ({ page }) => {
   await page.goto("/");
+  await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120_000 });
   await page.locator("#movingInput").setInputFiles({ name: "broken.nii", mimeType: "application/octet-stream", buffer: Buffer.from("not a NIfTI image") });
@@ -97,15 +108,27 @@ test("a failed replacement cannot register the previous moving image", async ({ 
 
 test("a failed example download keeps the loaded pair and can retry", async ({ page }) => {
   await page.goto("/");
+  await configureExampleFixtures(page);
   const select = page.locator("[data-neurodesk-example]");
   await select.selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
-  await page.route("**/t1_crop.nii.gz", route => route.fulfill({ status: 503 }));
+  await page.evaluate(name => caches.delete(name), VERIFIED_ASSET_CACHE);
+  let failedRequests = 0;
+  const failDownload = route => {
+    failedRequests++;
+    return route.fulfill({ status: 503 });
+  };
+  await page.context().route("**/t1_crop.nii.gz", failDownload);
   await select.selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "error");
   await expect(select).toHaveValue("");
   await expect(select).toBeEnabled();
   await expect(page.locator("#movingInfo")).toHaveText("t1_crop.nii.gz");
+  expect(failedRequests).toBeGreaterThan(0);
+  await page.context().unroute("**/t1_crop.nii.gz", failDownload);
+  await select.selectOption("t1-mni");
+  await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
+  await expect(page.locator("#runButton")).toBeEnabled();
 });
 
 test("image controls stay disabled without WebGPU", async ({ page }) => {

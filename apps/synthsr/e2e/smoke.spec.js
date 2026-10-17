@@ -19,7 +19,7 @@ test('load, invalid input, and cancellation preserve the original',async({page})
   await page.locator('#imageInput').setInputFiles(fixture('validation.nii.gz'));
   await expect(page.locator('#processButton')).toBeEnabled();
   // Hold the model request so this tests real cancellation without a giant asset.
-  await page.route('**/synthsr-v2.onnx*',()=>{});
+  await page.context().route('**/synthsr-v2.onnx*',()=>{});
   await page.locator('#processButton').click();await page.locator('#cancelBtn').click();
   await expect(page.locator('#statusText')).toContainText('cancelled');
   await expect(page.locator('#saveBtn')).toBeDisabled();

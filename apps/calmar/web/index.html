@@ -96,12 +96,23 @@
             <input type="file" data-neurodesk-input="image" id="structuralFileInput" multiple>
           </div>
           <div class="param-group">
-            <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (NIfTI / DICOM)</label>
+            <div class="param-label-row">
+              <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (NIfTI / DICOM)</label>
+              <span class="nd-info-icon" aria-label="DWI/TRACE help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  With DWI/TRACE plus ADC or b0, Run analysis seeds the lesion with DeepISLES (SEALS) instead of the T1 model. Without ADC, it is computed from the b0. Without a T1, the b0 (or DWI/TRACE) is used for registration.
+                </span>
+              </span>
+            </div>
             <input type="file" data-neurodesk-input="image" id="deepIslesDwiFileInput" multiple>
           </div>
           <div class="param-group">
             <label class="param-label" for="deepIslesAdcFileInput">ADC (NIfTI / DICOM)</label>
             <input type="file" data-neurodesk-input="image" id="deepIslesAdcFileInput" multiple>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="deepIslesB0FileInput">b0 (NIfTI / DICOM)</label>
+            <input type="file" data-neurodesk-input="image" id="deepIslesB0FileInput" multiple>
           </div>
         </div>
       </section>
@@ -143,7 +154,7 @@
                   <span class="param-label">3 Lesion mask</span>
                   <input type="file" data-neurodesk-input="image" id="manualMaskFileInput" class="hidden" aria-hidden="true" tabindex="-1" multiple>
                   <button class="btn btn-secondary btn-sm" id="runLesionSegmentationButton" title="Run auto segmentation as an editable seed">Auto seed mask</button>
-                  <button class="btn btn-secondary btn-sm" id="runDeepIslesSegmentationButton" title="Run DeepISLES on DWI/TRACE and ADC as an editable seed">DeepISLES DWI/ADC seed</button>
+                  <button class="btn btn-secondary btn-sm" id="runDeepIslesSegmentationButton" title="Run DeepISLES (SEALS) on DWI/TRACE and ADC, or ADC computed from a b0, as an editable seed">DeepISLES DWI/ADC seed</button>
                   <button class="btn btn-secondary btn-sm" id="startManualMaskButton" title="Start a blank editable lesion mask">Manual mask</button>
                   <button class="btn btn-secondary btn-sm" id="uploadManualMaskButton" title="Load a native-space lesion mask as an editable seed">Upload mask</button>
                 </div>
@@ -184,8 +195,7 @@
         </div>
       </section>
 
-      <!-- 3. RESULTS — overlap table, threshold panel, primary downloads.
-           Intermediate masks (brain / lesion) hidden under Advanced. -->
+      <!-- 3. RESULTS — result filters and downloads; the tables are in the viewer's Results view. -->
       <section class="sidebar-section collapsed" id="resultsSection" data-disclosure>
         <h2 class="section-title"><button type="button" class="section-toggle" data-disclosure-toggle>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-7"/></svg>
@@ -198,46 +208,6 @@
               <input type="number" id="networkThresholdMinCluster" class="param-input" min="0" step="1" value="30">
             </div>
           </div>
-          <div class="panel-title-row">
-            <h3>Direct lesion overlap</h3>
-            <span class="nd-info-icon" aria-label="Direct lesion overlap help" tabindex="0">i
-              <span class="nd-info-tooltip" role="tooltip">
-                Atlas labels listed here contain lesion voxels directly. Lesion % is the share of lesion voxels in each label.
-              </span>
-            </span>
-          </div>
-          <div id="outsideAtlasWarning" class="warning hidden"></div>
-          <table id="networkOverlapTable" class="results-table">
-            <thead>
-              <tr>
-                <th>Atlas label</th>
-                <th>Voxels</th>
-                <th>Lesion %</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-          <div id="directFunctionProfileResults" class="function-profile-results hidden">
-            <div class="panel-title-row">
-              <h3>Functional associations from direct lesion overlap</h3>
-              <span class="nd-info-icon" aria-label="Direct functional associations help" tabindex="0">i
-                <span class="nd-info-tooltip" role="tooltip">
-                  Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
-                </span>
-              </span>
-            </div>
-            <table id="directFunctionProfileTable" class="results-table function-profile-table">
-              <thead>
-                <tr>
-                  <th>Term</th>
-                  <th>Score</th>
-                  <th>Atlas label drivers</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-
           <div class="threshold-controls" id="thresholdControls">
             <div class="panel-title-row">
               <h3>Threshold connectivity map</h3>
@@ -256,47 +226,6 @@
             </div>
             <div class="param-row">
               <label><input type="checkbox" id="networkThresholdSymmetric" checked> Use |t| magnitude</label>
-            </div>
-            <p class="threshold-summary" id="networkThresholdSummary">Run analysis first to enable thresholding.</p>
-            <div id="affectedNetworkResults" class="affected-network-results hidden">
-              <div class="panel-title-row">
-                <h3>Connectivity-map effects</h3>
-                <span class="nd-info-icon" aria-label="Connectivity-map effects help" tabindex="0">i
-                  <span class="nd-info-tooltip" role="tooltip">
-                    Atlas labels listed here contain voxels surviving the thresholded connectivity map. Map % is the share of thresholded map voxels in each label.
-                  </span>
-                </span>
-              </div>
-              <table id="affectedNetworkTable" class="results-table">
-                <thead>
-                  <tr>
-                    <th>Atlas label</th>
-                    <th>Voxels</th>
-                    <th>Map %</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-              <div id="mapFunctionProfileResults" class="function-profile-results hidden">
-                <div class="panel-title-row">
-                  <h3>Functional associations from connectivity-map effects</h3>
-                  <span class="nd-info-icon" aria-label="Connectivity-map functional associations help" tabindex="0">i
-                    <span class="nd-info-tooltip" role="tooltip">
-                      Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
-                    </span>
-                  </span>
-                </div>
-                <table id="mapFunctionProfileTable" class="results-table function-profile-table">
-                  <thead>
-                    <tr>
-                      <th>Term</th>
-                      <th>Score</th>
-                      <th>Atlas label drivers</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
             </div>
           </div>
 
@@ -330,6 +259,7 @@
         <button class="view-tab" data-view="coronal">Coronal</button>
         <button class="view-tab" data-view="sagittal">Sagittal</button>
         <button class="view-tab" data-view="render">3D</button>
+        <button class="view-tab" data-view="results" disabled>Results</button>
       </div>
 
       <div class="mask-drawing-toolbar hidden" id="maskDrawingToolbar" aria-label="Lesion mask drawing tools">
@@ -451,6 +381,100 @@
 
     <div class="viewer-canvas-wrapper">
       <canvas id="gl1"></canvas>
+      <section id="resultsReport" class="nd-viewer-report" aria-label="Results" hidden>
+        <div class="nd-report-stack">
+          <div id="outsideAtlasWarning" class="nd-message warning hidden" role="note"></div>
+          <section aria-label="Direct lesion overlap">
+            <div class="nd-report-heading">
+              <h3>Direct lesion overlap</h3>
+              <span class="nd-info-icon" aria-label="Direct lesion overlap help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  Atlas labels listed here contain lesion voxels directly. Lesion % is the share of lesion voxels in each label.
+                </span>
+              </span>
+            </div>
+            <div class="nd-table-scroll">
+              <table id="networkOverlapTable" class="nd-data-table">
+                <thead>
+                  <tr>
+                    <th>Atlas label</th>
+                    <th class="nd-numeric">Voxels</th>
+                    <th class="nd-numeric">Lesion %</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+          <section id="directFunctionProfileResults" class="hidden" aria-label="Functional associations from direct lesion overlap">
+            <div class="nd-report-heading">
+              <h3>Functional associations from direct lesion overlap</h3>
+              <span class="nd-info-icon" aria-label="Direct functional associations help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
+                </span>
+              </span>
+            </div>
+            <div class="nd-table-scroll">
+              <table id="directFunctionProfileTable" class="nd-data-table">
+                <thead>
+                  <tr>
+                    <th>Term</th>
+                    <th class="nd-numeric">Score</th>
+                    <th>Atlas label drivers</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+          <p class="nd-report-notes" id="networkThresholdSummary">Run analysis first to enable thresholding.</p>
+          <section id="affectedNetworkResults" class="hidden" aria-label="Connectivity-map effects">
+            <div class="nd-report-heading">
+              <h3>Connectivity-map effects</h3>
+              <span class="nd-info-icon" aria-label="Connectivity-map effects help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  Atlas labels listed here contain voxels surviving the thresholded connectivity map. Map % is the share of thresholded map voxels in each label.
+                </span>
+              </span>
+            </div>
+            <div class="nd-table-scroll">
+              <table id="affectedNetworkTable" class="nd-data-table">
+                <thead>
+                  <tr>
+                    <th>Atlas label</th>
+                    <th class="nd-numeric">Voxels</th>
+                    <th class="nd-numeric">Map %</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <section id="mapFunctionProfileResults" class="hidden" aria-label="Functional associations from connectivity-map effects">
+              <div class="nd-report-heading">
+                <h3>Functional associations from connectivity-map effects</h3>
+                <span class="nd-info-icon" aria-label="Connectivity-map functional associations help" tabindex="0">i
+                  <span class="nd-info-tooltip" role="tooltip">
+                    Exploratory literature terms are available for selected atlas labels; they are not clinical predictions.
+                  </span>
+                </span>
+              </div>
+              <div class="nd-table-scroll">
+                <table id="mapFunctionProfileTable" class="nd-data-table">
+                  <thead>
+                    <tr>
+                      <th>Term</th>
+                      <th class="nd-numeric">Score</th>
+                      <th>Atlas label drivers</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </div>
+      </section>
     </div>
 
     <div class="viewer-info">
@@ -458,28 +482,15 @@
       <span class="viewer-info-label" id="viewerInfoLabel"></span>
     </div>
 
-    <div class="console-stack">
-      <div data-disclosure class="collapsed console-container console-primary-log" id="analysisLog" aria-label="Analysis log">
-        <div class="console-header">
-          <button type="button" class="console-title" data-disclosure-toggle>Analysis log</button>
-          <div class="nd-console-actions">
-            <button type="button" class="nd-console-clear" id="copyConsole" title="Copy to clipboard">Copy</button>
-            <button type="button" class="nd-console-clear" id="clearConsole">Clear</button>
-          </div>
+    <div data-disclosure class="collapsed nd-console-container" id="technicalLogDetails" aria-label="Technical log">
+      <div class="nd-console-header">
+        <button type="button" class="nd-console-title" data-disclosure-toggle>Technical log</button>
+        <div class="nd-console-actions">
+          <button type="button" class="nd-console-clear" id="copyTechnicalConsole" title="Copy technical log to clipboard">Copy</button>
+          <button type="button" class="nd-console-clear" id="clearTechnicalConsole">Clear</button>
         </div>
-        <div class="console-output" id="consoleOutput" data-disclosure-panel></div>
       </div>
-
-      <div data-disclosure class="collapsed console-container console-technical-log" id="technicalLogDetails" aria-label="Technical log: model and processing details">
-        <div class="console-header">
-          <button type="button" class="console-title" data-disclosure-toggle>Technical log</button>
-          <div class="nd-console-actions">
-            <button type="button" class="nd-console-clear" id="copyTechnicalConsole" title="Copy technical log to clipboard">Copy</button>
-            <button type="button" class="nd-console-clear" id="clearTechnicalConsole">Clear</button>
-          </div>
-        </div>
-        <div class="console-output" id="technicalConsoleOutput" data-disclosure-panel></div>
-      </div>
+      <div class="nd-console-output" id="technicalConsoleOutput" data-disclosure-panel></div>
     </div>
   </main>
 
@@ -493,7 +504,7 @@
 
 </div>
 
-<div class="modal-overlay" id="aboutModal">
+<div class="modal-overlay" id="aboutModal" inert aria-hidden="true">
   <div class="modal about-modal">
     <div class="modal-header">
       <h3>About CALMaR</h3>
@@ -520,7 +531,7 @@
   </div>
 </div>
 
-<div class="modal-overlay" id="privacyModal">
+<div class="modal-overlay" id="privacyModal" inert aria-hidden="true">
   <div class="modal privacy-modal">
     <div class="modal-header">
       <h3>Privacy</h3>

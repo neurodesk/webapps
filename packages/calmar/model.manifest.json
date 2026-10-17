@@ -132,7 +132,7 @@
       "conversionSource": "neurodesk/vesselboost-webapp:scripts/convert_synthstrip.py",
       "browserFormat": "onnx-fp32",
       "supportStatus": "supported",
-      "_comment": "Phase 2a.1 brain-extraction model. SynthStrip ONNX export converted from FreeSurfer's main synthstrip.1.pt checkpoint, not the no-CSF or pediatric variants; conversion script was ported from neurodesk/vesselboost-webapp@web/models/synthstrip.onnx (FreeSurfer Apache-2.0). Wrapper code uses LIA reorientation + 1mm resample + 192-320 conform + 99th percentile normalization + SDT<1 threshold + largest-CC + interior fill (matches FreeSurfer defaults). WASM execution provider only — WebGPU lacks 3D MaxPool."
+      "_comment": "Phase 2a.1 brain-extraction model. SynthStrip ONNX export converted from FreeSurfer's main synthstrip.1.pt checkpoint, not the no-CSF or pediatric variants; conversion script was ported from neurodesk/vesselboost-webapp@web/models/synthstrip.onnx (FreeSurfer Apache-2.0). Wrapper code uses LIA reorientation + 1mm resample + 192-320 conform + 99th percentile normalization + SDT<1 threshold + largest-CC + interior fill (matches FreeSurfer defaults). WASM execution provider only \u2014 WebGPU lacks 3D MaxPool."
     },
     {
       "id": "lnm-stroke-lesion",
@@ -181,26 +181,34 @@
         "normalize": "zscore",
         "channelOrder": "xyz"
       },
-      "_comment": "Phase 2a.2 lesion-segmentation model. Exported from liamchalcroft/synthstroke-baseline (MELBA 2025; MIT) — the baseline 3D MONAI UNet for T1w input with classes background/stroke. Upstream model card uses 192^3 patches, 1mm spacing, optional TTA; CALMaR exports the same safetensors weights to a browser-bounded static-128^3 ONNX and runs sliding-window overlap 0.25 WITH 8-axis test-time augmentation. TTA was added to suppress reflection-unstable false positives (notably in-brain cerebellum/posterior-fossa clusters); on the prealigned MNI160 input it removes the cerebellar FP while preserving ~95% of the true lesion. Raising overlap (0.5) only costs recall; the upstream 192^3 graph is both worse here and not browser-shippable from the static-128 export. Forward output is 2-channel logits (background, stroke); worker collapses stroke-background logit before sigmoid/thresholding."
+      "_comment": "Phase 2a.2 lesion-segmentation model. Exported from liamchalcroft/synthstroke-baseline (MELBA 2025; MIT) \u2014 the baseline 3D MONAI UNet for T1w input with classes background/stroke. Upstream model card uses 192^3 patches, 1mm spacing, optional TTA; CALMaR exports the same safetensors weights to a browser-bounded static-128^3 ONNX and runs sliding-window overlap 0.25 WITH 8-axis test-time augmentation. TTA was added to suppress reflection-unstable false positives (notably in-brain cerebellum/posterior-fossa clusters); on the prealigned MNI160 input it removes the cerebellar FP while preserving ~95% of the true lesion. Raising overlap (0.5) only costs recall; the upstream 192^3 graph is both worse here and not browser-shippable from the static-128 export. Forward output is 2-channel logits (background, stroke); worker collapses stroke-background logit before sigmoid/thresholding."
     },
     {
-      "id": "lnm-deepisles-nvauto-browser-seed",
-      "filename": "models/lnm-deepisles-nvauto-browser-seed.onnx",
-      "sizeBytes": 357826417,
-      "checksum": "sha256:fb30aa600986ca53c953f514e09eb2f96b19d6ae14c7bf70c44206ca0a21716a",
-      "cacheKey": "lnm-deepisles-nvauto-browser-seed-model0-192x192x128-v1",
-      "sourceUrl": "https://huggingface.co/datasets/sbollmann/lnm-webapp-models/resolve/6fd71cdb20e094c10312b42779abee8375f4142e/models/lnm-deepisles-nvauto-browser-seed.onnx",
-      "sourceVersion": "DeepISLES-NVAUTO-model0-explicit-traced-local-candidate",
-      "browserFormat": "onnx-fp32",
-      "supportStatus": "benchmark-only",
+      "id": "lnm-deepisles-seals-fold0",
+      "filename": "models/lnm-deepisles-seals-fold0-128-fp16.onnx",
+      "sizeBytes": 62429252,
+      "checksum": "sha256:54c01314ea7ad26b092266ac6cb39bc9f35ac84d8983186af734f05b1cd1c329",
+      "cacheKey": "lnm-deepisles-seals-fold0-128-fp16-v1",
+      "sourceUrl": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2375f48afe069ac4018917e8a4bee3f24920dee/calmar/models/lnm-deepisles-seals-fold0-128-fp16.onnx",
+      "sourceVersion": "DeepISLES-SEALS-nnUNetv1-Task012-fold0-Apache-2.0",
+      "upstream": {
+        "weights": "https://zenodo.org/records/14026715",
+        "archive": "stroke_ensemble_weights.7z",
+        "archiveMd5": "be5b6dfcd66b55c2e6dc6db9a5880f7f",
+        "checkpoint": "weights/SEALS/nnUNet_trained_models/nnUNet/3d_fullres/Task012_Ischemic_Stroke_TM_Fullset/nnUNetTrainerV2_DDP__nnUNetPlansv2.1/fold_0/model_final_checkpoint.model",
+        "code": "https://github.com/Tabrisrei/ISLES22_Ensemble/tree/6a99caa6389743b0a92aa4ed218d5dbe59c3ce7c/src/SEALS",
+        "license": "Apache-2.0"
+      },
+      "browserFormat": "onnx-fp16",
+      "supportStatus": "supported",
       "inputModality": "DWI_ADC",
       "inputContrasts": [
-        "ADC",
-        "TRACE"
+        "TRACE",
+        "ADC"
       ],
       "patchSize": [
-        192,
-        192,
+        128,
+        128,
         128
       ],
       "targetSpacing": [
@@ -208,19 +216,18 @@
         1,
         1
       ],
-      "overlap": 0.625,
-      "probabilityThreshold": 0.5,
-      "minComponentSize": 30,
+      "testTimeAugmentation": true,
       "preprocessing": {
-        "normalize": "nonzero-zscore-channel-wise",
+        "brainExtraction": "SynthStrip on DWI/TRACE unless a DWI-grid brain mask exists",
+        "resample": "DWI/TRACE to 1 mm, ADC onto that grid, trilinear",
+        "normalize": "nnU-Net v1 nonCT z-score inside the hole-filled nonzero mask",
         "channelOrder": [
-          "ADC",
-          "TRACE"
+          "TRACE",
+          "ADC"
         ],
-        "resampleAdcToDwi": "affine-trilinear",
         "tensorLayout": "NCDHW"
       },
-      "_comment": "DeepISLES browser-seed candidate only. This NVAUTO single-fold ONNX is too large for the current cold-load budget and remains supportStatus=benchmark-only until the Dice 0.5 gap analysis identifies a browser-feasible candidate. The app exposes an opt-in DWI/ADC seed hook but refuses to run this asset while it is not marked supported."
+      "_comment": "DWI/TRACE + ADC (or ADC computed from b0) editable lesion seed. SEALS, the nnU-Net v1 member of DeepISLES (ISLES'22 winner), fold 0, exported by scripts/convert_seals_model.py. Loaded only on the diffusion input path, which does not load lnm-stroke-lesion. packages/calmar/src/seals.js reproduces scripts/run_seals_onnx.py, which matches nnU-Net's own inference (Dice >= 0.9999 on the ADS examples; packages/calmar/validation/seals-parity.mjs)."
     },
     {
       "id": "lnm-synthmorph-mni",
@@ -287,7 +294,7 @@
         "resample": "mni160-to-browserRuntime.inputDims",
         "padding": "center"
       },
-      "_comment": "Phase 3 MNI registration. Exported from voxelmorph/synthmorph 'brains-dice-vel-0.5-res-16-256f.h5' (Hoffmann et al. 2022, Apache-2.0). Only the UNet backbone (layers 0-33 of the full network) is in the ONNX — output is the raw stationary velocity field at half-resolution. The browser model reuses the original SynthMorph weights on a 48x64x80 static graph so the largest first-conv activation is 240 MiB instead of ~4.7 GiB. The graph still contains 3D MaxPool nodes, so the worker routes it through WASM because ORT WebGPU does not support NHWC 3D pooling. The worker downsamples the MNI160 source/reference pair to 48x64x80, runs ONNX, then performs scaling-and-squaring SVF integration, 24x32x40 -> 160x160x192 displacement upsample, and spatial warp in pure JS (web/js/modules/registration.js); see scripts/convert_registration_model.py."
+      "_comment": "Phase 3 MNI registration. Exported from voxelmorph/synthmorph 'brains-dice-vel-0.5-res-16-256f.h5' (Hoffmann et al. 2022, Apache-2.0). Only the UNet backbone (layers 0-33 of the full network) is in the ONNX \u2014 output is the raw stationary velocity field at half-resolution. The browser model reuses the original SynthMorph weights on a 48x64x80 static graph so the largest first-conv activation is 240 MiB instead of ~4.7 GiB. The graph still contains 3D MaxPool nodes, so the worker routes it through WASM because ORT WebGPU does not support NHWC 3D pooling. The worker downsamples the MNI160 source/reference pair to 48x64x80, runs ONNX, then performs scaling-and-squaring SVF integration, 24x32x40 -> 160x160x192 displacement upsample, and spatial warp in pure JS (web/js/modules/registration.js); see scripts/convert_registration_model.py."
     }
   ],
   "atlasAssets": [
@@ -2001,7 +2008,7 @@
       "voxelOrder": "row-major",
       "statistic": "tstat",
       "supportStatus": "supported",
-      "_comment": "Phase 38 group-FC pack. 7 brain-wide one-sample t-maps (one per Yeo network) stacked Float32 in NumPy row-major order; decodeFcPack transposes channels to NIfTI x-fast order before thresholding or display. Computed by scripts/build_yeo7_connectome.py from development_fmri 155 subjects via nilearn fetch_development_fmri (Richardson 2018, movie-watching task, CC0 — no DUT required). Per-subject Yeo7 ROI mean -> Pearson r-map vs every brain voxel -> Fisher-z -> group t-stat. Same 99x117x95 2mm grid as the yeo7-2mm atlas. Group t-stat range observed [-13.47, 30.72] (vs [-13.85, 19.74] for the prior ADHD-200 N=40 pack — peak +stat ~55% higher with the larger sample)."
+      "_comment": "Phase 38 group-FC pack. 7 brain-wide one-sample t-maps (one per Yeo network) stacked Float32 in NumPy row-major order; decodeFcPack transposes channels to NIfTI x-fast order before thresholding or display. Computed by scripts/build_yeo7_connectome.py from development_fmri 155 subjects via nilearn fetch_development_fmri (Richardson 2018, movie-watching task, CC0 \u2014 no DUT required). Per-subject Yeo7 ROI mean -> Pearson r-map vs every brain voxel -> Fisher-z -> group t-stat. Same 99x117x95 2mm grid as the yeo7-2mm atlas. Group t-stat range observed [-13.47, 30.72] (vs [-13.85, 19.74] for the prior ADHD-200 N=40 pack \u2014 peak +stat ~55% higher with the larger sample)."
     },
     {
       "id": "schaefer400-fc-pack-development-n155-4mm",

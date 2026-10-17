@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DICOM View — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">DICOM files</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="dicomInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose DICOM files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop a DICOM folder or files</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="seriesSection" open>
+        <summary class="nd-section-title">Series</summary>
+        <div class="nd-section-content">
+          <div id="seriesList"></div>
+          <p id="seriesInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field" id="outputField" hidden>
+            <label for="outputSelect">Image
+              <span class="nd-info-icon" tabindex="0" aria-label="About the images of a series">i<span class="nd-info-tooltip">dcm2niix writes one image per echo, part (magnitude, phase) or orientation in a series.</span></span>
+            </label>
+            <select id="outputSelect"></select>
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="protocolSection">
+        <summary class="nd-section-title">Protocol</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="schemaSelect">Compare with
+              <span class="nd-info-icon" tabindex="0" aria-label="About protocol schemas">i<span class="nd-info-tooltip">dicompare groups the files into acquisitions and lists their parameters. A schema from the dicompare library adds a compliance check.</span></span>
+            </label>
+            <select id="schemaSelect"><option value="">No schema: summary only</option></select>
+          </div>
+          <div class="nd-field" id="schemaAcquisitionField" hidden>
+            <label for="schemaAcquisition">Schema acquisition</label>
+            <select id="schemaAcquisition"></select>
+          </div>
+          <button id="protocolButton" class="nd-btn nd-btn-primary" type="button" disabled>Summarize protocol</button>
+          <p class="nd-hint">Runs dicompare in Python in this browser; the first run downloads it.</p>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image of the selected series"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop a DICOM folder anywhere, or choose an example.</p>
+        <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
+        <section id="headerReport" class="nd-viewer-report" aria-label="DICOM header" hidden>
+          <div class="nd-report-controls">
+            <div class="nd-field">
+              <label for="headerSource">Show</label>
+              <select id="headerSource">
+                <option value="dicom">DICOM header</option>
+                <option value="sidecar">BIDS sidecar (dcm2niix)</option>
+              </select>
+            </div>
+            <div class="nd-field">
+              <label for="instanceSlider">Instance <small id="instanceLabel"></small></label>
+              <input id="instanceSlider" type="range" min="0" max="0" value="0" />
+            </div>
+            <div class="nd-field">
+              <label for="headerFilter">Filter</label>
+              <input id="headerFilter" type="search" placeholder="Keyword, tag or value" />
+            </div>
+            <label class="nd-check"><input id="varyingOnly" type="checkbox" /> Only fields that vary across the series</label>
+            <button id="copyHeader" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Copy JSON</button>
+            <button id="downloadHeader" class="nd-btn nd-btn-secondary nd-btn-sm" type="button">Download CSV</button>
+          </div>
+          <p id="headerNote" class="nd-report-notes"></p>
+          <div class="nd-table-scroll">
+            <table class="nd-data-table" aria-label="Header fields">
+              <thead><tr><th>Tag</th><th>Keyword</th><th>VR</th><th>Value</th></tr></thead>
+              <tbody id="headerRows"></tbody>
+            </table>
+          </div>
+        </section>
+        <section id="protocolReport" class="nd-viewer-report" aria-label="Protocol" hidden>
+          <div id="complianceReport"></div>
+          <div id="protocolSummary"></div>
+        </section>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-label"></span><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Loading…</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel" aria-label="Cancel" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>DICOM View opens a folder of DICOM files in the browser and lists the series in it, with each series’ size and main acquisition parameters. Choosing a series converts it to NIfTI with dcm2niix and shows it in NiiVue; a series that dcm2niix splits, such as one with several echoes or magnitude and phase, offers each image. The Header view lists every element of an instance, nested sequences included, names it from the DICOM dictionary, and can keep only the fields that differ between the instances of the series. It also shows the BIDS sidecar dcm2niix writes. Protocol runs dicompare in Python in the browser to group the files into acquisitions and list their parameters, and checks them against a schema from the dicompare library. Fields that vary are marked in bold. Compliance checks compare parameters with a published protocol; they are not a clinical quality assessment.</p>
+    </template>
+    <template id="privacyContent"><p>Files are read and converted in this browser and are never uploaded. Python and dicompare download from their public package hosts the first time a protocol is summarised; your files are not sent. The example is downloaded from Hugging Face at a pinned revision.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

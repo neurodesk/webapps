@@ -53,7 +53,7 @@
         },
         "reference": {
           "type": "string",
-          "description": "Norms for the volume report; auto or omitted picks AHEAD (7 T) from 5 T in the DICOM header, otherwise IXI",
+          "description": "Norms for the volume report; auto or omitted picks AHEAD (7 T) from 5 T in the DICOM header, otherwise IXI; the norms match the run's mode",
           "enum": [
             "auto",
             "ixi",

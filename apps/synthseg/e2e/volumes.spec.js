@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import manifest from '../../../packages/synthseg/model.manifest.json' with { type: 'json' };
-import { parseVolumesCsv } from '../../../packages/synthseg/src/results.js';
+import { parseVolumesCsv, VOLUME_COLUMNS, volumesCsv } from '../../../packages/synthseg/src/results.js';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 import { readVolume, writeFloat32Volume } from '../../../test-utils/nifti-fixture.mjs';
 
@@ -29,11 +29,16 @@ async function fakeInference(page) {
 
 // Serves the pinned norms from their checksummed fixtures and counts the requests per reference.
 async function serveNorms(page, status = 200) {
-  const fixtures = { ixi: 'brainquant_norms.json', ahead: 'brainquant_norms_7t.json' };
-  const requests = { ixi: 0, ahead: 0 };
+  const fixtures = {
+    'ixi-fast': 'brainquant_norms.json',
+    'ahead-fast': 'brainquant_norms_7t.json',
+    'ixi-normal': 'brainquant_norms_normal.json',
+    'ahead-normal': 'brainquant_norms_7t_normal.json',
+  };
+  const requests = Object.fromEntries(Object.keys(fixtures).map((id) => [id, 0]));
   for (const [id, name] of Object.entries(fixtures)) {
     const body = await readFile(`${FIXTURES}${name}`);
-    await page.route(manifest.norms[id].url, (route) => {
+    await page.context().route(manifest.norms[id].url, (route) => {
       requests[id]++;
       return status === 200 ? route.fulfill({ status, body, contentType: 'text/plain' }) : route.fulfill({ status, body: 'missing' });
     });
@@ -41,7 +46,7 @@ async function serveNorms(page, status = 200) {
   return () => requests;
 }
 
-async function finishInference(page) {
+async function finishInference(page, resultVolumes = volumes) {
   const labels = await readFile('../../exes/synthseg/test/fixtures/small_fast.nii.gz');
   const { header, data } = readVolume(labels);
   const map = writeFloat32Volume(header, new Float32Array(data.length));
@@ -53,14 +58,14 @@ async function finishInference(page) {
         provenance: { outputShape: [1, 1, 1], seconds: 0 },
       },
     });
-  }, { bytes: [...labels], mapBytes: [...map], volumes });
+  }, { bytes: [...labels], mapBytes: [...map], volumes: resultVolumes });
   await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', 'succeeded');
 }
 
-async function segment(page) {
+async function segment(page, resultVolumes = volumes) {
   await expect(page.locator('#processButton')).toBeEnabled();
   await page.locator('#processButton').click();
-  await finishInference(page);
+  await finishInference(page, resultVolumes);
 }
 
 test('fast mode is the default processing mode', async ({ page }) => {
@@ -89,15 +94,15 @@ test('the Volumes view charts each structure against age and follows the Age and
   expect(report.parameters).toMatchObject({ mode: 'fast', age: 72, sex: 'male', reference: 'auto' });
   expect(report.measurements.softVolumesMm3).toEqual(volumes);
   expect(report.measurements.volumeReport.norms).toEqual({
-    id: 'ixi',
+    id: 'ixi-fast',
     version: '347cf6fb6135',
-    url: manifest.norms.ixi.url,
-    sha256: manifest.norms.ixi.sha256,
+    url: manifest.norms['ixi-fast'].url,
+    sha256: manifest.norms['ixi-fast'].sha256,
   });
   expect(report.measurements.volumeReport.reference).toEqual({
     choice: 'auto',
     fieldStrengthT: null,
-    reason: 'the scanner field strength is unknown',
+    reason: 'the scanner field strength is unknown and SynthSeg ran in fast mode',
   });
   const hippocampus = report.measurements.volumeReport.results[0];
   expect(hippocampus).toMatchObject({ id: 'hippocampus_left', flag: '>95th' });
@@ -120,7 +125,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   await expect(panel).toContainText('Research use only. Not for diagnostic use.');
   await expect(panel).toContainText('Total intracranial volume 1592 mL.');
   await expect(panel).toContainText('Population data: IXI, version 347cf6fb6135.');
-  await expect(panel).toContainText('The IXI reference was chosen because the scanner field strength is unknown.');
+  await expect(panel).toContainText('The IXI reference was chosen because the scanner field strength is unknown and SynthSeg ran in fast mode.');
 
   await page.locator('#age').fill('');
   await page.locator('#sex').selectOption('');
@@ -129,7 +134,7 @@ test('the Volumes view charts each structure against age and follows the Age and
   await expect(panel).toContainText('Sex unknown: compared with the combined female and male reference.');
   await page.locator('#age').fill('95');
   await expect(panel.locator('figure svg rect.nd-chart-range')).toHaveCount(10);
-  expect(requests()).toEqual({ ixi: 1, ahead: 0 });
+  expect(requests()).toMatchObject({ 'ixi-fast': 1, 'ahead-fast': 0 });
 
   await page.getByRole('button', { name: 'Axial', exact: true }).click();
   await expect(panel).toBeHidden();
@@ -173,20 +178,20 @@ test('the Reference field switches the Volumes view to the AHEAD 7 T norms', asy
   await expect(page.locator('#referenceHint')).toBeHidden();
   await expect(panel).toContainText('Reference: AHEAD 7 T (n=105, 60 F / 45 M, age 18-80 y, CC BY 4.0)');
   await expect(panel).toContainText('Population data: AHEAD, version 347cf6fb6135.');
-  await expect(panel).toContainText('The AHEAD reference was chosen because it was selected manually.');
+  await expect(panel).toContainText('The AHEAD reference was chosen because it was selected manually and SynthSeg ran in fast mode.');
   await expect(panel.locator('figure')).toHaveCount(10);
-  expect(requests()).toEqual({ ixi: 1, ahead: 1 });
+  expect(requests()).toMatchObject({ 'ixi-fast': 1, 'ahead-fast': 1 });
 
   const json = page.waitForEvent('download');
   await page.locator('#reportBtn').click();
   const saved = JSON.parse(await readFile(await (await json).path(), 'utf8'));
   expect(saved.measurements.volumeReport.norms).toEqual({
-    id: 'ahead',
+    id: 'ahead-fast',
     version: '347cf6fb6135',
-    url: manifest.norms.ahead.url,
-    sha256: manifest.norms.ahead.sha256,
+    url: manifest.norms['ahead-fast'].url,
+    sha256: manifest.norms['ahead-fast'].sha256,
   });
-  expect(saved.measurements.volumeReport.reference).toEqual({ choice: 'ahead', fieldStrengthT: null, reason: 'it was selected manually' });
+  expect(saved.measurements.volumeReport.reference).toEqual({ choice: 'ahead', fieldStrengthT: null, reason: 'it was selected manually and SynthSeg ran in fast mode' });
 });
 
 test('without the reference volumes the Volumes view says why and the table still downloads', async ({ page }) => {
@@ -198,10 +203,64 @@ test('without the reference volumes the Volumes view says why and the table stil
   const { report } = JSON.parse(await page.locator('#neurodesk-run').textContent());
   expect(report.measurements.volumeReport.unavailable).toBeTruthy();
   await page.getByRole('button', { name: 'Volumes', exact: true }).click();
-  await expect(page.locator('#volumeReport .nd-message.error')).toContainText('The reference volumes could not be loaded');
+  await expect(page.locator('#volumeReport .nd-message.error')).toContainText('The population report is unavailable');
+  await expect(page.locator('#volumeReport tbody tr')).toHaveCount(VOLUME_COLUMNS.length);
   const csv = page.waitForEvent('download');
   await page.locator('#volumesBtn').click();
-  expect(await readFile(await (await csv).path(), 'utf8')).toContain('total intracranial');
+  expect(await readFile(await (await csv).path(), 'utf8')).toBe(volumesCsv('small', volumes));
+});
+
+test('a failed population report preserves raw volumes and downloads and recovers on the next run', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await fakeInference(page);
+  await serveNorms(page);
+  await page.goto('./');
+  await page.locator('#imageInput').setInputFiles(SMALL);
+  const invalid = { ...volumes, 'left hippocampus': 0 };
+  await segment(page, invalid);
+  const reason = 'SynthSeg reported no volume for Left hippocampus';
+  const { report } = JSON.parse(await page.locator('#neurodesk-run').textContent());
+  expect(report.measurements.volumeReport.unavailable).toBe(reason);
+  await page.getByRole('button', { name: 'Volumes', exact: true }).click();
+  const panel = page.locator('#volumeReport');
+  await expect(panel.locator('.nd-message.error')).toContainText(reason);
+  await expect(panel.locator('figure')).toHaveCount(0);
+  await expect(panel.locator('th')).toHaveText(['Structure', 'Volume (mL)']);
+  await expect(panel.locator('tbody tr')).toHaveCount(VOLUME_COLUMNS.length);
+  const rows = VOLUME_COLUMNS.map((name) => [name, (invalid[name] / 1000).toFixed(2)]);
+  expect(await panel.locator('tbody tr').evaluateAll((lines) => lines.map((line) => [...line.cells].map((cell) => cell.textContent)))).toEqual(rows);
+
+  await page.locator('#age').fill('72');
+  await page.locator('#reference').selectOption('ahead');
+  await expect(panel.locator('.nd-message.error')).toContainText(reason);
+  await page.getByRole('button', { name: 'Axial', exact: true }).click();
+  await expect(panel).toBeHidden();
+  await page.getByRole('button', { name: 'Volumes', exact: true }).click();
+  await expect(panel.locator('tbody tr')).toHaveCount(VOLUME_COLUMNS.length);
+  const csv = page.waitForEvent('download');
+  await page.locator('#volumesBtn').click();
+  const table = await csv;
+  expect(table.suggestedFilename()).toBe('small_synthseg_vol.csv');
+  expect(await readFile(await table.path(), 'utf8')).toBe(volumesCsv('small', invalid));
+  const json = page.waitForEvent('download');
+  await page.locator('#reportBtn').click();
+  const saved = JSON.parse(await readFile(await (await json).path(), 'utf8'));
+  expect(saved.measurements.softVolumesMm3).toEqual(invalid);
+  expect(saved.measurements.volumeReport.unavailable).toBe(reason);
+  const labels = page.waitForEvent('download');
+  await page.locator('#saveBtn').click();
+  const labelDownload = await labels;
+  expect(labelDownload.suggestedFilename()).toBe('small_synthseg.nii.gz');
+  expect(await readFile(await labelDownload.path())).toEqual(await readFile('../../exes/synthseg/test/fixtures/small_fast.nii.gz'));
+
+  await page.locator('#imageInput').setInputFiles(SMALL);
+  await expect(panel).toBeHidden();
+  await segment(page);
+  await page.getByRole('button', { name: 'Volumes', exact: true }).click();
+  await expect(panel.locator('figure')).toHaveCount(10);
+  await expect(panel.locator('.nd-message.error')).toHaveCount(0);
+  expect(errors).toEqual([]);
 });
 
 test('a DICOM series fills Age, Sex and the Auto reference from its header, and an edit overrides them', async ({ page }) => {
@@ -244,20 +303,23 @@ test('automation selects the DICOM reference, preserves demographic overrides an
   };
   const dicom = dicomSeries({ slices: 4, patient: { birthDate: '19700615', sex: 'F', studyDate: '20200614' }, fieldStrength: '6.98' });
   const automatic = await run(dicom);
-  expect(automatic.norms.id).toBe('ahead');
-  expect(automatic.reference).toEqual({ choice: 'auto', fieldStrengthT: 6.98, reason: 'the scanner field strength is 6.98 T' });
+  expect(automatic.norms.id).toBe('ahead-fast');
+  expect(automatic.reference).toEqual({ choice: 'auto', fieldStrengthT: 6.98, reason: 'the scanner field strength is 6.98 T and SynthSeg ran in fast mode' });
   expect(automatic.subject).toEqual({ age: 49, sex: 'female' });
 
   const ageOverride = await run(dicom, { age: 55, reference: 'ixi' });
-  expect(ageOverride.norms.id).toBe('ixi');
-  expect(ageOverride.reference).toEqual({ choice: 'ixi', fieldStrengthT: 6.98, reason: 'it was selected manually' });
+  expect(ageOverride.norms.id).toBe('ixi-fast');
+  expect(ageOverride.reference).toEqual({ choice: 'ixi', fieldStrengthT: 6.98, reason: 'it was selected manually and SynthSeg ran in fast mode' });
   expect(ageOverride.subject).toEqual({ age: 55, sex: 'female' });
   const sexOverride = await run(dicom, { sex: 'male', reference: 'auto' });
-  expect(sexOverride.norms.id).toBe('ahead');
+  expect(sexOverride.norms.id).toBe('ahead-fast');
   expect(sexOverride.subject).toEqual({ age: 49, sex: 'male' });
+  const defaultMode = await run(dicom, { mode: 'default' });
+  expect(defaultMode.norms.id).toBe('ahead-normal');
+  expect(defaultMode.reference.reason).toBe('the scanner field strength is 6.98 T and SynthSeg ran in default mode');
 
   const nifti = await run(SMALL);
-  expect(nifti.norms.id).toBe('ixi');
-  expect(nifti.reference).toEqual({ choice: 'auto', fieldStrengthT: null, reason: 'the scanner field strength is unknown' });
+  expect(nifti.norms.id).toBe('ixi-fast');
+  expect(nifti.reference).toEqual({ choice: 'auto', fieldStrengthT: null, reason: 'the scanner field strength is unknown and SynthSeg ran in fast mode' });
   expect(nifti.subject).toEqual({ age: null, sex: null });
 });

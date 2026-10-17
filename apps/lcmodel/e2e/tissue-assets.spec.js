@@ -27,7 +27,7 @@ test("MindMap loads its unchanged CPU runtime inside the app scope without host 
     await cp(new URL("../dist/", import.meta.url), join(scratch, "lcmodel"), { recursive: true });
     site = await serveSite(scratch, { isolationHeaders: false });
     const requests = [];
-    page.on("request", request => {
+    page.context().on("request", request => {
       if (request.url().includes("/brainchop/")) requests.push(request.url());
     });
     await page.goto(`${site.origin}/lcmodel/`, { waitUntil: "domcontentloaded" });

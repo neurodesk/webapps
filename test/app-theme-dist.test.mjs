@@ -20,6 +20,7 @@ test('adds the shared theme to a standalone app distribution', async (t) => {
     join(distDir, 'index.html'),
     '<!doctype html><html lang="en"><head><title>App</title></head><body></body></html>',
   );
+  await writeFile(join(distDir, 'engine.wasm'), 'final runtime binary');
   await writeFile(themeFile, ':root { --neurodesk-primary: #6aa329; }');
   await mkdir(join(root, 'fonts'));
   await writeFile(themeScriptFile, '/* shared theme controller */');
@@ -43,7 +44,13 @@ test('adds the shared theme to a standalone app distribution', async (t) => {
     iconFile,
   });
 
+  const themedHtml = await readFile(join(distDir, 'index.html'), 'utf8');
+  const manifestName = themedHtml.match(/content="\.\/(runtime-cache-manifest\.[a-f0-9]{64}\.json)"/)[1];
+  const manifest = JSON.parse(await readFile(join(distDir, manifestName), 'utf8'));
+  assert.equal(manifest.assets[0].url, './engine.wasm');
+  assert.equal(manifest.assets[0].bytes, 20);
   const html = await readFile(join(distDir, 'index.html'), 'utf8');
+  assert.match(html, /src="\.\/coi-serviceworker\.js"/);
   assert.match(html, /<html data-neurodesk-app="example-app" data-neurodesk-shell="static-html" data-neurodesk-theme="dark" lang="en">/);
   assert.match(html, /href="\.\/app-theme\.css" data-neurodesk-app-theme/);
   assert.match(html, /src="\.\/theme\.js" data-neurodesk-theme-controller/);

@@ -687,6 +687,26 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: dicomview
+    path: dicomview
+    title: DICOM View
+    description: Browse DICOM series, images, headers and protocol.
+    categories: [visualization]
+    keywords: [DICOM, viewer, header, series, metadata, protocol, dcm2niix]
+    legacy_domain: null
+    runtime: react-vite
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: NOASSERTION
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: true
   - id: fastprep
     path: fastprep
     title: fastprep

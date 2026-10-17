@@ -29,6 +29,36 @@ const viewports = [
   { width: 844, height: 390 },
 ];
 
+async function checkInformationAccessibility(page, app) {
+  const originalViewport = page.viewportSize();
+  // Class-toggled overlays can look closed while remaining in the accessibility
+  // tree. A selector containing `.active` alone cannot catch that regression.
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    for (const action of ['About', 'Privacy', 'Cite']) {
+      const control = page.locator('.nd-app-bar').getByRole('button', { name: action, exact: true });
+      const container = page.locator(action === 'Cite'
+        ? '.nd-app-dialog[data-dialog="cite"]'
+        : `#${action.toLowerCase()}Modal`);
+      await expect(container.getByRole('button')).toHaveCount(0);
+      for (const dismiss of ['click', 'Escape']) {
+        await control.click();
+        const close = container.getByRole('button', { name: /^(Close|×)$/ });
+        await expect(close).toHaveCount(1);
+        await expect(close).toBeFocused();
+        if (dismiss === 'click') await close.click();
+        else await page.keyboard.press('Escape');
+        await expect(container.getByRole('button')).toHaveCount(0);
+        await expect(control).toBeFocused();
+        await page.keyboard.press('Tab');
+        expect(await page.evaluate(() => Boolean(document.activeElement.closest('[inert]')))).toBe(false);
+      }
+    }
+    console.log(`PASS ${app.id}/information-accessibility/${viewport.width}`);
+  }
+  await page.setViewportSize(originalViewport);
+}
+
 async function checkLayout(page, label) {
   const result = await page.evaluate(() => {
     const width = document.documentElement.clientWidth;
@@ -72,9 +102,9 @@ try {
     // This suite measures layout, not inference. Avoid blocking Chromium's
     // renderer on BrowserQC's automatic full sample segmentation.
     if (app.id === 'browserqc') {
-      await page.route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
+      await context.route(/\/browserqc\/t1_crop\.nii\.gz$/, route => route.abort());
     }
-    await page.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
+    await context.route(/googletagmanager\.com|google-analytics\.com|analytics\.google\.com/,
       route => route.fulfill({ status: 200, body: '' }));
     try {
       const response = await page.goto(`${origin}/${app.path}${app.path ? '/' : ''}`, { waitUntil: 'domcontentloaded' });
@@ -129,6 +159,9 @@ try {
           await standalone.getByRole('button', { name: 'Close', exact: true }).tap();
           await expect(standalone).toBeHidden();
         }
+      }
+      if (['calmar', 'musclemap', 'qsmbly', 'seedseg', 'spinalcordtoolbox', 'vesselboost'].includes(app.id)) {
+        await checkInformationAccessibility(page, app);
       }
       if (app.id === 'qsmbly') {
         for (const viewport of [viewports[0], viewports[3]]) {

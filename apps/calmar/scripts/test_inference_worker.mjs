@@ -28,8 +28,7 @@ const { CalmarPipeline } = await import('../web/js/controllers/CalmarPipeline.js
 function makePipeline() {
   const events = { logs: [], errors: [], steps: [], stages: {}, descriptions: {}, completed: 0, volumeInfo: null };
   const pipeline = new CalmarPipeline({
-    updateOutput: () => {},
-    updateDebugOutput: message => events.logs.push(String(message)),
+    updateOutput: message => events.logs.push(String(message)),
     onStageData: data => {
       events.stages[data.stage] = data.niftiData;
       events.descriptions[data.stage] = data.description;
@@ -310,87 +309,112 @@ globalThis.fetch = async url => {
   assert.equal(events.errors.at(-1), 'Unexpected logits length 1536; expected 512 (1-channel) or 1024 (binary softmax)');
 }
 
-// ---- DeepISLES DWI/ADC seed route ----
+// ---- DeepISLES SEALS DWI/ADC seed route ----
 {
-  const dims = [8, 8, 8];
-  const dwiAffine = translationAffine(-4, -4, -4);
+  const dims = [12, 12, 12];
+  const dwiAffine = translationAffine(-6, -6, -6);
   // The ADC grid starts one voxel further along +x than the DWI grid, so
   // DWI voxel x shows ADC voxel x - 1 once resampled.
-  const adcAffine = translationAffine(-3, -4, -4);
-  const trace = new Float32Array(512).fill(100);
-  fillBox(trace, dims, [3, 5], [2, 4], [4, 6], 900);
-  const adc = new Float32Array(512).fill(1000);
-  fillBox(adc, dims, [2, 4], [2, 4], [4, 6], 200);
+  const adcAffine = translationAffine(-5, -6, -6);
+  const trace = new Float32Array(12 ** 3).fill(100);
+  fillBox(trace, dims, [5, 7], [5, 7], [5, 7], 900);
+  fillBox(trace, dims, [0, 1], [0, 1], [0, 1], 900);
+  const adc = new Float32Array(12 ** 3).fill(1000);
+  fillBox(adc, dims, [4, 6], [5, 7], [5, 7], 200);
+  fillBox(adc, dims, [0, 1], [0, 1], [0, 1], 200);
+  const b0 = new Float32Array(12 ** 3).fill(1000);
+  const brain = boxMask(dims, [1, 11], [1, 11], [1, 11]);
   const dwiBuffer = writeNifti1(trace, { dims, affine: flatAffine(dwiAffine) });
   const adcBuffer = writeNifti1(adc, { dims, affine: flatAffine(adcAffine) });
+  const b0Buffer = writeNifti1(b0, { dims, affine: flatAffine(dwiAffine) });
+  const brainMaskBuffer = writeNifti1(Float32Array.from(brain), { dims, affine: flatAffine(dwiAffine) });
 
   const settings = {
     taskId: 'lnm-deepisles',
-    modelAssetId: 'lnm-deepisles-nvauto-browser-seed',
-    modelName: 'lnm-deepisles-nvauto-browser-seed.onnx',
+    modelAssetId: 'lnm-deepisles-seals-fold0',
+    modelName: 'lnm-deepisles-seals-fold0-128-fp16.onnx',
     modelBaseUrl: 'https://models.example/models',
-    patchSize: [8, 8, 8],
-    overlap: 0.625,
-    threshold: 0.5,
-    minComponentSize: 1,
-    channelOrder: ['ADC', 'TRACE']
+    channelOrder: ['TRACE', 'ADC'],
+    supportStatus: 'supported',
+    dwiBuffer,
+    brainMaskBuffer
   };
   const { pipeline, events } = makePipeline();
   await settle(pipeline.resetWorkerState());
 
-  // The route is gated: benchmark-only assets, missing inputs and a wrong
-  // channel order are all refused.
-  await settle(pipeline.runDeepIslesInference({ ...settings, dwiBuffer, adcBuffer, supportStatus: 'benchmark-only' }));
-  await settle(pipeline.runDeepIslesInference({ ...settings, adcBuffer, supportStatus: 'supported' }));
-  await settle(pipeline.runDeepIslesInference({ ...settings, dwiBuffer, adcBuffer, supportStatus: 'supported', channelOrder: ['TRACE', 'ADC'] }));
+  // The route is gated: unsupported assets, missing inputs, a wrong
+  // channel order and unstripped input are all refused.
+  await settle(pipeline.runDeepIslesInference({ ...settings, adcBuffer, supportStatus: 'benchmark-only' }));
+  await settle(pipeline.runDeepIslesInference({ ...settings }));
+  await settle(pipeline.runDeepIslesInference({ ...settings, adcBuffer, channelOrder: ['ADC', 'TRACE'] }));
+  await settle(pipeline.runDeepIslesInference({ ...settings, adcBuffer, brainMaskBuffer: null }));
   assert.deepEqual(events.errors, [
-    'Task "lnm-deepisles" is benchmark-only. DeepISLES browser seed remains benchmark-only until a validated ONNX asset is selected.',
-    'DeepISLES requires DWI/TRACE and ADC input buffers.',
-    'DeepISLES channelOrder must be [ADC, TRACE].'
+    'Task "lnm-deepisles" is benchmark-only; only a supported DeepISLES asset can run.',
+    'DeepISLES requires a DWI/TRACE input and either ADC or b0.',
+    'DeepISLES SEALS channelOrder must be [TRACE, ADC].',
+    'DeepISLES needs a DWI-grid brain mask or SynthStrip settings: SEALS expects skull-stripped input.'
   ]);
 
-  // Stand-in two-channel model: stroke where ADC is low and TRACE is high
-  // (both z-scored over nonzero voxels), i.e. restricted diffusion.
+  // Stand-in model: lesion where TRACE is high and ADC is low (both
+  // z-scored inside the brain), i.e. restricted diffusion.
   const tensors = [];
   ortStub.create = async () => ({
-    inputNames: ['image'],
+    inputNames: ['input'],
     outputNames: ['logits'],
     run: async feeds => {
-      const tensor = feeds.image;
-      tensors.push(tensor);
+      const tensor = feeds.input;
+      tensors.push(tensor.dims);
       const voxels = tensor.data.length / 2;
       const logits = new Float32Array(2 * voxels);
       for (let i = 0; i < voxels; i++) {
-        const adcValue = tensor.data[i];
-        const traceValue = tensor.data[voxels + i];
-        logits[voxels + i] = adcValue < -1 && traceValue > 1 ? 9 : -9;
+        logits[voxels + i] = tensor.data[i] > 1 && tensor.data[voxels + i] < -1 ? 9 : -9;
       }
       return { logits: { data: logits } };
     },
     release: async () => {}
   });
-  await settle(pipeline.runDeepIslesInference({ ...settings, dwiBuffer, adcBuffer, supportStatus: 'supported' }));
-  assert.deepEqual(events.errors.slice(3), [], 'a validated DeepISLES asset runs');
-  assert.ok(events.logs.includes('Resampling ADC onto DWI/TRACE grid for DeepISLES.'));
-  assert.equal(tensors.length, 1);
-  assert.deepEqual(tensors[0].dims, [1, 2, 8, 8, 8], 'two-channel NCDHW input');
-  // Channel 0 is ADC: its low box, moved onto the DWI grid at x = {3, 4}.
-  const lowAdc = [];
-  for (let i = 0; i < 512; i++) {
-    if (tensors[0].data[i] < -1) lowAdc.push(i);
-  }
-  const expectedLowAdc = [];
-  for (const x of [3, 4]) {
-    for (const y of [2, 3]) {
-      for (const z of [4, 5]) expectedLowAdc.push((x * 8 + y) * 8 + z);
-    }
-  }
-  assert.deepEqual(lowAdc, expectedLowAdc, 'channel 0 is ADC resampled onto the DWI grid');
-
-  const seed = decode(events.stages.segmentation);
+  await settle(pipeline.runDeepIslesInference({ ...settings, adcBuffer }));
+  assert.deepEqual(events.errors.slice(4), [], 'a supported SEALS asset runs');
+  assert.deepEqual(tensors, Array(8).fill([1, 2, 128, 128, 128]), 'one padded 128^3 window, 8 mirrorings');
+  let seed = decode(events.stages.segmentation);
   assert.deepEqual(seed.affine, dwiAffine.slice(0, 3), 'the seed is written on the DWI/TRACE grid');
-  assertVolume(seed.data, boxMask(dims, [3, 5], [2, 4], [4, 6]), 'seed = low ADC and high TRACE');
+  assertVolume(seed.data, boxMask(dims, [5, 7], [5, 7], [5, 7]), 'seed = high TRACE and low ADC inside the brain mask only');
   assert.equal(events.descriptions.segmentation, 'DeepISLES lesion seed');
+
+  // Without ADC, ln(b0 / TRACE) stands in: low where TRACE is bright.
+  events.stages.segmentation = null;
+  await settle(pipeline.runDeepIslesInference({ ...settings, b0Buffer }));
+  assert.deepEqual(events.errors.slice(4), []);
+  assert.ok(events.logs.includes('No ADC: computing it from b0 and DWI/TRACE as ln(b0 / TRACE) / b.'));
+  seed = decode(events.stages.segmentation);
+  assertVolume(seed.data, boxMask(dims, [5, 7], [5, 7], [5, 7]), 'b0-derived ADC gives the same seed');
+
+  // Without a DWI-grid brain mask the worker strips the DWI/TRACE itself,
+  // in SynthStrip's fast mode so the conformed volume stays in budget.
+  const seals = ortStub.create;
+  ortStub.create = async (bytes, options) => {
+    const session = await seals(bytes, options);
+    return {
+      ...session,
+      run: async feeds => {
+        const tensor = feeds.input;
+        if (tensor.dims[1] === 2) return session.run(feeds);
+        return { logits: { data: Float32Array.from(tensor.data, value => (value > 0.05 ? -4 : 4)) } };
+      }
+    };
+  };
+  events.logs.length = 0;
+  requestedUrls.length = 0;
+  await settle(pipeline.runDeepIslesInference({
+    ...settings,
+    adcBuffer,
+    brainMaskBuffer: null,
+    synthStrip: { modelBaseUrl: 'https://models.example/models', modelName: 'synthstrip.onnx' }
+  }));
+  assert.deepEqual(events.errors.slice(4), []);
+  assert.ok(events.logs.includes('Brain extraction on DWI/TRACE (SynthStrip)...'));
+  assert.ok(events.logs.some(line => /^SynthStrip Fast/.test(line)), 'fast mode');
+  assert.ok(requestedUrls.includes('https://models.example/models/synthstrip.onnx'));
 }
 
 // ---- brain extraction ----

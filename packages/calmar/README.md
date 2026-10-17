@@ -72,8 +72,8 @@ execution never repairs or populates caches. The native adapter disables ONNX
 Runtime telemetry before initialization so it cannot create device IDs or
 databases outside the output directory. Source installs use a cache named
 for the asset set or `NEURODESK_CALMAR_MODEL_DIR`. `--cache-dir` selects another
-prepared directory. DeepISLES remains benchmark-only and is not installed or
-accepted as a command-line method.
+prepared directory. The DeepISLES SEALS diffusion seed runs in the web app only;
+`src/seals.js` is shared so a command line can adopt it later.
 
 CALMAR is research software. Review masks and registration before interpreting
 network maps. Model provenance and method citations are in the

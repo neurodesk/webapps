@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
+import { testedBase } from '../scripts/lib/tested-base.mjs';
 import { lockfileImpact } from '../scripts/lib/lockfile-impact.mjs';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { CATALOG_JOBS, loadConservativeWorkspaceGraph, WorkspaceGraphConfigurationError } from '../scripts/lib/workspace-graph.mjs';
@@ -533,7 +535,7 @@ async function plannerFixture(t) {
   for (const path of ['scripts/lib', 'registry', '.github/workflows']) {
     await mkdir(join(root, path), { recursive: true });
   }
-  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'registry/apps.yml']) {
+  for (const path of ['scripts/app-plan.mjs', 'scripts/lib/app-plan.mjs', 'scripts/lib/lockfile-impact.mjs', 'scripts/lib/workspace-graph.mjs', 'scripts/lib/apps-registry.mjs', 'scripts/lib/tested-base.mjs', 'registry/apps.yml']) {
     await copyFile(join(repoRoot, path), join(root, path));
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));
@@ -633,4 +635,92 @@ test('the CLI compares the lockfile at the merge base and reports why it selecte
   assert.equal(fallback.all_apps, 'true');
   assert.match(fallback.fallback_reason, /no changed paths/);
   assert.match(missingBase.stderr, /Full catalog and site selected: no changed paths/);
+});
+
+test('a push diffs from the nearest green run on the branch, not from a pull request or another branch', () => {
+  // main: a - b - c - head; d is off main.
+  const order = ['a', 'b', 'c', 'head'];
+  const git = {
+    isAncestor: (ancestor, descendant) => order.includes(ancestor) && order.indexOf(ancestor) <= order.indexOf(descendant),
+    distance: (ancestor, descendant) => order.indexOf(descendant) - order.indexOf(ancestor),
+  };
+  const run = (id, head_sha, extra = {}) => ({ id, head_sha, event: 'push', head_branch: 'main', conclusion: 'success', ...extra });
+  const runs = [
+    run(7, 'c', { event: 'pull_request' }),
+    run(6, 'c', { head_branch: 'feature' }),
+    run(5, 'c', { conclusion: 'cancelled' }),
+    run(4, 'd'),
+    run(3, 'head', { event: 'schedule' }),
+    run(2, 'a', { event: 'schedule' }),
+    run(1, 'b'),
+  ];
+  assert.equal(testedBase({ runs, head: 'head', branch: 'main', git }).base, 'b');
+  const none = testedBase({ runs: runs.slice(0, 5), head: 'head', branch: 'main', git });
+  assert.equal(none.base, null);
+  assert.match(none.reason, /no successful ci run on main/);
+});
+
+test('a push run tests the merges whose own runs were cancelled, and falls back without a green base', async (t) => {
+  const { root, run } = await plannerFixture(t);
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+  const commit = async (path) => {
+    await mkdir(join(root, path, '..'), { recursive: true });
+    await writeFile(join(root, path), path);
+    git('add', path);
+    git('commit', '--quiet', '-m', path);
+    return git('rev-parse', 'HEAD');
+  };
+  git('init', '--quiet');
+  const tested = await commit('README.md');
+  // Two merges whose push runs were cancelled, then the merge this run tests.
+  await commit('apps/niimath/cancelled.js');
+  await commit('apps/calmar/cancelled.js');
+  const before = await commit('apps/lcmodel/cancelled.js');
+  const head = await commit('apps/zarro/head.js');
+  let runs = [];
+  let status = 200;
+  const server = createServer((request, response) => {
+    const expected = request.url.startsWith('/repos/neurodesk/webapps/actions/workflows/ci.yml/runs?branch=main&status=success');
+    response.writeHead(expected ? status : 404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ workflow_runs: runs }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const env = { ...process.env, GITHUB_OUTPUT: '', GITHUB_REPOSITORY: 'neurodesk/webapps', GITHUB_TOKEN: 'token', GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
+  const plan = async () => {
+    const result = await new Promise((resolve) => {
+      const child = spawn(process.execPath, ['scripts/app-plan.mjs', '--base', 'last-success', '--head', head], { cwd: root, env });
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('close', (code) => resolve({ code, stdout, stderr }));
+    });
+    assert.equal(result.code, 0, result.stderr);
+    return { ...JSON.parse(result.stdout), stderr: result.stderr };
+  };
+  const order = (await loadAppsRegistry()).apps.map((app) => app.id);
+  const sorted = (ids) => [...ids].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+  // The push's own `before` selects only zarro.
+  assert.deepEqual(JSON.parse(JSON.parse(run('--base', before, '--head', head).stdout).selected_ids), ['zarro']);
+  runs = [
+    { id: 2, event: 'push', head_branch: 'main', head_sha: before, conclusion: 'cancelled' },
+    { id: 1, event: 'push', head_branch: 'main', head_sha: tested, conclusion: 'success' },
+  ];
+  const union = await plan();
+  assert.deepEqual(JSON.parse(union.selected_ids), sorted(['niimath', 'calmar', 'lcmodel', 'zarro']));
+  assert.equal(union.fallback_reason, '');
+  assert.match(union.stderr, new RegExp(`base ${tested} is the head of the last successful ci run on main`));
+
+  for (const [name, setup] of [
+    ['no green run', () => { runs = []; }],
+    ['a rewritten history', () => { runs = [{ id: 1, event: 'push', head_branch: 'main', head_sha: '0123456789abcdef0123456789abcdef01234567', conclusion: 'success' }]; }],
+    ['an API error', () => { status = 502; }],
+  ]) {
+    setup();
+    const fallback = await plan();
+    assert.equal(fallback.all_apps, 'true', name);
+    assert.match(fallback.fallback_reason, /successful ci run on main/, name);
+  }
 });

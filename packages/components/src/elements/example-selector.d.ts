@@ -3,6 +3,7 @@ export interface ExampleFile {
   name: string;
   url: string;
   sha256?: string;
+  bytes?: number;
 }
 
 export interface AppExample {

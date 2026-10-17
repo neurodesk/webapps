@@ -12,10 +12,10 @@ async function adopt(page) {
 }
 
 test('automation cancellation stops the real inference worker before it publishes output', async ({ page }) => {
-  await page.route('**/synthsr-v2.onnx*', () => {});
+  await page.context().route('**/synthsr-v2.onnx*', () => {});
   await page.goto('./');
   await adopt(page);
-  const modelRequested = page.waitForRequest('**/synthsr-v2.onnx*');
+  const modelRequested = page.context().waitForEvent('request', request => /synthsr-v2\.onnx/.test(request.url()));
   await page.evaluate(() => globalThis.neurodeskAutomation.dispatch('start', { operation: 'synthesize' }));
   await modelRequested;
   await expect(page.locator('#cancelBtn')).toBeVisible();

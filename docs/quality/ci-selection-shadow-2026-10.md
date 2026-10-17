@@ -19,7 +19,8 @@ merged pull requests, and what `ci` runs cost in runner minutes and queue time. 
 - **The nightly backstop was being cancelled.** It shared a concurrency group with pushes to main; a push cancelled it
   on 3 of 4 nights since narrowing began (5 of 9 since 2026-10-07). This PR gives it its own group.
 - **Most push runs on main are superseded.** 32 of the 57 merges had their own push run cancelled by the next push,
-  so their apps were not tested on main until a full run finished. Open.
+  so their apps were not tested on main until a full run finished. A follow-up makes a push diff from the head of
+  the last successful main run (see [Cancellation on main](#cancellation-on-main)).
 
 ## Method
 
@@ -250,8 +251,20 @@ requests, pushes and the nightly run share a few macOS runners.
 - **push runs superseded by the next merge**: 32 of the 57 replayed merges, 15 of them selecting the full catalog,
   14 narrowed with at least one app and 3 selecting none (`supersededMerges` in `shadow.json`). The next push run diffs only from its own
   `before`, so the cancelled merge's apps go untested on main until a full run finishes. Each of these merges passed
-  its own pull request checks, against an older main. Still open: options are a push base taken from the last
-  finished main run, or not cancelling on main at the cost of more concurrent runs.
+  its own pull request checks, against an older main.
+
+  Example: #323 (`site/app-shell.js`, full catalog) had its push run cancelled, #326's push run failed, and #328's
+  push run diffed from #326's merge (`311a3fa5..2f840e6b`), selected no app and passed. Diffed from the last green
+  run (`8cc92df6`), the same push selects all 31 apps.
+
+  **Fixed after this report.** Pushes keep cancelling each other, which keeps main's queue short, but a push now
+  diffs from the head of the last successful `ci` run on main (push, nightly or dispatch; pull request runs and
+  other branches do not count), found through the Actions API by `scripts/lib/tested-base.mjs`. The selection is the
+  union of every merge since main last went green, so it converges however many runs in a row are cancelled, and a
+  failed run's apps are tested again by the next push. When no such run is among the newest 100 or its head is not an
+  ancestor of the push (a rewritten history), or the API cannot be read, the push selects the full catalog.
+  Not cancelling on main was the alternative; it would have kept every superseded run (32 of 57 merges, about 390
+  Linux minutes per full-catalog push) on the shared runners.
 
 ## Rerunning
 

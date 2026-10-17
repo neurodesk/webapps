@@ -7,6 +7,9 @@ export class ModalManager {
     this.element = resolveTarget(options.element || options.modalId);
     this.closeOnOverlayClick = options.closeOnOverlayClick ?? true;
     this.activeClass = options.activeClass || 'active';
+    // Opacity-only overlays must also leave the accessibility tree and tab order.
+    this.element?.toggleAttribute?.('inert', !this.isOpen());
+    this.element?.setAttribute?.('aria-hidden', String(!this.isOpen()));
     if (this.element && this.closeOnOverlayClick) {
       this.element.addEventListener('click', event => {
         if (event.target === this.element) this.close();

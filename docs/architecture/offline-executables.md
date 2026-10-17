@@ -62,6 +62,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | `dicom2vid` | Volume-to-video conversion | `packages/dicom2vid/bin/dicom2vid.js` runs the app's readers, series selection and frame pipeline from `packages/dicom2vid`, draws frames into buffers and encodes VP9 with libvpx (libav.js WebAssembly) into the app's muxers; `exes/node-cli` packages it for Linux x64, Windows x64 and macOS arm64. Its release check holds frame count, size, timing and key frames to the recorded Chromium videos. WebM frame PSNR compares with both recorded browser frames and rendered source; MP4 frame PSNR compares with rendered source. Windowing, rotation and stretching remain web-only; MP4 is VP9, not H.264. |
 | `surfannotate` | No default batch equivalent | Manual surface ROI drawing and vertex selection. Excluded from this rollout. |
 | `zarro` | No default batch equivalent | Interactive OME-Zarr exploration. Conversion or extraction would be a separately scoped command. |
+| `dicomview` | No default batch equivalent | Interactive DICOM browsing. Its batch steps already ship as command lines: dcm2niix for conversion and dicompare for protocol summaries and checks. |
 
 ## Greedy release gates
 

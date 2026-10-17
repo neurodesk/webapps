@@ -54,7 +54,7 @@ test('lesion_ms segments MS lesions in the browser and reports lesion-only metri
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     modelServer = server;
-    await page.route('https://huggingface.co/**/web/models/sct-lesion-ms.onnx', route => route.fulfill({
+    await page.context().route('https://huggingface.co/**/web/models/sct-lesion-ms.onnx', route => route.fulfill({
       status: 302,
       headers: {
         location: `http://127.0.0.1:${server.address().port}/sct-lesion-ms.onnx`,

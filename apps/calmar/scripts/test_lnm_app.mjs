@@ -142,6 +142,163 @@ const STAGE_METHODS = [
   assert.equal(document.getElementById('statusText').textContent, 'Review and confirm the lesion mask');
 }
 
+// ---- Results view: the report takes the viewer's place once there is a result ----
+{
+  const app = makeApp();
+  const calls = record(app, STAGE_METHODS);
+  const viewTypes = [];
+  app.viewerController = {
+    setViewType: view => viewTypes.push(view),
+    clearVolumes() {},
+    clearAll() {},
+    removeVolumeForStage() {}
+  };
+  const tab = document.querySelector('.view-tab[data-view="results"]');
+  const report = document.getElementById('resultsReport');
+  const resultsSection = document.getElementById('resultsSection');
+  const activeTabs = () => Array.from(document.querySelectorAll('.view-tab.active')).map(element => element.dataset.view);
+
+  assert.equal(tab.disabled, true, 'Results is disabled before there is a result');
+  app.setViewerView('results');
+  assert.equal(report.hidden, true, 'Results cannot open without a result');
+  assert.deepEqual(activeTabs(), ['multiplanar']);
+
+  app.lesionFile = { name: 'lesion-atlas-grid.nii' };
+  app._lesionFileMatchesAtlasGrid = async () => true;
+  app.runAtlasOverlap = async () => {
+    calls.push(['runAtlasOverlap']);
+    app.overlapResult = { summary: { networks: [] } };
+  };
+  app.selectedPipeline = {
+    id: 'manual',
+    stages: [{ id: 'overlap', module: 'parcel-overlap' }, { id: 'fc', module: 'fc-weighted-sum' }]
+  };
+  resultsSection.classList.add('collapsed');
+  await app.runFullPipeline();
+  assert.deepEqual(calls.map(([method]) => method), ['runAtlasOverlap', 'runFcNetworkMap']);
+  assert.equal(tab.disabled, false, 'a finished analysis enables Results');
+  assert.equal(report.hidden, false, 'a finished analysis opens the report');
+  assert.deepEqual(activeTabs(), ['results']);
+  assert.equal(resultsSection.classList.contains('collapsed'), false, 'and the sidebar Results section');
+  assert.deepEqual(viewTypes, [], 'showing the report leaves the image layout alone');
+
+  app.applyNetworkThreshold();
+  assert.deepEqual(activeTabs(), ['results'], 're-thresholding keeps the current view');
+
+  app.setViewerView('axial');
+  assert.equal(report.hidden, true, 'an image layout hides the report');
+  assert.deepEqual(activeTabs(), ['axial']);
+  assert.deepEqual(viewTypes, ['axial']);
+  app.setViewerView('results');
+  assert.equal(report.hidden, false);
+
+  app.nativeStructuralFile = { name: 'T1.nii' };
+  app.ensureNativeStructuralInfo = async () => {};
+  app.loadViewerBaseVolume = async () => {};
+  app.applyMaskDrawingVisibility = () => {};
+  app.refreshViewerLayerControls = () => {};
+  app.maskDrawingController = { startBlank() {}, ensureDrawing() {}, setTool() {} };
+  await LesionNetworkMappingApp.prototype.startLesionMaskReview.call(app, { blank: true });
+  assert.equal(report.hidden, true, 'mask review shows the image, not the report');
+  assert.equal(tab.disabled, true, 'Results is unavailable while the mask is under review');
+  assert.deepEqual(activeTabs(), ['multiplanar']);
+  app.setViewerView('results');
+  assert.equal(report.hidden, true, 'and cannot be opened during review');
+
+  app.maskReviewActive = false;
+  app.showResultsView();
+  assert.equal(report.hidden, false, 'a resumed analysis returns to the report');
+  app.clearResults({ full: false });
+  assert.equal(tab.disabled, true, 'Start over disables Results again');
+  assert.equal(report.hidden, true, 'and hides the report');
+  assert.deepEqual(activeTabs(), ['multiplanar']);
+}
+
+// ---- A new input drops the previous patient's results ----
+for (const [input, load] of [
+  ['structural T1', app => app.setStructural({ name: 'case-b-T1.nii' })],
+  ['lesion mask', app => app.setLesion({ name: 'case-b-lesion.nii' })],
+  ['atlas choice', app => app.handleAtlasSelectionChange('yeo7')]
+]) {
+  const app = makeApp();
+  app.viewerController = { setViewType() {}, removeVolumeForStage() {}, loadOverlay: async () => {} };
+  app.loadViewerBaseVolume = async () => {};
+  app.refreshViewerLayerControls = () => {};
+  app.refreshMaskDrawingControls = () => {};
+  app.assertViewerOverlaySpace = () => {};
+  app.tagFileSpace = () => {};
+  app._autoPromotePipeline = () => {};
+  const tab = document.querySelector('.view-tab[data-view="results"]');
+  const report = document.getElementById('resultsReport');
+  const tbody = document.querySelector('#networkOverlapTable tbody');
+  const csv = document.getElementById('downloadOverlapCsv');
+  const mapDownloads = ['downloadNetworkMapButton', 'downloadThresholdedNetworkMapButton'].map(id => document.getElementById(id));
+  const thresholdSummary = document.getElementById('networkThresholdSummary');
+  app.selectedAtlasOptionId = 'schaefer400';
+  app.overlapResult = { summary: { networks: [{ network: 'Visual' }] } };
+  app.networkMapData = new Float32Array(8);
+  app.thresholdedMaskFile = { name: 'case-a-threshold.nii' };
+  tbody.innerHTML = '<tr><td>case A</td></tr>';
+  csv.disabled = false;
+  for (const button of mapDownloads) button.disabled = false;
+  thresholdSummary.textContent = 'case A: 54,380 voxels survive top 5%';
+  app.showResultsView();
+  assert.equal(report.hidden, false);
+
+  await load(app);
+  assert.equal(app.overlapResult, null, `loading a new ${input} drops the previous overlap`);
+  assert.equal(app.networkMapData, null, `loading a new ${input} drops the previous network map`);
+  assert.equal(app.thresholdedMaskFile, null, `loading a new ${input} drops the previous threshold mask`);
+  assert.equal(tbody.children.length, 0, `loading a new ${input} empties the overlap table`);
+  assert.equal(csv.disabled, true, `loading a new ${input} disables the previous CSV download`);
+  assert.deepEqual(mapDownloads.map(button => button.disabled), [true, true],
+    `loading a new ${input} disables the previous network-map downloads`);
+  assert.doesNotMatch(thresholdSummary.textContent, /case A/, `loading a new ${input} resets the threshold summary`);
+  assert.equal(tab.disabled, true, `loading a new ${input} disables Results`);
+  assert.equal(report.hidden, true, `loading a new ${input} hides the previous report`);
+}
+
+// ---- A new T1 drops the previous case's intermediates, so a second run cannot reuse them ----
+{
+  const app = makeApp();
+  app.viewerController = { setViewType() {}, removeVolumeForStage() {} };
+  app.loadViewerBaseVolume = async () => {};
+  app.refreshViewerLayerControls = () => {};
+  app.refreshMaskDrawingControls = () => {};
+  app.brainmaskFile = { name: 'case-a-brainmask.nii' };
+  app.nativeBrainmaskFile = { name: 'case-a-native-brainmask.nii' };
+  app.mniLesionFile = { name: 'case-a-lesion-mni.nii' };
+  app.lesionFile = { name: 'lnm-lesion-schaefer400.nii' };
+  const maskDownloads = ['downloadBrainMaskButton', 'downloadLesionMaskButton'].map(id => document.getElementById(id));
+  for (const button of maskDownloads) button.disabled = false;
+  await app.setStructural({ name: 'case-b-T1.nii' });
+  assert.deepEqual(maskDownloads.map(button => button.disabled), [true, true],
+    'a new T1 disables the downloads of the masks it dropped');
+  assert.equal(app.brainmaskFile, null, 'a new T1 drops the previous brain mask, so brain extraction runs again');
+  assert.equal(app.nativeBrainmaskFile, null);
+  assert.equal(app.mniLesionFile, null);
+  assert.equal(app.lesionFile, null, 'a new T1 drops the lesion warped from the previous T1');
+  await app.runAtlasOverlap();
+  assert.equal(app.overlapResult, null, 'overlap cannot be recomputed from the previous case');
+  assert.equal(app.messages.at(-1), 'Drop a lesion mask before computing overlap.');
+
+}
+
+// ---- A lesion the user loaded on the atlas grid survives its overlap and a later T1 ----
+{
+  const app = makeApp();
+  app.viewerController = { setViewType() {}, removeVolumeForStage() {} };
+  app.loadViewerBaseVolume = async () => {};
+  app.refreshViewerLayerControls = () => {};
+  app.refreshMaskDrawingControls = () => {};
+  app._autoPromotePipeline = () => {};
+  const atlasLesion = { name: 'atlas-grid-lesion.nii' };
+  await app.setLesion(atlasLesion);
+  app.tagFileSpace(atlasLesion, { space: 'atlas:yeo7-mni2mm', role: 'lesion', sourceStage: 'atlas-overlap' });
+  await app.setStructural({ name: 'case-c-T1.nii' });
+  assert.equal(app.lesionFile, atlasLesion, 'a lesion the user loaded on the atlas grid stays after overlap retags it');
+}
+
 // ---- duration formatting (hand-worked) ----
 {
   const app = makeApp();
@@ -258,7 +415,7 @@ const STAGE_METHODS = [
   assert.ok(results.classList.contains('collapsed'), 'the results section collapses');
   assert.equal(document.querySelector('#networkOverlapTable tbody').children.length, 0, 'the overlap table is emptied');
   assert.ok(document.getElementById('outsideAtlasWarning').classList.contains('hidden'));
-  assert.equal(document.getElementById('networkThresholdSummary').textContent, 'Compute a network map first to enable thresholding.');
+  assert.equal(document.getElementById('networkThresholdSummary').textContent, 'Run analysis first to enable thresholding.');
   assert.equal(executorCleared, 1, 'worker results are dropped too');
   assert.deepEqual(viewer, ['remove threshold-preview', 'base T1.nii'], 'the viewer goes back to the structural image');
   assert.equal(app.messages.at(-1), 'Results cleared (structural retained).');

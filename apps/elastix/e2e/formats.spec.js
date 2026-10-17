@@ -21,7 +21,7 @@ const cors = {
 // An OME-Zarr folder served key by key; missing keys are 404 as on a real server.
 async function serveZarr(page, role) {
   const prefix = `${REMOTE}/${role}.ome.zarr/`;
-  await page.route(`${prefix}**`, (route) => {
+  await page.context().route(`${prefix}**`, (route) => {
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     const bytes = pair[role].store.get(route.request().url().slice(prefix.length));
     return bytes ? route.fulfill({ body: Buffer.from(bytes), headers: cors }) : route.fulfill({ status: 404, headers: cors });
@@ -33,7 +33,7 @@ async function serveZarr(page, role) {
 async function serveTiff(page, role, requests) {
   const url = `${REMOTE}/${role}.ome.tif`;
   const bytes = pair[role].tiff;
-  await page.route(url, (route) => {
+  await page.context().route(url, (route) => {
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     const range = /bytes=(\d+)-(\d*)/.exec(route.request().headers().range ?? "");
     if (!range) return route.fulfill({ body: bytes, headers: { ...cors, "accept-ranges": "bytes" } });
@@ -146,7 +146,7 @@ test("a 2D image and a 3D image are refused before registration", async ({ page 
 });
 
 test("an unreachable URL shows an error and keeps the URL controls usable", async ({ page }) => {
-  await page.route(`${REMOTE}/missing.ome.zarr/**`, (route) => route.fulfill({ status: 404, headers: cors }));
+  await page.context().route(`${REMOTE}/missing.ome.zarr/**`, (route) => route.fulfill({ status: 404, headers: cors }));
   await page.goto("/");
   await expect(page.locator("#urlButton")).toBeEnabled();
   await page.locator("#urlSection > summary").click();
@@ -173,7 +173,7 @@ test("cancelling a remote TIFF read retains the selected image and permits a fre
   const pending = new Promise((resolve) => { release = resolve; });
   let started;
   const reading = new Promise((resolve) => { started = resolve; });
-  await page.route(url, async (route) => {
+  await page.context().route(url, async (route) => {
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
     started();
     await pending;

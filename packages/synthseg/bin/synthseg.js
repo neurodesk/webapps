@@ -18,8 +18,8 @@ Writes INPUT_synthseg.nii.gz (labels on a 1 mm grid), INPUT_synthseg.json
 downloads.
 
 Options:
-  --mode MODE       fast (the default; the volume norms come from fast mode) or
-                    default (flip averaging and topology postprocessing)
+  --mode MODE       fast (the default) or default (flip averaging and topology
+                    postprocessing)
   --ct, --no-ct     Treat the input as CT in Hounsfield units, or as MRI.
                     Without either, CT is assumed when any voxel is negative.
   --threads N       ONNX Runtime threads (default SLURM_CPUS_PER_TASK or all cores)

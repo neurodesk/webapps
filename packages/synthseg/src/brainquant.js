@@ -424,20 +424,21 @@ export function fieldStrengthFromSidecar(json) {
 }
 
 /**
- * The reference norms for a choice of 'auto' or a reference id, and the reason for the report.
- * Auto follows brainquant.py's select_norms: AHEAD from 5 T, IXI below or when the field strength is unknown.
+ * The reference norms for a choice of 'auto' or a cohort id and the run's SynthSeg mode, and the reason
+ * for the report. Auto follows brainquant.py's select_norms: AHEAD from 5 T, IXI below or when the field
+ * strength is unknown. Normal mode measures some structures several percent differently from fast mode,
+ * so each mode has its own norms, keyed `<cohort>-<mode>` in the manifest.
  */
-export function selectReference(choice, fieldStrengthT) {
-  if (choice !== 'auto') {
-    return { id: choice, reason: 'it was selected manually' };
+export function selectReference(choice, fieldStrengthT, fast) {
+  // The app calls normal mode (flip averaging and topology) "default", so the reason does too.
+  const ran = `SynthSeg ran in ${fast ? 'fast' : 'default'} mode`;
+  let cohort = choice;
+  let why = 'it was selected manually';
+  if (choice === 'auto') {
+    cohort = fieldStrengthT !== null && fieldStrengthT >= ULTRA_HIGH_FIELD_T ? 'ahead' : 'ixi';
+    why = fieldStrengthT === null ? 'the scanner field strength is unknown' : `the scanner field strength is ${formatG(fieldStrengthT)} T`;
   }
-  if (fieldStrengthT === null) {
-    return { id: 'ixi', reason: 'the scanner field strength is unknown' };
-  }
-  return {
-    id: fieldStrengthT >= ULTRA_HIGH_FIELD_T ? 'ahead' : 'ixi',
-    reason: `the scanner field strength is ${formatG(fieldStrengthT)} T`,
-  };
+  return { id: `${cohort}-${fast ? 'fast' : 'normal'}`, cohort, reason: `${why} and ${ran}` };
 }
 
 export function referenceNote(norms, reason) {

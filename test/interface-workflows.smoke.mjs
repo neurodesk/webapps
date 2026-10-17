@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { chromium, expect } from '@playwright/test';
 import { loadAppsRegistry, repoRoot } from '../scripts/lib/apps-registry.mjs';
 import { serveSite } from '../test-utils/serve-site.mjs';
+import { dicomSeries } from '../test-utils/dicom-fixture.mjs';
 
 function nifti(name, value = 20) {
   const buffer = Buffer.alloc(352 + 4096, 0);
@@ -300,6 +301,21 @@ try {
     await expect(page.locator('#workflow-compare')).toHaveCount(0);
     const status = page.locator('[data-runtime-status]');
     if (await status.count()) expect(await status.evaluate(node => getComputedStyle(node).position)).toBe('static');
+  });
+  await check('dicomview', async page => {
+    await page.locator('#dicomInput').setInputFiles(dicomSeries({ series: 4, slices: 4 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer })));
+    await expect(page.locator('#statusText')).toHaveText('Series 4: test_scan_4 · 1 image', { timeout: 60000 });
+    await page.locator('[data-view="header"]').tap();
+    await page.locator('#headerFilter').fill('Modality');
+    await expect(page.locator('#headerRows tr')).toHaveCount(1);
+    await page.locator('#protocolSection > summary').tap();
+    await page.locator('#schemaSelect').selectOption({ label: 'UK Biobank' });
+    await expect(page.locator('#protocolButton')).toHaveText('Check compliance');
+    await page.locator('#protocolSection > summary').tap();
+    await expect(page.locator('#schemaSelect')).toBeHidden();
+    await page.locator('#protocolSection > summary').tap();
+    await expect(page.locator('#schemaSelect')).toHaveValue('UK_Biobank_v1.0');
+    await expect(page.locator('#headerFilter')).toHaveValue('Modality');
   });
   await check('spinalcordtoolbox', async page => {
     await page.locator('#fileInput').setInputFiles(nifti('interface-cord.nii'));

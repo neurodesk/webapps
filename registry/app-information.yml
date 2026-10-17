@@ -181,7 +181,7 @@ apps:
 
   calmar:
     packages:
-      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs SynthStrip, SynthStroke and SynthMorph in the browser }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs SynthStrip, SynthStroke, DeepISLES SEALS and SynthMorph in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -201,6 +201,14 @@ apps:
         title: DeepISLES
         reference: "de la Rosa E, Reyes M, Liew SL, et al. A robust ensemble algorithm for ischemic stroke lesion segmentation: generalizability and clinical utility beyond the ISLES challenge. arXiv. 2024."
         url: https://arxiv.org/abs/2403.19425
+      - group: Lesion segmentation
+        title: nnU-Net (DeepISLES SEALS)
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+      - group: Lesion segmentation
+        title: ISLES 2022
+        reference: "Hernandez Petzsche MR, de la Rosa E, Hanning U, et al. ISLES 2022: a multi-center magnetic resonance imaging stroke lesion segmentation dataset. Scientific Data. 2022;9:762."
+        doi: 10.1038/s41597-022-01875-5
       - group: Lesion segmentation
         title: ATLAS v2.0
         reference: "Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320."
@@ -830,10 +838,10 @@ apps:
       - Fast mode skips flip averaging and topological correction. Browser inference requires WebGPU; the native executable also supports CPU inference.
       - Oversized scans first try niimath robust FOV, keeping 170 mm below the top of the head and removing excess neck. If the cropped scan still exceeds the GPU buffer limit, you can choose a coarser processing grid. This experimental fallback reduces detail and changes the anatomical scale seen by the model. It can affect segmentation and volume estimates; these outputs have not been validated against the 1 mm volume norms. The original upload is preserved and the run report records the crop and processing voxel size.
       - "The GM, WM and CSF downloads are float32 probability maps. Each map is the sum of SynthSeg's posterior probabilities for a group of structures, so these are anatomical class probabilities, not the tissue classes of a tissue-segmentation model. GM is cerebral and cerebellar cortex, thalamus, caudate, putamen, pallidum, hippocampus, amygdala, accumbens and ventral DC. WM is cerebral and cerebellar white matter and the brainstem. CSF is the ventricles and the CSF label. Ventral DC is GM because FreeSurfer's subcortical grey volume counts it; the brainstem is WM because it is mostly white matter. The maps use the label map's grid: the input grid when each voxel side is 0.95 to 1.05 mm, otherwise the 1 mm resampled grid, or the coarser processing grid when you choose one. They use the same postprocessing as the labels, so each map sums to the soft volumes of its structures. Label edits do not change them."
-      - The Volumes view charts each structure's head-size-adjusted volume against age with the 5th–95th and 25th–75th percentiles of a reference cohort, fitted on fast-mode volumes. Two references are available, IXI (1.5 T and 3 T) and AHEAD (7 T). Auto uses AHEAD when the DICOM header reports a field strength of 5 T or more, and IXI otherwise or when the field strength is unknown, as for NIfTI input. Healthy 7 T scans score well above the IXI range for cortical grey matter, so the choice matters. Population data version 347cf6fb6135 is pinned to the neurocontainers source revision and verified by checksum. The report names the reference and why it was chosen, and the saved run report records both. Research use only. Not for diagnostic use.
+      - The Volumes view charts each structure's head-size-adjusted volume against age with the 5th–95th and 25th–75th percentiles of a reference cohort, fitted on volumes segmented in the same SynthSeg mode as the run, fast or default. Two references are available, IXI (1.5 T and 3 T) and AHEAD (7 T). Auto uses AHEAD when the DICOM header reports a field strength of 5 T or more, and IXI otherwise or when the field strength is unknown, as for NIfTI input. Healthy 7 T scans score well above the IXI range for cortical grey matter, so the choice matters. The population data is pinned to neurocontainers source revisions, 347cf6fb6135 for fast mode and 84e39bc0f298 for default mode, and verified by checksum. The report names the reference and why it was chosen, and the saved run report records both. Research use only. Not for diagnostic use.
     packages:
       - { name: SynthSeg WebAssembly, url: https://github.com/neurodesk/webapps/tree/main/packages/synthseg, role: shared native and browser preprocessing and postprocessing }
-      - { name: brainquant norms, url: https://github.com/neurodesk/neurocontainers/tree/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg, role: IXI and AHEAD age and sex volume norms from the neurocontainers SynthSeg recipe }
+      - { name: brainquant norms, url: https://github.com/neurodesk/neurocontainers/tree/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg, role: IXI and AHEAD age and sex volume norms, fitted in fast and default mode, from the neurocontainers SynthSeg recipe }
       - { name: WebGPU FP32 kernels, url: https://github.com/neurodesk/webapps/tree/main/packages/runtime-support/src/gpu-unet, role: segmentation inference }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image and label viewer }
       - { name: niimath (WebAssembly), url: https://github.com/rordenlab/niimath, role: robust field-of-view neck cropping }
@@ -1355,6 +1363,32 @@ apps:
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
         url: https://github.com/niivue/niivue
+
+  dicomview:
+    privacy: Your DICOM files and their headers stay on your computer. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
+    packages:
+      - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion and BIDS sidecars }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+      - { name: dcmjs data dictionary, url: https://github.com/dcmjs-org/dcmjs, role: DICOM tag names and value representations }
+      - { name: dicompare (Python, via Pyodide), url: https://github.com/astewartau/dicompare, role: protocol summary and schema validation }
+      - { name: Pyodide, url: https://pyodide.org, role: runs the Python package in the browser }
+    citations:
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+      - group: Protocol validation
+        title: dicompare
+        reference: "Stewart AW, Amorosino G, Veraart J, Heinsfeld AS, Bollmann S, Pestilli F. dicompare [Computer software]."
+        url: https://github.com/astewartau/dicompare
+      - group: Browser runtime
+        title: Pyodide
+        reference: "Pyodide Contributors. Pyodide: Python distribution for the browser and Node.js based on WebAssembly [Computer software]."
+        url: https://pyodide.org
 
   fastprep:
     packages:

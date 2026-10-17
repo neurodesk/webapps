@@ -51,7 +51,7 @@ for (const app of apps) {
 }
 // Composite resources retain their relative URLs and worker adjacency.
 for (const entry of await readdir(join(repoRoot, 'dist'), { withFileTypes: true })) {
-  if (!entry.isDirectory() || entry.name === '_runtime' || entry.name === 'shell-adapters') {
+  if (!entry.isDirectory() || ['_runtime', 'shell-adapters', 'fonts'].includes(entry.name)) {
     await cp(join(repoRoot, 'dist', entry.name), join(destination, 'site', entry.name), { recursive: true });
   }
 }

@@ -18,7 +18,7 @@ test('pinned T1 example completes with the WASM SynthSR backend', async ({ page 
   test.skip(!process.env.SYNCRO_SCIENTIFIC_TESTS, 'Set SYNCRO_SCIENTIFIC_TESTS to run real inference and registration.');
   test.setTimeout(2 * 60 * 60 * 1000);
   if (process.env.SYNTHSR_MODEL) {
-    await page.route('**/synthsr-v2.onnx', route => route.fulfill({ path: process.env.SYNTHSR_MODEL }));
+    await page.context().route('**/synthsr-v2.onnx', route => route.fulfill({ path: process.env.SYNTHSR_MODEL }));
   }
   await page.goto('./');
   await page.locator('#tutorial').selectOption('trace-t1');
@@ -66,9 +66,9 @@ test('cropped head fixture cannot publish nearly empty normalized outputs', asyn
   test.skip(!process.env.SYNCRO_SCIENTIFIC_TESTS, 'Set SYNCRO_SCIENTIFIC_TESTS to run real inference and registration.');
   test.setTimeout(20 * 60 * 1000);
   if (process.env.SYNTHSR_MODEL) {
-    await page.route('**/synthsr-v2.onnx', route => route.fulfill({ path: process.env.SYNTHSR_MODEL }));
+    await page.context().route('**/synthsr-v2.onnx', route => route.fulfill({ path: process.env.SYNTHSR_MODEL }));
   }
-  await page.route('**/MNI152_T1_1mm_brain.nii.gz', route => route.fulfill({
+  await page.context().route('**/MNI152_T1_1mm_brain.nii.gz', route => route.fulfill({
     path: fileURLToPath(new URL('../../../packages/syncro/data/MNI152_T1_1mm_brain.nii.gz', import.meta.url)),
   }));
   await page.goto('./');

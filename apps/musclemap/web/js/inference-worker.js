@@ -33,7 +33,6 @@ async function fetchModel(asset, modelName, progressBase, progressSpan) {
             integrity: { bytes: source.bytes, sha256: source.sha256 }
           },
           {
-            cache: 'MuscleMapVerifiedModels',
             requestCache: attempt === 1 ? 'no-store' : 'reload',
             onProgress: ({ received: partReceived }) => {
               const dlProgress = (partStart + partReceived) / asset.bytes;

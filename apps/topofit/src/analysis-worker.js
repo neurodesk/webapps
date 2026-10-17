@@ -8,7 +8,7 @@ self.onmessage = async ({ data: job }) => {
       ...job,
       buffer: await job.file.arrayBuffer(),
       cortexAtlasSha256: cortexAtlas.sha256,
-      loadAtlas: () => fetchModel({ url: cortexAtlas.url, cacheKey: cortexAtlas.url, integrity: cortexAtlas }),
+      loadAtlas: () => fetchModel({ url: cortexAtlas.url, integrity: cortexAtlas }),
       onProgress: (value, message) => self.postMessage({ type: 'progress', value, message }),
     });
     self.postMessage({ type: 'result', ...result }, result.files.map((file) => file.bytes));

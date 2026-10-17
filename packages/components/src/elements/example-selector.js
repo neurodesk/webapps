@@ -1,6 +1,7 @@
 import { defineElement, upgradeProperties } from './define.js';
 import { bindInfoTooltips, renderInfoIcon } from '../ui/bindInfoTooltips.js';
 import { fetchWithRetry } from '../net/fetchWithRetry.js';
+import { fetchModel } from '../worker/fetchModel.js';
 import { bindPageDrop, deliverFiles, primaryInput } from '../ui/pageDrop.js';
 
 let nextId = 0;
@@ -266,14 +267,21 @@ export function defineExampleSelector(view = globalThis.window) {
           async fetchFiles() {
             const files = await Promise.all(example.files.map(async asset => {
               assertCurrent();
-              const response = await fetchWithRetry(asset.url, { signal: controller.signal }, { onRetry });
-              if (!response.ok) throw new Error(`Could not download ${asset.name} (HTTP ${response.status}).`);
-              const bytes = await response.arrayBuffer();
-              assertCurrent();
-              if (asset.sha256) {
-                const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-                const actual = Array.from(digest, byte => byte.toString(16).padStart(2, '0')).join('');
-                if (actual !== asset.sha256) throw new Error(`The checksum for ${asset.name} did not match.`);
+              let bytes;
+              try {
+                bytes = await fetchModel({ url: asset.url, integrity: { bytes: asset.bytes, sha256: asset.sha256 } }, {
+                  signal: controller.signal,
+                  fetch: async (url, init) => {
+                    const response = await fetchWithRetry(url, init, { onRetry });
+                    if (!response.ok) throw new Error(`Could not download ${asset.name} (HTTP ${response.status}).`);
+                    return response;
+                  },
+                });
+              } catch (error) {
+                if (error.message === 'Model SHA-256 mismatch') {
+                  throw new Error(`The checksum for ${asset.name} did not match.`, { cause: error });
+                }
+                throw error;
               }
               assertCurrent();
               return new view.File([bytes], asset.name);

@@ -254,7 +254,7 @@ test('primary and selected buttons retain their shared visual priority', async (
 
 test('dialog fields share sidebar styling and touch sizing', async () => {
   const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
-  const sharedFields = css.split('\n').filter((line) => line.includes(':is(.nd-imaging-controls .nd-section-content, .nd-dialog-body)'));
+  const sharedFields = css.split('\n').filter((line) => line.includes(':is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls)'));
   assert.ok(sharedFields.some((line) => line.includes('min-height: 44px')));
   assert.ok(sharedFields.some((line) => line.includes('font-size: 16px')));
   assert.ok(sharedFields.some((line) => line.includes(':focus')));
@@ -294,4 +294,22 @@ test('the viewer report and chart vocabulary colours only through tokens', async
   assert.match(report[2], /position:\s*absolute/);
   assert.match(report[2], /inset:\s*0/);
   assert.match(report[2], /overflow:\s*auto/);
+});
+
+test('a report shown in place of the canvas keeps its controls styled and in view', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  assert.match(css, /\.nd-report-controls\s*\{[^}]*position:\s*sticky[^}]*flex-wrap:\s*wrap/);
+  const fieldRules = css.split('\n').filter((line) => line.includes('.nd-report-controls)'));
+  assert.match(css, /\.nd-report-controls\) :is\(select, textarea[^{]*\{[^}]*min-height: 30px/, 'report fields take the sidebar field metrics');
+  assert.ok(fieldRules.some((line) => line.includes('min-height: 44px')), 'report fields take the touch sizing');
+  assert.ok(fieldRules.some((line) => line.includes('input[type="range"]')), 'report sliders take the shared accent');
+});
+
+test('dicompare compliance reports are styled from tokens alone', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const rules = css.split('\n').filter((line) => /^[^/]*\.dicompare-/.test(line));
+  for (const name of ['summary-badge', 'status-pass', 'status-fail', 'table', 'unchecked-toggle']) {
+    assert.ok(rules.some((line) => line.includes(`.dicompare-${name}`)), `.dicompare-${name} is styled`);
+  }
+  assert.ok(rules.every((line) => !/#[0-9a-f]{3,8}\b|\brgba?\(/i.test(line)), 'no colour literals');
 });

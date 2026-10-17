@@ -3,7 +3,6 @@ import {
   createWorkerEmitter,
   getOptimalWasmThreads,
   installWorkerRouter,
-  localForageCache,
 } from '../vendor/webapp-components/src/worker/index.js';
 import { parseNiftiVolume } from '../vendor/webapp-components/src/file-io/NiftiUtils.js';
 import { createVesselBoostPipeline } from '../vendor/vesselboost/src/pipeline.js';
@@ -17,11 +16,9 @@ let pipeline;
 let dependencies;
 function loadDependencies() {
   dependencies ||= Promise.all([
-    import('https://cdn.jsdelivr.net/npm/localforage@1.10.0/+esm'),
     import('../nifti-js/index.js'),
     preprocessing.default(),
-  ]).then(([{ default: cache }]) => {
-    cache.config({ name: 'VesselBoostModelCache', storeName: 'models' });
+  ]).then(() => {
     ort.env.wasm.numThreads = getOptimalWasmThreads();
     ort.env.wasm.wasmPaths = '../wasm/';
     pipeline = createVesselBoostPipeline({
@@ -35,7 +32,6 @@ function loadDependencies() {
         const asset = modelAsset(name);
         return fetchVerifiedModel(asset, {
           url,
-          cache: localForageCache(cache),
           onInvalidCache: (error) => events.log(`Discarding cached model: ${error.message}`),
           onProgress: ({ fraction }) => {
             if (fraction !== null) events.progress(base + fraction * span, `Downloading ${name}`);

@@ -26,7 +26,7 @@
   "graph_optimization": "None; float32 ONNX rebuilt from the Keras checkpoint by exes/synthseg/scripts/export_model.py",
   "classes": 33,
   "norms": {
-    "ixi": {
+    "ixi-fast": {
       "version": "347cf6fb6135",
       "description": "IXI (1.5 T and 3 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --fast --vol (neurodesk/neurocontainers recipes/synthseg)",
       "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms.json",
@@ -34,12 +34,28 @@
       "bytes": 12272,
       "license": "CC-BY-SA-3.0"
     },
-    "ahead": {
+    "ahead-fast": {
       "version": "347cf6fb6135",
       "description": "AHEAD (7 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --fast --vol (neurodesk/neurocontainers recipes/synthseg)",
       "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/347cf6fb613527c8a562cf086a9e476228a53068/recipes/synthseg/brainquant_norms_7t.json",
       "sha256": "f597123515ccccb6f8f2302670eb5be1dc73354d6b9791651bd4569a76d7ab95",
       "bytes": 12257,
+      "license": "CC-BY-4.0"
+    },
+    "ixi-normal": {
+      "version": "84e39bc0f298",
+      "description": "IXI (1.5 T and 3 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --vol in normal mode (neurodesk/neurocontainers recipes/synthseg)",
+      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_normal.json",
+      "sha256": "78fb642e811a733276468819273c9612d210770bf388cb69e21e7e07a907f7ff",
+      "bytes": 12275,
+      "license": "CC-BY-SA-3.0"
+    },
+    "ahead-normal": {
+      "version": "84e39bc0f298",
+      "description": "AHEAD (7 T) age norms for the volume report, fitted on FreeSurfer 8.2.0 mri_synthseg --vol in normal mode (neurodesk/neurocontainers recipes/synthseg)",
+      "url": "https://raw.githubusercontent.com/neurodesk/neurocontainers/84e39bc0f298de386e0e0321ce05719b436a1a94/recipes/synthseg/brainquant_norms_7t_normal.json",
+      "sha256": "4c6745ec015503275cabf126093536611936a1a7bcdf7301190738e16d35c975",
+      "bytes": 12296,
       "license": "CC-BY-4.0"
     }
   },

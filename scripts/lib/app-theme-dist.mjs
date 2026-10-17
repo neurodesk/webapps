@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { injectCompositeTheme } from './composite-theme.mjs';
 import { stageStandaloneAssets } from './standalone.mjs';
 import { publishAppContract } from './app-automation.mjs';
+import { writeRuntimeCacheManifest } from './runtime-cache.mjs';
 
 export async function applyAppTheme({
   app, information, version, measurementId, distDir, themeFile, themeScriptFile, shellFile, shellAdaptersDir, analyticsFile, iconFile,
@@ -37,4 +38,5 @@ export async function applyAppTheme({
   if (themed.includes('data-neurodesk-app-icon')) {
     await cp(iconFile, join(distDir, 'neurodesk-logo.svg'));
   }
+  await writeRuntimeCacheManifest({ distDir });
 }

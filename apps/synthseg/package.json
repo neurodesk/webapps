@@ -1,6 +1,6 @@
 {
   "name": "synthseg",
-  "version": "0.10.20261016",
+  "version": "0.11.20261017",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
-    "vite": "^6.3.2"
+    "vite": "^6.3.2",
+    "jsdom": "24.1.3"
   },
   "license": "Apache-2.0"
 }

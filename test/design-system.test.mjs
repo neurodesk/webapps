@@ -184,7 +184,7 @@ test('the shared stylesheet defines the whole vocabulary the template and docs r
     '.nd-viewer-canvas-wrapper', '.nd-viewer-empty', '.nd-viewer-info', '.nd-console-container', '.nd-console-title', '.nd-console-output',
     '.nd-status-label', '.nd-status-text', 'dialog.nd-dialog', '.nd-dialog-header', '.nd-dialog-body', '.nd-command', '.nd-volume-toggle', '.nd-result-visibility',
     '.nd-mask-editor', '.nd-tool-group', '.nd-tool-btn', '.nd-brush-control', '.nd-edit-btn',
-    '.nd-viewer-report', '.nd-chart-grid', '.nd-chart-figure', '.nd-chart', '.nd-chart-legend',
+    '.nd-viewer-report', '.nd-report-stack', '.nd-report-heading', '.nd-data-table caption', '.nd-chart-grid', '.nd-chart-figure', '.nd-chart', '.nd-chart-legend',
   ]) {
     assert.ok(css.includes(selector), `imaging-workspace.css must define ${selector}`);
   }
@@ -272,6 +272,25 @@ test('console header actions sit in the shared, spaced action group', async () =
       for (const button of document.querySelectorAll('[class*="console-header"] button:not([data-disclosure-toggle])')) {
         const grouped = button.matches('.nd-console-clear') && button.parentElement.matches('.nd-console-actions');
         if (!grouped) failures.push(`${source.path}: put console button "${button.textContent.trim()}" in .nd-console-actions as .nd-console-clear`);
+      }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
+// QSMbly's pipeline settings dialog is opened by its own code, starts at display: none and is never inert.
+const SELF_MANAGED_OVERLAYS = new Set(['pipelineSettingsModal']);
+
+test('a closed opacity overlay is hidden from assistive technology and focus before any script runs', async () => {
+  const failures = [];
+  for (const app of registry.apps) {
+    for (const source of await appSources(app, ['.html'])) {
+      const { document } = new JSDOM(source.text).window;
+      for (const overlay of document.querySelectorAll('.modal-overlay:not(.active)')) {
+        if (SELF_MANAGED_OVERLAYS.has(overlay.id)) continue;
+        if (!overlay.hasAttribute('inert') || overlay.getAttribute('aria-hidden') !== 'true') {
+          failures.push(`${source.path}: #${overlay.id} needs inert and aria-hidden="true" until ModalManager opens it`);
+        }
       }
     }
   }

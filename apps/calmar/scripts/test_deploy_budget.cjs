@@ -66,17 +66,30 @@ for (const [name, size] of topLevel) {
 // use sizeBytes for the always-fetched index JSON only; totalShardBytes
 // documents the full pack but is not part of cold-load because the
 // browser fetches only shards containing lesion-hit parcels.
+// Lesion-seed models with an inputModality are alternatives chosen by the
+// inputs (SynthStroke for T1, SEALS for DWI/ADC); a run fetches one, so the
+// largest counts.
 const manifest = JSON.parse(fs.readFileSync(path.join(WEB, 'models/manifest.json'), 'utf8'));
 let runtimeTotal = 0;
 const runtimeBreakdown = [];
+const seedModels = [];
 for (const key of ['modelAssets', 'atlasAssets', 'connectomeAssets', 'annotationAssets']) {
   for (const asset of manifest[key] || []) {
     if (asset.supportStatus !== 'supported') continue;
     if (typeof asset.sizeBytes !== 'number') continue;
+    if (key === 'modelAssets' && asset.inputModality) {
+      seedModels.push(asset);
+      continue;
+    }
     runtimeTotal += asset.sizeBytes;
     runtimeBreakdown.push({ id: asset.id, sizeBytes: asset.sizeBytes });
   }
 }
+assert.deepEqual(seedModels.map(asset => asset.inputModality).sort(), ['DWI_ADC', 'T1'],
+  'one lesion-seed model per input modality');
+const largestSeed = seedModels.reduce((a, b) => (a.sizeBytes >= b.sizeBytes ? a : b));
+runtimeTotal += largestSeed.sizeBytes;
+runtimeBreakdown.push({ id: `${largestSeed.id} (largest lesion-seed alternative)`, sizeBytes: largestSeed.sizeBytes });
 runtimeBreakdown.sort((a, b) => b.sizeBytes - a.sizeBytes);
 console.log(`\nRuntime-fetched (manifest sizeBytes, supported only): ${fmtMb(runtimeTotal)} MB`);
 for (const { id, sizeBytes } of runtimeBreakdown) {

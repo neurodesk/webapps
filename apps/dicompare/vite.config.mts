@@ -1,13 +1,29 @@
 import { loadAppContract } from '../../scripts/lib/app-automation.mjs'
+import { writeRuntimeCacheManifest } from '../../scripts/lib/runtime-cache.mjs'
+import { resolve } from 'node:path'
 import { contractJsonSchema } from '../../packages/desktop/src/contracts.js'
 import metadata from './package.json'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+
+function runtimeCachePlugin(): Plugin {
+  let distDir: string
+  return {
+    name: 'dicompare-runtime-cache',
+    apply: 'build',
+    configResolved(config) {
+      distDir = resolve(config.root, config.build.outDir)
+    },
+    async closeBundle() {
+      await writeRuntimeCacheManifest({ distDir })
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   base: process.env.WEBAPPS_BASE_PATH || (mode === 'test' ? '/' : '/dicompare/'),
-  plugins: [react(), {
+  plugins: [react(), runtimeCachePlugin(), {
     name: 'dicompare-automation-contract',
     async generateBundle() {
       const contract = await loadAppContract({ id: 'dicompare' }, metadata.version)

@@ -11,6 +11,8 @@
     "scripts/vendor-components.mjs",
     "scripts/lib/isolation-fallback-plugin.mjs",
     "scripts/lib/runtime-support.mjs",
+    "scripts/lib/runtime-cache.mjs",
+    "scripts/lib/app-theme-dist.mjs",
     "scripts/vendor-runtime-support.mjs"
   ],
   "tasks": {

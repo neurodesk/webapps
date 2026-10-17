@@ -6,7 +6,9 @@ same readers, series grouping, orientation, slice selection, windowing and
 resampling, and the same video settings and muxers.
 
 - `src/readers/`, `src/series.js`, `src/sources.js` read files into a volume
-  and pick the series to encode.
+  and pick the series to encode. `parseDicomHeader` in `src/readers/dicom.js`
+  reads every header element before the pixel data, nested sequences included;
+  the DICOM View app (`apps/dicomview`) shows it.
 - `src/pipeline.js` turns a volume into 8-bit frames (`renderFrame`).
 - `src/video.js` holds the frame size, timing, key frame, bitrate and colour
   settings and creates the vendored MP4 and WebM muxers (`src/vendor/`).

@@ -10,7 +10,7 @@ All 16 registered apps were reviewed on 9 September 2026, starting from `e6ef75e
 | MuscleMap | Inference tuning and the technical log start collapsed. Section buttons support keyboard activation and retain inputs. Shared navigation replaces repeated footer links. |
 | VesselBoost | Optional downsampling, bias correction, denoising, and brain extraction start collapsed. Segmentation remains available. Section controls and the technical log use the shared accessible binding. Footer navigation is consolidated. |
 | Spinal Cord Toolbox | Task selection and Run remain available. Advanced segmentation settings start collapsed. Disabled steps are inert. Threshold values survive closing and reopening after import. Footer navigation is consolidated. |
-| CALMaR | Empty Results start collapsed, open after analysis, and close on reset. Section buttons support keyboard activation. Existing advanced settings and detailed log remain collapsible. Footer navigation is consolidated. |
+| CALMaR | Empty Results start collapsed, open after analysis, and close on reset. Result tables open in the viewer's Results view instead of the sidebar. Section buttons support keyboard activation. Advanced settings and the single technical log remain collapsible. Footer navigation is consolidated. |
 | SeedSeg | Compact inference defaults remain. Native section buttons replace mouse-only headings, the technical log starts collapsed, and footer navigation is consolidated. |
 | dicompare | Runtime status occupies normal document space instead of covering the phone workspace. Loading details start collapsed. Workflow cards expose expanded state, and acquisition titles are keyboard-accessible buttons with truncated long names. Populated reference and test-data headers stack on phones and wrap their actions; real DICOM imports at 320 and 390 px verify that headings and buttons remain visible without overlap. |
 | Deface | Shared input picker, workflow sections, information dialogs and a console below the viewer. Output opens when processing completes. App CSS is empty. |
@@ -285,8 +285,8 @@ to seven primary buttons in one sidebar. Every app now follows one contract:
   dicompare gained the footer. `ProgressManager` drives it. Per-step Abort buttons,
   sidebar spinners and static footers are gone.
 - Every app has one technical log below the viewer, collapsed at load, with Copy and
-  Clear. CALMaR's always-open analysis log and SCT's sidebar log were folded in or
-  collapsed. SeedSeg gained Copy.
+  Clear. CALMaR's analysis log and SCT's sidebar log were folded into the
+  technical log. SeedSeg gained Copy.
 - Visible sidebar help is at most 90 characters. Longer text became `.nd-info-icon`
   tooltips or About content. Section subtitles and numbered step badges were removed.
 - Each sidebar has one primary button.

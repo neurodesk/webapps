@@ -58,16 +58,7 @@ input[type="file"]::file-selector-button:hover { border-color: var(--nd-color-bo
 .mask-approval-copy strong { color: #fff7ed; font-size: 0.9rem; font-weight: 700; white-space: nowrap; }
 .mask-approval-copy span { color: var(--nd-color-text); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.console-stack { flex-shrink: 0; background: var(--nd-color-surface); border-top: 1px solid var(--nd-color-border); }
-.console-container { height: 120px; flex-shrink: 0; background: var(--nd-color-surface); display: flex; flex-direction: column; }
-.console-primary-log { height: 118px; }
-.console-header { display: flex; align-items: center; justify-content: space-between; gap: var(--nd-space-md); padding: var(--nd-space-xs) var(--nd-space-md); border-bottom: 1px solid var(--nd-color-border); flex-shrink: 0; }
-.console-line { display: flex; align-items: baseline; gap: var(--nd-space-md); }
-.console-message { color: var(--nd-color-text-muted); min-width: 0; overflow-wrap: anywhere; }
 .console-source { color: var(--nd-color-text-dim); flex-shrink: 0; }
-.console-line-warning .console-message { color: var(--nd-color-warning); }
-.console-line-error .console-message { color: var(--nd-color-error); }
-.console-technical-log { height: 160px; border-top: 1px solid var(--nd-color-border); }
 
 .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 7000; opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
 
@@ -83,45 +74,11 @@ input[type="file"]::file-selector-button:hover { border-color: var(--nd-color-bo
 .panel-title-row h3 { flex: 1; min-width: 0; font-size: 0.75rem; text-transform: uppercase; color: var(--nd-color-text-muted); margin: 0; letter-spacing: 0.05em; }
 .results-filter-controls { margin-bottom: var(--nd-space-sm); }
 .threshold-controls { margin-top: var(--nd-space-md); }
-.affected-network-results { margin-top: var(--nd-space-sm); }
-.affected-network-results .panel-title-row { margin-bottom: var(--nd-space-xs); }
-.function-profile-results { margin-top: var(--nd-space-sm); }
-.function-profile-results .panel-title-row { margin-bottom: var(--nd-space-xs); }
 .param-row { margin-bottom: var(--nd-space-sm); }
 .param-row:last-child { margin-bottom: 0; }
 .param-row label { font-size: 0.78rem; color: var(--nd-color-text); }
 .param-input { margin-top: 2px; }
 .param-value { margin-left: auto; color: var(--nd-color-text-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
-.threshold-summary { margin: 6px 0 0; color: var(--nd-color-text-muted); font-size: 0.75rem; line-height: 1.4; }
-
-.results-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; color: var(--nd-color-text); }
-.results-table th,
-.results-table td { padding: 5px 4px; border-bottom: 1px solid var(--nd-color-border); text-align: left; vertical-align: top; }
-.results-table th { color: var(--nd-color-text-muted); font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.results-table th:nth-child(n+2),
-.results-table td:nth-child(n+2) { text-align: right; }
-.function-profile-table caption {
-  caption-side: top;
-  color: var(--nd-color-text-dim);
-  font-size: 0.68rem;
-  padding: 0 0 4px;
-  text-align: left;
-}
-.function-profile-table th:nth-child(3),
-.function-profile-table td:nth-child(3) { text-align: left; }
-.function-profile-score { font-variant-numeric: tabular-nums; }
-.function-profile-drivers { color: var(--nd-color-text-muted); }
-
-.warning {
-  background: var(--nd-color-warning-bg);
-  border: 1px solid var(--nd-color-warning);
-  color: var(--nd-color-warning);
-  border-radius: 6px;
-  padding: var(--nd-space-sm);
-  margin-bottom: var(--nd-space-sm);
-  font-size: 0.75rem;
-  line-height: 1.4;
-}
 
 .overlap-pct-cell {
   /* % label on top, thin magnitude bar underneath; keeps the table at 3 columns. */
@@ -139,7 +96,7 @@ input[type="file"]::file-selector-button:hover { border-color: var(--nd-color-bo
   width: 100%;
   height: 6px;
   margin-top: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--nd-color-border);
   border-radius: 3px;
   overflow: hidden;
 }

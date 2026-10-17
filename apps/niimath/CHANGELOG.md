@@ -1,9 +1,20 @@
 # niimath
 
+## 1.3.20261017
+
+### Patch Changes
+
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/runtime-support@0.6.4
+
 ## 1.3.20261016
 
 ### Patch Changes
 
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
 - Updated dependencies [7443048]
   - @neurodesk/webapp-components@0.14.1
   - @neurodesk/runtime-support@0.6.2

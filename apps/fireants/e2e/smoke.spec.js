@@ -1,3 +1,4 @@
+import { mockExampleIntegrity } from "../../../test-utils/example-fixture-catalog.mjs";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { affineDifference, downsampledExamplePair, ncc, readVolume, resampleToGrid } from "../../../test-utils/registration-similarity.mjs";
@@ -35,8 +36,14 @@ async function recordRegistrationRequests(page) {
   });
 }
 
+async function configureExampleFixtures(page, files) {
+  for (const file of examples.flatMap(example => example.files)) {
+    await mockExampleIntegrity(page, [file], files ? files[file.url.split("/").pop()] : fixture);
+  }
+}
+
 function serveExamples(page, bodyFor) {
-  return page.route("**/reg/**", (route) => route.fulfill({
+  return page.context().route("**/reg/**", (route) => route.fulfill({
     body: bodyFor(route.request().url()),
     contentType: "application/gzip",
     headers: {
@@ -58,8 +65,9 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-async function loadExample(page) {
+async function loadExample(page, files) {
   await page.goto("/");
+  await configureExampleFixtures(page, files);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator(".nd-viewer-panel")).toHaveCount(3);
@@ -114,7 +122,7 @@ test("the packaged CPU worker aligns the example T1 with the MNI template on the
   test.setTimeout(900_000);
   const { moving, fixed, files } = await downsampledExamplePair(examples[0], 3);
   await serveExamples(page, (url) => files[url.split("/").pop()]);
-  await loadExample(page);
+  await loadExample(page, files);
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 780_000 });
   await expect(page.locator("#statusText")).toContainText("end to end");
@@ -150,6 +158,7 @@ test("shared shell owns information actions and the page is isolated", async ({ 
 test("CPU registration stays available without WebGPU", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(Navigator.prototype, "gpu", { value: undefined }));
   await page.goto("/");
+  await configureExampleFixtures(page);
   await page.locator("[data-neurodesk-example]").selectOption("t1-mni");
   await expect(page.locator("[data-neurodesk-examples]")).toHaveAttribute("data-example-state", "ready", { timeout: 120_000 });
   await expect(page.locator("[data-neurodesk-example]")).toBeEnabled();

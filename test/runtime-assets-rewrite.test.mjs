@@ -204,6 +204,7 @@ test('a declared WASM runtime is shared across app-relative and root-relative wo
     for (const app of apps) {
       const assets = join(siteDist, app.path, 'assets');
       await mkdir(assets, { recursive: true });
+      await writeFile(join(siteDist, app.path, 'index.html'), '<html><head></head></html>');
       await writeFile(join(assets, name), body);
       const reference = app.id === 'ants' ? name : `/synthseg/assets/${name}`;
       await writeFile(join(assets, 'worker.jpeg.js'), `${workerPrefix}export const wasm = new URL("${reference}", import.meta.url);`);
@@ -235,6 +236,14 @@ test('a declared WASM runtime is shared across app-relative and root-relative wo
     }
     assert.equal(await readFile(join(siteDist, app.path, 'assets/ort-thread-worker.mjs'), 'utf8'), 'export const localThreadWorker = true;');
     assert.deepEqual(await readFile(join(siteDist, app.path, 'assets/unrelated.wasm')), body);
+    const html = await readFile(join(siteDist, app.path, 'index.html'), 'utf8');
+    const manifestName = html.match(/content="\.\/(runtime-cache-manifest\.[a-f0-9]{64}\.json)"/)[1];
+    const cacheManifest = JSON.parse(await readFile(join(siteDist, app.path, manifestName), 'utf8'));
+    assert.deepEqual(cacheManifest.assets.map(asset => asset.url).sort(), [
+      '../_runtime/dcm2niix-jpeg/1.2.0/dcm2niix.jpeg.wasm',
+      './assets/unrelated.wasm',
+    ]);
+    assert.ok(cacheManifest.assets.every(asset => asset.sha256 === createHash('sha256').update(body).digest('hex')));
   }
 
   await resetCopies();

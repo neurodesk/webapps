@@ -60,7 +60,7 @@ test('cancel terminates the worker and retry returns the actual native-grid defa
 });
 
 test('a niimath startup failure reports an error and a retry produces a defaced image', async ({ page }) => {
-  await page.route('**/niimath-*.wasm', route => route.abort('failed'));
+  await page.context().route('**/niimath-*.wasm', route => route.abort('failed'));
   await page.goto('./');
   await page.locator('#neurodesk-input-transfer').setInputFiles(fixture);
   await dispatch(page, 'adopt', { role: 'image' });
@@ -70,7 +70,7 @@ test('a niimath startup failure reports an error and a retry produces a defaced 
   expect(failed.error.message).toMatch(/wasm|WebAssembly|fetch|niimath/i);
   expect(failed.report).toBeUndefined();
   await expect(page.locator('#saveBtn')).toBeDisabled();
-  await page.unroute('**/niimath-*.wasm');
+  await page.context().unroute('**/niimath-*.wasm');
   await page.locator('#neurodesk-input-transfer').setInputFiles(fixture);
   await dispatch(page, 'adopt', { role: 'image' });
   await dispatch(page, 'start', { operation: 'deface', parameters: { method: 'allineate' } });

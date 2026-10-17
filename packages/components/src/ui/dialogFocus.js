@@ -31,7 +31,7 @@ function documentOf(node) {
 function isShown(el, root) {
   const view = documentOf(el)?.defaultView || globalThis;
   for (let node = el; node && node !== root.parentElement; node = node.parentElement) {
-    if (node.hidden) return false;
+    if (node.hidden || node.hasAttribute('inert')) return false;
     const style = view.getComputedStyle(node);
     if (style.display === 'none' || style.visibility === 'hidden') return false;
   }
@@ -110,6 +110,8 @@ function onKeydown(e) {
  */
 export function openDialog(overlay, { onEscape, activeClass = 'active' } = {}) {
   if (!overlay) return;
+  overlay.toggleAttribute?.('inert', false);
+  overlay.setAttribute?.('aria-hidden', 'false');
   overlay.classList.add(activeClass);
   if (stack.some((entry) => entry.overlay === overlay)) return;
 
@@ -133,6 +135,10 @@ export function openDialog(overlay, { onEscape, activeClass = 'active' } = {}) {
 export function closeDialog(overlay, { activeClass = 'active' } = {}) {
   if (!overlay) return;
   overlay.classList.remove(activeClass);
+  overlay.toggleAttribute?.('inert', true);
+  // Keep DOM-based accessibility snapshots in sync, including consumers whose
+  // ARIA implementation predates support for inert.
+  overlay.setAttribute?.('aria-hidden', 'true');
   const index = stack.findIndex((entry) => entry.overlay === overlay);
   if (index === -1) return;
   const [{ opener }] = stack.splice(index, 1);

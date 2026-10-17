@@ -107,7 +107,7 @@ for (const folds of [1, 5]) {
 
 test("automation reports a failed model download and leaves the run available", async ({ page }) => {
   test.setTimeout(5 * 60 * 1000);
-  await page.route(modelUrl, (route) => route.fulfill({ status: 503, body: "" }));
+  await page.context().route(modelUrl, (route) => route.fulfill({ status: 503, body: "" }));
   await page.goto("./");
   await page.getByLabel("Input", { exact: true }).selectOption(examples[0].id);
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120000 });
@@ -132,7 +132,7 @@ test("automation reports a failed model download and leaves the run available", 
 test("the ensemble downloads each fold after inference of the previous fold", async ({ page }) => {
   test.setTimeout(20 * 60 * 1000);
   const secondFold = manifest.base_url + manifest.assets[1].filename;
-  await page.route(secondFold, (route) => route.fulfill({ status: 503, body: "" }));
+  await page.context().route(secondFold, (route) => route.fulfill({ status: 503, body: "" }));
   await page.goto("./");
   await page.getByLabel("Input", { exact: true }).selectOption(examples[0].id);
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120000 });
@@ -150,7 +150,7 @@ test("the ensemble downloads each fold after inference of the previous fold", as
 
 test("cancelling a run stops it and keeps the input ready", async ({ page }) => {
   test.setTimeout(5 * 60 * 1000);
-  await page.route(modelUrl, () => {});
+  await page.context().route(modelUrl, () => {});
   await page.goto("./");
   await page.getByLabel("Input", { exact: true }).selectOption(examples[0].id);
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120000 });
@@ -166,7 +166,7 @@ test("cancelling a run stops it and keeps the input ready", async ({ page }) => 
 
 test("automation cancellation stops the worker and permits a new run", async ({ page }) => {
   test.setTimeout(5 * 60 * 1000);
-  await page.route(modelUrl, () => {});
+  await page.context().route(modelUrl, () => {});
   await page.goto("./");
   await page.getByLabel("Input", { exact: true }).selectOption(examples[0].id);
   await expect(page.locator("#runButton")).toBeEnabled({ timeout: 120000 });
@@ -185,8 +185,8 @@ test("automation cancellation stops the worker and permits a new run", async ({ 
   const snapshot = await page.evaluate(() => window.neurodeskAutomation.dispatch("snapshot"));
   expect(snapshot.state).toBe("cancelled");
   expect(snapshot.report).toBeUndefined();
-  await page.unroute(modelUrl);
-  await page.route(modelUrl, (route) => route.fulfill({ status: 503, body: "" }));
+  await page.context().unroute(modelUrl);
+  await page.context().route(modelUrl, (route) => route.fulfill({ status: 503, body: "" }));
   await page.locator("#neurodesk-input-transfer").setInputFiles({ name: input.name, mimeType: "application/gzip", buffer: input.bytes });
   await page.evaluate(async () => {
     await window.neurodeskAutomation.dispatch("adopt", { role: "image" });
@@ -215,7 +215,7 @@ for (const failure of ["download", "empty image"]) {
   test(`a failed example ${failure} can be retried`, async ({ page }) => {
     const example = examples[0];
     let attempts = 0;
-    await page.route(example.files[0].url, (route) => {
+    await page.context().route(example.files[0].url, (route) => {
       attempts++;
       if (attempts === 1) return route.fulfill({ status: failure === "download" ? 503 : 200, body: "" });
       return route.continue();

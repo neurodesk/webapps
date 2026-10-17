@@ -119,42 +119,30 @@ function waitMs(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ---- Split-log routing: analysis log is condensed, technical log keeps details ----
+// ---- One log: every message reaches the technical log once, in full, with its level ----
 {
   const app = new LesionNetworkMappingApp();
-  const clinical = [];
   const technical = [];
-  app.console = { log: (message, options) => clinical.push({ message, options }) };
   app.technicalConsole = { log: (message, options) => technical.push({ message, options }) };
 
   app.updateOutput('Loaded: sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz');
-  app.updateOutput('Loading sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz...');
-  app.updateOutput('sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz loaded');
-  app.updateOutput(
-    'Prealign (PCA): centroid src voxel (77.7, 124.7, 129.1) -> world ' +
-    '(3.5, 15.4, -10.2) mm; eigenvalues=[1561.1, 911.7, 833.4].'
-  );
   app.updateOutput('Structural image ready: sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz');
-  app.updateOutput('Starting MNI registration (SynthMorph deformable)...');
-  app.updateOutput('Starting MNI registration (SynthMorph deformable)...');
+  app.updateOutput('Worker log line', { source: 'worker' });
   app.updateOutput("Stage 'register' (registration) failed: synthetic failure");
+  app.updateOutput('Brain mask overlay unavailable');
 
   assert.deepEqual(
-    clinical.map(entry => entry.message),
+    technical,
     [
-      'Structural image ready.',
-      'MNI registration started.',
-      "Stage 'register' (registration) failed: synthetic failure"
+      { message: 'Loaded: sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz', options: { level: 'info', source: 'app' } },
+      { message: 'Structural image ready: sub-M2001_ses-1076_acq-tfl3_run-4_T1w.nii.gz', options: { level: 'info', source: 'app' } },
+      { message: 'Worker log line', options: { level: 'info', source: 'worker' } },
+      { message: "Stage 'register' (registration) failed: synthetic failure", options: { level: 'error', source: 'app' } },
+      { message: 'Brain mask overlay unavailable', options: { level: 'warning', source: 'app' } }
     ],
-    'analysis log must suppress file/viewer/PCA details, condense stage messages, and de-dupe repeats'
+    'each message is logged once with its original text, level and source'
   );
-  assert.ok(
-    technical.some(entry => entry.message.startsWith('Loaded: sub-M2001')) &&
-    technical.some(entry => entry.message.startsWith('Loading sub-M2001')) &&
-    technical.some(entry => entry.message.startsWith('sub-M2001')) &&
-    technical.some(entry => entry.message.startsWith('Prealign (PCA): centroid')),
-    'technical log must retain full file/viewer/PCA diagnostic details'
-  );
+  assert.equal(app.console, undefined, 'there is no second log');
 }
 
 function makeNiftiFile(name, buffer) {
@@ -419,8 +407,6 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const overlayCalls = [];
   const renderedStacks = [];
   app.structuralFile = { name: 'subject-t1.nii' };
-  app.networkMapFile = { name: 'network-map.nii' };
-  app.networkMapSpacing = [1, 1, 1];
   app.viewerController = {
     loadOverlay: async (...args) => { overlayCalls.push(args); },
     loadVolumeStack: async (entries) => { renderedStacks.push(entries); }
@@ -428,6 +414,8 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
   const lesion = { name: 'manual-lesion.nii' };
 
   await app.setLesion(lesion);
+  app.networkMapFile = { name: 'network-map.nii' };
+  app.networkMapSpacing = [1, 1, 1];
   assert.equal(overlayCalls.at(-1)[1], LESION_MASK_COLORMAP_ID,
     'manual lesion overlays must render with the blue lesion colormap');
 
@@ -1176,6 +1164,8 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     spacing: [1, 1, 1]
   };
   app.resumePipelineAfterMaskConfirmation = async () => { resumed = true; };
+  app.overlapResult = { summary: { networks: [{ network: 'previous mask' }] } };
+  app.networkMapData = new Float32Array(8);
 
   let confirmed;
   let decoded;
@@ -1201,6 +1191,10 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     'confirming must mark the lesion mask as user-approved');
   assert.equal(app.maskReviewActive, false,
     'confirming must leave mask-review mode');
+  assert.equal(app.overlapResult, null,
+    'confirming a new mask must drop the overlap computed from the previous mask');
+  assert.equal(app.networkMapData, null,
+    'confirming a new mask must drop the network map computed from the previous mask');
   assert.deepEqual(closeOptions, { clearDrawing: true },
     'confirming must clear the accepted NiiVue drawing overlay');
   assert.equal(toolbarClassList.contains('hidden'), true,
@@ -1710,7 +1704,7 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       'affected-network table must become visible after thresholding');
     assert.ok(renderedText.includes('Somatomotor'),
       'affected-network table must render the dominant Yeo network name');
-    assert.ok(renderedText.includes('% of map'),
+    assert.ok(renderedText.includes('Map %'),
       'affected-network table must use map-specific percent copy');
     assert.equal(mapFunctionResultsEl.classList.contains('hidden'), false,
       'connectivity-map functional profile table must become visible after thresholding');
@@ -3175,9 +3169,19 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     );
 
     app.lesionFile = makeNiftiFile('lesion-schaefer-grid.nii', lesionAtlasBuffer);
-    await app.runAtlasOverlap();
+    const resultsTab = { disabled: true };
+    const originalQuerySelector = globalThis.document.querySelector;
+    globalThis.document.querySelector = selector => (
+      selector === '.view-tab[data-view="results"]' ? resultsTab : originalQuerySelector(selector)
+    );
+    try {
+      await app.runAtlasOverlap();
+    } finally {
+      globalThis.document.querySelector = originalQuerySelector;
+    }
     assert.equal(resultsSection.classList.contains('collapsed'), false,
       'successful overlap must reveal the Results panel');
+    assert.equal(resultsTab.disabled, false, 'a computed overlap enables the Results view');
     assert.deepEqual(
       app.overlapResult.summary.networks.map(row => row.network),
       ['LH_Vis_1', 'RH_Default_2'],
@@ -3192,6 +3196,44 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       `Schaefer direct overlap must use atlas-label functional-profile driver copy; got ${renderedText.join(' | ')}`);
     assert.ok(renderedText.includes('language') || renderedText.includes('visual'),
       'Schaefer direct overlap must rank terms from parcel-label profiles');
+    {
+      const views = [];
+      const setViewerView = app.setViewerView;
+      const updateDirectFunctionProfile = app.updateDirectFunctionProfile;
+      let releaseProfile;
+      app.setViewerView = view => views.push(view);
+      app.updateDirectFunctionProfile = () => new Promise(resolve => { releaseProfile = resolve; });
+      let settled = false;
+      const run = app.runAtlasOverlap({ showResults: true }).then(() => { settled = true; });
+      for (let i = 0; i < 50 && !releaseProfile; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
+      assert.ok(releaseProfile, 'manual overlap must reach the functional-profile load');
+      assert.deepEqual(views, ['results'],
+        'manual overlap must open Results as soon as the overlap table is ready');
+      assert.equal(settled, false, 'the functional profile is still loading when Results opens');
+      releaseProfile();
+      await run;
+      app.setViewerView = setViewerView;
+      app.updateDirectFunctionProfile = updateDirectFunctionProfile;
+    }
+    {
+      const ensureFunctionProfiles = app.ensureFunctionProfiles;
+      const loaded = await ensureFunctionProfiles.call(app);
+      let releaseProfiles;
+      app.ensureFunctionProfiles = () => new Promise(resolve => { releaseProfiles = () => resolve(loaded); });
+      const directTable = globalThis.document.getElementById('directFunctionProfileTable');
+      const render = app.updateDirectFunctionProfile();
+      for (let i = 0; i < 50 && !releaseProfiles; i += 1) await new Promise(resolve => setTimeout(resolve, 0));
+      assert.ok(releaseProfiles, 'the functional profile render must reach the profile load');
+      app.clearDerivedResults();
+      const rowsAfterReset = directTable?.querySelectorAll?.('tbody tr').length ?? 0;
+      releaseProfiles();
+      assert.equal(await render, null, 'a profile load that finishes after a reset must not render');
+      assert.equal(directTable?.querySelectorAll?.('tbody tr').length ?? 0, rowsAfterReset,
+        'a stale profile load must not restore the previous associations');
+      app.ensureFunctionProfiles = ensureFunctionProfiles;
+      await app.runAtlasOverlap();
+      await app._functionalProfileRenderPromise;
+    }
     let fcStack = null;
     app.viewerController = {
       loadVolumeStack: async entries => { fcStack = entries; },
@@ -3220,6 +3262,54 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
     );
 
     const nonemptyOverlap = app.overlapResult;
+    {
+      const overlapRun = app.runAtlasOverlap();
+      app.clearDerivedResults();
+      assert.deepEqual(await overlapRun, { stopPipeline: true },
+        'an overlap whose case or atlas changed while it loaded must stop the pipeline');
+      assert.equal(app.overlapResult, null, 'and must not publish its result');
+      assert.match(app._messages.at(-1), /Overlap discarded: the case or atlas changed/);
+
+      app.overlapResult = nonemptyOverlap;
+      const mapRun = app.runFcNetworkMap();
+      app.clearDerivedResults();
+      assert.deepEqual(await mapRun, { stopPipeline: true },
+        'a network map whose case or atlas changed while it loaded must stop the pipeline');
+      assert.equal(app.networkMapData, null, 'and must not publish its map');
+      assert.match(app._messages.at(-1), /Network map discarded: the case or atlas changed/);
+
+      const viewerController = app.viewerController;
+      const updateDirectFunctionProfile = app.updateDirectFunctionProfile;
+      app.updateDirectFunctionProfile = async () => { app.clearDerivedResults(); };
+      assert.deepEqual(await app.runAtlasOverlap(), { stopPipeline: true },
+        'a reset during the functional-profile load must stop the pipeline');
+      app.updateDirectFunctionProfile = updateDirectFunctionProfile;
+
+      for (const newerRunOwnsStage of [false, true]) {
+        const removed = [];
+        const stale = {
+          ...viewerController,
+          volumeFiles: [],
+          loadVolumeStack: async entries => {
+            stale.volumeFiles = entries.map(entry => entry.file);
+            if (newerRunOwnsStage) stale.volumeFiles[entries.length - 1] = { name: 'newer-run-map.nii' };
+            app.clearDerivedResults();
+          },
+          getVolumeIndexForStage: stage => (stage === 'network-map' ? stale.volumeFiles.length - 1 : null),
+          removeVolumeAtIndex: index => removed.push(stale.volumeFiles[index].name)
+        };
+        app.viewerController = stale;
+        app.overlapResult = nonemptyOverlap;
+        assert.deepEqual(await app.runFcNetworkMap(), { stopPipeline: true },
+          'a reset while the network map is displayed must stop the pipeline');
+        assert.equal(networkDownloadEl.disabled, true, 'and must not re-enable the cleared download');
+        assert.deepEqual(removed, newerRunOwnsStage ? [] : ['lnm-network-map.nii'],
+          newerRunOwnsStage
+            ? 'a stale run must leave a newer run\'s network map in place'
+            : 'a stale run must remove its own network map from the viewer');
+      }
+      app.viewerController = viewerController;
+    }
     for (const atlasId of ['yeo7', 'schaefer400']) {
       app.overlapResult = {
         atlasOption: app.atlasOptions.find(option => option.id === atlasId),
@@ -3250,6 +3340,8 @@ async function waitForMicrotaskCondition(predicate, message, attempts = 20) {
       }
     };
     const bridgeFile = await app.applyRegistrationToLesion();
+    assert.equal(app.overlapResult, null,
+      'a re-warped lesion must drop the overlap computed from the previous lesion');
     assert.equal(bridgeFile.name, 'lnm-lesion-schaefer400.nii',
       'registration bridge output filename must reflect the selected atlas');
     const bridged = decodeNiftiForTest(await bridgeFile.arrayBuffer());

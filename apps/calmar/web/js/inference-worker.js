@@ -42,10 +42,9 @@ import {
   normaliseSynthMorphExecutionProviders,
   projectedVolumeToLabels,
   robustNormalizeMasked,
-  runDeepIslesMultiChannelPipeline,
-  shouldUseZYXModelAxisOrder,
-  softmaxStrokeChannel
+  shouldUseZYXModelAxisOrder
 } from './modules/inference-numerics.js';
+import { adcFromB0, segmentSeals } from './modules/seals.js';
 
 // nifti-reader-js is a UMD bundle that installs `self.nifti` as a side-
 // effect. We do NOT await its import at module top level: Chromium drops
@@ -436,77 +435,87 @@ async function stepInference(params) {
 
 async function stepDeepIslesInference(params) {
   const {
-    overlap = 0.625,
-    threshold = 0.5,
-    minComponentSize = 30,
     taskId,
     modelAssetId,
     modelName,
-    patchSize = [192, 192, 128],
     modelBaseUrl,
     supportStatus = 'unvalidated',
     cacheKey,
-    channelOrder = ['ADC', 'TRACE'],
+    channelOrder = ['TRACE', 'ADC'],
+    testTimeAugmentation = true,
     dwiBuffer,
-    adcBuffer
+    adcBuffer = null,
+    b0Buffer = null,
+    brainMaskBuffer = null,
+    synthStrip = null
   } = params;
 
   if (!taskId || !modelAssetId || !modelName) {
     throw new Error('run-deepisles-inference requires taskId, modelAssetId, and modelName.');
   }
-  if (!dwiBuffer || !adcBuffer) {
-    throw new Error('DeepISLES requires DWI/TRACE and ADC input buffers.');
+  if (!dwiBuffer || (!adcBuffer && !b0Buffer)) {
+    throw new Error('DeepISLES requires a DWI/TRACE input and either ADC or b0.');
   }
   if (supportStatus !== 'supported') {
-    throw new Error(
-      `Task "${taskId}" is ${supportStatus}. DeepISLES browser seed remains benchmark-only until a validated ONNX asset is selected.`
-    );
+    throw new Error(`Task "${taskId}" is ${supportStatus}; only a supported DeepISLES asset can run.`);
   }
-  if (!Array.isArray(channelOrder) || channelOrder.join(',') !== 'ADC,TRACE') {
-    throw new Error('DeepISLES channelOrder must be [ADC, TRACE].');
+  if (!Array.isArray(channelOrder) || channelOrder.join(',') !== 'TRACE,ADC') {
+    throw new Error('DeepISLES SEALS channelOrder must be [TRACE, ADC].');
+  }
+  if (!brainMaskBuffer && !synthStrip?.modelBaseUrl) {
+    throw new Error('DeepISLES needs a DWI-grid brain mask or SynthStrip settings: SEALS expects skull-stripped input.');
   }
   self._currentTaskId = taskId;
 
   postProgress(0.02, 'Reading DeepISLES inputs...');
-  postLog('Loading DWI/TRACE input for DeepISLES...');
-  const dwiState = prepareInputState(dwiBuffer, { emitUpdates: true });
-  const dwiRasAffine = affineFromHeaderBytes(dwiState.headerBytes);
-  postLog('Loading ADC input for DeepISLES...');
-  const adcState = prepareInputState(adcBuffer, { emitUpdates: false });
-  const adcRasAffine = affineFromHeaderBytes(adcState.headerBytes);
-
-  let adcOnDwi = adcState.rasData;
-  if (!dimsEqual(adcState.rasDims, dwiState.rasDims) || !affinesClose(adcRasAffine, dwiRasAffine, 1e-3)) {
-    postLog('Resampling ADC onto DWI/TRACE grid for DeepISLES.');
-    adcOnDwi = resampleAffine(
-      adcState.rasData,
-      adcState.rasDims,
-      adcRasAffine,
-      dwiState.rasDims,
-      dwiRasAffine,
-      'trilinear'
-    );
+  // SEALS sees volumes in the file's own axis order, as nnU-Net does.
+  const dwi = parseNiftiInput(dwiBuffer);
+  const dims = [...dwi.dims];
+  const affine = affineFromHeaderBytes(dwi.headerBytes);
+  const onDwiGrid = (buffer, label, mode = 'trilinear') => {
+    const other = parseNiftiInput(buffer);
+    const otherAffine = affineFromHeaderBytes(other.headerBytes);
+    if (dimsEqual(other.dims, dims) && affinesClose(otherAffine, affine, 1e-3)) return other.imageData;
+    postLog(`Resampling ${label} onto the DWI/TRACE grid.`);
+    return resampleAffine(other.imageData, other.dims, otherAffine, dims, affine, mode);
+  };
+  // ADC keeps its own grid; SEALS samples it once onto the 1 mm grid.
+  let adc;
+  if (adcBuffer) {
+    const parsed = parseNiftiInput(adcBuffer);
+    adc = { data: parsed.imageData, dims: [...parsed.dims], affine: affineFromHeaderBytes(parsed.headerBytes) };
+  } else {
+    postLog('No ADC: computing it from b0 and DWI/TRACE as ln(b0 / TRACE) / b.');
+    adc = { data: adcFromB0(onDwiGrid(b0Buffer, 'b0'), dwi.imageData), dims, affine };
   }
 
-  // Keep the worker state anchored to the DWI/TRACE source so the output
-  // NIfTI is written on that grid after inference.
-  workerState.origDims = [...dwiState.origDims];
-  workerState.affine = dwiState.affine;
-  workerState.headerBytes = dwiState.headerBytes.slice(0);
-  workerState.origHeaderBytes = dwiState.origHeaderBytes.slice(0);
-  workerState.perm = [...dwiState.perm];
-  workerState.flip = [...dwiState.flip];
-  workerState.isIdentity = dwiState.isIdentity;
-  workerState.rasData = new Float32Array(dwiState.rasData);
-  workerState.rasDims = [...dwiState.rasDims];
-  workerState.rasSpacing = [...dwiState.rasSpacing];
+  let brainMask;
+  if (brainMaskBuffer) {
+    brainMask = Uint8Array.from(onDwiGrid(brainMaskBuffer, 'brain mask', 'nearest'), v => (v > 0 ? 1 : 0));
+  } else {
+    postLog('Brain extraction on DWI/TRACE (SynthStrip)...');
+    const ras = prepareRasWorkerInput(dwi);
+    self._modelCacheKey = synthStrip.cacheKey || null;
+    const synthStripModel = await fetchModel(`${synthStrip.modelBaseUrl}/${synthStrip.modelName}`, synthStrip.modelName, 0.03, 0.05);
+    self._modelCacheKey = null;
+    const { mask } = await runSynthStrip({
+      rasData: ras.rasData,
+      rasDims: ras.rasDims,
+      rasSpacing: ras.rasSpacing,
+      modelArrayBuffer: synthStripModel,
+      ort,
+      // Fast mode keeps the conformed volume within the browser memory budget.
+      fast: true,
+      onProgress: (frac, label) => postProgress(0.08 + 0.10 * frac, label),
+      onLog: (msg) => postLog(msg)
+    });
+    brainMask = ras.isIdentity ? mask : inverseOrient(mask, ras.rasDims, ras.perm, ras.flip, ras.origDims);
+  }
 
   self._modelCacheKey = cacheKey || `${taskId}:${modelAssetId}:${self._appVersion || ''}`;
-  const modelUrl = `${modelBaseUrl}/${modelName}`;
-  const modelData = await fetchModel(modelUrl, modelName, 0.05, 0.15);
+  const modelData = await fetchModel(`${modelBaseUrl}/${modelName}`, modelName, 0.18, 0.12);
   self._modelCacheKey = null;
-
-  postProgress(0.20, 'Loading DeepISLES ONNX model...');
+  postProgress(0.30, 'Loading DeepISLES ONNX model...');
   const session = await ort.InferenceSession.create(modelData, {
     executionProviders: ['wasm'],
     graphOptimizationLevel: 'all'
@@ -514,54 +523,34 @@ async function stepDeepIslesInference(params) {
   const inputName = session.inputNames[0];
   const outputName = session.outputNames[0];
 
-  const inferenceStartTime = performance.now();
-  const result = await runDeepIslesMultiChannelPipeline(
-    {
-      channels: [adcOnDwi, dwiState.rasData],
-      dims: dwiState.rasDims,
-      patchSize,
-      channelOrder
-    },
-    async (patch, patchDims) => {
-      const [p0, p1, p2] = patchDims;
-      const voxels = p0 * p1 * p2;
-      const inputTensor = new ort.Tensor('float32', patch, [1, 2, p0, p1, p2]);
-      const out = await session.run({ [inputName]: inputTensor });
-      const raw = out[outputName].data;
-      inputTensor.dispose();
-      return softmaxStrokeChannel(raw, voxels, 2, 1);
+  const started = performance.now();
+  const labels = await segmentSeals(
+    { dwi: dwi.imageData, adc, brainMask, dims, affine },
+    async (patch, p) => {
+      const tensor = new ort.Tensor('float32', patch, [1, 2, p, p, p]);
+      const out = await session.run({ [inputName]: tensor });
+      tensor.dispose?.();
+      const logits = out[outputName].data;
+      if (logits.length !== 2 * p * p * p) throw new Error(`Unexpected DeepISLES output length ${logits.length}; expected ${2 * p * p * p}.`);
+      return logits;
     },
     {
-      overlap,
-      threshold,
-      minComponentSize,
-      onLog: (msg) => postLog(msg),
-      onProgress: (stepsDone, totalSteps, label) => {
-        const elapsed = (performance.now() - inferenceStartTime) / 1000;
-        const eta = stepsDone > 0 ? (elapsed / stepsDone) * (totalSteps - stepsDone) : 0;
-        const frac = totalSteps > 0 ? stepsDone / totalSteps : 0;
-        postProgress(0.25 + 0.55 * frac, `${label} (ETA: ${eta.toFixed(0)}s)`);
+      mirror: testTimeAugmentation,
+      onProgress: (done, total) => {
+        const elapsed = (performance.now() - started) / 1000;
+        const eta = done > 0 ? (elapsed / done) * (total - done) : 0;
+        postProgress(0.32 + 0.63 * (done / total), `DeepISLES pass ${done}/${total} (ETA: ${eta.toFixed(0)}s)`);
       }
     }
   );
   await session.release();
-  postLog(`DeepISLES inference complete in ${((performance.now() - inferenceStartTime) / 1000).toFixed(1)}s`);
+  postLog(`DeepISLES inference complete in ${((performance.now() - started) / 1000).toFixed(1)}s`);
 
-  let outputLabels = result.labels;
-  if (!workerState.isIdentity) {
-    outputLabels = inverseOrient(outputLabels, workerState.rasDims, workerState.perm, workerState.flip, workerState.origDims);
-  }
-  const outputNifti = createOutputNifti(outputLabels, workerState.origHeaderBytes, workerState.origDims);
-  postStageData('segmentation', outputNifti, 'DeepISLES lesion seed');
-
-  let finalVoxels = 0;
-  for (let i = 0; i < outputLabels.length; i++) {
-    if (outputLabels[i] > 0) finalVoxels++;
-  }
-  postLog(`DeepISLES output: ${finalVoxels} foreground voxels`);
-  if (finalVoxels === 0) {
-    postLog(`WARNING: DeepISLES seed is empty. Probability map max=${result.probStats.max.toFixed(4)} (threshold=${threshold}).`);
-  }
+  postStageData('segmentation', createOutputNifti(labels, dwi.headerBytes, dims), 'DeepISLES lesion seed');
+  let voxels = 0;
+  for (let i = 0; i < labels.length; i++) if (labels[i]) voxels++;
+  postLog(`DeepISLES output: ${voxels} lesion voxels`);
+  if (voxels === 0) postLog('WARNING: DeepISLES seed is empty.');
   postProgress(1.0, 'Complete');
   postStepComplete('inference');
   postComplete();

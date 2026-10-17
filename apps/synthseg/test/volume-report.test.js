@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { parseNorms } from '@neurodesk/synthseg/brainquant';
-import { parseVolumesCsv } from '@neurodesk/synthseg/results';
-import { chartSvg, legendEntries, tickStep, volumeReport } from '../src/volume-report.js';
+import { parseVolumesCsv, VOLUME_COLUMNS } from '@neurodesk/synthseg/results';
+import { chartSvg, legendEntries, rawVolumeRows, tickStep, volumeReport } from '../src/volume-report.js';
 
 const fixtures = new URL('../../../packages/synthseg/test/fixtures/', import.meta.url);
 const norms = parseNorms(JSON.parse(await readFile(new URL('brainquant_norms.json', fixtures), 'utf8')));
 const ahead = parseNorms(JSON.parse(await readFile(new URL('brainquant_norms_7t.json', fixtures), 'utf8')));
 const { volumes } = parseVolumesCsv(await readFile(new URL('T1_head_fast_vol.csv', fixtures), 'utf8'));
-const IXI = { reference: { id: 'ixi', reason: 'the scanner field strength is unknown' } };
+const IXI = { reference: { id: 'ixi-fast', cohort: 'ixi', reason: 'the scanner field strength is unknown' } };
 const golden = JSON.parse(await readFile(new URL('brainquant-golden.json', fixtures), 'utf8'));
 
 const attribute = (svg, element, name) => svg.match(new RegExp(`<${element} class="[^"]*"[^>]*\\b${name}="([^"]+)"`))?.[1];
@@ -20,7 +20,7 @@ test('the population data version is visible above the charts', () => {
 });
 
 test('the report names the reference it compared against and why', () => {
-  const { header, footer } = volumeReport(ahead, volumes, { age: 30, sex: 'male' }, { reference: { id: 'ahead', reason: 'the scanner field strength is 6.98 T' } });
+  const { header, footer } = volumeReport(ahead, volumes, { age: 30, sex: 'male' }, { reference: { id: 'ahead-fast', cohort: 'ahead', reason: 'the scanner field strength is 6.98 T' } });
   assert.ok(header.some((line) => line.startsWith('Reference: AHEAD 7 T (n=105,')));
   assert.ok(header.includes('Population data: AHEAD, version 347cf6fb6135.'));
   assert.equal(footer[0], 'The AHEAD reference was chosen because the scanner field strength is 6.98 T.');
@@ -66,13 +66,6 @@ test('an age outside the cohort extends the axis, boxes the reference ages and s
   assert.ok(Number(attribute(charts[0].svg, 'circle', 'cx')) > Number(attribute(charts[0].svg, 'rect', 'x')));
 });
 
-test('a default-mode run is footnoted, a fast run is not', () => {
-  const fast = volumeReport(norms, volumes, { age: 45, sex: 'female' }, IXI);
-  const slow = volumeReport(norms, volumes, { age: 45, sex: 'female' }, { ...IXI, fast: false });
-  assert.equal(slow.footer.length, fast.footer.length + 1);
-  assert.ok(slow.footer.some((line) => /fast mode/.test(line)));
-});
-
 test('coarser grids carry a warning beside the normative volume results', () => {
   const standard = volumeReport(norms, volumes, { age: 45, sex: 'female' }, IXI);
   const coarse = volumeReport(norms, volumes, { age: 45, sex: 'female' }, { ...IXI, voxelSizeMm: 1.5 });
@@ -102,4 +95,16 @@ test('the legend names the dot or the dashed level', () => {
   assert.equal(legendEntries(true)[0].label, 'patient (adjusted volume)');
   assert.equal(legendEntries(false)[0].label, 'patient (age unknown)');
   assert.equal(legendEntries(true).length, 4);
+});
+
+
+test('raw rows preserve all CSV structures when the population assessment rejects a zero volume', () => {
+  const invalid = { ...volumes, 'left hippocampus': 0 };
+  assert.throws(() => volumeReport(norms, invalid, { age: 45, sex: 'female' }, IXI), /no volume for Left hippocampus/);
+  const rows = rawVolumeRows(invalid);
+  assert.deepEqual(rows.map((row) => row.title), VOLUME_COLUMNS);
+  for (const row of rows) assert.equal(row.volumeMl, (invalid[row.title] / 1000).toFixed(2));
+  assert.equal(rows.find((row) => row.title === 'left hippocampus').volumeMl, '0.00');
+  assert.equal(rawVolumeRows({})[0].volumeMl, 'n/a');
+  assert.equal(rawVolumeRows({ 'total intracranial': NaN })[0].volumeMl, 'n/a');
 });

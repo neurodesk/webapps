@@ -12,7 +12,8 @@ const read = (path) => readFile(new URL(path, import.meta.url), 'utf8');
 const manifest = JSON.parse(await read('../python.manifest.json'));
 
 test('src/python.js is the web worker\'s Python code', async () => {
-  assert.equal(await read('../src/python.js'), await pythonCalls(), 'run node packages/dicompare/scripts/sync-python-calls.mjs');
+  const committed = (await read('../src/python.js')).replace(/\r\n/g, '\n');
+  assert.equal(committed, await pythonCalls(), 'run node packages/dicompare/scripts/sync-python-calls.mjs');
 });
 
 test('python.manifest.json is the offline inventory\'s dicompare Python set', async () => {

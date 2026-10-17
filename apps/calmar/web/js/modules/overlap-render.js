@@ -16,8 +16,9 @@ function colorForNetwork(network, colormap) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function appendTextCell(row, text) {
+function appendTextCell(row, text, className = '') {
   const cell = document.createElement('td');
+  if (className) cell.className = className;
   cell.textContent = text;
   row.appendChild(cell);
   return cell;
@@ -28,7 +29,7 @@ function appendPctCell(row, pct, color) {
   // static <thead> in index.html. The numeric label is on top, a thin bar
   // beneath it shows magnitude at a glance.
   const cell = document.createElement('td');
-  cell.className = 'overlap-pct-cell';
+  cell.className = 'nd-numeric overlap-pct-cell';
 
   const label = document.createElement('span');
   label.className = 'overlap-pct';
@@ -51,15 +52,16 @@ function appendPctCell(row, pct, color) {
 export function renderOverlapTable(tableEl, summary, {
   colormap,
   labelHeader = 'Atlas label',
-  percentHeader = '% of lesion',
+  percentHeader = 'Lesion %',
   emptyLabel = 'No overlap'
 } = {}) {
   tableEl.innerHTML = '';
 
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  for (const label of [labelHeader, 'Voxels', percentHeader]) {
+  for (const [label, className] of [[labelHeader, ''], ['Voxels', 'nd-numeric'], [percentHeader, 'nd-numeric']]) {
     const th = document.createElement('th');
+    if (className) th.className = className;
     th.textContent = label;
     headerRow.appendChild(th);
   }
@@ -83,7 +85,7 @@ export function renderOverlapTable(tableEl, summary, {
     const row = document.createElement('tr');
     const pct = (Number(network.fractionOfLesion) || 0) * 100;
     appendTextCell(row, network.network);
-    appendTextCell(row, `${Number(network.voxelsInLesion) || 0}`);
+    appendTextCell(row, `${Number(network.voxelsInLesion) || 0}`, 'nd-numeric');
     appendPctCell(row, pct, colorForNetwork(network.network, colormap));
     tbody.appendChild(row);
   }

@@ -27,7 +27,6 @@ async function modelBytes(model) {
     url: model.url,
     integrity: { bytes: model.bytes, sha256: model.sha256 },
   }, {
-    cache: 'neurodesk-synthseg-v1',
     requestFailureMessage: 'Could not download the SynthSeg weights. Check the connection and try again.',
     onProgress: ({ received, fraction }) => progress(
       0.12 + 0.13 * Math.min(1, fraction ?? 1),
@@ -59,7 +58,7 @@ self.onmessage = async ({ data: job }) => {
       loadModel: () => modelBytes(job.model),
       createSession: createBrowserSession,
       onProgress: progress,
-      runtime: { app: 'SynthSeg web 0.10.20261016', ...browserRuntime(), preparation },
+      runtime: { app: 'SynthSeg web 0.11.20261017', ...browserRuntime(), preparation },
     });
     self.postMessage({ type: 'result', buffer, provenance, volumes, tissues }, [buffer, ...Object.values(tissues)]);
   } catch (error) {

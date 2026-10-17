@@ -41,7 +41,7 @@ for (const app of bundle.apps.filter(app => !process.env.NEURODESK_TEST_APP || p
       if (reporting || !process.env.NEURODESK_WORKFLOWS) return;
       reporting = true;
       try {
-        const status = await page.locator('#statusText, #status, #consoleOutput, #log').allTextContents();
+        const status = await page.locator('#statusText, #status, #consoleOutput, #technicalConsoleOutput, #log').allTextContents();
         const text = status.join(' ').slice(-1600);
         if (text !== previousStatus) { console.log(`${app.id} progress: ${text}`); previousStatus = text; }
       } catch { /* The window can close during diagnostic polling; workflow errors are recorded separately. */ } finally { reporting = false; }
