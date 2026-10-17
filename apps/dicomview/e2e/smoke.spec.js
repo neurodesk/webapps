@@ -98,6 +98,7 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await page.addInitScript(() => {
     const Native = window.Worker;
     window.blobWorkers = new Set();
+    window.heldChecks = [];
     window.Worker = class extends Native {
       constructor(url, options) {
         super(url, options);
@@ -113,6 +114,10 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
         if (message?.type === 'analyzeFiles') {
           const sizes = message.payload.fileContents.map((buffer) => buffer.byteLength);
           window.analyzed = { files: sizes.length, bytes: sizes.reduce((sum, size) => sum + size, 0), transferred: transfer?.length ?? 0 };
+        }
+        if (message?.type === 'validateAcquisition' && window.holdChecks) {
+          window.heldChecks.push(message);
+          return;
         }
         if (message?.type === 'validateAcquisition' && window.breakChecks) {
           return super.postMessage({ ...message, payload: { ...message.payload, acquisitionIndex: 99 } }, transfer);
@@ -163,9 +168,14 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await page.locator('#schemaSelect').selectOption({ label: 'QSM Consensus Guidelines' });
   await expect(button).toHaveText('Check compliance');
   // Cancelling a check ends the worker; the next check must start a new one.
+  await page.evaluate(() => { window.holdChecks = true; });
+  const workersBeforeCheck = await page.evaluate(() => window.blobWorkers.size);
   await button.click();
-  await page.locator('#cancelButton').click({ timeout: 2000 }).catch(() => {});
-  await expect(status(page)).toHaveText(/cancelled|checked against/, { timeout: 120000 });
+  await expect.poll(() => page.evaluate(() => window.heldChecks.length)).toBe(1);
+  await page.locator('#cancelButton').click();
+  await expect(status(page)).toHaveText('Protocol summary cancelled');
+  expect(await page.evaluate(() => window.blobWorkers.size), 'the cancelled check ended its worker').toBe(workersBeforeCheck - 1);
+  await page.evaluate(() => { window.holdChecks = false; });
   await expect(button).toBeEnabled();
   await button.click();
   await expect(status(page)).toHaveText('1 acquisition checked against QSM Consensus Guidelines', { timeout: 120000 });
