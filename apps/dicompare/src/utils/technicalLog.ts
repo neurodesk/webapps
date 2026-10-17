@@ -32,8 +32,6 @@ type Listener = () => void;
 
 let entries: LogEntry[] = [];
 let nextId = 1;
-/** Bumped on every error so the console can open itself. */
-let errorSignal = 0;
 const logListeners = new Set<Listener>();
 
 function emitLog() {
@@ -43,7 +41,6 @@ function emitLog() {
 export function log(message: string, level: LogLevel = 'info'): void {
   const entry: LogEntry = { id: nextId++, time: new Date(), level, message };
   entries = entries.length >= MAX_ENTRIES ? [...entries.slice(1), entry] : [...entries, entry];
-  if (level === 'error') errorSignal += 1;
   emitLog();
 }
 
@@ -62,14 +59,6 @@ export function getLogEntries(): LogEntry[] {
   return entries;
 }
 
-export function formatLogTime(time: Date): string {
-  return time.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
-
-export function formatLogLines(list: LogEntry[] = entries): string {
-  return list.map((entry) => `${formatLogTime(entry.time)} [${entry.level}] ${entry.message}`).join('\n');
-}
-
 function subscribeLog(listener: Listener) {
   logListeners.add(listener);
   return () => { logListeners.delete(listener); };
@@ -77,10 +66,6 @@ function subscribeLog(listener: Listener) {
 
 export function useTechnicalLog(): LogEntry[] {
   return useSyncExternalStore(subscribeLog, getLogEntries, getLogEntries);
-}
-
-export function useErrorSignal(): number {
-  return useSyncExternalStore(subscribeLog, () => errorSignal, () => errorSignal);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +174,6 @@ export function installConsoleCapture(target: Window & typeof globalThis = windo
 export function resetTechnicalLog(): void {
   entries = [];
   activities = [];
-  errorSignal = 0;
   activityState = { label: null, progress: null, startedAt: null };
   emitLog();
   activityListeners.forEach((listener) => listener());

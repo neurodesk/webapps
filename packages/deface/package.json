@@ -35,7 +35,6 @@
     "@neurodesk/runtime-support": "workspace:*"
   },
   "devDependencies": {
-    "@neurodesk/webapp-components": "workspace:*",
     "@playwright/test": "1.63.0",
     "vite": "^6.3.2"
   },

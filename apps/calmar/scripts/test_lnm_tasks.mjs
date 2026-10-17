@@ -4,19 +4,13 @@
 // stage definitions. Written before lnm-tasks.js per the project's TDD policy.
 
 import assert from 'node:assert/strict';
-import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const tasksUrl = pathToFileURL(path.join(ROOT, 'web/js/app/lnm-tasks.js'));
-
-const {
+import {
   LNM_PIPELINES,
   getPipelineById,
   getRequiredAssetIds,
   isStageRunnable,
   isPipelineRunnable
-} = await import(tasksUrl);
+} from '../web/js/app/lnm-tasks.js';
 
 assert.ok(Array.isArray(LNM_PIPELINES) && LNM_PIPELINES.length >= 1,
   'LNM_PIPELINES must export a non-empty array');

@@ -11,13 +11,13 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { buildManifest } from '../web/js/app/sct-tasks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
 const manifest = JSON.parse(fs.readFileSync(path.join(ROOT, 'web/models/manifest.json'), 'utf8'));
-const { buildManifest } = await import(pathToFileURL(path.join(ROOT, 'web/js/app/sct-tasks.js')));
 const live = buildManifest();
 
 const indexById = (tasks) => Object.fromEntries(tasks.map(t => [t.id, t]));

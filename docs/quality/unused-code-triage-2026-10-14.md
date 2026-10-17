@@ -9,17 +9,17 @@ The report was run from `origin/main` at `4b28789c` with
 `pnpm quality:unused` (Knip 6.41.0).
 The scan exited successfully. `diagnostics.log` was empty, so there were no scan warnings.
 
-| Kind | Before | After the source removals | After the dependency removals | After the dcm2niix removals |
-| --- | ---: | ---: | ---: | ---: |
-| files | 17 | 16 | 16 | 16 |
-| exports | 69 | 40 | 40 | 40 |
-| types | 14 | 14 | 14 | 14 |
-| duplicates | 1 | 1 | 1 | 1 |
-| dependencies | 18 | 18 | 15 | 12 |
-| devDependencies | 28 | 28 | 7 | 8 |
-| total | 147 | 117 | 93 | 91 |
+| Kind | Before | After the source removals | After the dependency removals | After the dcm2niix removals | After the final cleanup |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| files | 17 | 16 | 16 | 16 | 16 |
+| exports | 69 | 40 | 40 | 40 | 34 |
+| types | 14 | 14 | 14 | 14 | 14 |
+| duplicates | 1 | 1 | 1 | 1 | 1 |
+| dependencies | 18 | 18 | 15 | 12 | 12 |
+| devDependencies | 28 | 28 | 7 | 8 | 7 |
+| total | 147 | 117 | 93 | 91 | 84 |
 
-The last column was run on `origin/main` at `4192b28f`. Its one new devDependency, `packages/deface` `@neurodesk/webapp-components`, arrived with the Deface command line (`2e1b66d4`) after the earlier reports and is not yet classified.
+The dcm2niix column was run on `origin/main` at `4192b28f`. Its one new devDependency, `packages/deface` `@neurodesk/webapp-components`, arrived with the Deface command line (`2e1b66d4`) after the earlier reports. The last column was run on `origin/main` at `1444613e` with the [final cleanup](#final-cleanup) applied, and the report produced no new candidates.
 
 Each candidate has one of these dispositions:
 
@@ -65,8 +65,8 @@ After the removals, the report produced no new candidates: no helper became unus
 | Candidate | Disposition | Evidence |
 | --- | --- | --- |
 | `apps/spinalcordtoolbox/web/js/modules/sct-processing.js` `default` | Runtime | This is a UMD wrapper. Knip reads `module.exports` as a default export. The app loads it as a side-effect import that sets `self.SCTProcessing`, and `test_sct_processing.cjs` loads it with `loadClassicScript`. |
-| `apps/calmar/web/js/app/lnm-tasks.js` `getRequiredAssetIds`, `isPipelineRunnable` | Runtime (test API) | Exported for `scripts/test_lnm_tasks.mjs`, which imports through a constructed `pathToFileURL` URL that Knip cannot follow. |
-| `apps/spinalcordtoolbox/web/js/app/sct-tasks.js` `buildManifest` | Runtime (test API) | Read by `scripts/test_manifest_consistency.mjs` through a constructed `import()`. |
+| `apps/calmar/web/js/app/lnm-tasks.js` `getRequiredAssetIds`, `isPipelineRunnable` | Resolved | `scripts/test_lnm_tasks.mjs` now imports them by literal path, so Knip sees the test as their caller. |
+| `apps/spinalcordtoolbox/web/js/app/sct-tasks.js` `buildManifest` | Resolved | `scripts/test_manifest_consistency.mjs` now imports it by literal path. |
 | `packages/runtime-support/src/niimath/types.d.ts` `dataTypes` | Kept | This is part of the frozen, vendored niimath build (see that directory's README). The declarations stay byte-identical to the build until Deface moves to npm niimath. |
 | `packages/topofit/src/affine.js` `prepareTemplates`, `mni305ToMni152` | Kept | These are unreachable scientific transform helpers, including the MNI305 to MNI152 matrix. Under #256 item 6, removing them needs the TopoFit owner's decision and parity evidence. Deleting them would not change the byte-pinned outputs. |
 | `packages/nesvor/src/output/index.js` re-exports `blurSupport`, `gaussianRandom` | Kept | These belong to the scientific output barrel. Both functions stay in use as defaults inside `support.js` and `sample.js`. Leave the re-exports until a NeSVoR output change has parity evidence. |
@@ -124,7 +124,7 @@ On 2026-10-15 every finding was checked against the upstream default branch: `as
 - dicompare: [astewartau/dicompare-web#25](https://github.com/astewartau/dicompare-web/issues/25), covering 14 files, 28 exports, 1 duplicate, 14 types and 4 dependencies.
 - QSMbly: [astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157), covering the two barrel modules.
 
-Three findings are monorepo-authored and stay with the monorepo:
+Three findings were monorepo-authored and were removed in the [final cleanup](#final-cleanup):
 
 - dicompare `technicalLog.ts` `formatLogLines` and `useErrorSignal` (`93381e89`). The upstream repository has no such file.
 - QSMbly `QsmEchoViewer` in `js/controllers/QsmEchoViewer.js`. Shared imaging consolidation added the file (`55603365`), and the upstream repository has no such file.
@@ -133,7 +133,6 @@ BrowserQC and SeedSeg have no upstream-owned findings. BrowserQC's only candidat
 
 | File | Kind | Candidates |
 | --- | --- | --- |
-| `apps/qsmbly/js/controllers/QsmEchoViewer.js` | exports | `QsmEchoViewer`: monorepo-authored (`55603365`), not upstream code |
 | `apps/qsmbly/js/modules/file-io/index.js` | files | upstream barrel module ([astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157)) |
 | `apps/qsmbly/js/modules/mask/index.js` | files | upstream barrel module ([astewartau/qsmbly#157](https://github.com/astewartau/qsmbly/issues/157)) |
 | `apps/dicompare/src/components/common/ConstraintInputWidgets.tsx` | files | (file) |
@@ -163,7 +162,6 @@ BrowserQC and SeedSeg have no upstream-owned findings. BrowserQC's only candidat
 | `apps/dicompare/src/utils/schemaFieldConverters.ts` | exports | `acquisitionFieldToSchemaField` |
 | `apps/dicompare/src/utils/schemaToAcquisition.ts` | exports | `convertRawAcquisitionToContext` |
 | `apps/dicompare/src/utils/tagUtils.ts` | exports | `splitTags` |
-| `apps/dicompare/src/utils/technicalLog.ts` | exports | `formatLogLines`, `useErrorSignal`: this file is a monorepo adaptation (`93381e89`), not upstream code, so a dicompare-scoped follow-up could remove these |
 | `apps/dicompare/src/utils/valueRounding.ts` | exports | `roundFieldValues` |
 | `apps/dicompare/src/utils/vrMapping.ts` | exports | `getVRDescription`, `isNumericVR`, `canHaveMultipleValues` |
 | `apps/dicompare/src/components/common/ConstraintBandEditor.tsx` | types | `GradedConstraint` |
@@ -178,10 +176,18 @@ BrowserQC and SeedSeg have no upstream-owned findings. BrowserQC's only candidat
 
 The `upstream.json` integration rules require some erased type imports (`ProcessingProgress`, `WorkspaceItem`) to avoid runtime import cycles. Report unused type exports upstream rather than deleting them here.
 
+## Final cleanup
+
+Checked on `origin/main` at `1444613e`. Each removal had no reference outside its own file in a repository-wide `git grep -w`.
+
+| Candidate | Disposition | Evidence |
+| --- | --- | --- |
+| `apps/dicompare/src/utils/technicalLog.ts` `formatLogLines`, `useErrorSignal` | Removed | No caller. Removing `formatLogLines` left `formatLogTime` without a caller, and removing `useErrorSignal` left the `errorSignal` counter write-only, so both went too. `TechnicalLog.tsx` feeds the shared `nd-console`, which formats and copies its own lines. Upstream has no such file, so the weekly sync cannot bring them back. |
+| `apps/qsmbly/js/controllers/QsmEchoViewer.js` `QsmEchoViewer` | Removed (export only) | The class stays. `qsm-app-romeo.js` uses it through the `ViewerController` alias, the name upstream's `controllers/index.js` re-exports. Upstream has no such file. |
+| `packages/deface` `@neurodesk/webapp-components` (devDependency) | Redundant, removed | Nothing in the package imports it, statically, dynamically or through `createRequire`. The browser reference harness imports `src/browser.js`, which reaches only `@neurodesk/runtime-support` (`niimath/command`, `mindgrab`), and neither module imports the components package. The lockfile change removes one importer entry. `apps/deface` declares the components package itself. |
+| calmar and SCT task tests | Literal imports | See the two Resolved rows in [Kept as runtime entries or by decision](#kept-as-runtime-entries-or-by-decision). |
+
 ## Remaining work
 
-- Remove the upstream findings once astewartau/dicompare-web#25 and astewartau/qsmbly#157 are fixed upstream and the weekly sync merges them.
-- Remove the monorepo-authored dicompare `technicalLog.ts` exports and QSMbly `QsmEchoViewer` export in a scoped PR that follows each app's `upstream.json` integration rules.
-- Classify the new `packages/deface` `@neurodesk/webapp-components` devDependency.
+- Remove the upstream findings once astewartau/dicompare-web#25 and astewartau/qsmbly#157 are fixed upstream and the weekly sync merges them. On 2026-10-16 both issues were open, and qsmbly `main` (`e69b603`) still had both barrel modules.
 - TopoFit's affine helpers and the NeSVoR output re-exports are kept by owner decision (2026-10-14).
-- The calmar and SCT test APIs would stop appearing in the report if those tests used literal imports. Knip already follows literal imports.

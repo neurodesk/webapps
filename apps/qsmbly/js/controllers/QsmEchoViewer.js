@@ -1,6 +1,6 @@
 import { ViewerController as SharedViewerController } from '@neurodesk/webapp-components';
 
-export class QsmEchoViewer extends SharedViewerController {
+class QsmEchoViewer extends SharedViewerController {
   constructor(options) {
     super(options);
     this.getMultiEchoFiles = options.getMultiEchoFiles;

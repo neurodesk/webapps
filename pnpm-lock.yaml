@@ -1162,9 +1162,6 @@ importers:
         specifier: workspace:*
         version: link:../runtime-support
     devDependencies:
-      '@neurodesk/webapp-components':
-        specifier: workspace:*
-        version: link:../components
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0

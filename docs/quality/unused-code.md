@@ -96,7 +96,8 @@ Run `pnpm quality:unused` for current counts after dependency changes.
 - [2026-10-14](unused-code-triage-2026-10-14.md) classifies every candidate in a
   fresh report. It removes 29 dead exports and one dead file, and lists the
   runtime entries, upstream-owned findings, redundant dependency declarations and
-  open decisions that remain.
+  open decisions that remain. Its later sections record the follow-up removals;
+  only upstream-owned findings and owner-kept helpers remain.
 
 Add a dated record like this one when a cleanup changes the candidate list.
 Scientific transform and output helpers need parity evidence before their public
