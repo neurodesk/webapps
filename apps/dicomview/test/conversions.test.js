@@ -154,5 +154,29 @@ test('clear aborts every pending run; forget drops done ones and leaves pending 
   await assert.rejects(b, aborted);
   assert.deepEqual(store.entries(), []);
   assert.deepEqual(changes.at(-1), []);
-  assert.ok(changes.includes('A:done') || changes.some((snapshot) => snapshot.includes('A:done')));
+  assert.ok(changes.some((snapshot) => snapshot.includes('A:done')));
+});
+
+test('a series chosen while its saved copy is still being looked up goes ahead of the queue', async () => {
+  const { runs, convert, started } = manualConvert();
+  let finishLookup;
+  const store = new ConversionStore({
+    load: (entry) => (entry.uid === 'C' ? new Promise((resolve) => { finishLookup = () => resolve(null); }) : Promise.resolve(null)),
+    convert,
+  });
+  const batch = store.convertAll([series('A'), series('B'), series('C')]);
+  await tick();
+  const chosen = store.request(series('C'));
+  await tick();
+  assert.deepEqual(started(), ['A']);
+  finishLookup();
+  runs[0].resolve();
+  await tick();
+  await tick();
+  assert.deepEqual(started(), ['A', 'C'], 'C was queued ahead of B once its lookup ended');
+  runs[1].resolve();
+  await chosen;
+  await tick();
+  runs[2].resolve();
+  await batch;
 });

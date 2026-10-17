@@ -21,8 +21,8 @@ import { ConversionStore } from './conversions.js';
 import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
 import { ProtocolSession, SCHEMAS } from './protocol-session.js';
-import { openSavedConversions, seriesFingerprint } from './saved-conversions.js';
 import { checkOutcome, protocolTables } from './protocol-table.js';
+import { openSavedConversions, seriesFingerprint } from './saved-conversions.js';
 import { describeSeries, downloadFiles, seriesLabel, seriesSummary } from './series-text.js';
 import examples from '../examples.json';
 
@@ -195,8 +195,8 @@ const seriesList = createResultList({
 function renderSeriesList() {
   if (!state.index) return;
   seriesList.render(Object.fromEntries(state.index.series.map((series) => {
-    const converted = conversions.get(series.uid)?.state === 'done' ? ' · converted' : '';
-    return [series.uid, { description: `${seriesLabel(series)}${converted}` }];
+    const converted = conversions.get(series.uid)?.state === 'done' ? '✓ ' : '';
+    return [series.uid, { description: `${converted}${seriesLabel(series)}` }];
   })));
   for (const row of seriesList.querySelectorAll('.nd-volume-toggle')) {
     row.querySelector('.nd-view-btn').classList.toggle('active', row.dataset.stage === state.seriesUid);

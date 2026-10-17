@@ -1,12 +1,13 @@
 // One owner for every series conversion: its lifetime is not the view that asked for it.
 // Selecting another series leaves a conversion running; what ends one is cancel(uid) (the
-// footer × while it is what the status bar shows), cancelAll() (the × on Convert all),
-// or clear() (a new input).
+// footer × while it is what the status bar shows), the signal given to convertAll (the ×
+// on Convert all) or clear() (a new input).
 //
-// Entry = { uid, state: 'pending' | 'done' | 'failed', promise, controller, outputs, error }
+// Entry = { uid, series, state: 'pending' | 'done' | 'failed', promise, controller, chosen,
+//           outputs, error }
 //   One entry per series uid. pending holds the controller that aborts it; done holds the
 //   outputs; failed holds the error until the next request retries. chosen marks a series
-//   the user asked for: cancelling Convert all leaves it running.
+//   the user asked for: it goes ahead of the queue and cancelling Convert all leaves it.
 //
 // Runs go through one queue: load(series) (a saved copy, fast) runs at once, convert(series)
 // (dcm2niix) one at a time in queue order, with requested series ahead of batch ones.
@@ -116,20 +117,20 @@ export class ConversionStore {
   #start(series, priority) {
     const controller = new AbortController();
     const entry = { uid: series.uid, state: 'pending', controller, outputs: null, error: null, promise: null, series, chosen: priority, release: null };
-    entry.promise = this.#run(entry, priority);
+    entry.promise = this.#run(entry);
     this.#entries.set(series.uid, entry);
     this.#onChange();
     return entry;
   }
 
-  async #run(entry, priority) {
+  async #run(entry) {
     const { signal } = entry.controller;
     const { series } = entry;
     try {
       let outputs = await this.#io.load(series, signal);
       signal.throwIfAborted();
       if (!outputs) {
-        await this.#turn(entry, priority);
+        await this.#turn(entry);
         try {
           signal.throwIfAborted();
           outputs = await this.#io.convert(series, signal);
@@ -154,14 +155,14 @@ export class ConversionStore {
   }
 
   // Waits for a free dcm2niix slot. An entry aborted while it waits leaves the queue.
-  #turn(entry, priority) {
+  #turn(entry) {
     if (this.#running < this.#concurrency && !this.#queue.length) {
       this.#running += 1;
       return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
       entry.release = resolve;
-      if (priority) this.#queue.unshift(entry);
+      if (entry.chosen) this.#queue.unshift(entry);
       else this.#queue.push(entry);
       entry.controller.signal.addEventListener('abort', () => {
         const at = this.#queue.indexOf(entry);
