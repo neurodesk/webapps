@@ -1,5 +1,11 @@
 # @neurodesk/elastix
 
+## 0.4.20261017
+
+### Minor Changes
+
+- Add registered-image OME-TIFF export in the browser and command line using one shared fiff writer. Preserve full-resolution float32 pixels, spacing and stationary input units. Explain when TIFF is unavailable because the pinned writer cannot retain the image origin, direction or unknown units.
+
 ## 0.3.20261017
 
 ## 0.3.20261016

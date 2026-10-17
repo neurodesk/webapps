@@ -7,6 +7,19 @@ interface follows the registration family: moving, stationary and registered
 images in linked NiiVue panels, one Register action, and downloads in the output
 section. It is based on ITKElastix's TypeScript demo app.
 
+Registered images download as NIfTI, OME-Zarr and, for compatible grids,
+deflate-compressed OME-TIFF. The TIFF export keeps the full-resolution float32
+pixels and the stationary input's physical spacing and spatial units. It uses
+the same `@fideus-labs/fiff` writer as the upstream demo, through the shared
+`@neurodesk/elastix` package so the command line writes the same file.
+
+The pinned TIFF writer cannot store origin or direction. OME-TIFF is offered
+only for zero-origin grids with identity direction and known spatial units
+from the stationary OME-TIFF or OME-Zarr input. Other ITK inputs do not retain
+explicit units in this reader. The Output section explains why TIFF is
+unavailable; use NIfTI or OME-Zarr for those grids. No resampling, orientation
+changes or intensity conversion are performed for TIFF export.
+
 ## Methods
 
 Each preset chains elastix's default parameter maps (`defaultParameterMap`):

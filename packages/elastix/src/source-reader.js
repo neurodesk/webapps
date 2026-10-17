@@ -67,7 +67,10 @@ export function createSourceReader({ fromOmeZarr, ngffImageToItkImage, TiffStore
     const image = await ngffImageToItkImage(level, { tIndex: 0, cIndex: 0 });
     signal?.throwIfAborted();
     const count = multiscales.images.length;
-    return prepared(image, name, kind, null, ` · pyramid level ${index + 1} of ${count}`, signal);
+    return {
+      ...await prepared(image, name, kind, null, ` · pyramid level ${index + 1} of ${count}`, signal),
+      spatialUnits: level.axesUnits,
+    };
   }
 
   async function fetchFile(url, signal) {

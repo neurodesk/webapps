@@ -86,6 +86,7 @@ The web app's downloads, named after the moving image:
 | File | Content |
 | --- | --- |
 | `<moving>_registered.nii.gz` | Moving image resampled onto the fixed grid |
+| `<moving>_registered.ome.tif` | Full-resolution float32 OME-TIFF, when geometry and units are supported |
 | `<moving>_transform.h5` | ITK HDF5 transform; rigid and affine runs only |
 | `<moving>_transform.ome.zarr.ozx` | OME-Zarr RFC-5 fixed-to-moving transform |
 | `<moving>_TransformParameters.N.toml` | elastix parameter files, one per stage |
@@ -95,9 +96,17 @@ so transformix given the last one applies every stage. The OME-Zarr transform
 is one `affine` for rigid and affine runs and a `displacements` field on the
 fixed grid otherwise.
 
+The shared OME-TIFF writer uses fiff with deflate compression and retains
+the stationary OME-TIFF or OME-Zarr input's spacing and spatial units. The
+pinned writer cannot store translation or direction, so this output requires
+a zero origin, identity direction and known spatial units. NIfTI and other
+ITK inputs do not retain explicit units in the current reader. A skipped TIFF
+is explained on standard error; NIfTI and the transform outputs still write.
+The writer does not resample, reorient or quantize the registration result.
+
 Two of the web app's downloads are missing:
 
-- The registered OME-Zarr image. The registered image is NIfTI only.
+- The registered OME-Zarr image. Use NIfTI or, for compatible grids, OME-TIFF.
 - The ITK HDF5 transform of a B-spline run. `@itk-wasm/transform-io` 1.1.0
   fails writing a BSpline transform; the web app no longer offers it either.
   Use the TransformParameters files or the OME-Zarr transform.

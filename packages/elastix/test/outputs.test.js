@@ -9,6 +9,7 @@ test("output names drop every format extension of the moving image", () => {
     stem: "t1_brain",
     nifti: "t1_brain_registered.nii.gz",
     omeZarr: "t1_brain_registered.ome.zarr.ozx",
+    omeTiff: "t1_brain_registered.ome.tif",
     transform: "t1_brain_transform.h5",
     transformOmeZarr: "t1_brain_transform.ome.zarr.ozx",
   });

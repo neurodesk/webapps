@@ -27,13 +27,14 @@ import {
   resetIo,
   writeImageFile,
   writeOmeZarrFile,
+  writeOmeTiffFile,
   writeTransformFile,
   writeTransformOmeZarrFile,
   writeTransformParameterFiles,
 } from "./io.js";
 import { assertCompatiblePair, classifySource } from "@neurodesk/elastix/sources";
 import { METHOD_LABELS, parameterFileNames, presetSettings, sortParameterFiles, stageNames } from "@neurodesk/elastix/parameter-maps";
-import { hdf5Writable, outputNames } from "@neurodesk/elastix/outputs";
+import { hdf5Writable, omeTiffIssue, outputNames } from "@neurodesk/elastix/outputs";
 import { createRegistrationRunner } from "./registration.js";
 import { loadSlotSource } from "./slot-loader.js";
 
@@ -258,6 +259,7 @@ async function clearOutput() {
   registeredValue = null;
   $("outputSection").open = false;
   $("resultList").replaceChildren();
+  $("omeTiffNote").hidden = true;
   if (viewersReady) await viewers.registered.removeAllVolumes();
 }
 
@@ -407,10 +409,11 @@ const registration = createRegistrationRunner({
   createWebWorker: () => createWebWorker(null),
 });
 
-function resultRows(names, parameterNames, hdf5) {
+function resultRows(names, parameterNames, hdf5, tiff) {
   return {
     registered: { description: "Registered NIfTI", file: names.nifti },
     omeZarr: { description: "Registered OME-Zarr", file: names.omeZarr, viewable: false },
+    ...(tiff ? { omeTiff: { description: "Registered OME-TIFF", file: names.omeTiff, viewable: false } } : {}),
     ...(hdf5 ? { transform: { description: "Transform (ITK HDF5)", file: names.transform, viewable: false } } : {}),
     transformOmeZarr: { description: "Transform (OME-Zarr)", file: names.transformOmeZarr, viewable: false },
     ...Object.fromEntries(parameterNames.map((name, index) => [`parameters${index}`, {
@@ -430,6 +433,7 @@ async function outputFile(stage, signal) {
   const { files, names } = output;
   if (stage === "registered") return files.nifti;
   if (stage === "omeZarr") return (files.omeZarr ??= await abortable(writeOmeZarrFile(output.result, names.omeZarr), signal));
+  if (stage === "omeTiff") return (files.omeTiff ??= await abortable(writeOmeTiffFile(output.result, output.spatialUnits, names.omeTiff, { signal }), signal));
   if (stage === "transform") return (files.transform ??= await abortable(writeTransformFile(output.transform, names.transform), signal));
   if (stage === "transformOmeZarr") {
     return (files.transformOmeZarr ??= await abortable(writeTransformOmeZarrFile(output, names.transformOmeZarr), signal));
@@ -477,9 +481,12 @@ async function register({
   await viewers.registered.loadVolumes([{ url: nifti, name: nifti.name }]);
   signal?.throwIfAborted();
   const parameterNames = parameterFileNames(names.stem, run.transformParameterObject.length);
-  const rows = resultRows(names, parameterNames, hdf5Writable(run.transform));
-  output = { ...run, fixed: fixed.image, moving: moving.image, names, rows, files: { nifti } };
+  const tiffIssue = omeTiffIssue(run.result, fixed.spatialUnits);
+  const rows = resultRows(names, parameterNames, hdf5Writable(run.transform), !tiffIssue);
+  output = { ...run, fixed: fixed.image, moving: moving.image, spatialUnits: fixed.spatialUnits, names, rows, files: { nifti } };
   results.render(rows);
+  $("omeTiffNote").textContent = tiffIssue ?? "";
+  $("omeTiffNote").hidden = !tiffIssue;
   $("outputSection").open = true;
   const elapsedMs = performance.now() - started;
   complete(`Registration complete in ${(elapsedMs / 1000).toFixed(1)} s`);

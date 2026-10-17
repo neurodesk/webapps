@@ -27,6 +27,7 @@ import ZipFileStore from "@zarrita/storage/zip";
 import { createSourceReader } from "@neurodesk/elastix/source-reader";
 import { voxelCount, VOXEL_BUDGET } from "@neurodesk/elastix/sources";
 import { outputStem, plainBytes, withTypedParameterArrays } from "@neurodesk/elastix/outputs";
+import { writeOmeTiff } from "@neurodesk/elastix/ome-tiff";
 import { registrationImage, transformParameterFiles } from "@neurodesk/elastix/pipeline";
 import { affineTransform, estimateTransform, namedTransformation, spatialDims } from "@neurodesk/elastix/transform-export";
 import { createIoWorkerQueue } from "./io-worker.js";
@@ -111,6 +112,10 @@ async function singleScale(ngffImage) {
 
 export async function writeOmeZarrFile(image, name) {
   return toFile(await toOmeZarrOzx(await singleScale(await itkImageToNgffImage(image))), name, "application/zip");
+}
+
+export async function writeOmeTiffFile(image, spatialUnits, name, { signal } = {}) {
+  return toFile(await writeOmeTiff(image, spatialUnits, { signal }), name, "image/tiff");
 }
 
 export async function writeTransformFile(transform, name) {

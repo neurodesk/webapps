@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/elastix",
-  "version": "0.3.20261017",
+  "version": "0.4.20261017",
   "description": "elastix rigid, affine and B-spline registration (ITK-Wasm) for browsers and the command line",
   "type": "module",
   "license": "Apache-2.0",
@@ -13,6 +13,7 @@
   "exports": {
     "./node": "./src/node.js",
     "./outputs": "./src/outputs.js",
+    "./ome-tiff": "./src/ome-tiff.js",
     "./parameter-maps": "./src/parameter-maps.js",
     "./pipeline": "./src/pipeline.js",
     "./source-reader": "./src/source-reader.js",

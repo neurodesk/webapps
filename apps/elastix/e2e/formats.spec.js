@@ -96,7 +96,7 @@ test("local OME-Zarr archives register and the result reopens as OME-Zarr", asyn
   await expect(page.locator("#movingInfo")).toContainText("moving_registered.ome.zarr.ozx · 128×128 float32");
 });
 
-test("local OME-TIFF files register", async ({ page }) => {
+test("local OME-TIFF files register and export calibrated float32 OME-TIFF", async ({ page }) => {
   test.setTimeout(300_000);
   await page.goto("/");
   await expect(page.locator("#movingInput")).toBeEnabled();
@@ -105,6 +105,23 @@ test("local OME-TIFF files register", async ({ page }) => {
   await page.locator("#stationaryInput").setInputFiles({ name: "fixed.ome.tif", mimeType: "image/tiff", buffer: pair.fixed.tiff });
   await expect(page.locator("#stationaryInfo")).toContainText("fixed.ome.tif");
   await registerRigidAndCheck(page);
+  await expect(page.locator("#omeTiffNote")).toBeHidden();
+  const tiff = await download(page, "Registered OME-TIFF");
+  const registered = await readVolume(await download(page, "Registered NIfTI"));
+  const { TiffStore } = await import("@fideus-labs/fiff");
+  const { fromOmeZarr } = await import("@fideus-labs/ngff-zarr");
+  const { ngffImageToItkImage } = await import("../../../packages/elastix/src/node-ngff.js");
+  const store = await TiffStore.fromArrayBuffer(tiff.buffer.slice(tiff.byteOffset, tiff.byteOffset + tiff.byteLength));
+  const { images: [level] } = await fromOmeZarr(store, { version: "0.5" });
+  expect(level.axesUnits).toEqual({ y: "micrometer", x: "micrometer" });
+  const output = await ngffImageToItkImage(level);
+  expect(output.size).toEqual([128, 128]);
+  expect(output.spacing).toEqual([SPACING, SPACING]);
+  expect(output.origin).toEqual([0, 0]);
+  expect(output.direction).toEqual(new Float64Array([1, 0, 0, 1]));
+  expect(Array.from(output.data)).toEqual(Array.from(registered.data));
+  await page.locator("#movingInput").setInputFiles({ name: "moving_registered.ome.tif", mimeType: "image/tiff", buffer: tiff });
+  await expect(page.locator("#movingInfo")).toContainText("moving_registered.ome.tif · 128×128 float32");
 });
 
 // fiff before 0.8.2 could not read SubIFD levels with geotiff 3.
@@ -233,6 +250,8 @@ test("an identity transform exports on a tiny OME-Zarr grid far from the origin"
   await expect(page.locator("#parameterInfo")).toContainText("EulerTransform");
   await page.locator("#runButton").click();
   await expect(page.locator("#statusText")).toContainText("Registration complete");
+  await expect(page.locator("#resultList")).not.toContainText("Registered OME-TIFF");
+  await expect(page.locator("#omeTiffNote")).toContainText("cannot preserve this origin");
   const { transformation } = await readTransformArchive(await download(page, "Transform (OME-Zarr)"));
   expect(transformation.type).toBe("affine");
   expect(transformation.affine.flat().every(Number.isFinite)).toBe(true);
