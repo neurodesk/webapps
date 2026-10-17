@@ -27,6 +27,41 @@ const gradedEchoTime = {
 };
 
 describe('buildSchemaFromAcquisitions', () => {
+  it('preserves a defined empty contains constraint at acquisition and series levels', () => {
+    const field = {
+      tag: '0008,103E',
+      name: 'SeriesDescription',
+      value: 'T1',
+      vr: 'LO',
+      level: 'acquisition' as const,
+      validationRule: { type: 'contains' as const, contains: '' },
+    };
+    const schema = buildSchemaFromAcquisitions([acquisition({
+      acquisitionFields: [field],
+      series: [{ name: 'Series 1', fields: [field] }],
+    })], {});
+    expect(JSON.parse(JSON.stringify(schema)).acquisitions.T2star).toEqual({
+      description: '',
+      detailed_description: '',
+      fields: [{ field: 'SeriesDescription', tag: '0008,103E', contains: '' }],
+      series: [{ name: 'Series 1', fields: [{ field: 'SeriesDescription', tag: '0008,103E', contains: '' }] }],
+    });
+  });
+
+  it('serializes arbitrary acquisition names without consuming object prototype keys', () => {
+    const names = ['__proto__', 'constructor', 'prototype', 'toString', 'Scan'];
+    const schema = buildSchemaFromAcquisitions(names.map(protocolName => acquisition({
+      protocolName,
+      acquisitionFields: [{ tag: '0008,0060', name: 'Modality', value: 'MR', vr: 'CS', level: 'acquisition' }],
+    })), {});
+    const exported = JSON.parse(JSON.stringify(schema));
+    expect(Object.keys(exported.acquisitions)).toEqual(names);
+    for (const name of names) {
+      expect(Object.hasOwn(exported.acquisitions, name)).toBe(true);
+      expect(exported.acquisitions[name].fields).toEqual([{ field: 'Modality', tag: '0008,0060', value: 'MR' }]);
+    }
+  });
+
   it('writes graded bands and custom messages at both levels', () => {
     const schema: any = buildSchemaFromAcquisitions([acquisition({
       acquisitionFields: [{ ...gradedEchoTime, vr: 'DS', level: 'acquisition' } as DicomField],
