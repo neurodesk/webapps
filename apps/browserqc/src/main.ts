@@ -226,7 +226,7 @@ function enqueue(fn: () => Promise<unknown>): void {
     .then(() => (isCleanedUp ? undefined : fn()))
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err)
-      setStatus(`Failed: ${msg}`)
+      if (!isCleanedUp) setStatus(`Failed: ${msg}`)
       console.error('task failed', err)
     })
 }
@@ -529,9 +529,9 @@ $('runButton').addEventListener('click', () => {
     progressManager.begin('Starting quality control…')
     try {
       await runSegment(file, { signal: controller.signal })
-      progressManager.end(statusMsg.textContent ?? 'Quality control complete')
+      if (manualRun === controller) progressManager.end(statusMsg.textContent ?? 'Quality control complete')
     } catch (error) {
-      progressManager.end(controller.signal.aborted ? 'Quality control cancelled.' : 'Quality control failed.', { success: false })
+      if (manualRun === controller) progressManager.end(controller.signal.aborted ? 'Quality control cancelled.' : 'Quality control failed.', { success: false })
       if (!controller.signal.aborted) throw error
     } finally { manualRun = null }
   })
@@ -612,6 +612,8 @@ $('rateSave').addEventListener('click', () => {
 function cleanup(): void {
   if (isCleanedUp) return
   isCleanedUp = true
+  const activeRun = manualRun
+  manualRun = null
   const failures: unknown[] = []
   const release = (step: () => void): void => {
     try {
@@ -622,7 +624,7 @@ function cleanup(): void {
   }
   release(() => exampleControl.destroy())
   release(() => listeners.abort())
-  release(() => manualRun?.abort())
+  release(() => activeRun?.abort())
   release(() => progressManager.reset())
   // niimath.dispose rejects in-flight work. Do not await the queue before stopping
   // its worker: a running WASM call cannot otherwise be interrupted.

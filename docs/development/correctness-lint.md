@@ -97,8 +97,13 @@ failures to the status bar and technical log and continues with the next task.
 Its teardown only calls synchronous APIs, including niimath `dispose` and
 NiiVue `destroy`, so it returns `void` to both `pagehide` and Vite HMR.
 Every release step runs even if another fails; teardown then reports any errors.
-The production browser tests cover teardown failure, a failed load followed by
-a valid load, and queued opacity and display changes. Its seven sources compile
+Cleanup revokes the active manual run's status ownership before aborting it.
+Late cancellation, completion and queue failures cannot replace a teardown error.
+The production regression starts a real segmentation worker and checks that its
+termination and run settlement preserve the teardown failure. Idle teardown and
+normal manual worker failure, retry and cancellation are also covered.
+Failed-load recovery and queued opacity/display changes are behavioral coverage;
+that test also passed before the opacity callback change. Its seven sources compile
 with the pinned TS 5.9.3. The 2026-10-17 audit confirms Dicompare still has
 38 floating and 47 misused promise findings in 30 files; it remains a separate
 upstream adaptation stage.
