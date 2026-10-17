@@ -2,6 +2,10 @@
 
 ## 0.3.20261017
 
+### Patch Changes
+
+- b0797ba: Fix `elastix-register --parameter-file` by passing the file paths in the ITK reader's `parameterFiles` options object. Custom parameter files and chains now load and run instead of failing before registration.
+
 ## 0.3.20261016
 
 ## 0.3.20261015

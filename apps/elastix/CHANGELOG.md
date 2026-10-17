@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [b0797ba]
+  - @neurodesk/elastix@0.3.20261017
 - Updated dependencies [b547d52]
   - @neurodesk/webapp-components@0.14.3
   - @neurodesk/elastix@0.3.20261017
