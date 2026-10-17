@@ -2,6 +2,12 @@
 
 ## 0.15.20261017
 
+### Patch Changes
+
+- Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.
+
+  Retain the command line's schema-generation Python after upstream moved web schema exports to JavaScript. Its generated schema and reference outputs are unchanged.
+
 ## 0.15.20261016
 
 ## 0.15.20261015

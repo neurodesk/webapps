@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.
+
+  Retain the command line's schema-generation Python after upstream moved web schema exports to JavaScript. Its generated schema and reference outputs are unchanged.
 - Merge upstream astewartau/dicompare-web 7c56841..d3d0879:
 
   - Describe the third-party requests in Privacy
@@ -23,6 +26,7 @@
   - fix: make no third-party requests from the desktop app
   - Merge pull request #31 from astewartau/fix/desktop-no-external-requests
   - Merge pull request #24 from stebo85/fix/privacy-third-party
+
 - Updated dependencies [b547d52]
   - @neurodesk/webapp-components@0.14.3
 

@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React, { useRef, useState } from 'react';
 import { Waypoints, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { Acquisition } from '../../types';
@@ -47,7 +48,7 @@ const GradientDropZone: React.FC<GradientDropZoneProps> = ({
     }
   };
 
-  const dropZone = useDropZone({ onDrop: handleFiles, disabled: disabled || busy });
+  const dropZone = useDropZone({ onDrop: asyncCallback('Files failed', handleFiles), disabled: disabled || busy });
 
   // Derived-descriptor summary (persistent indicator).
   const shells = getFieldValue(acquisition, 'NumberOfDiffusionShells');
@@ -79,7 +80,7 @@ const GradientDropZone: React.FC<GradientDropZoneProps> = ({
         accept=".dvs,.bvec,.bval"
         multiple
         className="hidden"
-        onChange={(e) => { if (e.target.files) handleFiles(e.target.files); e.target.value = ''; }}
+        onChange={(e) => { if (e.target.files) handleFiles(e.target.files).catch(error => logError('Files failed', error)); e.target.value = ''; }}
       />
 
       {busy ? (

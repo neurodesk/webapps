@@ -1,3 +1,4 @@
+import { logError } from '../../utils/technicalLog';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Edit2, Trash2, ChevronDown, ChevronUp, Code, X, CheckCircle, XCircle, AlertTriangle, HelpCircle, Loader, FileDown, FileText, Eye, EyeOff, ImageIcon } from 'lucide-react';
 import { Acquisition, DicomField, SelectedValidationFunction } from '../../types';
@@ -258,7 +259,7 @@ const AcquisitionTable: React.FC<AcquisitionTableProps> = ({
   const hasSchemaForValidation = schemaId || schemaAcquisition;
   useEffect(() => {
     if (isComplianceMode && hasSchemaForValidation && realAcquisition && !isDataProcessing) {
-      performValidationRuleCompliance();
+      performValidationRuleCompliance().catch(error => logError('Validation rule compliance failed', error));
     }
   }, [isComplianceMode, schemaId, schemaAcquisition, realAcquisition, schemaAcquisitionId, validationFunctions.length, isDataProcessing]);
 

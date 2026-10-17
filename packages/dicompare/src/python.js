@@ -74,15 +74,3 @@ results = validate_acquisition_direct(acq_data, schema_str, acq_index)
 json.dumps(results, default=str)
   `;
 export const validateAcquisitionMethod = 'runPython';
-
-export const generateSchemaCode = `
-import json
-from dicompare.interface import build_schema_from_ui_acquisitions
-
-acqs = json.loads(_ui_acquisitions_json)
-meta = json.loads(_schema_metadata_json)
-
-schema = build_schema_from_ui_acquisitions(acqs, meta)
-json.dumps(schema, default=str)
-  `;
-export const generateSchemaMethod = 'runPython';

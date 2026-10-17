@@ -1,3 +1,5 @@
+import { asyncCallback } from '../../utils/asyncCallback';
+import { logError } from '../../utils/technicalLog';
 import React, { useState, useEffect } from 'react';
 import { X, Download, Loader2, Play, FileDown, Table, Code, AlertTriangle, CheckCircle } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
@@ -70,7 +72,7 @@ const TestDicomGeneratorModal: React.FC<TestDicomGeneratorModalProps> = ({
   // Initialize when modal opens
   useEffect(() => {
     if (isOpen && acquisition) {
-      analyzeSchemaForGeneration();
+      analyzeSchemaForGeneration().catch(error => logError('Analyze schema for generation failed', error));
     }
   }, [isOpen, acquisition]);
 
@@ -934,7 +936,7 @@ output
 
                   <div className="flex items-center justify-between">
                     <button
-                      onClick={executeCodeTemplate}
+                      onClick={asyncCallback('Execute code template failed', executeCodeTemplate)}
                       disabled={codeExecutionResult?.loading}
                       className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >
@@ -1001,7 +1003,7 @@ output
                 Cancel
               </button>
               <button
-                onClick={generateDicoms}
+                onClick={asyncCallback('Generate DICOMs failed', generateDicoms)}
                 disabled={isGenerating || testData.length === 0}
                 className="px-4 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center space-x-2"
               >

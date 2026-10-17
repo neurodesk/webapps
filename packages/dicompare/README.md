@@ -26,8 +26,10 @@ unless `--output` is given; progress and a JSON summary go to standard error.
 
 - `src/python.js` is generated from `apps/dicompare/src/workers/pyodide.worker.ts`
   by `scripts/sync-python-calls.mjs`. It holds the worker's install, analysis,
-  validation and schema code, unchanged. The test fails when the worker changes
-  and the file was not regenerated.
+  version and validation code, unchanged. The test fails when the worker changes
+  and the file was not regenerated. The command line's schema builder stays in
+  `src/node.js` with the same Python text and reference outputs; upstream now
+  builds edited web schemas in JavaScript to preserve graded constraints.
 - `python.manifest.json` is generated from `registry/offline-assets.sources.json`
   and its lock by `scripts/sync-python-manifest.mjs`: the Pyodide packages and
   wheels the installed suite stages for dicompare, in the same order. The test

@@ -14,7 +14,6 @@ const CALLS = [
   { name: 'versionCode', after: 'async function initializePyodide(', open: 'pyodide.runPython(`', method: 'runPython', parameters: ['DICOMPARE_VERSION'] },
   { name: 'analyzeFilesCode', after: 'async function handleAnalyzeFiles(', open: 'pyodide.runPythonAsync(`', method: 'runPythonAsync', parameters: [] },
   { name: 'validateAcquisitionCode', after: 'async function handleValidateAcquisition(', open: 'pyodide.runPython(`', method: 'runPython', parameters: [] },
-  { name: 'generateSchemaCode', after: 'async function handleGenerateSchema(', open: 'pyodide.runPython(`', method: 'runPython', parameters: [] },
 ];
 
 function template(source, { name, after, open, parameters }) {

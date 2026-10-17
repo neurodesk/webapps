@@ -1,3 +1,4 @@
+import { logError } from '../../../utils/technicalLog';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Loader2, Zap, FlaskConical, FileText, GripVertical, ArrowRight, Check, X, Waypoints } from 'lucide-react';
 import {
@@ -407,7 +408,7 @@ const MatchingPanel: React.FC<MatchingPanelProps> = ({
       setHasInitialized(true);
 
       if (uploadedAcquisitions.length > 0 && availableSlots.length > 0) {
-        computeScores();
+        computeScores().catch(error => logError('Compute scores failed', error));
       }
     }
   }, [hasInitialized, initialAssignments, uploadedAcquisitions.length, availableSlots.length]);

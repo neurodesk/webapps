@@ -1,3 +1,5 @@
+import { asyncCallback } from '../../utils/asyncCallback';
+import { logError } from '../../utils/technicalLog';
 import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { searchDicomFields, type DicomFieldDefinition } from '../../services/dicomFieldService';
 
@@ -31,7 +33,7 @@ const DicomFieldSelector = ({
 
   // Debounced search effect
   useEffect(() => {
-    const delayedSearch = setTimeout(async () => {
+    const delayedSearch = setTimeout(asyncCallback('Dicom field selector failed', async () => {
       if (searchTerm.trim().length > 0) {
         setIsLoading(true);
         try {
@@ -49,7 +51,7 @@ const DicomFieldSelector = ({
         setSuggestions([]);
         setIsDropdownOpen(false);
       }
-    }, 300);
+    }), 300);
 
     return () => clearTimeout(delayedSearch);
   }, [searchTerm]);
@@ -281,7 +283,7 @@ const SelectedFieldTag = ({ fieldTag, onRemove }: { fieldTag: string; onRemove: 
         // Keep the tag as display name if lookup fails
       }
     };
-    loadFieldName();
+    loadFieldName().catch(error => logError('Load field name failed', error));
   }, [fieldTag]);
 
   return (

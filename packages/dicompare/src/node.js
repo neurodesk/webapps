@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import manifest from '../python.manifest.json' with { type: 'json' };
 import {
-  analyzeFilesCode, analyzeFilesMethod, generateSchemaCode, generateSchemaMethod, installCode, installMethod,
+  analyzeFilesCode, analyzeFilesMethod, installCode, installMethod,
   validateAcquisitionCode, validateAcquisitionMethod, versionCode, versionMethod,
 } from './python.js';
 
@@ -17,6 +17,18 @@ const WHEEL_BASE = 'emfs:/neurodesk/wheels/';
 const DICOMPARE_VERSION = /^dicompare-([^-]+)-/.exec(manifest.wheels.at(-1).name)[1];
 const PYODIDE_VERSION = manifest.pyodide;
 const ASSETS = [...manifest.packageFiles, ...manifest.wheels];
+
+const generateSchemaCode = `
+import json
+from dicompare.interface import build_schema_from_ui_acquisitions
+
+acqs = json.loads(_ui_acquisitions_json)
+meta = json.loads(_schema_metadata_json)
+
+schema = build_schema_from_ui_acquisitions(acqs, meta)
+json.dumps(schema, default=str)
+  `;
+const generateSchemaMethod = 'runPython';
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const offlineByDefault = () => process.env.NEURODESK_OFFLINE === '1';

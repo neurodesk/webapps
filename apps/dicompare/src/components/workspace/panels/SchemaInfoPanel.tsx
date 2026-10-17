@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../../utils/asyncCallback';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import MarkdownToolbar from '../../common/MarkdownToolbar';
 import { markdownComponents } from '../../../utils/markdownRenderers';
@@ -14,7 +15,7 @@ import remarkGfm from 'remark-gfm';
 import CodeMirror from '@uiw/react-codemirror';
 import { json } from '@codemirror/lang-json';
 import WelcomeTab from './schemaInfo/WelcomeTab';
-import { beginActivity } from '../../../utils/technicalLog';
+import { beginActivity, logError } from '../../../utils/technicalLog';
 
 export type SchemaInfoTab = 'welcome' | 'metadata' | 'preview';
 
@@ -139,14 +140,14 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
   // Auto-generate preview when on preview tab with no preview
   useEffect(() => {
     if (schemaInfoTab === 'preview' && !previewJson && !isGeneratingPreview) {
-      generatePreview();
+      generatePreview().catch(error => logError('Generate preview failed', error));
     }
   }, [schemaInfoTab, previewJson, isGeneratingPreview, generatePreview]);
 
   // Handle tab switch to preview
   const handlePreviewTabClick = () => {
     setSchemaInfoTab('preview');
-    generatePreview();
+    generatePreview().catch(error => logError('Generate preview failed', error));
   };
 
   // Download JSON
@@ -432,7 +433,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
             <div className="flex items-center gap-2">
               {schemaInfoTab === 'preview' && (
                 <button
-                  onClick={handleCopyJson}
+                  onClick={asyncCallback('Copy JSON failed', handleCopyJson)}
                   disabled={isGeneratingPreview || !previewJson}
                   className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
                 >
@@ -450,7 +451,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 </button>
               )}
               <button
-                onClick={handleDownloadJson}
+                onClick={asyncCallback('Download JSON failed', handleDownloadJson)}
                 disabled={isGeneratingPreview}
                 className="flex items-center px-3 py-2 text-sm border border-border-secondary rounded-lg hover:bg-surface-secondary disabled:opacity-50 disabled:cursor-not-allowed text-content-secondary"
               >
@@ -458,7 +459,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 Download JSON
               </button>
               <button
-                onClick={handleSaveToLibrary}
+                onClick={asyncCallback('Save to library failed', handleSaveToLibrary)}
                 disabled={isGeneratingPreview || isSavingToLibrary}
                 className="flex items-center px-3 py-2 text-sm bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -475,7 +476,7 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                 )}
               </button>
               <button
-                onClick={handlePublish}
+                onClick={asyncCallback('Publish failed', handlePublish)}
                 disabled={isGeneratingPreview || isSavingToLibrary}
                 className="flex items-center px-3 py-2 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Submit this schema for inclusion in the public dicompare schema library"
@@ -523,14 +524,14 @@ const SchemaInfoPanel: React.FC<SchemaInfoPanelProps> = ({
                   </p>
                   <div className="flex gap-2 mt-3">
                     <button
-                      onClick={handleConfirmOverwrite}
+                      onClick={asyncCallback('Confirm overwrite failed', handleConfirmOverwrite)}
                       disabled={isSavingToLibrary}
                       className="px-3 py-1.5 text-sm font-medium rounded-md bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
                     >
                       {isSavingToLibrary ? 'Saving...' : 'Overwrite'}
                     </button>
                     <button
-                      onClick={handleSaveAsNew}
+                      onClick={asyncCallback('Save as new failed', handleSaveAsNew)}
                       disabled={isSavingToLibrary}
                       className="px-3 py-1.5 text-sm font-medium rounded-md border border-amber-600 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 disabled:opacity-50"
                     >
@@ -903,7 +904,7 @@ Any additional technical details or vendor-specific information."
                 Cancel
               </button>
               <button
-                onClick={handleConfirmPublish}
+                onClick={asyncCallback('Confirm publish failed', handleConfirmPublish)}
                 className="flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 shadow-sm transition-colors"
               >
                 Continue to GitHub

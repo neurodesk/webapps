@@ -93,6 +93,10 @@ Run `pnpm quality:unused` for current counts after dependency changes.
 
 ## Triage records
 
+- [2026-10-17](unused-code-triage-2026-10-17.md) records the dicompare upstream
+  sync, the fresh 29-candidate report, retained runtime contracts and the eight
+  upstream-owned follow-up findings.
+
 - [2026-10-14](unused-code-triage-2026-10-14.md) classifies every candidate in a
   fresh report. It removes 29 dead exports and one dead file, and lists the
   runtime entries, upstream-owned findings, redundant dependency declarations and

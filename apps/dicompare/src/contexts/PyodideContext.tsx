@@ -105,7 +105,7 @@ export const PyodideProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     // Start background initialization
-    ensureReady();
+    ensureReady().catch(error => logError('Ensure ready failed', error));
   }, [ensureReady]);
 
   return (

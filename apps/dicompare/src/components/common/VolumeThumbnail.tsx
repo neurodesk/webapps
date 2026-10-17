@@ -1,3 +1,4 @@
+import { logError } from '../../utils/technicalLog';
 import React, { useEffect, useState } from 'react';
 import { Brain, Loader2 } from 'lucide-react';
 import { getVolumeThumbnail } from '../../utils/niivueThumbnail';
@@ -24,6 +25,11 @@ const VolumeThumbnail: React.FC<VolumeThumbnailProps> = ({ url, className = '' }
       if (!cancelled) {
         setDataUrl(result);
         setLoading(false);
+      }
+    }).catch(error => {
+      if (!cancelled) {
+        setLoading(false);
+        logError('Volume preview failed', error);
       }
     });
 

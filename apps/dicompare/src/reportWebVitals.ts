@@ -1,3 +1,4 @@
+import { logError } from './utils/technicalLog';
 import { ReportHandler } from 'web-vitals';
 
 const reportWebVitals = (onPerfEntry?: ReportHandler) => {
@@ -8,7 +9,7 @@ const reportWebVitals = (onPerfEntry?: ReportHandler) => {
       getFCP(onPerfEntry);
       getLCP(onPerfEntry);
       getTTFB(onPerfEntry);
-    });
+    }).catch(error => logError('Import failed', error));
   }
 };
 

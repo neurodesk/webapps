@@ -5,6 +5,8 @@
     "package-lock.json"
   ],
   "integration": [
+    "Keep both typed promise rules for src, the asyncCallback rejection boundary for synchronous React/timer callbacks, awaited session loading, and thumbnail queue failure cleanup and behavior tests.",
+    "The command line retains its schema-generation Python in packages/dicompare/src/node.js and its reference outputs; the synced worker no longer generates schemas.",
     "Keep the offline Pyodide path in public/embed/dicompare-worker.js; the standalone build serves this copy.",
     "Keep the shared Neurodesk shell in place of upstream's landing page and Pyodide notification.",
     "When DICOMPARE_PACKAGE changes, replace the dicompare wheel, and any wheel its Requires-Dist now pins (pydicom), in registry/offline-assets.sources.json and registry/offline-assets.lock.json, then verify with `node scripts/desktop/assets.mjs`.",

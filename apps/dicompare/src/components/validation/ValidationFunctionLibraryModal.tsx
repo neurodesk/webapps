@@ -1,3 +1,4 @@
+import { logError } from '../../utils/technicalLog';
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Plus, Search, ChevronDown, SlidersHorizontal } from 'lucide-react';
 import Modal from '../common/Modal';
@@ -107,7 +108,7 @@ const ValidationFunctionLibraryModal: React.FC<ValidationFunctionLibraryModalPro
           setFunctionsLoading(false);
         }
       };
-      loadFunctions();
+      loadFunctions().catch(error => logError('Load functions failed', error));
     }
   }, [isOpen, validationFunctions.length]);
 

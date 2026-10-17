@@ -53,3 +53,13 @@ test('protocol comparison uses the explicit schema acquisition and reports valid
   expect(result.comparison[0].results).toHaveLength(2);
   expect(result.comparison[0].results, JSON.stringify(result.comparison[0].results)).toEqual(expect.arrayContaining([expect.objectContaining({ status: 'pass' })]));
 });
+
+test('an analysis engine startup rejection reaches the footer and log without an unhandled rejection', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.context().route('**/dicompare-0.11.1-py3-none-any.whl', route => route.fulfill({ status: 200, body: 'invalid wheel' }));
+  await page.goto('./');
+  await expect(page.locator('#statusText')).toContainText('Analysis engine failed to start', { timeout: 60000 });
+  await expect(page.locator('#technicalLogOutput')).toContainText('Analysis engine failed to start');
+  expect(pageErrors).toEqual([]);
+});

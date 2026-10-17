@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React, { useState, useEffect, useRef, KeyboardEvent } from 'react';
 import { searchDicomFields, type DicomFieldDefinition } from '../../services/dicomFieldService';
 
@@ -30,7 +31,7 @@ const DicomFieldAutocompleteInput = ({
   useEffect(() => {
     if (!isFocused) return;
 
-    const delayedSearch = setTimeout(async () => {
+    const delayedSearch = setTimeout(asyncCallback('Dicom field autocomplete input failed', async () => {
       if (value.trim().length > 0) {
         setIsLoading(true);
         try {
@@ -47,7 +48,7 @@ const DicomFieldAutocompleteInput = ({
         setSuggestions([]);
         setIsDropdownOpen(false);
       }
-    }, 300);
+    }), 300);
 
     return () => clearTimeout(delayedSearch);
   }, [value, isFocused]);

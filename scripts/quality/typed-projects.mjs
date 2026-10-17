@@ -14,6 +14,7 @@ export const typedPromiseProjects = [
     sources: ['test/agentic/', 'test-utils/agentic-browser.ts', 'e2e.config.ts'],
     tsconfig: 'tsconfig.agentic.json',
   },
+  { name: 'dicompare', sources: ['apps/dicompare/src/'], tsconfig: 'apps/dicompare/tsconfig.json' },
 ];
 
 export const promiseRules = ['@typescript-eslint/no-floating-promises', '@typescript-eslint/no-misused-promises'];

@@ -4,7 +4,7 @@ import { Acquisition } from '../types';
 import { schemaCacheManager } from '../services/SchemaCacheManager';
 import { dicompareWorkerAPI } from '../services/DicompareWorkerAPI';
 import { convertSchemaToAcquisitions } from '../utils/schemaToAcquisition';
-import { log } from '../utils/technicalLog';
+import { log, logError } from '../utils/technicalLog';
 
 interface EditingSchema {
   id: string;
@@ -470,7 +470,7 @@ export const SchemaProvider: React.FC<SchemaProviderProps> = ({ children }) => {
       }
     };
 
-    initializeContext();
+    initializeContext().catch(error => logError('Initialize context failed', error));
   }, []);
 
   const value: SchemaContextValue = {

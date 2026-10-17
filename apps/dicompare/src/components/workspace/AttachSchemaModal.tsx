@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Loader2, Zap, ArrowUpDown } from 'lucide-react';
 import Modal from '../common/Modal';
@@ -199,7 +200,7 @@ const AttachSchemaModal: React.FC<AttachSchemaModalProps> = ({
               )}
               <button
                 data-tutorial="find-best-matches-button"
-                onClick={computeScores}
+                onClick={asyncCallback('Compute scores failed', computeScores)}
                 disabled={isComputing}
                 className="px-3 py-1 text-xs bg-brand-600 text-white rounded hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
               >

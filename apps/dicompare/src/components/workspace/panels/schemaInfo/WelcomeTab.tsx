@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../../../utils/asyncCallback';
 import React, { useState } from 'react';
 import { ChevronDown, CheckCircle, PlusCircle, FileSearch, Download, Play } from 'lucide-react';
 import { useTutorial, TutorialId } from '../../../../contexts/TutorialContext';
@@ -113,9 +114,9 @@ const WelcomeTab: React.FC = () => {
         isLoading={isLoadingSessions}
         activeSessionId={activeSessionId}
         onLoadSession={loadSession}
-        onDeleteSession={deleteSession}
-        onCreateNew={handleCreateNew}
-        onClearAll={handleClearAllSessions}
+        onDeleteSession={asyncCallback('Delete session failed', deleteSession)}
+        onCreateNew={asyncCallback('Create new failed', handleCreateNew)}
+        onClearAll={asyncCallback('Clear all sessions failed', handleClearAllSessions)}
       />
     </div>
   );

@@ -1,3 +1,4 @@
+import { asyncCallback } from '../utils/asyncCallback';
 import React, { useState, useEffect } from 'react';
 import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import {
@@ -188,7 +189,7 @@ const SchemaViewerPage: React.FC = () => {
       }
     };
 
-    loadSchema();
+    loadSchema().catch(error => logError('Load schema failed', error));
     return () => { cancelled = true; };
   }, [id, externalUrl, isCatalogMode, getUniversalSchemaContent]);
 
@@ -199,7 +200,7 @@ const SchemaViewerPage: React.FC = () => {
     if (id) {
       getSchemaDoi(id).then((entry) => {
         if (!cancelled) setDoi(entry);
-      });
+      }).catch(error => logError('Get schema DOI failed', error));
     }
     return () => { cancelled = true; };
   }, [id]);
@@ -255,7 +256,7 @@ const SchemaViewerPage: React.FC = () => {
       acquisitionNames,
     };
     sessionStorage.setItem('pendingSchemaImport', JSON.stringify(payload));
-    navigate('/');
+    Promise.resolve(navigate('/')).catch(error => logError('Navigate failed', error));
   };
 
   const handleDownload = () => {
@@ -421,8 +422,8 @@ const SchemaViewerPage: React.FC = () => {
                 uploadedSchemas={schemaService.uploadedSchemas}
                 selectionMode="acquisition"
                 expandable={true}
-                onAcquisitionSelect={(selectedId, acqIndex) => navigate(`/schema/${selectedId}?acq=${acqIndex}`)}
-                onOpenSchema={(selectedId) => navigate(`/schema/${selectedId}`)}
+                onAcquisitionSelect={asyncCallback('Acquisition select failed', (selectedId, acqIndex) => navigate(`/schema/${selectedId}?acq=${acqIndex}`))}
+                onOpenSchema={asyncCallback('Open schema failed', (selectedId) => navigate(`/schema/${selectedId}`))}
                 onSchemaUpload={async (file) => (await uploadSchema(file)).id}
                 getSchemaContent={schemaService.getSchemaContent}
                 maxHeight="calc(100vh - 150px)"
@@ -512,7 +513,7 @@ const SchemaViewerPage: React.FC = () => {
                   <div className="flex flex-wrap gap-2">
                     {doi && doi.concept_doi && (
                       <button
-                        onClick={handleCopyDoi}
+                        onClick={asyncCallback('Copy DOI failed', handleCopyDoi)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-border text-content-secondary hover:text-content-primary hover:bg-surface-secondary transition-colors"
                         title="Copy the schema's DOI (https://doi.org/…)"
                       >
@@ -785,7 +786,7 @@ const SchemaViewerPage: React.FC = () => {
       <PrintOptionsModal
         isOpen={showPrintOptions}
         onClose={() => setShowPrintOptions(false)}
-        onPrint={handlePrint}
+        onPrint={asyncCallback('Print failed', handlePrint)}
         isPrinting={pdfExporting}
         printLabel={isElectron() ? 'Export PDF' : 'Print'}
         availableSections={(() => {

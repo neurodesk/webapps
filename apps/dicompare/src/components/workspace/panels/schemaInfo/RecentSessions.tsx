@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../../../utils/asyncCallback';
 import React, { useState } from 'react';
 import { Clock, Trash2, HardDrive, FolderOpen, Loader, Plus } from 'lucide-react';
 import { StoredSessionMetadata } from '../../../../services/SessionStorageManager';
@@ -6,7 +7,7 @@ interface RecentSessionsProps {
   sessions: StoredSessionMetadata[];
   isLoading: boolean;
   activeSessionId: string | null;
-  onLoadSession: (sessionId: string) => void;
+  onLoadSession: (sessionId: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => void;
   onCreateNew: () => void;
   onClearAll: () => void;
@@ -144,7 +145,7 @@ const RecentSessions: React.FC<RecentSessionsProps> = ({
               {!isActive && (
                 <div className="mt-2 ml-6">
                   <button
-                    onClick={() => handleLoad(session.id)}
+                    onClick={asyncCallback('Session load failed', () => handleLoad(session.id))}
                     disabled={isLoadingThis}
                     className="text-xs font-medium px-3 py-1 rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 transition-colors inline-flex items-center gap-1.5"
                   >

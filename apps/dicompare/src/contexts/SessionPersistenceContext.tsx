@@ -1,3 +1,4 @@
+import { logError } from '../utils/technicalLog';
 import React, { createContext, useContext, useCallback, useEffect, useState, useRef, ReactNode } from 'react';
 import { useItemManagement } from './ItemManagementContext';
 import { useSchemaMetadata } from './SchemaMetadataContext';
@@ -57,7 +58,7 @@ export const SessionPersistenceProvider: React.FC<SessionPersistenceProviderProp
 
   // Load session list on mount
   useEffect(() => {
-    refreshSessionList();
+    refreshSessionList().catch(error => logError('Refresh session list failed', error));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -142,7 +143,7 @@ export const SessionPersistenceProvider: React.FC<SessionPersistenceProviderProp
   const scheduleSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      performSave();
+      performSave().catch(error => logError('Save failed', error));
     }, 1000);
   }, [performSave]);
 
@@ -236,7 +237,7 @@ export const SessionPersistenceProvider: React.FC<SessionPersistenceProviderProp
     }
     // Flush a final save before ending
     if (isDirtyRef.current && activeSessionIdRef.current) {
-      performSave();
+      performSave().catch(error => logError('Save failed', error));
     }
     activeSessionIdRef.current = null;
     setActiveSessionId(null);

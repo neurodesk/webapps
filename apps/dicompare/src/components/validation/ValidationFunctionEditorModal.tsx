@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Play, Loader2 } from 'lucide-react';
 import CodeMirror from '@uiw/react-codemirror';
@@ -1066,7 +1067,7 @@ json.dumps(_out)
                       />
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => runTestCase(testCase, editedFunc.customImplementation || editedFunc.implementation, editedFunc.customFields || editedFunc.fields, editedFunc.enabledSystemFields || [])}
+                          onClick={asyncCallback('Run test case failed', () => runTestCase(testCase, editedFunc.customImplementation || editedFunc.implementation, editedFunc.customFields || editedFunc.fields, editedFunc.enabledSystemFields || []))}
                           className="p-1 text-purple-500 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
                           title="Run this test (loads Python runtime on first use)"
                         >
@@ -1340,7 +1341,7 @@ json.dumps(_out)
 
                           <div className="flex items-center justify-between">
                             <button
-                              onClick={() => executeTestDataCode(testCase.id, testDataCode[testCase.id] || '')}
+                              onClick={asyncCallback('Execute test data code failed', () => executeTestDataCode(testCase.id, testDataCode[testCase.id] || ''))}
                               disabled={codeExecutionResults[testCase.id]?.loading}
                               className="px-3 py-1 text-xs bg-green-500/10 text-green-600 dark:text-green-400 rounded hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                             >

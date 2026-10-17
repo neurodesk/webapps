@@ -1,3 +1,5 @@
+import { asyncCallback } from '../../utils/asyncCallback';
+import { logError } from '../../utils/technicalLog';
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, AlertTriangle, Camera, Download, RotateCcw } from 'lucide-react';
 import { Niivue, SLICE_TYPE, MULTIPLANAR_TYPE, SHOW_RENDER, DRAG_MODE } from '@niivue/niivue';
@@ -274,7 +276,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
       }
     };
 
-    initViewer();
+    initViewer().catch(error => logError('Init viewer failed', error));
 
     return () => {
       cancelled = true;
@@ -289,7 +291,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     // Skip if we already applied this exact index
     if (externalVolumeIndex === lastAppliedExternalIndex.current) return;
     lastAppliedExternalIndex.current = externalVolumeIndex;
-    handleVolumeChangeInternal(externalVolumeIndex);
+    handleVolumeChangeInternal(externalVolumeIndex).catch(error => logError('Volume change internal failed', error));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalVolumeIndex, volumes, viewerReady]);
 
@@ -380,7 +382,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     const nv = nvRef.current;
     if (!nv) return;
     const volName = nv.volumes[0]?.name?.replace(/\.(nii|nii\.gz)$/i, '') || 'dicom';
-    nv.saveScene(`${volName}_screenshot.png`);
+    nv.saveScene(`${volName}_screenshot.png`).catch(error => logError('Nv failed', error));
   };
 
   const handleDownloadNifti = () => {
@@ -388,7 +390,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
     if (!nv || nv.volumes.length === 0) return;
     const vol = nv.volumes[0];
     const baseName = (vol.name || 'volume').replace(/\.(nii|nii\.gz)$/i, '');
-    nv.saveImage({ filename: `${baseName}.nii`, isSaveDrawing: false, volumeByIndex: 0 });
+    nv.saveImage({ filename: `${baseName}.nii`, isSaveDrawing: false, volumeByIndex: 0 }).catch(error => logError('Nv failed', error));
   };
 
   const showToolbar = !isLoading && !error;
@@ -404,7 +406,7 @@ const NiivueViewer: React.FC<NiivueViewerProps> = ({
               <label className="text-xs text-content-secondary">Volume:</label>
               <select
                 value={selectedVolumeIndex}
-                onChange={(e) => handleVolumeChange(parseInt(e.target.value))}
+                onChange={asyncCallback('Change volume failed', (e) => handleVolumeChange(parseInt(e.target.value)))}
                 className="text-xs border border-border-secondary rounded px-1.5 py-1 bg-surface-primary text-content-primary"
               >
                 {volumes.map((vol, idx) => (

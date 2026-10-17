@@ -1,3 +1,4 @@
+import { asyncCallback } from '../utils/asyncCallback';
 import { useState, useCallback } from 'react';
 import { processDroppedFiles, filesToFileList } from '../utils/workspaceHelpers';
 
@@ -59,7 +60,7 @@ export function useDropZone({ onDrop, disabled = false }: UseDropZoneOptions): U
     handlers: {
       onDragOver: handleDragOver,
       onDragLeave: handleDragLeave,
-      onDrop: handleDrop,
+      onDrop: asyncCallback('Drop failed', handleDrop),
     },
   };
 }

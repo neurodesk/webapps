@@ -1,3 +1,4 @@
+import { logError } from '../utils/technicalLog';
 import { useEffect, useRef } from 'react';
 import { useWorkspace } from '../contexts/WorkspaceContext';
 import { AcquisitionSelection } from '../types';
@@ -78,6 +79,6 @@ export function useSchemaImportFromViewer() {
       }
     };
 
-    processImport();
+    processImport().catch(error => logError('Import failed', error));
   }, [addFromSchema, selectItem]);
 }

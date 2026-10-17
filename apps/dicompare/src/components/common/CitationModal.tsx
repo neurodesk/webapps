@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React from 'react';
 import { Copy, Check } from 'lucide-react';
 import Modal from './Modal';
@@ -46,7 +47,7 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose, schema }
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Citation</span>
               <button
-                onClick={handleCopy}
+                onClick={asyncCallback('Copy failed', handleCopy)}
                 className="inline-flex items-center gap-1 px-2 py-1 text-xs text-content-secondary hover:text-content-primary hover:bg-surface-secondary rounded transition-colors"
               >
                 {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
@@ -64,7 +65,7 @@ const CitationModal: React.FC<CitationModalProps> = ({ isOpen, onClose, schema }
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-medium text-content-tertiary uppercase tracking-wider">Cite this schema</span>
                 <button
-                  onClick={() => copyWithFeedback(schemaCitation, setCopiedSchema)}
+                  onClick={asyncCallback('Copy with feedback failed', () => copyWithFeedback(schemaCitation, setCopiedSchema))}
                   className="inline-flex items-center gap-1 px-2 py-1 text-xs text-content-secondary hover:text-content-primary hover:bg-surface-secondary rounded transition-colors"
                 >
                   {copiedSchema ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}

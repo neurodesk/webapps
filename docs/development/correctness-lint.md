@@ -86,7 +86,7 @@ entire catalog is a separate migration.
 | BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Deferred; upstream-synced, record adaptations in `upstream.json` |
 | Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 21 | `apps/dwi2trx/tsconfig.json` compiles | 10 floating, all in `main.ts` | Typed; findings fixed |
-| Dicompare (`apps/dicompare/src`) | 142 | `apps/dicompare/tsconfig.json` compiles | 85: 38 floating, 47 misused, in 30 files | Deferred; upstream-owned, record adaptations in `upstream.json` |
+| Dicompare (`apps/dicompare/src`) | 138 | `apps/dicompare/tsconfig.json` compiles | 86 after upstream sync: 34 floating, 52 misused | Typed; findings fixed on 2026-10-17, adaptations in `upstream.json` |
 
 The root agentic tests had no findings: their promises are already awaited.
 Their project now includes `test/agentic/**/*.ts` so a new file in a
@@ -117,6 +117,20 @@ logs a run superseded by a newer input without changing that input's status.
 status error, one log entry and no page errors. That test also exposed a
 startup race: the view queue was declared after the viewer's startup `await`,
 so files chosen during startup failed with a temporal dead zone error.
+
+Dicompare's rollout follows the upstream `d3d0879` sync, which brings in its
+promise-failure fixes, bundled field dictionary and unused-code removal. The
+synced source had 86 promise findings across 136 TypeScript files. The project
+now has 138 sources, including the callback adapter and four behavior suites;
+three files already deleted upstream were removed after verifying no callers.
+Synchronous React and timer callbacks use `asyncCallback`, which reports
+rejections through the technical log and shared status footer. Callers that
+already await an operation keep its promise; in particular, opening a saved
+session remains busy until its loader settles. The thumbnail queue waits for
+each renderer and clears rejected pending entries, allowing the same file to
+retry. Superseded previews cannot report false errors or replace a newer image.
+The changes preserve the empty lint baseline and upstream adaptations live in
+`apps/dicompare/upstream.json`.
 
 Zarro's stream buffer annotations require ArrayBuffer storage, normalizing the
 encoded bytes once before streaming; compressed contents are unchanged. NiiVue 1.0.0-rc.14's `setFocus` and `setBudget`

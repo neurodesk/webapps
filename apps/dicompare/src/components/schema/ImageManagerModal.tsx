@@ -1,3 +1,4 @@
+import { logError } from '../../utils/technicalLog';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { X, Plus, Trash2, Download, Edit2, Brain, ImageIcon, Check, Columns2 } from 'lucide-react';
 import Modal from '../common/Modal';
@@ -162,8 +163,10 @@ const ImageManagerModal: React.FC<ImageManagerModalProps> = ({
         if (nifti && !cancelled) {
           setMatchVolumeName(nifti.name.toLowerCase());
         }
-      } catch { /* ignore */ }
-    })();
+      } catch (error) {
+        if (!cancelled) console.warn('Automatic volume matching is unavailable:', error);
+      }
+    })().catch(error => logError('Image manager modal failed', error));
 
     return () => { cancelled = true; };
   }, [isOpen, initialMatchFiles]);

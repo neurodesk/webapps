@@ -1,3 +1,4 @@
+import { asyncCallback } from '../../utils/asyncCallback';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Upload, Library, FolderOpen, Trash2, Download, FileText, List, ChevronDown, ChevronUp, X, Tag, Check, Minus, Search, GripVertical, BookOpen, FlaskConical, Link2, ExternalLink } from 'lucide-react';
 import { UnifiedSchema } from '../../hooks/useSchemaService';
@@ -356,7 +357,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   // Load acquisitions for expanded schemas
   useEffect(() => {
     expandedSchemas.forEach(id => {
-      loadSchemaAcquisitions(id);
+      loadSchemaAcquisitions(id).catch(error => logError('Load schema acquisitions failed', error));
     });
   }, [expandedSchemas]);
 
@@ -368,7 +369,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         (showCustom && s.source === 'uploaded')
       );
       schemasToLoad.forEach(s => {
-        loadSchemaAcquisitions(s.id);
+        loadSchemaAcquisitions(s.id).catch(error => logError('Load schema acquisitions failed', error));
       });
     }
   }, [viewMode, allSchemas, showLibrary, showCustom]);
@@ -569,7 +570,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
     if (!acquisitions) {
       // Trigger loading - checkbox will work once loaded
-      loadSchemaAcquisitions(schema.id);
+      loadSchemaAcquisitions(schema.id).catch(error => logError('Load schema acquisitions failed', error));
       return;
     }
 
@@ -614,7 +615,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
         newSet.delete(schemaId);
       } else {
         newSet.add(schemaId);
-        loadSchemaAcquisitions(schemaId);
+        loadSchemaAcquisitions(schemaId).catch(error => logError('Load schema acquisitions failed', error));
       }
       return newSet;
     });
@@ -624,7 +625,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     if (selectionMode === 'schema' && onSchemaSelect) {
       onSchemaSelect(schemaId);
     } else if (selectionMode === 'acquisition' && expandable) {
-      toggleSchemaExpansion(schemaId);
+      toggleSchemaExpansion(schemaId).catch(error => logError('Toggle schema expansion failed', error));
     }
   };
 
@@ -646,14 +647,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.name.endsWith('.json')) {
-        uploadSchemaFile(file);
+        uploadSchemaFile(file).catch(error => logError('Upload schema file failed', error));
       }
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      uploadSchemaFile(e.target.files[0]);
+      uploadSchemaFile(e.target.files[0]).catch(error => logError('Upload schema file failed', error));
       // Reset so re-uploading the same file still fires onChange.
       e.target.value = '';
     }
@@ -835,7 +836,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                 </button>
               ) : (
                 <button
-                  onClick={(e) => copySchemaLink(schema.id, e)}
+                  onClick={asyncCallback('Copy schema link failed', (e) => copySchemaLink(schema.id, e))}
                   className={`p-1 transition-colors ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
                   title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
                 >
@@ -845,7 +846,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
 
               {/* Download button */}
               <button
-                onClick={(e) => handleDownload(schema.id, schema.name, e)}
+                onClick={asyncCallback('Download failed', (e) => handleDownload(schema.id, schema.name, e))}
                 className="p-1 text-content-tertiary hover:text-brand-600 transition-colors"
                 title="Save schema"
               >
@@ -1018,7 +1019,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           </button>
                         ) : (
                           <button
-                            onClick={(e) => copySchemaLink(schema.id, e)}
+                            onClick={asyncCallback('Copy schema link failed', (e) => copySchemaLink(schema.id, e))}
                             className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
                             title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
                           >
@@ -1107,7 +1108,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                           </div>
                         ) : (
                           <div
-                            onClick={(e) => copySchemaLink(schema.id, e)}
+                            onClick={asyncCallback('Copy schema link failed', (e) => copySchemaLink(schema.id, e))}
                             className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
                             title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
                           >
@@ -1390,14 +1391,14 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                       type="url"
                       value={urlInput}
                       onChange={(e) => { setUrlInput(e.target.value); setUrlError(null); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlImport(); } }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleUrlImport().catch(error => logError('Url import failed', error)); } }}
                       placeholder="…or paste a schema URL (e.g. GitHub raw / gist)"
                       className="w-full pl-8 pr-2 py-1.5 text-xs border border-border-secondary rounded-md bg-surface-primary text-content-primary focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
                   <button
                     type="button"
-                    onClick={handleUrlImport}
+                    onClick={asyncCallback('Url import failed', handleUrlImport)}
                     disabled={!urlInput.trim() || urlImporting}
                     className="px-3 py-1.5 text-xs font-medium rounded-md bg-brand-600 text-white hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
@@ -1593,7 +1594,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               </button>
                             ) : (
                               <button
-                                onClick={(e) => copySchemaLink(schema.id, e)}
+                                onClick={asyncCallback('Copy schema link failed', (e) => copySchemaLink(schema.id, e))}
                                 className={`p-1.5 transition-colors flex-shrink-0 self-start ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
                                 title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
                               >
@@ -1690,7 +1691,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
                               </div>
                             ) : (
                               <div
-                                onClick={(e) => copySchemaLink(schema.id, e)}
+                                onClick={asyncCallback('Copy schema link failed', (e) => copySchemaLink(schema.id, e))}
                                 className={`p-1.5 transition-colors flex-shrink-0 self-start cursor-pointer ${copiedSchemaId === schema.id ? 'text-green-600 dark:text-green-400' : 'text-content-tertiary hover:text-brand-600'}`}
                                 title={copiedSchemaId === schema.id ? 'Copied!' : 'Copy schema link'}
                               >
@@ -1723,7 +1724,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
       <DeleteConfirmModal
         isOpen={deleteModal.isOpen}
         schemaName={deleteModal.schemaName}
-        onConfirm={confirmDelete}
+        onConfirm={asyncCallback('Confirm delete failed', confirmDelete)}
         onCancel={() => setDeleteModal({ isOpen: false, schemaId: '', schemaName: '' })}
       />
     </>

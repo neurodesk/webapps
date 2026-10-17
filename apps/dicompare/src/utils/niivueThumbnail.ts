@@ -4,6 +4,7 @@
  */
 
 import { Niivue, SLICE_TYPE, MULTIPLANAR_TYPE } from '@niivue/niivue';
+import { logError } from './technicalLog';
 
 const cache = new Map<string, string>();
 const pending = new Map<string, Promise<string | null>>();
@@ -27,7 +28,7 @@ function getHiddenCanvas(): HTMLCanvasElement {
 }
 
 // Serialize thumbnail generation to avoid WebGL context conflicts
-let queue: (() => void)[] = [];
+let queue: (() => Promise<void>)[] = [];
 let running = false;
 
 function enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -39,7 +40,7 @@ function enqueue<T>(fn: () => Promise<T>): Promise<T> {
         reject(e);
       }
     });
-    processQueue();
+    processQueue().catch(error => logError('Thumbnail queue failed', error));
   });
 }
 
@@ -118,10 +119,9 @@ export function getVolumeThumbnailFromFile(file: File): Promise<string | null> {
       URL.revokeObjectURL(blobUrl);
     }
   }).then(dataUrl => {
-    pending.delete(cacheKey);
     if (dataUrl) cache.set(cacheKey, dataUrl);
     return dataUrl;
-  });
+  }).finally(() => pending.delete(cacheKey));
 
   pending.set(cacheKey, promise);
   return promise;
@@ -140,10 +140,9 @@ export function getVolumeThumbnail(url: string): Promise<string | null> {
   if (inflight) return inflight;
 
   const promise = enqueue(() => generateSingle(url)).then(dataUrl => {
-    pending.delete(url);
     if (dataUrl) cache.set(url, dataUrl);
     return dataUrl;
-  });
+  }).finally(() => pending.delete(url));
 
   pending.set(url, promise);
   return promise;
