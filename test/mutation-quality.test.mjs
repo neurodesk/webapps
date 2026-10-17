@@ -50,7 +50,7 @@ test('each module is a separate Stryker run against only its own data-free Node 
     assert.deepEqual(selected, config);
   }
   process.env.MUTATION_MODULE = 'missing';
-  await assert.rejects(import('../stryker.config.mjs?module=missing'), /Set MUTATION_MODULE to one of disconnectome, basis-select, format-g, date-versions, lockfile-impact, carotid-series, carotid-outputs;/);
+  await assert.rejects(import('../stryker.config.mjs?module=missing'), /Set MUTATION_MODULE to one of disconnectome, basis-select, format-g, date-versions, lockfile-impact, carotid-series, carotid-outputs, workspace-graph;/);
   // Tools that load the config without the variable (Knip) get the canary's module.
   delete process.env.MUTATION_MODULE;
   const { default: fallback } = await import('../stryker.config.mjs?module=unset');
