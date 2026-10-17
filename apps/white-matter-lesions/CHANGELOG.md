@@ -1,5 +1,21 @@
 # white-matter-lesions
 
+## 0.4.20261017
+
+### Minor Changes
+
+- 202fd16: Step through segmented lesions in the viewer. ‹ and › centre the crosshair on each lesion in turn, largest first, and the Overlay toggle hides the mask or probability map to check the FLAIR beneath. The Output section shows the lesion count and the total, largest, median and smallest lesion volume. `lesionResults` now also returns the ranked lesions (`lesions`: volume and centroid in mm).
+
+### Patch Changes
+
+- Updated dependencies [b547d52]
+- Updated dependencies [202fd16]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/white-matter-lesions@0.4.20261017
+  - @neurodesk/runtime-support@0.6.4
+  - @neurodesk/synthsr@0.6.20261017
+  - @neurodesk/synthstrip@0.1.5
+
 ## 0.3.20261016
 
 ### Patch Changes

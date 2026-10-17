@@ -1,5 +1,26 @@
 # calmar
 
+## 0.7.20261017
+
+### Minor Changes
+
+- dd64cf6: Segment acute stroke lesions on diffusion data. With DWI/TRACE plus ADC or b0, Run analysis seeds the lesion with DeepISLES SEALS (the ISLES'22-winning nnU-Net, fold 0, 59.5 MB) instead of the T1 model; without ADC it is computed from the b0. Without a T1, the b0 or DWI/TRACE is used for brain extraction and registration. A new b0 input sits beside DWI/TRACE and ADC. The benchmark-only NVAUTO candidate is removed.
+
+### Patch Changes
+
+- Updated dependencies [dd64cf6]
+  - @neurodesk/calmar@0.7.20261017
+
+## 0.6.20261017
+
+### Patch Changes
+
+- cedc83a: Show a DWI/TRACE or ADC image in the viewer when it is loaded: as the base when nothing else is loaded, otherwise as a colour overlay on the T1 or lesion, so analysis overlays stay on the T1.
+- b547d52: CALMaR shows its result tables in a Results view in the viewer instead of the sidebar, so the Lesion % and Map % columns are no longer cut off. The Results tab opens once an analysis finishes and stays disabled until there is an atlas overlap, during lesion-mask review and after Start over. The separate Analysis log is gone: every message now appears once, in full and with its level, in the technical log. Captions above shared data tables are styled as muted, left-aligned notes. Loading a new T1 or lesion mask, confirming a mask, re-warping the lesion or changing the atlas now clears the previous results and their downloads, and a calculation that finishes after such a change is discarded instead of shown.
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/calmar@0.6.20261017
+
 ## 0.6.20261016
 
 ### Patch Changes

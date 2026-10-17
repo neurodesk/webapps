@@ -391,6 +391,12 @@
         "kind": "model"
       },
       {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/d2375f48afe069ac4018917e8a4bee3f24920dee/calmar/models/lnm-deepisles-seals-fold0-128-fp16.onnx",
+        "sha256": "54c01314ea7ad26b092266ac6cb39bc9f35ac84d8983186af734f05b1cd1c329",
+        "bytes": 62429252,
+        "kind": "model"
+      },
+      {
         "url": "https://unpkg.com/@niivue/niivue@0.68.2/dist/niivue.umd.js",
         "kind": "runtime-cdn"
       },
@@ -4138,13 +4144,7 @@
       }
     ]
   },
-  "exclusions": [
-    {
-      "app": "calmar",
-      "asset": "lnm-deepisles-nvauto-browser-seed",
-      "reason": "Benchmark-only candidate; app explicitly rejects inference until supportStatus is supported. Not an enabled application model."
-    }
-  ],
+  "exclusions": [],
   "python": {
     "base": "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/",
     "packages": [

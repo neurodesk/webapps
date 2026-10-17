@@ -181,7 +181,7 @@ apps:
 
   calmar:
     packages:
-      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs SynthStrip, SynthStroke and SynthMorph in the browser }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs SynthStrip, SynthStroke, DeepISLES SEALS and SynthMorph in the browser }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -201,6 +201,14 @@ apps:
         title: DeepISLES
         reference: "de la Rosa E, Reyes M, Liew SL, et al. A robust ensemble algorithm for ischemic stroke lesion segmentation: generalizability and clinical utility beyond the ISLES challenge. arXiv. 2024."
         url: https://arxiv.org/abs/2403.19425
+      - group: Lesion segmentation
+        title: nnU-Net (DeepISLES SEALS)
+        reference: "Isensee F, Jaeger PF, Kohl SAA, Petersen J, Maier-Hein KH. nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation. Nature Methods. 2021;18(2):203–211."
+        doi: 10.1038/s41592-020-01008-z
+      - group: Lesion segmentation
+        title: ISLES 2022
+        reference: "Hernandez Petzsche MR, de la Rosa E, Hanning U, et al. ISLES 2022: a multi-center magnetic resonance imaging stroke lesion segmentation dataset. Scientific Data. 2022;9:762."
+        doi: 10.1038/s41597-022-01875-5
       - group: Lesion segmentation
         title: ATLAS v2.0
         reference: "Liew SL, Lo BP, Donnelly MR, et al. A large, curated, open-source stroke neuroimaging dataset to improve lesion segmentation algorithms. Scientific Data. 2022;9:320."

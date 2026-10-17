@@ -107,7 +107,8 @@ assert.deepEqual(
   assert.deepEqual(inputLabels, {
     structuralFileInput: 'Structural T1 (NIfTI / DICOM)',
     deepIslesDwiFileInput: 'DWI/TRACE (NIfTI / DICOM)',
-    deepIslesAdcFileInput: 'ADC (NIfTI / DICOM)'
+    deepIslesAdcFileInput: 'ADC (NIfTI / DICOM)',
+    deepIslesB0FileInput: 'b0 (NIfTI / DICOM)'
   });
   for (const id of Object.keys(inputLabels)) {
     const input = document.getElementById(id);
@@ -557,10 +558,8 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
     ['runLesionSegmentation'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
   ]);
-  // A DWI-space DeepISLES seed never opens T1 mask review on its own.
-  app.deepIslesSeedCompatibleWithNativeT1 = false;
-  await expectClick('runDeepIslesSegmentationButton', [['runDeepIslesSegmentation']]);
-  app.deepIslesSeedCompatibleWithNativeT1 = true;
+  // A DeepISLES seed opens review on the structural image, also from a
+  // DWI grid (projected by scanner coordinates).
   await expectClick('runDeepIslesSegmentationButton', [
     ['runDeepIslesSegmentation'],
     ['startLesionMaskReview', { seedFile: app.autoLesionSeedFile }]
@@ -689,6 +688,15 @@ const fire = (id, type) => document.getElementById(id).dispatchEvent(new dom.win
   fire('lesionFileInput', 'change');
   assert.deepEqual(handled.map(([kind]) => kind), ['structural', 'lesion']);
   assert.equal(handled[0][1], $('#structuralFileInput').files);
+
+  // Diffusion inputs: each lands in its own DeepISLES slot.
+  const diffusion = [];
+  const scan = { name: 'scan.nii' };
+  app.readScanInput = async () => scan;
+  app.setDeepIslesInput = async (kind, file) => diffusion.push([kind, file]);
+  for (const id of ['deepIslesDwiFileInput', 'deepIslesAdcFileInput', 'deepIslesB0FileInput']) fire(id, 'change');
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.deepEqual(diffusion, [['dwi', scan], ['adc', scan], ['b0', scan]]);
 }
 
 // ---- dialogs ----

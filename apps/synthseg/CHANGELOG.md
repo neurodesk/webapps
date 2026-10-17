@@ -1,5 +1,20 @@
 # synthseg
 
+## 0.11.20261017
+
+### Minor Changes
+
+- ad1a2ac: The Volumes view compares a default-mode run with IXI and AHEAD norms fitted on default-mode SynthSeg volumes, and a fast-mode run with the fast-mode norms. The report footnote names the mode. Before, default-mode runs were compared with fast-mode norms, which put healthy cortical grey matter about 2 standard deviations low.
+
+### Patch Changes
+
+- 38b2b4b: Keep the raw volume table visible and explain why when the population volume report cannot be computed or its reference cannot be loaded.
+- Updated dependencies [b547d52]
+- Updated dependencies [ad1a2ac]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/synthseg@0.11.20261017
+  - @neurodesk/runtime-support@0.6.4
+
 ## 0.10.20261016
 
 ### Patch Changes

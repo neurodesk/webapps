@@ -43,6 +43,11 @@ assert.match(src, /"deepisles-nvauto-best3"[\s\S]*?probability_globs=\([\s\S]*mo
   'DeepISLES best-3 benchmark mode must combine the prior strongest NVAUTO folds');
 assert.match(src, /"deepisles-nvauto-15fold"[\s\S]*?patch_size=\(192,\s*192,\s*128\)[\s\S]*?overlap=0\.625/,
   'DeepISLES 15-fold mode must pin upstream NVAUTO patch geometry');
+const sealsMode = src.match(/"deepisles-seals-fold0-fp16-onnx"[\s\S]*?channel_order=\("TRACE",\s*"ADC"\)[\s\S]*?prediction_glob="([^"]+)"/);
+assert.ok(sealsMode, 'SEALS mode must read TRACE + ADC in nnU-Net channel order (0 = DWI/TRACE, 1 = ADC)');
+const runner = fs.readFileSync(path.join(ROOT, 'scripts/run_seals_onnx.py'), 'utf8');
+assert.equal(runner.match(/PREDICTION_PATTERN = "([^"]+)"/)?.[1], sealsMode[1],
+  'the SEALS mode must score the files run_seals_onnx.py writes');
 assert.match(src, /resample_binary_to_mask_grid/,
   'benchmark must resample predictions onto the mask grid before metrics');
 assert.match(src, /best-worst/,

@@ -1,5 +1,13 @@
 # @neurodesk/desktop
 
+## 0.29.20261017
+
+### Patch Changes
+
+- b243e7b: Include the shared Inter font and its licence in offline suite and single-app bundles so the composite theme loads without a missing font request.
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+
 ## 0.29.20261016
 
 ### Patch Changes

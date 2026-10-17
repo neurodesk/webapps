@@ -19,17 +19,12 @@ import {
   binaryMaskFromBuffer,
   collapseBinarySoftmaxLogits,
   dimsEqual,
-  extractMultiChannelPatch,
   fOrderToNDHWC,
   foregroundMaskFromScalar,
-  nonzeroZScore,
   normaliseSynthMorphExecutionProviders,
   projectedVolumeToLabels,
   robustNormalizeMasked,
-  runDeepIslesMultiChannelPipeline,
-  shouldUseZYXModelAxisOrder,
-  softmaxStrokeChannel,
-  zeroPadChannelsToPatchMultiple
+  shouldUseZYXModelAxisOrder
 } from '../web/js/modules/inference-numerics.js';
 import {
   accumulatePatch3D,
@@ -132,24 +127,6 @@ function sortedPositions(positions) {
   );
 }
 
-// ---- nonzeroZScore: MONAI NormalizeIntensity(nonzero=True) ----
-{
-  const input = Float32Array.from([0, 4, 0, 10, 7, 0, 1, 2, 0, 12]);
-  // MONAI: NormalizeIntensity(nonzero=True)(torch.tensor(input)[None])[0]
-  // (mean 6 and population std 4.041452 over the six nonzero voxels; zero
-  // background voxels stay zero).
-  assertClose(nonzeroZScore(input), [0, -0.494872, 0, 0.989743, 0.247436, 0, -1.237179, -0.989743, 0, 1.484615], 2e-6, 'nonzero z-score');
-
-  // Non-finite voxels neither enter the statistics nor survive as NaN.
-  const withNaN = nonzeroZScore(Float32Array.from([0, 4, NaN, 10, 7, Infinity, 1, 2, 0, 12]));
-  assertClose(withNaN, [0, -0.494872, 0, 0.989743, 0.247436, 0, -1.237179, -0.989743, 0, 1.484615], 2e-6, 'nonzero z-score ignores non-finite voxels');
-
-  // All-zero input: nothing to normalise, nothing to divide by.
-  assertSame(nonzeroZScore(new Float32Array(4)), [0, 0, 0, 0], 'all-zero channel');
-  // A constant nonzero channel has std 0, which falls back to 1.
-  assertSame(nonzeroZScore(Float32Array.from([0, 3, 3, 3])), [0, 0, 0, 0], 'constant nonzero channel');
-}
-
 // ---- zScoreNormalize: all voxels, population standard deviation ----
 {
   const input = Float32Array.from([0, 4, 0, 10, 7, 0, 1, 2, 0, 12]);
@@ -159,23 +136,13 @@ function sortedPositions(positions) {
   ], 2e-6, 'whole-volume z-score');
 }
 
-// ---- softmaxStrokeChannel and the 2-channel logit collapse ----
+// ---- the 2-channel logit collapse ----
 {
   const background = [0, 2, -1.5, 800, -800, 3.25];
   const stroke = [0, -1, 4, -800, 800, 3];
   const raw = Float32Array.from([...background, ...stroke]);
-
   // scipy: softmax(np.stack([background, stroke]), axis=0)[1]
   const expectedStroke = [0.5, 0.0474259, 0.9959299, 0, 1, 0.4378235];
-  assertClose(softmaxStrokeChannel(raw, 6, 2, 1), expectedStroke, 2e-7, 'stroke-channel softmax');
-  // scipy: softmax(np.stack([background, stroke]), axis=0)[0]
-  assertClose(softmaxStrokeChannel(raw, 6, 2, 0), [0.5, 0.9525741, 0.0040701, 1, 0, 0.5621765], 2e-7, 'background-channel softmax');
-  // scipy: expit(stroke): a 1-channel output is a plain sigmoid.
-  assertClose(softmaxStrokeChannel(Float32Array.from(stroke), 6), [0.5, 0.2689414, 0.9820138, 0, 1, 0.9525741], 2e-7, 'one-channel sigmoid');
-  // scipy: softmax(np.stack([background, stroke, ones]), axis=0)[2]
-  const three = Float32Array.from([...background, ...stroke, 1, 1, 1, 1, 1, 1]);
-  assertClose(softmaxStrokeChannel(three, 6, 3, 2), [0.5761169, 0.2594965, 0.047242, 0, 0, 0.0559384], 2e-7, 'three-channel softmax');
-  assert.throws(() => softmaxStrokeChannel(new Float32Array(7), 6), /Unexpected DeepISLES output length 7/);
 
   // SynthStroke route: the worker collapses [bg, stroke] logits to
   // stroke - bg and the pipeline applies a sigmoid. That must equal the
@@ -199,30 +166,6 @@ function sortedPositions(positions) {
     [0, 6, 12, 18, 2, 8, 14, 20, 4, 10, 16, 22, 1, 7, 13, 19, 3, 9, 15, 21, 5, 11, 17, 23],
     'x-fastest volume to row-major tensor'
   );
-
-  const dims = [5, 4, 3];
-  const channelA = Float32Array.from(ramp(60, 7, 61));
-  const channelB = Float32Array.from(ramp(60, 11, 59));
-  // numpy: np.stack([a[2:5, 1:3, 0:2], b[2:5, 1:3, 0:2]]).ravel(order="C")
-  assertSame(
-    extractMultiChannelPatch([channelA, channelB], dims, [2, 1, 0], [3, 2, 2]),
-    [49, 6, 23, 41, 56, 13, 30, 48, 2, 20, 37, 55, 18, 2, 14, 57, 29, 13, 25, 9, 40, 24, 36, 20],
-    'two-channel NCDHW patch'
-  );
-
-  // numpy: padded = np.pad(a, ((0, 3), (0, 0), (0, 1)))  -> shape (8, 4, 4)
-  const padded = zeroPadChannelsToPatchMultiple([channelA, channelB], dims, [4, 4, 4]);
-  assert.deepEqual(padded.dims, [8, 4, 4], 'padded dims');
-  const paddedA = padded.channels[0];
-  const at = (x, y, z) => paddedA[x + y * 8 + z * 32];
-  // numpy: [padded.sum(), padded[4, 3, 2], padded[7, 3, 3], padded[5, 0, 0]]
-  assert.deepEqual(
-    [paddedA.reduce((total, value) => total + value, 0), at(4, 3, 2), at(7, 3, 3), at(5, 0, 0)],
-    [1776, 47, 0, 0],
-    'padding keeps voxels in place and fills with zeros'
-  );
-  const untouched = zeroPadChannelsToPatchMultiple([channelA], [4, 4, 4], [4, 4, 4]);
-  assert.equal(untouched.channels[0], channelA, 'a patch-sized volume is not copied');
 }
 
 // ---- small decision helpers (hand-worked) ----
@@ -440,50 +383,6 @@ const POSITION_GAIN = Float32Array.from({ length: 64 }, (_, i) => -2 + (5 * i) /
     0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0,
     1, 1, 1, 0
   ], 'labels without TTA');
-}
-
-// ---- DeepISLES two-channel route (MONAI normalise + sliding window) ----
-{
-  // numpy: adc = ramp(128, 31, 113); adc[::5] = 0
-  //        trace = ramp(128, 17, 101); trace[::7] = 0
-  const adc = Float32Array.from(ramp(128, 31, 113), (value, i) => (i % 5 === 0 ? 0 : value));
-  const trace = Float32Array.from(ramp(128, 17, 101), (value, i) => (i % 7 === 0 ? 0 : value));
-  // MONAI: channels = NormalizeIntensity(nonzero=True, channel_wise=True)(stack)
-  //   predictor: softmax([trace * 0.25, adc * gain - trace * 0.5], dim=1)[:, 1:2]
-  //   sliding_window_inference(channels[None], roi_size=(4, 4, 4),
-  //     sw_batch_size=1, overlap=0.5, mode="gaussian", sigma_scale=2.0) >= 0.5
-  const patchShapes = [];
-  const result = await runDeepIslesMultiChannelPipeline(
-    { channels: [adc, trace], dims: SLIDING_DIMS, patchSize: PATCH, channelOrder: ['ADC', 'TRACE'] },
-    async (patch, patchDims) => {
-      patchShapes.push(`${patch.length}/${patchDims.join('x')}`);
-      const raw = new Float32Array(128);
-      for (let i = 0; i < 64; i++) {
-        const adcValue = patch[i];
-        const traceValue = patch[64 + i];
-        raw[i] = traceValue * 0.25;
-        raw[64 + i] = adcValue * POSITION_GAIN[i] - traceValue * 0.5;
-      }
-      return softmaxStrokeChannel(raw, 64, 2, 1);
-    },
-    { overlap: 0.5, threshold: 0.5, minComponentSize: 1 }
-  );
-  assert.deepEqual(patchShapes, ['128/4x4x4', '128/4x4x4', '128/4x4x4'], 'each patch carries two channels');
-  assertSame(result.labels, [
-    1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 0, 0, 0, 1, 0, 1, 1, 0, 0,
-    1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1,
-    1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1,
-    1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0,
-    1, 1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0,
-    0, 1, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0,
-    0, 1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0,
-    1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1,
-    1, 1, 0, 0, 0, 1, 1, 1, 1, 0, 0, 1,
-    1, 0, 0, 1, 0, 1, 1, 1
-  ], 'DeepISLES seed labels');
-  assertClose([result.probStats.max], [0.980481], 5e-6, 'DeepISLES peak probability');
-  assert.deepEqual(result.dims, SLIDING_DIMS);
 }
 
 // ---- connected components (scipy.ndimage.label, 26-connectivity) ----

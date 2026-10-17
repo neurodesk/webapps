@@ -96,12 +96,23 @@
             <input type="file" data-neurodesk-input="image" id="structuralFileInput" multiple>
           </div>
           <div class="param-group">
-            <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (NIfTI / DICOM)</label>
+            <div class="param-label-row">
+              <label class="param-label" for="deepIslesDwiFileInput">DWI/TRACE (NIfTI / DICOM)</label>
+              <span class="nd-info-icon" aria-label="DWI/TRACE help" tabindex="0">i
+                <span class="nd-info-tooltip" role="tooltip">
+                  With DWI/TRACE plus ADC or b0, Run analysis seeds the lesion with DeepISLES (SEALS) instead of the T1 model. Without ADC, it is computed from the b0. Without a T1, the b0 (or DWI/TRACE) is used for registration.
+                </span>
+              </span>
+            </div>
             <input type="file" data-neurodesk-input="image" id="deepIslesDwiFileInput" multiple>
           </div>
           <div class="param-group">
             <label class="param-label" for="deepIslesAdcFileInput">ADC (NIfTI / DICOM)</label>
             <input type="file" data-neurodesk-input="image" id="deepIslesAdcFileInput" multiple>
+          </div>
+          <div class="param-group">
+            <label class="param-label" for="deepIslesB0FileInput">b0 (NIfTI / DICOM)</label>
+            <input type="file" data-neurodesk-input="image" id="deepIslesB0FileInput" multiple>
           </div>
         </div>
       </section>
@@ -143,7 +154,7 @@
                   <span class="param-label">3 Lesion mask</span>
                   <input type="file" data-neurodesk-input="image" id="manualMaskFileInput" class="hidden" aria-hidden="true" tabindex="-1" multiple>
                   <button class="btn btn-secondary btn-sm" id="runLesionSegmentationButton" title="Run auto segmentation as an editable seed">Auto seed mask</button>
-                  <button class="btn btn-secondary btn-sm" id="runDeepIslesSegmentationButton" title="Run DeepISLES on DWI/TRACE and ADC as an editable seed">DeepISLES DWI/ADC seed</button>
+                  <button class="btn btn-secondary btn-sm" id="runDeepIslesSegmentationButton" title="Run DeepISLES (SEALS) on DWI/TRACE and ADC, or ADC computed from a b0, as an editable seed">DeepISLES DWI/ADC seed</button>
                   <button class="btn btn-secondary btn-sm" id="startManualMaskButton" title="Start a blank editable lesion mask">Manual mask</button>
                   <button class="btn btn-secondary btn-sm" id="uploadManualMaskButton" title="Load a native-space lesion mask as an editable seed">Upload mask</button>
                 </div>
