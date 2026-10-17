@@ -192,6 +192,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
   for (const lane of jobs.keys()) jobs.get(lane).controller.abort();
   const controller = begin('index', 'Reading DICOM headers…');
   const abort = () => controller.abort(signal.reason);
+  if (signal?.aborted) abort();
   signal?.addEventListener('abort', abort, { once: true });
   // Choosing a listed series would cancel the read that is replacing the list.
   seriesList.inert = true;
