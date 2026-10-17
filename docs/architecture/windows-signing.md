@@ -21,8 +21,11 @@ credential for `main` alone does not authorize these tagged releases.
 Before enabling signing, authorize the exact approved release tags in Azure as
 well as `main`. Match the complete subject emitted by GitHub, including any
 repository IDs or customized claims. Standard federated credentials require an
-exact subject and do not support wildcard tag values. A protected GitHub
-environment can provide a stable subject across releases, but the current
+exact subject and do not support wildcard tag values. Microsoft limits each
+application or user-assigned managed identity to 20 federated credentials.
+Before catalog-wide activation, define rotation that removes obsolete exact-tag
+credentials to stay within that limit, or coordinate an alternative trust design.
+A protected GitHub environment can provide a stable subject across releases, but the current
 producer jobs do not declare one; adopting it requires coordinated workflow and
 trust-policy changes. See [GitHub's OIDC subject reference](https://docs.github.com/en/actions/reference/security/oidc#example-subject-claims)
 and [Microsoft's federation configuration](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust#important-considerations-and-restrictions).
