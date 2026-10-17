@@ -175,7 +175,7 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
 
   await page.evaluate(() => { window.breakChecks = true; });
   await button.click();
-  await expect(status(page)).toHaveText(/^1 acquisition could not be checked against QSM Consensus Guidelines: .*Invalid acquisition index 99/, { timeout: 120000 });
+  await expect(status(page)).toHaveText(/^1 acquisition could not be checked against QSM Consensus Guidelines: ValueError: Invalid acquisition index 99\./, { timeout: 120000 });
   await expect(status(page)).toHaveClass(/error/);
 });
 

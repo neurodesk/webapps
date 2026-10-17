@@ -32,13 +32,15 @@ export function acquisitionCaption(acquisition) {
 }
 
 // The status line after a compliance check. results: ProtocolSession.check's, where an
-// acquisition the worker could not check carries an error. Any such error fails the run.
+// acquisition the worker could not check carries an error, a Python traceback whose last
+// line names the exception. Any such error fails the run.
 export function checkOutcome(results, schemaName) {
   const failures = results.filter((result) => result.error);
   const count = `${results.length} acquisition${results.length === 1 ? '' : 's'}`;
   if (!failures.length) return { message: `${count} checked against ${schemaName}`, failed: false };
   const which = failures.length === results.length ? count : `${failures.length} of ${count}`;
-  return { message: `${which} could not be checked against ${schemaName}: ${failures[0].error}`, failed: true };
+  const reason = failures[0].error.trim().split('\n').at(-1);
+  return { message: `${which} could not be checked against ${schemaName}: ${reason}`, failed: true };
 }
 
 // One table per acquisition, for the Protocol view.

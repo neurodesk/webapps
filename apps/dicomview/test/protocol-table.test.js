@@ -39,8 +39,8 @@ test('each acquisition becomes a captioned table that marks varying rows', () =>
 
 test('a compliance check fails when any acquisition could not be checked', () => {
   const passed = { acquisitionName: 'acq-t1', results: [{ status: 'pass' }] };
-  const broken = { acquisitionName: 'acq-t2', results: [], error: 'list index out of range' };
+  const broken = { acquisitionName: 'acq-t2', results: [], error: 'Traceback (most recent call last):\n  File "<exec>", line 9\nValueError: Invalid acquisition index 99.\n' };
   assert.deepEqual(checkOutcome([passed], 'QSM'), { message: '1 acquisition checked against QSM', failed: false });
-  assert.deepEqual(checkOutcome([passed, broken], 'QSM'), { message: '1 of 2 acquisitions could not be checked against QSM: list index out of range', failed: true });
-  assert.deepEqual(checkOutcome([broken], 'QSM'), { message: '1 acquisition could not be checked against QSM: list index out of range', failed: true });
+  assert.deepEqual(checkOutcome([passed, broken], 'QSM'), { message: '1 of 2 acquisitions could not be checked against QSM: ValueError: Invalid acquisition index 99.', failed: true });
+  assert.deepEqual(checkOutcome([broken], 'QSM'), { message: '1 acquisition could not be checked against QSM: ValueError: Invalid acquisition index 99.', failed: true });
 });
