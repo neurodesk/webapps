@@ -304,6 +304,32 @@ test('cancelling while the image loads keeps it off screen, and View loads it ag
   await expect(page.locator('#imageLabel')).toHaveText(/\.nii$/);
 });
 
+test('an image still loading when another series is chosen is cleared before that one loads', async ({ page }) => {
+  await page.goto('./');
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage;
+    const held = [];
+    window.heldImageReads = () => held.length;
+    Worker.prototype.postMessage = function (message, ...rest) {
+      if (!(message?.url instanceof File)) return post.call(this, message, ...rest);
+      held.push(() => post.call(this, message, ...rest));
+    };
+    window.releaseImageRead = (index) => held[index]();
+  });
+  const files = [...dicomSeries({ series: 7, slices: 4 }), ...dicomSeries({ series: 3, slices: 4 })]
+    .map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(files);
+  await page.waitForFunction(() => window.heldImageReads() === 1, null, { timeout: 60000 });
+  await page.locator('#seriesList .nd-volume-toggle', { hasText: 'test_scan_7' }).getByRole('button', { name: 'View' }).click();
+  await expect(page.locator('#imageLabel')).toContainText('test_scan_7', { timeout: 60000 });
+  await page.evaluate(() => window.releaseImageRead(0));
+  await page.waitForFunction(() => window.heldImageReads() === 2, null, { timeout: 60000 });
+  await expect(page.locator('#emptyState'), 'series 3 left the viewer while series 7 still loads').toBeVisible();
+  await page.evaluate(() => window.releaseImageRead(1));
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  await expect(page.locator('#emptyState')).toBeHidden();
+});
+
 test('protocol actions wait while a replacement folder is read', async ({ page }) => {
   await page.goto('./');
   const files = (series) => dicomSeries({ series, slices: 2 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));

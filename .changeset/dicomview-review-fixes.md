@@ -17,3 +17,5 @@ The extra "Or choose a folder" field is gone; choose a folder from the input men
 Downloaded images and sidecars are named from the series number and description, such as `series2_t1_mpr.nii`, instead of dcm2niix's default, which carries the input folder name and the study date and time. Two series that would share a name, such as the same series from two studies, also get a short hash of their series UID.
 
 A protocol summary stops with an error naming the file count and size when the headers it would send dicompare pass 512 MB, and files that share a path no longer overwrite each other in dicompare.
+
+Choosing another series while an image still loads clears that image before the new one loads.

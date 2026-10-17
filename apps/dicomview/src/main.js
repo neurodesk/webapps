@@ -349,11 +349,14 @@ function showOutput() {
 }
 
 // Queued behind any load in flight, so an image of an earlier series or folder never
-// stays on screen beside the header of the one now selected.
+// stays on screen beside the header of the one now selected. The selection's own images
+// may be ready by then; they load after this, so the clear still runs. Only a later
+// selection, which queues its own clear, makes this one moot.
 function clearImage() {
   $('imageLabel').textContent = '';
+  const { seriesUid } = state;
   const clear = viewerLoads.then(async () => {
-    if (!viewerReady || state.outputs) return;
+    if (!viewerReady || state.seriesUid !== seriesUid) return;
     await viewer.removeAllVolumes();
     $('emptyState').hidden = false;
   });
