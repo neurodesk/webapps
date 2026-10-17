@@ -248,13 +248,11 @@ function importFiles(files) {
   return loadFiles(files).catch(() => {});
 }
 
-for (const id of ['dicomInput', 'folderInput']) {
-  $(id).addEventListener('change', (event) => {
-    const files = Array.from(event.target.files);
-    event.target.value = '';
-    if (files.length) void importFiles(files);
-  });
-}
+$('dicomInput').addEventListener('change', (event) => {
+  const files = Array.from(event.target.files);
+  event.target.value = '';
+  if (files.length) void importFiles(files);
+});
 bindFileDrop($('dropZone'), async (files) => importFiles(await files));
 
 const exampleControl = createExampleSelector({

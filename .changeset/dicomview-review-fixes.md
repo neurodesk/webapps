@@ -11,3 +11,5 @@ Protocol summaries send dicompare only each file's header, up to its pixel data,
 Cancelling while an image loads now stops the job in the status bar and keeps that image off screen; View loads it again.
 
 A compliance check that dicompare could not run for some or all acquisitions now ends with an error in the status bar instead of a success.
+
+The extra "Or choose a folder" field is gone; choose a folder from the input menu's "Choose folder…".

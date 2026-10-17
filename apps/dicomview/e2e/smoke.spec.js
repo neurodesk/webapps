@@ -351,7 +351,10 @@ test('Choose folder reads every series in a directory tree', async ({ page }, te
     for (const { name, buffer } of dicomSeries({ series, slices: 3 })) writeFileSync(path.join(dir, name), buffer);
   }
   await page.goto('./');
-  await page.locator('#folderInput').setInputFiles(root);
+  await expect(page.locator('[data-neurodesk-input][webkitdirectory]')).toHaveCount(0);
+  const chooser = page.waitForEvent('filechooser');
+  await picker(page).selectOption({ label: 'Choose folder…' });
+  await (await chooser).setFiles(root);
   await expect(page.locator('#fileInfo')).toHaveText('6 images · 2 series');
   await expect(page.locator('#seriesList .nd-volume-toggle')).toHaveCount(2);
 });
