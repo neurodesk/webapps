@@ -374,17 +374,51 @@ test('a folder whose series fails to convert never keeps the previous folder\'s 
   await expect(page.locator('#imageLabel')).toHaveText('');
 });
 
-test('Choose folder reads every series in a directory tree', async ({ page }, testInfo) => {
+test('Load folder reads every series through the File System Access picker', async ({ page }) => {
+  const tree = [4, 9].flatMap((series) => dicomSeries({ series, slices: 3 })
+    .map(({ name, buffer }) => ({ dir: `series-${series}`, name, bytes: buffer.toString('base64') })));
+  await page.goto('./');
+  // A real directory handle: the files go into the origin's private file system,
+  // and the picker the menu calls returns that folder.
+  await page.evaluate(async (entries) => {
+    const storage = await navigator.storage.getDirectory();
+    const root = await storage.getDirectoryHandle('session', { create: true });
+    for (const { dir, name, bytes } of entries) {
+      const folder = await root.getDirectoryHandle(dir, { create: true });
+      const writable = await (await folder.getFileHandle(name, { create: true })).createWritable();
+      await writable.write(Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)));
+      await writable.close();
+    }
+    globalThis.pickerCalls = [];
+    globalThis.showDirectoryPicker = async (options) => {
+      globalThis.pickerCalls.push(options);
+      return root;
+    };
+  }, tree);
+  let chooserOpened = false;
+  page.on('filechooser', () => { chooserOpened = true; });
+  await picker(page).selectOption({ label: 'Load folder…' });
+  await expect(page.locator('#fileInfo')).toHaveText('6 images · 2 series');
+  await expect(page.locator('#seriesList .nd-volume-toggle')).toHaveCount(2);
+  expect(await page.evaluate(() => globalThis.pickerCalls)).toEqual([{ mode: 'read' }]);
+  expect(chooserOpened).toBe(false);
+});
+
+test('Load folder falls back to the folder input without File System Access', async ({ page }, testInfo) => {
   const root = testInfo.outputPath('session');
   for (const series of [4, 9]) {
     const dir = path.join(root, `series-${series}`);
     mkdirSync(dir, { recursive: true });
     for (const { name, buffer } of dicomSeries({ series, slices: 3 })) writeFileSync(path.join(dir, name), buffer);
   }
+  await page.addInitScript(() => {
+    delete globalThis.showDirectoryPicker;
+    delete globalThis.showOpenFilePicker;
+  });
   await page.goto('./');
   await expect(page.locator('[data-neurodesk-input][webkitdirectory]')).toHaveCount(0);
   const chooser = page.waitForEvent('filechooser');
-  await picker(page).selectOption({ label: 'Choose folder…' });
+  await picker(page).selectOption({ label: 'Load folder…' });
   await (await chooser).setFiles(root);
   await expect(page.locator('#fileInfo')).toHaveText('6 images · 2 series');
   await expect(page.locator('#seriesList .nd-volume-toggle')).toHaveCount(2);

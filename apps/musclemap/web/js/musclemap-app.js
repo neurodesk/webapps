@@ -346,7 +346,7 @@ class MuscleMapApp {
     if (fileInput) {
       fileInput.addEventListener('change', (e) => this.fileIOController.handleFileInput(e));
     }
-    // The page-wide drop replaces the inputs; "Choose files…" adds to them.
+    // The page-wide drop replaces the inputs; "Load files…" adds to them.
     fileInput?.addEventListener('nd-replace', () => this.fileIOController.clearFiles());
 
     const runBtn = document.getElementById('runSegmentation');

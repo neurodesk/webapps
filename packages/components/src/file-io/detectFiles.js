@@ -87,6 +87,23 @@ export async function filesFromDataTransferItems(items) {
   return files;
 }
 
+/**
+ * Read a File System Access directory handle the way a dropped folder is read:
+ * every file below it, each stamped with its path from the folder's parent.
+ */
+export async function filesFromDirectoryHandle(handle, path = '') {
+  const prefix = `${path}${handle.name}/`;
+  const children = [];
+  for await (const child of handle.values()) children.push(child);
+  const nested = await Promise.all(children.map(async child => {
+    if (child.kind === 'directory') return filesFromDirectoryHandle(child, prefix);
+    const file = await child.getFile();
+    file._webkitRelativePath = prefix + file.name;
+    return [file];
+  }));
+  return nested.flat();
+}
+
 function getName(fileOrName) {
   return typeof fileOrName === 'string' ? fileOrName : fileOrName?.name || '';
 }

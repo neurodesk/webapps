@@ -75,8 +75,8 @@ test('shared examples load through the image workflow and preserve input on fail
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('./');
   await mockExampleIntegrity(page, positiveExamples.flatMap(example => example.files), await readFile(fixture));
-  await expect(page.locator('#exampleSelect option:not([data-action])')).toHaveText(['Choose an example…', ...examples.map(example => example.label)]);
-  await expect(page.locator('#exampleSelect option[data-action]')).toHaveText(['Choose files…', 'Choose folder…']);
+  await expect(page.locator('#exampleSelect option:not([data-action])')).toHaveText(['Load data or example…', ...examples.map(example => example.label)]);
+  await expect(page.locator('#exampleSelect option[data-action]')).toHaveText(['Load files…', 'Load folder…']);
   await expect(page.locator('#exampleBtn')).toHaveCount(0);
   for (const id of ['t1-head', 'brain-ct']) {
     const example = examples.find(example => example.id === id);

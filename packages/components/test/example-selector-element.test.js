@@ -358,7 +358,8 @@ test('the menu ends with file actions that open the scope input and hide its dro
   let opened = 0;
   input.click = () => { opened++; };
   const actions = [...control.select.options].filter(option => option.dataset.action);
-  assert.deepEqual(actions.map(option => option.textContent), ['Choose files…', 'Choose folder…']);
+  assert.equal(control.select.options[0].textContent, 'Load data or example…');
+  assert.deepEqual(actions.map(option => option.textContent), ['Load files…', 'Load folder…']);
   assert.deepEqual([...control.select.options].map(option => option.value).filter(Boolean), ['brain'], 'only examples carry values');
   assert.ok(scope.querySelector('.nd-file').classList.contains('nd-file-merged'));
   actions[0].selected = true;
@@ -367,6 +368,100 @@ test('the menu ends with file actions that open the scope input and hide its dro
   assert.equal(control.select.value, '');
   assert.equal(control.dataset.exampleState, 'idle', 'a file action never loads an example');
   control.destroy();
+});
+
+// A browser with File System Access: the pickers and handles are stubs, and
+// deliverFiles builds its events from the page's globals.
+function accessSession(t, { files = [], folder = null } = {}) {
+  const { window } = new JSDOM('<body><div id="scope"><label class="nd-file"><input type="file" multiple data-neurodesk-input="image"></label></div></body>');
+  const scope = window.document.getElementById('scope');
+  const input = scope.querySelector('input');
+  const previous = { Event: globalThis.Event, CustomEvent: globalThis.CustomEvent, DataTransfer: globalThis.DataTransfer };
+  t.after(() => Object.assign(globalThis, previous));
+  Object.assign(globalThis, {
+    Event: window.Event,
+    CustomEvent: window.CustomEvent,
+    DataTransfer: class {
+      items = { list: [], add: file => this.items.list.push(file) };
+      get files() { return this.items.list; }
+    },
+  });
+  Object.defineProperty(input, 'files', { get: () => input._files ?? [], set: value => { input._files = value; } });
+  const calls = [];
+  const pickers = {
+    files: async options => { calls.push(['files', options]); return files.map(name => ({ kind: 'file', name, getFile: async () => new window.File([], name) })); },
+    folder: async options => { calls.push(['folder', options]); return folder(window); },
+  };
+  window.showOpenFilePicker = options => pickers.files(options);
+  window.showDirectoryPicker = options => pickers.folder(options);
+  let inputPicker = 0;
+  input.showPicker = () => { inputPicker++; };
+  const changes = [];
+  input.addEventListener('change', () => changes.push(input.files.map(file => file._webkitRelativePath ?? file.name)));
+  const control = createExampleSelector({ examples, onLoad: async () => {}, scope }, window.document);
+  scope.prepend(control);
+  const choose = async action => {
+    [...control.select.options].find(option => option.dataset.action === action).selected = true;
+    control.select.dispatchEvent(new window.Event('change'));
+    await tick();
+  };
+  return { window, control, input, calls, changes, pickers, choose, inputPicker: () => inputPicker };
+}
+
+const directory = (name, children) => ({ kind: 'directory', name, async *values() { yield* children; } });
+const handle = (window, name) => ({ kind: 'file', name, getFile: async () => new window.File([], name) });
+
+test('Load folder reads the chosen folder through File System Access with relative paths', async t => {
+  const session = accessSession(t, {
+    folder: window => directory('session', [
+      handle(window, 'notes.txt'),
+      directory('series-4', [handle(window, 'a.dcm'), handle(window, 'b.dcm')]),
+      directory('series-9', [directory('echo', [handle(window, 'c.dcm')])]),
+    ]),
+  });
+  await session.choose('folder');
+  assert.deepEqual(session.calls, [['folder', { mode: 'read' }]]);
+  assert.deepEqual(session.changes.map(paths => paths.sort()), [[
+    'session/notes.txt', 'session/series-4/a.dcm', 'session/series-4/b.dcm', 'session/series-9/echo/c.dcm',
+  ]], 'the primary input gets every file once, with the path a dropped folder carries');
+  assert.equal(session.inputPicker(), 0, 'the input picker that says Upload never opens');
+  assert.equal(session.control.select.value, '');
+  session.control.destroy();
+});
+
+test('Load files opens the File System Access file picker for the primary input', async t => {
+  const session = accessSession(t, { files: ['a.nii', 'b.nii'] });
+  await session.choose('files');
+  assert.deepEqual(session.calls, [['files', { multiple: true }]]);
+  assert.deepEqual(session.changes, [['a.nii', 'b.nii']]);
+  assert.equal(session.inputPicker(), 0);
+  session.control.destroy();
+});
+
+test('dismissing a File System Access picker changes nothing', async t => {
+  const session = accessSession(t);
+  session.pickers.folder = async () => { throw new session.window.DOMException('The user aborted a request.', 'AbortError'); };
+  session.pickers.files = session.pickers.folder;
+  await session.choose('folder');
+  await session.choose('files');
+  assert.deepEqual(session.changes, []);
+  assert.equal(session.inputPicker(), 0, 'a cancelled dialog does not open a second one');
+  assert.equal(session.control.querySelector('[role="status"]').textContent, '');
+  session.control.destroy();
+});
+
+test('without File System Access, or when it fails, the menu opens the input picker', async t => {
+  const session = accessSession(t);
+  session.pickers.files = async () => { throw new session.window.DOMException('Blocked', 'SecurityError'); };
+  await session.choose('files');
+  assert.equal(session.inputPicker(), 1, 'a failed File System Access picker falls back');
+  delete session.window.showOpenFilePicker;
+  delete session.window.showDirectoryPicker;
+  await session.choose('files');
+  assert.equal(session.inputPicker(), 2);
+  assert.deepEqual(session.calls, []);
+  assert.deepEqual(session.changes, []);
+  session.control.destroy();
 });
 
 test('a refused picker brings the drop box back instead of failing silently', () => {

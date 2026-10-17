@@ -3,6 +3,7 @@ import { bindInfoTooltips, renderInfoIcon } from '../ui/bindInfoTooltips.js';
 import { fetchWithRetry } from '../net/fetchWithRetry.js';
 import { fetchModel } from '../worker/fetchModel.js';
 import { bindPageDrop, deliverFiles, primaryInput } from '../ui/pageDrop.js';
+import { filesFromDirectoryHandle } from '../file-io/detectFiles.js';
 
 let nextId = 0;
 
@@ -143,7 +144,7 @@ export function defineExampleSelector(view = globalThis.window) {
     }
 
     #renderOptions() {
-      this.#select.replaceChildren(this.#option('Choose an example…'));
+      this.#select.replaceChildren(this.#option('Load data or example…'));
       for (const example of this.#examples) this.#select.append(this.#option(example.label, example.id));
       this.#actionsFor = null;
       this.#renderActions();
@@ -158,18 +159,32 @@ export function defineExampleSelector(view = globalThis.window) {
       if (!input || input === this.#actionsFor) return;
       this.#actionsFor?.closest('.nd-file')?.classList.remove('nd-file-merged');
       this.#select.querySelectorAll('hr, option[data-action]').forEach(node => node.remove());
-      this.#select.append(this.ownerDocument.createElement('hr'), this.#option('Choose files…', '', 'files'));
-      if (input.dataset.neurodeskInput === 'image') this.#select.append(this.#option('Choose folder…', '', 'folder'));
+      this.#select.append(this.ownerDocument.createElement('hr'), this.#option('Load files…', '', 'files'));
+      if (input.dataset.neurodeskInput === 'image') this.#select.append(this.#option('Load folder…', '', 'folder'));
       input.closest('.nd-file')?.classList.add('nd-file-merged');
       this.#actionsFor = input;
     };
 
-    #choose() {
+    async #choose() {
       const action = this.#select.selectedOptions[0]?.dataset.action;
       if (!action) return this.#load();
       this.#select.value = '';
-      const input = action === 'folder' ? this.#folder : this.#actionsFor;
-      if (!input) return;
+      const target = this.#actionsFor;
+      if (!target) return;
+      // Chromium's file input dialogs say "Upload"; its File System Access pickers
+      // say "Open" or "Select". Other browsers have only the input's picker.
+      if (view.showOpenFilePicker && view.showDirectoryPicker) {
+        try {
+          const files = action === 'folder'
+            ? await filesFromDirectoryHandle(await view.showDirectoryPicker({ mode: 'read' }))
+            : await Promise.all((await view.showOpenFilePicker({ multiple: target.multiple })).map(handle => handle.getFile()));
+          if (files.length) deliverFiles(target, files);
+          return;
+        } catch (error) {
+          if (error?.name === 'AbortError') return;
+        }
+      }
+      const input = action === 'folder' ? this.#folder : target;
       try {
         input.showPicker();
       } catch (error) {
@@ -239,7 +254,7 @@ export function defineExampleSelector(view = globalThis.window) {
       this.#select.value = '';
       delete this.dataset.exampleId;
       this.#refresh();
-      this.#status('cancelled', 'Example loading cancelled. Choose an example to retry.');
+      this.#status('cancelled', 'Example loading cancelled. Load the example again to retry.');
     }
 
     async #load() {
@@ -297,7 +312,7 @@ export function defineExampleSelector(view = globalThis.window) {
       } catch (error) {
         if (this.#active === controller && !controller.signal.aborted) {
           controller.abort();
-          this.#status('error', `${error.message} Choose the example again to retry.`, true);
+          this.#status('error', `${error.message} Load the example again to retry.`, true);
         }
       } finally {
         if (this.#active === controller) {
