@@ -1,6 +1,7 @@
 // Real browser tests: cross-origin isolation, app boot and the full example pipeline in Chromium.
 import { test, expect } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { unzipSync } from "fflate";
 import { hardwareGpu } from "../../../test-utils/hardware-gpu.mjs";
 
@@ -24,6 +25,75 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
 test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   await page.goto("/");
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
+});
+
+const [example] = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
+const exampleUrls = example.files.map((file) => file.url);
+const picker = (page) => page.locator("select[data-neurodesk-example]");
+const exampleState = (page) => page.locator("[data-neurodesk-examples]");
+// Only paths matter until Run, so placeholder bytes stand in for the images.
+const BIDS = ["dataset_description.json", "sub-01/anat/sub-01_T1w.nii.gz", "sub-01/func/sub-01_task-motor_bold.nii.gz"];
+
+// The example's downloads, answered by respond(index, route) unless it returns null. Routed on the
+// context so requests from the app's service worker are caught too.
+async function routeExample(page, respond) {
+  await page.context().route((url) => exampleUrls.includes(url.href), (route) =>
+    respond(exampleUrls.indexOf(route.request().url()), route) ?? route.continue());
+}
+
+test("files dropped over the viewer load as the dataset", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate((names) => {
+    const transfer = new DataTransfer();
+    for (const name of names) transfer.items.add(new File(["x"], name.split("/").at(-1)));
+    const target = document.getElementById("gl1");
+    for (const type of ["dragover", "drop"]) {
+      target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    }
+  }, BIDS);
+  await expect(page.locator("#fileInfo")).toHaveText("3 files · sub-01");
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("Choose folder reads a BIDS tree", async ({ page }, testInfo) => {
+  const root = testInfo.outputPath("bids");
+  for (const name of BIDS) {
+    mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
+    writeFileSync(path.join(root, name), "x");
+  }
+  await page.goto("/");
+  const chooser = page.waitForEvent("filechooser");
+  await picker(page).selectOption({ label: "Choose folder…" });
+  await (await chooser).setFiles(root);
+  await expect(page.locator("#fileInfo")).toHaveText("3 files · sub-01");
+});
+
+test("a failed example download can be retried", async ({ page }) => {
+  let failing = true;
+  await routeExample(page, (index, route) => (failing && index === 0 ? route.fulfill({ status: 503, body: "" }) : null));
+  await page.goto("/");
+  await picker(page).selectOption(example.id);
+  await expect(exampleState(page)).toHaveAttribute("data-example-state", "error", { timeout: 60_000 });
+  await expect(page.locator("#runButton")).toBeDisabled();
+  failing = false;
+  await picker(page).selectOption(example.id);
+  await expect(page.locator("#fileInfo")).toHaveText("6 files · sub-01", { timeout: 300_000 });
+  await expect(page.locator("#runButton")).toBeEnabled();
+});
+
+test("a cancelled example download loads nothing and can be retried", async ({ page }) => {
+  const held = [];
+  await routeExample(page, (index, route) => (held.length ? null : held.push(route)));
+  await page.goto("/");
+  await picker(page).selectOption(example.id);
+  await expect.poll(() => held.length).toBe(1);
+  await page.getByRole("button", { name: "Cancel example download", exact: true }).click();
+  await expect(exampleState(page)).toHaveAttribute("data-example-state", "cancelled");
+  await held[0].abort();
+  await expect(page.locator("#fileInfo")).toBeHidden();
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await picker(page).selectOption(example.id);
+  await expect(page.locator("#fileInfo")).toHaveText("6 files · sub-01", { timeout: 300_000 });
 });
 
 test("the example runs end to end and downloads the derivatives @slow", async ({ page }) => {
