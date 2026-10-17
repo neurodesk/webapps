@@ -124,7 +124,7 @@ apps:
       - { name: Pyodide, url: https://pyodide.org, role: runs SCT Python and scientific libraries in WebAssembly }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: runs the segmentation models in the browser }
       - { name: "@neurodesk/spinalcordtoolbox", url: https://github.com/neurodesk/webapps/tree/main/packages/spinalcordtoolbox, role: segmentation pipeline shared by the browser and the sct-webapp command line }
-      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive viewer with zoom, pan, layers and drawing }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive viewer with zoom, pan, layers and drawing }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
     citations:
@@ -962,7 +962,7 @@ apps:
       - { name: FreeSurfer, url: https://surfer.nmr.mgh.harvard.edu/, role: fsaverage cortical eligibility atlas }
       - { name: BrainNet, url: https://github.com/simnibs/brainnet, role: TopoFit and TReGA pretrained models }
       - { name: ONNX Runtime Web, url: https://onnxruntime.ai/docs/get-started/with-javascript/web.html, role: local model inference }
-      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/20260707-niivue-mono-migration, role: interactive volume and surface viewer }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive volume and surface viewer }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: niimath, url: https://github.com/rordenlab/niimath, role: mesh simplification and smoothing for STL export }
       - { name: dcm2niix, url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion }
@@ -1368,6 +1368,7 @@ apps:
     privacy: Your DICOM files and their headers stay on your computer. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
     packages:
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion and BIDS sidecars }
+      - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive viewer with window and level, layouts and colormaps }
       - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
       - { name: dcmjs data dictionary, url: https://github.com/dcmjs-org/dcmjs, role: DICOM tag names and value representations }
       - { name: dicompare (Python, via Pyodide), url: https://github.com/astewartau/dicompare, role: protocol summary and schema validation }
