@@ -10,10 +10,26 @@ macOS signing and notarization continue through their existing release jobs.
 The organization must create an Artifact Signing account, complete identity
 validation and create a public-trust certificate profile before activation.
 An Azure application or managed identity needs the **Artifact Signing Certificate
-Profile Signer** role on that profile. Configure a GitHub OIDC federated credential
-for this repository's `main` branch. Releases must run from that branch; do not
-trust pull-request or fork subjects. No client secret or certificate is stored in
-GitHub. The Windows producer jobs and reusable-workflow callers grant
+Profile Signer** role on that profile. Configure GitHub OIDC federation for this
+repository's approved workflow refs. Main-branch builds, including the nightly
+desktop suite, use `refs/heads/main`.
+[App release automation](../../scripts/dispatch-native-release.mjs) dispatches
+native workflows at `<app>-v<version>` tags. Those jobs use
+`refs/tags/<app>-v<version>`, including calls to `node-cli-portable.yml`. A
+credential for `main` alone does not authorize these tagged releases.
+
+Before enabling signing, authorize the exact approved release tags in Azure as
+well as `main`. Match the complete subject emitted by GitHub, including any
+repository IDs or customized claims. Standard federated credentials require an
+exact subject and do not support wildcard tag values. A protected GitHub
+environment can provide a stable subject across releases, but the current
+producer jobs do not declare one; adopting it requires coordinated workflow and
+trust-policy changes. See [GitHub's OIDC subject reference](https://docs.github.com/en/actions/reference/security/oidc#example-subject-claims)
+and [Microsoft's federation configuration](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation-create-trust#important-considerations-and-restrictions).
+
+Do not trust pull-request, fork or unreviewed tag subjects. No client secret or
+certificate is stored in GitHub. The Windows producer jobs and reusable-workflow
+callers grant
 `id-token: write`; signing itself is suppressed on pull requests.
 
 Set these repository variable names after organization setup:
