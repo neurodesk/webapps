@@ -31,6 +31,16 @@ export function acquisitionCaption(acquisition) {
   return parts.join(' · ');
 }
 
+// The status line after a compliance check. results: ProtocolSession.check's, where an
+// acquisition the worker could not check carries an error. Any such error fails the run.
+export function checkOutcome(results, schemaName) {
+  const failures = results.filter((result) => result.error);
+  const count = `${results.length} acquisition${results.length === 1 ? '' : 's'}`;
+  if (!failures.length) return { message: `${count} checked against ${schemaName}`, failed: false };
+  const which = failures.length === results.length ? count : `${failures.length} of ${count}`;
+  return { message: `${which} could not be checked against ${schemaName}: ${failures[0].error}`, failed: true };
+}
+
 // One table per acquisition, for the Protocol view.
 export function protocolTables(acquisitions, doc) {
   return acquisitions.map((acquisition) => {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { acquisitionCaption, protocolRows, protocolTables } from '../src/protocol-table.js';
+import { acquisitionCaption, checkOutcome, protocolRows, protocolTables } from '../src/protocol-table.js';
 
 // The shape dicompare's analyze_dicom_files_for_ui returns for one acquisition.
 const acquisition = {
@@ -35,4 +35,12 @@ test('each acquisition becomes a captioned table that marks varying rows', () =>
   assert.equal(table.caption.textContent, 'acq-megre · 2 series · 8 files');
   assert.equal(table.tBodies[0].rows.length, 4);
   assert.deepEqual([...table.querySelectorAll('tr[data-flag] td:first-child')].map((cell) => cell.textContent), ['EchoTime', 'ImageType']);
+});
+
+test('a compliance check fails when any acquisition could not be checked', () => {
+  const passed = { acquisitionName: 'acq-t1', results: [{ status: 'pass' }] };
+  const broken = { acquisitionName: 'acq-t2', results: [], error: 'list index out of range' };
+  assert.deepEqual(checkOutcome([passed], 'QSM'), { message: '1 acquisition checked against QSM', failed: false });
+  assert.deepEqual(checkOutcome([passed, broken], 'QSM'), { message: '1 of 2 acquisitions could not be checked against QSM: list index out of range', failed: true });
+  assert.deepEqual(checkOutcome([broken], 'QSM'), { message: '1 acquisition could not be checked against QSM: list index out of range', failed: true });
 });

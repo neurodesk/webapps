@@ -114,6 +114,9 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
           const sizes = message.payload.fileContents.map((buffer) => buffer.byteLength);
           window.analyzed = { files: sizes.length, bytes: sizes.reduce((sum, size) => sum + size, 0), transferred: transfer?.length ?? 0 };
         }
+        if (message?.type === 'validateAcquisition' && window.breakChecks) {
+          return super.postMessage({ ...message, payload: { ...message.payload, acquisitionIndex: 99 } }, transfer);
+        }
         super.postMessage(message, transfer);
       }
     };
@@ -169,6 +172,11 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect(page.locator('#complianceReport .dicompare-error')).toHaveCount(0);
   await expect(page.locator('#complianceReport .dicompare-summary')).toContainText('5 Passed');
   await expect(page.locator('#complianceReport .dicompare-status-fail').first()).toBeVisible();
+
+  await page.evaluate(() => { window.breakChecks = true; });
+  await button.click();
+  await expect(status(page)).toHaveText(/^1 acquisition could not be checked against QSM Consensus Guidelines: .*Invalid acquisition index 99/, { timeout: 120000 });
+  await expect(status(page)).toHaveClass(/error/);
 });
 
 for (const failure of ['download', 'corrupt download']) {

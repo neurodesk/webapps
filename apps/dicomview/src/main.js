@@ -20,7 +20,7 @@ import { APP } from './config.js';
 import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
 import { ProtocolSession, SCHEMAS } from './protocol-session.js';
-import { protocolTables } from './protocol-table.js';
+import { checkOutcome, protocolTables } from './protocol-table.js';
 import { describeSeries, seriesLabel, seriesSummary } from './series-text.js';
 import examples from '../examples.json';
 
@@ -538,20 +538,20 @@ async function runProtocol() {
       state.acquisitions = acquisitions;
       $('protocolSummary').replaceChildren(...protocolTables(state.acquisitions, document));
     }
-    let schema = null;
+    let outcome = { message: `${state.acquisitions.length} acquisition${state.acquisitions.length === 1 ? '' : 's'} summarised`, failed: false };
     if (schemaId) {
       report('protocol', 1, 'Checking compliance…');
-      schema = await loadSchema(schemaId);
+      const schema = await loadSchema(schemaId);
       const complianceResults = await protocol.check(state.acquisitions, schema, Number($('schemaAcquisition').value || 0), { signal: controller.signal });
       assertGeneration(generation);
       renderer.render($('complianceReport'), { acquisitions: state.acquisitions, complianceResults, schema });
+      outcome = checkOutcome(complianceResults, schema.name);
     } else {
       $('complianceReport').replaceChildren();
     }
     viewTab('protocol').hidden = false;
     showView('protocol');
-    const count = `${state.acquisitions.length} acquisition${state.acquisitions.length === 1 ? '' : 's'}`;
-    finish('protocol', controller, schema ? `${count} checked against ${schema.name}` : `${count} summarised`);
+    finish('protocol', controller, outcome.message, { error: outcome.failed ? new Error(outcome.message) : null });
   } catch (error) {
     finish('protocol', controller, 'Protocol summary', { error });
   }

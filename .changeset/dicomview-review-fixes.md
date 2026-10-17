@@ -9,3 +9,5 @@ Files without the DICOM preamble that start with their file meta group, includin
 Protocol summaries send dicompare only each file's header, up to its pixel data, and move rather than copy those bytes into its worker, so a large folder no longer needs all its pixel data in memory twice.
 
 Cancelling while an image loads now stops the job in the status bar and keeps that image off screen; View loads it again.
+
+A compliance check that dicompare could not run for some or all acquisitions now ends with an error in the status bar instead of a success.
