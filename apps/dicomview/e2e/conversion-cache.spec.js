@@ -83,7 +83,7 @@ test('Convert all converts every series once in the background, after which view
   await expect(status(page)).toHaveText('0 series converted · 3 already converted');
 });
 
-test('saved conversions open after a reload without dcm2niix; Forget saved images converts again', async ({ page }) => {
+test('saved conversions open after a reload without dcm2niix; Clear saved converts again', async ({ page }) => {
   await instrument(page);
   await page.goto('./');
   await page.locator('#dicomInput').setInputFiles(files(3, 7));
