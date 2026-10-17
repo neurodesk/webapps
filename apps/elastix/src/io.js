@@ -21,7 +21,7 @@ import {
   toOmeZarr,
   toOmeZarrOzx,
 } from "@fideus-labs/ngff-zarr/browser";
-import { TiffStore } from "@fideus-labs/fiff";
+import { TiffSource as TiffStore } from "@neurodesk/elastix/tiff-source";
 import FetchStore from "@zarrita/storage/fetch";
 import ZipFileStore from "@zarrita/storage/zip";
 import { createSourceReader } from "@neurodesk/elastix/source-reader";
@@ -114,8 +114,8 @@ export async function writeOmeZarrFile(image, name) {
   return toFile(await toOmeZarrOzx(await singleScale(await itkImageToNgffImage(image))), name, "application/zip");
 }
 
-export async function writeOmeTiffFile(image, spatialUnits, name, { signal } = {}) {
-  return toFile(await writeOmeTiff(image, spatialUnits, { signal }), name, "image/tiff");
+export async function writeOmeTiffFile(image, spatialUnits, name, { signal, tiffMetadata } = {}) {
+  return toFile(await writeOmeTiff(image, spatialUnits, { signal, tiffMetadata }), name, "image/tiff");
 }
 
 export async function writeTransformFile(transform, name) {

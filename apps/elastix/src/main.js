@@ -433,7 +433,7 @@ async function outputFile(stage, signal) {
   const { files, names } = output;
   if (stage === "registered") return files.nifti;
   if (stage === "omeZarr") return (files.omeZarr ??= await abortable(writeOmeZarrFile(output.result, names.omeZarr), signal));
-  if (stage === "omeTiff") return (files.omeTiff ??= await abortable(writeOmeTiffFile(output.result, output.spatialUnits, names.omeTiff, { signal }), signal));
+  if (stage === "omeTiff") return (files.omeTiff ??= await abortable(writeOmeTiffFile(output.result, output.spatialUnits, names.omeTiff, { signal, tiffMetadata: output.tiffMetadata }), signal));
   if (stage === "transform") return (files.transform ??= await abortable(writeTransformFile(output.transform, names.transform), signal));
   if (stage === "transformOmeZarr") {
     return (files.transformOmeZarr ??= await abortable(writeTransformOmeZarrFile(output, names.transformOmeZarr), signal));
@@ -481,9 +481,9 @@ async function register({
   await viewers.registered.loadVolumes([{ url: nifti, name: nifti.name }]);
   signal?.throwIfAborted();
   const parameterNames = parameterFileNames(names.stem, run.transformParameterObject.length);
-  const tiffIssue = omeTiffIssue(run.result, fixed.spatialUnits);
+  const tiffIssue = omeTiffIssue(run.result, fixed.spatialUnits, fixed.tiffMetadata);
   const rows = resultRows(names, parameterNames, hdf5Writable(run.transform), !tiffIssue);
-  output = { ...run, fixed: fixed.image, moving: moving.image, spatialUnits: fixed.spatialUnits, names, rows, files: { nifti } };
+  output = { ...run, fixed: fixed.image, moving: moving.image, spatialUnits: fixed.spatialUnits, tiffMetadata: fixed.tiffMetadata, names, rows, files: { nifti } };
   results.render(rows);
   $("omeTiffNote").textContent = tiffIssue ?? "";
   $("omeTiffNote").hidden = !tiffIssue;

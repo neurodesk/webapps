@@ -86,7 +86,7 @@ The web app's downloads, named after the moving image:
 | File | Content |
 | --- | --- |
 | `<moving>_registered.nii.gz` | Moving image resampled onto the fixed grid |
-| `<moving>_registered.ome.tif` | Full-resolution float32 OME-TIFF, when geometry and units are supported |
+| `<moving>_registered.ome.tif` | Float32 OME-TIFF at the selected registration pyramid level, when calibration and geometry are supported |
 | `<moving>_transform.h5` | ITK HDF5 transform; rigid and affine runs only |
 | `<moving>_transform.ome.zarr.ozx` | OME-Zarr RFC-5 fixed-to-moving transform |
 | `<moving>_TransformParameters.N.toml` | elastix parameter files, one per stage |
@@ -99,9 +99,16 @@ fixed grid otherwise.
 The shared OME-TIFF writer uses fiff with deflate compression and retains
 the stationary OME-TIFF or OME-Zarr input's spacing and spatial units. The
 pinned writer cannot store translation or direction, so this output requires
-a zero origin, identity direction and known spatial units. NIfTI and other
+a zero origin, identity direction and known physical sizes and spatial units.
+Original TIFF metadata must supply positive physical sizes on every spatial
+axis. Omitted units on known sizes use the OME schema's micrometer default.
+Original TIFF Plane positions disable export because the reader drops them
+when it builds the registration grid. NIfTI and other
 ITK inputs do not retain explicit units in the current reader. A skipped TIFF
-is explained on standard error; NIfTI and the transform outputs still write.
+is explained on standard error; NIfTI and the transform outputs still write,
+including after a TIFF encoder or file-write failure. Only a partial TIFF
+created by that export is removed. Cancellation and required-output failures
+still fail the run.
 The writer does not resample, reorient or quantize the registration result.
 
 Two of the web app's downloads are missing:

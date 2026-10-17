@@ -7,6 +7,7 @@ import { ncc, readVolume } from "../../../test-utils/registration-similarity.mjs
 import { fixedPixels, movingPixels, pyramidalTiff, SHIFT_PX, SPACING, syntheticPair, totalTranslation } from "./fixtures.mjs";
 import { memoryStoreToZip } from "@fideus-labs/ngff-zarr";
 import { readTransformArchive } from "./ome-zarr-transform.mjs";
+import { tiffFixture } from "../../../packages/elastix/test/tiff-fixture.js";
 
 const pair = await syntheticPair();
 const fixture = await readFile(new URL("../../../exes/synthseg/test/fixtures/small.nii.gz", import.meta.url));
@@ -123,6 +124,32 @@ test("local OME-TIFF files register and export calibrated float32 OME-TIFF", asy
   await page.locator("#movingInput").setInputFiles({ name: "moving_registered.ome.tif", mimeType: "image/tiff", buffer: tiff });
   await expect(page.locator("#movingInfo")).toContainText("moving_registered.ome.tif · 128×128 float32");
 });
+
+for (const [name, metadata, reason] of [
+  ["uncalibrated", { attributes: "" }, "known physical pixel sizes"],
+  ["positioned", { planes: '<Plane TheZ="0" TheC="0" TheT="0" PositionX="100" PositionY="200"/>' }, "source plane positions"],
+]) {
+  test(`${name} TIFF retains other downloads and explains its TIFF refusal`, async ({ page }) => {
+    test.setTimeout(300_000);
+    const buffer = Buffer.from(await tiffFixture({ ...metadata, size: [128, 128], data: Float32Array.from(fixedPixels) }));
+    await page.goto("/");
+    await expect(page.locator("#movingInput")).toBeEnabled();
+    await page.locator("#movingInput").setInputFiles({ name: "moving.ome.tif", mimeType: "image/tiff", buffer });
+    await expect(page.locator("#movingInfo")).toContainText("128×128 float32");
+    await page.locator("#stationaryInput").setInputFiles({ name: `${name}.ome.tif`, mimeType: "image/tiff", buffer });
+    await expect(page.locator("#stationaryInfo")).toContainText("128×128 float32");
+    await page.locator("#method").selectOption("rigid");
+    await page.locator("#runButton").click();
+    await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 240_000 });
+    await expect(page.locator("#resultList")).not.toContainText("Registered OME-TIFF");
+    await expect(page.locator("#omeTiffNote")).toContainText(reason);
+    const registered = await readVolume(await download(page, "Registered NIfTI"));
+    expect(registered.dims.slice(0, 2)).toEqual([128, 128]);
+    expect(ncc(registered.data, Float32Array.from(fixedPixels))).toBeGreaterThan(0.98);
+    expect((await download(page, "TransformParameters.1.toml")).toString("utf8")).toContain("InitialTransformParameterFileName");
+    expect((await download(page, "Transform (OME-Zarr)")).length).toBeGreaterThan(0);
+  });
+}
 
 // fiff before 0.8.2 could not read SubIFD levels with geotiff 3.
 test("a pyramidal OME-TIFF opens with its SubIFD levels", async ({ page }) => {

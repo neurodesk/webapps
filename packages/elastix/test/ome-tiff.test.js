@@ -59,3 +59,34 @@ test("a cancelled OME-TIFF export does not return a download and can be retried"
   await assert.rejects(writeOmeTiff(input, units, { signal: AbortSignal.abort() }), { name: "AbortError" });
   assert.ok((await writeOmeTiff(input, units)).byteLength > 0);
 });
+
+test("cancellation after TIFF compression starts rejects the download and retains pixels for retry", async (t) => {
+  const input = image(3);
+  const pixels = new Float32Array(input.data);
+  const controller = new AbortController();
+  const NativeCompressionStream = globalThis.CompressionStream;
+  let started = false;
+  t.mock.method(globalThis, "CompressionStream", function (format) {
+    const stream = new NativeCompressionStream(format);
+    const writer = stream.writable.getWriter();
+    return {
+      readable: stream.readable,
+      writable: new WritableStream({
+        write(chunk) {
+          const pending = writer.write(chunk);
+          started = true;
+          controller.abort();
+          return pending;
+        },
+        close: () => writer.close(),
+      }),
+    };
+  });
+  await assert.rejects(writeOmeTiff(input, units, { signal: controller.signal }), { name: "AbortError" });
+  assert.equal(started, true);
+  assert.deepEqual(input.data, pixels);
+  t.mock.restoreAll();
+  const bytes = await writeOmeTiff(input, units);
+  const { images: [level] } = await fromOmeZarr(await TiffStore.fromArrayBuffer(bytes.buffer), { version: "0.5" });
+  assert.deepEqual((await ngffImageToItkImage(level)).data, pixels);
+});

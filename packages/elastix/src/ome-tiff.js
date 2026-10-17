@@ -2,10 +2,10 @@ import { toOmeTiff } from "@fideus-labs/fiff";
 import { createNgffImage, toMultiscales } from "@fideus-labs/ngff-zarr";
 import { omeTiffIssue } from "./outputs.js";
 
-/** Full-resolution scalar registration output, with units from the stationary input. */
-export async function writeOmeTiff(image, spatialUnits, { signal } = {}) {
+/** Scalar result at the selected registration pyramid level, with stationary calibration. */
+export async function writeOmeTiff(image, spatialUnits, { signal, tiffMetadata } = {}) {
   signal?.throwIfAborted();
-  const issue = omeTiffIssue(image, spatialUnits);
+  const issue = omeTiffIssue(image, spatialUnits, tiffMetadata);
   if (issue) throw new Error(issue);
   const { dimension } = image.imageType;
   if (![2, 3].includes(dimension) || image.imageType.components !== 1 || !(image.data instanceof Float32Array)) {

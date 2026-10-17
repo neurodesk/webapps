@@ -22,21 +22,34 @@ export function outputNames(movingName) {
 }
 
 /** fiff 0.8.2 writes spacing and units, but no origin or direction. */
-export function omeTiffIssue(image, spatialUnits) {
+export function omeTiffIssue(image, spatialUnits, tiffMetadata) {
   const dimension = image.imageType.dimension;
+  const axes = ["x", "y", ...(dimension === 3 ? ["z"] : [])];
+  if (tiffMetadata?.hasPlanePositions) {
+    return "OME-TIFF cannot preserve source plane positions. Use NIfTI or OME-Zarr.";
+  }
+  if (tiffMetadata && axes.some((axis) => !(tiffMetadata.physicalSizes[axis] > 0 && Number.isFinite(tiffMetadata.physicalSizes[axis])))) {
+    return "OME-TIFF needs known physical pixel sizes. Use NIfTI or OME-Zarr.";
+  }
   if (Array.from(image.origin).some((value) => value !== 0)) {
     return "OME-TIFF cannot preserve this origin. Use NIfTI or OME-Zarr.";
   }
   if (Array.from(image.direction).some((value, index) => value !== (index % (dimension + 1) === 0 ? 1 : 0))) {
     return "OME-TIFF cannot preserve this direction. Use NIfTI or OME-Zarr.";
   }
-  if (["x", "y", ...(dimension === 3 ? ["z"] : [])].some((axis) => !TIFF_UNITS.has(spatialUnits?.[axis]))) {
+  if (axes.some((axis) => !TIFF_UNITS.has(spatialUnits?.[axis]))) {
     return "OME-TIFF needs known spatial units. Use NIfTI or OME-Zarr.";
   }
   return null;
 }
 
 const TIFF_UNITS = new Set(["meter", "centimeter", "millimeter", "micrometer", "nanometer", "picometer", "angstrom"]);
+
+const UNIT_ALIASES = { m: "meter", cm: "centimeter", mm: "millimeter", um: "micrometer", "µm": "micrometer", "μm": "micrometer", nm: "nanometer", pm: "picometer", "Å": "angstrom" };
+
+export function normalizeSpatialUnits(units) {
+  return units && Object.fromEntries(Object.entries(units).map(([axis, unit]) => [axis, UNIT_ALIASES[unit] ?? unit]));
+}
 
 /**
  * A copy in a plain ArrayBuffer of exactly the view's bytes. ITK-Wasm can

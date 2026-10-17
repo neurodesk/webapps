@@ -17,6 +17,7 @@
     "./parameter-maps": "./src/parameter-maps.js",
     "./pipeline": "./src/pipeline.js",
     "./source-reader": "./src/source-reader.js",
+    "./tiff-source": "./src/tiff-source.js",
     "./sources": "./src/sources.js",
     "./transform-export": "./src/transform-export.js"
   },
@@ -38,6 +39,8 @@
     "@itk-wasm/image-io": "1.6.1",
     "@itk-wasm/transform-io": "1.1.0",
     "@zarrita/storage": "0.2.0",
+    "@xmldom/xmldom": "0.8.13",
+    "geotiff": "3.0.5",
     "itk-wasm": "1.0.0-b.201",
     "zarrita": "0.7.5"
   },
