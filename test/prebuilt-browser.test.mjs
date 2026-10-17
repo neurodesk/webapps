@@ -62,7 +62,7 @@ test('a failed build stops the browser suite and returns its exit code', () => {
 
 test('every production Playwright server omits its build only in prebuilt mode', async () => {
   const { readdir } = await import('node:fs/promises');
-  const apps = await readdir(join(root, 'apps'));
+  const apps = (await readdir(join(root, 'apps'), { withFileTypes: true })).filter(e => e.isDirectory()).map(e => e.name);
   const configs = [];
   for (const app of apps) {
     const files = await readdir(join(root, 'apps', app));

@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "app": "fastprep",
+  "repository": "neurodeskorg/webapps",
+  "revision": "3390ec024ac302bde8f365a4f6169b4a1580538f",
+  "base_url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/",
+  "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+  "source": "example: motor3T run-03 (Rorden lab, 3T Siemens), T1w cropped (neck), echo-2 magnitude BOLD cropped in x, sidecars de-identified; templates: TemplateFlow tpl-MNI152NLin2009cAsym res-01",
+  "assets": [
+    {"filename": "example/dataset_description.json","bytes": 137,"sha256": "5389aee8d4012972303be53ec7bdce986e30c3205b3eb7e8cfdbe5030c7c93bb"},
+    {"filename": "example/sub-01/anat/sub-01_T1w.json","bytes": 2095,"sha256": "4ed766311e03cb46d4a03d7c4be31cb921cc89faad952ec7e97227ede22aa4ca"},
+    {"filename": "example/sub-01/anat/sub-01_T1w.nii.gz","bytes": 7380892,"sha256": "1f2e921ff17f09b1bce0947a92afb636eaa027e60edccd562e647507e1ac6336"},
+    {"filename": "example/sub-01/func/sub-01_task-motor_bold.json","bytes": 3039,"sha256": "dc208e0cddfebba6ef146149fa642afaf1cdfe3d96cba255760cc14518d59c55"},
+    {"filename": "example/sub-01/func/sub-01_task-motor_bold.nii.gz","bytes": 45640970,"sha256": "074c5ec0f73a24b86fe3716b7e97eddcea3db7a90f398f023bb52a3dac46a86a"},
+    {"filename": "example/sub-01/func/sub-01_task-motor_events.tsv","bytes": 99,"sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7"},
+    {"filename": "templates/tpl-MNI152NLin2009cAsym/LICENSE","bytes": 682,"sha256": "46e280fe1a24c6f37feef2445ed288435e0ad063504a06030b206b12fdd2629d"},
+    {"filename": "templates/tpl-MNI152NLin2009cAsym/template_description.json","bytes": 1551,"sha256": "6b1b199ecc5fce65967e820f9a6a73247103ed6aa47b9df904d85a0d0c817571"},
+    {"filename": "templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz","bytes": 13685075,"sha256": "1f27aabea9f7183dc0c69dafa71e1787b921ca778d655d9c1bf302b273d5627a"},
+    {"filename": "templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_T1w.nii.gz","bytes": 3388655,"sha256": "0d3f168c8f9990197d6dad59a7bab8e4f144fcc8a4e3e5513053ebd533edc309"},
+    {"filename": "templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz","bytes": 159538,"sha256": "e40bb1816736504d4c25abc243c1c8503df1d308f64c048318aa4b829e09a7ae"}
+  ]
+}

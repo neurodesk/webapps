@@ -22,6 +22,7 @@ minimumReleaseAgeExclude:
   - '@niivue/niivue@1.0.0-rc.14'
   - '@fideus-labs/ngff-zarr@0.38.0'
   - '@fideus-labs/fiff@0.8.2'
+  - '@niivue/niimath@1.4.20261016'
 overrides:
   '@playwright/test': 1.64.0
   playwright: 1.64.0

@@ -37,6 +37,7 @@ exes/*/target/
 # WASM files (downloaded by per-app setup.sh)
 apps/*/web/wasm/
 packages/greedy/wasm/
+packages/fastprep/wasm/
 packages/greedy/.wasm-build.lock/
 
 # Vendored shared components (generated from packages/components by each app's vendor script)
@@ -105,3 +106,5 @@ apps/*/web/examples.json
 
 quality-artifacts/
 .stryker-tmp/
+apps/fastprep/public/fastprep-wasm/
+apps/fastprep/public/niimath/

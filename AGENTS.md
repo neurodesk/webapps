@@ -4,6 +4,8 @@ This repository stores source code only. Large validation datasets and models be
 
 Every remote URL the apps or the offline bundle fetch (`registry/offline-assets.sources.json` and its lock, `models/*.manifest.json`, `apps/*/examples.json`) must be immutable: a Hugging Face commit, an exact npm version, a release asset or a commit URL. Mirror anything else to the dataset and pin it; `test/offline-asset-pins.test.mjs` rejects the rest.
 
+pnpm's `minimumReleaseAge` blocks a dependency version for 24 h after it is published. To adopt a fresh release (e.g. a new `@niivue/niimath`) sooner, add that exact version to `minimumReleaseAgeExclude` in `pnpm-workspace.yaml`.
+
 ## Interface changes and new applications
 
 Before changing UI, adding controls, or scaffolding an app, read [the design system](docs/architecture/design-system.md) and [the interface standard](docs/architecture/interface-standard.md). The design system sets the look (Inter, neutral greys, the logo green for action only) and the shared vocabulary; the app template is its reference.
@@ -95,6 +97,14 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - The NiiVue rc.11 controller has no single-volume removal (`removeVolume` lives on its internal model); `dropOverlays()` reloads just the base image with `nv.loadVolumes([nv.volumes[0]])`.
 - The pipeline (segmentation, the GM + WM sum, niimath `-mesh`, the manifold and winding check, STL/MZ3) lives in `packages/brain2print`, shared by the app and the `brain2print` command line; change outputs there. The app injects its browser runtimes (`src/browser.js`), the command line the CPU MindGrab and niimath drivers from `@neurodesk/node-drivers`. Its release check holds every file byte for byte to `validation/browser-reference.json`, recorded by `validation/browser-reference.mjs` from the pipeline in Chromium with MindGrab's CPU backend; rerecord it when MindGrab, niimath or the pipeline changes. MindGrab stays at the version the Node driver mirrors.
 - The e2e pipeline tests run segmentation with `backend: 'cpu'` in Chromium's software adapter; the CPU automation test's downloads must equal the `mni152-pve` pins in `browser-reference.json`. The hardware variants need `NEURODESK_HARDWARE_GPU=1` on a Mac. Mesh outputs (`*.stl`, `*.obj`, `*.mz3`) are gitignored; reference data goes to Hugging Face.
+
+## fastprep
+
+- The Rust core (`exes/fastprep/core`) decides every step and emits tool argv, as written to `work/commands.sh`. The native CLI (`exes/fastprep/cli`) runs it as processes; the browser host (`packages/fastprep/src/drivers.js`) maps it to WASM/WebGPU runtimes and rejects options it does not declare. A core change that adds a tool option needs a driver change, or the browser run fails.
+- Byte parity with the Python reference (`fastprep.py`, `glm.py`) is the goal. Deliberate divergences are listed in `exes/fastprep/README.md` and `exes/glm/README.md`; add any new one there.
+- niimath WASM reads `ENV` during startup, so set it in Emscripten `preRun`. It has no zstd: `.nii.zst` names are staged as raw `.nii`.
+- `vite.config.js` excludes `@brainchop/mindgrab` and `onnxruntime-web` from `optimizeDeps`: MindGrab's top-level await breaks esbuild's es2020 dev pre-bundle, and `dev` fails without it. Any app importing either needs the same.
+- The full-example e2e test is `@slow` and needs `NEURODESK_HARDWARE_GPU=1`; the headless shell has no WebGPU and takes hours.
 
 ## ants
 
@@ -295,6 +305,8 @@ relative URLs and must remain adjacent. The versioned Greedy web release carries
 that generated runtime; it is never committed or npm-published. Greedy's app
 manifest is the release version source; the release tooling keeps its package
 and Rust workspace at the same `MAJOR.MINOR.YYYYMMDD` version.
+
+`exes/fastprep` and `exes/glm` are Cargo workspaces (`make build test lint`) with `cli`, `core` and `wasm` crates. `pnpm --filter @neurodesk/fastprep build:wasm` builds both WASM crates into the gitignored `packages/fastprep/wasm`. There is no bundled CLI release yet: fastprep is in `WITHOUT_COMMAND_LINE` (`test/standalone.test.mjs`) until niimath, brainchop, greedy-rs, synthsr, topofit and glm are packaged and TopoFit's licence allows it.
 
 `exes/compute-server` is the `neurodesk-compute` server (`make build test lint fmt`,
 `make run-simulated`). It has no GPU or Docker dependency at build or test time; all

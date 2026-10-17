@@ -1,0 +1,4 @@
+glm
+Copyright 2026 Neurodesk contributors
+
+Rust port of glm.py (Chris Rorden's Lab): block-design first-level GLM with AR(1) prewhitening.

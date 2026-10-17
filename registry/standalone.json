@@ -1485,6 +1485,13 @@
         }
       ],
       "containers": []
+    },
+    "fastprep": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
     }
   }
 }

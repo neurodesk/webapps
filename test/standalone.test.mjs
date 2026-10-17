@@ -77,6 +77,7 @@ const WITHOUT_COMMAND_LINE = {
   surfannotate: 'interactive surface annotation: every result is a manual choice in the viewer',
   zarro: 'interactive OME-Zarr viewer: it has no batch output',
   nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
+  fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',
 };
 
 test('every app ships its own command line or states why it cannot', async () => {

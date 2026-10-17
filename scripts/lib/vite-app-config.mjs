@@ -35,9 +35,11 @@ function emitHeadersFile() {
 const fsUrl = (path) => `@fs/${path.replaceAll('\\', '/').replace(/^\/+/, '')}`;
 
 function injectDevShell({ app, version, measurementId, information }) {
+  let base = '/';
   return {
     name: 'neurodesk-dev-shell',
     apply: 'serve',
+    configResolved(config) { base = config.base; },
     transformIndexHtml(html) {
       return injectCompositeTheme(html, {
         appId: app.id,
@@ -46,8 +48,9 @@ function injectDevShell({ app, version, measurementId, information }) {
         description: app.description,
         version,
         information,
-        standaloneHref: fsUrl(join(repoRoot, 'registry/standalone.json')),
-        componentsHref: `${fsUrl(join(repoRoot, 'packages/components/src'))}/`,
+        // the shell resolves these two against its own script URL, so they must be rooted
+        standaloneHref: base + fsUrl(join(repoRoot, 'registry/standalone.json')),
+        componentsHref: `${base}${fsUrl(join(repoRoot, 'packages/components/src'))}/`,
         measurementId,
         href: fsUrl(join(repoRoot, 'site', 'app-theme.css')),
         themeHref: fsUrl(join(repoRoot, 'site', 'theme.js')),

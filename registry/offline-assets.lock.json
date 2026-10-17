@@ -323,13 +323,6 @@
       "license": "Apache-2.0",
       "dependencies": []
     },
-    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz": {
-      "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
-      "bytes": 5176902,
-      "contentType": "application/gzip",
-      "kind": "example",
-      "dependencies": []
-    },
     "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/4247dd46949521cf9cc21399c6015b41c0ca176f/dwi2trx/fixtures/dwi.bval": {
       "sha256": "5b7b0b81f43794445d5b12fb227a5f4ed838c9df384d9a639d47d18fb067118b",
       "bytes": 102,
@@ -3225,6 +3218,101 @@
       "kind": "font",
       "license": "OFL-1.1",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.json": {
+      "sha256": "4ed766311e03cb46d4a03d7c4be31cb921cc89faad952ec7e97227ede22aa4ca",
+      "bytes": 2095,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/dataset_description.json": {
+      "sha256": "5389aee8d4012972303be53ec7bdce986e30c3205b3eb7e8cfdbe5030c7c93bb",
+      "bytes": 137,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.json": {
+      "sha256": "dc208e0cddfebba6ef146149fa642afaf1cdfe3d96cba255760cc14518d59c55",
+      "bytes": 3039,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_events.tsv": {
+      "sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7",
+      "bytes": 99,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/LICENSE": {
+      "sha256": "46e280fe1a24c6f37feef2445ed288435e0ad063504a06030b206b12fdd2629d",
+      "bytes": 682,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/template_description.json": {
+      "sha256": "6b1b199ecc5fce65967e820f9a6a73247103ed6aa47b9df904d85a0d0c817571",
+      "bytes": 1551,
+      "contentType": "text/plain; charset=utf-8",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz": {
+      "sha256": "58220b40d179b7a93dd3ce231dd7afaa39989c75658b2b8e4c2f34abf8f16416",
+      "bytes": 5176902,
+      "contentType": "application/gzip",
+      "kind": "example",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.nii.gz": {
+      "sha256": "1f2e921ff17f09b1bce0947a92afb636eaa027e60edccd562e647507e1ac6336",
+      "bytes": 7380892,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_T1w.nii.gz": {
+      "sha256": "0d3f168c8f9990197d6dad59a7bab8e4f144fcc8a4e3e5513053ebd533edc309",
+      "bytes": 3388655,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz": {
+      "sha256": "e40bb1816736504d4c25abc243c1c8503df1d308f64c048318aa4b829e09a7ae",
+      "bytes": 159538,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz": {
+      "sha256": "1f27aabea9f7183dc0c69dafa71e1787b921ca778d655d9c1bf302b273d5627a",
+      "bytes": 13685075,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.nii.gz": {
+      "sha256": "074c5ec0f73a24b86fe3716b7e97eddcea3db7a90f398f023bb52a3dac46a86a",
+      "bytes": 45640970,
+      "contentType": "application/gzip",
+      "kind": "model",
+      "license": "CC0-1.0 (example); MNI template: McConnell Brain Imaging Centre permissive notice (templates/.../LICENSE)",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3822,6 +3910,20 @@
     "elastix": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/moving/t1_brain.nii.gz",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/544f1362f367355e61a85e0694f5075aba2792b6/reg/templates/MNI152_T1_1mm_brain.nii.gz"
+    ],
+    "fastprep": [
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/dataset_description.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_events.tsv",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/LICENSE",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/template_description.json",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_T1w.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_T1w.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/templates/tpl-MNI152NLin2009cAsym/tpl-MNI152NLin2009cAsym_res-01_desc-brain_mask.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/88c3dd6b9aac13429f760d9b0b48249040d3ee5f/synthsr/models/synthsr-v2.onnx"
     ]
   }
 }

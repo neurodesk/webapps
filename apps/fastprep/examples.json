@@ -1,0 +1,52 @@
+[
+  {
+    "id": "motor3t",
+    "label": "Motor task: T1w + single-echo BOLD",
+    "description": "One subject (3T): cropped T1w, a 150-volume BOLD run with SliceTiming, and left/right finger-tapping blocks.",
+    "expectedResult": "Preprocessed BOLD in T1w and MNI space, confounds, an HTML report and left/right task t maps.",
+    "files": [
+      {
+        "role": "dataset",
+        "name": "dataset_description.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/dataset_description.json",
+        "bytes": 137,
+        "sha256": "5389aee8d4012972303be53ec7bdce986e30c3205b3eb7e8cfdbe5030c7c93bb"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_T1w.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.json",
+        "bytes": 2095,
+        "sha256": "4ed766311e03cb46d4a03d7c4be31cb921cc89faad952ec7e97227ede22aa4ca"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_T1w.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/anat/sub-01_T1w.nii.gz",
+        "bytes": 7380892,
+        "sha256": "1f2e921ff17f09b1bce0947a92afb636eaa027e60edccd562e647507e1ac6336"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_bold.json",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.json",
+        "bytes": 3039,
+        "sha256": "dc208e0cddfebba6ef146149fa642afaf1cdfe3d96cba255760cc14518d59c55"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_bold.nii.gz",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_bold.nii.gz",
+        "bytes": 45640970,
+        "sha256": "074c5ec0f73a24b86fe3716b7e97eddcea3db7a90f398f023bb52a3dac46a86a"
+      },
+      {
+        "role": "dataset",
+        "name": "sub-01_task-motor_events.tsv",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/3390ec024ac302bde8f365a4f6169b4a1580538f/fastprep/example/sub-01/func/sub-01_task-motor_events.tsv",
+        "bytes": 99,
+        "sha256": "2f242d5849df80cbc4b3f8153733b6619d74bcc2fc538d9973e40bc626c867e7"
+      }
+    ]
+  }
+]
