@@ -291,6 +291,19 @@ test('root Knip and Stryker changes run their independent workflows without sele
   }
 });
 
+test('missing root tool package metadata selects the full catalog with a fallback reason', async () => {
+  const registry = await loadAppsRegistry();
+  const before = changeLock(lock => { lock.importers['.'].devDependencies.knip = dep('5.0.0'); });
+  const invalid = structuredClone(before);
+  delete invalid.packages['knip@5.0.0'];
+  for (const [base, head] of [[before, invalid], [invalid, before]]) {
+    const plan = createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(base, head)]]));
+    assert.equal(plan.allApps, true);
+    assert.equal(plan.site, true);
+    assert.match(plan.reasons.fallback, /knip@5\.0\.0.*package metadata/);
+  }
+});
+
 test('unknown root tools, runtime dependencies and mixed changes still select the catalog', async () => {
   const registry = await loadAppsRegistry();
   for (const [before, after] of [

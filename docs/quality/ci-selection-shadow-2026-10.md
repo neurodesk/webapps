@@ -198,7 +198,11 @@ run on every pull request through `unused-code.yml` and `mutation-quality.yml`.
 A contract checks that neither tool appears in app, package, native or browser
 inputs, so a new consumer requires revisiting this ownership.
 
-The lockfile analyzer validates the complete original root closure first.
+The lockfile analyzer validates both original root closures before excluding tools.
+Every required snapshot must have matching package metadata and a nonempty resolution
+mapping. Peer-qualified snapshots use the package key without the peer suffix.
+Missing or malformed metadata on either side triggers a full-catalog fallback,
+including when the tool or a transitive dependency disappears from the other side.
 It then compares the root importer without those two devDependency roots.
 Every other importer retains its complete base and head closure. A changed
 transitive package shared with an app still selects that app. Another root

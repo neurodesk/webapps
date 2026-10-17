@@ -28,6 +28,10 @@ function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function isMapping(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function parseLockfile(text, side) {
   let lock;
   try {
@@ -37,6 +41,11 @@ function parseLockfile(text, side) {
   }
   if (lock?.lockfileVersion !== SUPPORTED_VERSION) {
     throw new LockfileAnalysisError(`the ${side} pnpm-lock.yaml has lockfileVersion ${lock?.lockfileVersion}, not ${SUPPORTED_VERSION}`);
+  }
+  for (const section of RESOLUTION_SECTIONS) {
+    if (lock[section] !== undefined && !isMapping(lock[section])) {
+      throw new LockfileAnalysisError(`the ${side} pnpm-lock.yaml has an invalid ${section} section`);
+    }
   }
   return { importers: {}, packages: {}, snapshots: {}, ...lock };
 }
@@ -49,7 +58,12 @@ function packageKey(snapshot) {
 // A dependency resolves to `name@version`, or, for an npm: alias, to the version itself.
 function snapshotOf(lock, name, version, owner) {
   for (const key of [`${name}@${version}`, String(version)]) {
-    if (Object.hasOwn(lock.snapshots, key)) return key;
+    if (!Object.hasOwn(lock.snapshots, key)) continue;
+    const metadata = lock.packages[packageKey(key)];
+    if (!isMapping(metadata) || !isMapping(metadata.resolution) || !Object.keys(metadata.resolution).length) {
+      throw new LockfileAnalysisError(`pnpm-lock.yaml snapshot ${key} for ${owner} has missing or invalid package metadata`);
+    }
+    return key;
   }
   throw new LockfileAnalysisError(`pnpm-lock.yaml resolves ${name} for ${owner} to ${version}, which has no snapshot`);
 }

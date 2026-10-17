@@ -100,13 +100,16 @@ cost.
 
 ## Results and reviewed survivors
 
-The 2026-10-17 root-quality ownership change adds 17 lockfile-analyzer mutants.
-The targeted run assesses 163, with 146 killed, 7 timed out and 10 survivors.
-It completes in 64 seconds on this host. These are one-run execution counts,
-not a performance comparison. The new tests caught missing validation of a
-root-only tool snapshot and incorrect handling of empty or absent root importers.
-The eight earlier survivors below remain. The two additional survivors are
-equivalent for pnpm-written lockfiles:
+The 2026-10-17 package-metadata correction assesses 195 lockfile-analyzer mutants,
+with 178 killed, 7 timed out and 10 survivors. No mutants are uncovered or have
+compile or runtime errors. Rerun with `MUTATION_MODULE=lockfile-impact pnpm exec
+stryker run stryker.config.mjs`.
+The earlier root-quality ownership change assessed 163 mutants, with 146 killed,
+7 timed out and 10 survivors. The current tests also cover required package
+metadata on both original sides, removed root tools and transitives, peer-qualified
+snapshots, malformed resolution mappings and absent top-level sections.
+The eight earlier survivors below and the two root-tool survivors remain;
+no new survivor remains from the metadata validation:
 
 - A default excluded-tool list containing `"Stryker was here"` matches no npm
   package name, because spaces are invalid in a package name.

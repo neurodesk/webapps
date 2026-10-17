@@ -89,6 +89,44 @@ test('independent root tools can be added or removed without hiding invalid root
   assert.deepEqual([...compare(absent, absent)], []);
 });
 
+test('required package metadata is validated on both original sides before excluding root tools', () => {
+  const peered = 'knip@5.0.0(typescript@7.0.2)';
+  const before = lockfile({
+    importers: { '.': { devDependencies: { knip: dep(peered.slice('knip@'.length)) } } },
+    snapshots: { [peered]: { optionalDependencies: { helper: '1.0.0' } }, 'helper@1.0.0': {} },
+  });
+  const options = { independentRootDevDependencies: ['knip'] };
+  const compare = (base, head) => lockfileImpact({ before: JSON.stringify(base), after: JSON.stringify(head) }, options);
+  const removed = changeLock(lock => {
+    lock.importers['.'] = {};
+    lock.snapshots = {};
+    lock.packages = {};
+  }, before);
+  assert.deepEqual([...compare(before, before)], []);
+  assert.deepEqual([...compare(before, removed)], []);
+  assert.deepEqual([...compare(removed, before)], []);
+  const invalidMetadata = [undefined, null, [], 'metadata', 42, {}, { resolution: null }, { resolution: [] }, { resolution: 'bad' }, { resolution: {} }];
+  for (const key of ['knip@5.0.0', 'helper@1.0.0']) {
+    for (const metadata of invalidMetadata) {
+      const invalid = changeLock(lock => {
+        if (metadata === undefined) delete lock.packages[key];
+        else lock.packages[key] = metadata;
+      }, before);
+      for (const [base, head] of [[before, invalid], [invalid, before], [invalid, removed], [removed, invalid]]) {
+        assert.throws(() => compare(base, head), error => error instanceof LockfileAnalysisError && error.message.includes(key) && /package metadata/.test(error.message), `${key}: ${JSON.stringify(metadata)}`);
+      }
+    }
+  }
+});
+
+test('non-root closures validate required metadata with the default API', () => {
+  for (const key of ['@niivue/niivue@1.0.0', 'pako@2.1.0']) {
+    const invalid = changeLock(lock => { delete lock.packages[key]; });
+    assert.throws(() => impact(invalid), LockfileAnalysisError);
+    assert.throws(() => impact(baseLock, invalid), LockfileAnalysisError);
+  }
+});
+
 test('an importer is affected through the workspace importers it links, but the root is not', () => {
   const after = changeLock((lock) => {
     lock.importers['scripts/quality'].devDependencies.knip = dep('5.1.0');
@@ -249,6 +287,13 @@ test('changes the analysis cannot scope throw a LockfileAnalysisError naming the
   fails(changeLock((lock) => {
     lock.snapshots['@niivue/niivue@1.0.0'].dependencies.gone = '3.0.0';
   }), /^pnpm-lock\.yaml resolves gone for @niivue\/niivue@1\.0\.0 to 3\.0\.0, which has no snapshot$/);
+  for (const section of ['importers', 'packages', 'snapshots']) {
+    for (const value of [null, [], 'invalid']) {
+      fails({ ...baseLock, [section]: value }, new RegExp(`^the head pnpm-lock\\.yaml has an invalid ${section} section$`));
+      fails(baseLock, new RegExp(`^the base pnpm-lock\\.yaml has an invalid ${section} section$`), { ...baseLock, [section]: value });
+    }
+  }
+  assert.deepEqual([...lockfileImpact({ before: 'lockfileVersion: "9.0"', after: 'lockfileVersion: "9.0"' })], []);
   // A section that is present but unchanged does not stop the analysis.
   assert.equal(impact({ ...baseLock, settings: { autoInstallPeers: true } }).size, 0);
 });
