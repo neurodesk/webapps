@@ -15,20 +15,24 @@ test('downloads are named from the series, never from dcm2niix\'s folder and stu
   assert.deepEqual(JSON.parse(await sidecar.text()), { EchoTime: 0.003 });
 });
 
-test('series that would share a name get a short hash of their UID; a unique name stays as it is', () => {
-  const first = { uid: '1.2.826.0.1.3680043.2.1125.20240102.1', number: 2, description: 'T1 MPR' };
-  const second = { uid: '1.2.826.0.1.3680043.2.1125.20240315.1', number: 2, description: 'T1 MPR' };
+test('series that would share a name are kept apart in index order; a unique name stays as it is', () => {
+  // These two UIDs share a six-digit FNV-1a prefix, so a hash suffix could not keep them apart.
+  const first = { uid: '1.2.826.0.1.3680043.2.1125.741', number: 2, description: 'T1 MPR' };
+  const second = { uid: '1.2.826.0.1.3680043.2.1125.18131', number: 2, description: 'T1 MPR' };
+  const third = { uid: '1.2.826.0.1.3680043.2.1125.20240315.1', number: 2, description: 'T1 MPR' };
   const other = { uid: '1.2.3', number: 3, description: 'T1 MPR' };
-  const all = [first, second, other];
+  const all = [first, second, third, other];
   const name = (series) => downloadFiles(series, [{ image: dcm2niix('x.nii'), sidecar: {} }], all)[0];
-  const [a, b, c] = all.map(name);
-  assert.match(a.image.name, /^series2_T1_MPR_[0-9a-f]{6}\.nii$/);
-  assert.match(b.image.name, /^series2_T1_MPR_[0-9a-f]{6}\.nii$/);
-  assert.notEqual(a.image.name, b.image.name);
-  assert.equal(a.sidecar.name, a.image.name.replace(/\.nii$/, '.json'));
-  assert.equal(name(first).image.name, a.image.name, 'stable across calls');
-  assert.doesNotMatch(a.image.name, /2024/);
-  assert.equal(c.image.name, 'series3_T1_MPR.nii');
+  const files = all.map(name);
+  assert.deepEqual(files.map(({ image }) => image.name), [
+    'series2_T1_MPR.nii',
+    'series2_T1_MPR_dup2.nii',
+    'series2_T1_MPR_dup3.nii',
+    'series3_T1_MPR.nii',
+  ]);
+  assert.equal(files[1].sidecar.name, 'series2_T1_MPR_dup2.json');
+  assert.equal(name(second).image.name, files[1].image.name, 'stable across calls');
+  for (const { image } of files) assert.doesNotMatch(image.name, /2024|1125/);
 });
 
 test('several images of a series are numbered, and one without a sidecar downloads alone', () => {
