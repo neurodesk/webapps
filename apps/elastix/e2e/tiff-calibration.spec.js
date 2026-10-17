@@ -30,7 +30,7 @@ for (const fixture of calibrationCases) {
     await page.locator("#runButton").click();
     await expect(page.locator("#statusText")).toContainText("Registration complete", { timeout: 60000 });
     const nifti = await readVolume(await download(page, "Registered NIfTI"));
-    expect(nifti.dims.slice(0, 2)).toEqual([20, 20]);
+    expect(nifti.dims.slice(0, fixture.size?.length ?? 2)).toEqual(fixture.size ?? [20, 20]);
     expect(nifti.data.some((value) => value > 900)).toBe(true);
     await expect(page.locator("#resultList")).toContainText("Transform (OME-Zarr)");
     await expect(page.locator("#resultList")).toContainText("TransformParameters.0.toml");

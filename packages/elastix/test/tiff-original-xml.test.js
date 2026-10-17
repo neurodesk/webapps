@@ -17,7 +17,7 @@ for (const fixture of calibrationCases) {
     const path = join(directory, `${fixture.name}.ome.tif`);
     await writeFile(path, omeTiffFixture(fixture));
     const source = await readInput(path, "fixed");
-    assert.deepEqual(source.image.size, [20, 20]);
+    assert.deepEqual(source.image.size, fixture.size ?? [20, 20]);
     assert.deepEqual(source.image.spacing, fixture.spacing ?? (fixture.images?.[0].size ? [51.225, 153.675] : [0.25, 0.75]));
     if (fixture.name.startsWith("other-image") || fixture.name.startsWith("selected-second")) {
       assert.equal(source.tiffMetadata.imageId, "Image:1");
@@ -65,7 +65,7 @@ test("XYZ calibration binds every original plane before exporting all slices", a
   const directory = await mkdtemp(join(tmpdir(), "elastix-xyz-calibration-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, "volume.ome.tif");
-  await writeFile(path, omeTiffFixture({ volume: true, images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeZ="1.5"' }, { value: 17 }] }));
+  await writeFile(path, omeTiffFixture({ volume: true, images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeZ="1.5"', tiffData: "<TiffData/>" }, { value: 17 }] }));
   const source = await readInput(path, "fixed");
   assert.deepEqual(source.image.size, [20, 20, 2]);
   assert.deepEqual(source.image.spacing, [0.25, 0.75, 1.5]);

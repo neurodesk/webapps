@@ -24,11 +24,13 @@ for (const fixture of calibrationCases) {
     assert.ok(files.includes("input_transform.ome.zarr.ozx"));
     assert.ok(files.includes("input_TransformParameters.0.toml"));
     const registered = await readVolume(await readFile(join(output, "input_registered.nii.gz")));
-    assert.deepEqual(registered.dims.slice(0, 2), [20, 20]);
+    assert.deepEqual(registered.dims.slice(0, fixture.size?.length ?? 2), fixture.size ?? [20, 20]);
     assert.ok(registered.data.some((value) => value > 900), "the selected Gaussian image, not the unselected zero image");
     if (fixture.issue) {
       assert.match(run.stderr, fixture.issue);
       assert.ok(!files.includes("input_registered.ome.tif"));
+      assert.ok(files.includes("input_TransformParameters.1.toml"));
+      assert.equal(files.length, 5);
       return;
     }
     const bytes = await readFile(join(output, "input_registered.ome.tif"));

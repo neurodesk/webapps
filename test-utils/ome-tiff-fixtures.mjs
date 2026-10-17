@@ -3,7 +3,7 @@ import { deflateSync } from "node:zlib";
 const namespace = "http://www.openmicroscopy.org/Schemas/OME/2016-06";
 
 // Independent classic-TIFF strips. No fiff writer or metadata parser is used.
-export function omeTiffFixture({ images = [{}], subIfd = false, reduced = true, volume = false, prefix = "", quote = '"', namespaceUri = namespace } = {}) {
+export function omeTiffFixture({ images = [{}], metadataImages = "", subIfd = false, reduced = true, volume = false, prefix = "", quote = '"', namespaceUri = namespace } = {}) {
   const tag = (name) => `${prefix}${name}`;
   const attrs = (values) => Object.entries(values).map(([key, value]) => `${key}=${quote}${value}${quote}`).join(" ");
   const descriptors = images.map((image, index) => ({ size: [20, 20], calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75"', ...image, index }));
@@ -13,12 +13,12 @@ export function omeTiffFixture({ images = [{}], subIfd = false, reduced = true, 
     (tiffData ?? `<${tag("TiffData")} ${attrs({ IFD: index, PlaneCount: volume ? descriptors.length : 1 })}/>` ) +
     planes + `</${tag("Pixels")}></${tag("Image")}>`
   )).join("");
-  const xml = `<?xml version="1.0"?><${tag("OME")} xmlns${prefix ? `:${prefix.slice(0, -1)}` : ""}=${quote}${namespaceUri}${quote}>${xmlImages}</${tag("OME")}>`;
+  const xml = `<?xml version="1.0"?><${tag("OME")} xmlns${prefix ? `:${prefix.slice(0, -1)}` : ""}=${quote}${namespaceUri}${quote}>${metadataImages}${xmlImages}</${tag("OME")}>`;
   const description = Buffer.from(`${xml}\0`);
-  const strips = descriptors.map(({ size, value }) => {
+  const strips = descriptors.map(({ size, value, offset = 0 }) => {
     const pixels = new Float32Array(size[0] * size[1]);
     for (let y = 0; y < size[1]; y += 1) {
-      for (let x = 0; x < size[0]; x += 1) pixels[y * size[0] + x] = value ?? 1000 * Math.exp(-((x - 9) ** 2 + (y - 10) ** 2) / 12);
+      for (let x = 0; x < size[0]; x += 1) pixels[y * size[0] + x] = value ?? offset + 1000 * Math.exp(-((x - 9) ** 2 + (y - 10) ** 2) / 12);
     }
     return deflateSync(new Uint8Array(pixels.buffer));
   });
@@ -64,6 +64,17 @@ export function omeTiffFixture({ images = [{}], subIfd = false, reduced = true, 
 }
 
 export const calibrationCases = [
+  {
+    name: "metadata-only-before-explicit-owners",
+    metadataImages: '<Image ID="Image:metadata"><Pixels ID="Pixels:metadata" DimensionOrder="XYZCT" Type="float" SizeX="20" SizeY="20" SizeZ="20" SizeC="1" SizeT="1" PhysicalSizeX="10" PhysicalSizeY="20" PhysicalSizeZ="30"><Channel ID="Channel:metadata:0" SamplesPerPixel="1"/><MetadataOnly/></Pixels></Image>',
+    images: Array.from({ length: 20 }, (_, z) => ({ offset: z * 17 })),
+    size: [20, 20, 20],
+    spacing: [10, 20, 30],
+    issue: /unambiguously associate/,
+  },
+  { name: "missing-tiffdata", images: [{ tiffData: "<MetadataOnly/>" }], issue: /unambiguously associate/ },
+  { name: "foreign-tiffdata", images: [{ tiffData: '<foreign:TiffData xmlns:foreign="urn:not-ome"/>' }], issue: /unambiguously associate/ },
+  { name: "empty-tiffdata-defaults", images: [{ tiffData: "<TiffData/>" }], unit: "µm" },
   { name: "single-quoted-nm", images: [{ calibration: "PhysicalSizeX='0.25' PhysicalSizeY='0.75' PhysicalSizeXUnit='nm' PhysicalSizeYUnit='nm'" }], quote: "'", unit: "nm" },
   { name: "prefixed-xml", prefix: "ome:", images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeXUnit="n&#109;" PhysicalSizeYUnit="nm"' }], unit: "nm" },
   { name: "numeric-entities", images: [{ calibration: 'PhysicalSizeX="&#48;.25" PhysicalSizeY="7.5e-1"' }], unit: "µm" },
