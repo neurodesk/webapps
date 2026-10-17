@@ -4,11 +4,19 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
   for (const view of ['catalog', 'schema']) {
     test(`schema console pointer controls remain reachable in ${view} at ${viewport.width}px`, async ({ page }, testInfo) => {
       await page.setViewportSize(viewport);
+      await page.addInitScript(() => {
+        window.workerRequests = [];
+        const postMessage = Worker.prototype.postMessage;
+        Worker.prototype.postMessage = function (message, ...args) {
+          window.workerRequests.push(message.type);
+          return postMessage.call(this, message, ...args);
+        };
+      });
       const errors = [];
       const pythonRequests = [];
       page.on('pageerror', error => errors.push(error.message));
       page.on('request', request => {
-        if (/pyodide|dicompare-worker/.test(request.url())) pythonRequests.push(request.url());
+        if (/pyodide\.asm\.|python_stdlib|\.whl(?:\?|$)/.test(request.url())) pythonRequests.push(request.url());
       });
       await page.context().route('**/cloudflareinsights.com/**', route => route.fulfill({ status: 204 }));
       await page.goto('./schema');
@@ -59,10 +67,10 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
         expect(header.y + header.height).toBeLessThanOrEqual(bounds.y);
         await testInfo.attach(`${state}-geometry`, { body: JSON.stringify({ footer: bounds, header }), contentType: 'application/json' });
         for (const theme of ['light', 'dark']) {
-          await page.evaluate(theme => {
-            document.documentElement.dataset.neurodeskTheme = theme;
-            document.documentElement.classList.toggle('dark', theme === 'dark');
-          }, theme);
+          if (await page.locator('html').getAttribute('data-neurodesk-theme') !== theme) {
+            await page.locator('.nd-app-bar').getByRole('button', { name: /Use .* theme/ }).click();
+          }
+          await expect(page.locator('html')).toHaveAttribute('data-neurodesk-theme', theme);
           await page.screenshot({ path: testInfo.outputPath(`${state}-${theme}.png`) });
         }
         return bounds.height;
@@ -77,18 +85,26 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
       const readyHeight = await recordLayout('ready');
       await toggle.click();
 
-      const action = view === 'catalog'
-        ? page.getByTitle('Copy schema link', { exact: true }).first()
-        : page.getByRole('button', { name: 'Copy DOI', exact: true });
+      if (view === 'catalog') {
+        await page.getByTitle('Open schema', { exact: true }).first().click();
+        await page.waitForURL('**/schema/ASL_Clinical_Guidelines_v1.0');
+      }
+      const action = page.getByRole('button', { name: 'Copy DOI', exact: true });
       await configureClipboard(false);
       await action.click();
-      await expect(action).toHaveText('Copied!');
-      await expect(action).not.toHaveText('Copied!', { timeout: 5000 });
+      const feedback = page.getByRole('button', { name: 'Copied!', exact: true });
+      await expect(feedback).toBeVisible();
+      await expect(feedback).toHaveCount(0, { timeout: 5000 });
       await configureClipboard(true);
       await action.click();
       await expect(page.locator('#statusText')).toContainText('Clipboard access was refused');
       await expect(output).toContainText('Clipboard access was refused');
       await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      if (view === 'catalog') {
+        await page.getByRole('link', { name: 'All schemas', exact: true }).click();
+        await page.waitForURL('**/schema');
+        await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      }
       await toggle.click();
       await reopen();
       const errorHeight = await recordLayout('multiline-error');
@@ -105,6 +121,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
       await recordLayout('cleared');
       expect(errors).toEqual([]);
       expect(pythonRequests).toEqual([]);
+      expect(await page.evaluate(() => window.workerRequests)).not.toContain('initialize');
     });
   }
 }

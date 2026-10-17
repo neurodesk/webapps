@@ -321,9 +321,9 @@ const SchemaViewerPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-surface">
+    <div className="h-dvh flex flex-col overflow-hidden bg-surface">
       {/* Header */}
-      <header className="bg-surface-primary shadow-sm">
+      <header className="shrink-0 bg-surface-primary shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
           <div className="flex items-center">
             <Link to="/" className="flex items-center hover:opacity-80 transition-opacity">
@@ -409,10 +409,10 @@ const SchemaViewerPage: React.FC = () => {
       />
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex-1 min-h-0 overflow-y-auto w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Catalog mode — browse all schemas */}
         {isCatalogMode && (
-          <div className="h-[calc(100vh-130px)]">
+          <div className="h-full">
             {schemaService.isLoading ? (
               <div className="flex flex-col items-center justify-center py-24">
                 <Loader className="h-8 w-8 text-brand-600 animate-spin mb-4" />
@@ -428,7 +428,7 @@ const SchemaViewerPage: React.FC = () => {
                 onOpenSchema={asyncCallback('Open schema failed', (selectedId) => navigate(`/schema/${selectedId}`))}
                 onSchemaUpload={async (file) => (await uploadSchema(file)).id}
                 getSchemaContent={schemaService.getSchemaContent}
-                maxHeight="calc(100vh - 150px)"
+                maxHeight="100%"
               />
             )}
           </div>
@@ -469,7 +469,7 @@ const SchemaViewerPage: React.FC = () => {
 
         {/* Detail mode — sidebar + detail pane layout */}
         {!isCatalogMode && !isLoading && !error && schemaData && (
-          <div className="grid grid-cols-12 gap-6 h-auto md:h-[calc(100vh-130px)]">
+          <div className="grid grid-cols-12 gap-6 h-auto md:h-full">
             {/* Left sidebar — navigation */}
             <div className="col-span-12 md:col-span-3 flex flex-col min-h-0 max-h-[50vh] md:max-h-none">
               <div className="bg-surface-primary rounded-lg border border-border shadow-sm flex flex-col h-full">
@@ -784,8 +784,10 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         )}
       </div>
-      <TechnicalLog />
-      <ActivityStatusFooter position="fixed" />
+      <div className="shrink-0">
+        <TechnicalLog />
+        <ActivityStatusFooter />
+      </div>
       {/* Print Options Modal */}
       <PrintOptionsModal
         isOpen={showPrintOptions}
