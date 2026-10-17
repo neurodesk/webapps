@@ -10,7 +10,7 @@ import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview'];
+export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -49,7 +49,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
-  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'dicomview'].includes(id)) {
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'dicomview', 'fastprep'].includes(id)) {
     const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
     const selector = page.getByRole('combobox', { name: 'Input', exact: true });
     await expect(selector).toBeEnabled({ timeout: 120000 });
@@ -387,6 +387,19 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     // The MSLesSeg P57 example has dozens of periventricular and deep lesions.
     assert.ok(rows.length > 10, `expected lesions, found ${rows.length - 1}`);
     return { mask: nifti(mask), lesions: rows.length - 1 };
+  }
+  if (id === 'fastprep') {
+    // The whole pipeline on the pinned example; the zip holds every derivative and both report pages.
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#runButton').click();
+    await expect(page.locator('#statusText')).toContainText('fastprep finished', { timeout: 1800000 });
+    const result = await download('#resultList button:has-text("Download") >> nth=0');
+    assert.equal(result.bytes.readUInt32LE(0), 0x04034b50, 'results must be a ZIP archive');
+    for (const name of ['fastprep/sub-01.html', 'fastprep/sub-01_task-motor.html',
+      'fastprep/sub-01/func/sub-01_task-motor_space-MNI152NLin2009cAsym_desc-preproc_bold.nii.gz']) {
+      assert.ok(result.bytes.includes(name), `results lack ${name}`);
+    }
+    return { filename: result.filename, bytes: result.bytes.length };
   }
   if (id === 'lcmodel') {
     // GE PRESS phantom: FID-A preprocessing, then LCModel with the shaped-pulse TE 35 ms basis set.

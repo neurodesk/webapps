@@ -1,0 +1,74 @@
+# fastprep
+
+Rust port of fastprep.py: lean fMRIPrep-style preprocessing. fastprep orchestrates only. It reads NIfTI headers
+(at most 348 decompressed bytes per image), BIDS sidecars and small tool outputs; separately installed tools touch
+every voxel.
+
+```bash
+make build
+FASTPREP_HOME=/path/to/home target/release/fastprep bids_dir out_dir participant -w work
+```
+
+`$FASTPREP_HOME` (default: the executable's directory) holds `bin/` (niimath, brainchop-mindgrab,
+brainchop-mindmap, greedy-rs, synthsr, topofit, glm; searched before `PATH`) and
+`templates/tpl-MNI152NLin2009cAsym/`. The bids_dir is the folder that holds `sub-*`.
+
+A development home can link the release builds, so rebuilding updates it:
+
+```bash
+mkdir -p ~/fastprep/bin && cd ~/fastprep/bin
+E=~/src/webapps/exes
+ln -sfn $E/fastprep/target/release/fastprep $E/glm/target/release/glm $E/greedy/target/release/greedy-rs \
+  $E/synthsr/target/release/synthsr .
+ln -sfn ~/src/niimath/src/niimath ~/src/brainchopC/src/brainchop-mind{grab,map} .
+ln -sfn ~/src/topofit/node/topofit.mjs topofit
+ln -sfn ~/src/fastprep/templates ~/fastprep/templates
+FASTPREP_HOME=~/fastprep ~/fastprep/bin/fastprep BIDS OUT participant -w WORK
+```
+
+Differences from fastprep.py:
+
+- Resume uses completion records in `work/steps/` (argv, settings and input/output size and mtime), not output
+  existence. Work directories from fastprep.py rerun.
+- Steps run sequentially. Peak RAM is not sampled.
+- Opposite-PE (PEPOLAR) fieldmaps are reported as unusable (sucor is deferred); those runs get SynthSR SDC when
+  `--synthsr` allows it.
+- Only single-file NIfTI-1 (`.nii`, `.nii.gz`) inputs are accepted.
+- `commands.sh` starts each invocation with an `export` line of the tool environment.
+
+Fixed here; fastprep.py still has these:
+
+- Resume refreshes the chosen BOLD→T1 coreg transform when it changes, and its QC reference whenever the chosen
+  candidate reran; Python keeps both once they exist.
+- Tissue PVE maps follow the segmentation step's resume record (work copies are kept), not an existence check.
+- SliceTiming is reversed for `SliceEncodingDirection` `k-`; for `i`/`j` slice timing is skipped with a warning.
+- A subject with neither T1w nor BOLD is skipped instead of crashing.
+- A SliceTiming list with non-numbers is treated as absent (no STC), instead of writing it through.
+- The events file is found for an uncompressed `_bold.nii` as well as `.nii.gz`.
+- Report text follows what ran: Methods claims STC only along a k slice axis and names runs that fell back to the
+  rigid coreg; "other temporal filtering" when FRISGO ran; tSNR scope for short runs; a PEPOLAR pair is "acquired
+  but not supported", not "failed validation"; `--frisgo off` is named as the reason; Dataset comes from a BOLD
+  run (a synthetic T1w is in the output folder); the surfaces figure needs surfaces to have run. The browser
+  report shows a Runtime fact in place of the CLI's Threads/GPU facts.
+- The browser BOLD size check counts phase echoes (MEDIC).
+- A step's declared outputs are deleted before it reruns. niimath gave the aCompCor step, which re-reads its own
+  `-save notgm`, the previous run's file, so a resume after a T1w grid change failed. Verified: a resume after
+  `--synthsr off --no-robustfov` matches a clean run. Derivatives from an earlier configuration are not removed.
+
+The goal is otherwise byte parity of `commands.sh` and outputs with fastprep.py; list any new divergence here.
+
+## GPU slots
+
+`--gpu-slots N --gpu-lock-dir DIR` (default `/tmp`) caps concurrent GPU steps across every fastprep instance, users
+included, with `flock`ed `fastprep-gpu-{i}.lock` files: the kernel drops a crashed holder's lock, so no stale slots.
+A lock file that cannot be opened is an error, not a wait. Files are opened `O_NOFOLLOW` and made 0666 only when
+they are a lone (one link) file owned by the caller, so a planted symlink or hard link cannot redirect the chmod.
+
+## Status
+
+No bundled release yet (`WITHOUT_COMMAND_LINE` in `test/standalone.test.mjs`): it waits on packaging niimath,
+brainchop, greedy-rs, synthsr, topofit and glm, and on TopoFit's licence. The browser host is
+`packages/fastprep`; the demo is `apps/fastprep`.
+
+Open: PEPOLAR fieldmaps and sucor deferred; TopoFit licence; native release packaging; per-tool browser
+peak-memory measurement.

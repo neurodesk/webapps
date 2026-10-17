@@ -1,0 +1,1 @@
+for(const s of document.querySelectorAll(".sdc")){const b=s.querySelector(".view");let t,peek=0;const set=()=>s.classList.toggle("on",b.ariaPressed=="true"||peek);b.onclick=()=>{b.ariaPressed=b.ariaPressed!="true";set()};s.querySelector(".flip").onclick=()=>{peek=1;set();clearTimeout(t);t=setTimeout(()=>{peek=0;set()},1000)}}

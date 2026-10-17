@@ -1,0 +1,34 @@
+{
+  "name": "fastprep",
+  "version": "0.0.20261016",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "runtime": "pnpm --filter @neurodesk/greedy build:wasm && pnpm --filter @neurodesk/fastprep build:wasm && node scripts/copy-runtime.mjs",
+    "dev": "pnpm run runtime && vite --force",
+    "build": "pnpm run runtime && vite build && node ../../scripts/theme-app-dist.mjs --app fastprep",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js ../../packages/fastprep/test/*.test.js",
+    "test:e2e": "playwright test",
+    "lint": "node ../../scripts/lint.mjs --workspace"
+  },
+  "dependencies": {
+    "@brainchop/mindgrab": "0.1.20261008",
+    "@neurodesk/fastprep": "workspace:*",
+    "@neurodesk/greedy": "workspace:*",
+    "@neurodesk/runtime-support": "workspace:*",
+    "@neurodesk/synthsr": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*",
+    "@niivue/niimath": "1.4.20261016",
+    "fflate": "^0.8.2",
+    "onnxruntime-web": "1.29.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "vite": "^5.0.0"
+  },
+  "neurodeskWebapp": {
+    "coiServiceWorker": true
+  }
+}

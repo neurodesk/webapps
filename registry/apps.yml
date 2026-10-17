@@ -707,3 +707,25 @@ apps:
       shared_runtime: false
       browser_test: true
       release: true
+  - id: fastprep
+    path: fastprep
+    title: fastprep
+    description: fMRIPrep-style BOLD preprocessing in the browser.
+    categories: [image-processing]
+    keywords: [fMRI, BOLD, preprocessing, fMRIPrep, BIDS, motion correction, distortion correction]
+    legacy_domain: null
+    runtime: vite-webgpu
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    app_scoped_runtime_families: [ort-web-asyncify]
+    ci:
+      toolchains: [node, rust-wasm]
+      shared_runtime: false
+      browser_test: true
+      hardware_gpu: true
+      release: false

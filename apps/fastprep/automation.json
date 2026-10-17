@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 2,
+  "app": "fastprep",
+  "title": "fastprep",
+  "description": "fMRIPrep-style preprocessing of one BIDS subject, run locally in the browser.",
+  "defaultOperation": "preprocess",
+  "operations": {
+    "preprocess": {
+      "title": "Preprocess",
+      "description": "Run fastprep on one BIDS subject (T1w and BOLD with JSON sidecars; events optional).",
+      "mode": "batch",
+      "inputs": {
+        "dataset": {
+          "source": "files",
+          "type": "neuro:bids",
+          "formats": [
+            "nifti",
+            "json",
+            "tsv"
+          ],
+          "description": "The BIDS dataset files; each file's name is its path relative to the dataset root.",
+          "minimum": 2,
+          "maximum": 10000
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "results": {
+          "type": "neuro:bids-derivatives",
+          "mediaType": "application/zip",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

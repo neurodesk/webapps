@@ -78,6 +78,7 @@ const WITHOUT_COMMAND_LINE = {
   zarro: 'interactive OME-Zarr viewer: it has no batch output',
   nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
   dicomview: 'interactive DICOM browser: dcm2niix and dicompare already ship as command lines',
+  fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',
 };
 
 test('every app ships its own command line or states why it cannot', async () => {

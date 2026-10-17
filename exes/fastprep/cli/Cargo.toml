@@ -1,0 +1,10 @@
+[package]
+name = "fastprep"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+fastprep-core = { path = "../core" }
+libc = "0.2"

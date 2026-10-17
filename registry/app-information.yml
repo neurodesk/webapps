@@ -1389,3 +1389,33 @@ apps:
         title: Pyodide
         reference: "Pyodide Contributors. Pyodide: Python distribution for the browser and Node.js based on WebAssembly [Computer software]."
         url: https://pyodide.org
+
+  fastprep:
+    packages:
+      - { name: fastprep Rust core (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/fastprep, role: pipeline orchestration }
+      - { name: niimath, url: https://github.com/rordenlab/niimath, role: voxel processing }
+      - { name: MindGrab, url: https://github.com/neuroneural/brainchop, role: brain extraction and tissue maps }
+      - { name: Greedy, url: https://github.com/rordenlab/greedy, role: template and SDC registration }
+      - { name: SynthSR, url: https://github.com/BBillot/SynthSR, role: fieldmap-less distortion correction }
+      - { name: ONNX Runtime Web, url: https://onnxruntime.ai, role: SynthSR inference }
+    citations:
+      - group: Method
+        title: fMRIPrep
+        reference: "Esteban O, Markiewicz CJ, Blair RW, et al. fMRIPrep: a robust preprocessing pipeline for functional MRI. Nat Methods. 2019;16(1):111-116."
+        url: https://doi.org/10.1038/s41592-018-0235-4
+      - group: Tools
+        title: niimath
+        reference: "Rorden C, Webster M, Drake C, et al. niimath and fslmaths: replication as a method to enhance popular neuroimaging tools. Aperture Neuro. 2024;4."
+        url: https://doi.org/10.52294/001c.94384
+      - group: Tools
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab: a spectrally-motivated architecture for accessible deep learning in neuroimaging. NeuroImage. 2026;338:122074."
+        url: https://doi.org/10.1016/j.neuroimage.2026.122074
+      - group: Tools
+        title: SynthSR
+        reference: "Iglesias JE, Billot B, Balbastre Y, et al. SynthSR: a public AI tool to turn heterogeneous clinical brain scans into high-resolution T1-weighted images for 3D morphometry. Sci Adv. 2023;9(5):eadd3607."
+        url: https://doi.org/10.1126/sciadv.add3607
+      - group: Template
+        title: MNI152NLin2009cAsym
+        reference: "Fonov V, Evans AC, Botteron K, et al. Unbiased average age-appropriate atlases for pediatric studies. NeuroImage. 2011;54(1):313-327."
+        url: https://doi.org/10.1016/j.neuroimage.2010.07.033

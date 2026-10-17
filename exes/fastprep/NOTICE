@@ -1,0 +1,6 @@
+fastprep
+Copyright 2026 Neurodesk contributors
+
+Rust port of fastprep.py (Chris Rorden's Lab). fastprep orchestrates separately
+installed tools (niimath, brainchop, greedy-rs, synthsr, topofit, glm); it does
+not link or redistribute them, and their own licenses apply.

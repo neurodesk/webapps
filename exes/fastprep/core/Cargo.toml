@@ -1,0 +1,11 @@
+[package]
+name = "fastprep-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+neurodesk-nifti = { path = "../../nifti" }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }

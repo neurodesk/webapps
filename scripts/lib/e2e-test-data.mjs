@@ -48,6 +48,8 @@ export const provisioners = {
   brain2print: { env: [], provision: async () => ({}) },
   calmar: { env: ['CALMAR_AUTOMATION_IMAGE'], provision: async () => ({ CALMAR_AUTOMATION_IMAGE: 'example' }) },
   disconnectome: flag('DISCONNECTOME_LIVE_DATA'),
+  // The full pipeline fetches the pinned example and template itself: about 2.5 min on an M-series GPU.
+  fastprep: { env: [], provision: async () => ({}) },
   // The browser reference runs MindGrab on the CPU once, about 2 min and 3 GB.
   dwi2trx: {
     env: ['DWI2TRX_FIXTURE_DIR', 'DWI2TRX_BROWSER_REFERENCE'],

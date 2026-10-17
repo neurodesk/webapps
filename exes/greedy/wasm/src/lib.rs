@@ -1,7 +1,8 @@
 use greedy_rs_core::{
     AffineMetric, DEFAULT_AFFINE_JITTER, Interpolation, Transform, decode_image,
     decode_vector_field, encode_image, encode_vector_field, read_matrix, register_affine,
-    register_nmi_svf, reslice, reslice_with_background,
+    register_affine_masked, register_nmi_svf, register_nmi_svf_masked, reslice,
+    reslice_with_background,
 };
 use wasm_bindgen::prelude::*;
 
@@ -91,6 +92,72 @@ pub fn register_nmi_svf_wasm(
     let warp = register_nmi_svf(
         fixed,
         moving,
+        parse_iterations(iterations)?,
+        false,
+        |_, _| {},
+    )
+    .map_err(wasm_error)?;
+    encode_vector_field(&warp, false).map_err(wasm_error)
+}
+
+/// `greedy -a [-gm MASK]` (12 DOF): the RAS matrix text exactly as the CLI writes `-o aff.mat`.
+/// Inputs are raw `.nii` bytes; `mask` restricts the metric to the fixed image's mask.
+#[wasm_bindgen]
+pub fn register_affine_masked_wasm(
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    metric: &str,
+    iterations: &str,
+) -> Result<String, JsValue> {
+    let fixed = decode_image(fixed).map_err(wasm_error)?;
+    let moving = decode_image(moving).map_err(wasm_error)?;
+    let mask = mask
+        .map(|m| decode_image(&m))
+        .transpose()
+        .map_err(wasm_error)?;
+    let matrix = register_affine_masked(
+        fixed,
+        moving,
+        mask,
+        parse_metric(metric)?,
+        parse_iterations(iterations)?,
+        false,
+        DEFAULT_AFFINE_JITTER,
+    )
+    .map_err(wasm_error)?;
+    Ok(matrix
+        .0
+        .iter()
+        .map(|row| format!("{} {} {} {}\n", row[0], row[1], row[2], row[3]))
+        .collect())
+}
+
+/// `greedy -sv -m NMI [-gm MASK] [-it aff.mat]`: raw `.nii` displacement field, as the CLI writes `-o`.
+/// Without `matrix` the moving image is used as given (no initial transform).
+#[wasm_bindgen]
+pub fn register_nmi_svf_masked_wasm(
+    fixed: &[u8],
+    moving: &[u8],
+    mask: Option<Vec<u8>>,
+    matrix: Option<String>,
+    iterations: &str,
+) -> Result<Vec<u8>, JsValue> {
+    let fixed = decode_image(fixed).map_err(wasm_error)?;
+    let mut moving = decode_image(moving).map_err(wasm_error)?;
+    if let Some(m) = matrix {
+        let affine = read_matrix(&m).map_err(wasm_error)?;
+        moving = reslice(&fixed.grid, &moving, &[Transform::Affine(affine)], None)
+            .map_err(wasm_error)?;
+    }
+    let mask = mask
+        .map(|m| decode_image(&m))
+        .transpose()
+        .map_err(wasm_error)?;
+    let warp = register_nmi_svf_masked(
+        fixed,
+        moving,
+        mask,
         parse_iterations(iterations)?,
         false,
         |_, _| {},

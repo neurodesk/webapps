@@ -1,0 +1,36 @@
+{
+  "name": "@neurodesk/fastprep",
+  "version": "0.1.20261016",
+  "private": true,
+  "description": "fastprep fMRI preprocessing in the browser: the Rust orchestration core (WASM) driving niimath, MindGrab, Greedy, SynthSR and glm workers",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/*.js scripts/*.mjs validation/*.mjs"
+  },
+  "devDependencies": {
+    "@brainchop/mindgrab": "0.1.20261008",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@niivue/niimath": "1.4.20261016"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/fastprep"
+  }
+}

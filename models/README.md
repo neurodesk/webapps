@@ -22,6 +22,8 @@ Current folders:
 - `disconnectome/`: two tract atlases as packed TVX for `nii2tvx` queries, ENIGMA Symmetric
   (65 bundles, the default) and HCP1065 (87), a decimated TRX of each for display only, and
   example lesion/scan pairs, see `disconnectome.manifest.json`.
+- `fastprep/example/`: one-subject BIDS example (cropped T1w, single-echo BOLD, left/right events) for the
+  fastprep demo (`neurodeskorg/webapps`), see `fastprep.manifest.json`.
 - `syncro/tutorials/`: seven deidentified inputs for SYNcro's four documented
   walkthroughs (`neurodeskorg/webapps`), see
   `syncro-tutorials.manifest.json` and `syncro-tutorials.README.md`.
