@@ -53,6 +53,13 @@ export const modules = [
     files: ['packages/carotid-flow/package.json', 'packages/carotid-flow/src/carotid.js', 'packages/carotid-flow/src/series.js', 'packages/carotid-flow/test/series-outputs.test.js'],
     command: 'node --test packages/carotid-flow/test/series-outputs.test.js',
   },
+  {
+    id: 'workspace-graph',
+    file: 'scripts/lib/workspace-graph.mjs',
+    mutate: 'scripts/lib/workspace-graph.mjs',
+    files: ['test/workspace-graph.test.mjs'],
+    command: 'node --test test/workspace-graph.test.mjs',
+  },
 ];
 
 // The PR canary: tableName, a small naming function in the first module.

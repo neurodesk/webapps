@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { moduleById, modules, smoke, strykerConfig } from '../scripts/lib/mutation-modules.mjs';
 import { runMutations, summarizeMutations } from '../scripts/report-mutations.mjs';
@@ -50,7 +50,7 @@ test('each module is a separate Stryker run against only its own data-free Node 
     assert.deepEqual(selected, config);
   }
   process.env.MUTATION_MODULE = 'missing';
-  await assert.rejects(import('../stryker.config.mjs?module=missing'), /Set MUTATION_MODULE to one of disconnectome, basis-select, format-g, date-versions, lockfile-impact, carotid-series, carotid-outputs;/);
+  await assert.rejects(import('../stryker.config.mjs?module=missing'), /Set MUTATION_MODULE to one of disconnectome, basis-select, format-g, date-versions, lockfile-impact, carotid-series, carotid-outputs, workspace-graph;/);
   // Tools that load the config without the variable (Knip) get the canary's module.
   delete process.env.MUTATION_MODULE;
   const { default: fallback } = await import('../stryker.config.mjs?module=unset');
@@ -109,6 +109,21 @@ test('a failing real baseline test fails instead of reporting a mutation score',
   writeFileSync(join(cwd, tests), "import test from 'node:test'; test('baseline', () => { throw new Error('baseline failure canary'); });\n");
   assert.throws(() => runMutations({ cwd, config: 'bad.config.mjs' }), /Stryker failed/);
   assert.match(readFileSync(join(cwd, 'quality-artifacts/mutations/stryker.log'), 'utf8'), /initial test run|baseline failure canary/i);
+});
+
+test('temporary files a killed suite leaves behind are removed after each run', (t) => {
+  const cwd = fixture(t);
+  const record = join(cwd, 'scratch.txt');
+  const leave = [
+    "const { mkdtempSync, writeFileSync } = require('node:fs');",
+    `const left = mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'left-'));`,
+    `writeFileSync(${JSON.stringify(record)}, left);`,
+    'process.exit(2);',
+  ].join('\n');
+  assert.throws(() => runMutations({ cwd, prefix: ['-e', leave, '--'] }), /Stryker failed for disconnectome with exit 2/);
+  const left = readFileSync(record, 'utf8');
+  assert.ok(left.startsWith(join(tmpdir(), 'mutation-disconnectome-')), left);
+  assert.throws(() => readdirSync(dirname(left)), { code: 'ENOENT' });
 });
 
 test('a crashing tool and missing executable fail', (t) => {

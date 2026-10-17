@@ -20,6 +20,7 @@ network.
 | `scripts/lib/lockfile-impact.mjs` | Which workspace importers a `pnpm-lock.yaml` change affects, and so which apps CI tests; a missed importer skips the tests that would catch a broken dependency | `test/lockfile-impact.test.mjs` |
 | `packages/carotid-flow/src/series.js` | The frames, grid and header Carotid Flow measures, and which amplitude and phase pairs it refuses; the app and the `carotid-flow` command line both read through it | `packages/carotid-flow/test/series-outputs.test.js` |
 | `packages/carotid-flow/src/outputs.js` | The names and bytes of Carotid Flow's downloads and the command line's files, and the measurements automation reports | `packages/carotid-flow/test/series-outputs.test.js` |
+| `scripts/lib/workspace-graph.mjs` | Which directories and root files each app and CI job reaches, and so which apps a change tests; a missed reference skips the tests that would catch the change | `test/workspace-graph.test.mjs` |
 
 `formatG` is mutated by line range because the rest of `index.js` drives the
 WebAssembly module. Its command selects the two `printf` tests by name; the rest
@@ -28,7 +29,10 @@ date-version range likewise leaves out the rest of `app-versions.mjs`, which
 plans releases with Changesets on a workspace; `test/app-versions.test.mjs`
 keeps covering that part. The two Carotid Flow modules share one suite of small
 in-memory NIfTI files. `packages/carotid-flow/test/node.test.js` runs the command
-line on the phantom and is not part of this run. `test/mutation-quality.test.mjs`
+line on the phantom and is not part of this run. The workspace graph's suite
+builds one fixture tree with a case for each path rule; `test/app-plan.test.mjs`
+reads the whole repository and stays out of the run.
+`test/mutation-quality.test.mjs`
 fails when a range no longer covers exactly its functions or the name pattern
 selects other tests.
 
@@ -45,7 +49,10 @@ uncovered mutations from mutations that survive assertions.
 Only the module's listed files are copied into Stryker's sandbox. Concurrency is two.
 The sandbox stays inside the checkout at `.stryker-tmp` and is cleaned even on
 failure. Node test fixtures use the host's `TMPDIR` storage volume locally and
-the runner temporary directory in CI. The reporting adapter clears the inherited
+the runner temporary directory in CI. Each Stryker run gets its own directory
+there as `TMPDIR`, removed when the run ends: Stryker kills a timed-out suite
+before its cleanup hooks run, and the workspace graph's fixture trees would
+otherwise stay behind. The reporting adapter clears the inherited
 `NODE_TEST_CONTEXT` marker so nested node:test suites execute independently.
 
 ## CI and failures
@@ -84,12 +91,20 @@ Measured locally on 2026-10-15 (two workers, `Done in` from each module's log):
 | Carotid Flow `series.js` (2026-10-16) | 39 | 0.23 s | 9 s |
 | Carotid Flow `outputs.js` (2026-10-16) | 42 | 0.23 s | 14 s |
 | Full run, seven Stryker runs (2026-10-16, loaded host) | 642 | - | 221 s wall |
+| `workspace-graph.mjs` (2026-10-17, hosted runner) | 371 | 0.6 s | 84 s |
+| Full run, eight Stryker runs (2026-10-17, hosted runner) | 1013 | - | 179 s step |
 | PR smoke (`tableName`) | 2 | 0.13 s | 6 s wall |
 
 On 2026-10-16 the two Carotid Flow modules added 39 and 42 mutants, each with a
 0.23 s baseline: `series.js` took 9 s and `outputs.js` 14 s. The full run of
 seven modules, 642 mutants, took 221 s wall on a host with a load average of 22
 on 8 cores, where the five earlier modules alone took 179 s.
+
+On 2026-10-17 the workspace graph added 371 mutants. Its suite writes a fixture
+tree of about 150 files, two of them 1 MiB, for every mutant. On the hosted
+runner it took 84 s, including eight timeouts that loop forever, and the full
+run of eight modules took 179 s. Locally the module took 2.5 to 4 minutes on a
+host with a load average of 15 to 25 on 8 cores; measure on an idle host.
 
 The full run took about 4 s with the canary alone and 96 s with three modules.
 Most of `lockfile-impact.mjs`'s time is its seven timeouts: each is a mutant that
@@ -102,8 +117,8 @@ cost.
 
 The pilot on 2026-10-10 killed all 10 mutants in `disconnectome.js`.
 
-The full run on 2026-10-16 detected 620 of 642 mutants (613 killed, 7 timed
-out), with 22 survivors and no compile or runtime errors:
+The full run on 2026-10-17 detected 977 of 1013 mutants (962 killed, 15 timed
+out), with 36 survivors and no compile or runtime errors:
 
 | Module | Killed | Timed out | Survived |
 | --- | --- | --- | --- |
@@ -114,10 +129,14 @@ out), with 22 survivors and no compile or runtime errors:
 | `lockfile-impact.mjs` | 131 | 7 | 8 |
 | Carotid Flow `series.js` | 38 | 0 | 1 |
 | Carotid Flow `outputs.js` | 42 | 0 | 0 |
+| `workspace-graph.mjs` | 349 | 8 | 14 |
 
 `basis-select.js` has grown 10 mutants since 2026-10-14; all 10 are killed.
 The timeouts are real detections: each mutant (dropping the cycle guard, the
-`while` body or the loop's exit in the link propagation) loops forever.
+`while` body or the loop's exit in the link propagation) loops forever. So do the
+workspace graph's eight: each drops the guard or the bookkeeping that stops the
+`pnpm` script expansion, the root-file walk or `reachableFrom` from revisiting a
+node, or makes every node name the same path.
 
 The first run of `basis-select.js` left 134 of 274 mutants alive: the suite
 never exercised related sequence families, unrecorded parameters, the field and
@@ -139,7 +158,15 @@ run against the command-line suite alone detected 33 of 39 `series.js` mutants
 and 18 of 42 `outputs.js` mutants: that suite names every input `neck.nii` and
 never checks an upper-case, doubled or missing extension, the per-side masks,
 the measurements, the spacing tolerance, the frame-count refusal or the error
-text. Behavioral tests now cover these. The survivors that remain do not
+text. The workspace graph had no suite the sandbox could run: its only tests
+loaded the whole repository through `app-plan.test.mjs`. The first fixture tree
+left 51 of 371 mutants alive. It had no file in `.turbo`, `.vite`,
+`test-results` or `playwright-report`, no `.yml`, no `file:` dependency whose
+path the text rules could not also find, no workspace devDependency or `exes`
+package, no unscoped or spaced bare import, no `.mjs` file named inside a
+package, no glob with text between its directory and `*`, no cycle between root
+files, no empty `ci.yml` and no CI command in the split `'registry', 'x.json'`
+form. Behavioral tests now cover these. The survivors that remain do not
 change a result the app, the pipeline, the command line or the CI planner exposes:
 
 Equivalent mutants:
@@ -170,6 +197,30 @@ Equivalent mutants:
   `1e-5` has its lowest set bit at 2^-69. Their difference can equal it only if
   one spacing has a float32 ulp of 2^-69 or less, that is, a spacing below 2^-45
   mm (about 3e-14 mm), which no scanner writes.
+- `workspace-graph.mjs:23` and `:30`, `(?:\.\.\/)+` to `(?:\.\.\/)`: the
+  patterns are not anchored, so the last `../` before `packages/` still matches.
+- `workspace-graph.mjs:44` and `:45`, `'(catalog)'` or `'(site)'` to `''`: the
+  names only key the two CI entry nodes. No changed path is empty, and the two
+  names stay distinct.
+- `workspace-graph.mjs:70`, dropping `.sort()` after `readdir`: on Linux and
+  macOS libuv sorts directory entries by name, so the order is already sorted.
+  CI plans on Linux.
+- `workspace-graph.mjs:84`, `() => false` to `() => undefined`, `:90`, `return
+  null` to no return, and `:89` and `:141`, `'utf8'` to `''`: `undefined` is as
+  falsy as `false`, every caller reads the manifest with `?.`, and
+  `JSON.parse` reads a `Buffer` as its UTF-8 text.
+- `workspace-graph.mjs:117`, resolving every dependency spec as a path
+  (`startsWith('file:')` to `true` or to `startsWith('')`): a version range,
+  `workspace:`, `npm:`, repository or URL spec without its first five characters
+  resolves inside the dependent's own directory, which `nodeOf` maps to the node
+  itself, removed later, or to an app, which is never followed. An `http:` URL
+  becomes an absolute path outside the repository, which maps to no node.
+- `workspace-graph.mjs:147` and `:148`, a step without `run` or a filtered
+  `pnpm --filter` command read as `"Stryker was here!"`, and the filter pattern
+  stopping one character into the script name: none of these strings names a
+  root file or starts with `pnpm `, and workspace script names hold only word
+  characters, `:` and `-`, so the rest of the name cannot name a root file
+  either.
 - `lockfile-impact.mjs:87`, treating every version as a `link:`: the path
   formed from the rest of a registry version (`'1.0.0'.slice(5)` is empty, so the
   importer links itself) never names another importer.
