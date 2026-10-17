@@ -132,6 +132,22 @@ test('a file without the preamble that opens on its file meta group follows the 
   assert.deepEqual([map.get(0x00280010).numbers, map.get(0x00280011).numbers], [[64], [32]], 'the video reader agrees');
 });
 
+test('an Implicit VR file with neither preamble nor file meta is read as Implicit VR by both readers', async () => {
+  const buffer = Buffer.concat([
+    implicit(0x0008, 0x103e, 'scan'),
+    implicit(0x0020, 0x000e, '1.2.3\0'),
+    implicit(0x0028, 0x0010, uint16(64)),
+    implicit(0x0028, 0x0011, uint16(32)),
+    implicit(0x7fe0, 0x0010, Buffer.alloc(64 * 32 * 2)),
+  ]);
+  const header = await parseDicomHeader(arrayBuffer(buffer));
+  assert.equal(header.implicitVR, true);
+  assert.equal(header.map.get(0x0008103e).str, 'scan');
+  const { map, implicitVR } = parseDicom(arrayBuffer(buffer), { headerOnly: true });
+  assert.equal(implicitVR, true);
+  assert.deepEqual([map.get(0x00280010).numbers, map.get(0x00280011).numbers], [[64], [32]]);
+});
+
 test('a Deflated Explicit VR Little Endian dataset is inflated, whole or as a prefix', async () => {
   const dataset = Buffer.concat([
     explicit(0x0008, 0x0060, 'CS', 'MR'),

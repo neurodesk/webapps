@@ -294,15 +294,14 @@ export function parseDicom(arrayBuffer, { headerOnly = false } = {}) {
 // from a DICOM dictionary. complete is false when the buffer ended before the pixel data;
 // headerBytes is the file offset of the pixel data, null when unknown.
 export async function parseDicomHeader(arrayBuffer, { vrOf } = {}) {
-  const { meta, dataStart, transferSyntax, hasMeta } = parseFileMeta(arrayBuffer);
+  const { meta, dataStart, transferSyntax } = parseFileMeta(arrayBuffer);
   if (transferSyntax === TS_EXPLICIT_BE) {
     throw new DicomError(`Transfer syntax ${transferSyntax} is not supported.`);
   }
   const deflated = transferSyntax === TS_DEFLATED_LE;
   const bytes = deflated ? await inflateDataset(meta.bytes, dataStart) : meta.bytes;
   const view = deflated ? new DataView(bytes.buffer) : meta.view;
-  const implicitVR = transferSyntax === TS_IMPLICIT_LE
-    || (!hasMeta && !/^[A-Z]{2}$/.test(String.fromCharCode(bytes[4], bytes[5])));
+  const implicitVR = transferSyntax === TS_IMPLICIT_LE;
   const ctx = { view, bytes, implicitVR, littleEndian: true, vrOf, header: true };
   const { map, stop, next } = parseDataset(ctx, dataStart, bytes.length, { topLevel: true });
   const complete = stop === 'pixels';
@@ -341,7 +340,8 @@ async function inflateDataset(bytes, dataStart) {
 
 // The preamble, the file meta group (always Explicit VR Little Endian) and the transfer
 // syntax it names. A file without a preamble may still open on its file meta group;
-// without either it is taken to be Explicit VR Little Endian.
+// without either, the first element says which: an Explicit VR element has its VR, two
+// capital letters, where an Implicit VR one has the low bytes of its length.
 function parseFileMeta(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
   const view = new DataView(arrayBuffer);
@@ -351,12 +351,13 @@ function parseFileMeta(arrayBuffer) {
   const hasPreamble = bytes[128] === 0x44 && bytes[129] === 0x49 && bytes[130] === 0x43 && bytes[131] === 0x4d;
   const hasMeta = hasPreamble || view.getUint16(0, true) === 0x0002;
   if (!hasMeta) {
-    return { meta: { map: new Map(), view, bytes }, dataStart: 0, transferSyntax: TS_EXPLICIT_LE, hasMeta };
+    const explicitVR = /^[A-Z]{2}$/.test(String.fromCharCode(bytes[4], bytes[5]));
+    return { meta: { map: new Map(), view, bytes }, dataStart: 0, transferSyntax: explicitVR ? TS_EXPLICIT_LE : TS_IMPLICIT_LE };
   }
   const ctx = { view, bytes, implicitVR: false, littleEndian: true };
   const { map, next } = parseDataset(ctx, hasPreamble ? 132 : 0, bytes.length, { stopGroupAbove: 0x0002 });
   const transferSyntax = map.get(T.TransferSyntaxUID)?.str ?? TS_EXPLICIT_LE;
-  return { meta: { map, view, bytes }, dataStart: next, transferSyntax, hasMeta };
+  return { meta: { map, view, bytes }, dataStart: next, transferSyntax };
 }
 
 // ---- accessors ----
