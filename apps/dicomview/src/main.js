@@ -516,8 +516,8 @@ async function runProtocol() {
   try {
     protocol ??= new ProtocolSession((message) => log.log(message));
     if (!state.acquisitions) {
-      const files = state.index.series.flatMap((series) => series.files.map((record) => record.file));
-      const acquisitions = await protocol.summarize(files, {
+      const records = state.index.series.flatMap((series) => series.files);
+      const acquisitions = await protocol.summarize(records, {
         signal: controller.signal,
         onProgress: (fraction, message) => report('protocol', fraction, message),
       });

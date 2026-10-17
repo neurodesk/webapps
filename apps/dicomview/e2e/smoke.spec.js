@@ -108,6 +108,14 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
         window.blobWorkers.delete(this);
         super.terminate();
       }
+
+      postMessage(message, transfer) {
+        if (message?.type === 'analyzeFiles') {
+          const sizes = message.payload.fileContents.map((buffer) => buffer.byteLength);
+          window.analyzed = { files: sizes.length, bytes: sizes.reduce((sum, size) => sum + size, 0), transferred: transfer?.length ?? 0 };
+        }
+        super.postMessage(message, transfer);
+      }
     };
   });
   await page.goto('./');
@@ -144,6 +152,10 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect(page.locator('#protocolReport')).toBeVisible();
   await expect(page.locator('#protocolSummary caption')).toHaveText('acq-t1mprtragkv4 · 120 files');
   await expect(page.locator('#protocolSummary tr', { hasText: 'RepetitionTime' })).toContainText('1900');
+  const analyzed = await page.evaluate(() => window.analyzed);
+  expect(analyzed.files).toBe(120);
+  expect(analyzed.transferred, 'the buffers move to the worker').toBe(120);
+  expect(analyzed.bytes, 'headers only: 120 slices of 512 × 512 16-bit pixels are 63 MB').toBeLessThan(120 * 512 * 512 * 2 / 10);
 
   await page.locator('#schemaSelect').selectOption({ label: 'QSM Consensus Guidelines' });
   await expect(button).toHaveText('Check compliance');

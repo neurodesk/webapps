@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { dicomFile, dicomSeries, explicit, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
-import { MAX_PREFIX_BYTES, PREFIX_BYTES, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
+import { MAX_PREFIX_BYTES, PREFIX_BYTES, headerBuffer, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
 import { seriesLabel, seriesSummary } from '../src/series-text.js';
 
 const arrayBuffer = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length);
@@ -168,6 +168,21 @@ test('a Deflated Explicit VR Little Endian file is indexed', async () => {
   const { series, skipped } = await indexFiles([toFile({ name: 'deflated.dcm', buffer })]);
   assert.deepEqual(skipped, []);
   assert.deepEqual([series[0].uid, series[0].modality, series[0].rows, series[0].cols], ['1.2.3', 'MR', 64, 32]);
+});
+
+test('dicompare gets each file up to its pixel data, also when indexing stopped reading before it', async () => {
+  const header = [
+    explicit(0x0020, 0x000e, 'UI', '1.2.3'),
+    explicit(0x0028, 0x0010, 'US', uint16(1024)),
+    explicit(0x0028, 0x0011, 'US', uint16(1024)),
+  ];
+  const pixels = explicit(0x7fe0, 0x0010, 'OW', Buffer.alloc(1024 * 1024 * 2));
+  const short = dicomFile('1.2.840.10008.1.2.1', [...header, pixels]);
+  const long = dicomFile('1.2.840.10008.1.2.1', [...header, explicit(0x0029, 0x1010, 'OB', Buffer.alloc(300 * 1024)), pixels]);
+  const { series } = await indexFiles([toFile({ name: 'a.dcm', buffer: short }), toFile({ name: 'b.dcm', buffer: long })]);
+  const buffers = await Promise.all(series[0].files.map(headerBuffer));
+  assert.deepEqual(buffers.map((buffer) => buffer.byteLength), [short.length - pixels.length, long.length - pixels.length]);
+  assert.deepEqual(new Uint8Array(buffers[1]), new Uint8Array(arrayBuffer(long.subarray(0, long.length - pixels.length))));
 });
 
 test('text, JSON, NIfTI and JPEG files are skipped after one prefix read', async () => {

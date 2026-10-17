@@ -1,9 +1,10 @@
 // From a folder of files to the DICOM series it holds. Each file is read only as far as
 // a header prefix; nothing here touches pixels or the DOM, so it runs under Node too.
 //
-// FileRecord = { file, path, instanceNumber, fields, values, complete }
+// FileRecord = { file, path, instanceNumber, fields, values, complete, headerBytes }
 //   fields: the summary attributes, values: Map<tag, comparable text> of the top-level
-//   elements, complete: false when the prefix ended before the pixel data.
+//   elements, complete: false when the prefix ended before the pixel data, headerBytes:
+//   the file offset of the pixel data when the prefix reached it, else null.
 // Series = { uid, studyUid, number, description, protocolName, modality, imageType, rows,
 //   cols, kind, files, summary, varyingTags }
 // DicomIndex = { series, skipped: [{ path, reason }] }
@@ -91,7 +92,7 @@ const isSize = (value) => Number.isInteger(value) && value > 0;
 export async function readRecord(file, path, buffer) {
   const bytes = new Uint8Array(buffer);
   if (!looksLikeDicom(bytes, file.name)) throw new Error('not a DICOM file');
-  const { map, complete } = await parseDicomHeader(buffer);
+  const { map, complete, headerBytes } = await parseDicomHeader(buffer);
   const found = map.has(TAG.Rows) && map.has(TAG.Columns) && map.has(TAG.SeriesInstanceUID);
   if (!found && !complete && bytes.length < file.size) return null;
   if (!found || !isUid(text(map, TAG.SeriesInstanceUID)) || !isSize(number(map, TAG.Rows)) || !isSize(number(map, TAG.Columns))) {
@@ -106,6 +107,7 @@ export async function readRecord(file, path, buffer) {
     path,
     instanceNumber: number(map, TAG.InstanceNumber),
     complete: complete || bytes.length >= file.size,
+    headerBytes,
     values,
     fields: {
       seriesUid: text(map, TAG.SeriesInstanceUID),
@@ -219,7 +221,7 @@ export function indexDicom(records, skipped = []) {
   return { series, skipped };
 }
 
-export function relativePath(file) {
+function relativePath(file) {
   return file.webkitRelativePath || file._webkitRelativePath || file.name;
 }
 
@@ -234,6 +236,18 @@ async function readFileRecord(file) {
     if (record) return record;
   }
   throw new Error(`no image tags in the first ${MAX_PREFIX_BYTES / 1024 / 1024} MB`);
+}
+
+// The file up to its pixel data, which is all dicompare reads: it parses with pydicom's
+// stop_before_pixels. The whole file when the pixel data lies past the read cap or the
+// dataset is deflated.
+export async function headerBuffer(record) {
+  const { file } = record;
+  let end = record.headerBytes;
+  for (let size = PREFIX_BYTES * 2; end === null && size < file.size && size <= MAX_PREFIX_BYTES; size *= 2) {
+    end = (await parseDicomHeader(await file.slice(0, size).arrayBuffer())).headerBytes;
+  }
+  return file.slice(0, end ?? file.size).arrayBuffer();
 }
 
 // Reads the header of every file in batches, yielding between them so thousands of

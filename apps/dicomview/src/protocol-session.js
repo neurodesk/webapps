@@ -5,7 +5,9 @@
 import { DicompareController } from './vendor/dicompare/DicompareController.js';
 import workerUrl from './vendor/dicompare/dicompare-worker.js?url';
 import schemaIndex from './vendor/dicompare/schemas/index.json';
-import { relativePath } from './dicom-index.js';
+import { headerBuffer } from './dicom-index.js';
+
+const BATCH = 32;
 
 // The dicompare schema library, bundled as assets; only a schema's name is inlined.
 const schemaUrls = import.meta.glob(['./vendor/dicompare/schemas/*.json', '!**/index.json'], { query: '?url', import: 'default', eager: true });
@@ -68,22 +70,32 @@ export class ProtocolSession extends DicompareController {
     super.terminate();
   }
 
-  // Acquisitions of these files, as dicompare groups them. onProgress(fraction, message).
-  // The file bytes stay local to one run, so a cancelled run cannot leak into the next.
-  async summarize(files, { signal, onProgress }) {
+  // The controller's requests copy every buffer into the worker; these move them.
+  _sendRequest(request, onProgress, transfer = []) {
+    const id = `req_${++this.requestId}_${Date.now()}`;
+    return new Promise((resolve, reject) => {
+      this.pendingRequests.set(id, { resolve, reject, onProgress });
+      this.worker.postMessage({ ...request, id }, transfer);
+    });
+  }
+
+  // Acquisitions of these files (dicom-index records), as dicompare groups them.
+  // onProgress(fraction, message). Only each file's header, up to its pixel data, is read
+  // and sent. The bytes stay local to one run, so a cancelled run cannot leak into the next.
+  async summarize(records, { signal, onProgress }) {
     const report = (scale, offset) => (progress) => onProgress(offset + scale * (progress.percentage ?? 0) / 100, progress.currentOperation);
     return abortable((async () => {
       const contents = [];
-      for (const file of files) {
-        contents.push(await file.arrayBuffer());
+      for (let start = 0; start < records.length; start += BATCH) {
+        contents.push(...await Promise.all(records.slice(start, start + BATCH).map(headerBuffer)));
         signal.throwIfAborted();
       }
       await this.ensureInitialized(report(0.5, 0));
       signal.throwIfAborted();
       const result = await this._sendRequest({
         type: 'analyzeFiles',
-        payload: { fileNames: files.map(relativePath), fileContents: contents },
-      }, report(0.5, 0.5));
+        payload: { fileNames: records.map((record) => record.path), fileContents: contents },
+      }, report(0.5, 0.5), contents);
       const acquisitions = result.acquisitions ?? result;
       return Array.isArray(acquisitions)
         ? acquisitions
