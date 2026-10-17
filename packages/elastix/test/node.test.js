@@ -8,7 +8,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import ZipFileStore from '@zarrita/storage/zip';
 import * as zarr from 'zarrita';
+import { defaultParameterMapNode, writeParameterFilesNode } from '@itk-wasm/elastix';
 import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
+import { ncc, readVolume } from '../../../test-utils/registration-similarity.mjs';
+import { fixedToMovingRas } from '../validation/parameter-matrix.mjs';
 import { hdf5Writable } from '../src/outputs.js';
 import { registrationError, registrationImage, transformParameterFiles } from '../src/pipeline.js';
 
@@ -129,6 +132,55 @@ test('a B-spline registration writes a displacement field archive and no HDF5 tr
   assert.deepEqual(field.shape, [3, 20, 20, 20]);
   assert.ok(field.data.every(Number.isFinite));
 });
+
+for (const stages of [['rigid'], ['translation', 'rigid']]) {
+  test(`custom TOML parameter files register the shifted image with ${stages.join(' and ')}`, async (t) => {
+    const { directory, moving, fixed } = await workspace(t);
+    const maps = [];
+    for (const stage of stages) {
+      const { parameterMap } = await defaultParameterMapNode(stage, { numberOfResolutions: 2 });
+      maps.push({ ...parameterMap, DefaultPixelValue: ['-321'], AutomaticTransformInitialization: ['true'] });
+    }
+    const paths = stages.map((_, index) => join(directory, `parameters.${index ? 10 : 2}.toml`));
+    await writeParameterFilesNode(maps, paths);
+    const output = join(directory, 'custom');
+    const result = run([moving, fixed, output, ...paths.toReversed().flatMap((path) => ['--parameter-file', path])]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /\(parameter files\)/);
+    const names = [
+      'subject_registered.nii.gz', 'subject_transform.h5', 'subject_transform.ome.zarr.ozx',
+      ...stages.map((_, index) => `subject_TransformParameters.${index}.toml`),
+    ];
+    assert.deepEqual(result.stdout.trim().split('\n'), names.map((name) => join(output, name)));
+    assert.deepEqual((await readdir(output)).sort(), [...names].sort());
+    const texts = await Promise.all(stages.map((_, index) => readFile(join(output, `subject_TransformParameters.${index}.toml`), 'utf8')));
+    assert.deepEqual(texts.map((text) => toml(text, 'Transform')), stages.map((stage) => stage === 'rigid' ? 'EulerTransform' : 'TranslationTransform'));
+    for (const [index, text] of texts.entries()) {
+      assert.equal(toml(text, 'DefaultPixelValue'), -321);
+      assert.equal(toml(text, 'InitialTransformParameterFileName'), index ? `subject_TransformParameters.${index - 1}.toml` : 'NoInitialTransform');
+    }
+    const matrix = fixedToMovingRas(texts);
+    const expected = [[1, 0, 0, 4], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        assert.ok(Math.abs(matrix[row][column] - expected[row][column]) < 0.2, `composed transform [${row}, ${column}] = ${matrix[row][column]}`);
+      }
+    }
+    const registered = await readVolume(await readFile(join(output, 'subject_registered.nii.gz')));
+    const template = await readVolume(await readFile(fixed));
+    assert.deepEqual(registered.dims, template.dims);
+    const foreground = template.data.map((value) => value > 10 ? 1 : 0);
+    const actual = Array.from(registered.data).filter((_, index) => foreground[index]);
+    const target = Array.from(template.data).filter((_, index) => foreground[index]);
+    assert.ok(ncc(actual, target) > 0.99, 'registered foreground matches the fixed image');
+    assert.ok(registered.data.includes(-321), 'resampling uses the custom padding value');
+    assert.equal((await readFile(join(output, 'subject_transform.h5'))).subarray(0, 8).toString('latin1'), '\x89HDF\r\n\x1a\n');
+    const store = ZipFileStore.fromBlob(new Blob([await readFile(join(output, 'subject_transform.ome.zarr.ozx'))]));
+    const [transformation] = JSON.parse(new TextDecoder().decode(await store.get('/zarr.json'))).attributes.ome.coordinateTransformations;
+    assert.equal(transformation.name, 'fixed_to_moving');
+    assert.ok(['translation', 'affine'].includes(transformation.type), transformation.type);
+  });
+}
 
 test('a folder or a DICOM-like file is refused with a hint', async (t) => {
   const { directory, fixed } = await workspace(t);
