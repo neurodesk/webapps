@@ -372,7 +372,7 @@ async function downloadSeries(uid) {
   if (uid !== state.seriesUid || !state.conversions.has(uid)) selectSeries(uid);
   try {
     const outputs = await state.conversions.get(uid);
-    for (const { image, sidecar } of downloadFiles(series, outputs)) {
+    for (const { image, sidecar } of downloadFiles(series, outputs, state.index.series)) {
       downloadFile(image);
       if (sidecar) downloadFile(sidecar);
     }
@@ -574,7 +574,7 @@ registerAppAutomation({
       return {
         artifacts: [
           { role: 'series', file: new File([JSON.stringify(index, null, 2)], 'series.json', { type: 'application/json' }) },
-          ...downloadFiles(series, outputs).map(({ image }) => ({ role: 'image', file: image })),
+          ...downloadFiles(series, outputs, state.index.series).map(({ image }) => ({ role: 'image', file: image })),
         ],
         provenance: { converter: 'dcm2niix', series: series.uid },
       };

@@ -45,12 +45,26 @@ export function seriesSummary(series) {
   return parts.join(' · ');
 }
 
+function seriesStem(series) {
+  const label = (series.description || series.protocolName || '').replace(/[^A-Za-z0-9.-]+/g, '_').replace(/^[_.]+|_+$/g, '').slice(0, 64);
+  return [`series${series.number ?? ''}`, label].filter(Boolean).join('_');
+}
+
+// FNV-1a of the UID, six hex digits: stable, and unlike the UID itself it embeds no date.
+function uidTag(uid) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < uid.length; i++) h = Math.imul(h ^ uid.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16).padStart(8, '0').slice(0, 6);
+}
+
 // A series' images and sidecars as downloads. dcm2niix names its outputs after the input
 // folder, often the patient's name, and the study date and time; these carry only the
-// series number and description, an image and its sidecar under one stem.
-export function downloadFiles(series, outputs) {
-  const label = (series.description || series.protocolName || '').replace(/[^A-Za-z0-9.-]+/g, '_').replace(/^[_.]+|_+$/g, '').slice(0, 64);
-  const stem = [`series${series.number ?? ''}`, label].filter(Boolean).join('_');
+// series number and description, an image and its sidecar under one stem. A stem that
+// another series in allSeries shares gains a hash of the series UID.
+export function downloadFiles(series, outputs, allSeries) {
+  const base = seriesStem(series);
+  const shared = allSeries.some((other) => other.uid !== series.uid && seriesStem(other) === base);
+  const stem = shared ? `${base}_${uidTag(series.uid)}` : base;
   return outputs.map(({ image, sidecar }, index) => {
     const name = outputs.length > 1 ? `${stem}_${index + 1}` : stem;
     const extension = image.name.match(/\.nii(\.gz)?$/i)?.[0] ?? '.nii';

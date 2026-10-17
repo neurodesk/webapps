@@ -14,4 +14,4 @@ A compliance check that dicompare could not run for some or all acquisitions now
 
 The extra "Or choose a folder" field is gone; choose a folder from the input menu's "Choose folder…".
 
-Downloaded images and sidecars are named from the series number and description, such as `series2_t1_mpr.nii`, instead of dcm2niix's default, which carries the input folder name and the study date and time.
+Downloaded images and sidecars are named from the series number and description, such as `series2_t1_mpr.nii`, instead of dcm2niix's default, which carries the input folder name and the study date and time. Two series that would share a name, such as the same series from two studies, also get a short hash of their series UID.
