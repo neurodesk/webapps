@@ -58,4 +58,11 @@ test('the example image can be windowed from the keyboard in FreeBrowse', async 
   await page.locator('[data-view="image"]').click();
   await expect(page.locator('#headerReport')).toBeHidden();
   await expect(contrastMax, 'the window survives a visit to the header').toHaveAttribute('aria-valuenow', String(after));
+
+  const shown = await settledCanvas(canvas);
+  const eye = viewer.getByRole('button', { name: 'Toggle visibility' });
+  await eye.click();
+  expect((await settledCanvas(canvas)).equals(shown), 'the eye button hides the image').toBe(false);
+  await eye.click();
+  expect((await settledCanvas(canvas)).equals(shown), 'showing it again restores the windowed image').toBe(true);
 });

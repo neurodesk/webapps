@@ -5,6 +5,7 @@ import workspaceStyles from '@neurodesk/webapp-components/styles/imaging-workspa
 import { bindTouchGestures } from './touch-gestures.js';
 import { LOCKED_ATTRIBUTE, applyDrawingLock } from './drawing-lock.js';
 import { activateRowName, labelSliders, syncRowNames } from './accessibility.js';
+import { bindVolumeVisibility } from './volume-visibility.js';
 
 // Mounts FreeBrowse around a host-owned NiiVue instance inside an open shadow
 // root. Returns { nv, ready, setDrawingLocked, destroy };
@@ -50,6 +51,7 @@ export function mountViewer(element, options, embed = {}) {
   const nv = new EmbeddedNiiVue(options);
   nv.sliceType = SLICE_TYPE.MULTIPLANAR;
   nv.showRender = SHOW_RENDER.ALWAYS;
+  const releaseVisibility = bindVolumeVisibility(nv);
   const handle = mountFreeBrowse(container, {
     nv,
     backend: null,
@@ -98,6 +100,7 @@ export function mountViewer(element, options, embed = {}) {
       clearTimeout(timeout);
       observer.disconnect();
       releaseGestures?.();
+      releaseVisibility();
       handle.destroy();
       nv.destroy();
     },

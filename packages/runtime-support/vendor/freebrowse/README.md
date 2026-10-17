@@ -26,5 +26,6 @@ the build scripts from `package.json`, and writes this README.
 ## Known gaps
 
 FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which no NiiVue
-release supports yet. NiiVue stores the flag and keeps drawing the volume. The declaration
+release supports yet. NiiVue stores the flag and keeps drawing the volume, so the shared viewer
+(`src/freebrowse-viewer/volume-visibility.js`) hides it through its opacity instead. The declaration
 build reports that one type error; the script stops on any other.

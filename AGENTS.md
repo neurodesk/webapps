@@ -116,7 +116,7 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 ## FreeBrowse viewer (topofit, spinalcordtoolbox, dicomview)
 
 - `packages/runtime-support` pins `freebrowse` to the vendored `file:./vendor/freebrowse` build of FreeBrowse's development branch, which is not on npm. Rebuild it only with `node packages/runtime-support/scripts/vendor-freebrowse.mjs` (the vendor README names the commit). Return to a registry pin once upstream publishes that code.
-- The branch builds against an unreleased niivue-mono checkout; the vendored build uses `@niivue/niivue` `1.0.0-rc.17`, the first release with the drawing undo snapshot its wand calls. Every app that mounts the viewer pins that same NiiVue. Volume visibility (the eye button) needs niivue/mono#224, which no release has yet.
+- The branch builds against an unreleased niivue-mono checkout; the vendored build uses `@niivue/niivue` `1.0.0-rc.17`, the first release with the drawing undo snapshot its wand calls. Every app that mounts the viewer pins that same NiiVue. FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which no release draws yet; `src/freebrowse-viewer/volume-visibility.js` maps it to opacity. Delete that module once the pinned NiiVue renders `visible`.
 
 ## topofit
 
