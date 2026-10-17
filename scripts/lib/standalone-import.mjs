@@ -107,7 +107,7 @@ export async function releaseDownloads({ id, version, release, native, previous 
       sha256: asset.digest.slice(7),
       bytes: asset.size,
       validationUrl: receipt.browser_download_url,
-      ...(spec ? { modelsIncluded: true, command: portableCommand(spec, platform, asset.name) } : {}),
+      ...(spec ? { modelsIncluded: spec.bundleModels !== false, command: portableCommand(spec, platform, asset.name) } : {}),
       ...(!spec && embeddedModels ? { modelsIncluded: true } : {}),
     });
   }
