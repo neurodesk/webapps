@@ -38,8 +38,9 @@ const ROOT_GLOB = /['"`]((?:scripts|test-utils|test)\/[\w/-]+)\/[^'"`]*\*[^'"`]*
 const ROOT_DIRS = ['scripts/', 'test-utils/', 'registry/', 'test/', 'packages/', 'exes/'];
 const ROOT_CONFIG = /^[\w.-]+\.(?:[cm]?[jt]s|json)$/;
 const SOURCE_FILE = /\.[cm]?[jt]s$/;
-// A whole line that is a `//` comment.
-const LINE_COMMENT = /^[ \t]*\/\/.*$/gm;
+// A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
+// `/// <reference path>` directives are compiler inputs.
+const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
 const ROOT_SCRIPT_CALL = /\bpnpm (?:run )?([\w:-]+)/g;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;

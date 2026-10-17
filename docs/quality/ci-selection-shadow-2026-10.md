@@ -191,7 +191,7 @@ Narrowing these needs proof that app builds do not read those files; this PR doe
 
 **Follow-up (comment edges).** The `exes/synthseg` edge came from a comment in `resource-limits.js` ("Preserve
 exes/synthseg/src/nifti.rs arithmetic order"). The workspace graph now ignores whole `//` comment lines when it
-scans root files. Block comments stay, because JSDoc `import()` types are typecheck inputs. Six edges disappear:
+scans root files. Block comments and `///` directives stay, because JSDoc `import()` types and triple-slash references are typecheck inputs. Six edges disappear:
 
 - `resource-limits.js` → `exes/synthseg`;
 - `vite-app-config.mjs` → `scripts/build-site.mjs` and `scripts/build-static.mjs`, from its header-policy comment. That

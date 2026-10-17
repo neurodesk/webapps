@@ -511,10 +511,10 @@ test('deleting an imported root helper still selects the app that imports it', a
   assert.equal(plan.site, true);
 });
 
-test('a path named in a line comment is not an input, but code and JSDoc types on any line are', async (t) => {
+test('a path named in a line comment is not an input, but code, JSDoc types and triple-slash directives are', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'app-plan-comment-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  for (const directory of ['apps/lcmodel', 'scripts/lib', 'exes/prose', 'exes/code', 'packages/typed', '.github/workflows']) {
+  for (const directory of ['apps/lcmodel', 'scripts/lib', 'exes/prose', 'exes/code', 'packages/typed', 'packages/directive', '.github/workflows']) {
     await mkdir(join(root, directory), { recursive: true });
   }
   await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: {} }));
@@ -524,6 +524,7 @@ test('a path named in a line comment is not an input, but code and JSDoc types o
     '// The composite build (scripts/build-site.mjs) mirrors exes/prose/src/lib.rs.',
     "  // registry/standalone.json is described here, not read.",
     "/** @type {import('../../packages/typed/index.js').Value} */",
+    '/// <reference path="../../packages/directive/index.d.ts" />',
     "export const fixture = 'exes/code/data.bin'; // trailing comments keep their line",
     '',
   ].join('\n'));
@@ -535,6 +536,7 @@ test('a path named in a line comment is not an input, but code and JSDoc types o
   assert.deepEqual(selects('scripts/build-site.mjs'), []);
   assert.deepEqual(selects('exes/code/data.bin'), ['lcmodel']);
   assert.deepEqual(selects('packages/typed/index.js'), ['lcmodel']);
+  assert.deepEqual(selects('packages/directive/index.d.ts'), ['lcmodel']);
 });
 
 test('removing a root script still selects the CI job that calls it', async (t) => {
