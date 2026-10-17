@@ -302,20 +302,33 @@ function convert(series, signal) {
   return conversion;
 }
 
+function untilAborted(signal) {
+  return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+}
+
 async function showSeries(series) {
   const { generation } = state;
   const controller = begin('viewer', `${describeSeries(series)} · converting…`);
+  let outputs = null;
   try {
-    const outputs = await convert(series, controller.signal);
+    outputs = await convert(series, controller.signal);
     controller.signal.throwIfAborted();
     assertGeneration(generation);
     if (state.seriesUid !== series.uid) return;
     state.outputs = outputs;
     $('outputSelect').replaceChildren(...outputs.map(({ image }, index) => new Option(image.name, String(index))));
     $('outputField').hidden = outputs.length < 2;
-    await showOutput();
+    await Promise.race([showOutput(), untilAborted(controller.signal)]);
+    controller.signal.throwIfAborted();
     finish('viewer', controller, `${describeSeries(series)} · ${outputs.length} image${outputs.length === 1 ? '' : 's'}`);
   } catch (error) {
+    // A load cannot be stopped once NiiVue has it; clearImage, queued behind it, takes the
+    // image down again so a cancelled or failed one never stays current.
+    if (outputs && state.outputs === outputs) {
+      state.outputs = null;
+      $('outputField').hidden = true;
+      void clearImage();
+    }
     finish('viewer', controller, `${describeSeries(series)} · conversion`, { error });
   }
 }

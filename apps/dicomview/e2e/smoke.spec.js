@@ -250,6 +250,37 @@ test('a downloaded sidecar leaves out the patient\'s name and birth date', async
   expect(sidecar).not.toHaveProperty('PatientBirthDate');
 });
 
+test('cancelling while the image loads keeps it off screen, and View loads it again', async ({ page }) => {
+  await page.goto('./');
+  // NiiVue hands each image file to its loader worker; holding that message holds the load.
+  await page.evaluate(() => {
+    const post = Worker.prototype.postMessage;
+    const held = [];
+    window.heldImageReads = () => held.length;
+    Worker.prototype.postMessage = function (message, ...rest) {
+      if (!(message?.url instanceof File)) return post.call(this, message, ...rest);
+      held.push(() => post.call(this, message, ...rest));
+    };
+    window.releaseImageReads = () => {
+      Worker.prototype.postMessage = post;
+      for (const release of held) release();
+    };
+  });
+  const files = dicomSeries({ series: 7, slices: 4 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(files);
+  await page.waitForFunction(() => window.heldImageReads() > 0, null, { timeout: 60000 });
+  await page.locator('#cancelButton').click();
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · conversion cancelled');
+  await page.evaluate(() => window.releaseImageReads());
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#emptyState')).toBeVisible();
+  await expect(page.locator('#imageLabel')).toHaveText('');
+  await page.locator('#seriesList .nd-volume-toggle').getByRole('button', { name: 'View' }).click();
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  await expect(page.locator('#emptyState')).toBeHidden();
+  await expect(page.locator('#imageLabel')).toHaveText(/\.nii$/);
+});
+
 test('protocol actions wait while a replacement folder is read', async ({ page }) => {
   await page.goto('./');
   const files = (series) => dicomSeries({ series, slices: 2 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
