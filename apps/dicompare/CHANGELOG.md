@@ -2,13 +2,13 @@
 
 ## 0.15.20261017
 
-- Preserve empty contains constraints and arbitrary acquisition names in browser schema downloads. Report clipboard failures in the status bar and technical log, including on the read-only schema viewer.
-
 ### Patch Changes
 
+- 0ca8624: Preserve empty contains constraints and arbitrary acquisition names in browser schema downloads. Report clipboard failures through the status footer and technical log on both workspace and schema viewer pages.
 - Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.
 
   Retain the command line's schema-generation Python after upstream moved web schema exports to JavaScript. Its generated schema and reference outputs are unchanged.
+
 - Merge upstream astewartau/dicompare-web 7c56841..d3d0879:
 
   - Describe the third-party requests in Privacy
