@@ -216,7 +216,7 @@ async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
     throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
-    seriesList.inert = false;
+    if (!jobs.has('index')) seriesList.inert = false;
   }
 }
 
@@ -403,6 +403,7 @@ async function renderHeader() {
   const series = currentSeries();
   if (!series) return;
   const render = ++headerRender;
+  setExportable(false);
   const record = series.files[state.instance];
   const sidecar = $('headerSource').value === 'sidecar';
   $('instanceSlider').disabled = sidecar;
@@ -429,6 +430,13 @@ async function renderHeader() {
   const limited = shownRows.length > ROW_LIMIT ? ` · first ${ROW_LIMIT} shown; filter to narrow` : '';
   $('headerNote').textContent = `${shownRows.length} of ${rows.length} fields${limited} · ${note}`;
   $('headerRows').replaceChildren(...shownRows.slice(0, ROW_LIMIT).map(headerRow));
+  setExportable(true);
+}
+
+// The exports name the current selection, so they wait until its rows are shown.
+function setExportable(ready) {
+  $('copyHeader').disabled = !ready;
+  $('downloadHeader').disabled = !ready;
 }
 
 function headerRow(row) {
