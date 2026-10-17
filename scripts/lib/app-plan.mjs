@@ -27,6 +27,8 @@ const MODEL_MANIFEST = /^models\/([^/]+)\.manifest\.json$/;
 const NON_CODE_FILES = new Set(['README.md', 'LICENSES.md']);
 const LOCKFILE = 'pnpm-lock.yaml';
 const REGISTRY = 'registry/apps.yml';
+// Only the independent unused-code and mutation workflows execute these root tools.
+const INDEPENDENT_ROOT_DEV_DEPENDENCIES = ['knip', '@stryker-mutator/core'];
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -36,7 +38,7 @@ function same(a, b) {
 // the change cannot be scoped.
 function analyseLockfile(manifest) {
   try {
-    return { importers: lockfileImpact(manifest) };
+    return { importers: lockfileImpact(manifest, { independentRootDevDependencies: INDEPENDENT_ROOT_DEV_DEPENDENCIES }) };
   } catch (error) {
     if (error instanceof LockfileAnalysisError) return { shared: error.message };
     throw error;
@@ -104,8 +106,14 @@ function changedFields({ before, after }) {
   return [...fields].filter((field) => JSON.stringify(old[field]) !== JSON.stringify(now[field]));
 }
 
-// Which root package.json scripts changed, or null when anything else changed.
+// Changed root scripts after removing independent tools, or null for shared fields.
 function changedRootScripts(manifest) {
+  const withoutTools = (text) => {
+    const { devDependencies = {}, ...rest } = JSON.parse(text);
+    const remaining = Object.fromEntries(Object.entries(devDependencies).filter(([name]) => !INDEPENDENT_ROOT_DEV_DEPENDENCIES.includes(name)));
+    return JSON.stringify({ ...rest, devDependencies: remaining });
+  };
+  manifest = { before: withoutTools(manifest.before), after: withoutTools(manifest.after) };
   if (changedFields(manifest).some((field) => field !== 'scripts')) return null;
   const [old, now] = [JSON.parse(manifest.before).scripts ?? {}, JSON.parse(manifest.after).scripts ?? {}];
   return [...new Set([...Object.keys(old), ...Object.keys(now)])].filter((name) => old[name] !== now[name]);

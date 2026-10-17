@@ -91,12 +91,23 @@ function linkedImporters(lock, path) {
 }
 
 // Map of affected importer path ('.', 'apps/x', 'packages/y', ...) to why.
-export function lockfileImpact({ before, after }) {
+export function lockfileImpact({ before, after }, { independentRootDevDependencies = [] } = {}) {
   const base = parseLockfile(before, 'base');
   const head = parseLockfile(after, 'head');
   for (const section of new Set([...Object.keys(base), ...Object.keys(head)])) {
     if (!RESOLUTION_SECTIONS.has(section) && !same(base[section], head[section])) {
       throw new LockfileAnalysisError(`pnpm-lock.yaml changed its ${section} section, which can alter every resolution`);
+    }
+  }
+  if (independentRootDevDependencies.length) {
+    for (const lock of [base, head]) {
+      // Validate tool resolutions too, before removing their independent roots.
+      closure(lock, '.');
+      const importer = lock.importers['.'];
+      if (!importer?.devDependencies) continue;
+      const remaining = Object.fromEntries(Object.entries(importer.devDependencies).filter(([name]) => !independentRootDevDependencies.includes(name)));
+      if (Object.keys(remaining).length) importer.devDependencies = remaining;
+      else delete importer.devDependencies;
     }
   }
   const changed = (key) => !same(base.snapshots[key], head.snapshots[key])

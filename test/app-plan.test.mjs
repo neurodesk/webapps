@@ -269,6 +269,54 @@ async function lockPlan(after) {
   return createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(baseLock, after)]]));
 }
 
+test('root Knip and Stryker changes run their independent workflows without selecting apps', async () => {
+  const registry = await loadAppsRegistry();
+  for (const name of ['knip', '@stryker-mutator/core']) {
+    const before = { devDependencies: { [name]: '1.0.0', esbuild: '1.0.0' }, scripts: {} };
+    const after = { devDependencies: { [name]: '2.0.0', esbuild: '1.0.0' }, scripts: { 'quality:unused': 'node scripts/report-unused-code.mjs' } };
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)]]));
+    assert.deepEqual(plan.selected, [], name);
+    assert.equal(plan.site, false, name);
+    assert.equal(plan.reasons.fallback, null, name);
+    const root = changeLock(lock => {
+      lock.importers['.'].devDependencies[name] = dep('1.0.0');
+      resolve(lock, `${name}@1.0.0`);
+    });
+    const next = structuredClone(root);
+    next.importers['.'].devDependencies[name] = dep('2.0.0');
+    resolve(next, `${name}@2.0.0`);
+    const locked = createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(root, next)]]));
+    assert.deepEqual(locked.selected, [], name);
+    assert.equal(locked.site, false, name);
+  }
+});
+
+test('unknown root tools, runtime dependencies and mixed changes still select the catalog', async () => {
+  const registry = await loadAppsRegistry();
+  for (const [before, after] of [
+    [{ devDependencies: { esbuild: '1.0.0' } }, { devDependencies: { esbuild: '2.0.0' } }],
+    [{ dependencies: { knip: '1.0.0' } }, { dependencies: { knip: '2.0.0' } }],
+    [{ devDependencies: { knip: '1.0.0' } }, { devDependencies: { knip: '2.0.0' }, engines: { node: '>=24' } }],
+  ]) {
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)]]));
+    assert.equal(plan.selected.length, registry.apps.length);
+    assert.ok(plan.reasons.fallback);
+  }
+});
+
+test('Knip and Stryker remain independent of app, native and browser inputs', async () => {
+  const paths = execFileSync('git', ['ls-files', '-z', '--', 'apps', 'packages', 'exes', 'test-utils'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\0').filter(path => /\.(?:[cm]?[jt]sx?|json|ya?ml|toml|sh|py|rs)$|\/Makefile$/.test(path));
+  for (const path of paths) {
+    assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), /\bknip\b|@stryker-mutator\/core|\bstryker\b/, `${path} now consumes an independent root tool; revisit its CI ownership`);
+  }
+  for (const [file, command] of [['unused-code', 'pnpm quality:unused'], ['mutation-quality', 'pnpm quality:mutations:smoke']]) {
+    const workflow = parse(await readFile(join(repoRoot, `.github/workflows/${file}.yml`), 'utf8'));
+    assert.ok(Object.hasOwn(workflow.on, 'pull_request'), `${file} still runs on every PR`);
+    assert.ok(Object.values(workflow.jobs).some(job => job.steps.some(step => step.run === command)), command);
+  }
+});
+
 test('a lockfile-only runtime upgrade selects the apps that resolve it', async () => {
   const plan = await lockPlan(changeLock((lock) => {
     lock.snapshots['@niivue/niivue@1.0.0'].dependencies.pako = '2.1.1';

@@ -42,6 +42,53 @@ function resolve(lock, key) {
 const impact = (after, before = baseLock) => lockfileImpact({ before: JSON.stringify(before), after: JSON.stringify(after) });
 const affected = (after, before) => Object.fromEntries(impact(after, before));
 
+test('independent root tools retain validation and every non-root dependency closure', () => {
+  const before = changeLock(lock => {
+    lock.importers['.'].devDependencies.knip = dep('5.0.0');
+    lock.snapshots['knip@5.0.0'] = { dependencies: { pako: '2.1.0' } };
+  });
+  const options = { independentRootDevDependencies: ['knip'] };
+  const narrowed = (after) => lockfileImpact({ before: JSON.stringify(before), after: JSON.stringify(after) }, options);
+  const upgraded = changeLock(lock => {
+    lock.importers['.'].devDependencies.knip = dep('6.0.0');
+    resolve(lock, 'knip@6.0.0');
+  }, before);
+  assert.deepEqual([...narrowed(upgraded).keys()], []);
+  assert.ok(impact(upgraded, before).has('.'), 'the default analysis remains conservative');
+  const removed = changeLock(lock => { delete lock.importers['.'].devDependencies.knip; }, before);
+  assert.deepEqual([...narrowed(removed).keys()], []);
+  const shared = changeLock(lock => { lock.packages['pako@2.1.0'].resolution.integrity = 'sha512-republished'; }, before);
+  assert.deepEqual([...narrowed(shared).keys()], ['apps/niimath', 'scripts/quality']);
+  const rootRuntime = changeLock(lock => {
+    lock.importers['.'].devDependencies.pako = dep('2.1.0');
+    lock.packages['pako@2.1.0'].resolution.integrity = 'sha512-republished';
+  }, before);
+  assert.ok(narrowed(rootRuntime).has('.'), 'other root dependency roots are preserved');
+  const invalid = changeLock(lock => { delete lock.snapshots['knip@5.0.0']; }, before);
+  assert.throws(() => narrowed(invalid), LockfileAnalysisError);
+  const optional = changeLock(lock => {
+    delete lock.importers['.'].devDependencies.knip;
+    lock.importers['.'].optionalDependencies = { knip: dep('5.0.0') };
+  }, before);
+  assert.ok(narrowed(optional).has('.'), 'only devDependencies may be independent');
+});
+
+test('independent root tools can be added or removed without hiding invalid root-only resolutions', () => {
+  const options = { independentRootDevDependencies: ['knip'] };
+  const compare = (before, after) => lockfileImpact({ before: JSON.stringify(before), after: JSON.stringify(after) }, options);
+  const empty = changeLock(lock => {
+    lock.importers['.'] = {};
+    delete lock.importers['scripts/quality'];
+  });
+  const tool = changeLock(lock => { lock.importers['.'].devDependencies = { knip: dep('5.0.0') }; }, empty);
+  assert.deepEqual([...compare(empty, tool)], []);
+  assert.deepEqual([...compare(tool, empty)], []);
+  const invalid = changeLock(lock => { delete lock.snapshots['knip@5.0.0']; }, tool);
+  assert.throws(() => compare(tool, invalid), error => error instanceof LockfileAnalysisError && /knip for \./.test(error.message));
+  const absent = changeLock(lock => { delete lock.importers['.']; }, empty);
+  assert.deepEqual([...compare(absent, absent)], []);
+});
+
 test('an importer is affected through the workspace importers it links, but the root is not', () => {
   const after = changeLock((lock) => {
     lock.importers['scripts/quality'].devDependencies.knip = dep('5.1.0');

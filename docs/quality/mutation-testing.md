@@ -100,6 +100,20 @@ cost.
 
 ## Results and reviewed survivors
 
+The 2026-10-17 root-quality ownership change adds 17 lockfile-analyzer mutants.
+The targeted run assesses 163, with 146 killed, 7 timed out and 10 survivors.
+It completes in 64 seconds on this host. These are one-run execution counts,
+not a performance comparison. The new tests caught missing validation of a
+root-only tool snapshot and incorrect handling of empty or absent root importers.
+The eight earlier survivors below remain. The two additional survivors are
+equivalent for pnpm-written lockfiles:
+
+- A default excluded-tool list containing `"Stryker was here"` matches no npm
+  package name, because spaces are invalid in a package name.
+- Running the root-tool normalization with an empty excluded-tool list only
+  removes an empty `devDependencies` mapping. pnpm omits that empty mapping;
+  all actual roots and their closures remain identical.
+
 The pilot on 2026-10-10 killed all 10 mutants in `disconnectome.js`.
 
 The full run on 2026-10-16 detected 620 of 642 mutants (613 killed, 7 timed

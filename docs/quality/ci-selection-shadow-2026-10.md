@@ -189,6 +189,35 @@ scripts) where the oracle expects 0–3, and #292 selects 30 through `registry/s
 
 Narrowing these needs proof that app builds do not read those files; this PR does not change them.
 
+## Root quality tools, 2026-10-17 follow-up
+
+Root-only Knip and Stryker devDependencies now have independent ownership.
+The root manifest comparison removes only `knip` and `@stryker-mutator/core`
+from `devDependencies` before classifying changed scripts. Their commands still
+run on every pull request through `unused-code.yml` and `mutation-quality.yml`.
+A contract checks that neither tool appears in app, package, native or browser
+inputs, so a new consumer requires revisiting this ownership.
+
+The lockfile analyzer validates the complete original root closure first.
+It then compares the root importer without those two devDependency roots.
+Every other importer retains its complete base and head closure. A changed
+transitive package shared with an app still selects that app. Another root
+dependency using that package still selects the whole catalog. Missing or
+unresolvable tool snapshots remain errors. Dependencies, optionalDependencies,
+settings and unknown root tools retain conservative selection.
+
+The five-case shadow replay covers #240, #242, #246, #273 and #302, with no
+oracle misses. #240 and #242 now select no apps or site build. #246 retains
+its six app consumers, #273 selects no apps, and #302 retains all 31 apps.
+The replay selects 37 of 155 app-test jobs, 38 of 157 browser jobs and 8 of 30
+GPU jobs. These are historical job counts, not measured runner-minute or queue
+savings. The oracle's root-file and runtime-asset limits above still apply.
+
+Rerun with `node scripts/app-plan-shadow.mjs --prs 240,242,246,273,302
+--json shadow.json --markdown shadow.md`. Root ESLint and other tooling,
+comment-derived graph edges, `.gitattributes`, native workflow inputs and
+stacked-PR duplication remain separate work.
+
 ## Measurements
 
 Window: `ci` runs created 2026-10-13 00:00 to 2026-10-15 18:30 UTC.
