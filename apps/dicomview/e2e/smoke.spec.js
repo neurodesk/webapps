@@ -222,6 +222,22 @@ test('chosen files list every series, skip what is not DICOM, and switch series 
   await expect(page.locator('#technicalLog')).toContainText('Skipped notes.txt: not a DICOM file');
 });
 
+test('a downloaded sidecar leaves out the patient\'s name and birth date', async ({ page }) => {
+  await page.goto('./');
+  const files = dicomSeries({ series: 7, slices: 4, patient: { birthDate: '19800101', studyDate: '20240102' } })
+    .map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(files);
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  const downloads = [];
+  page.on('download', (download) => downloads.push(download));
+  await page.locator('#seriesList').getByRole('button', { name: 'Download', exact: true }).click();
+  await expect.poll(() => downloads.length).toBe(2);
+  const sidecar = JSON.parse(readFileSync(await downloads[1].path(), 'utf8'));
+  expect(sidecar.SeriesDescription).toBe('test_scan_7');
+  expect(sidecar).not.toHaveProperty('PatientName');
+  expect(sidecar).not.toHaveProperty('PatientBirthDate');
+});
+
 test('protocol actions wait while a replacement folder is read', async ({ page }) => {
   await page.goto('./');
   const files = (series) => dicomSeries({ series, slices: 2 }).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));

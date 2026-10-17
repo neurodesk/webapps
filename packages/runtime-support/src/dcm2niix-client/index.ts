@@ -151,13 +151,14 @@ export async function readImageFiles(
 
 /**
  * Like {@link readImageFiles}, but pairs each image with its BIDS sidecar by file stem.
- * dcm2niix runs with `-b y -ba n`, so converted sidecars keep identifying fields
- * (patient name, birth date, acquisition time). Keep them in memory; never persist them.
- * A direct volume pairs with a supplied `.json` of the same stem.
+ * dcm2niix runs with `-b y -ba n` unless `anonymizeSidecar` is `true`, so converted
+ * sidecars keep identifying fields (patient name, birth date, acquisition time). Keep
+ * those in memory; never persist them. Pass `anonymizeSidecar: true` for sidecars a
+ * user can save. A direct volume pairs with a supplied `.json` of the same stem.
  */
 export async function readImageSeries(
   files: FileList | File[],
-  options: Omit<ReadImageFilesOptions, 'niftiOnly'> = {},
+  options: Omit<ReadImageFilesOptions, 'niftiOnly'> & { anonymizeSidecar?: boolean } = {},
 ): Promise<ImageSeries[]> {
   const { direct, sidecars, dicom } = splitInputs(files, options.directVolume)
   const directSeries = await pairSidecars(direct, sidecars)
@@ -165,7 +166,7 @@ export async function readImageSeries(
   const outputs = await convertDicom(
     dicom,
     { ...options, niftiOnly: false },
-    (processor) => processor.bids('y').bidsAnonymize('n'),
+    (processor) => options.anonymizeSidecar ? processor : processor.bids('y').bidsAnonymize('n'),
   )
   const images = requireImages(outputs.filter(isNifti))
   return [...directSeries, ...(await pairSidecars(images, outputs))]

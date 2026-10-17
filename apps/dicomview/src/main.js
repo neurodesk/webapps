@@ -293,7 +293,7 @@ function selectSeries(uid) {
 function convert(series, signal) {
   let conversion = state.conversions.get(series.uid);
   if (!conversion) {
-    conversion = readImageSeries(series.files.map((record) => record.file), { signal });
+    conversion = readImageSeries(series.files.map((record) => record.file), { signal, anonymizeSidecar: true });
     state.conversions.set(series.uid, conversion);
     conversion.catch(() => {
       if (state.conversions.get(series.uid) === conversion) state.conversions.delete(series.uid);

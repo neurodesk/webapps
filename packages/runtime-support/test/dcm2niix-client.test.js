@@ -52,6 +52,13 @@ test('readImageSeries pairs converted images with their sidecars by stem, withou
   assert.deepEqual(calls[0].cmd, ['-b', 'y', '-ba', 'n']);
 });
 
+test('readImageSeries keeps dcm2niix sidecar anonymisation when asked to', async () => {
+  const outputs = [file('t1_2.nii'), file('t1_2.json', JSON.stringify({ SeriesNumber: 2 }))];
+  const { result, calls } = await withFakeWorker(outputs, () => readImageSeries([file('IM0001')], { anonymizeSidecar: true }));
+  assert.deepEqual(result.map(({ image, sidecar }) => [image.name, sidecar]), [['t1_2.nii', { SeriesNumber: 2 }]]);
+  assert.deepEqual(calls[0].cmd, [], 'no -ba n: dcm2niix drops PatientName, PatientBirthDate and the other identifiers');
+});
+
 test('readImageSeries pairs direct volumes with supplied sidecars and ignores stray JSON', async () => {
   const { result, calls } = await withFakeWorker([], () => readImageSeries([
     file('sub-01_T1w.json', JSON.stringify({ RepetitionTime: 2.3 })),
