@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/deface",
-  "version": "1.4.20261016",
+  "version": "1.4.20261017",
   "private": true,
   "description": "niimath affine defacing and MindGrab brain extraction for the Deface web app and the command line",
   "type": "module",

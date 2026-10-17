@@ -1,5 +1,15 @@
 # calmar
 
+## 0.6.20261017
+
+### Patch Changes
+
+- cedc83a: Show a DWI/TRACE or ADC image in the viewer when it is loaded: as the base when nothing else is loaded, otherwise as a colour overlay on the T1 or lesion, so analysis overlays stay on the T1.
+- b547d52: CALMaR shows its result tables in a Results view in the viewer instead of the sidebar, so the Lesion % and Map % columns are no longer cut off. The Results tab opens once an analysis finishes and stays disabled until there is an atlas overlap, during lesion-mask review and after Start over. The separate Analysis log is gone: every message now appears once, in full and with its level, in the technical log. Captions above shared data tables are styled as muted, left-aligned notes.
+- Updated dependencies [b547d52]
+  - @neurodesk/webapp-components@0.14.3
+  - @neurodesk/calmar@0.6.20261017
+
 ## 0.6.20261016
 
 ### Patch Changes
