@@ -388,7 +388,7 @@ function recordRows(record, series) {
     const rows = (async () => {
       const dictionary = await loadDictionary();
       const buffer = await record.file.slice(0, HEADER_BYTES).arrayBuffer();
-      const header = parseDicomHeader(buffer, { vrOf: dictionary.vrOf });
+      const header = await parseDicomHeader(buffer, { vrOf: dictionary.vrOf });
       return { rows: headerRows(header, dictionary, series.varyingTags), complete: header.complete || buffer.byteLength >= record.file.size };
     })();
     rows.catch(() => headerCache.delete(record));

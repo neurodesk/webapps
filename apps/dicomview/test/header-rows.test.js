@@ -20,13 +20,13 @@ const explicitFile = dicomFile('1.2.840.10008.1.2.1', [
   explicit(0x7fe0, 0x0010, 'OW', Buffer.alloc(4)),
 ]);
 
-function rows(buffer, varying) {
-  const header = parseDicomHeader(arrayBuffer(buffer), { vrOf: dictionary.vrOf });
+async function rows(buffer, varying) {
+  const header = await parseDicomHeader(arrayBuffer(buffer), { vrOf: dictionary.vrOf });
   return headerRows(header, dictionary, varying);
 }
 
-test('rows name public and private tags from the DICOM dictionary, file meta first', () => {
-  const all = rows(explicitFile);
+test('rows name public and private tags from the DICOM dictionary, file meta first', async () => {
+  const all = await rows(explicitFile);
   assert.deepEqual(all[0], { tag: '(0002,0010)', keyword: 'TransferSyntaxUID', vr: 'UI', value: '1.2.840.10008.1.2.1', depth: 0, varies: false });
   const byTag = new Map(all.map((row) => [row.tag, row]));
   assert.equal(byTag.get('(0008,0060)').keyword, 'Modality');
@@ -38,8 +38,8 @@ test('rows name public and private tags from the DICOM dictionary, file meta fir
   assert.equal(byTag.has('(7FE0,0010)'), false, 'pixel data is not a header row');
 });
 
-test('sequence items follow their sequence, indented and flagged with it', () => {
-  const all = rows(explicitFile, new Set([0x00081140]));
+test('sequence items follow their sequence, indented and flagged with it', async () => {
+  const all = await rows(explicitFile, new Set([0x00081140]));
   const start = all.findIndex((row) => row.tag === '(0008,1140)');
   assert.deepEqual(all.slice(start, start + 4).map(({ tag, keyword, value, depth, varies }) => [tag, keyword, value, depth, varies]), [
     ['(0008,1140)', 'ReferencedImageSequence', '1 item', 0, true],
@@ -50,7 +50,7 @@ test('sequence items follow their sequence, indented and flagged with it', () =>
   assert.equal(all.find((row) => row.tag === '(0008,0060)').varies, false);
 });
 
-test('Implicit VR values are read as the dictionary says, private creators included', () => {
+test('Implicit VR values are read as the dictionary says, private creators included', async () => {
   const groupLength = Buffer.alloc(4);
   groupLength.writeUInt32LE(18);
   const implicitFile = dicomFile('1.2.840.10008.1.2', [
@@ -62,7 +62,7 @@ test('Implicit VR values are read as the dictionary says, private creators inclu
     implicit(0x00e1, 0x0010, 'ELSCINT1'),
     implicit(0x00e1, 0x1001, uint16(3)),
   ]);
-  const byTag = new Map(rows(implicitFile).map((row) => [row.tag, row]));
+  const byTag = new Map((await rows(implicitFile)).map((row) => [row.tag, row]));
   assert.deepEqual([byTag.get('(00E1,1001)').keyword, byTag.get('(00E1,1001)').value], ['DataDictionaryVersion (ELSCINT1)', '3'], 'upper-case private dictionary keys match');
   assert.deepEqual([byTag.get('(0028,0107)').vr, byTag.get('(0028,0107)').value], ['US', '507']);
   assert.equal(byTag.get('(0028,1050)').value, '210');
@@ -71,8 +71,8 @@ test('Implicit VR values are read as the dictionary says, private creators inclu
   assert.equal(byTag.get('(0019,1015)').keyword, 'Private (SIEMENS MR HEADER)');
 });
 
-test('the filter matches tag, keyword or value, and can keep only varying fields', () => {
-  const all = rows(explicitFile, new Set([0x00180080]));
+test('the filter matches tag, keyword or value, and can keep only varying fields', async () => {
+  const all = await rows(explicitFile, new Set([0x00180080]));
   const tags = (query, varyingOnly = false) => filterRows(all, { query, varyingOnly }).map((row) => row.tag);
   assert.deepEqual(tags('modality'), ['(0008,0060)']);
   assert.deepEqual(tags('00180080'), ['(0018,0080)']);

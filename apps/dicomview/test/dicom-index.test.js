@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { deflateRawSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { dicomFile, dicomSeries, explicit, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
 import { MAX_PREFIX_BYTES, PREFIX_BYTES, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
@@ -45,12 +46,12 @@ test('only the attributes that differ between instances vary; instance identifie
   assert.match(seriesSummary(multiEcho), /TE 20–35 \(2 values\)/);
 });
 
-test('a tag past where one prefix was cut is not reported as varying', () => {
+test('a tag past where one prefix was cut is not reported as varying', async () => {
   const [whole, other] = dicomSeries({ series: 6, slices: 2 });
   const cut = whole.buffer.indexOf(Buffer.from([0x28, 0x00, 0x30, 0x00]));
   const records = [
-    readRecord(toFile(whole), 'a.dcm', arrayBuffer(whole.buffer.subarray(0, cut + 4))),
-    readRecord(toFile(other), 'b.dcm', arrayBuffer(other.buffer)),
+    await readRecord(toFile(whole), 'a.dcm', arrayBuffer(whole.buffer.subarray(0, cut + 4))),
+    await readRecord(toFile(other), 'b.dcm', arrayBuffer(other.buffer)),
   ];
   assert.equal(records[0].complete, false);
   assert.equal(records[1].complete, true);
@@ -59,7 +60,7 @@ test('a tag past where one prefix was cut is not reported as varying', () => {
   assert.equal(series.varyingTags.has(0x00200032), true);
 });
 
-test('an Implicit VR file still yields its modality and protocol name', () => {
+test('an Implicit VR file still yields its modality and protocol name', async () => {
   const buffer = dicomFile('1.2.840.10008.1.2', [
     implicit(0x0008, 0x0060, 'MR'),
     implicit(0x0018, 0x1030, 't1_mpr '),
@@ -67,7 +68,7 @@ test('an Implicit VR file still yields its modality and protocol name', () => {
     implicit(0x0028, 0x0010, uint16(64)),
     implicit(0x0028, 0x0011, uint16(64)),
   ]);
-  const record = readRecord(new File([buffer], 'i.dcm'), 'i.dcm', arrayBuffer(buffer));
+  const record = await readRecord(new File([buffer], 'i.dcm'), 'i.dcm', arrayBuffer(buffer));
   assert.deepEqual([record.fields.modality, record.fields.protocolName, record.fields.seriesUid, record.fields.rows], ['MR', 't1_mpr', '1.2.3', 64]);
 });
 
@@ -139,6 +140,34 @@ test('a DICOM file with neither preamble nor extension is indexed', async () => 
   assert.equal(series.length, 1);
   assert.equal(series[0].files[0].path, 'scan/IM0001');
   assert.deepEqual([series[0].number, series[0].rows], [2, 16]);
+});
+
+test('a file without the preamble whose file meta group names Implicit VR is indexed', async () => {
+  const buffer = dicomFile('1.2.840.10008.1.2', [
+    implicit(0x0008, 0x0060, 'MR'),
+    implicit(0x0020, 0x000e, '1.2.3\0'),
+    implicit(0x0020, 0x0011, '4 '),
+    implicit(0x0028, 0x0010, uint16(64)),
+    implicit(0x0028, 0x0011, uint16(32)),
+    implicit(0x7fe0, 0x0010, Buffer.alloc(64 * 32 * 2)),
+  ]).subarray(132);
+  const { series, skipped } = await indexFiles([toFile({ name: 'IM0001', buffer }, 'scan/IM0001')]);
+  assert.deepEqual(skipped, []);
+  assert.deepEqual([series[0].uid, series[0].number, series[0].modality, series[0].rows, series[0].cols], ['1.2.3', 4, 'MR', 64, 32]);
+});
+
+test('a Deflated Explicit VR Little Endian file is indexed', async () => {
+  const dataset = deflateRawSync(Buffer.concat([
+    explicit(0x0008, 0x0060, 'CS', 'MR'),
+    explicit(0x0020, 0x000e, 'UI', '1.2.3'),
+    explicit(0x0028, 0x0010, 'US', uint16(64)),
+    explicit(0x0028, 0x0011, 'US', uint16(32)),
+    explicit(0x7fe0, 0x0010, 'OW', Buffer.alloc(64 * 32 * 2)),
+  ]));
+  const buffer = Buffer.concat([dicomFile('1.2.840.10008.1.2.1.99', []), dataset]);
+  const { series, skipped } = await indexFiles([toFile({ name: 'deflated.dcm', buffer })]);
+  assert.deepEqual(skipped, []);
+  assert.deepEqual([series[0].uid, series[0].modality, series[0].rows, series[0].cols], ['1.2.3', 'MR', 64, 32]);
 });
 
 test('text, JSON, NIfTI and JPEG files are skipped after one prefix read', async () => {

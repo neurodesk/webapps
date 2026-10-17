@@ -88,10 +88,10 @@ const isSize = (value) => Number.isInteger(value) && value > 0;
 
 // The record in this prefix of the file, or null when its series and size tags may lie
 // past the end of the prefix.
-export function readRecord(file, path, buffer) {
+export async function readRecord(file, path, buffer) {
   const bytes = new Uint8Array(buffer);
   if (!looksLikeDicom(bytes, file.name)) throw new Error('not a DICOM file');
-  const { map, complete } = parseDicomHeader(buffer);
+  const { map, complete } = await parseDicomHeader(buffer);
   const found = map.has(TAG.Rows) && map.has(TAG.Columns) && map.has(TAG.SeriesInstanceUID);
   if (!found && !complete && bytes.length < file.size) return null;
   if (!found || !isUid(text(map, TAG.SeriesInstanceUID)) || !isSize(number(map, TAG.Rows)) || !isSize(number(map, TAG.Columns))) {
@@ -230,7 +230,7 @@ const nextTask = () => new Promise(resolve => setTimeout(resolve));
 async function readFileRecord(file) {
   const path = relativePath(file);
   for (let size = PREFIX_BYTES; size <= MAX_PREFIX_BYTES; size *= 2) {
-    const record = readRecord(file, path, await file.slice(0, size).arrayBuffer());
+    const record = await readRecord(file, path, await file.slice(0, size).arrayBuffer());
     if (record) return record;
   }
   throw new Error(`no image tags in the first ${MAX_PREFIX_BYTES / 1024 / 1024} MB`);
