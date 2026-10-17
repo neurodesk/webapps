@@ -4,6 +4,7 @@
 
 ### Patch Changes
 
+- 5b32319: Keep the schema catalog and read-only viewer technical log reachable above the status footer, including multiline clipboard errors.
 - 0ca8624: Preserve empty contains constraints and arbitrary acquisition names in browser schema downloads. Report clipboard failures through the status footer and technical log on both workspace and schema viewer pages.
 - Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.
 
