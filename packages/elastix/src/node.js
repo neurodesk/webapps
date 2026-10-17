@@ -152,7 +152,7 @@ export async function readInput(path, role) {
 /** Custom elastix parameter files (.txt or .toml), in name order, as a parameter object. */
 export async function readParameterFiles(paths) {
   const sorted = sortParameterFiles(paths.map((path) => ({ name: basename(path), path: resolve(path) })));
-  const { parameterObject } = await readParameterFilesNode(sorted.map((file) => file.path));
+  const { parameterObject } = await readParameterFilesNode({ parameterFiles: sorted.map((file) => file.path) });
   if (!parameterObject.length) throw new Error("The parameter files hold no parameter maps.");
   return parameterObject;
 }
