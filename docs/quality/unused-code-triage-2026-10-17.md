@@ -4,6 +4,12 @@
 `diagnostics.log`. The report remains advisory. The baseline was 91 at
 `1444613e`, then 84 after PR #355 merged as `45ae49a1`.
 
+The accepted schema-export and clipboard review fixes were scanned again with
+`node scripts/report-unused-code.mjs`. The result remains 29 candidates with
+zero diagnostic bytes and the same classifications. The browser exporter and
+clipboard changes intentionally alter the final production bundle; the 88-file
+byte comparison below applies only to the earlier deletion check.
+
 This update follows the canonical dicompare sync from upstream `7c56841` to
 `d3d0879`, including upstream's completed unused-code issue #25. The sync removes
 the upstream dead exports, types and dependency declarations. Three deleted

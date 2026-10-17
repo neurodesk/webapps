@@ -57,7 +57,7 @@ describe('buildSchemaFromAcquisitions', () => {
     const exported = JSON.parse(JSON.stringify(schema));
     expect(Object.keys(exported.acquisitions)).toEqual(names);
     for (const name of names) {
-      expect(Object.hasOwn(exported.acquisitions, name)).toBe(true);
+      expect(Object.prototype.hasOwnProperty.call(exported.acquisitions, name)).toBe(true);
       expect(exported.acquisitions[name].fields).toEqual([{ field: 'Modality', tag: '0008,0060', value: 'MR' }]);
     }
   });

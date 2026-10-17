@@ -1,13 +1,13 @@
 /**
  * Copy text to the clipboard. Tries the async Clipboard API first and falls
  * back to a hidden textarea + execCommand('copy') (e.g. insecure context,
- * unfocused page, or denied permission). Resolves to whether the copy worked;
- * never rejects.
+ * unfocused page, or denied permission). Rejects if both methods fail so the
+ * caller's asyncCallback reports the error in the status bar and technical log.
  */
-export const copyText = async (text: string): Promise<boolean> => {
+export const copyText = async (text: string): Promise<void> => {
   try {
     await navigator.clipboard.writeText(text);
-    return true;
+    return;
   } catch {
     // Fall through to the legacy path below.
   }
@@ -17,9 +17,9 @@ export const copyText = async (text: string): Promise<boolean> => {
   document.body.appendChild(textarea);
   try {
     textarea.select();
-    return document.execCommand('copy');
-  } catch {
-    return false;
+    if (!document.execCommand('copy')) {
+      throw new Error('Could not copy to clipboard. Check browser permissions and try again.');
+    }
   } finally {
     document.body.removeChild(textarea);
   }

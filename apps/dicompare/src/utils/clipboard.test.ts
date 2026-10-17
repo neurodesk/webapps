@@ -1,4 +1,5 @@
 import { waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
 import { copyText } from './clipboard';
 import { asyncCallback } from './asyncCallback';
 import { getLogEntries, resetTechnicalLog } from './technicalLog';
@@ -32,6 +33,14 @@ test('falls back to the selected text when the Clipboard API is denied', async (
   expect(document.execCommand).toHaveBeenCalledWith('copy');
   expect(document.querySelector('textarea')).toBeNull();
   expect(getLogEntries()).toEqual([]);
+});
+
+test('falls back when the Clipboard API is unavailable', async () => {
+  clipboard(async () => {}, () => true);
+  vi.stubGlobal('navigator', {});
+  await expect(copyText('DOI')).resolves.toBeUndefined();
+  expect(document.execCommand).toHaveBeenCalledWith('copy');
+  expect(document.querySelector('textarea')).toBeNull();
 });
 
 test.each(['false', 'throw'])('reports a failed legacy copy (%s) through the callback boundary', async (failure) => {

@@ -5,6 +5,8 @@
     "package-lock.json"
   ],
   "integration": [
+    "Preserve defined empty contains constraints and arbitrary acquisition keys, including __proto__, in the browser schema exporter. Keep production download parity and validation against the installed Python exporter/runtime.",
+    "copyText resolves only after copying and rejects if both clipboard methods fail. Keep all three callers awaiting it, the asyncCallback error path, and the shared activity footer and technical log on the read-only schema viewer without starting Pyodide.",
     "Keep both typed promise rules for src, the asyncCallback rejection boundary for synchronous React/timer callbacks, awaited session loading, and thumbnail queue failure cleanup and behavior tests.",
     "The command line retains its schema-generation Python in packages/dicompare/src/node.js and its reference outputs; the synced worker no longer generates schemas.",
     "Keep the offline Pyodide path in public/embed/dicompare-worker.js; the standalone build serves this copy.",

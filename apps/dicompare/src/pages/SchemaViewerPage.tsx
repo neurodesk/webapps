@@ -24,6 +24,8 @@ import PrintOptionsModal from '../components/common/PrintOptionsModal';
 import { isVolumeUrl, isFlatImageUrl } from '../utils/imageHelpers';
 import { getSchemaDoi, doiUrl, SchemaDoiEntry } from '../utils/schemaDoi';
 import { copyText } from '../utils/clipboard';
+import { ActivityStatusFooter } from '../components/common/StatusFooter';
+import TechnicalLog from '../components/common/TechnicalLog';
 import ImageManagerModal from '../components/schema/ImageManagerModal';
 import VolumeThumbnail from '../components/common/VolumeThumbnail';
 import { log, logError } from '../utils/technicalLog';
@@ -274,7 +276,7 @@ const SchemaViewerPage: React.FC = () => {
   const handleCopyDoi = async () => {
     const url = doiUrl(doi?.concept_doi);
     if (!url) return;
-    if (!(await copyText(url))) return;
+    await copyText(url);
     setCopiedDoi(true);
     setTimeout(() => setCopiedDoi(false), 2000);
   };
@@ -782,6 +784,8 @@ const SchemaViewerPage: React.FC = () => {
           </div>
         )}
       </div>
+      <TechnicalLog />
+      <ActivityStatusFooter position="fixed" />
       {/* Print Options Modal */}
       <PrintOptionsModal
         isOpen={showPrintOptions}

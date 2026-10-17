@@ -176,7 +176,7 @@ const UnifiedSchemaSelector: React.FC<UnifiedSchemaSelectorProps> = ({
   const copySchemaLink = async (schemaId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `${window.location.origin}${import.meta.env.BASE_URL}schema/${schemaId}`;
-    if (!(await copyText(url))) return;
+    await copyText(url);
     setCopiedSchemaId(schemaId);
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setCopiedSchemaId(null), 2000);

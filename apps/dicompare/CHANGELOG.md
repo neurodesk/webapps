@@ -2,6 +2,8 @@
 
 ## 0.15.20261017
 
+- Preserve empty contains constraints and arbitrary acquisition names in browser schema downloads. Report clipboard failures in the status bar and technical log, including on the read-only schema viewer.
+
 ### Patch Changes
 
 - Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.

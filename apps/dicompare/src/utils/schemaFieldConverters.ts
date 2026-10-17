@@ -65,7 +65,7 @@ export function fieldToSchemaField(
       if (r.min !== undefined) schemaField.min = r.min;
       if (r.max !== undefined) schemaField.max = r.max;
       constrained = true;
-    } else if (r?.type === 'contains' && r.contains) {
+    } else if (r?.type === 'contains' && r.contains !== undefined) {
       schemaField.contains = r.contains;
       constrained = true;
     } else if (r?.type === 'contains_any' && r.contains_any) {

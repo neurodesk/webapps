@@ -86,7 +86,7 @@ entire catalog is a separate migration.
 | BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Deferred; upstream-synced, record adaptations in `upstream.json` |
 | Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 21 | `apps/dwi2trx/tsconfig.json` compiles | 10 floating, all in `main.ts` | Typed; findings fixed |
-| Dicompare (`apps/dicompare/src`) | 138 | `apps/dicompare/tsconfig.json` compiles | 86 after upstream sync: 34 floating, 52 misused | Typed; findings fixed on 2026-10-17, adaptations in `upstream.json` |
+| Dicompare (`apps/dicompare/src`) | 140 | `apps/dicompare/tsconfig.json` compiles | 86 after upstream sync: 34 floating, 52 misused | Typed; findings fixed on 2026-10-17, adaptations in `upstream.json` |
 
 The root agentic tests had no findings: their promises are already awaited.
 Their project now includes `test/agentic/**/*.ts` so a new file in a
@@ -121,7 +121,7 @@ so files chosen during startup failed with a temporal dead zone error.
 Dicompare's rollout follows the upstream `d3d0879` sync, which brings in its
 promise-failure fixes, bundled field dictionary and unused-code removal. The
 synced source had 86 promise findings across 136 TypeScript files. The project
-now has 138 sources, including the callback adapter and four behavior suites;
+now has 140 sources, including the callback adapter and behavior suites;
 three files already deleted upstream were removed after verifying no callers.
 Synchronous React and timer callbacks use `asyncCallback`, which reports
 rejections through the technical log and shared status footer. Callers that
@@ -131,6 +131,19 @@ each renderer and clears rejected pending entries, allowing the same file to
 retry. Superseded previews cannot report false errors or replace a newer image.
 The changes preserve the empty lint baseline and upstream adaptations live in
 `apps/dicompare/upstream.json`.
+
+Clipboard copying rejects when both browser methods fail. Citation, schema-link
+and DOI callers await it, so `asyncCallback` reports failures through the same
+store. The read-only schema viewer mounts the existing technical log and an
+activity footer without initializing Python. Its footer stays in the viewport.
+The workspace retains its existing footer layout.
+
+The production schema-download regression compares the actual downloaded JSON
+with the pinned installed Python exporter and validates it in that separate
+runtime. It checks defined empty `contains` constraints and arbitrary acquisition
+keys, including `__proto__`, `constructor` and `prototype`. Invalid modality
+values must still fail for each named acquisition. The CLI's `build-schema`
+reference remains a separate check and does not establish browser-export parity.
 
 Zarro's stream buffer annotations require ArrayBuffer storage, normalizing the
 encoded bytes once before streaming; compressed contents are unchanged. NiiVue 1.0.0-rc.14's `setFocus` and `setBudget`

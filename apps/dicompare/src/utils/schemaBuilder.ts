@@ -79,7 +79,7 @@ export function buildSchemaFromAcquisitions(
   acquisitions: Acquisition[],
   metadata: SchemaBuildMetadata
 ): Record<string, unknown> {
-  const schemaAcquisitions: Record<string, unknown> = {};
+  const schemaAcquisitions = new Map<string, unknown>();
 
   for (const acquisition of acquisitions) {
     const acqName = acquisition.protocolName ?? acquisition.id ?? 'Unknown';
@@ -115,7 +115,7 @@ export function buildSchemaFromAcquisitions(
       acqEntry.rules = acquisition.validationFunctions.map((func, idx) => ruleToSchema(func, acqName, idx));
     }
 
-    schemaAcquisitions[acqName] = acqEntry;
+    schemaAcquisitions.set(acqName, acqEntry);
   }
 
   return {
@@ -123,6 +123,6 @@ export function buildSchemaFromAcquisitions(
     description: metadata.description ?? '',
     version: metadata.version ?? '1.0',
     authors: metadata.authors ?? [],
-    acquisitions: schemaAcquisitions,
+    acquisitions: Object.fromEntries(schemaAcquisitions),
   };
 }

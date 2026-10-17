@@ -31,6 +31,17 @@ interface FooterState {
 export default function StatusFooter() {
   const { status: pyodide } = usePyodide();
   const { isProcessing, processingProgress } = useProcessing();
+  return <ActivityStatusFooter pyodide={pyodide} isProcessing={isProcessing} processingProgress={processingProgress} />;
+}
+
+type ActivityStatusFooterProps = {
+  position?: 'sticky' | 'fixed';
+  pyodide?: ReturnType<typeof usePyodide>['status'];
+  isProcessing?: boolean;
+  processingProgress?: ReturnType<typeof useProcessing>['processingProgress'];
+};
+
+export function ActivityStatusFooter({ pyodide, isProcessing = false, processingProgress, position = 'sticky' }: ActivityStatusFooterProps) {
   const activity = useActivity();
   const entries = useTechnicalLog();
   const [now, setNow] = useState(() => Date.now());
@@ -40,7 +51,7 @@ export default function StatusFooter() {
   const entriesRef = useRef(entries);
   entriesRef.current = entries;
 
-  const running = pyodide.isLoading || isProcessing || activity.label !== null;
+  const running = Boolean(pyodide?.isLoading) || isProcessing || activity.label !== null;
   // The newest error stays visible until the next operation starts.
   const candidate = newestError(entries);
   const lastError = candidate && candidate.id > errorFloor.current ? candidate : null;
@@ -68,7 +79,7 @@ export default function StatusFooter() {
     };
   } else if (activity.label) {
     state = { message: `${activity.label}…`, progress: activity.progress, running: true, error: false };
-  } else if (pyodide.isLoading) {
+  } else if (pyodide?.isLoading) {
     state = {
       message: `Preparing analysis engine · ${Math.round(pyodide.progress)}%`,
       progress: pyodide.progress / 100,
@@ -77,12 +88,12 @@ export default function StatusFooter() {
     };
   } else if (lastError) {
     state = { message: lastError.message, progress: 0, running: false, error: true };
-  } else if (pyodide.error) {
+  } else if (pyodide?.error) {
     state = { message: `Analysis engine unavailable: ${pyodide.error}`, progress: 0, running: false, error: true };
   } else {
     state = {
-      message: pyodide.isReady ? 'Ready · load DICOMs, a protocol or a schema' : 'Starting…',
-      progress: pyodide.isReady ? 1 : 0,
+      message: pyodide ? (pyodide.isReady ? 'Ready · load DICOMs, a protocol or a schema' : 'Starting…') : 'Ready',
+      progress: pyodide?.isReady ? 1 : 0,
       running: false,
       error: false,
     };
@@ -96,7 +107,7 @@ export default function StatusFooter() {
   const progressValue = state.progress === null ? undefined : Math.max(0, Math.min(1, state.progress));
 
   return (
-    <footer id="status" className="nd-imaging-status sticky bottom-0 z-40">
+    <footer id="status" className={`nd-imaging-status ${position === 'fixed' ? 'fixed inset-x-0' : 'sticky'} bottom-0 z-40`}>
       <span className="nd-status-label">Status</span>
       <span
         id="statusText"

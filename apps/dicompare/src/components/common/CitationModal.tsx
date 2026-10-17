@@ -20,7 +20,7 @@ interface CitationModalProps {
 const CITATION_TEXT = `Ashley Wilton Stewart, Gabriele Amorosino, Jelle Veraart, Anibal S. Heinsfeld, Steffen Bollmann, Franco Pestilli. dicompare v${VERSION} [Computer software]. https://github.com/neurodesk/webapps/tree/main/apps/dicompare`;
 
 const copyWithFeedback = async (text: string, setCopied: (v: boolean) => void) => {
-  if (!(await copyText(text))) return;
+  await copyText(text);
   setCopied(true);
   setTimeout(() => setCopied(false), 2000);
 };
