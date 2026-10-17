@@ -48,7 +48,7 @@ export function dicomSeries({ series = 1, slices = 4, extension = '.dcm', patien
 
 // Element builders for headers the series fixture does not cover: nested sequences,
 // private groups, Implicit VR and other transfer syntaxes.
-const LONG = new Set(['OB', 'OW', 'SQ', 'UN', 'UT']);
+const LONG = new Set(['OB', 'OD', 'OF', 'OL', 'OV', 'OW', 'SQ', 'SV', 'UC', 'UN', 'UR', 'UT', 'UV']);
 
 // An Explicit VR element; an SQ value from undefinedSequence() keeps its undefined length.
 export function explicit(group, element, vr, value) {

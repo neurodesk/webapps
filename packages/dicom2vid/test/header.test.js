@@ -154,6 +154,18 @@ test('a Deflated Explicit VR Little Endian dataset is inflated, whole or as a pr
   assert.equal(prefix.map.get(0x00080060).str, 'MR');
 });
 
+test('Float and Double Float Pixel Data end the header too, but not inside a sequence item', async () => {
+  for (const [element, vr] of [[0x0008, 'OF'], [0x0009, 'OD']]) {
+    const pixels = explicit(0x7fe0, element, vr, Buffer.alloc(64 * 8));
+    const nested = explicit(0x0040, 0xa730, 'SQ', item(explicit(0x7fe0, element, vr, Buffer.alloc(8))));
+    const buffer = dicomFile('1.2.840.10008.1.2.1', [explicit(0x0028, 0x0010, 'US', uint16(8)), nested, pixels]);
+    const header = await parseDicomHeader(arrayBuffer(buffer));
+    assert.equal(header.complete, true, vr);
+    assert.equal(header.headerBytes, buffer.length - pixels.length, vr);
+    assert.equal(header.map.get(0x0040a730).items[0].has((0x7fe0 * 0x10000 + element) >>> 0), true, `${vr} in an item is an element`);
+  }
+});
+
 test('headerBytes is where the pixel data starts in the file', async () => {
   const [slice] = dicomSeries({ series: 3, slices: 1 });
   const header = await parseDicomHeader(arrayBuffer(slice.buffer));

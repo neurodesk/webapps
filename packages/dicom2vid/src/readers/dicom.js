@@ -55,11 +55,17 @@ const T = {
   PixelValueTransformationSequence: 0x00289145,
   SharedFunctionalGroupsSequence: 0x52009229,
   PerFrameFunctionalGroupsSequence: 0x52009230,
+  FloatPixelData: 0x7fe00008,
+  DoubleFloatPixelData: 0x7fe00009,
   PixelData: 0x7fe00010,
   ItemStart: 0xfffee000,
   ItemEnd: 0xfffee00d,
   SeqEnd: 0xfffee0dd,
 };
+
+// The header ends at whichever pixel data element the image has, as for pydicom's
+// stop_before_pixels.
+const PIXEL_TAGS = new Set([T.FloatPixelData, T.DoubleFloatPixelData, T.PixelData]);
 
 // VRs that carry a 2-byte reserved field then a 4-byte length in Explicit VR.
 const LONG_VR = new Set(['OB', 'OW', 'OF', 'OD', 'OL', 'OV', 'SQ', 'UT', 'UN', 'UC', 'UR', 'SV', 'UV']);
@@ -131,7 +137,7 @@ function parseDataset(ctx, start, end, { stopGroupAbove = null, topLevel = false
     if (stopGroupAbove !== null && group !== 0xfffe && group > stopGroupAbove) {
       return { map, next: off, stop: 'group' };
     }
-    if (ctx.header && topLevel && tag === T.PixelData) {
+    if (ctx.header && topLevel && PIXEL_TAGS.has(tag)) {
       return { map, next: off, stop: 'pixels' };
     }
     // Item/sequence delimiters handled by the caller; stop if we hit one.

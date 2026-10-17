@@ -185,6 +185,19 @@ test('dicompare gets each file up to its pixel data, also when indexing stopped 
   assert.deepEqual(new Uint8Array(buffers[1]), new Uint8Array(arrayBuffer(long.subarray(0, long.length - pixels.length))));
 });
 
+test('dicompare gets a Float Pixel Data image without its pixels', async () => {
+  const pixels = explicit(0x7fe0, 0x0008, 'OF', Buffer.alloc(512 * 512 * 4));
+  const buffer = dicomFile('1.2.840.10008.1.2.1', [
+    explicit(0x0020, 0x000e, 'UI', '1.2.3'),
+    explicit(0x0028, 0x0010, 'US', uint16(512)),
+    explicit(0x0028, 0x0011, 'US', uint16(512)),
+    pixels,
+  ]);
+  const { series } = await indexFiles([toFile({ name: 'float.dcm', buffer })]);
+  assert.equal(series[0].files[0].headerBytes, buffer.length - pixels.length);
+  assert.equal((await headerBuffer(series[0].files[0])).byteLength, buffer.length - pixels.length);
+});
+
 test('text, JSON, NIfTI and JPEG files are skipped after one prefix read', async () => {
   const nifti = Buffer.alloc(16 * 1024 * 1024);
   nifti.writeInt32LE(348, 0);
