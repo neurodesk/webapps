@@ -471,8 +471,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/components
       '@niivue/niivue':
-        specifier: 1.0.0-rc.14
-        version: 1.0.0-rc.14
+        specifier: 1.0.0-rc.17
+        version: 1.0.0-rc.17
       dcmjs:
         specifier: 0.52.0
         version: 0.52.0
@@ -955,8 +955,8 @@ importers:
         specifier: 1.4.20260909
         version: 1.4.20260909
       '@niivue/niivue':
-        specifier: 1.0.0-rc.13
-        version: 1.0.0-rc.13
+        specifier: 1.0.0-rc.17
+        version: 1.0.0-rc.17
       onnxruntime-web:
         specifier: 1.29.0
         version: 1.29.0
@@ -1391,11 +1391,11 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@niivue/niivue':
-        specifier: 1.0.0-rc.13
-        version: 1.0.0-rc.13
+        specifier: 1.0.0-rc.17
+        version: 1.0.0-rc.17
       freebrowse:
-        specifier: 2.5.0-next.1
-        version: 2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
+        specifier: file:./vendor/freebrowse
+        version: file:packages/runtime-support/vendor/freebrowse(@niivue/niivue@1.0.0-rc.17)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0))
     devDependencies:
       vite:
         specifier: ^6.3.2
@@ -3479,13 +3479,16 @@ packages:
   '@niivue/niivue@1.0.0-rc.16':
     resolution: {integrity: sha512-ACDAQtuFzP7OhDEFT9iml57nyd7oqAjMAY3g1UPAt2nCmLtxK66BYF3GxBhQvKYbNyN8jCqJBMVwqAD42bLC5g==}
 
+  '@niivue/niivue@1.0.0-rc.17':
+    resolution: {integrity: sha512-O1MReu1Ft6xroAOZb5esrbyPIAjHP1oPqgQ9Kz3Zs1F1g5Qfs6+jONEfAePhXWd1BN63nXpwIMnDbjiN21EaRA==}
+
   '@niivue/niivue@1.0.0-rc.9':
     resolution: {integrity: sha512-CPu6+KTONESagpbYn+BF/TWy27twmPgqpLNam9x24tl9XDWKfJTLhkjqBZSCVOyWqu1eYMdJFt/nQeDbTGdWvA==}
 
-  '@niivue/nv-ext-drawing@1.0.0-rc.13':
-    resolution: {integrity: sha512-s74zm60htYOyYnlDODxbmMcBZ8yBeCgkYbvPU+WmnvdNtXIjcEKb/xwq/GTyUPvD1E2D4cRg2eX2sZjt7HQLtQ==}
+  '@niivue/nv-ext-drawing@1.0.0-rc.16':
+    resolution: {integrity: sha512-8guIVOhLVSTWdiER6J/VKDM1uVnV2X48LM91eSmopIpNQLkwT/8JDODSIw3iyB71kFl4M1dXn4S/DKwGRstjlQ==}
     peerDependencies:
-      '@niivue/niivue': 1.0.0-rc.13
+      '@niivue/niivue': 1.0.0-rc.16
 
   '@noble/hashes@1.4.0':
     resolution: {integrity: sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==}
@@ -6017,10 +6020,10 @@ packages:
   fraction.js@5.3.4:
     resolution: {integrity: sha512-1X1NTtiJphryn/uLQz3whtY6jK3fTqoE3ohKs0tT+Ujr1W59oopxmoEh7Lu5p6vBaPbgoM0bzveAW4Qi5RyWDQ==}
 
-  freebrowse@2.5.0-next.1:
-    resolution: {integrity: sha512-wTqSNp8QbDmAL8Wy1M/ttxmHi+zBOM1ymrX88/FMDufi3zbzdMNp21uWOo/74VzFgCrg7IfaRw4OPVq4aVK8bw==}
+  freebrowse@file:packages/runtime-support/vendor/freebrowse:
+    resolution: {directory: packages/runtime-support/vendor/freebrowse, type: directory}
     peerDependencies:
-      '@niivue/niivue': 1.0.0-rc.13
+      '@niivue/niivue': 1.0.0-rc.17
       react: ^19.0.0
       react-dom: ^19.0.0
     peerDependenciesMeta:
@@ -10851,6 +10854,15 @@ snapshots:
       nifti-reader-js: 0.8.0
       zarrita: 0.7.5
 
+  '@niivue/niivue@1.0.0-rc.17':
+    dependencies:
+      cbor-x: 1.6.4
+      clipper2-ts: 2.0.1-18
+      earcut: 3.2.3
+      gl-matrix: 3.4.4
+      nifti-reader-js: 0.8.0
+      zarrita: 0.7.5
+
   '@niivue/niivue@1.0.0-rc.9':
     dependencies:
       cbor-x: 1.6.4
@@ -10859,9 +10871,9 @@ snapshots:
       gl-matrix: 3.4.4
       nifti-reader-js: 0.8.0
 
-  '@niivue/nv-ext-drawing@1.0.0-rc.13(@niivue/niivue@1.0.0-rc.13)':
+  '@niivue/nv-ext-drawing@1.0.0-rc.16(@niivue/niivue@1.0.0-rc.17)':
     dependencies:
-      '@niivue/niivue': 1.0.0-rc.13
+      '@niivue/niivue': 1.0.0-rc.17
 
   '@noble/hashes@1.4.0': {}
 
@@ -11516,7 +11528,7 @@ snapshots:
   '@tailwindcss/node@4.3.3':
     dependencies:
       '@jridgewell/remapping': 2.3.5
-      enhanced-resolve: 5.25.1
+      enhanced-resolve: 5.26.0
       jiti: 2.7.0
       lightningcss: 1.32.0
       magic-string: 0.30.21
@@ -13404,10 +13416,10 @@ snapshots:
 
   fraction.js@5.3.4: {}
 
-  freebrowse@2.5.0-next.1(@niivue/niivue@1.0.0-rc.13)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)):
+  freebrowse@file:packages/runtime-support/vendor/freebrowse(@niivue/niivue@1.0.0-rc.17)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(vite@6.4.3(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.14)(yaml@2.9.0)):
     dependencies:
-      '@niivue/niivue': 1.0.0-rc.13
-      '@niivue/nv-ext-drawing': 1.0.0-rc.13(@niivue/niivue@1.0.0-rc.13)
+      '@niivue/niivue': 1.0.0-rc.17
+      '@niivue/nv-ext-drawing': 1.0.0-rc.16(@niivue/niivue@1.0.0-rc.17)
       '@radix-ui/react-checkbox': 1.3.11(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-label': 2.1.15(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-radio-group': 1.4.7(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

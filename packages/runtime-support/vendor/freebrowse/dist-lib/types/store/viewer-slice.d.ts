@@ -1,0 +1,31 @@
+import type { StateCreator } from "zustand";
+import type { ViewerOptions } from "./types";
+export interface ViewerSlice {
+    viewerOptions: ViewerOptions;
+    darkMode: boolean;
+    sidebarOpen: boolean;
+    footerOpen: boolean;
+    activeTab: string;
+    settingsDialogOpen: boolean;
+    removeDialogOpen: boolean;
+    volumeToRemove: number | null;
+    skipRemoveConfirmation: boolean;
+    imagingUploadConfirmDialogOpen: boolean;
+    skipImagingUploadConfirmation: boolean;
+    sessionDeleteConfirmDialogOpen: boolean;
+    skipSessionDeleteConfirmation: boolean;
+    setViewerOptions: (options: ViewerOptions | ((prev: ViewerOptions) => ViewerOptions)) => void;
+    setDarkMode: (dark: boolean) => void;
+    setSidebarOpen: (open: boolean) => void;
+    setFooterOpen: (open: boolean) => void;
+    setActiveTab: (tab: string) => void;
+    setSettingsDialogOpen: (open: boolean) => void;
+    setRemoveDialogOpen: (open: boolean) => void;
+    setVolumeToRemove: (index: number | null) => void;
+    setSkipRemoveConfirmation: (skip: boolean) => void;
+    setImagingUploadConfirmDialogOpen: (open: boolean) => void;
+    setSkipImagingUploadConfirmation: (skip: boolean) => void;
+    setSessionDeleteConfirmDialogOpen: (open: boolean) => void;
+    setSkipSessionDeleteConfirmation: (skip: boolean) => void;
+}
+export declare const createViewerSlice: StateCreator<ViewerSlice>;

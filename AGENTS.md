@@ -113,6 +113,11 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 - The OME-Zarr transform (`estimateTransform` in `packages/elastix/src/transform-export.js`, `writeTransformOmeZarrFile` in the app) is evaluated by elastix's own transformix on coordinate images, so it follows every transform elastix can write. Linear stacks become one RFC-5 `affine` fitted from the stationary corners; anything else becomes a `displacements` field on the stationary grid, staged in a MemoryStore and zipped with `storeToZip`. Frames come from one-voxel proxies of the two images. Keep `transformix` in `scripts/copy-pipelines.mjs`. `e2e/ome-zarr-transform.mjs` checks both forms by resampling through the archive.
 - Node cannot run ngff-zarr's array readers or writers (they start Web Workers from blob: URLs), so `e2e/fixtures.mjs` writes its OME-Zarr 0.5 store by hand and gives fiff the plane through `getPlane`, and the command line (`packages/elastix/src/node-ngff.js`) reads and writes array data with zarrita on the main thread and writes the displacements store's metadata itself. `validation/cli-check.mjs` holds every command-line output to the web app's, recorded by `e2e/reference.spec.js` (`ELASTIX_BROWSER_REFERENCE=write`) in `validation/t1-mni-reference.json`; rerecord it when elastix, ngff-zarr or a preset changes.
 
+## FreeBrowse viewer (topofit, spinalcordtoolbox, dicomview)
+
+- `packages/runtime-support` pins `freebrowse` to the vendored `file:./vendor/freebrowse` build of FreeBrowse's development branch, which is not on npm. Rebuild it only with `node packages/runtime-support/scripts/vendor-freebrowse.mjs` (the vendor README names the commit). Return to a registry pin once upstream publishes that code.
+- The branch builds against an unreleased niivue-mono checkout; the vendored build uses `@niivue/niivue` `1.0.0-rc.17`, the first release with the drawing undo snapshot its wand calls. Every app that mounts the viewer pins that same NiiVue. Volume visibility (the eye button) needs niivue/mono#224, which no release has yet.
+
 ## topofit
 
 - `apps/topofit/src/stl-worker.js` imports `@niivue/niimath/niimath.js` (the package's raw Emscripten
