@@ -86,7 +86,7 @@ The web app's downloads, named after the moving image:
 | File | Content |
 | --- | --- |
 | `<moving>_registered.nii.gz` | Moving image resampled onto the fixed grid |
-| `<moving>_registered.ome.tif` | Float32 OME-TIFF at the selected registration pyramid level, when calibration and geometry are supported |
+| `<moving>_registered.ome.tif` | Float32 OME-TIFF on the selected registration grid, when calibration and geometry are supported |
 | `<moving>_transform.h5` | ITK HDF5 transform; rigid and affine runs only |
 | `<moving>_transform.ome.zarr.ozx` | OME-Zarr RFC-5 fixed-to-moving transform |
 | `<moving>_TransformParameters.N.toml` | elastix parameter files, one per stage |
@@ -100,10 +100,24 @@ The shared OME-TIFF writer uses fiff with deflate compression and retains
 the stationary OME-TIFF or OME-Zarr input's spacing and spatial units. The
 pinned writer cannot store translation or direction, so this output requires
 a zero origin, identity direction and known physical sizes and spatial units.
-Original TIFF metadata must supply positive physical sizes on every spatial
-axis. Omitted units on known sizes use the OME schema's micrometer default.
-Original TIFF Plane positions disable export because the reader drops them
-when it builds the registration grid. NIfTI and other
+Original 2016-06 OME XML must supply positive finite physical sizes on every
+spatial axis. Numeric suffixes and unknown explicit units disable export.
+Only absent units use the schema's micrometer default. The shared TIFF adapter
+normalizes quoting, namespace prefixes and XML character references before
+fiff parses them, so valid single-quoted calibration also reaches registration.
+It binds calibration to the selected Image's local TiffData directories and
+verifies true SubIFD dimensions before deriving their spacing. This check
+supports scalar XY or XYZ images with one channel and time point. Multi-file,
+ambiguous and unsupported mappings disable TIFF only.
+
+Plane positions inside the selected Image disable export because the reader
+drops them when it builds the registration grid. Other Images' positions are
+ignored. fiff's legacy multi-image selection can use another Image's pixels
+with the first Image's spacing. TIFF is refused if that decoded grid disagrees
+with the selected Image's original calibration. This change does not repair
+such registration geometry; the other outputs retain the reader's grid.
+Registration also does not convert between unlike moving and stationary units.
+NIfTI and other
 ITK inputs do not retain explicit units in the current reader. A skipped TIFF
 is explained on standard error; NIfTI and the transform outputs still write,
 including after a TIFF encoder or file-write failure. Only a partial TIFF

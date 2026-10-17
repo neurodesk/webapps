@@ -25,6 +25,7 @@ export function outputNames(movingName) {
 export function omeTiffIssue(image, spatialUnits, tiffMetadata) {
   const dimension = image.imageType.dimension;
   const axes = ["x", "y", ...(dimension === 3 ? ["z"] : [])];
+  if (tiffMetadata?.issue) return tiffMetadata.issue;
   if (tiffMetadata?.hasPlanePositions) {
     return "OME-TIFF cannot preserve source plane positions. Use NIfTI or OME-Zarr.";
   }
@@ -39,6 +40,13 @@ export function omeTiffIssue(image, spatialUnits, tiffMetadata) {
   }
   if (axes.some((axis) => !TIFF_UNITS.has(spatialUnits?.[axis]))) {
     return "OME-TIFF needs known spatial units. Use NIfTI or OME-Zarr.";
+  }
+  if (tiffMetadata?.spacing && (axes.some((axis, index) => spatialUnits[axis] !== tiffMetadata.spatialUnits[axis]
+    || !Number.isFinite(image.spacing[index])
+    || !Number.isFinite(tiffMetadata.spacing[index])
+    || Math.abs(image.spacing[index] - tiffMetadata.spacing[index]) > Math.abs(tiffMetadata.spacing[index]) * 1e-12)
+    || Array.from(image.size).some((size, index) => size !== tiffMetadata.size[index]))) {
+    return "OME-TIFF decoded grid differs from the selected OME Image. Use NIfTI or OME-Zarr.";
   }
   return null;
 }

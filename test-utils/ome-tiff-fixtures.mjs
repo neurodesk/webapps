@@ -3,14 +3,14 @@ import { deflateSync } from "node:zlib";
 const namespace = "http://www.openmicroscopy.org/Schemas/OME/2016-06";
 
 // Independent classic-TIFF strips. No fiff writer or metadata parser is used.
-export function omeTiffFixture({ images = [{}], subIfd = false, prefix = "", quote = '"', namespaceUri = namespace } = {}) {
+export function omeTiffFixture({ images = [{}], subIfd = false, reduced = true, volume = false, prefix = "", quote = '"', namespaceUri = namespace } = {}) {
   const tag = (name) => `${prefix}${name}`;
   const attrs = (values) => Object.entries(values).map(([key, value]) => `${key}=${quote}${value}${quote}`).join(" ");
   const descriptors = images.map((image, index) => ({ size: [20, 20], calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75"', ...image, index }));
-  const xmlImages = (subIfd ? descriptors.slice(0, 1) : descriptors).map(({ size, calibration, planes = "", index, tiffData }) => (
-    `<${tag("Image")} ${attrs({ ID: `Image:${index}` })}><${tag("Pixels")} ${attrs({ ID: `Pixels:${index}`, DimensionOrder: "XYZCT", Type: "float", SizeX: size[0], SizeY: size[1], SizeZ: 1, SizeC: 1, SizeT: 1 })} ${calibration}>` +
+  const xmlImages = (subIfd || volume ? descriptors.slice(0, 1) : descriptors).map(({ size, calibration, planes = "", index, tiffData }) => (
+    `<${tag("Image")} ${attrs({ ID: `Image:${index}` })}><${tag("Pixels")} ${attrs({ ID: `Pixels:${index}`, DimensionOrder: "XYZCT", Type: "float", SizeX: size[0], SizeY: size[1], SizeZ: volume ? descriptors.length : 1, SizeC: 1, SizeT: 1 })} ${calibration}>` +
     `<${tag("Channel")} ${attrs({ ID: `Channel:${index}:0`, SamplesPerPixel: 1 })}/>` +
-    (tiffData ?? `<${tag("TiffData")} ${attrs({ IFD: index, PlaneCount: 1 })}/>` ) +
+    (tiffData ?? `<${tag("TiffData")} ${attrs({ IFD: index, PlaneCount: volume ? descriptors.length : 1 })}/>` ) +
     planes + `</${tag("Pixels")}></${tag("Image")}>`
   )).join("");
   const xml = `<?xml version="1.0"?><${tag("OME")} xmlns${prefix ? `:${prefix.slice(0, -1)}` : ""}=${quote}${namespaceUri}${quote}>${xmlImages}</${tag("OME")}>`;
@@ -28,7 +28,7 @@ export function omeTiffFixture({ images = [{}], subIfd = false, prefix = "", quo
     const list = [[256, 4, 1, size[0]], [257, 4, 1, size[1]], [258, 3, 1, 32], [259, 3, 1, 8], [262, 3, 1, 1], [273, 4, 1, 0], [277, 3, 1, 1], [278, 4, 1, size[1]], [279, 4, 1, strips[index].length], [284, 3, 1, 1], [339, 3, 1, 3]];
     if (index === 0) list.push([270, 2, description.length, 0]);
     if (subIfd && index === 0) list.push([330, 4, 1, 0]);
-    if (subIfd && index > 0) list.push([254, 4, 1, 1]);
+    if (subIfd && index > 0) list.push([254, 4, 1, reduced ? 1 : 0]);
     list.sort((a, b) => a[0] - b[0]);
     offsets.push(end);
     end += 2 + list.length * 12 + 4;
@@ -66,11 +66,17 @@ export function omeTiffFixture({ images = [{}], subIfd = false, prefix = "", quo
 export const calibrationCases = [
   { name: "single-quoted-nm", images: [{ calibration: "PhysicalSizeX='0.25' PhysicalSizeY='0.75' PhysicalSizeXUnit='nm' PhysicalSizeYUnit='nm'" }], quote: "'", unit: "nm" },
   { name: "prefixed-xml", prefix: "ome:", images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeXUnit="n&#109;" PhysicalSizeYUnit="nm"' }], unit: "nm" },
+  { name: "numeric-entities", images: [{ calibration: 'PhysicalSizeX="&#48;.25" PhysicalSizeY="7.5e-1"' }], unit: "µm" },
   { name: "unknown-single-quoted", images: [{ calibration: "PhysicalSizeX='0.25' PhysicalSizeY='0.75' PhysicalSizeXUnit='pixel' PhysicalSizeYUnit='pixel'" }], issue: /known spatial units/ },
   { name: "invalid-number", images: [{ calibration: 'PhysicalSizeX="0.25junk" PhysicalSizeY="0.75"' }], issue: /known physical pixel sizes/ },
+  { name: "unknown-double-quoted", images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeXUnit="pixel"' }], issue: /known spatial units/ },
+  { name: "ambiguous-image", images: [{}, { tiffData: '<TiffData IFD="0" PlaneCount="1"/>' }], issue: /unambiguously associate/ },
+  { name: "foreign-plane", images: [{ planes: '<foreign:Plane xmlns:foreign="urn:not-ome" PositionX="100"/>' }], unit: "µm" },
   { name: "unselected-position", images: [{}, { planes: '<Plane TheZ="0" TheC="0" TheT="0" PositionX="100"/>' }], unit: "µm" },
   { name: "selected-position", images: [{ planes: '<Plane TheZ="0" TheC="0" TheT="0" PositionX="100"/>' }], issue: /source plane positions/ },
   { name: "other-image-uncalibrated", images: [{ size: [4098, 4098], value: 0 }, { calibration: "" }], issue: /known physical pixel sizes/ },
   { name: "other-image-calibrated", images: [{ size: [4098, 4098], value: 0 }, { calibration: 'PhysicalSizeX="10" PhysicalSizeY="20"' }], issue: /decoded grid.*selected OME Image/ },
+  { name: "selected-second-image", images: [{ size: [4098, 4098], value: 0, planes: '<Plane TheZ="0" TheC="0" TheT="0" PositionY="100"/>' }, { calibration: 'PhysicalSizeX="51.225" PhysicalSizeY="153.675"' }], unit: "µm", spacing: [51.225, 153.675] },
+  { name: "selected-second-position", images: [{ size: [4098, 4098], value: 0 }, { planes: '<Plane TheZ="0" TheC="0" TheT="0" PositionX="100"/>' }], issue: /source plane positions/ },
   { name: "true-subifd", images: [{ size: [4098, 4098], value: 0 }, {}], subIfd: true, unit: "µm", spacing: [51.225, 153.675] },
 ];

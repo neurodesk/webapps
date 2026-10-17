@@ -4,11 +4,11 @@
 
 ### Minor Changes
 
-- Add registered-image OME-TIFF export in the browser and command line using one shared fiff writer. Preserve float32 pixels at the selected registration pyramid level, spacing and stationary input units. Explain when TIFF is unavailable because the pinned writer cannot retain the image origin, direction or unknown units.
+- Add registered-image OME-TIFF export in the browser and command line using one shared fiff writer. Preserve float32 pixels on the selected registration grid, spacing and stationary input units. Explain when TIFF is unavailable because the pinned writer cannot retain the image origin, direction or unknown units.
 
 ### Patch Changes
 
-- Refuse OME-TIFF export when original TIFF physical sizes are unknown or Plane positions cannot be preserved. Keep schema-default micrometer units for known sizes and normalize supported length symbols, including pm and Å. Preserve required CLI outputs after optional TIFF encoder or partial-write failures, and cover cancellation during compression.
+- Refuse OME-TIFF export when the selected TIFF Image's original physical sizes are unknown or its Plane positions cannot be preserved. Keep schema-default micrometer units for known sizes and normalize supported length symbols, including pm and Å. Preserve required CLI outputs after optional TIFF encoder or partial-write failures, and cover cancellation during compression.
 
 ## 0.3.20261017
 

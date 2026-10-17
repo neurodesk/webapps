@@ -61,16 +61,17 @@ export function createSourceReader({ fromOmeZarr, ngffImageToItkImage, TiffStore
 
   async function readOmeZarr(store, name, kind, options, signal) {
     signal?.throwIfAborted();
-    const tiffMetadata = store.tiffMetadata;
+    const tiffMetadataForLevel = store.tiffMetadataForLevel;
     store = cancellableStore(store, signal);
     const multiscales = await readMultiscales(store, options, signal);
     signal?.throwIfAborted();
     const { image: level, level: index } = chooseLevel(multiscales.images);
     const image = await ngffImageToItkImage(level, { tIndex: 0, cIndex: 0 });
+    const tiffMetadata = await tiffMetadataForLevel?.(index);
     signal?.throwIfAborted();
     const count = multiscales.images.length;
     return {
-      ...await prepared(image, name, kind, null, ` · pyramid level ${index + 1} of ${count}`, signal),
+      ...await prepared(image, name, kind, null, tiffMetadata?.selectionNote ?? ` · pyramid level ${index + 1} of ${count}`, signal),
       spatialUnits: normalizeSpatialUnits(level.axesUnits),
       ...(tiffMetadata && { tiffMetadata }),
     };
