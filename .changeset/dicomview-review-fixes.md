@@ -13,3 +13,5 @@ Cancelling while an image loads now stops the job in the status bar and keeps th
 A compliance check that dicompare could not run for some or all acquisitions now ends with an error in the status bar instead of a success.
 
 The extra "Or choose a folder" field is gone; choose a folder from the input menu's "Choose folder…".
+
+Downloaded images and sidecars are named from the series number and description, such as `series2_t1_mpr.nii`, instead of dcm2niix's default, which carries the input folder name and the study date and time.

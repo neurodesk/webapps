@@ -61,7 +61,12 @@ test('the example opens as one series that converts, downloads and explains its 
   await page.locator('#seriesList').getByRole('button', { name: 'Download', exact: true }).click();
   await expect.poll(() => downloads.length).toBe(2);
   const [image, sidecar] = downloads;
-  expect(image.suggestedFilename()).toMatch(/t1_mpr_tra_gk_v4.*\.nii$/);
+  for (const download of [image, sidecar]) {
+    const name = download.suggestedFilename();
+    expect(name, 'no study date or time').not.toMatch(/19940904|0842/);
+    expect(name, 'no folder name dcm2niix saw').not.toMatch(/input/i);
+  }
+  expect([image.suggestedFilename(), sidecar.suggestedFilename()]).toEqual(['series2_t1_mpr_tra_gk_v4.nii', 'series2_t1_mpr_tra_gk_v4.json']);
   expect(niftiDims(readFileSync(await image.path()))).toEqual([512, 512, 120]);
   expect(JSON.parse(readFileSync(await sidecar.path(), 'utf8')).EchoTime).toBe(0.00297);
 

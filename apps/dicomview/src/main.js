@@ -21,7 +21,7 @@ import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
 import { ProtocolSession, SCHEMAS } from './protocol-session.js';
 import { checkOutcome, protocolTables } from './protocol-table.js';
-import { describeSeries, seriesLabel, seriesSummary } from './series-text.js';
+import { describeSeries, downloadFiles, seriesLabel, seriesSummary } from './series-text.js';
 import examples from '../examples.json';
 
 const $ = (id) => document.getElementById(id);
@@ -366,20 +366,15 @@ $('outputSelect').addEventListener('change', () => {
   void showOutput().catch((error) => status(error.message, true));
 });
 
-function sidecarFile({ image, sidecar }) {
-  const name = image.name.replace(/\.nii(\.gz)?$/i, '.json');
-  return new File([`${JSON.stringify(sidecar, null, 2)}\n`], name, { type: 'application/json' });
-}
-
 async function downloadSeries(uid) {
   const series = state.index?.series.find((candidate) => candidate.uid === uid);
   if (!series) return;
   if (uid !== state.seriesUid || !state.conversions.has(uid)) selectSeries(uid);
   try {
     const outputs = await state.conversions.get(uid);
-    for (const output of outputs) {
-      downloadFile(output.image);
-      if (output.sidecar) downloadFile(sidecarFile(output));
+    for (const { image, sidecar } of downloadFiles(series, outputs)) {
+      downloadFile(image);
+      if (sidecar) downloadFile(sidecar);
     }
   } catch {
     // The conversion reports its own failure in the status bar.
@@ -579,7 +574,7 @@ registerAppAutomation({
       return {
         artifacts: [
           { role: 'series', file: new File([JSON.stringify(index, null, 2)], 'series.json', { type: 'application/json' }) },
-          ...outputs.map(({ image }) => ({ role: 'image', file: image })),
+          ...downloadFiles(series, outputs).map(({ image }) => ({ role: 'image', file: image })),
         ],
         provenance: { converter: 'dcm2niix', series: series.uid },
       };

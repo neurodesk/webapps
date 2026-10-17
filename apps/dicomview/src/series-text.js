@@ -44,3 +44,19 @@ export function seriesSummary(series) {
   if (varying) parts.push(`${varying} field${varying === 1 ? ' varies' : 's vary'}`);
   return parts.join(' · ');
 }
+
+// A series' images and sidecars as downloads. dcm2niix names its outputs after the input
+// folder, often the patient's name, and the study date and time; these carry only the
+// series number and description, an image and its sidecar under one stem.
+export function downloadFiles(series, outputs) {
+  const label = (series.description || series.protocolName || '').replace(/[^A-Za-z0-9.-]+/g, '_').replace(/^[_.]+|_+$/g, '').slice(0, 64);
+  const stem = [`series${series.number ?? ''}`, label].filter(Boolean).join('_');
+  return outputs.map(({ image, sidecar }, index) => {
+    const name = outputs.length > 1 ? `${stem}_${index + 1}` : stem;
+    const extension = image.name.match(/\.nii(\.gz)?$/i)?.[0] ?? '.nii';
+    return {
+      image: new File([image], `${name}${extension}`, { type: image.type }),
+      sidecar: sidecar ? new File([`${JSON.stringify(sidecar, null, 2)}\n`], `${name}.json`, { type: 'application/json' }) : null,
+    };
+  });
+}
