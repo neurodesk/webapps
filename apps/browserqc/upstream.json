@@ -21,6 +21,7 @@
     "Use the public niimath package API and shared DICOM importer instead of upstream vendored runtimes.",
     "Keep monorepo date-based release versions and deployment workflows; port relevant ignored index.html and src/style.css changes through the shared design system.",
     "Keep the MindGrab mask and segmentation sequence, the pinned air template and the report provenance in packages/browserqc, shared with the browserqc command line; give MindGrab and niimath a NIfTI file's own bytes, as the command line does.",
-    "Keep the shared result list in Image quality: it offers the brain mask and the tissue fraction or label maps, named after the input, and clears with the QC report."
+    "Keep the shared result list in Image quality: it offers the brain mask and the tissue fraction or label maps, named after the input, and clears with the QC report.",
+    "src/main.ts is a typed promise lint project: report every callback's or teardown's rejection through reportFailure (status bar and technical log), never `void promise`."
   ]
 }

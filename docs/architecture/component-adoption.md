@@ -79,9 +79,9 @@ the fork ratchet in `test/component-forks.test.mjs` lists which of those are for
   - `file-io`: web/js/automation.js, web/js/controllers/SeedSegDicomInput.js, web/js/seedseg-app.js
   - `ui`: web/js/seedseg-app.js
 - **dicompare**
-  - `automation`: src/automation.ts, src/components/viewer/NiivueViewer.tsx
-  - `styles/imaging-workspace.css`: src/components/workspace/ExampleInput.tsx
-  - `ui`: public/embed/DicompareReportRenderer.js, src/components/common/DropZone.tsx, src/components/common/TechnicalLog.tsx, src/components/workspace/ExampleInput.tsx
+  - `automation`: src/components/viewer/NiivueViewer.tsx, src/neurodesk/automation.ts
+  - `styles/imaging-workspace.css`: src/neurodesk/ExampleInput.tsx
+  - `ui`: public/embed/DicompareReportRenderer.js, src/components/common/DropZone.tsx, src/neurodesk/ExampleInput.tsx, src/neurodesk/TechnicalLog.tsx
 - **deface**
   - `automation`: src/main.ts
   - `core/mount-imaging-workspace`: src/main.ts

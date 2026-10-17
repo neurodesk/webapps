@@ -133,3 +133,37 @@ test('default PVE analysis publishes native-grid fractions and an independent ma
   const regions = await dispatch(page, 'viewers.regions', { viewerId: 'main' });
   expect(regions).toEqual([]);
 });
+
+test('an overlay opacity failure reaches the status bar instead of an unhandled rejection', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('./');
+  await expect(page.locator('#statusMsg')).toHaveText('Drag and drop files');
+  await page.locator('#niftiInput').setInputFiles(fixture);
+  await expect(page.locator('#statusMsg')).toHaveText('Image loaded. Run quality control when ready.');
+  await page.evaluate(() => {
+    Object.defineProperty(document.querySelector('#viewPick'), 'value', { get() { throw new Error('display canary'); } });
+    document.querySelector('#ovlSlider').dispatchEvent(new Event('input'));
+  });
+  await expect(page.locator('#statusMsg')).toHaveText('Failed: display canary');
+  await expect(page.locator('#consoleOutput')).toContainText('Failed: display canary');
+  expect(pageErrors).toEqual([]);
+});
+
+test('a teardown failure reaches the status bar after every teardown step', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('./');
+  await expect(page.locator('#statusMsg')).toHaveText('Drag and drop files');
+  await page.evaluate(() => {
+    const selector = document.querySelector('#exampleControl nd-example-selector');
+    selector.destroy = () => { throw new Error('teardown canary'); };
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+  });
+  await expect(page.locator('#statusMsg')).toHaveText('Failed: teardown canary');
+  await expect(page.locator('#consoleOutput')).toContainText('Failed: teardown canary');
+  // Teardown continued past the failing first step: the workspace listeners are gone.
+  const dragAccepted = await page.evaluate(() => !document.dispatchEvent(new DragEvent('dragover', { cancelable: true })));
+  expect(dragAccepted).toBe(false);
+  expect(pageErrors).toEqual([]);
+});

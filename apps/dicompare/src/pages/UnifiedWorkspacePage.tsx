@@ -8,8 +8,8 @@ import CitationModal from '../components/common/CitationModal';
 import PrivacyModal from '../components/common/PrivacyModal';
 import VersionBadge from '../components/common/VersionBadge';
 import UnifiedWorkspace from '../components/workspace/UnifiedWorkspace';
-import StatusFooter from '../components/common/StatusFooter';
-import TechnicalLog from '../components/common/TechnicalLog';
+import StatusFooter from '../neurodesk/StatusFooter';
+import TechnicalLog from '../neurodesk/TechnicalLog';
 
 const UnifiedWorkspacePage: React.FC = () => {
   const [showCitation, setShowCitation] = useState(false);

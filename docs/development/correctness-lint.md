@@ -83,10 +83,10 @@ entire catalog is a separate migration.
 | --- | --- | --- | --- | --- |
 | Zarro (`apps/zarro/src`) | 29 | `apps/zarro/tsconfig.json` compiles | 0 | Typed since PR #245 |
 | Deface (`apps/deface/src`) | 7 | `apps/deface/tsconfig.json` compiles | 2: 1 floating, 1 misused, both in `main.ts` | Typed; findings fixed |
-| BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Deferred; upstream-synced, record adaptations in `upstream.json` |
+| BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Typed; findings fixed |
 | Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 21 | `apps/dwi2trx/tsconfig.json` compiles | 10 floating, all in `main.ts` | Typed; findings fixed |
-| Dicompare (`apps/dicompare/src`) | 142 | `apps/dicompare/tsconfig.json` compiles | 85: 38 floating, 47 misused, in 30 files | Deferred; upstream-owned, record adaptations in `upstream.json` |
+| Dicompare (`apps/dicompare/src/neurodesk`, `src/utils/technicalLog.ts`) | 5 of 142 | `apps/dicompare/tsconfig.json` compiles | 0 in the monorepo's files; 85 in upstream's 30 files | Typed for the monorepo's code; upstream's findings reported in astewartau/dicompare-web#26 |
 
 The root agentic tests had no findings: their promises are already awaited.
 Their project now includes `test/agentic/**/*.ts` so a new file in a
@@ -117,6 +117,25 @@ logs a run superseded by a newer input without changing that input's status.
 status error, one log entry and no page errors. That test also exposed a
 startup race: the view queue was declared after the viewer's startup `await`,
 so files chosen during startup failed with a temporal dead zone error.
+
+BrowserQC's three findings were all in code the monorepo added around
+niivue/browserqc's `main.ts`: the overlay opacity slider discarded
+`showView()`, and the `pagehide` and HMR teardown discarded `cleanup()`. The
+slider now reports a rejection through `reportFailure`, the queue's status bar
+and technical log handler; it stays outside the queue so it still responds
+while QC metrics run. Teardown is synchronous, runs every step before
+rethrowing, and reports its failure the same way. `e2e/automation.spec.js`
+fails each path and checks the status bar, the log and the absence of page
+errors.
+
+Dicompare is astewartau/dicompare-web, merged weekly. Its 85 findings are all
+at upstream call sites (one, `navigate('/')`, has a monorepo route). Most are
+async handlers that catch their own errors; ten can reject unhandled (the monorepo
+copy already catches one), listed
+with fixes in astewartau/dicompare-web#26. They are not baselined here: fixing
+them upstream keeps the weekly merge clean. Code the monorepo adds lives in
+`src/neurodesk/` (and the pre-existing `src/utils/technicalLog.ts`), which is
+the typed project; new files there are checked like any other typed source.
 
 Zarro's stream buffer annotations require ArrayBuffer storage, normalizing the
 encoded bytes once before streaming; compressed contents are unchanged. NiiVue 1.0.0-rc.14's `setFocus` and `setBudget`

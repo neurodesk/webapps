@@ -1,6 +1,6 @@
 import { registerAppAutomation, type OperationContext, type Artifact } from '@neurodesk/webapp-components/automation';
-import { DicompareWorkerAPI } from './services/DicompareWorkerAPI';
-import type { FileObject } from './utils/fileUploadUtils';
+import { DicompareWorkerAPI } from '../services/DicompareWorkerAPI';
+import type { FileObject } from '../utils/fileUploadUtils';
 
 function filesFor(context: OperationContext, role: string): File[] {
   const files = context.inputs[role];

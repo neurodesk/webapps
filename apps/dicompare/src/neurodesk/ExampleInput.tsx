@@ -1,9 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { createExampleSelector, renderSidebarSection } from '@neurodesk/webapp-components/ui';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
-import examples from '../../../examples.json';
-import { useWorkspace } from '../../contexts/WorkspaceContext';
-import { log } from '../../utils/technicalLog';
+import examples from '../../examples.json';
+import { useWorkspace } from '../contexts/WorkspaceContext';
+import { log } from '../utils/technicalLog';
 
 export default function ExampleInput() {
   const host = useRef<HTMLDivElement>(null);

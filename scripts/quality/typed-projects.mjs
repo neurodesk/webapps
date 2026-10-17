@@ -9,6 +9,15 @@ export const typedPromiseProjects = [
   { name: 'zarro', sources: ['apps/zarro/src/'], tsconfig: 'apps/zarro/tsconfig.json' },
   { name: 'deface', sources: ['apps/deface/src/'], tsconfig: 'apps/deface/tsconfig.json' },
   { name: 'dwi2trx', sources: ['apps/dwi2trx/src/'], tsconfig: 'apps/dwi2trx/tsconfig.json' },
+  { name: 'browserqc', sources: ['apps/browserqc/src/'], tsconfig: 'apps/browserqc/tsconfig.json' },
+  // Only the code the monorepo added: the rest is astewartau/dicompare-web's, whose
+  // findings are reported upstream (docs/development/correctness-lint.md). New
+  // monorepo code goes in src/neurodesk/.
+  {
+    name: 'dicompare',
+    sources: ['apps/dicompare/src/neurodesk/', 'apps/dicompare/src/utils/technicalLog.ts'],
+    tsconfig: 'apps/dicompare/tsconfig.json',
+  },
   {
     name: 'agentic',
     sources: ['test/agentic/', 'test-utils/agentic-browser.ts', 'e2e.config.ts'],

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import { ESLint } from 'eslint';
@@ -14,6 +14,16 @@ const sourceDirectory = ({ name, sources }) => {
   const directory = sources.find((source) => source.endsWith('/'));
   assert.ok(directory, `${name} needs a source directory for its canaries`);
   return directory;
+};
+// A run killed before its finally block leaves canaries behind, which the next lint
+// would report as owned source; remove them before creating new ones.
+const removeStaleCanaries = async () => {
+  for (const project of typedPromiseProjects) {
+    const directory = join(root, sourceDirectory(project));
+    for (const entry of await readdir(directory)) {
+      if (/^(promise|type)-canary-/.test(entry)) await rm(join(directory, entry), { recursive: true, force: true });
+    }
+  }
 };
 import { preservedLintFilters } from '../scripts/lint-workspaces.mjs';
 
@@ -36,7 +46,7 @@ test('every owned tracked source receives nonempty correctness rules', async () 
   }
   assert.ok(files.length > 1500);
   // Rolled-out projects stay typed; see the inventory in docs/development/correctness-lint.md.
-  for (const name of ['zarro', 'deface', 'agentic']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
+  for (const name of ['zarro', 'deface', 'dwi2trx', 'browserqc', 'dicompare', 'agentic']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
   await assertCoverage(eslint, files);
 });
 
@@ -170,6 +180,7 @@ test('each typed project checks new source, async callbacks and ignored promises
     ['handled.ts', 'export {}; Promise.reject(new Error("reported")).catch((error: unknown) => { console.error(error); });', null],
   ];
   const directories = [];
+  await removeStaleCanaries();
   try {
     for (const project of typedPromiseProjects) {
       const sources = sourceDirectory(project);
@@ -205,6 +216,7 @@ test('each typed project checks new source, async callbacks and ignored promises
 });
 
 test('a typed project that does not compile fails the gate instead of typing promises as any', async () => {
+  await removeStaleCanaries();
   for (const project of typedPromiseProjects) {
     const { tsconfig } = project;
     const directory = await mkdtemp(join(root, sourceDirectory(project), 'type-canary-'));

@@ -224,11 +224,13 @@ function enqueue(fn: () => Promise<unknown>): void {
     // Re-check at execution time, not just enqueue time: a job queued before
     // cleanup() (HMR/tab-close) must not run on the destroyed NiiVue afterwards.
     .then(() => (isCleanedUp ? undefined : fn()))
-    .catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err)
-      setStatus(`Failed: ${msg}`)
-      console.error('task failed', err)
-    })
+    .catch(reportFailure)
+}
+// The status bar and technical log, for a failure no caller awaits.
+function reportFailure(err: unknown): void {
+  const msg = err instanceof Error ? err.message : String(err)
+  setStatus(`Failed: ${msg}`)
+  console.error('task failed', err)
 }
 
 async function ensureNiimath(): Promise<void> {
@@ -597,7 +599,8 @@ ovlSlider.addEventListener(
     // Skip while a segmentation is mid-flight — mutating the scene between its
     // loadVolumes/addVolume awaits can hit the wrong volume or throw. The final
     // opacity is applied via addVolume's `opacity` when the overlay lands.
-    if (!busy) void showView()
+    // Not queued: the slider must respond while QC metrics run after segmentation.
+    if (!busy) showView().catch(reportFailure)
   },
   ac,
 )
@@ -609,30 +612,52 @@ $('rateSave').addEventListener('click', () => {
 }, ac)
 
 // --- Cleanup (HMR / tab close) ---
-async function cleanup(): Promise<void> {
-  exampleControl.destroy()
-  if (isCleanedUp) return
+// Every release step runs, so HMR never replaces a half-torn-down module; a failure
+// is rethrown only once teardown is complete.
+function cleanup(): void {
+  const failures: unknown[] = []
+  const release = (step: () => void): void => {
+    try {
+      step()
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  const finish = (): void => {
+    if (failures.length === 1) throw failures[0]
+    if (failures.length > 1) throw new AggregateError(failures, 'BrowserQC teardown failed')
+  }
+  release(() => exampleControl.destroy())
+  if (isCleanedUp) return finish()
   isCleanedUp = true
-  listeners.abort()
-  manualRun?.abort()
-  progressManager.reset()
+  release(() => listeners.abort())
+  release(() => manualRun?.abort())
+  release(() => progressManager.reset())
   // Terminate the niimath worker FIRST (don't await `pending`): a WASM run is one
   // uninterruptible call, so awaiting the queue would stall teardown. The terminated
   // run never resolves; any run that already resolved hits `if (isCleanedUp) return`
   // before touching nv/ctx.
-  resetNiimathWorker()
+  release(resetNiimathWorker)
   try {
     ctx?.dispose() // null if WebGPU was unavailable (attachNiiVue never ran)
   } catch {
     // best-effort — must not skip nv.destroy() below
   }
-  nv.destroy()
+  release(() => nv.destroy())
+  finish()
+}
+function teardown(): void {
+  try {
+    cleanup()
+  } catch (err) {
+    reportFailure(err)
+  }
 }
 window.addEventListener('pagehide', (e) => {
   if (e.persisted) return
-  void cleanup()
+  teardown()
 }, { once: true, signal: listeners.signal })
-if (import.meta.hot) import.meta.hot.dispose(cleanup)
+if (import.meta.hot) import.meta.hot.dispose(teardown)
 
 registerAppAutomation({
   app: 'browserqc',

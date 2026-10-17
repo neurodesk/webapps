@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, render, screen } from '@testing-library/react';
 import App from './App';
-import TechnicalLog from './components/common/TechnicalLog';
+import TechnicalLog from './neurodesk/TechnicalLog';
 import { log, resetTechnicalLog } from './utils/technicalLog';
 
 beforeEach(() => {

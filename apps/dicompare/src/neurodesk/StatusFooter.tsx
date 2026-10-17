@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { usePyodide } from '../../contexts/PyodideContext';
-import { useProcessing } from '../../contexts/ProcessingContext';
-import { LogEntry, useActivity, useTechnicalLog } from '../../utils/technicalLog';
+import { usePyodide } from '../contexts/PyodideContext';
+import { useProcessing } from '../contexts/ProcessingContext';
+import { LogEntry, useActivity, useTechnicalLog } from '../utils/technicalLog';
 
 function newestError(entries: LogEntry[]): LogEntry | null {
   for (let index = entries.length - 1; index >= 0; index -= 1) {

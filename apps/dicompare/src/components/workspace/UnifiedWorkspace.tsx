@@ -29,7 +29,7 @@ import { useReadmeModal } from '../../hooks/useReadmeModal';
 import { useFileSystemAccess } from '../../hooks/useFileSystemAccess';
 import { useSchemaImportFromViewer } from '../../hooks/useSchemaImportFromViewer';
 import { useSessionPersistence } from '../../contexts/SessionPersistenceContext';
-import ExampleInput from './ExampleInput';
+import ExampleInput from '../../neurodesk/ExampleInput';
 
 const UnifiedWorkspace: React.FC = () => {
   const {

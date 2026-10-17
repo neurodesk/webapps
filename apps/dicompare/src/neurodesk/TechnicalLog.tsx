@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { createConsole } from '@neurodesk/webapp-components/ui';
-import { clearLog, useTechnicalLog } from '../../utils/technicalLog';
+import { clearLog, useTechnicalLog } from '../utils/technicalLog';
 
 /**
  * Collapsed technical log below the workspace. The shared createConsole()
