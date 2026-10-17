@@ -58,10 +58,6 @@ self.onmessage = async ({ data }) => {
         mindgrabOptions: { backend: "auto", worker: false, timeoutMs: 900_000 },
         greedy,
         synthsr,
-        wasm: {
-          core: { module_or_path: `${base}fastprep-wasm/fastprep/fastprep_wasm_bg.wasm` },
-          glm: { module_or_path: `${base}fastprep-wasm/glm/glm_wasm_bg.wasm` },
-        },
       },
       options: { omp: threads, nprocs: threads, ...options },
       onLog: (line) => post({ log: line }),

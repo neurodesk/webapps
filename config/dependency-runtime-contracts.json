@@ -165,6 +165,16 @@
     "reason": "packages/dicompare/scripts/stage-schemas.mjs copies the pinned app schema library into the generated CLI schemas directory before build and test."
   },
   {
+    "from": "packages/fastprep/src/index.js",
+    "to": "../wasm/fastprep/fastprep_wasm.js",
+    "reason": "pnpm --filter @neurodesk/fastprep build:wasm (run by the fastprep app runtime script before dev and build) generates this wasm-bindgen module from exes/fastprep and exes/glm into the gitignored packages/fastprep/wasm."
+  },
+  {
+    "from": "packages/fastprep/src/index.js",
+    "to": "../wasm/glm/glm_wasm.js",
+    "reason": "pnpm --filter @neurodesk/fastprep build:wasm (run by the fastprep app runtime script before dev and build) generates this wasm-bindgen module from exes/fastprep and exes/glm into the gitignored packages/fastprep/wasm."
+  },
+  {
     "from": "packages/seedseg/src/node.js",
     "to": "../runtime/",
     "reason": "packages/seedseg build stages the pinned QSM runtime directory with scripts/fetch-app-runtime.mjs."

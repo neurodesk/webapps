@@ -107,5 +107,4 @@ apps/*/web/examples.json
 
 quality-artifacts/
 .stryker-tmp/
-apps/fastprep/public/fastprep-wasm/
 apps/fastprep/public/niimath/
