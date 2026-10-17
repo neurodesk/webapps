@@ -597,7 +597,7 @@ ovlSlider.addEventListener(
     // Skip while a segmentation is mid-flight — mutating the scene between its
     // loadVolumes/addVolume awaits can hit the wrong volume or throw. The final
     // opacity is applied via addVolume's `opacity` when the overlay lands.
-    if (!busy) void showView()
+    if (!busy) enqueue(showView)
   },
   ac,
 )
@@ -609,28 +609,35 @@ $('rateSave').addEventListener('click', () => {
 }, ac)
 
 // --- Cleanup (HMR / tab close) ---
-async function cleanup(): Promise<void> {
-  exampleControl.destroy()
+function cleanup(): void {
   if (isCleanedUp) return
   isCleanedUp = true
-  listeners.abort()
-  manualRun?.abort()
-  progressManager.reset()
-  // Terminate the niimath worker FIRST (don't await `pending`): a WASM run is one
-  // uninterruptible call, so awaiting the queue would stall teardown. The terminated
-  // run never resolves; any run that already resolved hits `if (isCleanedUp) return`
-  // before touching nv/ctx.
-  resetNiimathWorker()
-  try {
-    ctx?.dispose() // null if WebGPU was unavailable (attachNiiVue never ran)
-  } catch {
-    // best-effort — must not skip nv.destroy() below
+  const failures: unknown[] = []
+  const release = (step: () => void): void => {
+    try {
+      step()
+    } catch (error) {
+      failures.push(error)
+    }
   }
-  nv.destroy()
+  release(() => exampleControl.destroy())
+  release(() => listeners.abort())
+  release(() => manualRun?.abort())
+  release(() => progressManager.reset())
+  // niimath.dispose rejects in-flight work. Do not await the queue before stopping
+  // its worker: a running WASM call cannot otherwise be interrupted.
+  release(resetNiimathWorker)
+  release(() => ctx?.dispose())
+  release(() => nv.destroy())
+  if (failures.length) {
+    const error = failures.length === 1 ? failures[0] : new AggregateError(failures, 'BrowserQC teardown failed')
+    setStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`)
+    console.error('teardown failed', error)
+  }
 }
 window.addEventListener('pagehide', (e) => {
   if (e.persisted) return
-  void cleanup()
+  cleanup()
 }, { once: true, signal: listeners.signal })
 if (import.meta.hot) import.meta.hot.dispose(cleanup)
 

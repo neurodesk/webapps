@@ -133,3 +133,37 @@ test('default PVE analysis publishes native-grid fractions and an independent ma
   const regions = await dispatch(page, 'viewers.regions', { viewerId: 'main' });
   expect(regions).toEqual([]);
 });
+
+test('a teardown failure reaches the status bar after workspace listeners are released', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('./');
+  await expect(page.locator('#statusMsg')).toHaveText(/Drag and drop files|WebGPU/);
+  await page.evaluate(() => {
+    const selector = document.querySelector('#exampleControl nd-example-selector');
+    selector.destroy = () => { throw new Error('teardown canary'); };
+    window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false }));
+  });
+  await expect(page.locator('#statusMsg')).toHaveText('Failed: teardown canary');
+  await expect(page.locator('#consoleOutput')).toContainText('Failed: teardown canary');
+  const accepted = await page.evaluate(() => !document.dispatchEvent(new DragEvent('dragover', { cancelable: true })));
+  expect(accepted).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
+test('a failed image load does not stall later loads or opacity changes', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  await page.goto('./');
+  await expect(page.locator('#statusMsg')).toHaveText('Drag and drop files');
+  await page.locator('#niftiInput').setInputFiles({ name: 'invalid.nii', mimeType: 'application/octet-stream', buffer: Buffer.from('invalid') });
+  await expect(page.locator('#statusMsg')).toContainText('Failed:');
+  await page.locator('#niftiInput').setInputFiles(fixture);
+  await expect(page.locator('#statusMsg')).toHaveText('Image loaded. Run quality control when ready.');
+  await page.locator('#ovlSlider').fill('128');
+  await page.locator('#viewPick').selectOption('background');
+  await expect(page.locator('#ovlSlider')).toBeDisabled();
+  await page.locator('#viewPick').selectOption('tissues');
+  await expect(page.locator('#ovlSlider')).toBeEnabled();
+  expect(pageErrors).toEqual([]);
+});

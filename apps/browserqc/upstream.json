@@ -13,6 +13,7 @@
     "src/dcm2niix/**"
   ],
   "integration": [
+    "Keep the typed promise checks: queue opacity updates and complete synchronous teardown before reporting failures through the status bar and technical log.",
     "Keep the shared Neurodesk shell, imaging workspace, dialogs, technical console and ProgressManager status bar.",
     "Keep pinned examples, shared example loading, automation controls and workflow coverage.",
     "Keep the local segmentation worker and abortable automation operations; adapt upstream processing changes to that worker.",

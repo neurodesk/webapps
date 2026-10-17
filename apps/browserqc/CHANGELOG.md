@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Queue opacity updates and report teardown failures after releasing every workspace resource.
+  - @neurodesk/browserqc@1.6.20261017
 - Updated dependencies [b547d52]
   - @neurodesk/webapp-components@0.14.3
   - @neurodesk/browserqc@1.6.20261017
