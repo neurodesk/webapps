@@ -8,6 +8,9 @@
 
 ### Patch Changes
 
+- d7d3420: Bind OME-TIFF export calibration to the selected Image and its verified local TIFF directories or SubIFDs. Parse original XML with namespace semantics and strict numbers. Preserve valid quoting and character references at TIFF import, refuse unknown explicit units and calibration disagreements, and ignore positions on unselected Images. Keep alternate outputs when TIFF is unsafe. Registration grids with conflicting multi-image metadata remain unchanged and are documented.
+
+  Require a local TiffData element for directory association. Metadata-only Images cannot supply another Image's calibration, even when their plane counts match the file. Preserve mapping defaults for an existing empty TiffData element and verified reduced-resolution SubIFDs.
 - Refuse OME-TIFF export when the selected TIFF Image's original physical sizes are unknown or its Plane positions cannot be preserved. Keep schema-default micrometer units for known sizes and normalize supported length symbols, including pm and Å. Preserve required CLI outputs after optional TIFF encoder or partial-write failures, and cover cancellation during compression.
 
 ## 0.3.20261017

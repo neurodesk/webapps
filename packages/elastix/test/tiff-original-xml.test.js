@@ -61,24 +61,26 @@ for (const value of ["0.25junk", "1e-3junk", "NaN", "Infinity", "0", "-0.25"]) {
   });
 }
 
-test("XYZ calibration binds every original plane before exporting all slices", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "elastix-xyz-calibration-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  const path = join(directory, "volume.ome.tif");
-  await writeFile(path, omeTiffFixture({ volume: true, images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeZ="1.5"', tiffData: "<TiffData/>" }, { value: 17 }] }));
-  const source = await readInput(path, "fixed");
-  assert.deepEqual(source.image.size, [20, 20, 2]);
-  assert.deepEqual(source.image.spacing, [0.25, 0.75, 1.5]);
-  assert.deepEqual(source.tiffMetadata.ifds, [0, 1]);
-  assert.equal(omeTiffIssue(source.image, source.spatialUnits, source.tiffMetadata), null);
-  const bytes = await writeOmeTiff(source.image, source.spatialUnits, { tiffMetadata: source.tiffMetadata });
-  const output = await fromArrayBuffer(bytes.buffer);
-  assert.equal(await output.getImageCount(), 2);
-  for (let z = 0; z < 2; z += 1) {
-    const [data] = await (await output.getImage(z)).readRasters();
-    assert.deepEqual(data, source.image.data.subarray(z * 400, (z + 1) * 400));
-  }
-});
+for (const [name, tiffData] of [["explicit plane count", undefined], ["empty TiffData defaults", "<TiffData/>"]]) {
+  test(`XYZ calibration binds every original plane before exporting all slices: ${name}`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "elastix-xyz-calibration-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const path = join(directory, "volume.ome.tif");
+    await writeFile(path, omeTiffFixture({ volume: true, images: [{ calibration: 'PhysicalSizeX="0.25" PhysicalSizeY="0.75" PhysicalSizeZ="1.5"', tiffData }, { value: 17 }] }));
+    const source = await readInput(path, "fixed");
+    assert.deepEqual(source.image.size, [20, 20, 2]);
+    assert.deepEqual(source.image.spacing, [0.25, 0.75, 1.5]);
+    assert.deepEqual(source.tiffMetadata.ifds, [0, 1]);
+    assert.equal(omeTiffIssue(source.image, source.spatialUnits, source.tiffMetadata), null);
+    const bytes = await writeOmeTiff(source.image, source.spatialUnits, { tiffMetadata: source.tiffMetadata });
+    const output = await fromArrayBuffer(bytes.buffer);
+    assert.equal(await output.getImageCount(), 2);
+    for (let z = 0; z < 2; z += 1) {
+      const [data] = await (await output.getImage(z)).readRasters();
+      assert.deepEqual(data, source.image.data.subarray(z * 400, (z + 1) * 400));
+    }
+  });
+}
 
 test("a SubIFD link without a reduced-resolution declaration cannot authorize scaling", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "elastix-subifd-calibration-"));

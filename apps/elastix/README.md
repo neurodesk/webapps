@@ -26,11 +26,14 @@ has the same meaning in the browser and command line.
 
 The calibration check supports scalar XY or XYZ images with one channel and
 time point, verifiable local TiffData mappings and genuine SubIFD pyramids.
+An Image without TiffData cannot supply calibration for TIFF directories.
+An existing empty `<TiffData/>` retains the schema's mapping defaults.
 Ambiguous mappings and other layouts disable TIFF export. Plane positions
 inside the selected Image disable export because the registration reader does
 not preserve them. Positions on another Image do not affect that decision.
 In fiff's legacy multi-image path, selection can use another Image's pixels
-with the first Image's spacing. This change refuses TIFF when that grid
+with the first Image's spacing, including when that first Image is metadata-only.
+This change refuses TIFF when that grid
 disagrees with the selected Image's original calibration. It does not repair
 that registration geometry; the other outputs retain the reader's grid.
 Registration also does not convert between unlike moving and stationary units.

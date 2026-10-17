@@ -70,7 +70,7 @@ function planeIfds(pixels, imageCount) {
   const depth = integer(pixels, "SizeZ", NaN);
   if (!Number.isSafeInteger(depth) || depth < 1 || integer(pixels, "SizeC", NaN) !== 1 || integer(pixels, "SizeT", NaN) !== 1 || !DIMENSION_ORDERS.has(pixels.getAttribute("DimensionOrder"))) return null;
   const entries = children(pixels, "TiffData");
-  if (!entries.length) return imageCount === depth ? Array.from({ length: depth }, (_, z) => z) : null;
+  if (!entries.length) return null;
   const ifds = Array(depth);
   for (const entry of entries) {
     if (children(entry, "UUID").length || integer(entry, "FirstC", 0) !== 0 || integer(entry, "FirstT", 0) !== 0) return null;
