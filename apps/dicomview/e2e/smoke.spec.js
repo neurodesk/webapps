@@ -5,24 +5,24 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
+import { PREFIX_BYTES } from '../src/dicom-index.js';
 
 const [example] = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
 const exampleUrls = new Set(example.files.map((file) => file.url));
 const EXAMPLE_SERIES = 'Series 2: t1_mpr_tra_gk_v4 · 1 image';
-const SYNTHETIC_SERIES = 'Series 2: test_scan_2 · 1 image';
 
 const picker = (page) => page.getByRole('combobox', { name: 'Input', exact: true });
 const exampleState = (page) => page.locator('[data-neurodesk-examples]');
 const status = (page) => page.locator('#statusText');
 const headerRows = (page) => page.locator('#headerRows tr');
 
-// Synthetic 16 × 16 slices in place of the example's files: the failure paths need no network.
-async function serveSynthetic(page, respond = () => null) {
-  const slices = dicomSeries({ series: 2, slices: example.files.length });
+// The example's downloads, failed where respond() answers. Routed on the context so
+// requests made by the app's service worker are caught too.
+async function routeExample(page, respond) {
   const order = example.files.map((file) => file.url);
-  await page.route((url) => exampleUrls.has(url.href), (route) => {
+  await page.context().route((url) => exampleUrls.has(url.href), (route) => {
     const index = order.indexOf(route.request().url());
-    return respond(index, route) ?? route.fulfill({ body: slices[index].buffer });
+    return respond(index, route) ?? route.continue();
   });
 }
 
@@ -118,16 +118,16 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect(button).toHaveText('Summarize protocol');
 
   const workerScript = '**/assets/dicompare-worker-*.js';
-  await page.route(workerScript, (route) => route.fulfill({ status: 503, body: '' }));
+  await page.context().route(workerScript, (route) => route.fulfill({ status: 503, body: '' }));
   await button.click();
   await expect(status(page)).toContainText('Failed to load dicompare worker');
   await expect(status(page)).toHaveClass(/error/);
-  await page.unroute(workerScript);
+  await page.context().unroute(workerScript);
 
   // Hold each fetch of the worker script, so the cancel lands while start-up is still
   // fetching and the retry's fetch completes after the cancelled one's.
   const held = [];
-  await page.route(workerScript, (route) => { held.push(route); });
+  await page.context().route(workerScript, (route) => { held.push(route); });
   const workersBefore = await page.evaluate(() => window.blobWorkers.size);
   await button.click();
   await expect.poll(() => held.length).toBe(1);
@@ -138,7 +138,7 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect.poll(() => held.length).toBe(2);
   await held[0].continue();
   await held[1].continue();
-  await page.unroute(workerScript);
+  await page.context().unroute(workerScript);
   await expect(status(page)).toHaveText('1 acquisition summarised', { timeout: 600000 });
   expect(await page.evaluate(() => window.blobWorkers.size), 'the cancelled start-up created no worker').toBe(workersBefore + 1);
   await expect(page.locator('#protocolReport')).toBeVisible();
@@ -159,10 +159,10 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
   await expect(page.locator('#complianceReport .dicompare-status-fail').first()).toBeVisible();
 });
 
-for (const failure of ['download', 'unreadable files']) {
+for (const failure of ['download', 'corrupt download']) {
   test(`a failed example (${failure}) can be retried`, async ({ page }) => {
     let failing = true;
-    await serveSynthetic(page, (index, route) => {
+    await routeExample(page, (index, route) => {
       if (!failing) return null;
       if (failure === 'download') return index === 0 ? route.fulfill({ status: 503, body: '' }) : null;
       return route.fulfill({ body: 'not a DICOM file' });
@@ -170,22 +170,23 @@ for (const failure of ['download', 'unreadable files']) {
     await page.goto('./');
     await picker(page).selectOption(example.id);
     await expect(exampleState(page)).toHaveAttribute('data-example-state', 'error', { timeout: 60000 });
-    if (failure === 'unreadable files') await expect(status(page)).toHaveText(/No DICOM images in 120 files/);
+    if (failure === 'corrupt download') await expect(status(page)).toContainText('size mismatch');
     await expect(page.locator('#protocolButton')).toBeDisabled();
     await expect(picker(page)).toBeEnabled();
     failing = false;
     await picker(page).selectOption(example.id);
     await expect(exampleState(page)).toHaveAttribute('data-example-state', 'ready', { timeout: 60000 });
-    await expect(status(page)).toHaveText(SYNTHETIC_SERIES, { timeout: 60000 });
+    await expect(status(page)).toHaveText(EXAMPLE_SERIES, { timeout: 60000 });
   });
 }
 
 test('cancelling while headers are read commits nothing and permits a retry', async ({ page }) => {
-  await serveSynthetic(page);
   await page.goto('./');
-  await page.evaluate(() => {
+  await page.evaluate((prefixBytes) => {
     const read = Blob.prototype.arrayBuffer;
+    // Only a header read: the example's checksum reads take whole files.
     Blob.prototype.arrayBuffer = function () {
+      if (this.size !== prefixBytes) return read.call(this);
       const blob = this;
       return new Promise((resolve, reject) => {
         window.finishRead = () => {
@@ -194,7 +195,7 @@ test('cancelling while headers are read commits nothing and permits a retry', as
         };
       });
     };
-  });
+  }, PREFIX_BYTES);
   await picker(page).selectOption(example.id);
   await page.waitForFunction(() => typeof window.finishRead === 'function', null, { timeout: 60000 });
   await page.getByRole('button', { name: 'Cancel example download', exact: true }).click();
@@ -204,7 +205,7 @@ test('cancelling while headers are read commits nothing and permits a retry', as
   await expect(page.locator('#seriesList .nd-volume-toggle')).toHaveCount(0);
   await picker(page).selectOption(example.id);
   await expect(exampleState(page)).toHaveAttribute('data-example-state', 'ready', { timeout: 60000 });
-  await expect(status(page)).toHaveText(SYNTHETIC_SERIES, { timeout: 60000 });
+  await expect(status(page)).toHaveText(EXAMPLE_SERIES, { timeout: 60000 });
 });
 
 test('chosen files list every series, skip what is not DICOM, and switch series on View', async ({ page }) => {
