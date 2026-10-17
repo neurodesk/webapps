@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { deflateRawSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { dicomFile, dicomSeries, explicit, implicit, uint16 } from '../../../test-utils/dicom-fixture.mjs';
-import { MAX_PREFIX_BYTES, PREFIX_BYTES, headerBuffer, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
+import { MAX_PREFIX_BYTES, PREFIX_BYTES, analysisFiles, headerBuffer, indexDicom, indexFiles, readRecord } from '../src/dicom-index.js';
 import { seriesLabel, seriesSummary } from '../src/series-text.js';
 
 const arrayBuffer = (buffer) => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.length);
@@ -196,6 +196,22 @@ test('dicompare gets a Float Pixel Data image without its pixels', async () => {
   const { series } = await indexFiles([toFile({ name: 'float.dcm', buffer })]);
   assert.equal(series[0].files[0].headerBytes, buffer.length - pixels.length);
   assert.equal((await headerBuffer(series[0].files[0])).byteLength, buffer.length - pixels.length);
+});
+
+test('files sharing a path reach dicompare under distinct names that keep the path', async () => {
+  const [a, b] = dicomSeries({ series: 4, slices: 2 });
+  const records = (await indexFiles([toFile(a, 'scan/IM0001'), toFile(b, 'scan/IM0001')])).series[0].files;
+  const { fileNames, fileContents } = await analysisFiles(records);
+  assert.deepEqual(fileNames, ['scan/IM0001', 'scan/IM0001#2']);
+  assert.equal(fileContents.length, 2);
+});
+
+test('dicompare input over the memory limit is refused before it is sent, naming files and size', async () => {
+  const files = dicomSeries({ series: 4, slices: 40 }).map((file) => toFile(file));
+  const records = (await indexFiles(files)).series[0].files;
+  const each = (await headerBuffer(records[0])).byteLength;
+  await assert.rejects(analysisFiles(records, { limit: each * 35 }), /^Error: Protocol summary stopped: the headers of 40 of 40 files take \d+(\.\d)? MB, over the \d+(\.\d)? MB dicompare is given at most\.$/);
+  assert.equal((await analysisFiles(records, { limit: each * 40 })).fileContents.length, 40);
 });
 
 test('text, JSON, NIfTI and JPEG files are skipped after one prefix read', async () => {

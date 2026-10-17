@@ -250,6 +250,36 @@ export async function headerBuffer(record) {
   return file.slice(0, end ?? file.size).arrayBuffer();
 }
 
+// The worker copies what it is given into Pyodide's 32-bit WebAssembly heap, at most 4 GB,
+// where pydicom and pandas need room of their own; this keeps the input to an eighth of it.
+export const ANALYSIS_LIMIT = 512 * 1024 * 1024;
+
+const megabytes = (bytes) => (bytes / 1024 / 1024).toFixed(1).replace(/\.0$/, '');
+
+// dicompare's analyzeFiles payload: each file's header, keyed by its path. dicompare keys a
+// dict by name, so a repeated path gains #2, #3, … rather than replacing an earlier file.
+// Throws, before anything is sent, once the headers read so far pass limit bytes.
+export async function analysisFiles(records, { signal, limit = ANALYSIS_LIMIT } = {}) {
+  const fileContents = [];
+  let bytes = 0;
+  for (let start = 0; start < records.length; start += BATCH) {
+    const batch = await Promise.all(records.slice(start, start + BATCH).map(headerBuffer));
+    signal?.throwIfAborted();
+    fileContents.push(...batch);
+    bytes += batch.reduce((sum, buffer) => sum + buffer.byteLength, 0);
+    if (bytes > limit) {
+      throw new Error(`Protocol summary stopped: the headers of ${fileContents.length} of ${records.length} files take ${megabytes(bytes)} MB, over the ${megabytes(limit)} MB dicompare is given at most.`);
+    }
+  }
+  const seen = new Map();
+  const fileNames = records.map(({ path }) => {
+    const count = (seen.get(path) ?? 0) + 1;
+    seen.set(path, count);
+    return count === 1 ? path : `${path}#${count}`;
+  });
+  return { fileNames, fileContents };
+}
+
 // Reads the header of every file in batches, yielding between them so thousands of
 // files never freeze the page. onProgress(done, total) follows each batch.
 export async function indexFiles(files, { signal, onProgress = () => {} } = {}) {
