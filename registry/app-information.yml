@@ -1365,7 +1365,7 @@ apps:
         url: https://github.com/niivue/niivue
 
   dicomview:
-    privacy: Your DICOM files and their headers stay on your computer. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
+    privacy: Your DICOM files and their headers stay on your computer. Converted images are saved in the browser's own storage on this device until you choose Forget saved images or clear the site's data. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests.
     packages:
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion and BIDS sidecars }
       - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive viewer with window and level, layouts and colormaps }

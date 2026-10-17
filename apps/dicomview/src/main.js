@@ -17,9 +17,11 @@ import { readImageSeries } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
 import { APP } from './config.js';
+import { ConversionStore } from './conversions.js';
 import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
 import { ProtocolSession, SCHEMAS } from './protocol-session.js';
+import { openSavedConversions, seriesFingerprint } from './saved-conversions.js';
 import { checkOutcome, protocolTables } from './protocol-table.js';
 import { describeSeries, downloadFiles, seriesLabel, seriesSummary } from './series-text.js';
 import examples from '../examples.json';
@@ -60,9 +62,8 @@ const info = createInfoDialog();
 $('aboutBtn').onclick = () => info.open('About DICOM View', $('aboutContent'));
 $('privacyBtn').onclick = () => info.open('Privacy', $('privacyContent'));
 
-// What the user is looking at. Conversions are cached per series, failed or cancelled
-// ones dropped so selecting the series again retries. generation counts committed
-// inputs: a result computed from an earlier input is never written over a later one.
+// What the user is looking at. generation counts committed inputs: a result computed from
+// an earlier input is never written over a later one.
 const state = {
   generation: 0,
   index: null,
@@ -70,20 +71,20 @@ const state = {
   instance: 0,
   output: 0,
   outputs: null,
-  conversions: new Map(),
   view: 'image',
   acquisitions: null,
 };
 
-// Jobs run in lanes: reading headers ('index'), converting images ('viewer') and dicompare
-// ('protocol'). Reading a new input cancels every lane; otherwise the image and protocol
-// lanes run side by side. The status bar shows the most recent; its × cancels that one,
-// and the other's message returns after.
+// Jobs run in lanes: reading headers ('index'), showing a series ('viewer'), Convert all
+// ('batch') and dicompare ('protocol'). Reading a new input cancels every lane; otherwise
+// the lanes run side by side. The status bar shows the most recent; its × cancels that
+// one, and the others' messages return after.
 const jobs = new Map();
 let shown = null;
 
-function syncProtocolButton() {
+function syncButtons() {
   $('protocolButton').disabled = !state.index || jobs.has('index') || jobs.has('protocol');
+  $('convertAllButton').disabled = !state.index || jobs.has('index') || jobs.has('batch');
 }
 
 function assertGeneration(generation) {
@@ -103,7 +104,7 @@ function begin(lane, message) {
   shown = lane;
   progress.begin(message);
   status(message);
-  syncProtocolButton();
+  syncButtons();
   return controller;
 }
 
@@ -117,7 +118,7 @@ function report(lane, fraction, message) {
 function finish(lane, controller, message, { error = null } = {}) {
   if (jobs.get(lane)?.controller !== controller) return;
   jobs.delete(lane);
-  syncProtocolButton();
+  syncButtons();
   const cancelled = error?.name === 'AbortError';
   const text = cancelled ? `${message} cancelled` : error ? error.message : message;
   const [other] = jobs;
@@ -132,8 +133,15 @@ function finish(lane, controller, message, { error = null } = {}) {
   status(text, Boolean(error) && !cancelled);
 }
 
+// A message for the user while a job owns the status bar goes to the log instead.
+function notify(message, error = false) {
+  if (jobs.size && !error) log.log(message);
+  else status(message, error);
+}
+
 $('cancelButton').onclick = () => {
   if (shown === 'index') exampleControl.cancel();
+  if (shown === 'viewer') conversions.cancel(state.seriesUid);
   jobs.get(shown)?.controller.abort();
 };
 
@@ -184,6 +192,48 @@ const seriesList = createResultList({
   onDownload: (uid) => { void downloadSeries(uid); },
 });
 
+function renderSeriesList() {
+  if (!state.index) return;
+  seriesList.render(Object.fromEntries(state.index.series.map((series) => {
+    const converted = conversions.get(series.uid)?.state === 'done' ? ' · converted' : '';
+    return [series.uid, { description: `${seriesLabel(series)}${converted}` }];
+  })));
+  for (const row of seriesList.querySelectorAll('.nd-volume-toggle')) {
+    row.querySelector('.nd-view-btn').classList.toggle('active', row.dataset.stage === state.seriesUid);
+  }
+}
+
+// Converted series, kept across selections and, when the browser has an origin private
+// file system, across reloads. A storage failure only costs the saving: the conversion
+// stays in memory and the viewer goes on.
+const savedConversions = openSavedConversions();
+void savedConversions.then((store) => { $('forgetButton').disabled = !store; });
+const fingerprints = new WeakMap();
+function fingerprint(series) {
+  if (!fingerprints.has(series)) fingerprints.set(series, seriesFingerprint(series));
+  return fingerprints.get(series);
+}
+const conversions = new ConversionStore({
+  load: async (series) => {
+    const store = await savedConversions;
+    if (!store) return null;
+    try {
+      const outputs = await store.load(await fingerprint(series));
+      if (outputs) log.log(`${describeSeries(series)}: opened from the saved conversion`);
+      return outputs;
+    } catch (error) {
+      console.warn(`Saved conversion of ${series.uid} could not be read: ${error.message}`);
+      return null;
+    }
+  },
+  convert: (series, signal) => readImageSeries(series.files.map((record) => record.file), { signal, anonymizeSidecar: true }),
+  save: async (series, outputs) => {
+    const store = await savedConversions;
+    if (store) await store.save(await fingerprint(series), outputs);
+  },
+  onChange: renderSeriesList,
+});
+
 async function loadFiles(files, { signal, assertCurrent = () => {} } = {}) {
   for (const lane of jobs.keys()) jobs.get(lane).controller.abort();
   const controller = begin('index', 'Reading DICOM headers…');
@@ -221,7 +271,7 @@ function commit(index) {
   state.index = index;
   state.seriesUid = null;
   state.outputs = null;
-  state.conversions = new Map();
+  conversions.clear(new DOMException('A new input replaced this one', 'AbortError'));
   void clearImage();
   state.acquisitions = null;
   headerCache = new WeakMap();
@@ -230,13 +280,13 @@ function commit(index) {
   $('fileInfo').hidden = false;
   $('fileInfo').textContent = `${images} images · ${index.series.length} series${skipped}`;
   $('dropZone').classList.add('has-files');
-  syncProtocolButton();
+  syncButtons();
   $('protocolSummary').replaceChildren();
   $('complianceReport').replaceChildren();
   viewTab('header').hidden = false;
   viewTab('protocol').hidden = true;
   if (state.view === 'protocol') showView('header');
-  seriesList.render(Object.fromEntries(index.series.map((series) => [series.uid, { description: seriesLabel(series) }])));
+  renderSeriesList();
 }
 
 function importFiles(files) {
@@ -254,7 +304,7 @@ bindFileDrop($('dropZone'), async (files) => importFiles(await files));
 const exampleControl = createExampleSelector({
   examples,
   // The selector reports "loaded" once its files are in; by then a conversion may own the status bar.
-  onStatus: (message, error) => (jobs.size && !error ? log.log(message) : status(message, error)),
+  onStatus: notify,
   onLoad: async (_example, { signal, fetchFiles, assertCurrent }) => {
     const files = await fetchFiles();
     assertCurrent();
@@ -284,28 +334,20 @@ function selectSeries(uid) {
   void showSeries(series);
 }
 
-function convert(series, signal) {
-  let conversion = state.conversions.get(series.uid);
-  if (!conversion) {
-    conversion = readImageSeries(series.files.map((record) => record.file), { signal, anonymizeSidecar: true });
-    state.conversions.set(series.uid, conversion);
-    conversion.catch(() => {
-      if (state.conversions.get(series.uid) === conversion) state.conversions.delete(series.uid);
-    });
-  }
-  return conversion;
-}
-
 function untilAborted(signal) {
+  if (!signal) return new Promise(() => {});
   return new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
 }
 
+// The job in the status bar waits for the conversion; it does not own it. Choosing another
+// series ends the wait and the conversion goes on; the footer × ends both.
 async function showSeries(series) {
   const { generation } = state;
-  const controller = begin('viewer', `${describeSeries(series)} · converting…`);
+  const ready = conversions.get(series.uid)?.state === 'done';
+  const controller = begin('viewer', `${describeSeries(series)} · ${ready ? 'loading…' : 'converting…'}`);
   let outputs = null;
   try {
-    outputs = await convert(series, controller.signal);
+    outputs = await Promise.race([conversions.request(series), untilAborted(controller.signal)]);
     controller.signal.throwIfAborted();
     assertGeneration(generation);
     if (state.seriesUid !== series.uid) return;
@@ -370,9 +412,9 @@ $('outputSelect').addEventListener('change', () => {
 async function downloadSeries(uid) {
   const series = state.index?.series.find((candidate) => candidate.uid === uid);
   if (!series) return;
-  if (uid !== state.seriesUid || !state.conversions.has(uid)) selectSeries(uid);
+  if (uid !== state.seriesUid || conversions.get(uid)?.state === 'failed') selectSeries(uid);
   try {
-    const outputs = await state.conversions.get(uid);
+    const outputs = await conversions.request(series);
     for (const { image, sidecar } of downloadFiles(series, outputs, state.index.series)) {
       downloadFile(image);
       if (sidecar) downloadFile(sidecar);
@@ -381,6 +423,33 @@ async function downloadSeries(uid) {
     // The conversion reports its own failure in the status bar.
   }
 }
+
+async function convertAll() {
+  const controller = begin('batch', 'Convert all…');
+  try {
+    const counts = await conversions.convertAll(state.index.series, {
+      signal: controller.signal,
+      onProgress: (done, total) => { if (total) report('batch', done / total, `Converting ${Math.min(done + 1, total)} of ${total} series`); },
+    });
+    const notes = [counts.failed ? `${counts.failed} failed` : '', counts.skipped ? `${counts.skipped} already converted` : ''].filter(Boolean);
+    const message = `${counts.converted} series converted${notes.length ? ` · ${notes.join(' · ')}` : ''}`;
+    finish('batch', controller, message, { error: counts.failed ? new Error(message) : null });
+  } catch (error) {
+    finish('batch', controller, 'Convert all', { error });
+  }
+}
+
+$('convertAllButton').addEventListener('click', () => { void convertAll(); });
+
+$('forgetButton').addEventListener('click', async () => {
+  try {
+    await (await savedConversions)?.forget();
+    conversions.forget();
+    notify('Saved images removed from this browser');
+  } catch (error) {
+    notify(`Saved images could not be removed: ${error.message}`, true);
+  }
+});
 
 
 let dictionaryPromise = null;
@@ -560,7 +629,7 @@ registerAppAutomation({
     'index-series': async ({ inputs, signal }) => {
       await loadFiles(inputs.dicom, { signal });
       const series = currentSeries();
-      const outputs = await convert(series, signal);
+      const outputs = await Promise.race([conversions.request(series), untilAborted(signal)]);
       const index = state.index.series.map((entry) => ({
         uid: entry.uid,
         number: entry.number,
