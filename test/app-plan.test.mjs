@@ -511,6 +511,34 @@ test('deleting an imported root helper still selects the app that imports it', a
   assert.equal(plan.site, true);
 });
 
+test('a path named in a line comment is not an input, but code, JSDoc types and triple-slash directives are', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-comment-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const directory of ['apps/lcmodel', 'scripts/lib', 'exes/prose', 'exes/code', 'packages/typed', 'packages/directive', '.github/workflows']) {
+    await mkdir(join(root, directory), { recursive: true });
+  }
+  await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: {} }));
+  await writeFile(join(root, '.github/workflows/ci.yml'), JSON.stringify({ jobs: Object.fromEntries(['composite-site', ...CATALOG_JOBS].map((name) => [name, { steps: [{ run: 'echo fixture' }] }])) }));
+  await writeFile(join(root, 'apps/lcmodel/main.js'), "import '../../scripts/lib/config.mjs';\n");
+  await writeFile(join(root, 'scripts/lib/config.mjs'), [
+    '// The composite build (scripts/build-site.mjs) mirrors exes/prose/src/lib.rs.',
+    "  // registry/standalone.json is described here, not read.",
+    "/** @type {import('../../packages/typed/index.js').Value} */",
+    '/// <reference path="../../packages/directive/index.d.ts" />',
+    "export const fixture = 'exes/code/data.bin'; // trailing comments keep their line",
+    '',
+  ].join('\n'));
+  await writeFile(join(root, 'scripts/build-site.mjs'), 'export {};\n');
+  const graph = await loadConservativeWorkspaceGraph(root);
+  const registry = await loadAppsRegistry();
+  const selects = (path) => createAppPlan(registry, [path], graph).selected.map((app) => app.id);
+  assert.deepEqual(selects('exes/prose/src/lib.rs'), []);
+  assert.deepEqual(selects('scripts/build-site.mjs'), []);
+  assert.deepEqual(selects('exes/code/data.bin'), ['lcmodel']);
+  assert.deepEqual(selects('packages/typed/index.js'), ['lcmodel']);
+  assert.deepEqual(selects('packages/directive/index.d.ts'), ['lcmodel']);
+});
+
 test('removing a root script still selects the CI job that calls it', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'app-plan-deleted-script-'));
   t.after(() => rm(root, { recursive: true, force: true }));

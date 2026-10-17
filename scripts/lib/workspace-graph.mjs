@@ -38,6 +38,9 @@ const ROOT_GLOB = /['"`]((?:scripts|test-utils|test)\/[\w/-]+)\/[^'"`]*\*[^'"`]*
 const ROOT_DIRS = ['scripts/', 'test-utils/', 'registry/', 'test/', 'packages/', 'exes/'];
 const ROOT_CONFIG = /^[\w.-]+\.(?:[cm]?[jt]s|json)$/;
 const SOURCE_FILE = /\.[cm]?[jt]s$/;
+// A whole line that is a `//` comment. Triple-slash lines stay: TypeScript's
+// `/// <reference path>` directives are compiler inputs.
+const LINE_COMMENT = /^[ \t]*\/\/(?!\/).*$/gm;
 const ROOT_SCRIPT_CALL = /\bpnpm (?:run )?([\w:-]+)/g;
 // Lint and mutation-testing configs: their own workflows read them, composite-site never does.
 export const INDEPENDENT_CONFIG = /^(?:eslint|knip|stryker)\.config\.m?js$/;
@@ -168,8 +171,12 @@ export async function loadConservativeWorkspaceGraph(root) {
     const uses = new Set();
     edges.set(file, uses);
     if (!SOURCE_FILE.test(file)) continue;
-    const text = await readFile(join(root, file), 'utf8').catch(() => null);
-    if (text === null) continue;
+    const source = await readFile(join(root, file), 'utf8').catch(() => null);
+    if (source === null) continue;
+    // A path in a line comment is prose, not an input: vite-app-config.mjs
+    // naming the composite build in a comment made every app depend on it.
+    // Block comments stay, since JSDoc `import()` types are typecheck inputs.
+    const text = source.replace(LINE_COMMENT, '');
     for (const [, top, name, inner] of text.matchAll(SCRIPT_REFERENCE)) {
       if (!nodeSet.has(`${top}/${name}`)) continue;
       const target = inner && `${top}/${name}${inner}`;

@@ -189,6 +189,29 @@ scripts) where the oracle expects 0–3, and #292 selects 30 through `registry/s
 
 Narrowing these needs proof that app builds do not read those files; this PR does not change them.
 
+**Follow-up (comment edges).** The `exes/synthseg` edge came from a comment in `resource-limits.js` ("Preserve
+exes/synthseg/src/nifti.rs arithmetic order"). The workspace graph now ignores whole `//` comment lines when it
+scans root files. Block comments and `///` directives stay, because JSDoc `import()` types and triple-slash references are typecheck inputs. Six edges disappear:
+
+- `resource-limits.js` → `exes/synthseg`;
+- `vite-app-config.mjs` → `scripts/build-site.mjs` and `scripts/build-static.mjs`, from its header-policy comment. That
+  comment had put the composite build's whole input set (the landing page, the runtime store, `scripts/lib/standalone.mjs`)
+  into every app;
+- `e2e-test-data.mjs` → `packages/lcmodel/validation/reference.mjs` and that file's two reads. lcmodel still reaches
+  `packages/lcmodel`.
+
+Every app now reaches `exes/synthseg` only through a real reference: 11 apps instead of all of them (32 since dicomview
+was added). `registry/standalone.json` stays a real input. `theme-app-dist.mjs` copies it into every themed app, and the
+dev shell links it.
+
+Replayed over the last 70 merged pull requests plus #240–#247 (78 in all), with no `--overlay`:
+
+- oracle misses: 0 before, 0 after;
+- `app-tests` jobs: 1490 before, 1450 after; `browser-e2e`: 1532 before, 1492 after; macOS GPU: 296 before, 291 after;
+- changed rows: #314 (31 → 11 apps, oracle 3), #311 (31 → 12, oracle 0) and #321 (30 → 29, oracle 1).
+
+`registry/standalone.json` (#292) remains open.
+
 ## Measurements
 
 Window: `ci` runs created 2026-10-13 00:00 to 2026-10-15 18:30 UTC.
