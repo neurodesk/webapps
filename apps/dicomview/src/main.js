@@ -1,4 +1,3 @@
-import NiiVue, { SLICE_TYPE } from '@niivue/niivue';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-imaging-workspace';
 import {
@@ -15,6 +14,7 @@ import {
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { registerAppAutomation } from '@neurodesk/webapp-components/automation';
 import { readImageSeries } from '@neurodesk/runtime-support/dcm2niix-client';
+import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
 import { APP } from './config.js';
 import { indexFiles } from './dicom-index.js';
@@ -28,12 +28,6 @@ const $ = (id) => document.getElementById(id);
 // The explorer reads at most this much of an instance; enhanced multiframe headers can run to megabytes.
 const HEADER_BYTES = 16 * 1024 * 1024;
 const ROW_LIMIT = 2000;
-const LAYOUTS = {
-  multiplanar: SLICE_TYPE.MULTIPLANAR,
-  axial: SLICE_TYPE.AXIAL,
-  coronal: SLICE_TYPE.CORONAL,
-  sagittal: SLICE_TYPE.SAGITTAL,
-};
 
 mountImagingWorkspace({
   controls: '#controls',
@@ -52,10 +46,7 @@ const toolbar = createViewerToolbar({
   download: false,
   screenshot: false,
   views: [
-    { id: 'multiplanar', label: '3-Plane', active: true },
-    { id: 'axial', label: 'Axial' },
-    { id: 'coronal', label: 'Coronal' },
-    { id: 'sagittal', label: 'Sagittal' },
+    { id: 'image', label: 'Image', active: true },
     { id: 'header', label: 'Header', hidden: true },
     { id: 'protocol', label: 'Protocol', hidden: true },
   ].map((view) => ({ ...view, onClick: () => showView(view.id) })),
@@ -80,7 +71,7 @@ const state = {
   output: 0,
   outputs: null,
   conversions: new Map(),
-  view: 'multiplanar',
+  view: 'image',
   acquisitions: null,
 };
 
@@ -146,15 +137,24 @@ $('cancelButton').onclick = () => {
   jobs.get(shown)?.controller.abort();
 };
 
-const viewer = new NiiVue({ isDragDropEnabled: false, backgroundColor: [0, 0, 0, 1] });
+// FreeBrowse's header holds the layouts and the right-drag mode; its Volumes panel holds
+// contrast (window and level), colormap and opacity. Below 700 px that panel covers the
+// image (imaging-workspace.css), so it starts closed there; the header button opens it.
+const embed = mountViewer($('freebrowseViewer'), {
+  isDragDropEnabled: false,
+  backgroundColor: [0, 0, 0, 1],
+  backend: 'webgl2',
+}, { canvasLabel: 'Image of the selected series', sidebar: $('freebrowseViewer').clientWidth > 700 });
+const viewer = embed.nv;
 let viewerReady = false;
 const initialized = (async () => {
   try {
-    await viewer.attachTo('gl1');
-    viewer.sliceType = SLICE_TYPE.MULTIPLANAR;
+    await embed.ready;
     viewer.addEventListener('locationChange', (event) => { $('location').textContent = event.detail?.string ?? ''; });
     viewerReady = true;
   } catch (error) {
+    embed.destroy();
+    $('freebrowseViewer').hidden = true;
     $('viewerNotice').hidden = false;
     $('viewerNotice').textContent = `Images cannot be shown in this browser: ${error.message}. Headers and protocol still work.`;
   }
@@ -171,10 +171,6 @@ function showView(id) {
   $('headerReport').hidden = id !== 'header';
   $('protocolReport').hidden = id !== 'protocol';
   if (id === 'header') void renderHeader();
-  if (LAYOUTS[id] !== undefined && viewerReady) {
-    viewer.sliceType = LAYOUTS[id];
-    viewer.drawScene();
-  }
 }
 
 function viewTab(id) {
@@ -337,11 +333,13 @@ let viewerLoads = initialized;
 function showOutput() {
   const output = state.outputs?.[state.output];
   if (!output) return Promise.resolve();
-  $('imageLabel').textContent = output.image.name;
+  // FreeBrowse lists and saves the volume by name; dcm2niix's carries the study date.
+  const { name } = downloadFiles(currentSeries(), state.outputs, state.index.series)[state.output].image;
+  $('imageLabel').textContent = name;
   if (state.view === 'header' && $('headerSource').value === 'sidecar') void renderHeader();
   const load = viewerLoads.then(async () => {
     if (!viewerReady || state.outputs?.[state.output] !== output) return;
-    await viewer.loadVolumes([{ url: output.image, name: output.image.name }]);
+    await viewer.loadVolumes([{ url: output.image, name }]);
     $('emptyState').hidden = true;
   });
   viewerLoads = load.catch(() => {});

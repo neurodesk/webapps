@@ -58,7 +58,7 @@
 
     <main id="viewer">
       <div class="nd-viewer-canvas-wrapper">
-        <canvas id="gl1" aria-label="Image of the selected series"></canvas>
+        <div id="freebrowseViewer" class="nd-viewer-embed"></div>
         <p id="emptyState" class="nd-viewer-empty">Drop a DICOM folder anywhere, or choose an example.</p>
         <p id="viewerNotice" class="nd-viewer-notice" hidden></p>
         <section id="headerReport" class="nd-viewer-report" aria-label="DICOM header" hidden>
@@ -107,7 +107,7 @@
     </footer>
 
     <template id="aboutContent">
-      <p>DICOM View opens a folder of DICOM files in the browser and lists the series in it, with each series’ size and main acquisition parameters. Choosing a series converts it to NIfTI with dcm2niix and shows it in NiiVue; a series that dcm2niix splits, such as one with several echoes or magnitude and phase, offers each image. The Header view lists every element of an instance, nested sequences included, names it from the DICOM dictionary, and can keep only the fields that differ between the instances of the series. It also shows the BIDS sidecar dcm2niix writes. Protocol runs dicompare in Python in the browser to group the files into acquisitions and list their parameters, and checks them against a schema from the dicompare library. Fields that vary are marked in bold. Compliance checks compare parameters with a published protocol; they are not a clinical quality assessment.</p>
+      <p>DICOM View opens a folder of DICOM files in the browser and lists the series in it, with each series’ size and main acquisition parameters. Choosing a series converts it to NIfTI with dcm2niix and shows it in FreeBrowse, a NiiVue viewer with contrast (window and level), colormap and layout controls; a series that dcm2niix splits, such as one with several echoes or magnitude and phase, offers each image. The Header view lists every element of an instance, nested sequences included, names it from the DICOM dictionary, and can keep only the fields that differ between the instances of the series. It also shows the BIDS sidecar dcm2niix writes. Protocol runs dicompare in Python in the browser to group the files into acquisitions and list their parameters, and checks them against a schema from the dicompare library. Fields that vary are marked in bold. Compliance checks compare parameters with a published protocol; they are not a clinical quality assessment.</p>
     </template>
     <template id="privacyContent"><p>Files are read and converted in this browser and are never uploaded. Python and dicompare download from their public package hosts the first time a protocol is summarised; your files are not sent. The example is downloaded from Hugging Face at a pinned revision.</p></template>
 
