@@ -16,5 +16,7 @@ so voxels get the same AR(1) groups.
 
 Differences from glm.py: rank-deficient designs, empty masks and mismatched confounds fail with a message;
 a zero-variance voxel gets t 0 (NumPy gives inf/nan); `t_display` agrees with SciPy to about 1e-14.
+Confound cells must be finite numbers. NaN, infinity and numeric overflow fail with the TSV row and column
+name instead of producing zero maps. The documented `n/a` and empty cells still read as zero.
 Fixed here, still open in glm.py: short `events.tsv` rows read as empty cells; a NaN `vox_offset` is
 rejected; the sidecar is found for `.nii` as well as `.nii.gz`; an output named `.nii` is written uncompressed.

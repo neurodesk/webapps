@@ -131,31 +131,38 @@ pub fn gzip(bytes: &[u8]) -> Vec<u8> {
 pub fn confounds(text: &str) -> Result<Vec<(String, Vec<f64>)>, String> {
     let mut lines = text
         .lines()
-        .map(|l| l.trim_end_matches('\r'))
-        .filter(|l| !l.is_empty());
+        .enumerate()
+        .map(|(r, l)| (r + 1, l.trim_end_matches('\r')))
+        .filter(|(_, l)| !l.is_empty());
     let mut cols: Vec<(String, Vec<f64>)> = lines
         .next()
-        .unwrap_or("")
+        .map_or("", |(_, l)| l)
         .split('\t')
         .map(|h| (h.to_string(), vec![]))
         .collect();
-    for (r, line) in lines.enumerate() {
+    for (r, line) in lines {
         let cells: Vec<&str> = line.split('\t').collect();
         if cells.len() != cols.len() {
             return Err(format!(
                 "row {} has {} cells, header has {}",
-                r + 2,
+                r,
                 cells.len(),
                 cols.len()
             ));
         }
         for ((name, col), cell) in cols.iter_mut().zip(cells) {
-            col.push(match cell {
+            let value = match cell {
                 "n/a" | "" => 0.0,
                 v => v
-                    .parse()
-                    .map_err(|_| format!("column {name}: '{v}' is not a number"))?,
-            });
+                    .parse::<f64>()
+                    .map_err(|_| format!("row {r}, column {name}: '{v}' is not a number"))?,
+            };
+            if !value.is_finite() {
+                return Err(format!(
+                    "row {r}, column {name}: '{cell}' is not a finite number"
+                ));
+            }
+            col.push(value);
         }
     }
     Ok(cols)

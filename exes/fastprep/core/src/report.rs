@@ -1092,7 +1092,7 @@ pub async fn report<H: Host>(
             "<code>{}</code><br>{} vols × TR {} s",
             esc(&name),
             bold.hdr.shape.get(3).copied().unwrap_or(1),
-            py::value(&meta["RepetitionTime"])
+            esc(&py::value(&meta["RepetitionTime"]))
         );
         if !bold.echoes.is_empty() {
             fact += &format!(", {} echoes (T2*-combined)", bold.echoes.len());

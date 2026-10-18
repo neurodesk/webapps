@@ -34,6 +34,8 @@ Differences from fastprep.py:
 - Opposite-PE (PEPOLAR) fieldmaps are reported as unusable (sucor is deferred); those runs get SynthSR SDC when
   `--synthsr` allows it.
 - Only single-file NIfTI-1 (`.nii`, `.nii.gz`) inputs are accepted.
+- BOLD `RepetitionTime` must be a positive finite JSON number. Discovery rejects strings, nulls and
+  non-positive values before preprocessing. Reports escape metadata at the HTML boundary.
 - `commands.sh` starts each invocation with an `export` line of the tool environment.
 
 Fixed here; fastprep.py still has these:
@@ -41,6 +43,7 @@ Fixed here; fastprep.py still has these:
 - Resume refreshes the chosen BOLD→T1 coreg transform when it changes, and its QC reference whenever the chosen
   candidate reran; Python keeps both once they exist.
 - Tissue PVE maps follow the segmentation step's resume record (work copies are kept), not an existence check.
+- GLM completion records include the BOLD JSON sidecar, so a `StartTime` change reruns the task analysis.
 - SliceTiming is reversed for `SliceEncodingDirection` `k-`; for `i`/`j` slice timing is skipped with a warning.
 - A subject with neither T1w nor BOLD is skipped instead of crashing.
 - A SliceTiming list with non-numbers is treated as absent (no STC), instead of writing it through.

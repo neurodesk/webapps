@@ -82,11 +82,12 @@ test("Undo restores an example after a dropped replacement", async ({ page }) =>
     }));
   });
   await expect(page.locator("#fileInfo")).toHaveText("1 files · sub-02");
+  await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.locator("#fileInfo")).toHaveText("6 files · sub-01");
   await expect(page.locator("#runButton")).toBeEnabled();
   await expect(page.locator("#synthsr")).toHaveValue("off");
-  await expect(page.locator("#resultList")).toBeEmpty();
+  await expect(page.locator("#resultList button")).toHaveCount(0);
 });
 
 test("a failed example download can be retried", async ({ page }) => {

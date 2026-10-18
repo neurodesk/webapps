@@ -96,6 +96,7 @@ function setDataset(files) {
   $("emptyState").hidden = true;
   $("runButton").disabled = false;
   status(subjects.size > 1 ? "Several subjects: only the first is processed here." : "Dataset loaded");
+  $("imageInput").dispatchEvent(new CustomEvent("nd-files", { bubbles: true, detail: { files } }));
 }
 
 function finish(message, success = false) {

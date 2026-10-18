@@ -246,6 +246,16 @@ pub async fn discover<H: Host>(
                 py::list_repr(&missing)
             ));
         }
+        if suffix == "bold"
+            && !meta["RepetitionTime"]
+                .as_f64()
+                .is_some_and(|tr| tr.is_finite() && tr > 0.0)
+        {
+            return Err(format!(
+                "{}: RepetitionTime must be a positive finite number",
+                file_name(rel)
+            ));
+        }
         let img = Image {
             path,
             rel: rel.clone(),

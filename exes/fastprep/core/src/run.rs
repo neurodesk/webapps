@@ -256,12 +256,23 @@ impl<H: Host> Ctx<H> {
         }
         let first = outputs[0].as_str();
         let outs: Vec<&str> = outputs.iter().map(String::as_str).collect();
+        // GLM reads the BOLD sidecar implicitly in both its native and browser drivers.
+        let glm_sidecar = if file_name(&tool) == "glm" {
+            argv[1..]
+                .iter()
+                .filter(|p| !outs.contains(&p.as_str()))
+                .find_map(|p| p.strip_suffix(".gz").unwrap_or(p).strip_suffix(".nii"))
+                .map(|stem| format!("{stem}.json"))
+        } else {
+            None
+        };
         // existing files named on the command line (including undeclared side outputs), so a rerun upstream
         // invalidates this step without hashing image payloads
         let inputs = || -> Vec<&str> {
             argv[1..]
                 .iter()
                 .map(|a| a.strip_prefix('@').unwrap_or(a))
+                .chain(glm_sidecar.as_deref())
                 .filter(|a| !outs.contains(a) && self.h.stat(a).is_some())
                 .collect()
         };
