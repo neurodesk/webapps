@@ -28,6 +28,10 @@ function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function isMapping(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
 function parseLockfile(text, side) {
   let lock;
   try {
@@ -37,6 +41,11 @@ function parseLockfile(text, side) {
   }
   if (lock?.lockfileVersion !== SUPPORTED_VERSION) {
     throw new LockfileAnalysisError(`the ${side} pnpm-lock.yaml has lockfileVersion ${lock?.lockfileVersion}, not ${SUPPORTED_VERSION}`);
+  }
+  for (const section of RESOLUTION_SECTIONS) {
+    if (lock[section] !== undefined && !isMapping(lock[section])) {
+      throw new LockfileAnalysisError(`the ${side} pnpm-lock.yaml has an invalid ${section} section`);
+    }
   }
   return { importers: {}, packages: {}, snapshots: {}, ...lock };
 }
@@ -49,7 +58,12 @@ function packageKey(snapshot) {
 // A dependency resolves to `name@version`, or, for an npm: alias, to the version itself.
 function snapshotOf(lock, name, version, owner) {
   for (const key of [`${name}@${version}`, String(version)]) {
-    if (Object.hasOwn(lock.snapshots, key)) return key;
+    if (!Object.hasOwn(lock.snapshots, key)) continue;
+    const metadata = lock.packages[packageKey(key)];
+    if (!isMapping(metadata) || !isMapping(metadata.resolution) || !Object.keys(metadata.resolution).length) {
+      throw new LockfileAnalysisError(`pnpm-lock.yaml snapshot ${key} for ${owner} has missing or invalid package metadata`);
+    }
+    return key;
   }
   throw new LockfileAnalysisError(`pnpm-lock.yaml resolves ${name} for ${owner} to ${version}, which has no snapshot`);
 }
@@ -91,12 +105,23 @@ function linkedImporters(lock, path) {
 }
 
 // Map of affected importer path ('.', 'apps/x', 'packages/y', ...) to why.
-export function lockfileImpact({ before, after }) {
+export function lockfileImpact({ before, after }, { independentRootDevDependencies = [] } = {}) {
   const base = parseLockfile(before, 'base');
   const head = parseLockfile(after, 'head');
   for (const section of new Set([...Object.keys(base), ...Object.keys(head)])) {
     if (!RESOLUTION_SECTIONS.has(section) && !same(base[section], head[section])) {
       throw new LockfileAnalysisError(`pnpm-lock.yaml changed its ${section} section, which can alter every resolution`);
+    }
+  }
+  if (independentRootDevDependencies.length) {
+    for (const lock of [base, head]) {
+      // Validate tool resolutions too, before removing their independent roots.
+      closure(lock, '.');
+      const importer = lock.importers['.'];
+      if (!importer?.devDependencies) continue;
+      const remaining = Object.fromEntries(Object.entries(importer.devDependencies).filter(([name]) => !independentRootDevDependencies.includes(name)));
+      if (Object.keys(remaining).length) importer.devDependencies = remaining;
+      else delete importer.devDependencies;
     }
   }
   const changed = (key) => !same(base.snapshots[key], head.snapshots[key])

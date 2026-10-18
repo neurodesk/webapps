@@ -217,7 +217,7 @@ test('root package.json script edits count only where ci.yml runs them', async (
   const registry = await loadAppsRegistry();
   const scripts = { build: 'a', 'new-app': 'b', 'test:mobile': 'c' };
   const resolved = await graph;
-  const plan = (after) => createAppPlan(registry, ['package.json'], resolved, new Map([['package.json', manifest({ scripts }, after)]]));
+  const plan = (after) => createAppPlan(registry, ['package.json'], resolved, new Map([['package.json', manifest({ scripts }, after)], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]));
   assert.deepEqual(plan({ scripts: { ...scripts, 'new-app': 'B' } }).selected, []);
   assert.equal(plan({ scripts: { ...scripts, 'new-app': 'B' } }).site, false);
   const site = plan({ scripts: { ...scripts, 'test:mobile': 'C' } });
@@ -268,6 +268,72 @@ async function lockPlan(after) {
   const registry = await loadAppsRegistry();
   return createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(baseLock, after)]]));
 }
+
+test('root Knip and Stryker changes run their independent workflows without selecting apps', async () => {
+  const registry = await loadAppsRegistry();
+  for (const name of ['knip', '@stryker-mutator/core']) {
+    const before = { devDependencies: { [name]: '1.0.0', esbuild: '1.0.0' }, scripts: {} };
+    const after = { devDependencies: { [name]: '2.0.0', esbuild: '1.0.0' }, scripts: { 'quality:unused': 'node scripts/report-unused-code.mjs' } };
+    const root = changeLock(lock => {
+      lock.importers['.'].devDependencies[name] = dep('1.0.0');
+      resolve(lock, `${name}@1.0.0`);
+    });
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)], ['pnpm-lock.yaml', manifest(root, root)]]));
+    assert.deepEqual(plan.selected, [], name);
+    assert.equal(plan.site, false, name);
+    assert.equal(plan.reasons.fallback, null, name);
+    const next = structuredClone(root);
+    next.importers['.'].devDependencies[name] = dep('2.0.0');
+    resolve(next, `${name}@2.0.0`);
+    const locked = createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(root, next)]]));
+    assert.deepEqual(locked.selected, [], name);
+    assert.equal(locked.site, false, name);
+  }
+});
+
+test('missing root tool package metadata selects the full catalog with a fallback reason', async () => {
+  const registry = await loadAppsRegistry();
+  const before = changeLock(lock => { lock.importers['.'].devDependencies.knip = dep('5.0.0'); });
+  const invalid = structuredClone(before);
+  delete invalid.packages['knip@5.0.0'];
+  for (const [base, head] of [[before, invalid], [invalid, before]]) {
+    for (const path of ['pnpm-lock.yaml', 'package.json']) {
+      const plan = createAppPlan(registry, [path], await graph, new Map([
+        ['pnpm-lock.yaml', manifest(base, head)],
+        ['package.json', manifest({ devDependencies: { knip: '5.0.0' } }, { devDependencies: { knip: '^5.0.0' } })],
+      ]));
+      assert.equal(plan.allApps, true, path);
+      assert.equal(plan.site, true, path);
+      assert.match(plan.reasons.fallback, /knip@5\.0\.0.*package metadata/, path);
+    }
+  }
+});
+
+test('unknown root tools, runtime dependencies and mixed changes still select the catalog', async () => {
+  const registry = await loadAppsRegistry();
+  for (const [before, after] of [
+    [{ devDependencies: { esbuild: '1.0.0' } }, { devDependencies: { esbuild: '2.0.0' } }],
+    [{ dependencies: { knip: '1.0.0' } }, { dependencies: { knip: '2.0.0' } }],
+    [{ devDependencies: { knip: '1.0.0' } }, { devDependencies: { knip: '2.0.0' }, engines: { node: '>=24' } }],
+  ]) {
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]));
+    assert.equal(plan.selected.length, registry.apps.length);
+    assert.ok(plan.reasons.fallback);
+  }
+});
+
+test('Knip and Stryker remain independent of app, native and browser inputs', async () => {
+  const paths = execFileSync('git', ['ls-files', '-z', '--', 'apps', 'packages', 'exes', 'test-utils'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\0').filter(path => /\.(?:[cm]?[jt]sx?|json|ya?ml|toml|sh|py|rs)$|\/Makefile$/.test(path));
+  for (const path of paths) {
+    assert.doesNotMatch(await readFile(join(repoRoot, path), 'utf8'), /\bknip\b|@stryker-mutator\/core|\bstryker\b/, `${path} now consumes an independent root tool; revisit its CI ownership`);
+  }
+  for (const [file, command] of [['unused-code', 'pnpm quality:unused'], ['mutation-quality', 'pnpm quality:mutations:smoke']]) {
+    const workflow = parse(await readFile(join(repoRoot, `.github/workflows/${file}.yml`), 'utf8'));
+    assert.ok(Object.hasOwn(workflow.on, 'pull_request'), `${file} still runs on every PR`);
+    assert.ok(Object.values(workflow.jobs).some(job => job.steps.some(step => step.run === command)), command);
+  }
+});
 
 test('a lockfile-only runtime upgrade selects the apps that resolve it', async () => {
   const plan = await lockPlan(changeLock((lock) => {
@@ -523,7 +589,7 @@ test('removing a root script still selects the CI job that calls it', async (t) 
     'browser-e2e-gpu': { steps: [{ run: 'echo fixture' }] },
   } }));
   const registry = await loadAppsRegistry();
-  const manifests = new Map([['package.json', manifest({ scripts: { build: 'node scripts/build.mjs' } }, { scripts: {} })]]);
+  const manifests = new Map([['package.json', manifest({ scripts: { build: 'node scripts/build.mjs' } }, { scripts: {} })], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]);
   const plan = createAppPlan(registry, ['package.json'], await loadConservativeWorkspaceGraph(root), manifests);
   assert.deepEqual(plan.selected, []);
   assert.equal(plan.site, true);
@@ -602,6 +668,55 @@ test('workflow outputs include the fallback reason and complete matrices', async
   assert.equal(outputs.all_apps, 'true');
   assert.equal(outputs.has_site, 'true');
   assert.deepEqual(JSON.parse(outputs.selected_ids), (await loadAppsRegistry()).apps.map(app => app.id));
+});
+
+test('manifest-only tool changes validate the unchanged lockfile through the CLI', async (t) => {
+  for (const name of ['knip', '@stryker-mutator/core']) {
+    for (const variant of ['valid', 'missing metadata', 'invalid resolution', 'missing snapshot', 'unparsable', 'unavailable']) {
+      await t.test(`${name}: ${variant}`, async (t) => {
+        const { root, run } = await plannerFixture(t);
+        const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+        git('init', '--quiet');
+        const pkg = { type: 'module', devDependencies: { [name]: '1.0.0' }, scripts: {} };
+        await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+        const lock = changeLock(lock => {
+          lock.importers['.'].devDependencies[name] = dep('1.0.0');
+          resolve(lock, `${name}@1.0.0`);
+        });
+        if (variant === 'missing metadata') delete lock.packages[`${name}@1.0.0`];
+        if (variant === 'invalid resolution') lock.packages[`${name}@1.0.0`].resolution = {};
+        if (variant === 'missing snapshot') delete lock.snapshots[`${name}@1.0.0`];
+        if (variant !== 'unavailable') {
+          await writeFile(join(root, 'pnpm-lock.yaml'), variant === 'unparsable' ? '[invalid' : stringify(lock));
+          git('add', 'pnpm-lock.yaml');
+        }
+        git('add', 'package.json');
+        git('commit', '--quiet', '-m', 'base');
+        const base = git('rev-parse', 'HEAD');
+        pkg.devDependencies[name] = '^1.0.0';
+        await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+        git('commit', '--quiet', '-am', 'manifest only');
+        const result = run('--base', base, '--head', 'HEAD');
+        assert.equal(result.status, 0, result.stderr);
+        const output = JSON.parse(result.stdout);
+        assert.deepEqual(output.changedPaths, ['package.json']);
+        if (variant === 'valid') {
+          assert.deepEqual(JSON.parse(output.selected_ids), []);
+          assert.equal(output.has_site, 'false');
+          assert.equal(output.fallback_reason, '');
+        } else {
+          assert.equal(output.all_apps, 'true', variant);
+          assert.equal(output.has_site, 'true', variant);
+          assert.deepEqual(JSON.parse(output.selected_ids), (await loadAppsRegistry()).apps.map(app => app.id));
+          assert.match(output.fallback_reason, /pnpm-lock\.yaml/);
+          if (variant === 'missing metadata' || variant === 'invalid resolution') assert.match(output.fallback_reason, /package metadata/);
+          if (variant === 'missing snapshot') assert.match(output.fallback_reason, /no snapshot/);
+          if (variant === 'unparsable') assert.match(output.fallback_reason, /does not parse/);
+          if (variant === 'unavailable') assert.match(output.fallback_reason, /unavailable/);
+        }
+      });
+    }
+  }
 });
 
 test('the CLI compares the lockfile at the merge base and reports why it selected each app', async (t) => {
