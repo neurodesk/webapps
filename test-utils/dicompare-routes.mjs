@@ -93,7 +93,7 @@ export async function verifyDicompareRoutes(browser, origin) {
       });
       db.close();
     }, schema);
-    const fixtureReady = () => expect(page.getByText('Static route fixture', { exact: true }).first()).toBeVisible();
+    const fixtureReady = () => expect(page.getByRole('heading', { name: 'Static route fixture', level: 2, exact: true })).toBeVisible();
     await open('/dicompare/schema/uploaded_route_fixture', fixtureReady);
     await open('/dicompare/schema?url=' + encodeURIComponent(externalUrl) + '#external', fixtureReady);
     await open('/dicompare/schema/missing_route_fixture', () => expect(page.getByText('Schema "missing_route_fixture" not found.', { exact: true })).toBeVisible());
