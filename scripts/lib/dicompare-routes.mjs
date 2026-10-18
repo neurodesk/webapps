@@ -8,8 +8,13 @@ export async function stageDicompareRoutes({ repoRoot, siteDist }) {
   const html = await readFile(index, 'utf8');
   const restore = '<script src="/dicompare-routes.js"></script>';
   if (!html.includes(restore)) {
-    // Run before any app module or shared shell inspects the current URL.
-    await writeFile(index, html.replace('<head>', `<head>\n  ${restore}`));
+    // Runtime-cache staging can prepend relative scripts before the base tag.
+    // Establish the fixed asset base before restoring a nested document URL.
+    const base = html.match(/<base\b[^>]*>/i)?.[0];
+    if (!base || !/href=["']\/dicompare\/["']/.test(base)) {
+      throw new Error('Dicompare Pages routing requires a /dicompare/ document base');
+    }
+    await writeFile(index, html.replace(base, '').replace('<head>', `<head>\n  ${base}\n  ${restore}`));
   }
   for (const file of ['404.html', 'dicompare-routes.js']) {
     await cp(join(repoRoot, 'site', file), join(siteDist, file));
