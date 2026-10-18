@@ -105,7 +105,7 @@ export async function verifyDicompareRoutes(browser, origin) {
       await expect(page).toHaveURL(origin + path);
     }
     await open('/dicompare/schema', () => expect(catalog).toBeVisible());
-    await page.getByTitle('More Neurodesk web apps').click();
+    await page.locator('.nd-app-bar').getByTitle('More Neurodesk web apps').click();
     await expect(page).toHaveURL(origin + '/');
     assert.deepEqual(pageErrors, []);
     assert.deepEqual(failedAssets, []);
