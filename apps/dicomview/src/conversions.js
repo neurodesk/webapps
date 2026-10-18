@@ -139,6 +139,7 @@ export class ConversionStore {
           this.#release();
         }
         await this.#io.save(series, outputs).catch((error) => console.warn(`Saving ${series.uid} failed: ${error.message}`));
+        signal.throwIfAborted();
       }
       this.#settle(entry, { state: 'done', outputs });
       return outputs;

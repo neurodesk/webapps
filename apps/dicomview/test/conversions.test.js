@@ -180,3 +180,17 @@ test('a series chosen while its saved copy is still being looked up goes ahead o
   runs[2].resolve();
   await batch;
 });
+
+test('cancelling while a conversion is being saved cancels it', async () => {
+  const { runs, convert } = manualConvert();
+  let saving;
+  const store = new ConversionStore({ convert, save: () => new Promise((resolve) => { saving = resolve; }) });
+  const request = store.request(series('A'));
+  await tick();
+  runs[0].resolve();
+  await tick();
+  store.cancel('A', aborted);
+  saving();
+  await assert.rejects(request, (error) => error === aborted);
+  assert.equal(store.get('A').state, 'failed');
+});

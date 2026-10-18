@@ -36,3 +36,13 @@ test('released, the binding no longer touches opacity', async () => {
   await nv.setVolume(0, { visible: false });
   assert.equal(nv.volumes[0].opacity, 1);
 });
+
+test('opacity set while hidden stays hidden and is the value shown again', async () => {
+  const nv = fakeNiiVue(0.6);
+  bindVolumeVisibility(nv);
+  await nv.setVolume(0, { visible: false });
+  await nv.setVolume(0, { opacity: 0.3 });
+  assert.equal(nv.volumes[0].opacity, 0);
+  await nv.setVolume(0, { visible: true });
+  assert.equal(nv.volumes[0].opacity, 0.3);
+});

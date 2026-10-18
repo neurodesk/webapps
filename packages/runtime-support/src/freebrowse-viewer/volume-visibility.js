@@ -8,6 +8,10 @@ export function bindVolumeVisibility(nv) {
     if (changes.visible === false && volume.opacity > 0) {
       hiddenOpacity.set(volume, volume.opacity);
       void nv.setVolume(volumeIndex, { opacity: 0 });
+    } else if (changes.opacity > 0 && hiddenOpacity.has(volume)) {
+      // The Opacity slider stays live while hidden: remember its value, keep the volume hidden.
+      hiddenOpacity.set(volume, changes.opacity);
+      void nv.setVolume(volumeIndex, { opacity: 0 });
     } else if (changes.visible === true && hiddenOpacity.has(volume)) {
       const opacity = hiddenOpacity.get(volume);
       hiddenOpacity.delete(volume);

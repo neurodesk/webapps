@@ -29,6 +29,11 @@ test('the fingerprint follows the series content, not the file dates or order', 
   header[0].buffer.write('30', header[0].buffer.indexOf(Buffer.from([0x81, 0x00, 0x44, 0x53])) + 8, 'latin1');
   const changed = (await indexFiles(header.map((file) => toFile(file)))).series[0];
   assert.notEqual(await seriesFingerprint(changed), await seriesFingerprint(a), 'a header byte is part of the key');
+  const pixels = dicomSeries({ series: 3, slices: 3 });
+  pixels[2].buffer = Buffer.from(pixels[2].buffer);
+  pixels[2].buffer[pixels[2].buffer.length - 1] ^= 1;
+  const repainted = (await indexFiles(pixels.map((file) => toFile(file)))).series[0];
+  assert.notEqual(await seriesFingerprint(repainted), await seriesFingerprint(a), 'a pixel byte is part of the key');
   assert.ok(a.files.every((record) => record.headerBytes !== null));
 });
 

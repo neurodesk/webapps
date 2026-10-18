@@ -2,6 +2,7 @@
 // keyboard through FreeBrowse's Volumes panel, and the rendered image follows.
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 
 const [example] = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
 
@@ -65,4 +66,19 @@ test('the example image can be windowed from the keyboard in FreeBrowse', async 
   expect((await settledCanvas(canvas)).equals(shown), 'the eye button hides the image').toBe(false);
   await eye.click();
   expect((await settledCanvas(canvas)).equals(shown), 'showing it again restores the windowed image').toBe(true);
+});
+
+test('a drawing made on one series is closed when another series opens', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('./');
+  const files = [...dicomSeries({ series: 7, slices: 4 }), ...dicomSeries({ series: 3, slices: 4 })]
+    .map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+  await page.locator('#dicomInput').setInputFiles(files);
+  await expect(page.locator('#statusText')).toHaveText(/1 image/, { timeout: 60000 });
+  const viewer = page.locator('#freebrowseViewer');
+  await viewer.getByRole('button', { name: /Create empty drawing layer/ }).click();
+  await expect(viewer.getByText('Save Drawing')).toBeVisible();
+  await page.locator('#seriesList .nd-view-btn').nth(1).click();
+  await expect(page.locator('#statusText')).toHaveText(/test_scan_7 · 1 image/, { timeout: 60000 });
+  await expect(viewer.getByText('No drawing layer active')).toBeVisible();
 });

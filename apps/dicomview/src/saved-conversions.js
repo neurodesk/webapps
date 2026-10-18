@@ -6,9 +6,8 @@
 //   dicomview/<fingerprint>/<index>         the NIfTI bytes of outputs[index]
 // The manifest is written last, so a directory without one is an unfinished save and is
 // treated as absent.
-import { PREFIX_BYTES } from './dicom-index.js';
 
-export const FORMAT_VERSION = 'dicomview-nifti-1';
+export const FORMAT_VERSION = 'dicomview-nifti-2';
 export const DIRECTORY = 'dicomview';
 const MANIFEST = 'manifest.json';
 
@@ -16,14 +15,14 @@ const encoder = new TextEncoder();
 const hex = (buffer) => [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 
 // SHA-256 over the format version, the series uid and, per file in path order, its path,
-// size and the digest of its header prefix (up to the pixel data when the index reached
-// it, else the index's first prefix). Not lastModified: a re-fetched example has a new one.
+// size and the digest of its whole content, pixel data included, so an edited file never
+// opens a stale image. Not lastModified: a re-fetched example has a new one.
 export async function seriesFingerprint(series, { digest = (bytes) => crypto.subtle.digest('SHA-256', bytes) } = {}) {
   const records = [...series.files].sort((a, b) => a.path.localeCompare(b.path));
   const lines = [`${FORMAT_VERSION}\n${series.uid}\n`];
   for (const record of records) {
-    const prefix = await record.file.slice(0, record.headerBytes ?? PREFIX_BYTES).arrayBuffer();
-    lines.push(`${record.path}\n${record.file.size}\n${hex(await digest(prefix))}\n`);
+    const content = await record.file.arrayBuffer();
+    lines.push(`${record.path}\n${record.file.size}\n${hex(await digest(content))}\n`);
   }
   return hex(await digest(encoder.encode(lines.join(''))));
 }

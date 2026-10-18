@@ -381,6 +381,8 @@ function showOutput() {
   if (state.view === 'header' && $('headerSource').value === 'sidecar') void renderHeader();
   const load = viewerLoads.then(async () => {
     if (!viewerReady || state.outputs?.[state.output] !== output) return;
+    // A drawing belongs to the image it was made on; NiiVue keeps it across volume loads.
+    viewer.closeDrawing();
     await viewer.loadVolumes([{ url: output.image, name }]);
     $('emptyState').hidden = true;
   });
@@ -397,6 +399,7 @@ function clearImage() {
   const { seriesUid } = state;
   const clear = viewerLoads.then(async () => {
     if (!viewerReady || state.seriesUid !== seriesUid) return;
+    viewer.closeDrawing();
     await viewer.removeAllVolumes();
     $('emptyState').hidden = false;
   });
