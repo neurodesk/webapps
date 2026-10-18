@@ -7,9 +7,10 @@ export default defineConfig({
   testDir: "./e2e",
   workers: 1,
   webServer: {
+    timeout: 300_000,
     command: withBrowserBuild(
       "node node_modules/vite/bin/vite.js preview --port 4173 --strictPort",
-      "node scripts/copy-runtime.mjs && node node_modules/vite/bin/vite.js build && node ../../scripts/theme-app-dist.mjs --app fastprep",
+      "pnpm run runtime && node node_modules/vite/bin/vite.js build && node ../../scripts/theme-app-dist.mjs --app fastprep",
     ),
     url: "http://localhost:4173",
     reuseExistingServer: !process.env.CI,

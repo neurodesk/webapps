@@ -41,7 +41,7 @@ $("privacyBtn").onclick = () => info.open("Privacy", $("privacyContent"));
 let dataset = null; // [[relative path, File]]
 let label = null; // the first subject's label, the one processed
 let outputs = null; // [[relative path, Uint8Array]]
-let active = null; // { worker, reject } of the run in progress
+let active = null; // { worker, reject, cleanup } of the run in progress
 let reportUrls = [];
 
 function status(message, error = false) {
@@ -100,6 +100,7 @@ function setDataset(files) {
 }
 
 function finish(message, success = false) {
+  active.cleanup();
   active.worker.terminate();
   active = null;
   progress.end(message, { success });
@@ -113,19 +114,28 @@ function fail(message, error = true) {
   reject(new Error(message));
 }
 
-function run() {
+function run(signal) {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     if (!dataset) return reject(new Error("Load a BIDS dataset first."));
     if (active) return reject(new Error("fastprep is already running."));
     $("runButton").disabled = true;
     progress.begin("Preprocessing…");
     const worker = new Worker(new URL("./pipeline-worker.js", import.meta.url), { type: "module" });
-    active = { worker, reject };
-    worker.onerror = (event) => fail(event.message || "The pipeline worker failed to start.");
+    const current = { worker, reject, cleanup: () => signal?.removeEventListener("abort", abort) };
+    const abort = () => {
+      if (active === current) fail("Cancelled", false);
+    };
+    active = current;
+    signal?.addEventListener("abort", abort, { once: true });
+    worker.onerror = (event) => {
+      if (active === current) fail(event.message || "The pipeline worker failed to start.");
+    };
     worker.onmessage = ({ data }) => {
+      if (active !== current) return;
       if (data.log) log.log(data.log, "info");
       if (data.step) $("statusText").textContent = `Running ${data.step}…`;
-      if (data.error) fail(data.error);
+      if (data.error) return fail(data.error);
       if (data.done) {
         finish("fastprep finished", true);
         try {
@@ -181,9 +191,10 @@ $("runButton").addEventListener("click", () => run().catch(() => {}));
 registerAppAutomation({
   app: APP.id,
   operations: {
-    preprocess: async ({ inputs }) => {
+    preprocess: async ({ inputs, signal }) => {
+      signal?.throwIfAborted();
       setDataset(inputs.dataset);
-      const zip = await run();
+      const zip = await run(signal);
       return { artifacts: [{ role: "results", file: zip }], provenance: { method: "fastprep", scientificProcessing: true } };
     },
   },

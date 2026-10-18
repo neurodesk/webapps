@@ -1393,6 +1393,7 @@ apps:
   fastprep:
     packages:
       - { name: fastprep Rust core (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/fastprep, role: pipeline orchestration }
+      - { name: glm Rust core (WebAssembly), url: https://github.com/neurodesk/webapps/tree/main/exes/glm, role: first-level GLM with AR(1) Prais-Winsten prewhitening }
       - { name: niimath, url: https://github.com/rordenlab/niimath, role: voxel processing }
       - { name: MindGrab, url: https://github.com/neuroneural/brainchop, role: brain extraction and tissue maps }
       - { name: Greedy, url: https://github.com/rordenlab/greedy, role: template and SDC registration }
@@ -1419,3 +1420,20 @@ apps:
         title: MNI152NLin2009cAsym
         reference: "Fonov V, Evans AC, Botteron K, et al. Unbiased average age-appropriate atlases for pediatric studies. NeuroImage. 2011;54(1):313-327."
         url: https://doi.org/10.1016/j.neuroimage.2010.07.033
+      - group: Registration
+        title: Greedy
+        reference: "Yushkevich PA, Pluta J, Wang H, Wisse LE, Das S, Wolk D. Fast Automatic Segmentation of Hippocampal Subfields and Medial Temporal Lobe Subregions in 3 Tesla and 7 Tesla MRI. Alzheimer's & Dementia. 2016;12(7):P126-P127. Conference abstract recommended by the Greedy authors."
+        url: https://sites.google.com/view/greedyreg/cite
+        code: https://github.com/pyushkevich/greedy
+      - group: Registration
+        title: Greedy diffeomorphic registration method
+        reference: "Joshi S, Davis B, Jomier M, Gerig G. Unbiased diffeomorphic atlas construction for computational anatomy. NeuroImage. 2004;23 Suppl 1:S151-S160."
+        doi: 10.1016/j.neuroimage.2004.07.068
+      - group: Task analysis
+        title: General linear model
+        reference: "Friston KJ, Holmes AP, Worsley KJ, Poline JP, Frith CD, Frackowiak RSJ. Statistical parametric maps in functional imaging: a general linear approach. Human Brain Mapping. 1994;2(4):189-210."
+        doi: 10.1002/hbm.460020402
+      - group: Task analysis
+        title: Prais-Winsten AR(1) prewhitening
+        reference: "Prais SJ, Winsten CB. Trend Estimators and Serial Correlation. Cowles Commission Discussion Paper, Statistics No. 383. 1954."
+        url: https://cowles.yale.edu/sites/default/files/2023-05/s-0383.pdf

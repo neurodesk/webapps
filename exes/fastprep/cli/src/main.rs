@@ -433,14 +433,16 @@ mod tests {
         };
         let (a, b) = (host(&d), host(&d));
         let events = std::sync::Mutex::new(vec![]);
+        let (acquired, ready) = std::sync::mpsc::channel();
         std::thread::scope(|s| {
             s.spawn(|| {
                 let _f = a.gpu_slot().unwrap();
                 events.lock().unwrap().push("a+");
+                acquired.send(()).unwrap();
                 std::thread::sleep(Duration::from_millis(400));
                 events.lock().unwrap().push("a-");
             });
-            std::thread::sleep(Duration::from_millis(100));
+            ready.recv().unwrap();
             let _f = b.gpu_slot().unwrap();
             events.lock().unwrap().push("b+");
         });
