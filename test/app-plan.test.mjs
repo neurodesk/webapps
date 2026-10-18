@@ -217,7 +217,7 @@ test('root package.json script edits count only where ci.yml runs them', async (
   const registry = await loadAppsRegistry();
   const scripts = { build: 'a', 'new-app': 'b', 'test:mobile': 'c' };
   const resolved = await graph;
-  const plan = (after) => createAppPlan(registry, ['package.json'], resolved, new Map([['package.json', manifest({ scripts }, after)]]));
+  const plan = (after) => createAppPlan(registry, ['package.json'], resolved, new Map([['package.json', manifest({ scripts }, after)], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]));
   assert.deepEqual(plan({ scripts: { ...scripts, 'new-app': 'B' } }).selected, []);
   assert.equal(plan({ scripts: { ...scripts, 'new-app': 'B' } }).site, false);
   const site = plan({ scripts: { ...scripts, 'test:mobile': 'C' } });
@@ -274,14 +274,14 @@ test('root Knip and Stryker changes run their independent workflows without sele
   for (const name of ['knip', '@stryker-mutator/core']) {
     const before = { devDependencies: { [name]: '1.0.0', esbuild: '1.0.0' }, scripts: {} };
     const after = { devDependencies: { [name]: '2.0.0', esbuild: '1.0.0' }, scripts: { 'quality:unused': 'node scripts/report-unused-code.mjs' } };
-    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)]]));
-    assert.deepEqual(plan.selected, [], name);
-    assert.equal(plan.site, false, name);
-    assert.equal(plan.reasons.fallback, null, name);
     const root = changeLock(lock => {
       lock.importers['.'].devDependencies[name] = dep('1.0.0');
       resolve(lock, `${name}@1.0.0`);
     });
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)], ['pnpm-lock.yaml', manifest(root, root)]]));
+    assert.deepEqual(plan.selected, [], name);
+    assert.equal(plan.site, false, name);
+    assert.equal(plan.reasons.fallback, null, name);
     const next = structuredClone(root);
     next.importers['.'].devDependencies[name] = dep('2.0.0');
     resolve(next, `${name}@2.0.0`);
@@ -297,10 +297,15 @@ test('missing root tool package metadata selects the full catalog with a fallbac
   const invalid = structuredClone(before);
   delete invalid.packages['knip@5.0.0'];
   for (const [base, head] of [[before, invalid], [invalid, before]]) {
-    const plan = createAppPlan(registry, ['pnpm-lock.yaml'], await graph, new Map([['pnpm-lock.yaml', manifest(base, head)]]));
-    assert.equal(plan.allApps, true);
-    assert.equal(plan.site, true);
-    assert.match(plan.reasons.fallback, /knip@5\.0\.0.*package metadata/);
+    for (const path of ['pnpm-lock.yaml', 'package.json']) {
+      const plan = createAppPlan(registry, [path], await graph, new Map([
+        ['pnpm-lock.yaml', manifest(base, head)],
+        ['package.json', manifest({ devDependencies: { knip: '5.0.0' } }, { devDependencies: { knip: '^5.0.0' } })],
+      ]));
+      assert.equal(plan.allApps, true, path);
+      assert.equal(plan.site, true, path);
+      assert.match(plan.reasons.fallback, /knip@5\.0\.0.*package metadata/, path);
+    }
   }
 });
 
@@ -311,7 +316,7 @@ test('unknown root tools, runtime dependencies and mixed changes still select th
     [{ dependencies: { knip: '1.0.0' } }, { dependencies: { knip: '2.0.0' } }],
     [{ devDependencies: { knip: '1.0.0' } }, { devDependencies: { knip: '2.0.0' }, engines: { node: '>=24' } }],
   ]) {
-    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)]]));
+    const plan = createAppPlan(registry, ['package.json'], await graph, new Map([['package.json', manifest(before, after)], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]));
     assert.equal(plan.selected.length, registry.apps.length);
     assert.ok(plan.reasons.fallback);
   }
@@ -584,7 +589,7 @@ test('removing a root script still selects the CI job that calls it', async (t) 
     'browser-e2e-gpu': { steps: [{ run: 'echo fixture' }] },
   } }));
   const registry = await loadAppsRegistry();
-  const manifests = new Map([['package.json', manifest({ scripts: { build: 'node scripts/build.mjs' } }, { scripts: {} })]]);
+  const manifests = new Map([['package.json', manifest({ scripts: { build: 'node scripts/build.mjs' } }, { scripts: {} })], ['pnpm-lock.yaml', manifest(baseLock, baseLock)]]);
   const plan = createAppPlan(registry, ['package.json'], await loadConservativeWorkspaceGraph(root), manifests);
   assert.deepEqual(plan.selected, []);
   assert.equal(plan.site, true);

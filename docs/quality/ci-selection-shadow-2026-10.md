@@ -198,6 +198,8 @@ run on every pull request through `unused-code.yml` and `mutation-quality.yml`.
 A contract checks that neither tool appears in app, package, native or browser
 inputs, so a new consumer requires revisiting this ownership.
 
+Root manifest edits load the lockfile at both revisions even when it is unchanged.
+The planner validates those closures before narrowing root manifest changes.
 The lockfile analyzer validates both original root closures before excluding tools.
 Every required snapshot must have matching package metadata and a nonempty resolution
 mapping. Peer-qualified snapshots use the package key without the peer suffix.

@@ -204,6 +204,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const manifest = graph && manifests.get(path);
     if (manifest && path === 'package.json') {
+      const lock = manifests.get(LOCKFILE);
+      const impact = lock ? analyseLockfile(lock) : { shared: 'the base or head lockfile is unavailable' };
+      if (impact.shared) {
+        shared(`${LOCKFILE}: ${impact.shared}`);
+        continue;
+      }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
         const catalogScripts = scripts.filter((name) => graph.rootScriptsRun.get(CATALOG).has(name));
@@ -284,14 +290,15 @@ export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
 
 const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml)$|^pnpm-lock\.yaml$/;
 
-// The text of each changed manifest createAppPlan compares, at the merge base
-// (changedPathsFromGit diffs from there) and at head. A manifest missing on
-// either side, or every manifest when there is no merge base, is left out and
-// counts as an ordinary code change.
+// The text of each changed manifest and the lockfile for root manifest edits,
+// at the merge base (changedPathsFromGit diffs from there) and at head. A manifest
+// missing on either side, or every manifest when there is no merge base, is left
+// out and counts as an ordinary code change.
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {
   const manifests = new Map();
-  const paths = changedPaths.filter((path) => MANIFEST.test(path));
-  if (!paths.length) return manifests;
+  const paths = new Set(changedPaths.filter((path) => MANIFEST.test(path)));
+  if (changedPaths.includes('package.json')) paths.add(LOCKFILE);
+  if (!paths.size) return manifests;
   const show = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
   let mergeBase;
   try {
