@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { stageDicompareRoutes } from './lib/dicompare-routes.mjs';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -71,6 +72,7 @@ for (const [name, sharedSource] of sharedSiteAssets) {
 }
 await cp(join(repoRoot, 'site', 'analytics.json'), join(siteDist, 'analytics.json'));
 await stageStandaloneAssets(siteDist);
+await stageDicompareRoutes({ repoRoot, siteDist });
 await writeFile(join(siteDist, '.nojekyll'), '');
 await writeFile(join(siteDist, '_headers'), headersFile);
 console.log(`Assembled ${registry.apps.length} apps at ${siteDist}`);
