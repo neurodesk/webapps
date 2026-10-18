@@ -13,6 +13,8 @@ float32 copies of both images. Writes the web app's downloads to OUTPUT_DIR,
 named after the moving image:
 
   <moving>_registered.nii.gz             moving image resampled onto the fixed grid
+  <moving>_registered.ome.tif            OME-TIFF when origin is zero, direction is
+                                         identity and spatial units are known
   <moving>_transform.h5                  ITK HDF5 transform
   <moving>_transform.ome.zarr.ozx        OME-Zarr (RFC-5) fixed-to-moving transform:
                                          an affine for rigid and affine runs, a
@@ -33,7 +35,8 @@ Inputs are NIfTI, other ITK formats (NRRD, MHA, MGH, ...), TIFF/OME-TIFF or
 OME-Zarr .ozx archives, 2D or 3D, one scalar channel. TIFF and OME-Zarr use
 the finest pyramid level within 2^24 voxels, as the web app does. Convert
 DICOM with dcm2niix first. The web app's registered OME-Zarr image is not
-written; the registered image is NIfTI only.
+written; use NIfTI or OME-TIFF for a compatible grid. A skipped OME-TIFF
+is explained on standard error.
 The elastix log goes to standard error and the written files to standard
 output. download-models does nothing: elastix uses no model files.
 OUTPUT_DIR must be new or empty.`;

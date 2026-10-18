@@ -1,4 +1,5 @@
 import { chooseLevel, classifySource, urlName, zarrFolderEntries } from "./sources.js";
+import { normalizeSpatialUnits } from "./outputs.js";
 
 // The readers without a signal option can finish decoding after cancellation.
 // Guard their store calls and every async stage before preparing the display copy.
@@ -60,14 +61,20 @@ export function createSourceReader({ fromOmeZarr, ngffImageToItkImage, TiffStore
 
   async function readOmeZarr(store, name, kind, options, signal) {
     signal?.throwIfAborted();
+    const tiffMetadataForLevel = store.tiffMetadataForLevel;
     store = cancellableStore(store, signal);
     const multiscales = await readMultiscales(store, options, signal);
     signal?.throwIfAborted();
     const { image: level, level: index } = chooseLevel(multiscales.images);
     const image = await ngffImageToItkImage(level, { tIndex: 0, cIndex: 0 });
+    const tiffMetadata = await tiffMetadataForLevel?.(index);
     signal?.throwIfAborted();
     const count = multiscales.images.length;
-    return prepared(image, name, kind, null, ` · pyramid level ${index + 1} of ${count}`, signal);
+    return {
+      ...await prepared(image, name, kind, null, tiffMetadata?.selectionNote ?? ` · pyramid level ${index + 1} of ${count}`, signal),
+      spatialUnits: normalizeSpatialUnits(level.axesUnits),
+      ...(tiffMetadata && { tiffMetadata }),
+    };
   }
 
   async function fetchFile(url, signal) {
