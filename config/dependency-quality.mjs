@@ -4,6 +4,7 @@ export const generatedSources = {
   'apps/dicom2vid/web/js/vendor/': 'Pinned third-party viewer bundle.',
   'packages/dicom2vid/src/vendor/': 'Pinned third-party muxer bundles.',
   'apps/dwi2trx/vendor/niimath/': 'Vendored Emscripten dtifit build.',
+  'packages/runtime-support/vendor/freebrowse/': 'Vendored FreeBrowse development build; React is its own dependency.',
   'packages/easy-mp2rage/wasm/mp2rage_wasm.js': 'Committed wasm-bindgen glue.',
   'packages/nii2tvx/wasm/nii2tvx.mjs': 'Committed Emscripten glue.',
   'packages/registration/wasm/syncro-registration.mjs': 'Committed Emscripten glue.',

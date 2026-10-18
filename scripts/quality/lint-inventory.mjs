@@ -17,6 +17,8 @@ export const exclusions = {
   'apps/dwi2trx/vendor/niimath/dist/niimath.js': 'Generated Emscripten glue.',
   'apps/dwi2trx/vendor/niimath/dist/types.js': 'Vendored niimath build, upstream-owned.',
   'apps/dwi2trx/vendor/niimath/dist/worker.js': 'Vendored niimath build, upstream-owned.',
+  'packages/runtime-support/vendor/freebrowse/dist-lib/index.js': 'Vendored FreeBrowse build, upstream-owned.',
+  'packages/runtime-support/vendor/freebrowse/dist-lib/react.js': 'Vendored FreeBrowse build, upstream-owned.',
   'packages/easy-mp2rage/wasm/mp2rage_wasm.js': 'Generated wasm-bindgen glue, rebuilt by WASM parity CI.',
   'packages/nii2tvx/wasm/nii2tvx.mjs': 'Generated Emscripten glue, rebuilt by make.',
   'packages/registration/wasm/syncro-registration.mjs': 'Generated Emscripten glue.',
