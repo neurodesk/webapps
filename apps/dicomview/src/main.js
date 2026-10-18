@@ -448,6 +448,13 @@ $('handoffButton').addEventListener('click', async () => {
   $('handoffButton').disabled = true;
   try {
     await sendHandoff({ target: LESIONS.path, source: { app: APP.id, title: APP.title }, files: [image], signal: controller.signal });
+    // Ending the job now would let a second send start while the page navigates away; end it
+    // only if the back-forward cache brings this page back, or the button stays disabled.
+    window.addEventListener('pageshow', (event) => {
+      if (!event.persisted) return;
+      finish('handoff', controller, `Sent ${image.name} to ${LESIONS.title}`);
+      void syncHandoff();
+    }, { once: true });
   } catch (error) {
     finish('handoff', controller, message, { error });
     void syncHandoff();

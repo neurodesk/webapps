@@ -550,6 +550,21 @@ test('new files dropped while a send checks its target cancel the send before th
   await expectStayed(page, before);
 });
 
+test('a page restored from the back-forward cache after a send can send again', async ({ page }) => {
+  // A 204 answer cancels the navigation, so the page stays as if Back had restored it.
+  await page.context().route('**/white-matter-lesions/', (route) => route.fulfill({ status: 204 }));
+  await page.goto('./');
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4 }));
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  await handoffButton(page).click();
+  await expect.poll(async () => (await storedHandoffs(page)).length, 'the send completed').toBe(1);
+  // Locators wait for the cancelled navigation to finish, which it never does; read the page directly.
+  const shown = () => page.evaluate(() => ({ disabled: document.getElementById('handoffButton').disabled, status: document.getElementById('statusText').textContent }));
+  expect((await shown()).disabled, 'disabled while the page navigates away').toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
+  await expect.poll(shown).toEqual({ disabled: false, status: 'Sent series7_test_scan_7.nii to White matter lesions' });
+});
+
 test('the footer × cancels a send while it checks its target', async ({ page }) => {
   const { before, release } = await heldSend(page);
   await expect(page.locator('#cancelButton')).toBeVisible();
