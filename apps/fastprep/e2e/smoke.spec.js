@@ -55,17 +55,38 @@ test("files dropped over the viewer load as the dataset", async ({ page }) => {
   await expect(page.locator("#runButton")).toBeEnabled();
 });
 
-test("Choose folder reads a BIDS tree", async ({ page }, testInfo) => {
+test("the native folder chooser reads a BIDS tree", async ({ page }, testInfo) => {
   const root = testInfo.outputPath("bids");
   for (const name of BIDS) {
     mkdirSync(path.dirname(path.join(root, name)), { recursive: true });
     writeFileSync(path.join(root, name), "x");
   }
+  await page.addInitScript(() => { window.showDirectoryPicker = undefined; });
   await page.goto("/");
   const chooser = page.waitForEvent("filechooser");
-  await picker(page).selectOption({ label: "Choose folder…" });
+  await picker(page).selectOption(await picker(page).locator('[data-action="folder"]').elementHandle());
   await (await chooser).setFiles(root);
   await expect(page.locator("#fileInfo")).toHaveText("3 files · sub-01");
+});
+
+test("Undo restores an example after a dropped replacement", async ({ page }) => {
+  await page.goto("/");
+  await picker(page).selectOption(example.id);
+  await expect(page.locator("#fileInfo")).toHaveText("6 files · sub-01", { timeout: 300_000 });
+  await page.locator("#synthsr").selectOption("off");
+  await page.evaluate(() => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["replacement"], "sub-02_T1w.nii.gz"));
+    document.getElementById("gl1").dispatchEvent(new DragEvent("drop", {
+      bubbles: true, cancelable: true, dataTransfer: transfer,
+    }));
+  });
+  await expect(page.locator("#fileInfo")).toHaveText("1 files · sub-02");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator("#fileInfo")).toHaveText("6 files · sub-01");
+  await expect(page.locator("#runButton")).toBeEnabled();
+  await expect(page.locator("#synthsr")).toHaveValue("off");
+  await expect(page.locator("#resultList")).toBeEmpty();
 });
 
 test("a failed example download can be retried", async ({ page }) => {

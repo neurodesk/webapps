@@ -415,6 +415,9 @@ fn start(a: Args) -> Result<(), String> {
 }
 
 #[cfg(test)]
+mod regressions;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

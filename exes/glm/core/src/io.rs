@@ -348,3 +348,31 @@ pub fn single(
     );
     Ok((encode(&img, &maps[0], None), line))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::confounds;
+
+    #[test]
+    fn confounds_reject_nonfinite_cells_with_location() {
+        for value in ["NaN", "inf", "-inf", "1e999"] {
+            let text = format!("trans_x\trot_z\r\n0\t0\r\n\r\n0\t{value}\r\n");
+            let error = confounds(&text).expect_err(value);
+            assert_eq!(
+                error,
+                format!("row 4, column rot_z: '{value}' is not a finite number")
+            );
+        }
+    }
+
+    #[test]
+    fn confounds_preserve_missing_cells_and_finite_numbers() {
+        assert_eq!(
+            confounds("trans_x\trot_z\nn/a\t\n-0.25\t1e-3\n").unwrap(),
+            vec![
+                ("trans_x".into(), vec![0.0, -0.25]),
+                ("rot_z".into(), vec![0.0, 0.001]),
+            ]
+        );
+    }
+}
