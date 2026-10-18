@@ -24,6 +24,7 @@
     "test:resource-cache": "node test/resource-cache.smoke.mjs",
     "test:runtime-startup": "node test/runtime-startup.smoke.mjs",
     "test:smoke": "node test/composite-site.smoke.mjs",
+    "test:app-handoff": "node test/app-handoff.smoke.mjs",
     "test:interface-workflows": "node test/interface-workflows.smoke.mjs",
     "test:image-uploads": "node test/image-upload.smoke.mjs",
     "test:mobile": "node test/mobile-layout.smoke.mjs",

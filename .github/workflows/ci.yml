@@ -187,13 +187,15 @@ jobs:
       - name: Install browser
         run: |
           sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
-          node node_modules/@playwright/test/cli.js install --with-deps chromium
+          node node_modules/@playwright/test/cli.js install --with-deps chromium firefox webkit
       - name: Check custom element browser behavior
         run: pnpm --filter @neurodesk/webapp-components test:elements:browser
         env:
           ELEMENT_ARTIFACTS: ${{ github.workspace }}/interface-artifacts/elements
       - name: Check the component showcase boots in a browser
         run: pnpm --filter @neurodesk/webapp-components test:showcase:browser
+      - name: Check passing files between apps in Chromium, Firefox and WebKit
+        run: pnpm --filter @neurodesk/webapp-components test:handoff:browser
       - name: Build the composite site
         run: pnpm build
       - name: Enforce scientific-asset and hosting budgets
@@ -208,6 +210,8 @@ jobs:
         run: pnpm test:runtime-startup
       - name: Smoke test every deployed subpath
         run: pnpm test:smoke
+      - name: Hand an image from DICOM View to White matter lesions in Chromium, Firefox and WebKit
+        run: pnpm test:app-handoff
       - name: Check catalog e2e types
         run: pnpm test:e2e:types
       - name: Test every production workspace with e2e
