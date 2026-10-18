@@ -665,6 +665,55 @@ test('workflow outputs include the fallback reason and complete matrices', async
   assert.deepEqual(JSON.parse(outputs.selected_ids), (await loadAppsRegistry()).apps.map(app => app.id));
 });
 
+test('manifest-only tool changes validate the unchanged lockfile through the CLI', async (t) => {
+  for (const name of ['knip', '@stryker-mutator/core']) {
+    for (const variant of ['valid', 'missing metadata', 'invalid resolution', 'missing snapshot', 'unparsable', 'unavailable']) {
+      await t.test(`${name}: ${variant}`, async (t) => {
+        const { root, run } = await plannerFixture(t);
+        const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
+        git('init', '--quiet');
+        const pkg = { type: 'module', devDependencies: { [name]: '1.0.0' }, scripts: {} };
+        await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+        const lock = changeLock(lock => {
+          lock.importers['.'].devDependencies[name] = dep('1.0.0');
+          resolve(lock, `${name}@1.0.0`);
+        });
+        if (variant === 'missing metadata') delete lock.packages[`${name}@1.0.0`];
+        if (variant === 'invalid resolution') lock.packages[`${name}@1.0.0`].resolution = {};
+        if (variant === 'missing snapshot') delete lock.snapshots[`${name}@1.0.0`];
+        if (variant !== 'unavailable') {
+          await writeFile(join(root, 'pnpm-lock.yaml'), variant === 'unparsable' ? '[invalid' : stringify(lock));
+          git('add', 'pnpm-lock.yaml');
+        }
+        git('add', 'package.json');
+        git('commit', '--quiet', '-m', 'base');
+        const base = git('rev-parse', 'HEAD');
+        pkg.devDependencies[name] = '^1.0.0';
+        await writeFile(join(root, 'package.json'), JSON.stringify(pkg));
+        git('commit', '--quiet', '-am', 'manifest only');
+        const result = run('--base', base, '--head', 'HEAD');
+        assert.equal(result.status, 0, result.stderr);
+        const output = JSON.parse(result.stdout);
+        assert.deepEqual(output.changedPaths, ['package.json']);
+        if (variant === 'valid') {
+          assert.deepEqual(JSON.parse(output.selected_ids), []);
+          assert.equal(output.has_site, 'false');
+          assert.equal(output.fallback_reason, '');
+        } else {
+          assert.equal(output.all_apps, 'true', variant);
+          assert.equal(output.has_site, 'true', variant);
+          assert.deepEqual(JSON.parse(output.selected_ids), (await loadAppsRegistry()).apps.map(app => app.id));
+          assert.match(output.fallback_reason, /pnpm-lock\.yaml/);
+          if (variant === 'missing metadata' || variant === 'invalid resolution') assert.match(output.fallback_reason, /package metadata/);
+          if (variant === 'missing snapshot') assert.match(output.fallback_reason, /no snapshot/);
+          if (variant === 'unparsable') assert.match(output.fallback_reason, /does not parse/);
+          if (variant === 'unavailable') assert.match(output.fallback_reason, /unavailable/);
+        }
+      });
+    }
+  }
+});
+
 test('the CLI compares the lockfile at the merge base and reports why it selected each app', async (t) => {
   const { root, run } = await plannerFixture(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=planner', '-c', 'user.email=planner@example.org', ...args], { cwd: root, encoding: 'utf8' }).trim();
