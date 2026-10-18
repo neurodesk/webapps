@@ -67,10 +67,11 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
         expect(header.y + header.height).toBeLessThanOrEqual(bounds.y);
         await testInfo.attach(`${state}-geometry`, { body: JSON.stringify({ footer: bounds, header }), contentType: 'application/json' });
         for (const theme of ['light', 'dark']) {
-          if (await page.locator('html').getAttribute('data-neurodesk-theme') !== theme) {
-            await page.locator('.nd-app-bar').getByRole('button', { name: /Use .* theme/ }).click();
-          }
-          await expect(page.locator('html')).toHaveAttribute('data-neurodesk-theme', theme);
+          const toggleTheme = page.getByRole('button', { name: `Switch to ${theme} mode`, exact: true });
+          if (await toggleTheme.isVisible()) await toggleTheme.click();
+          await expect(page.getByRole('button', { name: `Switch to ${theme === 'light' ? 'dark' : 'light'} mode`, exact: true })).toBeVisible();
+          if (theme === 'dark') await expect(page.locator('html')).toHaveClass(/dark/);
+          else await expect(page.locator('html')).not.toHaveClass(/dark/);
           await page.screenshot({ path: testInfo.outputPath(`${state}-${theme}.png`) });
         }
         return bounds.height;

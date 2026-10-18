@@ -2,29 +2,19 @@
 // through indexing, conversion, the header explorer and dicompare, and their failure,
 // cancellation and retry paths.
 import { test, expect } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
 import { PREFIX_BYTES } from '../src/dicom-index.js';
 
 const [example] = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
-const exampleUrls = new Set(example.files.map((file) => file.url));
 const EXAMPLE_SERIES = 'Series 2: t1_mpr_tra_gk_v4 · 1 image';
 
 const picker = (page) => page.getByRole('combobox', { name: 'Input', exact: true });
 const exampleState = (page) => page.locator('[data-neurodesk-examples]');
 const status = (page) => page.locator('#statusText');
 const headerRows = (page) => page.locator('#headerRows tr');
-
-// The example's downloads, failed where respond() answers. Routed on the context so
-// requests made by the app's service worker are caught too.
-async function routeExample(page, respond) {
-  const order = example.files.map((file) => file.url);
-  await page.context().route((url) => exampleUrls.has(url.href), (route) => {
-    const index = order.indexOf(route.request().url());
-    return respond(index, route) ?? route.continue();
-  });
-}
 
 function niftiDims(bytes) {
   expect(bytes.readInt32LE(0)).toBe(348);
@@ -196,22 +186,34 @@ test('dicompare fails, cancels and retries, then summarises the example and chec
 
 for (const failure of ['download', 'corrupt download']) {
   test(`a failed example (${failure}) can be retried`, async ({ page }) => {
+    const fixtures = dicomSeries({ series: 7, slices: 4 });
+    const files = fixtures.map(({ buffer }, index) => ({
+      ...example.files[index],
+      sha256: createHash('sha256').update(buffer).digest('hex'),
+      bytes: buffer.length,
+    }));
+    const bodies = new Map(files.map((file, index) => [file.url, fixtures[index].buffer]));
     let failing = true;
-    await routeExample(page, (index, route) => {
-      if (!failing) return null;
-      if (failure === 'download') return index === 0 ? route.fulfill({ status: 503, body: '' }) : null;
-      return route.fulfill({ body: 'not a DICOM file' });
+    await page.context().route(url => bodies.has(url.href), route => {
+      const url = route.request().url();
+      if (failing && failure === 'corrupt download') return route.fulfill({ body: 'not a DICOM file' });
+      if (failing && url === files[0].url) return route.fulfill({ status: 503, body: '' });
+      return route.fulfill({ body: bodies.get(url), contentType: 'application/dicom' });
     });
     await page.goto('./');
+    await exampleState(page).evaluate((selector, files) => {
+      selector.examples = [{ ...selector.examples[0], label: 'Synthetic retry fixture', files }];
+    }, files);
     await picker(page).selectOption(example.id);
     await expect(exampleState(page)).toHaveAttribute('data-example-state', 'error', { timeout: 60000 });
-    if (failure === 'corrupt download') await expect(status(page)).toContainText('size mismatch');
+    await expect(status(page)).toContainText(failure === 'download' ? 'HTTP 503' : 'size mismatch');
     await expect(page.locator('#protocolButton')).toBeDisabled();
     await expect(picker(page)).toBeEnabled();
     failing = false;
     await picker(page).selectOption(example.id);
     await expect(exampleState(page)).toHaveAttribute('data-example-state', 'ready', { timeout: 60000 });
-    await expect(status(page)).toHaveText(EXAMPLE_SERIES, { timeout: 60000 });
+    await expect(page.locator('#fileInfo')).toHaveText('4 images · 1 series');
+    await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
   });
 }
 
