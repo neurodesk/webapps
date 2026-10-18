@@ -38,14 +38,14 @@ function validateDownloads(downloads, id) {
   }
 }
 
-// Shared modules the app shell imports at run time (Standalone dialog, page-wide drop).
-export const SHELL_COMPONENTS = ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'styles/imaging-workspace.css', 'styles/base.css'];
+// Shared modules the app shell imports at run time (Standalone dialog, page-wide drop, handoff sweep).
+export const SHELL_COMPONENTS = ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'handoff/index.js', 'styles/imaging-workspace.css', 'styles/base.css'];
 
 export async function stageStandaloneAssets(destination) {
   await loadStandalone(await loadAppsRegistry());
   await cp(join(repoRoot, 'registry/standalone.json'), join(destination, 'standalone.json'));
   const components = join(destination, 'shell-adapters/components');
-  for (const directory of ['core', 'ui', 'styles', 'file-io']) await mkdir(join(components, directory), { recursive: true });
+  for (const directory of ['core', 'ui', 'styles', 'file-io', 'handoff']) await mkdir(join(components, directory), { recursive: true });
   for (const name of SHELL_COMPONENTS) {
     await cp(join(repoRoot, 'packages/components/src', name), join(components, name));
   }

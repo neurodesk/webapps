@@ -82,6 +82,10 @@
       "types": "./src/compute/index.d.ts",
       "default": "./src/compute/index.js"
     },
+    "./handoff": {
+      "types": "./src/handoff/index.d.ts",
+      "default": "./src/handoff/index.js"
+    },
     "./elements/compute-connection": {
       "types": "./src/elements/compute-connection.d.ts",
       "default": "./src/elements/compute-connection.js"
@@ -95,6 +99,7 @@
     "test:unit": "node --test test/*.test.js",
     "test:showcase:browser": "node scripts/test-showcase-browser.mjs",
     "test:elements:browser": "node scripts/test-elements-browser.mjs",
+    "test:handoff:browser": "node scripts/test-handoff-browser.mjs",
     "check": "node scripts/check-syntax.mjs"
   },
   "engines": {

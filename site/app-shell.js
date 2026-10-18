@@ -34,6 +34,11 @@ import { resolveShellAdapter } from './shell-adapters/index.js';
     .then(({ bindPageDrop }) => bindPageDrop(document))
     .catch((error) => console.warn('Neurodesk page-wide file drop could not start:', error));
 
+  // Files one app passed to another live for minutes; whichever app opens next removes stale ones.
+  import(/* @vite-ignore */ new URL('handoff/index.js', metadata.componentsHref).href)
+    .then(({ sweepHandoffs }) => sweepHandoffs())
+    .catch((error) => console.warn('Neurodesk handoff cleanup failed:', error));
+
   const icons = {
     about: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>',
     cite: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.5h12a2 2 0 0 1 2 2V21H7a2 2 0 0 1-2-2V3.5Z"/><path d="M7 17h12M9 7h6"/></svg>',
