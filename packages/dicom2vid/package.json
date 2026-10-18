@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/dicom2vid",
-  "version": "0.5.20261017",
+  "version": "0.5.20261018",
   "description": "DICOM, NIfTI and MGZ slice videos for the dicom2vid web app and its portable command line",
   "type": "module",
   "license": "BSD-3-Clause",

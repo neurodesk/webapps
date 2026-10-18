@@ -1,5 +1,13 @@
 # @neurodesk/webapp-components
 
+## 0.14.4
+
+### Patch Changes
+
+- 2ae93ae: The input menu now reads "Load data or example…", and its file actions are **Load files…** and **Load folder…**. In Chrome and Edge on desktop they open the browser's Open and Select dialogs instead of the file input's, which asked to "Upload" files: nothing is uploaded, and the menu no longer says so. A folder's files keep their paths within it, as a dropped folder's do. Other browsers, and any browser where those dialogs fail, open the file input's picker as before.
+- ccb2970: Remove closed class-toggled dialogs from the accessibility tree and keyboard navigation using synchronized inert and aria-hidden state, preserving fade transitions and focus restoration. This prevents repeated attempts to dismiss an already-closed SCT About dialog.
+- 67a5a8f: Style report controls (`.nd-report-controls`): a sticky row of shared fields above a report shown in place of the canvas. Style dicompare compliance reports from design tokens in the shared stylesheet.
+
 ## 0.14.3
 
 ### Patch Changes

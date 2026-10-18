@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/elastix",
-  "version": "0.4.20261017",
+  "version": "0.4.20261018",
   "description": "elastix rigid, affine and B-spline registration (ITK-Wasm) for browsers and the command line",
   "type": "module",
   "license": "Apache-2.0",

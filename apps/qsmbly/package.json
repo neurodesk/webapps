@@ -1,6 +1,6 @@
 {
   "name": "qsmbly",
-  "version": "0.31.20261017",
+  "version": "0.31.20261018",
   "description": "Quantitative Susceptibility Mapping in WebAssembly",
   "homepage": "https://qsmbly.neurodesk.org",
   "repository": {

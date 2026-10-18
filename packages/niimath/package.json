@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/niimath",
-  "version": "1.3.20261017",
+  "version": "1.3.20261018",
   "description": "niimath command line running the NiiMath web app's WebAssembly build",
   "type": "module",
   "license": "BSD-2-Clause",

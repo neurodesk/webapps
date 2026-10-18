@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/musclemap",
-  "version": "1.5.20261017",
+  "version": "1.5.20261018",
   "type": "module",
   "license": "MIT",
   "description": "MuscleMap segmentation and muscle metrics for browsers and portable command lines",

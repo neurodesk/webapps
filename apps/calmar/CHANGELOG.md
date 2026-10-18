@@ -1,5 +1,16 @@
 # calmar
 
+## 0.7.20261018
+
+### Patch Changes
+
+- 45ae49a: Remove verified dead code from the unused-code report (#256): dicompare's unused technical-log helpers, QSMbly's duplicate `QsmEchoViewer` export and Deface's unused `@neurodesk/webapp-components` devDependency. The calmar and SCT task tests now import the modules they check by literal path.
+- Updated dependencies [2ae93ae]
+- Updated dependencies [ccb2970]
+- Updated dependencies [67a5a8f]
+  - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/calmar@0.7.20261018
+
 ## 0.7.20261017
 
 ### Minor Changes

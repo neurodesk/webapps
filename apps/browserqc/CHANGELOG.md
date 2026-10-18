@@ -1,5 +1,18 @@
 # browserqc
 
+## 1.6.20261018
+
+### Patch Changes
+
+- Updated dependencies [67a5a8f]
+- Updated dependencies [b8b37d6]
+- Updated dependencies [2ae93ae]
+- Updated dependencies [ccb2970]
+- Updated dependencies [67a5a8f]
+  - @neurodesk/runtime-support@0.7.0
+  - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/browserqc@1.6.20261018
+
 ## 1.6.20261017
 
 ### Patch Changes
