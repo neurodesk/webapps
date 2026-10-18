@@ -296,114 +296,143 @@ if (typeof window === 'undefined') {
         });
     }
 } else {
+    // Resolves once this page knows whether it is about to reload, so work that must happen
+    // only once per visit (taking a handoff) waits for the page that stays. That work then
+    // calls coiHoldReloads, so a worker update cannot reload the page under it.
+    let settleReload;
+    let reloadsHeld = false;
+    window.coiWillReload = new Promise((resolve) => { settleReload = resolve; });
+    window.coiHoldReloads = () => { reloadsHeld = true; };
     (() => {
-        const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
-        window.sessionStorage.removeItem("coiReloadedBySelf");
-        const coepDegrading = reloadedBySelf === "coepdegrade";
-        const coi = {
-            // A first-install update can reload before clients.claim() gives
-            // the new page a controller. Do not let the one-shot reload marker
-            // suppress the recovery registration in that state.
-            shouldRegister: () => !reloadedBySelf || !navigator.serviceWorker?.controller,
-            shouldDeregister: () => false,
-            coepCredentialless: () => true,
-            coepDegrade: () => true,
-            doReload: () => window.location.reload(),
-            quiet: false,
-            ...window.coi
-        };
-        const navigatorApi = navigator;
-        const controlling = navigatorApi.serviceWorker && navigatorApi.serviceWorker.controller;
+        try {
+            const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
+            window.sessionStorage.removeItem("coiReloadedBySelf");
+            const coepDegrading = reloadedBySelf === "coepdegrade";
+            const coi = {
+                // A first-install update can reload before clients.claim() gives
+                // the new page a controller. Do not let the one-shot reload marker
+                // suppress the recovery registration in that state.
+                shouldRegister: () => !reloadedBySelf || !navigator.serviceWorker?.controller,
+                shouldDeregister: () => false,
+                coepCredentialless: () => true,
+                coepDegrade: () => true,
+                doReload: () => window.location.reload(),
+                quiet: false,
+                ...window.coi
+            };
+            const navigatorApi = navigator;
+            const controlling = navigatorApi.serviceWorker && navigatorApi.serviceWorker.controller;
 
-        if (controlling && !window.crossOriginIsolated) {
-            window.sessionStorage.setItem("coiCoepHasFailed", "true");
-        }
-        const coepHasFailed = window.sessionStorage.getItem("coiCoepHasFailed");
-        if (controlling) {
-            const reloadToDegrade = coi.coepDegrade() && !(coepDegrading || window.crossOriginIsolated);
-            navigatorApi.serviceWorker.controller.postMessage({
-                type: "coepCredentialless",
-                value: (reloadToDegrade || coepHasFailed && coi.coepDegrade())
-                    ? false
-                    : coi.coepCredentialless(),
-            });
-            if (reloadToDegrade) {
-                !coi.quiet && console.log("Reloading page to degrade COEP.");
-                window.sessionStorage.setItem("coiReloadedBySelf", "coepdegrade");
-                coi.doReload("coepdegrade");
+            if (controlling && !window.crossOriginIsolated) {
+                window.sessionStorage.setItem("coiCoepHasFailed", "true");
             }
-            if (coi.shouldDeregister()) navigatorApi.serviceWorker.controller.postMessage({ type: "deregister" });
-        }
-
-        const requiresRuntimeCache = coiRuntimeConfig.runtimeCache === true;
-        const requiresWorkerFeatures = coiRuntimeConfig.alwaysRegister === true || requiresRuntimeCache;
-        const documentManifest = () => window.document.querySelector?.('meta[name="neurodesk-runtime-manifest"]')?.content;
-        const postManifestIdentity = () => {
-            const url = documentManifest();
-            if (url) navigatorApi.serviceWorker?.controller?.postMessage({ type: "runtimeManifest", url });
-        };
-        if (requiresRuntimeCache) {
-            navigatorApi.serviceWorker?.addEventListener?.("controllerchange", postManifestIdentity);
-            navigatorApi.serviceWorker?.addEventListener?.("message", (event) => {
-                if (event.data?.type === "runtimeManifestRequest") event.ports[0]?.postMessage(documentManifest());
-            });
-            postManifestIdentity();
-        }
-        const persistenceKey = Symbol.for("neurodesk.storage.persistenceRequested");
-        if (requiresRuntimeCache && navigatorApi.storage?.persist && !globalThis[persistenceKey]) {
-            globalThis[persistenceKey] = true;
-            try {
-                Promise.resolve(navigatorApi.storage.persist()).catch(error => console.warn("Persistent storage request failed:", error));
-            } catch (error) {
-                console.warn("Persistent storage request failed:", error);
-            }
-        }
-        if ((!requiresWorkerFeatures && window.crossOriginIsolated !== false) || !coi.shouldRegister()) return;
-        if (!window.isSecureContext) {
-            !coi.quiet && console.log("COOP/COEP Service Worker not registered, a secure context is required.");
-            return;
-        }
-        if (!navigatorApi.serviceWorker) {
-            !coi.quiet && console.error("COOP/COEP Service Worker not registered, perhaps due to private mode.");
-            return;
-        }
-
-        navigatorApi.serviceWorker.register(window.document.currentScript.src).then(
-            (registration) => {
-                !coi.quiet && console.log("COOP/COEP Service Worker registered", registration.scope);
-                let reloadRequested = false;
-                const reloadOnce = (reason) => {
-                    if (reloadRequested || window.crossOriginIsolated === true) return;
-                    reloadRequested = true;
-                    !coi.quiet && console.log("Reloading page to make use of updated COOP/COEP Service Worker.");
-                    window.sessionStorage.setItem("coiReloadedBySelf", reason);
-                    coi.doReload();
-                };
-                const reloadWhenActive = (worker, reason) => {
-                    if (!worker) {
-                        navigatorApi.serviceWorker.ready.then(() => reloadOnce(reason));
-                        return;
-                    }
-                    if (worker.state === "activated") {
-                        reloadOnce(reason);
-                        return;
-                    }
-                    worker.addEventListener("statechange", () => {
-                        if (worker.state === "activated") reloadOnce(reason);
-                    });
-                };
-                registration.addEventListener("updatefound", () => {
-                    reloadWhenActive(registration.installing, "updatefound");
+            const coepHasFailed = window.sessionStorage.getItem("coiCoepHasFailed");
+            if (controlling) {
+                const reloadToDegrade = coi.coepDegrade() && !(coepDegrading || window.crossOriginIsolated);
+                navigatorApi.serviceWorker.controller.postMessage({
+                    type: "coepCredentialless",
+                    value: (reloadToDegrade || coepHasFailed && coi.coepDegrade())
+                        ? false
+                        : coi.coepCredentialless(),
                 });
-                if (!navigatorApi.serviceWorker.controller) {
-                    // register() may resolve after updatefound has already fired.
-                    // Observe the worker returned by the registration as well so
-                    // a clean first visit cannot remain unisolated indefinitely.
-                    const worker = registration.installing || registration.waiting || registration.active;
-                    reloadWhenActive(worker, "notcontrolling");
+                if (reloadToDegrade) {
+                    !coi.quiet && console.log("Reloading page to degrade COEP.");
+                    window.sessionStorage.setItem("coiReloadedBySelf", "coepdegrade");
+                    coi.doReload("coepdegrade");
+                    settleReload(true);
                 }
-            },
-            (error) => !coi.quiet && console.error("COOP/COEP Service Worker failed to register:", error)
-        );
+                if (coi.shouldDeregister()) navigatorApi.serviceWorker.controller.postMessage({ type: "deregister" });
+            }
+
+            const requiresRuntimeCache = coiRuntimeConfig.runtimeCache === true;
+            const requiresWorkerFeatures = coiRuntimeConfig.alwaysRegister === true || requiresRuntimeCache;
+            const documentManifest = () => window.document.querySelector?.('meta[name="neurodesk-runtime-manifest"]')?.content;
+            const postManifestIdentity = () => {
+                const url = documentManifest();
+                if (url) navigatorApi.serviceWorker?.controller?.postMessage({ type: "runtimeManifest", url });
+            };
+            if (requiresRuntimeCache) {
+                navigatorApi.serviceWorker?.addEventListener?.("controllerchange", postManifestIdentity);
+                navigatorApi.serviceWorker?.addEventListener?.("message", (event) => {
+                    if (event.data?.type === "runtimeManifestRequest") event.ports[0]?.postMessage(documentManifest());
+                });
+                postManifestIdentity();
+            }
+            const persistenceKey = Symbol.for("neurodesk.storage.persistenceRequested");
+            if (requiresRuntimeCache && navigatorApi.storage?.persist && !globalThis[persistenceKey]) {
+                globalThis[persistenceKey] = true;
+                try {
+                    Promise.resolve(navigatorApi.storage.persist()).catch(error => console.warn("Persistent storage request failed:", error));
+                } catch (error) {
+                    console.warn("Persistent storage request failed:", error);
+                }
+            }
+            if ((!requiresWorkerFeatures && window.crossOriginIsolated !== false) || !coi.shouldRegister()) return settleReload(false);
+            if (!window.isSecureContext) {
+                !coi.quiet && console.log("COOP/COEP Service Worker not registered, a secure context is required.");
+                return settleReload(false);
+            }
+            if (!navigatorApi.serviceWorker) {
+                !coi.quiet && console.error("COOP/COEP Service Worker not registered, perhaps due to private mode.");
+                return settleReload(false);
+            }
+
+            navigatorApi.serviceWorker.register(window.document.currentScript.src).then(
+                (registration) => {
+                    !coi.quiet && console.log("COOP/COEP Service Worker registered", registration.scope);
+                    let reloadRequested = false;
+                    const reloadOnce = (reason) => {
+                        if (reloadRequested || reloadsHeld || window.crossOriginIsolated === true) return settleReload(false);
+                        reloadRequested = true;
+                        !coi.quiet && console.log("Reloading page to make use of updated COOP/COEP Service Worker.");
+                        // Settle only once the reload is under way: a failed marker write means no reload.
+                        try {
+                            window.sessionStorage.setItem("coiReloadedBySelf", reason);
+                            coi.doReload();
+                            settleReload(true);
+                        } catch (error) {
+                            settleReload(false);
+                            console.error("COOP/COEP Service Worker reload failed:", error);
+                        }
+                    };
+                    const reloadWhenActive = (worker, reason) => {
+                        if (!worker) {
+                            navigatorApi.serviceWorker.ready.then(() => reloadOnce(reason));
+                            return;
+                        }
+                        if (worker.state === "activated") {
+                            reloadOnce(reason);
+                            return;
+                        }
+                        worker.addEventListener("statechange", () => {
+                            if (worker.state === "activated") reloadOnce(reason);
+                            if (worker.state === "redundant") settleReload(false);
+                        });
+                    };
+                    registration.addEventListener("updatefound", () => {
+                        reloadWhenActive(registration.installing, "updatefound");
+                    });
+                    if (!navigatorApi.serviceWorker.controller) {
+                        // register() may resolve after updatefound has already fired.
+                        // Observe the worker returned by the registration as well so
+                        // a clean first visit cannot remain unisolated indefinitely.
+                        const worker = registration.installing || registration.waiting || registration.active;
+                        reloadWhenActive(worker, "notcontrolling");
+                    } else {
+                        settleReload(false);
+                    }
+                },
+                (error) => {
+                    settleReload(false);
+                    !coi.quiet && console.error("COOP/COEP Service Worker failed to register:", error);
+                }
+            ).catch((error) => {
+                settleReload(false);
+                console.error("COOP/COEP Service Worker bootstrap failed:", error);
+            });
+        } catch (error) {
+            settleReload(false);
+            console.error("COOP/COEP Service Worker bootstrap failed:", error);
+        }
     })();
 }

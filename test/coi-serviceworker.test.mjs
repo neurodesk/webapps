@@ -85,6 +85,7 @@ test('recovers when an update reload happens before the worker controls the page
   assert.equal(registrations, 1);
   assert.equal(reloads, 1);
   assert.equal(storage.get('coiReloadedBySelf'), 'notcontrolling');
+  assert.equal(await window.coiWillReload, true);
 });
 
 test('reloads after an installing worker activates when updatefound was missed', async () => {
@@ -134,10 +135,13 @@ test('reloads after an installing worker activates when updatefound was missed',
 
   assert.equal(reloads, 0);
   assert.equal(typeof stateChangeListener, 'function');
+  const pending = Symbol('pending');
+  assert.equal(await Promise.race([window.coiWillReload, Promise.resolve(pending)]), pending, 'undecided until the worker activates');
 
   installing.state = 'activated';
   stateChangeListener();
 
+  assert.equal(await window.coiWillReload, true);
   assert.equal(reloads, 1);
   assert.equal(storage.get('coiReloadedBySelf'), 'notcontrolling');
 });
@@ -405,6 +409,23 @@ test('header-isolated pages register the cache worker without reloading the appl
   assert.equal(registrations, 1);
   assert.equal(reloads, 0);
   assert.equal(persistRequests, 1);
+  assert.equal(await context.window.coiWillReload, false);
+});
+
+test('a page whose worker cannot register stays, and says so', async () => {
+  const window = {
+    crossOriginIsolated: false,
+    isSecureContext: true,
+    document: { currentScript: { src: 'https://example.test/app/coi-serviceworker.js' } },
+    location: { reload: () => assert.fail('no reload without a worker') },
+    sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+  };
+  vm.runInNewContext(source, {
+    console: { error() {}, log() {}, warn() {} },
+    navigator: { serviceWorker: { controller: null, register: async () => { throw new Error('denied'); } } },
+    window,
+  });
+  assert.equal(await window.coiWillReload, false);
 });
 
 
@@ -517,3 +538,73 @@ test('a navigation without a valid app-local immutable identity cannot inherit a
   assert.equal(await (await worker.fetch(fixture.assetUrl, { clientId: 'document-two' })).text(), 'ordinary network bytes');
   assert.equal(worker.calls.filter(call => call.url === outside).length, 0);
 });
+
+function bootstrapPage({ isolated = false, controller = null, registration, storage = new Map(), coi } = {}) {
+  const page = { reloads: 0 };
+  page.window = {
+    coi,
+    crossOriginIsolated: isolated,
+    isSecureContext: true,
+    document: { currentScript: { src: 'https://example.test/app/coi-serviceworker.js' } },
+    location: { reload: () => { page.reloads++; } },
+    sessionStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      removeItem: (key) => storage.delete(key),
+      setItem: (key, value) => storage.set(key, value),
+    },
+  };
+  vm.runInNewContext(source, {
+    console: { error() {}, log() {}, warn() {} },
+    navigator: { serviceWorker: { controller, register: async () => registration } },
+    window: page.window,
+  });
+  return page;
+}
+
+function workerIn(state) {
+  const worker = { state, listeners: [], addEventListener: (type, listener) => worker.listeners.push(listener) };
+  worker.become = (next) => {
+    worker.state = next;
+    for (const listener of worker.listeners) listener();
+  };
+  return worker;
+}
+
+test('a first-visit worker that turns redundant settles the page as staying', async () => {
+  const installing = workerIn('installing');
+  const page = bootstrapPage({ registration: { installing, waiting: null, active: null, addEventListener() {} } });
+  await new Promise((resolve) => setImmediate(resolve));
+  installing.become('redundant');
+  assert.equal(await page.window.coiWillReload, false);
+  assert.equal(page.reloads, 0);
+});
+
+test('a bootstrap that cannot use sessionStorage settles the page as staying', async () => {
+  const page = bootstrapPage({ storage: { get: () => { throw new DOMException('denied', 'SecurityError'); } } });
+  assert.equal(await page.window.coiWillReload, false);
+  assert.equal(page.reloads, 0);
+});
+
+test('a first visit that cannot write its reload marker stays, and says so', async () => {
+  const storage = { get: () => undefined, delete() {}, set: () => { throw new DOMException('full', 'QuotaExceededError'); } };
+  const page = bootstrapPage({ storage, registration: { installing: null, waiting: null, active: { state: 'activated' }, addEventListener() {} } });
+  assert.equal(await page.window.coiWillReload, false);
+  assert.equal(page.reloads, 0);
+});
+
+for (const held of [false, true]) {
+  test(`a worker update on a controlled, unisolated page ${held ? 'waits while reloads are held' : 'reloads it as before'}`, async () => {
+    let updatefound;
+    const registration = {
+      installing: null,
+      addEventListener: (type, listener) => { if (type === 'updatefound') updatefound = listener; },
+    };
+    const page = bootstrapPage({ controller: { postMessage() {} }, registration, coi: { coepDegrade: () => false } });
+    assert.equal(await page.window.coiWillReload, false);
+    if (held) page.window.coiHoldReloads();
+    registration.installing = workerIn('installing');
+    updatefound();
+    registration.installing.become('activated');
+    assert.equal(page.reloads, held ? 0 : 1);
+  });
+}
