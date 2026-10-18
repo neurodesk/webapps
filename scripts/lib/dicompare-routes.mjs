@@ -6,7 +6,7 @@ import { join } from 'node:path';
 export async function stageDicompareRoutes({ repoRoot, siteDist }) {
   const index = join(siteDist, 'dicompare', 'index.html');
   const html = await readFile(index, 'utf8');
-  const restore = '<script src="/dicompare-routes.js"></script>';
+  const restore = '<script src="/dicompare/dicompare-routes.js"></script>';
   if (!html.includes(restore)) {
     // Runtime-cache staging can prepend relative scripts before the base tag.
     // Establish the fixed asset base before restoring a nested document URL.
@@ -16,7 +16,6 @@ export async function stageDicompareRoutes({ repoRoot, siteDist }) {
     }
     await writeFile(index, html.replace(base, '').replace('<head>', `<head>\n  ${base}\n  ${restore}`));
   }
-  for (const file of ['404.html', 'dicompare-routes.js']) {
-    await cp(join(repoRoot, 'site', file), join(siteDist, file));
-  }
+  await cp(join(repoRoot, 'site', '404.html'), join(siteDist, '404.html'));
+  await cp(join(repoRoot, 'site', 'dicompare-routes.js'), join(siteDist, 'dicompare', 'dicompare-routes.js'));
 }

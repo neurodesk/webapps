@@ -64,16 +64,17 @@ test('composite staging copies the bridge and restores before app modules, idemp
     await writeFile(index, '<html><head><script src="./coi-serviceworker.js"></script><base href="/dicompare/"><script type="module" src="/dicompare/assets/app.js"></script></head><body></body></html>');
     await stageDicompareRoutes({ repoRoot, siteDist });
     const first = await readFile(index, 'utf8');
-    assert.match(first, /<script src="\/dicompare-routes\.js"><\/script>/);
+    assert.match(first, /<script src="\/dicompare\/dicompare-routes\.js"><\/script>/);
     assert.ok(first.indexOf('/dicompare-routes.js') < first.indexOf('type="module"'));
     assert.ok(first.indexOf('<base ') < first.indexOf('/dicompare-routes.js'));
     assert.match(first, /<script src="\.\/coi-serviceworker\.js"><\/script>/);
     assert.ok(first.indexOf('<base ') < first.indexOf('./coi-serviceworker.js'));
     assert.equal((first.match(/<base /g) || []).length, 1);
     assert.match(first, /<base href="\/dicompare\/">/);
-    for (const file of ['404.html', 'dicompare-routes.js']) {
-      assert.equal(await readFile(join(siteDist, file), 'utf8'), await readFile(join(repoRoot, 'site', file), 'utf8'));
+    for (const [source, destination] of [['404.html', '404.html'], ['dicompare-routes.js', 'dicompare/dicompare-routes.js']]) {
+      assert.equal(await readFile(join(siteDist, destination), 'utf8'), await readFile(join(repoRoot, 'site', source), 'utf8'));
     }
+    assert.match(await readFile(join(siteDist, '404.html'), 'utf8'), /src="\/dicompare\/dicompare-routes\.js"/);
     await stageDicompareRoutes({ repoRoot, siteDist });
     assert.equal(await readFile(index, 'utf8'), first);
     await writeFile(index, '<html><head><base href="./"></head></html>');
