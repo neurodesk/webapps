@@ -21,6 +21,7 @@ export function defineExampleSelector(view = globalThis.window) {
     #folder;
     #actionsFor = null;
     #active = null;
+    #picks = 0;
 
     static get observedAttributes() {
       return ['disabled'];
@@ -166,6 +167,7 @@ export function defineExampleSelector(view = globalThis.window) {
     };
 
     async #choose() {
+      const pick = ++this.#picks;
       const action = this.#select.selectedOptions[0]?.dataset.action;
       if (!action) return this.#load();
       this.#select.value = '';
@@ -178,7 +180,8 @@ export function defineExampleSelector(view = globalThis.window) {
           const files = action === 'folder'
             ? await filesFromDirectoryHandle(await view.showDirectoryPicker({ mode: 'read' }))
             : await Promise.all((await view.showOpenFilePicker({ multiple: target.multiple })).map(handle => handle.getFile()));
-          if (files.length) deliverFiles(target, files);
+          // A file, folder or example chosen while this folder was read replaces it.
+          if (files.length && pick === this.#picks) deliverFiles(target, files);
           return;
         } catch (error) {
           if (error?.name === 'AbortError') return;
@@ -212,6 +215,7 @@ export function defineExampleSelector(view = globalThis.window) {
 
     #replaced = event => {
       if (event.type !== 'drop' && !event.target?.matches('input[type="file"]')) return;
+      this.#picks += 1;
       if (this.#active) this.cancel();
       else {
         delete this.dataset.exampleId;

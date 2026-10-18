@@ -424,8 +424,23 @@ test('Load folder reads the chosen folder through File System Access with relati
   assert.deepEqual(session.changes.map(paths => paths.sort()), [[
     'session/notes.txt', 'session/series-4/a.dcm', 'session/series-4/b.dcm', 'session/series-9/echo/c.dcm',
   ]], 'the primary input gets every file once, with the path a dropped folder carries');
+  assert.deepEqual(session.input.files.map(file => file.webkitRelativePath).sort(), session.changes[0],
+    'readers of a folder input\'s native path see the same path');
   assert.equal(session.inputPicker(), 0, 'the input picker that says Upload never opens');
   assert.equal(session.control.select.value, '');
+  session.control.destroy();
+});
+
+test('a folder still being read when other files are chosen never replaces them', async t => {
+  let release;
+  const session = accessSession(t, { files: ['new.nii'] });
+  session.pickers.folder = () => new Promise(resolve => { release = () => resolve(directory('old', [handle(session.window, 'old.nii')])); });
+  await session.choose('folder');
+  await session.choose('files');
+  release();
+  await tick();
+  await tick();
+  assert.deepEqual(session.changes, [['new.nii']]);
   session.control.destroy();
 });
 
