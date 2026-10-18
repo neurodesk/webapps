@@ -13,7 +13,7 @@
     "dev:electron": "electron-vite dev",
     "start": "vite",
     "start:electron": "electron-vite preview",
-    "build": "vite build",
+    "build": "vite build && node ../../scripts/theme-app-dist.mjs --app dicompare",
     "build:electron": "electron-vite build",
     "build:win": "npm run download:pyodide && npm run build:electron && electron-builder --win",
     "build:mac": "npm run download:pyodide && npm run build:electron && electron-builder --mac",

@@ -10,7 +10,7 @@
     "Keep both typed promise rules for src, the asyncCallback rejection boundary for synchronous React/timer callbacks, awaited session loading, and thumbnail queue failure cleanup and behavior tests.",
     "The command line retains its schema-generation Python in packages/dicompare/src/node.js and its reference outputs; the synced worker no longer generates schemas.",
     "Keep the offline Pyodide path in public/embed/dicompare-worker.js; the standalone build serves this copy.",
-    "Keep the shared Neurodesk shell in place of upstream's landing page and Pyodide notification.",
+    "Keep the shared Neurodesk shell in place of upstream's landing page and Pyodide notification. The standalone build must run theme-app-dist.mjs so the committed production browser tests and the deployed site use the same shell.",
     "When DICOMPARE_PACKAGE changes, replace the dicompare wheel, and any wheel its Requires-Dist now pins (pydicom), in registry/offline-assets.sources.json and registry/offline-assets.lock.json, then verify with `node scripts/desktop/assets.mjs`.",
     "Keep the bundled DICOM field dictionary and metaschema, concurrent dictionary import coalescing, rejection/retry tests, switch-local declaration scopes and actionable schema preload warnings.",
     "Keep explicit import type for ProcessingProgress in useFileProcessing.ts, UnifiedSchema in schemaToAcquisition.ts and WorkspaceItem in workspaceHelpers.ts; these interfaces are erased imports, avoiding runtime context/hook cycles.",
