@@ -4,6 +4,62 @@ import { expect } from '@playwright/test';
 // Run against the assembled production site, served with Pages-style 404.html,
 // never a Vite/dev-server SPA fallback.
 export async function verifyDicompareRoutes(browser, origin) {
+  for (const path of ['/dicompare/schema/ASL_Clinical_Guidelines_v1.0?acq=0#details', '/dicompare/schema/']) {
+    const coldContext = await browser.newContext();
+    try {
+      const document = await coldContext.request.get(origin + '/dicompare/');
+      assert.equal(document.headers()['cross-origin-opener-policy'], undefined);
+      assert.equal(document.headers()['cross-origin-embedder-policy'], undefined);
+      const coldPage = await coldContext.newPage();
+      const workerResponses = [];
+      const failedAssets = [];
+      const scientificRequests = [];
+      await coldContext.route('**/*', route => {
+        const url = route.request().url();
+        if (/pyodide\.asm\.|python_stdlib|\.whl(?:\?|$)/.test(url)) {
+          scientificRequests.push(url);
+          return route.abort();
+        }
+        if (!url.startsWith(origin + '/')) return route.fulfill({ status: 200, body: '' });
+        return route.continue();
+      });
+      coldPage.on('response', response => {
+        if (response.url().endsWith('/coi-serviceworker.js')) {
+          workerResponses.push({ url: response.url(), status: response.status() });
+        }
+        if (response.status() >= 400 && ['script', 'stylesheet', 'font'].includes(response.request().resourceType())) {
+          failedAssets.push(response.url());
+        }
+      });
+      await coldPage.goto(origin + path);
+      const ready = path.includes('ASL_')
+        ? coldPage.getByRole('link', { name: 'All schemas', exact: true })
+        : coldPage.getByPlaceholder('Search schemas, acquisitions, tags...');
+      await expect(ready).toBeVisible();
+      assert.deepEqual(failedAssets, [], `cold assets for ${path}`);
+      assert.ok(workerResponses.some(response => response.url === origin + '/dicompare/coi-serviceworker.js' && response.status === 200));
+      await coldPage.waitForFunction(() => crossOriginIsolated && navigator.serviceWorker.controller, null, { timeout: 15_000 });
+      assert.deepEqual(await coldPage.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        return { scope: registration.scope, active: registration.active.scriptURL, controller: navigator.serviceWorker.controller.scriptURL };
+      }), {
+        scope: origin + '/dicompare/',
+        active: origin + '/dicompare/coi-serviceworker.js',
+        controller: origin + '/dicompare/coi-serviceworker.js',
+      });
+      await expect(ready).toBeVisible();
+      await expect(coldPage).toHaveURL(origin + path);
+      await coldPage.reload();
+      await expect(ready).toBeVisible();
+      await expect(coldPage).toHaveURL(origin + path);
+      assert.equal(await coldPage.evaluate(() => crossOriginIsolated), true);
+      assert.deepEqual(failedAssets, [], `reloaded assets for ${path}`);
+      assert.deepEqual(scientificRequests, []);
+      console.log(`PASS cold Dicompare route ${path} registers /dicompare/coi-serviceworker.js and isolates without server headers`);
+    } finally {
+      await coldContext.close();
+    }
+  }
   const context = await browser.newContext();
   const page = await context.newPage();
   const pageErrors = [];

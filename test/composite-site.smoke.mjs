@@ -79,8 +79,11 @@ const server = createServer(async (request, response) => {
     response.writeHead(200, {
       'content-length': metadata.size,
       'content-type': mimeTypes.get(extname(path)) ?? 'application/octet-stream',
-      'cross-origin-embedder-policy': 'credentialless',
-      'cross-origin-opener-policy': 'same-origin',
+      // Dicompare's Pages route checks must acquire isolation from its worker.
+      ...(url.pathname.startsWith('/dicompare/') ? {} : {
+        'cross-origin-embedder-policy': 'credentialless',
+        'cross-origin-opener-policy': 'same-origin',
+      }),
       'x-content-type-options': 'nosniff',
     });
     if (request.method === 'HEAD') response.end();
