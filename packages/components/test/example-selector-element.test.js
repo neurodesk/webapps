@@ -444,6 +444,30 @@ test('a folder still being read when other files are chosen never replaces them'
   session.control.destroy();
 });
 
+for (const operation of ['destroy', 'remove', 'cancel', 'disable', 'disable-enable', 'remove-input', 'disable-input']) {
+  test(`a pending folder read delivers no files after ${operation}`, async t => {
+    const session = accessSession(t);
+    let release;
+    session.pickers.folder = async () => directory('old', [{
+      kind: 'file', name: 'old.nii',
+      getFile: () => new Promise(resolve => { release = () => resolve(new session.window.File([], 'old.nii')); }),
+    }]);
+    await session.choose('folder');
+    assert.equal(typeof release, 'function');
+    if (operation === 'disable' || operation === 'disable-enable') session.control.disabled = true;
+    else if (operation === 'remove-input') session.input.remove();
+    else if (operation === 'disable-input') session.input.disabled = true;
+    else session.control[operation]();
+    if (operation === 'disable-enable') session.control.disabled = false;
+    await tick();
+    release();
+    await tick();
+    await tick();
+    assert.deepEqual(session.changes, []);
+    session.control.destroy();
+  });
+}
+
 test('Load files opens the File System Access file picker for the primary input', async t => {
   const session = accessSession(t, { files: ['a.nii', 'b.nii'] });
   await session.choose('files');

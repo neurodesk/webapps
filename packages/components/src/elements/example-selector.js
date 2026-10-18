@@ -42,6 +42,7 @@ export function defineExampleSelector(view = globalThis.window) {
     }
 
     attributeChangedCallback() {
+      if (this.disabled) this.#picks += 1;
       this.#refresh();
     }
 
@@ -125,10 +126,6 @@ export function defineExampleSelector(view = globalThis.window) {
       this.#folder = doc.createElement('input');
       this.#folder.type = 'file';
       this.#folder.setAttribute('webkitdirectory', '');
-      this.#folder.addEventListener('change', () => {
-        if (this.#actionsFor && this.#folder.files.length) deliverFiles(this.#actionsFor, [...this.#folder.files]);
-        this.#folder.value = '';
-      });
       this.#select.addEventListener('change', () => this.#choose());
       this.#select.addEventListener('focus', this.#renderActions);
       this.#select.addEventListener('pointerdown', this.#renderActions);
@@ -167,12 +164,16 @@ export function defineExampleSelector(view = globalThis.window) {
     };
 
     async #choose() {
+      if (this.disabled || !this.isConnected) return;
       const pick = ++this.#picks;
       const action = this.#select.selectedOptions[0]?.dataset.action;
       if (!action) return this.#load();
       this.#select.value = '';
       const target = this.#actionsFor;
       if (!target) return;
+      const current = () => pick === this.#picks
+        && this.isConnected && !this.disabled
+        && target.isConnected && !target.disabled && this.#actionsFor === target;
       // Chromium's file input dialogs say "Upload"; its File System Access pickers
       // say "Open" or "Select". Other browsers have only the input's picker.
       if (view.showOpenFilePicker && view.showDirectoryPicker) {
@@ -181,13 +182,20 @@ export function defineExampleSelector(view = globalThis.window) {
             ? await filesFromDirectoryHandle(await view.showDirectoryPicker({ mode: 'read' }))
             : await Promise.all((await view.showOpenFilePicker({ multiple: target.multiple })).map(handle => handle.getFile()));
           // A file, folder or example chosen while this folder was read replaces it.
-          if (files.length && pick === this.#picks) deliverFiles(target, files);
+          if (files.length && current()) deliverFiles(target, files);
           return;
         } catch (error) {
           if (error?.name === 'AbortError') return;
         }
       }
+      if (!current()) return;
       const input = action === 'folder' ? this.#folder : target;
+      if (action === 'folder') {
+        input.onchange = () => {
+          if (current() && input.files.length) deliverFiles(target, [...input.files]);
+          input.value = '';
+        };
+      }
       try {
         input.showPicker();
       } catch (error) {
@@ -251,6 +259,7 @@ export function defineExampleSelector(view = globalThis.window) {
     }
 
     cancel() {
+      this.#picks += 1;
       if (!this.#active) return;
       const job = this.#active;
       this.#active = null;
