@@ -81,7 +81,10 @@
       <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
     </footer>
 
-    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded. The FLAMeS and SynthStrip models are downloaded once and cached.</p></template>
+    <template id="privacyContent">
+      <p>Images are processed locally in this browser and are never uploaded. The FLAMeS and SynthStrip models are downloaded once and cached.</p>
+      <p>White matter lesions can open an image sent from DICOM View for 2 minutes, and deletes it from this browser&rsquo;s storage once it opens it. It is the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient&rsquo;s name or birth date. If the browser closes first, the image can no longer be opened, but its bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open it within the 2 minutes.</p>
+    </template>
 
     <script type="module" src="/src/main.js"></script>
   </body>

@@ -16,6 +16,7 @@ import { createElement } from "@neurodesk/webapp-components/core";
 import { downloadFile } from "@neurodesk/webapp-components/file-io";
 import { decodeNiftiBuffer, parseNiftiHeader } from "@neurodesk/webapp-components/file-io/nifti";
 import { registerAppAutomation, runAbortable } from "@neurodesk/webapp-components/automation";
+import { handoffId, takeHandoff } from "@neurodesk/webapp-components/handoff";
 import { readImageFiles, runDcm2niix } from "@neurodesk/runtime-support/dcm2niix-client";
 import { readVolume } from "@neurodesk/synthsr";
 import { MAX_INPUT_VOXELS } from "@neurodesk/white-matter-lesions";
@@ -314,7 +315,7 @@ function show(stage) {
   return viewQueue;
 }
 
-async function loadFiles(filesPromise, signal) {
+async function loadFiles(filesPromise, signal, loaded = () => "FLAIR loaded · ready to segment lesions") {
   if (job) throw new Error("Wait for the current step to finish or cancel it, then retry.");
   const current = begin("loading", "Reading image…");
   const abort = () => current.controller.abort();
@@ -347,7 +348,7 @@ async function loadFiles(filesPromise, signal) {
     $("fileInfo").hidden = false;
     $("fileInfo").textContent = `${source.name} · ${nx} × ${ny} × ${nz} voxels`;
     $("dropZone").classList.add("has-files");
-    end(current, "FLAIR loaded · ready to segment lesions");
+    end(current, loaded(source));
     await show("flair");
   } catch (error) {
     const cancelled = error.name === "AbortError";
@@ -472,6 +473,18 @@ function cancel() {
   end(current, "Cancelled", { success: false });
 }
 $("cancelButton").onclick = cancel;
+
+// An image another app sent here is loaded, never segmented: the user starts that. It is the
+// first job, so drops and examples wait behind it as behind any load.
+if (handoffId(location.hash)) {
+  let sender;
+  const files = takeHandoff().then((received) => {
+    if (!received) throw new DOMException("The page reloads before taking the image", "AbortError");
+    sender = received.source;
+    return received.files;
+  });
+  void loadFiles(files, undefined, (image) => `Loaded ${image.name} from ${sender.title}`);
+}
 window.addEventListener("pagehide", () => {
   exampleControl.destroy();
   cancel();
