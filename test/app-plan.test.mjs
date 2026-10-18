@@ -4,6 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { parse, stringify } from 'yaml';
 import { createAppPlan } from '../scripts/lib/app-plan.mjs';
@@ -537,6 +538,52 @@ test('a path named in a line comment is not an input, but code, JSDoc types and 
   assert.deepEqual(selects('exes/code/data.bin'), ['lcmodel']);
   assert.deepEqual(selects('packages/typed/index.js'), ['lcmodel']);
   assert.deepEqual(selects('packages/directive/index.d.ts'), ['lcmodel']);
+});
+
+test('executable comment-like lines retain their app consumer', async (t) => {
+  const registry = await loadAppsRegistry();
+  for (const name of ['block-close', 'template-continuation', 'multiline-template', 'continued-string']) {
+    await t.test(name, async (t) => {
+      const root = await mkdtemp(join(tmpdir(), 'app-plan-executable-comment-'));
+      t.after(() => rm(root, { recursive: true, force: true }));
+      for (const directory of ['apps/lcmodel', 'scripts/lib', 'packages/runtime', '.github/workflows']) {
+        await mkdir(join(root, directory), { recursive: true });
+      }
+      await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: {} }));
+      await writeFile(join(root, '.github/workflows/ci.yml'), JSON.stringify({ jobs: Object.fromEntries(['composite-site', ...CATALOG_JOBS].map((name) => [name, { steps: [{ run: 'echo fixture' }] }])) }));
+      await writeFile(join(root, 'apps/lcmodel/main.js'), "import '../../scripts/lib/entry.mjs';\n");
+      await writeFile(join(root, 'packages/runtime/index.mjs'), 'export const value = 356;\n');
+      const sources = {
+        'block-close': '/* block comment\n// */ export { value } from "../../packages/runtime/index.mjs";\n',
+        'template-continuation': 'export const loaded = await import(`\\\n//${new URL("../../", import.meta.url).pathname}packages/runtime/index.mjs`);\n',
+        'multiline-template': 'export const loaded = await import(`\n//${new URL("../../", import.meta.url).pathname}packages/runtime/index.mjs\n`.trim());\n',
+        'continued-string': "export const loaded = await import('\\\n//../../packages/runtime/index.mjs'.slice(2));\n",
+      };
+      const entry = join(root, 'scripts/lib/entry.mjs');
+      await writeFile(entry, sources[name]);
+      const loaded = await import(pathToFileURL(entry));
+      assert.equal(loaded.loaded?.value ?? loaded.value, 356);
+      const graph = await loadConservativeWorkspaceGraph(root);
+      const plan = createAppPlan(registry, ['packages/runtime/index.mjs'], graph);
+      assert.deepEqual(plan.selected.map((app) => app.id), ['lcmodel']);
+    });
+  }
+});
+
+test('unparsed root source retains uncertain comment references', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'app-plan-unparsed-comment-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const directory of ['apps/lcmodel', 'scripts', 'packages/runtime', '.github/workflows']) {
+    await mkdir(join(root, directory), { recursive: true });
+  }
+  await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: {} }));
+  await writeFile(join(root, '.github/workflows/ci.yml'), JSON.stringify({ jobs: Object.fromEntries(['composite-site', ...CATALOG_JOBS].map((name) => [name, { steps: [{ run: 'echo fixture' }] }])) }));
+  await writeFile(join(root, 'apps/lcmodel/main.js'), "import '../../scripts/entry.mjs';\n");
+  await writeFile(join(root, 'scripts/entry.mjs'), 'const invalid = ;\n// packages/runtime/index.mjs\n');
+  const graph = await loadConservativeWorkspaceGraph(root);
+  const registry = await loadAppsRegistry();
+  const plan = createAppPlan(registry, ['packages/runtime/index.mjs'], graph);
+  assert.deepEqual(plan.selected.map((app) => app.id), ['lcmodel']);
 });
 
 test('removing a root script still selects the CI job that calls it', async (t) => {
