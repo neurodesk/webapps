@@ -100,6 +100,23 @@ cost.
 
 ## Results and reviewed survivors
 
+The 2026-10-17 package-metadata correction assesses 195 lockfile-analyzer mutants,
+with 178 killed, 7 timed out and 10 survivors. No mutants are uncovered or have
+compile or runtime errors. Rerun with `MUTATION_MODULE=lockfile-impact pnpm exec
+stryker run stryker.config.mjs`.
+The earlier root-quality ownership change assessed 163 mutants, with 146 killed,
+7 timed out and 10 survivors. The current tests also cover required package
+metadata on both original sides, removed root tools and transitives, peer-qualified
+snapshots, malformed resolution mappings and absent top-level sections.
+The eight earlier survivors below and the two root-tool survivors remain;
+no new survivor remains from the metadata validation:
+
+- A default excluded-tool list containing `"Stryker was here"` matches no npm
+  package name, because spaces are invalid in a package name.
+- Running the root-tool normalization with an empty excluded-tool list only
+  removes an empty `devDependencies` mapping. pnpm omits that empty mapping;
+  all actual roots and their closures remain identical.
+
 The pilot on 2026-10-10 killed all 10 mutants in `disconnectome.js`.
 
 The full run on 2026-10-16 detected 620 of 642 mutants (613 killed, 7 timed

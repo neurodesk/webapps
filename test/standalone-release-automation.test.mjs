@@ -61,6 +61,27 @@ test('a verified portable release becomes one download per target with its insta
   assert.match(downloads[1].command, /^sudo installer -pkg tool-0\.2\.20261006-macos-arm64\.pkg -target \//);
 });
 
+test('portable downloads describe model bundling from their release specification', async (t) => {
+  for (const [bundleModels, expected] of [[false, false], [true, true], [undefined, true]]) {
+    await t.test(`bundleModels=${bundleModels}`, async () => {
+      const releaseSpec = { ...spec, bundleModels };
+      const natives = nativeReleases(new Map([['tool', { packageDir: 'packages/tool', spec: releaseSpec }]]));
+      const catalog = { apps: { tool: { downloads: [{ kind: 'cli', platform: 'linux-x64', modelsIncluded: !expected }] } } };
+      applyCatalogUpdate(catalog, await update(catalog, verifiedRelease(archives), natives));
+      assert.deepEqual(catalog.apps.tool.downloads.map((download) => download.modelsIncluded), [expected, expected, expected]);
+      const dom = new JSDOM('<html><body></body></html>');
+      try {
+        const dialog = openStandalone({ title: 'Tool', app: { ...catalog.apps.tool, containers: [] } }, dom.window.document);
+        const section = dialog.root.querySelector('section[aria-labelledby="standalone-downloads"]');
+        assert.match(section.textContent, expected ? /Models are included\./ : /Models download when first used\./);
+        assert.doesNotMatch(section.textContent, expected ? /Models download when first used\./ : /Models are included\./);
+      } finally {
+        dom.window.close();
+      }
+    });
+  }
+});
+
 test('incomplete, unverified, draft or prerelease releases never reach the catalog', async () => {
   const catalog = { apps: { tool: { downloads: [] } } };
   await assert.rejects(update(catalog, verifiedRelease(archives.slice(0, 2))), /lacks macos-arm64/);

@@ -27,6 +27,8 @@ const MODEL_MANIFEST = /^models\/([^/]+)\.manifest\.json$/;
 const NON_CODE_FILES = new Set(['README.md', 'LICENSES.md']);
 const LOCKFILE = 'pnpm-lock.yaml';
 const REGISTRY = 'registry/apps.yml';
+// Only the independent unused-code and mutation workflows execute these root tools.
+const INDEPENDENT_ROOT_DEV_DEPENDENCIES = ['knip', '@stryker-mutator/core'];
 
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
@@ -36,7 +38,7 @@ function same(a, b) {
 // the change cannot be scoped.
 function analyseLockfile(manifest) {
   try {
-    return { importers: lockfileImpact(manifest) };
+    return { importers: lockfileImpact(manifest, { independentRootDevDependencies: INDEPENDENT_ROOT_DEV_DEPENDENCIES }) };
   } catch (error) {
     if (error instanceof LockfileAnalysisError) return { shared: error.message };
     throw error;
@@ -104,8 +106,14 @@ function changedFields({ before, after }) {
   return [...fields].filter((field) => JSON.stringify(old[field]) !== JSON.stringify(now[field]));
 }
 
-// Which root package.json scripts changed, or null when anything else changed.
+// Changed root scripts after removing independent tools, or null for shared fields.
 function changedRootScripts(manifest) {
+  const withoutTools = (text) => {
+    const { devDependencies = {}, ...rest } = JSON.parse(text);
+    const remaining = Object.fromEntries(Object.entries(devDependencies).filter(([name]) => !INDEPENDENT_ROOT_DEV_DEPENDENCIES.includes(name)));
+    return JSON.stringify({ ...rest, devDependencies: remaining });
+  };
+  manifest = { before: withoutTools(manifest.before), after: withoutTools(manifest.after) };
   if (changedFields(manifest).some((field) => field !== 'scripts')) return null;
   const [old, now] = [JSON.parse(manifest.before).scripts ?? {}, JSON.parse(manifest.after).scripts ?? {}];
   return [...new Set([...Object.keys(old), ...Object.keys(now)])].filter((name) => old[name] !== now[name]);
@@ -196,6 +204,12 @@ export function selectAffectedApps(registry, changedPaths = [], graph = null, ma
     }
     const manifest = graph && manifests.get(path);
     if (manifest && path === 'package.json') {
+      const lock = manifests.get(LOCKFILE);
+      const impact = lock ? analyseLockfile(lock) : { shared: 'the base or head lockfile is unavailable' };
+      if (impact.shared) {
+        shared(`${LOCKFILE}: ${impact.shared}`);
+        continue;
+      }
       const scripts = changedRootScripts(manifest);
       if (scripts) {
         const catalogScripts = scripts.filter((name) => graph.rootScriptsRun.get(CATALOG).has(name));
@@ -276,14 +290,15 @@ export function changedPathsFromGit({ base, head = 'HEAD', cwd }) {
 
 const MANIFEST = /^(?:(?:packages|apps|exes)\/[^/]+\/)?package\.json$|^registry\/(?:offline-assets\.lock\.json|apps\.yml)$|^pnpm-lock\.yaml$/;
 
-// The text of each changed manifest createAppPlan compares, at the merge base
-// (changedPathsFromGit diffs from there) and at head. A manifest missing on
-// either side, or every manifest when there is no merge base, is left out and
-// counts as an ordinary code change.
+// The text of each changed manifest and the lockfile for root manifest edits,
+// at the merge base (changedPathsFromGit diffs from there) and at head. A manifest
+// missing on either side, or every manifest when there is no merge base, is left
+// out and counts as an ordinary code change.
 export function changedManifests({ base, head = 'HEAD', cwd, changedPaths }) {
   const manifests = new Map();
-  const paths = changedPaths.filter((path) => MANIFEST.test(path));
-  if (!paths.length) return manifests;
+  const paths = new Set(changedPaths.filter((path) => MANIFEST.test(path)));
+  if (changedPaths.includes('package.json')) paths.add(LOCKFILE);
+  if (!paths.size) return manifests;
   const show = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 });
   let mergeBase;
   try {

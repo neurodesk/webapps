@@ -7,6 +7,41 @@ interface follows the registration family: moving, stationary and registered
 images in linked NiiVue panels, one Register action, and downloads in the output
 section. It is based on ITKElastix's TypeScript demo app.
 
+Registered images download as NIfTI, OME-Zarr and, for compatible grids,
+deflate-compressed OME-TIFF. The TIFF export keeps the float32 registration
+result on the selected registration grid, including its physical spacing
+and stationary input units. It uses
+the same `@fideus-labs/fiff` writer as the upstream demo, through the shared
+`@neurodesk/elastix` package so the command line writes the same file.
+
+The pinned TIFF writer cannot store origin or direction. OME-TIFF is offered
+only for zero-origin grids with identity direction and known physical sizes
+and spatial units from the stationary OME-TIFF or OME-Zarr input. TIFF export
+validates the original 2016-06 OME XML against the selected TIFF directories.
+Physical sizes must be positive finite numbers without suffixes. Explicit
+units must be supported; only absent units use the schema's micrometer default.
+The shared reader normalizes XML quoting, namespace prefixes and character
+references before fiff reads those values. Single-quoted calibration therefore
+has the same meaning in the browser and command line.
+
+The calibration check supports scalar XY or XYZ images with one channel and
+time point, verifiable local TiffData mappings and genuine SubIFD pyramids.
+An Image without TiffData cannot supply calibration for TIFF directories.
+An existing empty `<TiffData/>` retains the schema's mapping defaults.
+Ambiguous mappings and other layouts disable TIFF export. Plane positions
+inside the selected Image disable export because the registration reader does
+not preserve them. Positions on another Image do not affect that decision.
+In fiff's legacy multi-image path, selection can use another Image's pixels
+with the first Image's spacing, including when that first Image is metadata-only.
+This change refuses TIFF when that grid
+disagrees with the selected Image's original calibration. It does not repair
+that registration geometry; the other outputs retain the reader's grid.
+Registration also does not convert between unlike moving and stationary units.
+Other ITK inputs do not retain
+explicit units in this reader. The Output section explains why TIFF is
+unavailable; use NIfTI or OME-Zarr for those grids. No resampling, orientation
+changes or intensity conversion are performed for TIFF export.
+
 ## Methods
 
 Each preset chains elastix's default parameter maps (`defaultParameterMap`):

@@ -83,7 +83,7 @@ entire catalog is a separate migration.
 | --- | --- | --- | --- | --- |
 | Zarro (`apps/zarro/src`) | 29 | `apps/zarro/tsconfig.json` compiles | 0 | Typed since PR #245 |
 | Deface (`apps/deface/src`) | 7 | `apps/deface/tsconfig.json` compiles | 2: 1 floating, 1 misused, both in `main.ts` | Typed; findings fixed |
-| BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Deferred; upstream-synced, record adaptations in `upstream.json` |
+| BrowserQC (`apps/browserqc/src`) | 7 | `apps/browserqc/tsconfig.json` compiles | 3: 2 floating, 1 misused, all in `main.ts` | Typed; findings fixed on 2026-10-17, adaptations in `upstream.json` |
 | Root agentic tests (`test/agentic`, `test-utils/agentic-browser.ts`, `e2e.config.ts`) | 3 | `tsconfig.agentic.json` compiles | 0 | Typed; `test:e2e:types` still compiles it with TypeScript 7 |
 | DWI2TRX (`apps/dwi2trx/src`) | 21 | `apps/dwi2trx/tsconfig.json` compiles | 10 floating, all in `main.ts` | Typed; findings fixed |
 | Dicompare (`apps/dicompare/src`) | 142 | `apps/dicompare/tsconfig.json` compiles | 85: 38 floating, 47 misused, in 30 files | Deferred; upstream-owned, record adaptations in `upstream.json` |
@@ -91,6 +91,22 @@ entire catalog is a separate migration.
 The root agentic tests had no findings: their promises are already awaited.
 Their project now includes `test/agentic/**/*.ts` so a new file in a
 subdirectory is typed rather than rejected by the parser.
+
+BrowserQC's opacity callback now uses the existing serial queue, which reports
+failures to the status bar and technical log and continues with the next task.
+Its teardown only calls synchronous APIs, including niimath `dispose` and
+NiiVue `destroy`, so it returns `void` to both `pagehide` and Vite HMR.
+Every release step runs even if another fails; teardown then reports any errors.
+Cleanup revokes the active manual run's status ownership before aborting it.
+Late cancellation, completion and queue failures cannot replace a teardown error.
+The production regression starts a real segmentation worker and checks that its
+termination and run settlement preserve the teardown failure. Idle teardown and
+normal manual worker failure, retry and cancellation are also covered.
+Failed-load recovery and queued opacity/display changes are behavioral coverage;
+that test also passed before the opacity callback change. Its seven sources compile
+with the pinned TS 5.9.3. The 2026-10-17 audit confirms Dicompare still has
+38 floating and 47 misused promise findings in 30 files; it remains a separate
+upstream adaptation stage.
 
 Deface's findings were both teardown paths. `pagehide` discarded the
 `cleanup()` promise, so a teardown failure became an unhandled rejection; it
