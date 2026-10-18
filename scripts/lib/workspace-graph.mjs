@@ -1,6 +1,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { parse } from 'yaml';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import sourceParser from '@neurodesk/code-quality';
 
 // Which apps/, packages/ and exes/ directories each workspace directory uses.
 // Declared workspace dependencies are not enough: apps also reach shared code
@@ -67,6 +68,17 @@ function namedByCommands(commands, rootScripts) {
   return { named, expanded };
 }
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+
+function withoutLineComments(source, file) {
+  let comments;
+  try {
+    comments = sourceParser.parse(source, { filePath: file, sourceType: 'module' }).comments;
+  } catch {
+    return source;
+  }
+  const starts = new Set(comments.filter(({ type }) => type === 'Line').map(({ range }) => range[0]));
+  return source.replace(LINE_COMMENT, (line, offset) => starts.has(offset + line.indexOf('//')) ? '' : line);
+}
 
 async function listDirs(path) {
   const entries = await readdir(path, { withFileTypes: true }).catch(() => []);
@@ -173,10 +185,7 @@ export async function loadConservativeWorkspaceGraph(root) {
     if (!SOURCE_FILE.test(file)) continue;
     const source = await readFile(join(root, file), 'utf8').catch(() => null);
     if (source === null) continue;
-    // A path in a line comment is prose, not an input: vite-app-config.mjs
-    // naming the composite build in a comment made every app depend on it.
-    // Block comments stay, since JSDoc `import()` types are typecheck inputs.
-    const text = source.replace(LINE_COMMENT, '');
+    const text = withoutLineComments(source, file);
     for (const [, top, name, inner] of text.matchAll(SCRIPT_REFERENCE)) {
       if (!nodeSet.has(`${top}/${name}`)) continue;
       const target = inner && `${top}/${name}${inner}`;
