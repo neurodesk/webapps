@@ -8,8 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import ZipFileStore from '@zarrita/storage/zip';
 import * as zarr from 'zarrita';
+import { defaultParameterMapNode, writeParameterFilesNode } from '@itk-wasm/elastix';
 import { createNiftiFromVolume } from '@neurodesk/webapp-components/file-io/nifti';
+import { ncc, readVolume } from '../../../test-utils/registration-similarity.mjs';
+import { fixedToMovingRas } from '../validation/parameter-matrix.mjs';
 import { hdf5Writable } from '../src/outputs.js';
+import { writeOmeTiff } from '../src/ome-tiff.js';
+import { readInput } from '../src/node.js';
+import { readImageNode } from '@itk-wasm/image-io';
 import { registrationError, registrationImage, transformParameterFiles } from '../src/pipeline.js';
 
 const BIN = fileURLToPath(new URL('../bin/elastix-register.js', import.meta.url));
@@ -96,6 +102,7 @@ test('a rigid registration writes the web app downloads, lists them on stdout an
   const output = join(directory, 'results');
   const result = run([moving, fixed, output, '--method', 'rigid', '--resolutions', '2']);
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stderr, /No subject_registered\.ome\.tif: OME-TIFF cannot preserve/);
   const names = ['subject_registered.nii.gz', 'subject_transform.h5', 'subject_transform.ome.zarr.ozx', 'subject_TransformParameters.0.toml', 'subject_TransformParameters.1.toml'];
   assert.deepEqual(result.stdout.trim().split('\n'), names.map((name) => join(output, name)));
   assert.match(result.stderr, /TranslationTransform -> EulerTransform \(rigid preset\)/);
@@ -130,10 +137,86 @@ test('a B-spline registration writes a displacement field archive and no HDF5 tr
   assert.ok(field.data.every(Number.isFinite));
 });
 
+for (const stages of [['rigid'], ['translation', 'rigid']]) {
+  test(`custom TOML parameter files register the shifted image with ${stages.join(' and ')}`, async (t) => {
+    const { directory, moving, fixed } = await workspace(t);
+    const maps = [];
+    for (const stage of stages) {
+      const { parameterMap } = await defaultParameterMapNode(stage, { numberOfResolutions: 2 });
+      maps.push({ ...parameterMap, DefaultPixelValue: ['-321'], AutomaticTransformInitialization: ['true'] });
+    }
+    const paths = stages.map((_, index) => join(directory, `parameters.${index ? 10 : 2}.toml`));
+    await writeParameterFilesNode(maps, paths);
+    const output = join(directory, 'custom');
+    const result = run([moving, fixed, output, ...paths.toReversed().flatMap((path) => ['--parameter-file', path])]);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /\(parameter files\)/);
+    const names = [
+      'subject_registered.nii.gz', 'subject_transform.h5', 'subject_transform.ome.zarr.ozx',
+      ...stages.map((_, index) => `subject_TransformParameters.${index}.toml`),
+    ];
+    assert.deepEqual(result.stdout.trim().split('\n'), names.map((name) => join(output, name)));
+    assert.deepEqual((await readdir(output)).sort(), [...names].sort());
+    const texts = await Promise.all(stages.map((_, index) => readFile(join(output, `subject_TransformParameters.${index}.toml`), 'utf8')));
+    assert.deepEqual(texts.map((text) => toml(text, 'Transform')), stages.map((stage) => stage === 'rigid' ? 'EulerTransform' : 'TranslationTransform'));
+    for (const [index, text] of texts.entries()) {
+      assert.equal(toml(text, 'DefaultPixelValue'), -321);
+      assert.equal(toml(text, 'InitialTransformParameterFileName'), index ? `subject_TransformParameters.${index - 1}.toml` : 'NoInitialTransform');
+    }
+    const matrix = fixedToMovingRas(texts);
+    const expected = [[1, 0, 0, 4], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+    for (let row = 0; row < 4; row += 1) {
+      for (let column = 0; column < 4; column += 1) {
+        assert.ok(Math.abs(matrix[row][column] - expected[row][column]) < 0.2, `composed transform [${row}, ${column}] = ${matrix[row][column]}`);
+      }
+    }
+    const registered = await readVolume(await readFile(join(output, 'subject_registered.nii.gz')));
+    const template = await readVolume(await readFile(fixed));
+    assert.deepEqual(registered.dims, template.dims);
+    const foreground = template.data.map((value) => value > 10 ? 1 : 0);
+    const actual = Array.from(registered.data).filter((_, index) => foreground[index]);
+    const target = Array.from(template.data).filter((_, index) => foreground[index]);
+    assert.ok(ncc(actual, target) > 0.99, 'registered foreground matches the fixed image');
+    assert.ok(registered.data.includes(-321), 'resampling uses the custom padding value');
+    assert.equal((await readFile(join(output, 'subject_transform.h5'))).subarray(0, 8).toString('latin1'), '\x89HDF\r\n\x1a\n');
+    const store = ZipFileStore.fromBlob(new Blob([await readFile(join(output, 'subject_transform.ome.zarr.ozx'))]));
+    const [transformation] = JSON.parse(new TextDecoder().decode(await store.get('/zarr.json'))).attributes.ome.coordinateTransformations;
+    assert.equal(transformation.name, 'fixed_to_moving');
+    assert.ok(['translation', 'affine'].includes(transformation.type), transformation.type);
+  });
+}
+
 test('a folder or a DICOM-like file is refused with a hint', async (t) => {
   const { directory, fixed } = await workspace(t);
   await mkdir(join(directory, 'image.zarr'));
   await writeFile(join(directory, 'IM0001'), 'not an image');
   assert.match(run([join(directory, 'image.zarr'), fixed, join(directory, 'a')]).stderr, /is a folder/);
   assert.match(run([join(directory, 'IM0001'), fixed, join(directory, 'b')]).stderr, /Convert DICOM with dcm2niix first/);
+});
+
+test('the command line exports eligible OME-TIFF with the same registered pixels and stationary calibration', async (t) => {
+  const { directory } = await workspace(t);
+  const moving = join(directory, 'moving.ome.tif');
+  const fixed = join(directory, 'fixed.ome.tif');
+  const make = (shift) => ({
+    imageType: { dimension: 3, componentType: 'float32', pixelType: 'Scalar', components: 1 },
+    name: 'blob', size: [20, 20, 20], origin: [0, 0, 0], spacing: [0.5, 0.5, 0.5],
+    direction: new Float64Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    data: Float32Array.from({ length: 8000 }, (_, index) => {
+      const x = index % 20, y = Math.floor(index / 20) % 20, z = Math.floor(index / 400);
+      return 1000 * Math.exp(-((x - 9 - shift) ** 2 + (y - 10) ** 2 + 0.5 * (z - 10) ** 2) / 12);
+    }),
+  });
+  await writeFile(moving, await writeOmeTiff(make(2), { x: 'micrometer', y: 'micrometer', z: 'micrometer' }));
+  await writeFile(fixed, await writeOmeTiff(make(0), { x: 'micrometer', y: 'micrometer', z: 'micrometer' }));
+  const output = join(directory, 'tiff-results');
+  const result = run([moving, fixed, output, '--method', 'rigid', '--resolutions', '2']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(result.stdout.split('\n').includes(join(output, 'moving_registered.ome.tif')));
+  const tiff = await readInput(join(output, 'moving_registered.ome.tif'), 'registered');
+  const nifti = await readImageNode(join(output, 'moving_registered.nii.gz'));
+  assert.deepEqual(tiff.spatialUnits, { z: 'micrometer', y: 'micrometer', x: 'micrometer' });
+  assert.deepEqual(tiff.image.size, [20, 20, 20]);
+  assert.deepEqual(tiff.image.spacing, [0.5, 0.5, 0.5]);
+  assert.deepEqual(tiff.image.data, nifti.data);
 });

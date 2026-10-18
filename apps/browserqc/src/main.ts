@@ -226,7 +226,7 @@ function enqueue(fn: () => Promise<unknown>): void {
     .then(() => (isCleanedUp ? undefined : fn()))
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err)
-      setStatus(`Failed: ${msg}`)
+      if (!isCleanedUp) setStatus(`Failed: ${msg}`)
       console.error('task failed', err)
     })
 }
@@ -529,9 +529,9 @@ $('runButton').addEventListener('click', () => {
     progressManager.begin('Starting quality control…')
     try {
       await runSegment(file, { signal: controller.signal })
-      progressManager.end(statusMsg.textContent ?? 'Quality control complete')
+      if (manualRun === controller) progressManager.end(statusMsg.textContent ?? 'Quality control complete')
     } catch (error) {
-      progressManager.end(controller.signal.aborted ? 'Quality control cancelled.' : 'Quality control failed.', { success: false })
+      if (manualRun === controller) progressManager.end(controller.signal.aborted ? 'Quality control cancelled.' : 'Quality control failed.', { success: false })
       if (!controller.signal.aborted) throw error
     } finally { manualRun = null }
   })
@@ -597,7 +597,7 @@ ovlSlider.addEventListener(
     // Skip while a segmentation is mid-flight — mutating the scene between its
     // loadVolumes/addVolume awaits can hit the wrong volume or throw. The final
     // opacity is applied via addVolume's `opacity` when the overlay lands.
-    if (!busy) void showView()
+    if (!busy) enqueue(showView)
   },
   ac,
 )
@@ -609,28 +609,37 @@ $('rateSave').addEventListener('click', () => {
 }, ac)
 
 // --- Cleanup (HMR / tab close) ---
-async function cleanup(): Promise<void> {
-  exampleControl.destroy()
+function cleanup(): void {
   if (isCleanedUp) return
   isCleanedUp = true
-  listeners.abort()
-  manualRun?.abort()
-  progressManager.reset()
-  // Terminate the niimath worker FIRST (don't await `pending`): a WASM run is one
-  // uninterruptible call, so awaiting the queue would stall teardown. The terminated
-  // run never resolves; any run that already resolved hits `if (isCleanedUp) return`
-  // before touching nv/ctx.
-  resetNiimathWorker()
-  try {
-    ctx?.dispose() // null if WebGPU was unavailable (attachNiiVue never ran)
-  } catch {
-    // best-effort — must not skip nv.destroy() below
+  const activeRun = manualRun
+  manualRun = null
+  const failures: unknown[] = []
+  const release = (step: () => void): void => {
+    try {
+      step()
+    } catch (error) {
+      failures.push(error)
+    }
   }
-  nv.destroy()
+  release(() => exampleControl.destroy())
+  release(() => listeners.abort())
+  release(() => activeRun?.abort())
+  release(() => progressManager.reset())
+  // niimath.dispose rejects in-flight work. Do not await the queue before stopping
+  // its worker: a running WASM call cannot otherwise be interrupted.
+  release(resetNiimathWorker)
+  release(() => ctx?.dispose())
+  release(() => nv.destroy())
+  if (failures.length) {
+    const error = failures.length === 1 ? failures[0] : new AggregateError(failures, 'BrowserQC teardown failed')
+    setStatus(`Failed: ${error instanceof Error ? error.message : String(error)}`)
+    console.error('teardown failed', error)
+  }
 }
 window.addEventListener('pagehide', (e) => {
   if (e.persisted) return
-  void cleanup()
+  cleanup()
 }, { once: true, signal: listeners.signal })
 if (import.meta.hot) import.meta.hot.dispose(cleanup)
 

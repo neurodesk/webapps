@@ -15,9 +15,48 @@ export function outputNames(movingName) {
     stem,
     nifti: `${stem}_registered.nii.gz`,
     omeZarr: `${stem}_registered.ome.zarr.ozx`,
+    omeTiff: `${stem}_registered.ome.tif`,
     transform: `${stem}_transform.h5`,
     transformOmeZarr: `${stem}_transform.ome.zarr.ozx`,
   };
+}
+
+/** fiff 0.8.2 writes spacing and units, but no origin or direction. */
+export function omeTiffIssue(image, spatialUnits, tiffMetadata) {
+  const dimension = image.imageType.dimension;
+  const axes = ["x", "y", ...(dimension === 3 ? ["z"] : [])];
+  if (tiffMetadata?.issue) return tiffMetadata.issue;
+  if (tiffMetadata?.hasPlanePositions) {
+    return "OME-TIFF cannot preserve source plane positions. Use NIfTI or OME-Zarr.";
+  }
+  if (tiffMetadata && axes.some((axis) => !(tiffMetadata.physicalSizes[axis] > 0 && Number.isFinite(tiffMetadata.physicalSizes[axis])))) {
+    return "OME-TIFF needs known physical pixel sizes. Use NIfTI or OME-Zarr.";
+  }
+  if (Array.from(image.origin).some((value) => value !== 0)) {
+    return "OME-TIFF cannot preserve this origin. Use NIfTI or OME-Zarr.";
+  }
+  if (Array.from(image.direction).some((value, index) => value !== (index % (dimension + 1) === 0 ? 1 : 0))) {
+    return "OME-TIFF cannot preserve this direction. Use NIfTI or OME-Zarr.";
+  }
+  if (axes.some((axis) => !TIFF_UNITS.has(spatialUnits?.[axis]))) {
+    return "OME-TIFF needs known spatial units. Use NIfTI or OME-Zarr.";
+  }
+  if (tiffMetadata?.spacing && (axes.some((axis, index) => spatialUnits[axis] !== tiffMetadata.spatialUnits[axis]
+    || !Number.isFinite(image.spacing[index])
+    || !Number.isFinite(tiffMetadata.spacing[index])
+    || Math.abs(image.spacing[index] - tiffMetadata.spacing[index]) > Math.abs(tiffMetadata.spacing[index]) * 1e-12)
+    || Array.from(image.size).some((size, index) => size !== tiffMetadata.size[index]))) {
+    return "OME-TIFF decoded grid differs from the selected OME Image. Use NIfTI or OME-Zarr.";
+  }
+  return null;
+}
+
+const TIFF_UNITS = new Set(["meter", "centimeter", "millimeter", "micrometer", "nanometer", "picometer", "angstrom"]);
+
+const UNIT_ALIASES = { m: "meter", cm: "centimeter", mm: "millimeter", um: "micrometer", "µm": "micrometer", "μm": "micrometer", nm: "nanometer", pm: "picometer", "Å": "angstrom" };
+
+export function normalizeSpatialUnits(units) {
+  return units && Object.fromEntries(Object.entries(units).map(([axis, unit]) => [axis, UNIT_ALIASES[unit] ?? unit]));
 }
 
 /**

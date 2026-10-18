@@ -2,7 +2,7 @@
 // itk-wasm's Node runner from the .wasm.zst files inside the installed
 // @itk-wasm packages, never from a CDN. Each pipeline runs to completion on
 // the main thread, one at a time.
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { InterfaceTypes, runPipelineNode } from "itk-wasm";
@@ -10,10 +10,11 @@ import { readImageNode, writeImageNode } from "@itk-wasm/image-io";
 import { writeTransformNode } from "@itk-wasm/transform-io";
 import { defaultParameterMapNode, elastixNode, readParameterFilesNode, transformixNode } from "@itk-wasm/elastix";
 import { fromOmeZarr } from "@fideus-labs/ngff-zarr";
-import { TiffStore } from "@fideus-labs/fiff";
+import { TiffSource } from "./tiff-source.js";
 import ZipFileStore from "@zarrita/storage/zip";
 import { affineArchive, displacementArchive, ngffImageToItkImage } from "./node-ngff.js";
-import { hdf5Writable, outputNames, withTypedParameterArrays } from "./outputs.js";
+import { hdf5Writable, omeTiffIssue, outputNames, withTypedParameterArrays } from "./outputs.js";
+import { writeOmeTiff } from "./ome-tiff.js";
 import { buildParameterObject, presetSettings, sortParameterFiles, stageNames } from "./parameter-maps.js";
 import { registrationError, registrationImage, transformParameterFiles } from "./pipeline.js";
 import { createSourceReader } from "./source-reader.js";
@@ -139,7 +140,7 @@ export async function readInput(path, role) {
     fromOmeZarr,
     ngffImageToItkImage,
     // geotiff reads a Blob with FileReader, which Node lacks.
-    TiffStore: { fromBlob: async (blob) => TiffStore.fromArrayBuffer(await blob.arrayBuffer()) },
+    TiffStore: { fromBlob: async (blob) => TiffSource.fromArrayBuffer(await blob.arrayBuffer()) },
     ZipFileStore,
     FetchStore: null,
     prepared,
@@ -152,15 +153,15 @@ export async function readInput(path, role) {
 /** Custom elastix parameter files (.txt or .toml), in name order, as a parameter object. */
 export async function readParameterFiles(paths) {
   const sorted = sortParameterFiles(paths.map((path) => ({ name: basename(path), path: resolve(path) })));
-  const { parameterObject } = await readParameterFilesNode(sorted.map((file) => file.path));
+  const { parameterObject } = await readParameterFilesNode({ parameterFiles: sorted.map((file) => file.path) });
   if (!parameterObject.length) throw new Error("The parameter files hold no parameter maps.");
   return parameterObject;
 }
 
 /**
  * Registers `moving` to `fixed` and writes the web app's downloads to
- * `output`: the registered NIfTI, the ITK HDF5 transform, the OME-Zarr RFC-5
- * transform and the chained TransformParameters TOML files.
+ * `output`: the registered NIfTI, eligible OME-TIFF, the ITK HDF5 transform,
+ * the OME-Zarr RFC-5 transform and the chained TransformParameters TOML files.
  */
 export async function registerImages({ moving, fixed, output, method = "affine", resolutions = 3, gridSpacing = 10, parameterFiles = [], onLog = () => {} }) {
   if (!moving || !fixed || !output) throw new Error("A moving image, a fixed image and an output directory are required.");
@@ -198,6 +199,28 @@ export async function registerImages({ moving, fixed, output, method = "affine",
     written.push(names.transformOmeZarr);
     await writeImageNode(run.result, join(destination, names.nifti));
     written.push(names.nifti);
+    const tiffIssue = omeTiffIssue(run.result, fixedSource.spatialUnits, fixedSource.tiffMetadata);
+    if (tiffIssue) {
+      onLog(`No ${names.omeTiff}: ${tiffIssue}`);
+    } else {
+      const path = join(destination, names.omeTiff);
+      let created = false;
+      try {
+        const bytes = await writeOmeTiff(run.result, fixedSource.spatialUnits, { tiffMetadata: fixedSource.tiffMetadata });
+        const handle = await open(path, "wx");
+        created = true;
+        try {
+          await handle.writeFile(bytes);
+        } finally {
+          await handle.close();
+        }
+        written.push(names.omeTiff);
+      } catch (error) {
+        if (created) await rm(path, { force: true });
+        if (error?.name === "AbortError") throw error;
+        onLog(`No ${names.omeTiff}: ${error?.message ?? String(error)}`);
+      }
+    }
     if (hdf5Writable(run.transform)) {
       await writeTransformNode(withTypedParameterArrays(run.transform), join(destination, names.transform));
       written.push(names.transform);
@@ -208,7 +231,7 @@ export async function registerImages({ moving, fixed, output, method = "affine",
     await Promise.all(written.map((name) => rm(join(destination, name), { force: true })));
     throw error;
   }
-  const order = [names.nifti, names.transform, names.transformOmeZarr, ...parameters.map((file) => file.name)].filter((name) => written.includes(name));
+  const order = [names.nifti, names.omeTiff, names.transform, names.transformOmeZarr, ...parameters.map((file) => file.name)].filter((name) => written.includes(name));
   return {
     output: destination,
     files: order,

@@ -28,6 +28,7 @@ test('every owned tracked source receives nonempty correctness rules', async () 
     'templates/app-template/src/main.js',
     'apps/zarro/src/cursor_zoom.ts',
     'apps/deface/src/main.ts',
+    'apps/browserqc/src/main.ts',
     'test/agentic/catalog.e2e.ts',
     'test-utils/agentic-browser.ts',
     'e2e.config.ts',
@@ -37,8 +38,7 @@ test('every owned tracked source receives nonempty correctness rules', async () 
   }
   assert.ok(files.length > 1500);
   // Rolled-out projects stay typed; see the inventory in docs/development/correctness-lint.md.
-  for (const name of ['zarro', 'deface', 'agentic']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
-  assert.ok(typedPromiseProjects.some((project) => project.name === 'dicompare'));
+  for (const name of ['zarro', 'deface', 'dwi2trx', 'browserqc', 'agentic', 'dicompare']) assert.ok(typedPromiseProjects.some((project) => project.name === name), name);
   await assertCoverage(eslint, files);
 });
 
