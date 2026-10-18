@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 import { readImageNode } from "@itk-wasm/image-io";
 import { tiffFixture } from "./tiff-fixture.js";
@@ -59,7 +59,7 @@ if (failure === 'mandatory') {
 }
 syncBuiltinESMExports();
 `);
-    const result = spawnSync(process.execPath, ["--import", preload, bin, input, input, output, "--method", "rigid", "--resolutions", "1"], { encoding: "utf8" });
+    const result = spawnSync(process.execPath, ["--import", pathToFileURL(preload).href, bin, input, input, output, "--method", "rigid", "--resolutions", "1"], { encoding: "utf8" });
     if (failure === "abort" || failure === "mandatory") {
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, failure === "abort" ? /Injected TIFF cancellation/ : /Injected mandatory output failure/);
