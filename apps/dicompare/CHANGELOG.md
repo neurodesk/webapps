@@ -4,6 +4,8 @@
 
 ### Patch Changes
 
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
 - 6e46e80: Restore schema catalog and detail URLs on direct entry and reload on the composite GitHub Pages site, including browser-local schema IDs and external schema query URLs.
 - 45ae49a: Remove verified dead code from the unused-code report (#256): dicompare's unused technical-log helpers, QSMbly's duplicate `QsmEchoViewer` export and Deface's unused `@neurodesk/webapp-components` devDependency. The calmar and SCT task tests now import the modules they check by literal path.
 - Updated dependencies [2ae93ae]

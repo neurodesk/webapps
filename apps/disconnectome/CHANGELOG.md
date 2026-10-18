@@ -4,6 +4,10 @@
 
 ### Patch Changes
 
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/runtime-support@0.7.1
+  - @neurodesk/nii2tvx@0.3.20261018
 - Updated dependencies [67a5a8f]
 - Updated dependencies [b8b37d6]
 - Updated dependencies [2ae93ae]

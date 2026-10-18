@@ -4,6 +4,9 @@
 
 ### Patch Changes
 
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/seedseg@0.6.20261018
 - Updated dependencies [2ae93ae]
 - Updated dependencies [ccb2970]
 - Updated dependencies [67a5a8f]
