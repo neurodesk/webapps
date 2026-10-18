@@ -443,3 +443,141 @@ test('the automation operation returns the series index and the converted image'
   const series = JSON.parse(readFileSync(await (await download).path(), 'utf8'));
   expect(series.map((entry) => [entry.number, entry.images, entry.rows, entry.cols])).toEqual([[5, 4, 16, 16], [6, 4, 16, 16]]);
 });
+
+// Every handoff entry in this origin's store, without its file bytes; none when there is no store.
+function storedHandoffs(page) {
+  return page.evaluate(async () => {
+    if (!(await indexedDB.databases()).some(({ name }) => name === 'neurodesk-handoff')) return [];
+    const database = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('neurodesk-handoff');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const all = await new Promise((resolve) => {
+      database.transaction('entries').objectStore('entries').getAll().onsuccess = ({ target }) => resolve(target.result);
+    });
+    database.close();
+    return all.map((entry) => ({
+      id: entry.id,
+      target: entry.target,
+      source: entry.source,
+      files: entry.files.map(({ name, blob }) => ({ name, size: blob.size })),
+    }));
+  });
+}
+
+const fixtureFiles = (options) => dicomSeries(options).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
+const handoffButton = (page) => page.getByRole('button', { name: 'Open in White matter lesions', exact: true });
+
+test('a converted 3D image goes to White matter lesions alone, under its download name', async ({ page }) => {
+  // The standalone preview serves dicomview alone; stand in for the receiving app on the same origin.
+  await page.context().route('**/white-matter-lesions/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>receiver</title>' }));
+  await page.goto('./');
+  await expect(handoffButton(page)).toBeDisabled();
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4, patient: { birthDate: '19800101', studyDate: '20240102' } }));
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  await expect(handoffButton(page)).toBeEnabled();
+  await expect(page.locator('#handoffNote')).toBeHidden();
+  await handoffButton(page).click();
+  await page.waitForURL(/\/white-matter-lesions\/#handoff=[0-9a-f-]{36}$/);
+  const entries = await storedHandoffs(page);
+  expect(entries).toHaveLength(1);
+  const [entry] = entries;
+  expect(page.url()).toContain(`#handoff=${entry.id}`);
+  expect(entry.target).toBe('white-matter-lesions');
+  expect(entry.source).toEqual({ app: 'dicomview', title: 'DICOM View' });
+  expect(entry.files.map(({ name }) => name)).toEqual(['series7_test_scan_7.nii']);
+  expect(entry.files[0].size, 'the converted image, not a copy of the header').toBeGreaterThan(352 + 16 * 16 * 4);
+  expect(await page.evaluate((id) => sessionStorage.getItem(`neurodesk-handoff:${id}`), entry.id), 'the tab holds the secret').toMatch(/^[0-9a-f]{64}$/);
+});
+
+// Loads two series and starts a send of series 3 whose check of the target waits for release().
+async function heldSend(page) {
+  let release;
+  const checked = new Promise((resolve) => {
+    page.context().route('**/white-matter-lesions/', async (route) => {
+      resolve();
+      await new Promise((go) => { release = go; });
+      await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>receiver</title>' }).catch(() => {});
+    });
+  });
+  await page.goto('./');
+  await page.locator('#dicomInput').setInputFiles([...fixtureFiles({ series: 7, slices: 4 }), ...fixtureFiles({ series: 3, slices: 4 })]);
+  await expect(status(page)).toHaveText('Series 3: test_scan_3 · 1 image', { timeout: 60000 });
+  const before = page.url();
+  await handoffButton(page).click();
+  await checked;
+  await expect(handoffButton(page), 'disabled while the send is in flight').toBeDisabled();
+  return { before, release: () => release() };
+}
+
+async function expectStayed(page, before) {
+  await page.waitForTimeout(1000);
+  expect(page.url()).toBe(before);
+  expect(await storedHandoffs(page)).toEqual([]);
+}
+
+test('choosing another series while a send checks its target cancels the send', async ({ page }) => {
+  const { before, release } = await heldSend(page);
+  await page.locator('#seriesList .nd-volume-toggle', { hasText: 'test_scan_7' }).getByRole('button', { name: 'View' }).click();
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  release();
+  await expect(handoffButton(page)).toBeEnabled();
+  await expectStayed(page, before);
+});
+
+test('new files dropped while a send checks its target cancel the send before they are read', async ({ page }) => {
+  const { before, release } = await heldSend(page);
+  // The new files' headers are held too, so the send's check completes while they are read.
+  await page.evaluate(() => {
+    const read = Blob.prototype.arrayBuffer;
+    const pending = [];
+    window.pendingReads = () => pending.length;
+    Blob.prototype.arrayBuffer = function () {
+      return new Promise((resolve, reject) => pending.push(() => read.call(this).then(resolve, reject)));
+    };
+    window.finishReads = () => {
+      Blob.prototype.arrayBuffer = read;
+      for (const finish of pending) finish();
+    };
+  });
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 5, slices: 4 }));
+  await page.waitForFunction(() => window.pendingReads() > 0);
+  release();
+  await expectStayed(page, before);
+  await page.evaluate(() => window.finishReads());
+  await expect(status(page)).toHaveText('Series 5: test_scan_5 · 1 image', { timeout: 60000 });
+  await expectStayed(page, before);
+});
+
+test('the footer × cancels a send while it checks its target', async ({ page }) => {
+  const { before, release } = await heldSend(page);
+  await expect(page.locator('#cancelButton')).toBeVisible();
+  await page.locator('#cancelButton').click();
+  await expect(status(page)).toHaveText('Opening series3_test_scan_3.nii in White matter lesions cancelled');
+  await expect(status(page)).not.toHaveClass(/error/);
+  release();
+  await expect(handoffButton(page)).toBeEnabled();
+  await expectStayed(page, before);
+});
+
+test('a time series cannot be sent, and says why', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 8, slices: 4, volumes: 3 }));
+  await expect(status(page)).toHaveText('Series 8: test_scan_8 · 1 image', { timeout: 60000 });
+  await expect(page.locator('#handoffNote')).toHaveText('White matter lesions takes one 3D image; this one has 3 volumes.');
+  await expect(handoffButton(page)).toBeDisabled();
+});
+
+test('sending from the standalone app, where White matter lesions is not served, stays put and says so', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4 }));
+  await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
+  const before = page.url();
+  await handoffButton(page).click();
+  await expect(status(page)).toHaveText('/white-matter-lesions/ is not served beside this app. Download the image instead.');
+  await expect(status(page)).toHaveClass(/error/);
+  expect(page.url()).toBe(before);
+  await expect(handoffButton(page)).toBeEnabled();
+  expect(await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name))).not.toContain('neurodesk-handoff');
+});

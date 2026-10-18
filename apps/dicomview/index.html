@@ -36,6 +36,8 @@
             </label>
             <select id="outputSelect"></select>
           </div>
+          <button id="handoffButton" class="nd-btn nd-btn-secondary" type="button" disabled>Open in White matter lesions</button>
+          <p id="handoffNote" class="nd-hint" hidden></p>
         </div>
       </details>
 
@@ -114,7 +116,10 @@
     <template id="aboutContent">
       <p>DICOM View opens a folder of DICOM files in the browser and lists the series in it, with each series’ size and main acquisition parameters. Choosing a series converts it to NIfTI with dcm2niix and shows it in FreeBrowse, a NiiVue viewer with contrast (window and level), colormap and layout controls; a series that dcm2niix splits, such as one with several echoes or magnitude and phase, offers each image. A conversion keeps running when another series is chosen, and Convert all converts every series one after another. Converted images are saved in the browser’s own storage, keyed by the content of the series, so the same folder opens without converting again; Clear saved removes them. The Header view lists every element of an instance, nested sequences included, names it from the DICOM dictionary, and can keep only the fields that differ between the instances of the series. It also shows the BIDS sidecar dcm2niix writes. Protocol runs dicompare in Python in the browser to group the files into acquisitions and list their parameters, and checks them against a schema from the dicompare library. Fields that vary are marked in bold. Compliance checks compare parameters with a published protocol; they are not a clinical quality assessment.</p>
     </template>
-    <template id="privacyContent"><p>Files are read and converted in this browser and are never uploaded. The converted images and their anonymised sidecars are stored in this browser, on this device, until you choose Clear saved or clear the site’s data; anyone using this browser profile can open them. Python and dicompare download from their public package hosts the first time a protocol is summarised; your files are not sent. The example is downloaded from Hugging Face at a pinned revision.</p></template>
+    <template id="privacyContent">
+      <p>Files are read and converted in this browser and are never uploaded. The converted images and their anonymised sidecars are stored in this browser, on this device, until you choose Clear saved or clear the site’s data; anyone using this browser profile can open them. Python and dicompare download from their public package hosts the first time a protocol is summarised; your files are not sent. The example is downloaded from Hugging Face at a pinned revision.</p>
+      <p>Open in White matter lesions keeps the converted image in this browser&rsquo;s storage so that app can open it within 2 minutes; it is deleted once that app opens it. It is the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient&rsquo;s name or birth date. If the browser closes first, the image can no longer be opened, but its bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open it within the 2 minutes.</p>
+    </template>
 
     <script type="module" src="/src/main.js"></script>
   </body>

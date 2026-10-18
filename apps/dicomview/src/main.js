@@ -13,6 +13,7 @@ import {
 } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { registerAppAutomation } from '@neurodesk/webapp-components/automation';
+import { sendHandoff } from '@neurodesk/webapp-components/handoff';
 import { readImageSeries } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
 import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
@@ -24,6 +25,7 @@ import { ProtocolSession, SCHEMAS } from './protocol-session.js';
 import { checkOutcome, protocolTables } from './protocol-table.js';
 import { openSavedConversions, seriesFingerprint } from './saved-conversions.js';
 import { describeSeries, downloadFiles, seriesLabel, seriesSummary } from './series-text.js';
+import { LESIONS, handoffImage, lesionHandoffBlocker } from './handoff.js';
 import examples from '../examples.json';
 
 const $ = (id) => document.getElementById(id);
@@ -76,7 +78,8 @@ const state = {
 };
 
 // Jobs run in lanes: reading headers ('index'), showing a series ('viewer'), Convert all
-// ('batch') and dicompare ('protocol'). Reading a new input cancels every lane; otherwise
+// ('batch'), dicompare ('protocol') and sending an image to another app ('handoff'). Reading
+// a new input cancels every lane; otherwise
 // the lanes run side by side. The status bar shows the most recent; its × cancels that
 // one, and the others' messages return after.
 const jobs = new Map();
@@ -374,6 +377,7 @@ async function showSeries(series) {
 let viewerLoads = initialized;
 function showOutput() {
   const output = state.outputs?.[state.output];
+  void syncHandoff();
   if (!output) return Promise.resolve();
   // FreeBrowse lists and saves the volume by name; dcm2niix's carries the study date.
   const { name } = downloadFiles(currentSeries(), state.outputs, state.index.series)[state.output].image;
@@ -396,6 +400,7 @@ function showOutput() {
 // selection, which queues its own clear, makes this one moot.
 function clearImage() {
   $('imageLabel').textContent = '';
+  void syncHandoff();
   const { seriesUid } = state;
   const clear = viewerLoads.then(async () => {
     if (!viewerReady || state.seriesUid !== seriesUid) return;
@@ -410,6 +415,43 @@ function clearImage() {
 $('outputSelect').addEventListener('change', () => {
   state.output = Number($('outputSelect').value);
   void showOutput().catch((error) => status(error.message, true));
+});
+
+// Enabled for the image now chosen once its header shows a 3D volume. Sending is the
+// 'handoff' job lane: new input, the footer × and a later choice of image all cancel it, so
+// an earlier image never opens over the one now chosen.
+let handoffCheck = 0;
+async function syncHandoff() {
+  const check = ++handoffCheck;
+  jobs.get('handoff')?.controller.abort();
+  const output = state.outputs?.[state.output];
+  $('handoffButton').disabled = true;
+  $('handoffNote').hidden = true;
+  if (!output) return;
+  let reason;
+  try {
+    reason = await lesionHandoffBlocker(output.image);
+  } catch (error) {
+    reason = 'This image cannot be checked for White matter lesions.';
+    log.log(`Reading ${output.image.name} for White matter lesions: ${error.message}`, 'error');
+  }
+  if (check !== handoffCheck) return;
+  $('handoffButton').disabled = Boolean(reason) || jobs.has('handoff');
+  $('handoffNote').hidden = !reason;
+  $('handoffNote').textContent = reason ?? '';
+}
+
+$('handoffButton').addEventListener('click', async () => {
+  const image = handoffImage(currentSeries(), state.outputs, state.output, state.index.series);
+  const message = `Opening ${image.name} in ${LESIONS.title}`;
+  const controller = begin('handoff', `${message}…`);
+  $('handoffButton').disabled = true;
+  try {
+    await sendHandoff({ target: LESIONS.path, source: { app: APP.id, title: APP.title }, files: [image], signal: controller.signal });
+  } catch (error) {
+    finish('handoff', controller, message, { error });
+    void syncHandoff();
+  }
 });
 
 async function downloadSeries(uid) {

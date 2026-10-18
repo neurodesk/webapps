@@ -30,7 +30,7 @@
         },
         "image": {
           "type": "neuro:volume",
-          "mediaType": "application/octet-stream",
+          "mediaType": "application/x-nifti",
           "minimum": 1
         }
       },
