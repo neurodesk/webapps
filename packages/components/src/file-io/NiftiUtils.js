@@ -210,11 +210,10 @@ export function parseNiftiVolume(bufferLike, options = {}) {
 }
 
 /**
- * The size of a NIfTI file for an input summary, from its header alone:
- * spatial dims, voxel spacing in mm, 2 or 3 dimensions (a single slice is 2D)
- * and the number of volumes.
+ * The parsed header of a NIfTI file (plain or gzipped), read from its first bytes: the whole
+ * image is never loaded into memory.
  */
-export async function describeNiftiFile(file) {
+export async function readNiftiHeader(file) {
   const head = await file.slice(0, 352).arrayBuffer();
   let decoded = head;
   if (isGzipped(head)) {
@@ -222,7 +221,16 @@ export async function describeNiftiFile(file) {
       ? await readStreamPrefix(file.stream().pipeThrough(new DecompressionStream('gzip')), 352)
       : await decodeNiftiBuffer(await file.arrayBuffer(), { maxBytes: 352 });
   }
-  const header = parseNiftiHeader(decoded);
+  return parseNiftiHeader(decoded);
+}
+
+/**
+ * The size of a NIfTI file for an input summary, from its header alone:
+ * spatial dims, voxel spacing in mm, 2 or 3 dimensions (a single slice is 2D)
+ * and the number of volumes.
+ */
+export async function describeNiftiFile(file) {
+  const header = await readNiftiHeader(file);
   const rank = Math.max(1, Math.min(7, header.dims[0]));
   const spatial = header.dims.slice(1, Math.min(rank, 3) + 1);
   const dimensionality = spatial.length === 3 && spatial[2] === 1 ? 2 : spatial.length;

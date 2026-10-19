@@ -11,6 +11,7 @@ import {
   isNiftiFile,
   parseNiftiHeader,
   readNiftiFrames,
+  readNiftiHeader,
   readNiftiImageData,
   sameNiftiGrid
 } from '../src/file-io/index.js';
@@ -242,6 +243,34 @@ test('decodeNiftiBuffer decodes gzip whole or only the first maxBytes', async ()
   assert.deepEqual(head.slice(0, 352), original.slice(0, 352));
 });
 
+
+test('readNiftiHeader reads the dims of a plain or gzipped file without loading the image', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const [nx, ny, nz] = [256, 256, 64];
+  const bytes = new Uint8Array(352 + nx * ny * nz * 2);
+  const view = new DataView(bytes.buffer);
+  view.setInt32(0, 348, true);
+  [3, nx, ny, nz, 1, 1, 1, 1].forEach((size, axis) => view.setInt16(40 + 2 * axis, size, true));
+  view.setInt16(70, 4, true);
+  view.setInt16(72, 16, true);
+  bytes.set([0x6e, 0x2b, 0x31, 0], 344);
+  const reads = [];
+  const { arrayBuffer } = Blob.prototype;
+  Blob.prototype.arrayBuffer = function () {
+    reads.push(this.size);
+    return arrayBuffer.call(this);
+  };
+  try {
+    for (const file of [new File([bytes], 'scan.nii'), new File([gzipSync(bytes)], 'scan.nii.gz')]) {
+      const header = await readNiftiHeader(file);
+      assert.deepEqual([header.nx, header.ny, header.nz], [nx, ny, nz], file.name);
+      assert.ok(reads.every(size => size <= 352), `${file.name} read ${Math.max(...reads)} bytes at once`);
+      reads.length = 0;
+    }
+  } finally {
+    Blob.prototype.arrayBuffer = arrayBuffer;
+  }
+});
 
 test('reads orientation codes in both byte orders without changing affine or scaling', () => {
   for (const littleEndian of [true, false]) {

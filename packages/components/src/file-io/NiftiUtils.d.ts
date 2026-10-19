@@ -71,6 +71,7 @@ export function extractAffine(view: NiftiBytes): NiftiAffine;
 export function isGzipped(data: NiftiBytes): boolean;
 export function isValidNifti1(data: NiftiBytes): boolean;
 export function decodeNiftiBuffer(bufferLike: NiftiBytes, options?: { maxBytes?: number }): Promise<ArrayBuffer>;
+export function readNiftiHeader(file: Blob): Promise<NiftiHeader>;
 export function readNifti(bufferLike: NiftiBytes): Promise<NiftiImage>;
 export function readNifti<T extends NiftiVoxelArray>(bufferLike: NiftiBytes, OutputCtor: NiftiOutputConstructor<T>): Promise<NiftiImage<T>>;
 export function readNiftiImageData(bufferLike: NiftiBytes): NiftiImage;
