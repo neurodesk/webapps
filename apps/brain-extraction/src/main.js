@@ -91,9 +91,9 @@ const methodHints = {
 function methodChanged() {
   $('methodHint').textContent = methodHints[$('method').value] || '';
   $('methodHint').hidden = $('method').value === 'bet';
-  $('advancedSettings').hidden = $('method').value === 'synthstrip';
   $('betSettings').hidden = $('method').value !== 'bet';
   $('mindgrabSettings').hidden = $('method').value !== 'mindgrab';
+  $('synthstripSettings').hidden = $('method').value !== 'synthstrip';
 }
 $('method').onchange = methodChanged;
 methodChanged();
@@ -108,7 +108,7 @@ function refreshControls() {
   const busy = state.phase !== 'idle';
   exampleControl.setDisabled(busy);
   picker.disabled = busy;
-  for (const id of ['folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend']) $(id).disabled = busy;
+  for (const id of ['folderInput', 'folderButton', 'method', 'threshold', 'mindgrabBackend', 'noCsf']) $(id).disabled = busy;
   $('runButton').disabled = busy || !source;
   $('cancelButton').hidden = !busy;
   $('reportBtn').disabled = busy || runs.snapshot().state !== 'succeeded';
@@ -299,11 +299,13 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
   signal?.throwIfAborted();
   const cancelled = resetOutputs();
   const { method, threshold = 0.5, backend: requestedBackend = 'auto' } = parameters;
+  const noCsf = method === 'synthstrip' && parameters.noCsf === true;
   const effective = { method };
   if (method === 'bet') effective.threshold = threshold;
   if (method === 'mindgrab') effective.backend = requestedBackend;
+  if (method === 'synthstrip') effective.noCsf = noCsf;
   const job = start('running', { inputs: { image: source }, parameters: effective });
-  const names = outputNames(source.name, method);
+  const names = outputNames(source.name, method, { noCsf });
   status(`Starting ${method}…`);
   const abort = () => cancel();
   signal?.addEventListener('abort', abort, { once: true });
@@ -365,7 +367,7 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
         job.worker.onerror = event => fail(new Error(event.message || 'The processing worker failed. Reload and try again.'));
         void resolveMindgrabBackend(requestedBackend, job.run).then(backend => {
           if (!job.run.current) return;
-          job.worker.postMessage({ file: source, method, backend, fractionalIntensity: threshold, assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
+          job.worker.postMessage({ file: source, method, backend, fractionalIntensity: threshold, noCsf, assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
         }, fail);
       } catch (error) { fail(error); }
     });
@@ -380,7 +382,7 @@ $('runButton').onclick = () => {
     status(message, true);
     return;
   }
-  void extractBrain({ method: $('method').value, threshold: Number($('threshold').value), backend: $('mindgrabBackend').value }).catch(error => {
+  void extractBrain({ method: $('method').value, threshold: Number($('threshold').value), backend: $('mindgrabBackend').value, noCsf: $('noCsf').checked }).catch(error => {
     if (error.name !== 'AbortError') status(error.message, true);
   });
 };

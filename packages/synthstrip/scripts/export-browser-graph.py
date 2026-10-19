@@ -7,7 +7,11 @@ import json
 from pathlib import Path
 import struct
 
-EXPECTED_HASH = 'dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800'
+# The browser graphs of the default and no-CSF models; both give the same plan apart from these two fields.
+EXPECTED_HASHES = {
+    'dc9e11999b58d7949d77ddf1b2ed2910df66f8725c078a6b46ae08b8ebcc2800',
+    'f60cbe2673325ba22b75cf40979cdff4236379c34892528d6185b6a592cc6da8',
+}
 IMAGE_OPS = {'Conv', 'LeakyRelu', 'MaxPool', 'Resize', 'Add'}
 
 
@@ -53,7 +57,7 @@ def fields(blob, start=0, end=None):
 def export(source):
     blob = source.read_bytes()
     digest = hashlib.sha256(blob).hexdigest()
-    require(digest == EXPECTED_HASH, 'Unexpected SynthStrip browser model checksum')
+    require(digest in EXPECTED_HASHES, 'Unexpected SynthStrip browser model checksum')
 
     def payload(span):
         return blob[span[0]:span[1]]

@@ -20,7 +20,7 @@ self.onmessage = async ({ data: job }) => {
       result = await runMindgrab({ volume, backend: job.backend, assetPath: new URL('mindgrab/', job.assetBase).href, onProgress, onLog });
     } else if (job.method === 'synthstrip') {
       const { extractSynthstrip } = await import('./synthstrip.js');
-      result = await extractSynthstrip({ volume, onProgress });
+      result = await extractSynthstrip({ volume, noCsf: job.noCsf, onProgress });
     } else {
       throw new Error('Choose BET, MindGrab or SynthStrip.');
     }

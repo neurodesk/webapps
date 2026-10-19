@@ -50,6 +50,11 @@
             "cpu"
           ],
           "default": "auto"
+        },
+        "noCsf": {
+          "type": "boolean",
+          "description": "Leave the CSF around the brain out of the mask (mri_synthstrip --no-csf); used only by SynthStrip",
+          "default": false
         }
       },
       "artifacts": {

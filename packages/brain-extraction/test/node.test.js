@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readVolume } from '@neurodesk/synthsr';
-import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
+import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '@neurodesk/synthstrip/model';
+import { outputNames } from '../src/outputs.js';
 import { MODEL_ASSETS, checkInstallation, defaultCacheDir, downloadModels, extract } from '../src/node.js';
 
 const cli = fileURLToPath(new URL('../bin/brain-extraction.js', import.meta.url));
@@ -42,8 +43,28 @@ function run(args, env = {}) {
   return result;
 }
 
-test('installation holds the SynthStrip graph the web app loads', () => {
-  assert.deepEqual(MODEL_ASSETS, [SYNTHSTRIP_MODEL]);
+test('installation holds the SynthStrip graphs the web app loads, with and without CSF', () => {
+  assert.deepEqual(MODEL_ASSETS, [SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL]);
+});
+
+test('a no-CSF run is named apart from one that includes CSF', () => {
+  assert.deepEqual(outputNames('head.nii.gz', 'synthstrip'), { brain: 'head_synthstrip_brain.nii', mask: 'head_synthstrip_mask.nii' });
+  assert.deepEqual(outputNames('head.nii.gz', 'synthstrip', { noCsf: true }), { brain: 'head_synthstrip-nocsf_brain.nii', mask: 'head_synthstrip-nocsf_mask.nii' });
+});
+
+test('--no-csf loads the no-CSF model and applies to SynthStrip only', async (t) => {
+  const { root, cache } = await workspace(t);
+  const input = join(root, 'head.nii.gz');
+  await copyFile(fixture, input);
+  const missing = run([input, join(root, 'out'), '--no-csf', '--cache-dir', cache, '--offline']);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /synthstrip-nocsf-browser\.onnx is missing from the offline model directory/);
+  for (const method of ['bet', 'mindgrab']) {
+    const result = run([input, join(root, 'out'), '--method', method, '--no-csf', '--cache-dir', cache]);
+    assert.equal(result.status, 1, method);
+    assert.match(result.stderr, /--no-csf applies to --method synthstrip only/, method);
+  }
+  assert.deepEqual((await readdir(root)).sort(), ['head.nii.gz', 'input.nii']);
 });
 
 test('the model directory comes from the launcher variable', () => {

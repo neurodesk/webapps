@@ -5,7 +5,7 @@ import { basename, join, resolve } from 'node:path';
 import * as ort from 'onnxruntime-node';
 import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
-import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
+import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '@neurodesk/synthstrip/model';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
 import packageJson from '../package.json' with { type: 'json' };
 import { runBet } from './bet.js';
@@ -13,7 +13,7 @@ import { betRuntime } from './bet-runtime.js';
 import { runMindgrab } from './mindgrab.js';
 import { outputNames, writeOutputs } from './outputs.js';
 
-export const MODEL_ASSETS = Object.freeze([SYNTHSTRIP_MODEL]);
+export const MODEL_ASSETS = Object.freeze([SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL]);
 export const DEFAULT_METHOD = 'synthstrip';
 const DEFAULT_FRACTIONAL_INTENSITY = 0.5;
 
@@ -34,23 +34,25 @@ async function loadBetRuntime() {
 // What each --method runs. A method's models are verified before any computation.
 const METHODS = {
   synthstrip: {
-    models: [SYNTHSTRIP_MODEL],
+    // mri_synthstrip --no-csf: the same network with weights that leave the surrounding CSF out.
+    models: ({ noCsf }) => [noCsf ? SYNTHSTRIP_NOCSF_MODEL : SYNTHSTRIP_MODEL],
     threaded: true,
-    async extract({ volume, models: [model], threads, onProgress }) {
+    async extract({ volume, models: [model], threads, noCsf, onProgress }) {
+      const asset = noCsf ? SYNTHSTRIP_NOCSF_MODEL : SYNTHSTRIP_MODEL;
       // Without the arena the T1 example peaks at 2.6 GB instead of 4.4 GB, at the same speed and mask.
       const sessionOptions = { executionProviders: ['cpu'], graphOptimizationLevel: 'all', intraOpNumThreads: threads, interOpNumThreads: 1, enableCpuMemArena: false };
       const result = await runSynthstrip({
         volume,
-        loadModel: async () => ({ bytes: model, hash: SYNTHSTRIP_MODEL.sha256 }),
+        loadModel: async () => ({ bytes: model, hash: asset.sha256 }),
         createSession: (bytes) => ort.InferenceSession.create(bytes, sessionOptions),
         Tensor: ort.Tensor,
         onProgress,
       });
-      return { ...result, provenance: { ...result.provenance, inference: 'ONNX Runtime Node', onnxruntime: ort.env.versions.node, executionProvider: 'cpu', threads } };
+      return { ...result, provenance: { ...result.provenance, csf: noCsf ? 'excluded' : 'included', model: asset.filename, inference: 'ONNX Runtime Node', onnxruntime: ort.env.versions.node, executionProvider: 'cpu', threads } };
     },
   },
   bet: {
-    models: [],
+    models: () => [],
     async extract({ volume, fractionalIntensity, onProgress }) {
       const result = runBet({ volume, runtime: await loadBetRuntime(), fractionalIntensity, onProgress });
       return { ...result, provenance: { ...result.provenance, runtime: 'WebAssembly, single-threaded' } };
@@ -58,7 +60,7 @@ const METHODS = {
   },
   // The web app's CPU backend: the same modules, with the weights compiled in, and the same options.
   mindgrab: {
-    models: [],
+    models: () => [],
     async extract({ volume, onProgress }) {
       const { segment } = await loadMindgrab();
       const result = await runMindgrab({ volume, backend: 'cpu', segmenter: segment, onProgress });
@@ -221,6 +223,7 @@ export async function extract({
   method: methodName = DEFAULT_METHOD,
   fractionalIntensity,
   threads,
+  noCsf = false,
   cacheDir = defaultCacheDir(),
   offline = offlineByDefault(),
   onProgress = () => {},
@@ -229,15 +232,16 @@ export async function extract({
   const method = resolveMethod(methodName);
   const fraction = resolveFractionalIntensity(fractionalIntensity, methodName);
   if (!method.threaded && threads !== undefined) throw new Error('--threads applies to --method synthstrip only.');
+  if (noCsf && methodName !== 'synthstrip') throw new Error('--no-csf applies to --method synthstrip only.');
   const intraOpNumThreads = method.threaded ? resolveThreads(threads) : undefined;
   const destination = resolve(output);
   await assertNewOutput(destination);
   const volume = readVolume(arrayBuffer(await readFile(input)));
   const models = [];
-  for (const asset of method.models) models.push(await loadAsset(asset, { cacheDir, offline, onProgress: (message) => onProgress(undefined, message) }));
+  for (const asset of method.models({ noCsf })) models.push(await loadAsset(asset, { cacheDir, offline, onProgress: (message) => onProgress(undefined, message) }));
   const started = performance.now();
-  const result = await method.extract({ volume, models, threads: intraOpNumThreads, fractionalIntensity: fraction, onProgress });
-  const names = outputNames(basename(input), methodName);
+  const result = await method.extract({ volume, models, threads: intraOpNumThreads, fractionalIntensity: fraction, noCsf, onProgress });
+  const names = outputNames(basename(input), methodName, { noCsf });
   const files = writeOutputs(result);
   await publish(destination, { [names.brain]: new Uint8Array(files.brain), [names.mask]: new Uint8Array(files.mask) });
   return {
@@ -248,6 +252,7 @@ export async function extract({
       app: `brain-extraction command line ${packageJson.version}`,
       ...result.provenance,
       method: methodName,
+      ...(noCsf ? { noCsf } : {}),
       seconds: Math.round((performance.now() - started) / 100) / 10,
     },
   };

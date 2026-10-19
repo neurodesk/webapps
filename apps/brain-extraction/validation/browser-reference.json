@@ -1,6 +1,6 @@
 {
   "example": "t1-head",
-  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend",
+  "recorded": "2026-10-07, e2e/app.spec.js on the production build in Chromium (Playwright 1.63), linux-x64 with 8 cores: BET on QSMbly's threaded WebAssembly bundle, SynthStrip on ONNX Runtime Web 1.29.0 WebAssembly with 4 threads. MindGrab added 2026-10-08 on the same setup: @brainchop/mindgrab 0.1.20260925 on its CPU backend. SynthStrip without CSF added 2026-10-19 on the production build in Chromium (Playwright 1.64), linux-x64 with 8 cores: the same runtime with the synthstrip-nocsf-browser.onnx graph",
   "methods": {
     "bet": {
       "tolerance": {
@@ -30,6 +30,20 @@
       "background": 0,
       "brainMean": 138.838,
       "brainMax": 318
+    },
+    "synthstrip-nocsf": {
+      "tolerance": {
+        "basis": "The same runtime, pipeline and tolerance as synthstrip, with FreeSurfer's no-CSF weights. The command line reproduced this mask bit for bit on linux-x64, and it differs from mri_synthstrip --no-csf (freesurfer/synthstrip@sha256:ebbc1772) in 2 of its 1.4 million voxels.",
+        "relative": 0.0001,
+        "minimumDice": 0.99995
+      },
+      "maskVoxels": 1425011,
+      "maskSha256": "fa2ac59c89be9fdc3febc6f0ce9994293f8f5512fe4f5141e82ef393996f4633",
+      "brainHeaderSha256": "f6d0d240380458d5328c87625178204d46a9d5ec09f9dee8d217d2524a9dd7cf",
+      "maskHeaderSha256": "a2659a350b6b39b3bd1886daf7e27bfaafe2a20fe6679056529c40a562856abe",
+      "background": 0,
+      "brainMean": 149.476,
+      "brainMax": 267
     },
     "mindgrab": {
       "tolerance": {

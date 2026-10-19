@@ -18,6 +18,9 @@ Options:
   --method NAME                synthstrip (default), bet or mindgrab
   --fractional-intensity F     BET threshold from 0 to 1 (default 0.5); lower
                                values give larger masks
+  --no-csf                     SynthStrip only: leave the CSF around the brain out
+                               of the mask (mri_synthstrip --no-csf). Writes
+                               INPUT_synthstrip-nocsf_brain.nii and _mask.nii
   --threads N                  SynthStrip ONNX Runtime threads (default
                                SLURM_CPUS_PER_TASK or all cores)
   --cache-dir DIR              Model directory (default
@@ -26,11 +29,11 @@ Options:
   --offline                    Never download; fail if the model is missing
   -h, --help                   Show this help
 
-OUTPUT_DIR must be new or empty. The SynthStrip model downloads once and is
-SHA-256 checked on every load. BET needs no model, and MindGrab's weights are
-part of its WebAssembly module. MindGrab runs the web app's CPU backend on all
-logical cores and needs about 2.6 GB of memory. DICOM input and mask editing
-are available in the web app only.`;
+OUTPUT_DIR must be new or empty. Each SynthStrip model (with and without CSF)
+downloads once and is SHA-256 checked on every load. BET needs no model, and
+MindGrab's weights are part of its WebAssembly module. MindGrab runs the web
+app's CPU backend on all logical cores and needs about 2.6 GB of memory. DICOM
+input and mask editing are available in the web app only.`;
 
 const reportProgress = () => {
   let previous;
@@ -50,6 +53,7 @@ try {
       method: { type: 'string' },
       'fractional-intensity': { type: 'string' },
       threads: { type: 'string' },
+      'no-csf': { type: 'boolean' },
       'cache-dir': { type: 'string' },
       offline: { type: 'boolean' },
     },
@@ -83,6 +87,7 @@ try {
       method: values.method,
       fractionalIntensity: values['fractional-intensity'],
       threads: values.threads,
+      noCsf: values['no-csf'],
       cacheDir: values['cache-dir'],
       offline: values.offline,
       onProgress: reportProgress(),

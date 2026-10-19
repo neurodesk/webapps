@@ -14,12 +14,18 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { readVolume } from '@neurodesk/synthsr';
-import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
+import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '@neurodesk/synthstrip/model';
 import { browserReference, compareWithBrowser, dice, measure } from '../../../apps/brain-extraction/validation/browser-reference.mjs';
 import { outputNames } from '../src/outputs.js';
 import { webReference } from './web-reference.mjs';
 
-const METHODS = ['bet', 'synthstrip', 'mindgrab'];
+// Each case is a browser-reference.json entry: a method and the options that select it.
+const CASES = [
+  { id: 'bet', method: 'bet' },
+  { id: 'synthstrip', method: 'synthstrip' },
+  { id: 'synthstrip-nocsf', method: 'synthstrip', noCsf: true },
+  { id: 'mindgrab', method: 'mindgrab' },
+];
 const examples = JSON.parse(await readFile(new URL('../../../apps/brain-extraction/examples.json', import.meta.url), 'utf8'));
 const lock = JSON.parse(await readFile(new URL('../../../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
 const { values } = parseArgs({ options: { executable: { type: 'string' } } });
@@ -55,10 +61,11 @@ async function pinnedExample() {
   return path;
 }
 
-function extract(input, output, method) {
-  const run = spawnSync(command[0], [...command.slice(1), input, output, '--method', method], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+function extract(input, output, { method, noCsf }) {
+  const options = ['--method', method, ...(noCsf ? ['--no-csf'] : [])];
+  const run = spawnSync(command[0], [...command.slice(1), input, output, ...options], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   if (run.error) throw run.error;
-  if (run.status !== 0) throw new Error(`${command.join(' ')} --method ${method} exited with ${run.status}:\n${run.stderr}`);
+  if (run.status !== 0) throw new Error(`${command.join(' ')} ${options.join(' ')} exited with ${run.status}:\n${run.stderr}`);
   return JSON.parse(run.stdout);
 }
 
@@ -78,12 +85,16 @@ function checkBrainIsInput(input, names, outputs, background) {
   check(differing === 0, `${names.brain} is the input inside the mask and ${background} outside (${differing} voxels differ)`);
 }
 
-let reference;
-async function browserMask(input, work, names) {
-  reference ??= await webReference({ input, output: join(work, 'web'), cacheDir: join(cache, 'models') }).then(() => files(join(work, 'web')));
+const references = new Map();
+async function browserMask(input, work, names, { id, noCsf }) {
+  if (!references.has(id)) {
+    const output = join(work, `web-${id}`);
+    references.set(id, await webReference({ input, output, noCsf, cacheDir: join(cache, 'models') }).then(() => files(output)));
+  }
+  const reference = references.get(id);
   const mask = reference.get(names.mask);
   const maskSha256 = measure({ brain: reference.get(names.brain), mask }).maskSha256;
-  check(maskSha256 === browserReference.methods.synthstrip.maskSha256, `web-reference.mjs reproduces the browser's SynthStrip mask bit for bit (${maskSha256.slice(0, 16)})`);
+  check(maskSha256 === browserReference.methods[id].maskSha256, `web-reference.mjs reproduces the browser's ${id} mask bit for bit (${maskSha256.slice(0, 16)})`);
   return volume(mask).data;
 }
 
@@ -92,14 +103,18 @@ try {
   const inputPath = await pinnedExample();
   const input = await readFile(inputPath);
   const inputName = examples.find(({ id }) => id === browserReference.example).files[0].name;
-  for (const method of METHODS) {
-    const expected = browserReference.methods[method];
-    const names = outputNames(inputName, method);
-    const output = join(work, method);
-    const report = extract(inputPath, output, method);
-    console.log(`INFO --method ${method}: ${report.provenance.seconds} s, ${JSON.stringify(report.provenance)}`);
+  for (const testCase of CASES) {
+    const { id, method, noCsf } = testCase;
+    const expected = browserReference.methods[id];
+    const names = outputNames(inputName, method, { noCsf });
+    const output = join(work, id);
+    const report = extract(inputPath, output, testCase);
+    console.log(`INFO ${id}: ${report.provenance.seconds} s, ${JSON.stringify(report.provenance)}`);
     check(report.provenance.method === method, `provenance names method ${report.provenance.method}`);
-    if (method === 'synthstrip') check(report.provenance.modelHash === SYNTHSTRIP_MODEL.sha256, `SynthStrip model ${report.provenance.modelHash}`);
+    if (method === 'synthstrip') {
+      const model = noCsf ? SYNTHSTRIP_NOCSF_MODEL : SYNTHSTRIP_MODEL;
+      check(report.provenance.modelHash === model.sha256, `SynthStrip model ${report.provenance.modelHash}, ${model.filename}`);
+    }
     if (method === 'bet') check(report.provenance.fractionalIntensity === 0.5, `BET fractional intensity ${report.provenance.fractionalIntensity}, the web app's default`);
     if (method === 'mindgrab') check(report.provenance.version === expected.version && report.provenance.model === 'mindgrab' && report.provenance.backend === 'cpu', `MindGrab ${report.provenance.version} model ${report.provenance.model} on the ${report.provenance.backend} backend, browser ${expected.version} mindgrab on cpu`);
     const outputs = await files(output);
@@ -107,13 +122,13 @@ try {
     if (!outputs.has(names.brain) || !outputs.has(names.mask)) continue;
     const measured = measure({ brain: outputs.get(names.brain), mask: outputs.get(names.mask) });
     check(report.maskVoxels === measured.maskVoxels, `reported ${report.maskVoxels} mask voxels, written ${measured.maskVoxels}`);
-    for (const [passed, line] of compareWithBrowser(measured, method)) check(passed, line);
+    for (const [passed, line] of compareWithBrowser(measured, id)) check(passed, line);
     checkBrainIsInput(input, names, outputs, expected.background);
     const { minimumDice } = expected.tolerance;
     if (measured.maskSha256 === expected.maskSha256) {
       check(true, `${names.mask} Dice 1 with the browser's mask: identical (${measured.maskSha256.slice(0, 16)})`);
     } else if (minimumDice < 1) {
-      const { dice: overlap, differing } = dice(volume(outputs.get(names.mask)).data, await browserMask(inputPath, work, names));
+      const { dice: overlap, differing } = dice(volume(outputs.get(names.mask)).data, await browserMask(inputPath, work, names, testCase));
       check(overlap >= minimumDice, `${names.mask} Dice ${overlap.toFixed(6)} >= ${minimumDice} with the browser's mask (${differing} voxels differ)`);
     } else {
       check(false, `${names.mask} differs from the browser's mask (${measured.maskSha256.slice(0, 16)}, browser ${expected.maskSha256.slice(0, 16)})`);

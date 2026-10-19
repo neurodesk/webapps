@@ -7,9 +7,11 @@ import { promisify } from 'node:util';
 import model from '../src/browser-model.json' with { type: 'json' };
 import { createBrowserSession, planStripGraph } from '../src/browser.js';
 import { finishStrip } from '../src/index.js';
+import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '../src/model.js';
 import { layerModel, slabPlan } from '../../runtime-support/src/streamed-onnx/session.js';
 
 const modelPath = process.env.SYNTHSTRIP_MODEL_PATH;
+const noCsfModelPath = process.env.SYNTHSTRIP_NOCSF_MODEL_PATH;
 const native = () => createRequire(import.meta.url)('onnxruntime-node');
 const nativeOptions = options => ({ ...options, executionProviders: ['cpu'], intraOpNumThreads: 2 });
 
@@ -234,4 +236,41 @@ test('streamed real-volume distances and finished masks match the untouched pinn
   const expectedMask = finishStrip(expected, prep).mask.data;
   assert.deepEqual(actualMask, expectedMask);
   t.diagnostic(`maximum distance difference ${maximum}; identical mask brain voxels ${actualMask.reduce((sum, value) => sum + value, 0)}`);
+});
+
+test('the no-CSF pin shares the browser plan of the pinned graph', async () => {
+  assert.equal(model.sha256, SYNTHSTRIP_MODEL.sha256);
+  assert.equal(SYNTHSTRIP_NOCSF_MODEL.bytes, model.bytes);
+  await assert.rejects(
+    async () => createBrowserSession(new ArrayBuffer(8), [64, 64, 64], {}, { asset: { ...SYNTHSTRIP_NOCSF_MODEL, bytes: 8 } }),
+    /does not share the SynthStrip graph layout/,
+  );
+});
+
+test('the streamed no-CSF graph matches ONNX Runtime on the whole graph', { skip: !noCsfModelPath && 'SYNTHSTRIP_NOCSF_MODEL_PATH is not set' }, async (t) => {
+  const ort = native();
+  const raw = await readFile(noCsfModelPath);
+  const dims = [64, 64, 64];
+  const data = Float32Array.from({ length: dims[0] * dims[1] * dims[2] }, (_, i) => {
+    const [x, y, z] = [i % 64, Math.floor(i / 64) % 64, Math.floor(i / 4096)].map(value => value - 32);
+    return Math.max(0, 1 - Math.hypot(x, y, z) / 28);
+  });
+  const tensor = new ort.Tensor('float32', data, [1, 1, ...dims]);
+  const adapter = { ...ort, InferenceSession: {
+    create: (bytes, options) => ort.InferenceSession.create(bytes, nativeOptions(options)),
+  } };
+  const streamed = await createBrowserSession(raw, dims, adapter, { asset: SYNTHSTRIP_NOCSF_MODEL });
+  const reference = await ort.InferenceSession.create(raw, nativeOptions({ graphOptimizationLevel: 'all' }));
+  try {
+    const actual = await (await streamed.run({ input: tensor })).output.getData();
+    const expected = await (await reference.run({ input: tensor })).output.getData();
+    let maximum = 0;
+    for (let index = 0; index < actual.length; index++) maximum = Math.max(maximum, Math.abs(actual[index] - expected[index]));
+    t.diagnostic(`maximum distance difference ${maximum}`);
+    assert.ok(maximum < 1e-4, `maximum float32 distance difference ${maximum}`);
+  } finally {
+    tensor.dispose();
+    await streamed.release();
+    await reference.release();
+  }
 });

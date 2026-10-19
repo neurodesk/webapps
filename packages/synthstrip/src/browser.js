@@ -58,10 +58,13 @@ export function planStripGraph(dims) {
   return nodes;
 }
 
-export function createBrowserSession(raw, dims, ort, options = {}) {
+// asset is the pinned model raw must be: SYNTHSTRIP_MODEL by default, or SYNTHSTRIP_NOCSF_MODEL,
+// whose graph and weight layout are this plan's with other weights.
+export function createBrowserSession(raw, dims, ort, { asset, ...options } = {}) {
+  if (asset && asset.bytes !== model.bytes) throw new Error(`${asset.filename} does not share the SynthStrip graph layout.`);
   return createStreamedSession(raw, dims, ort, {
     ...options,
-    model,
+    model: asset ? { ...model, sha256: asset.sha256, bytes: asset.bytes } : model,
     nodes: planStripGraph(dims),
     implementation: WASM_IMPLEMENTATION,
   });

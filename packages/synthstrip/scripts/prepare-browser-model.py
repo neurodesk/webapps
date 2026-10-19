@@ -7,7 +7,9 @@ import argparse,hashlib,pathlib,onnx
 from onnx import helper as oh,numpy_helper as nh
 p=argparse.ArgumentParser();p.add_argument('source');p.add_argument('output');a=p.parse_args()
 source=pathlib.Path(a.source).read_bytes()
-assert hashlib.sha256(source).hexdigest()=='7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074'
+# The ONNX exports of FreeSurfer's synthstrip.1.pt and synthstrip.nocsf.1.pt (same graph, other weights).
+SOURCES={'7b8eeecf3793a6c4510b9f5270ecc03d9c3262d26e08d568203a651ab4b84074','a1618df5f8f08b77917793d1e043fd4382563ddc09faa5e93489db0a74ae61f5'}
+assert hashlib.sha256(source).hexdigest() in SOURCES
 m=onnx.load_model_from_string(source);arrays={w.name:nh.to_array(w) for w in m.graph.initializer}
 concats={n.output[0]:n for n in m.graph.node if n.op_type=='Concat'}
 # These channel counts belong to the hash-pinned model's encoder skip tensors.

@@ -29,7 +29,7 @@
             </select>
             <p id="methodHint" class="nd-hint"></p>
           </div>
-          <details class="nd-sidebar-section" id="advancedSettings" hidden>
+          <details class="nd-sidebar-section" id="advancedSettings">
             <summary class="nd-section-title">Advanced settings</summary>
             <div class="nd-section-content">
               <div class="nd-field" id="betSettings">
@@ -44,6 +44,10 @@
                   <option value="cpu">CPU</option>
                 </select>
                 <p class="nd-hint">Choose CPU if graphics processing is slow or unavailable.</p>
+              </div>
+              <div class="nd-field" id="synthstripSettings">
+                <label class="nd-check"><input id="noCsf" type="checkbox" /> Exclude CSF</label>
+                <p class="nd-hint">Leaves the CSF around the brain out of the mask, as mri_synthstrip --no-csf.</p>
               </div>
             </div>
           </details>

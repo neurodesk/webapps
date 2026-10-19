@@ -1,9 +1,11 @@
 import { writeVolume } from '@neurodesk/synthsr';
 
-// The names the web app downloads a run's brain image and mask under.
-export function outputNames(inputName, method) {
+// The names the web app downloads a run's brain image and mask under. A no-CSF SynthStrip run
+// is named apart, so its mask can sit beside the one that includes CSF.
+export function outputNames(inputName, method, { noCsf = false } = {}) {
   const stem = inputName.replace(/\.nii(\.gz)?$/i, '');
-  return { brain: `${stem}_${method}_brain.nii`, mask: `${stem}_${method}_mask.nii` };
+  const label = noCsf ? `${method}-nocsf` : method;
+  return { brain: `${stem}_${label}_brain.nii`, mask: `${stem}_${label}_mask.nii` };
 }
 
 // The NIfTI bytes of a run's brain image and mask, as the web app downloads them.

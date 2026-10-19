@@ -230,6 +230,19 @@ test('shared app bar owns dialogs, theme and cross-origin isolation', async ({ p
   expect(await page.evaluate(() => crossOriginIsolated)).toBe(true);
 });
 
+test('Exclude CSF is a SynthStrip setting that survives switching methods', async ({ page }) => {
+  await page.goto('./');
+  await page.locator('#method').selectOption('synthstrip');
+  await page.locator('#advancedSettings summary').click();
+  await expect(page.locator('#synthstripSettings')).toBeVisible();
+  await expect(page.locator('#noCsf')).not.toBeChecked();
+  await page.getByLabel('Exclude CSF').check();
+  await page.locator('#method').selectOption('bet');
+  await expect(page.locator('#synthstripSettings')).toBeHidden();
+  await page.locator('#method').selectOption('synthstrip');
+  await expect(page.locator('#noCsf')).toBeChecked();
+});
+
 test('MindGrab processing choice survives closing settings and switching methods', async ({ page }) => {
   await page.goto('./');
   await page.locator('#advancedSettings summary').click();
@@ -249,8 +262,14 @@ const REAL_MODEL_MIN_DICE = { mindgrab: 0.96, synthstrip: 0.96 };
 // Holds each run on the real T1 example to validation/browser-reference.json and attaches its
 // measurements, which re-record the reference when the pipeline changes on purpose.
 // MindGrab runs on its CPU backend, the modules the command line runs.
-for (const method of ['bet', 'synthstrip', 'mindgrab']) {
-  test(`${method} on the T1 example matches the recorded browser reference`, { tag: '@slow' }, async ({ page }, testInfo) => {
+const REFERENCE_CASES = [
+  { id: 'bet', method: 'bet' },
+  { id: 'synthstrip', method: 'synthstrip' },
+  { id: 'synthstrip-nocsf', method: 'synthstrip', noCsf: true },
+  { id: 'mindgrab', method: 'mindgrab' },
+];
+for (const { id, method, noCsf } of REFERENCE_CASES) {
+  test(`${id} on the T1 example matches the recorded browser reference`, { tag: '@slow' }, async ({ page }, testInfo) => {
     test.skip(!process.env.BRAIN_EXTRACTION_REAL_MODELS, 'Set BRAIN_EXTRACTION_REAL_MODELS=1 for the example download and inference.');
     test.setTimeout(1200000);
     const example = examples.find(({ id }) => id === browserReference.example);
@@ -262,10 +281,14 @@ for (const method of ['bet', 'synthstrip', 'mindgrab']) {
       await page.locator('#advancedSettings summary').click();
       await page.locator('#mindgrabBackend').selectOption('cpu');
     }
+    if (noCsf) {
+      await page.locator('#advancedSettings summary').click();
+      await page.getByLabel('Exclude CSF').check();
+    }
     await page.locator('#runButton').click();
     await expect(page.locator('#statusText')).toHaveAttribute('data-neurodesk-state', /succeeded|failed/, { timeout: 1100000 });
     await expect(page.locator('#statusText')).toHaveText('Brain image and mask ready');
-    const names = outputNames(example.files[0].name, method);
+    const names = outputNames(example.files[0].name, method, { noCsf });
     const download = async index => {
       const pending = page.waitForEvent('download');
       await page.locator('#resultList .nd-download-btn').nth(index).click();
@@ -276,9 +299,9 @@ for (const method of ['bet', 'synthstrip', 'mindgrab']) {
     const mask = await download(2);
     expect([brain.name, mask.name]).toEqual([names.brain, names.mask]);
     const measured = measure({ brain: brain.bytes, mask: mask.bytes });
-    await testInfo.attach(`browser-reference-${method}`, { body: JSON.stringify(measured), contentType: 'application/json' });
-    for (const [passed, line] of compareWithBrowser(measured, method)) expect(passed, line).toBe(true);
-    if (browserReference.methods[method].tolerance.minimumDice === 1) expect(measured.maskSha256).toBe(browserReference.methods[method].maskSha256);
+    await testInfo.attach(`browser-reference-${id}`, { body: JSON.stringify(measured), contentType: 'application/json' });
+    for (const [passed, line] of compareWithBrowser(measured, id)) expect(passed, line).toBe(true);
+    if (browserReference.methods[id].tolerance.minimumDice === 1) expect(measured.maskSha256).toBe(browserReference.methods[id].maskSha256);
     if (method === 'mindgrab') {
       const reportDownload = page.waitForEvent('download');
       await page.locator('#reportBtn').click();
