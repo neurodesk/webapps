@@ -8,6 +8,8 @@ import {createBrowserSession as createStripSession} from '@neurodesk/synthstrip/
 import { fetchModel } from '@neurodesk/webapp-components/worker';
 import {assets,browserSynthstrip} from '../../../packages/syncro/src/assets.js';
 import {runMindgrab} from '@neurodesk/brain-extraction/mindgrab';
+import * as mindgrab from '@brainchop/mindgrab';
+import {withBackendChoice} from '@neurodesk/runtime-support/mindgrab/backend';
 ort.env.wasm.wasmPaths={wasm:wasmURL,mjs:wasmModuleURL};
 ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(4,navigator.hardwareConcurrency||1):1;
 async function model(name,base) {
@@ -22,6 +24,7 @@ self.onmessage=async({data:job})=>{
  try {
   if(job.stage==='mindgrab') {
    const result=await runMindgrab({volume:job.volume??readVolume(job.buffer),assetPath:job.assetPath,backend:job.brainBackend??'auto',
+    segmenter:withBackendChoice(mindgrab).segment,
     onProgress:(value,message)=>self.postMessage({type:'progress',value,message}),
     onLog:message=>self.postMessage({type:'log',message})});
    const output={brain:result.brain,provenance:result.provenance};

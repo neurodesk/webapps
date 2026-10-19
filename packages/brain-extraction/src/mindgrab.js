@@ -1,9 +1,6 @@
-import * as mindgrab from '@brainchop/mindgrab';
+import { segment } from '@brainchop/mindgrab';
 import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
-import { withBackendChoice } from '@neurodesk/runtime-support/mindgrab/backend';
 import { readVolume, writeVolume } from '@neurodesk/synthsr';
-
-const { segment } = withBackendChoice(mindgrab);
 
 const asBuffer = bytes => bytes instanceof ArrayBuffer
   ? bytes

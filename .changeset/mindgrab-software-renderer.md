@@ -1,6 +1,5 @@
 ---
 "@neurodesk/runtime-support": patch
-"@neurodesk/brain-extraction": patch
 "brain-extraction": patch
 "fastprep": patch
 "ants": patch

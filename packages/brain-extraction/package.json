@@ -34,7 +34,6 @@
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/node-drivers": "workspace:*",
-    "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/synthsr": "workspace:*",
     "@neurodesk/synthstrip": "workspace:*",
     "onnxruntime-node": "1.29.0"
