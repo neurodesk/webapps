@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { after, describe, test } from 'node:test';
+import { after, afterEach, describe, test as nodeTest } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import playwright from '@playwright/test';
 import { serveSite } from '../../../test-utils/serve-site.mjs';
@@ -15,6 +15,8 @@ const SENDER = 'dicomview';
 const RECEIVER = 'white-matter-lesions';
 const MINUTE = 60 * 1000;
 const GONE = 'The image sent from DICOM View is no longer available. Send it again.';
+// A test whose page never settles fails after a minute instead of hanging the run.
+const test = (name, options, fn) => (fn ? nodeTest(name, { timeout: MINUTE, ...options }, fn) : nodeTest(name, { timeout: MINUTE }, options));
 
 const fixture = `<!doctype html>
 <meta charset="utf-8">
@@ -129,10 +131,9 @@ function suite(engine) {
   describe(engine, { concurrency: 1 }, () => {
     let browser;
     let context;
-    after(async () => {
-      await context?.close();
-      await browser?.close();
-    });
+    // Closing the context also ends the evaluations of a test that timed out.
+    afterEach(async () => { await context?.close(); });
+    after(async () => { await browser?.close(); });
 
     // A fresh context in one browser, or a profile on disk where the test restarts the browser
     // and in WebKit, whose ephemeral sessions, like Safari's private windows, refuse Blobs in
@@ -495,7 +496,6 @@ function suite(engine) {
 
     // An in-memory profile, as a private window or the desktop app's session has.
     test('a private window hands the image over, or, in WebKit, says it cannot and stays put', async () => {
-      await context?.close();
       browser ??= await playwright[engine].launch();
       context = await browser.newContext();
       const sender = await open(context, `/${SENDER}/`);
