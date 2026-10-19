@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chooseBackend, isSoftwareAdapter, isSoftwareRenderer } from '../src/mindgrab/backend.js'
+import { chooseBackend, isSoftwareAdapter, isSoftwareRenderer, withBackendChoice } from '../src/mindgrab/backend.js'
 
 // Strings as Chromium reports them.
 const swiftshaderAdapter = { vendor: 'google', architecture: 'swiftshader', device: '', description: 'SwiftShader Device (Subzero)', isFallbackAdapter: false }
@@ -62,4 +62,48 @@ test('without the CPU module a software renderer is still better than nothing', 
   assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: false }, cpu: true }), 'cpu')
   // Nothing at all: MindGrab's own auto explains every refusal.
   assert.equal(chooseBackend({ webgpu: { supported: false }, webgl2: { supported: false }, cpu: false }), 'auto')
+})
+
+// A MindGrab module whose probes report `support`, recording the backend each call receives.
+function fakeMindgrab(support, calls) {
+  const run = async (input, options) => {
+    calls.push(options.backend)
+    return { backend: options.backend }
+  }
+  return {
+    checkSupport: async () => ({ supported: support.webgpu }),
+    checkWebgl2Support: () => ({ supported: support.webgl2, renderer: '' }),
+    checkCpuSupport: () => ({ supported: support.cpu }),
+    segment: run,
+    segmentTissues: run,
+  }
+}
+
+test('withBackendChoice resolves auto before each call and logs the choice', async () => {
+  const calls = []
+  const lines = []
+  const { segment, segmentTissues } = withBackendChoice(fakeMindgrab({ webgpu: false, webgl2: false, cpu: true }, calls))
+  const onLog = (line) => lines.push(line)
+  assert.deepEqual(await segment(new Uint8Array(), { model: 'mindgrab', backend: 'auto', onLog }), { backend: 'cpu' })
+  assert.deepEqual(await segmentTissues(new Uint8Array(), { model: 'mindmap', onLog }), { backend: 'cpu' })
+  assert.deepEqual(calls, ['cpu', 'cpu'])
+  assert.equal(lines.length, 2)
+  assert.match(lines[0], /^MindGrab: auto runs on cpu /)
+  assert.match(lines[0], /WebGPU unsupported/)
+})
+
+test('withBackendChoice passes a named backend through without probing', async () => {
+  const calls = []
+  const mindgrab = fakeMindgrab({ webgpu: true, webgl2: true, cpu: true }, calls)
+  mindgrab.checkSupport = async () => assert.fail('a named backend is not probed')
+  const { segment } = withBackendChoice(mindgrab)
+  assert.deepEqual(await segment(new Uint8Array(), { model: 'mindgrab', backend: 'webgl2' }), { backend: 'webgl2' })
+  assert.deepEqual(calls, ['webgl2'])
+})
+
+test('withBackendChoice leaves auto to MindGrab when nothing is usable, so it reports why', async () => {
+  const calls = []
+  const { segment } = withBackendChoice(fakeMindgrab({ webgpu: false, webgl2: false, cpu: false }, calls))
+  await segment(new Uint8Array(), { model: 'mindgrab' })
+  assert.deepEqual(calls, ['auto'])
 })
