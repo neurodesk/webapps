@@ -107,3 +107,25 @@ test('withBackendChoice leaves auto to MindGrab when nothing is usable, so it re
   await segment(new Uint8Array(), { model: 'mindgrab' })
   assert.deepEqual(calls, ['auto'])
 })
+
+// A page can pass MindGrab's WebGL2 check through a canvas element while OffscreenCanvas is
+// missing (older Safari and Firefox); the caveat probe must not throw there.
+test('withBackendChoice probes WebGL2 through a canvas element when OffscreenCanvas is missing', async () => {
+  const calls = []
+  const { segment } = withBackendChoice(fakeMindgrab({ webgpu: false, webgl2: true, cpu: true }, calls))
+  assert.equal(typeof OffscreenCanvas, 'undefined')
+  globalThis.document = { createElement: () => ({ getContext: () => null }) }
+  try {
+    await segment(new Uint8Array(), { model: 'mindgrab' })
+  } finally {
+    delete globalThis.document
+  }
+  assert.deepEqual(calls, ['cpu'], 'a context refused for a performance caveat means a software renderer')
+})
+
+test('withBackendChoice treats WebGL2 as unavailable when no canvas exists', async () => {
+  const calls = []
+  const { segment } = withBackendChoice(fakeMindgrab({ webgpu: false, webgl2: true, cpu: true }, calls))
+  await segment(new Uint8Array(), { model: 'mindgrab' })
+  assert.deepEqual(calls, ['cpu'])
+})

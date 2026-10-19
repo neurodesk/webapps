@@ -60,10 +60,15 @@ async function probeWebgpu(mindgrab, model) {
   }
 }
 
+// A worker has OffscreenCanvas; a page may only have a canvas element.
+const canvas = () => typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(1, 1) : typeof document === 'object' ? document.createElement('canvas') : null
+
 function probeWebgl2(mindgrab, model) {
   const { supported, renderer } = mindgrab.checkWebgl2Support(model)
+  const probe = supported ? canvas() : null
+  if (!probe) return { supported: false, renderer }
   // Chromium refuses this context when it would be software-rendered.
-  const caveat = supported && !new OffscreenCanvas(1, 1).getContext('webgl2', { failIfMajorPerformanceCaveat: true })
+  const caveat = !probe.getContext('webgl2', { failIfMajorPerformanceCaveat: true })
   return { supported, renderer, caveat }
 }
 
