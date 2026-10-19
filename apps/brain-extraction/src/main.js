@@ -133,15 +133,6 @@ function finish(job) {
   refreshControls();
   return true;
 }
-// MindGrab's "auto" falls back to WebGL when WebGPU has no adapter; on a software GL stack that
-// never finishes, so route adapter-less browsers to the CPU module instead.
-async function resolveMindgrabBackend(requested, run) {
-  if (requested !== 'auto') return requested;
-  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  if (adapter) return 'auto';
-  if (run.current) status('No WebGPU adapter · using CPU processing');
-  return 'cpu';
-}
 function closeEdit() {
   const previous = editing?.previous;
   editing = null;
@@ -363,10 +354,7 @@ async function extractBrain(parameters, { signal, progress = () => {} } = {}) {
           }
         };
         job.worker.onerror = event => fail(new Error(event.message || 'The processing worker failed. Reload and try again.'));
-        void resolveMindgrabBackend(requestedBackend, job.run).then(backend => {
-          if (!job.run.current) return;
-          job.worker.postMessage({ file: source, method, backend, fractionalIntensity: threshold, assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
-        }, fail);
+        job.worker.postMessage({ file: source, method, backend: requestedBackend, fractionalIntensity: threshold, assetBase: new URL(import.meta.env.BASE_URL, location.href).href });
       } catch (error) { fail(error); }
     });
   } finally {

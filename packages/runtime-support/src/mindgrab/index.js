@@ -6,7 +6,7 @@ import { version } from '@brainchop/mindgrab/package.json';
 
 const abortError = (signal) => signal.reason ?? new DOMException('Cancelled', 'AbortError');
 
-function runInWorker(input, tissues, { signal, ...options }) {
+function runInWorker(input, tissues, { signal, onLog, ...options }) {
   return new Promise((resolve, reject) => {
     const active = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
     const finish = (error, result) => {
@@ -17,7 +17,11 @@ function runInWorker(input, tissues, { signal, ...options }) {
     };
     const cancel = () => finish(abortError(signal));
     signal?.addEventListener('abort', cancel, { once: true });
-    active.onmessage = ({ data }) => data.error ? finish(new Error(data.error)) : finish(null, data.result);
+    active.onmessage = ({ data }) => {
+      if (data.log !== undefined) onLog?.(data.log);
+      else if (data.error) finish(new Error(data.error));
+      else finish(null, data.result);
+    };
     active.onerror = (event) => finish(new Error(event.message || 'Segmentation worker failed'));
     active.onmessageerror = () => finish(new Error('Segmentation worker returned an unreadable result'));
     if (signal?.aborted) cancel();

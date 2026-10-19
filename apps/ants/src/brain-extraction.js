@@ -1,4 +1,7 @@
-import { segment } from "@brainchop/mindgrab";
+import * as mindgrab from "@brainchop/mindgrab";
+import { withBackendChoice } from "@neurodesk/runtime-support/mindgrab/backend";
+
+const { segment } = withBackendChoice(mindgrab);
 
 export function strippedName(name) {
   return name.replace(/(\.nii)?(\.gz)?$/i, "_brain$1$2");

@@ -6,7 +6,8 @@ import { fetchModel } from "@neurodesk/webapp-components/worker";
 import { loadGreedy } from "@neurodesk/greedy";
 import { runSynthsr } from "@neurodesk/synthsr";
 import { chooseBrowserBackend, createBrowserSession } from "@neurodesk/synthsr/browser";
-import { segment, segmentTissues } from "@brainchop/mindgrab";
+import * as mindgrab from "@brainchop/mindgrab";
+import { withBackendChoice } from "@neurodesk/runtime-support/mindgrab/backend";
 import * as ort from "onnxruntime-web/webgpu";
 import ortWasm from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import ortMjs from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
@@ -57,7 +58,7 @@ self.onmessage = async ({ data }) => {
       templates: tpl,
       runtimes: {
         niimath,
-        mindgrab: { segment, segmentTissues },
+        mindgrab: withBackendChoice(mindgrab),
         mindgrabOptions: { backend: "auto", worker: false, timeoutMs: 900_000, onLog: (line) => post({ log: line }) },
         greedy,
         synthsr,

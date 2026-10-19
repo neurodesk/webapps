@@ -1135,6 +1135,9 @@ importers:
       '@neurodesk/node-drivers':
         specifier: workspace:*
         version: link:../node-drivers
+      '@neurodesk/runtime-support':
+        specifier: workspace:*
+        version: link:../runtime-support
       '@neurodesk/synthsr':
         specifier: workspace:*
         version: link:../synthsr

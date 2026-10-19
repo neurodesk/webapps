@@ -19,7 +19,8 @@
     "./gpu-unet": "./src/gpu-unet/index.js",
     "./freebrowse-viewer": "./src/freebrowse-viewer/index.js",
     "./streamed-onnx": "./src/streamed-onnx/session.js",
-    "./mindgrab": "./src/mindgrab/index.js"
+    "./mindgrab": "./src/mindgrab/index.js",
+    "./mindgrab/backend": "./src/mindgrab/backend.js"
   },
   "dependencies": {
     "@brainchop/mindgrab": "0.1.20260925",
