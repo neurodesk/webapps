@@ -6,7 +6,7 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry } from '../scripts/lib/apps-registry.mjs';
 import { loadStandalone } from '../scripts/lib/standalone.mjs';
-import { ciWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
+import { ciWorkflowApps, cpuWorkflowApps, hardwareWorkflowApps } from '../scripts/desktop/ci-apps.mjs';
 import { prepareWorkflow, workflowApps } from '../scripts/desktop/workflows.mjs';
 import { openStandalone } from '../packages/components/src/ui/renderStandalone.js';
 import { portableCommand, releasePlatform } from '../scripts/lib/portable-command.mjs';
@@ -99,11 +99,21 @@ test('future apps automatically receive real offline workflow coverage on hosted
 test('an app whose browser tests need a hardware GPU keeps its desktop workflow off the hosted runners', async () => {
   const registry = await loadAppsRegistry();
   const hosted = new Set(ciWorkflowApps(registry));
-  for (const app of registry.apps.filter(app => app.ci?.hardware_gpu && hosted.has(app.id))) {
+  for (const app of registry.apps.filter(app => app.ci?.hardware_gpu && hosted.has(app.id) && !cpuWorkflowApps.has(app.id))) {
     // Only a workflow that computes on a compute server (prepareWorkflow provisions one) runs without the runner's GPU.
     const prepared = await prepareWorkflow(app.id);
     await prepared?.close();
-    assert.ok(prepared, `${app.id} declares ci.hardware_gpu and computes in the browser: add it to hardwareWorkflowApps in scripts/desktop/ci-apps.mjs with its hardware evidence`);
+    assert.ok(prepared, `${app.id} declares ci.hardware_gpu and computes in the browser: add it to hardwareWorkflowApps in scripts/desktop/ci-apps.mjs with its hardware evidence, or to cpuWorkflowApps with its hosted runs`);
+  }
+});
+
+test('an app whose offline workflow completed on every hosted runner without a GPU stays in hosted coverage', async () => {
+  const registry = await loadAppsRegistry();
+  const hosted = new Set(ciWorkflowApps(registry));
+  for (const id of cpuWorkflowApps) {
+    assert.ok(registry.apps.some(app => app.id === id), `${id} is not a registered app`);
+    assert.ok(registry.apps.find(app => app.id === id).ci?.hardware_gpu, `${id} does not declare ci.hardware_gpu, so cpuWorkflowApps has nothing to override`);
+    assert.ok(!hardwareWorkflowApps.has(id) && hosted.has(id), `${id} completed its workflow on the hosted runners: remove it from hardwareWorkflowApps`);
   }
 });
 
