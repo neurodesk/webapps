@@ -42,7 +42,11 @@ async function niivueVersions(app, runtimeSupport, runtimeDownloads) {
   }
   const setup = await readText(`apps/${app}/web/setup.sh`);
   for (const download of runtimeDownloads) {
-    if (download.id.startsWith('niivue') && setup.includes(` ${download.id}:`)) versions.push(download.version);
+    if (!download.id.startsWith('niivue') || !setup.includes(` ${download.id}:`)) continue;
+    // The fetcher downloads from download_base; its version field is only a label.
+    const fetched = /@niivue\/niivue@([^/]+)\//.exec(download.download_base)?.[1];
+    assert.equal(fetched, download.version, `${download.id} downloads NiiVue ${fetched} but is labelled ${download.version}`);
+    versions.push(fetched);
   }
   return versions.filter(Boolean);
 }
