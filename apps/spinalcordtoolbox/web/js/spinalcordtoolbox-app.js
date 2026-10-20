@@ -1790,8 +1790,12 @@ export class SpinalCordToolboxApp {
   // FreeBrowse's own eye, opacity slider and delete button change a stage's
   // visibility without going through the Results list; keep the two in step.
   onViewerStageVisibility(stage, visible) {
-    // The stage on the drawing layer is hidden by the editor, not the user.
-    if (this.manualEdits?.isHiding(stage)) return;
+    // The stage on the drawing layer is hidden by the editor, not the user;
+    // FreeBrowse's eye can still show it, so hide it again.
+    if (this.manualEdits?.isHiding(stage)) {
+      if (visible) void this.renderViewerVolumes();
+      return;
+    }
     const shownStage = this.isOverlayStage(stage) ? stage : 'input';
     if (this.isStageVisible(shownStage) === visible) return;
     this.setStageVisible(shownStage, visible);

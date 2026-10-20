@@ -191,6 +191,13 @@ test('Apply makes the drawing the stage data: edited name, provenance, analysis 
   assert.deepEqual(viewer.locks, [true], "FreeBrowse's drawing controls are locked for the session");
   const shown = viewer.stacks.at(-1).find(entry => entry.stage === 'lesion');
   assert.equal(shown.visible, false, 'the lesion overlay is hidden while its mask is on the drawing layer');
+  // FreeBrowse's eye can still show the hidden overlay; the app hides it again.
+  const stacks = viewer.stacks.length;
+  app.onViewerStageVisibility('lesion', true);
+  await app._renderViewerPromise;
+  await until(() => viewer.stacks.length > stacks);
+  assert.equal(viewer.stacks.at(-1).find(entry => entry.stage === 'lesion').visible, false, 'FreeBrowse cannot reveal the stage being edited');
+  assert.equal(app.isStageVisible('lesion'), true, "the stage's own visibility is untouched");
   assert.ok(rows().slice(1).every(row => row.edit.disabled), 'every Edit is disabled during a session');
   assert.deepEqual(status.at(-1), ['reset', 'Editing Lesion. Left-drag paints; Apply keeps the changes.']);
   assert.equal(nv.drawIsEnabled, true);
