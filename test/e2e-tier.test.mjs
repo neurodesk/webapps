@@ -72,6 +72,22 @@ test('the pull request tier collects Calmar structural candidate inference', () 
   assert.match(collected, /"title":\s*"real structural example produces an unconfirmed native lesion candidate"/);
 });
 
+test('the pull request tier collects no-CSF SynthStrip inference', () => {
+  const collected = execFileSync(process.execPath, [
+    join(repoRoot, 'node_modules/@playwright/test/cli.js'),
+    'test', '--list', '--reporter=json',
+  ], {
+    cwd: join(repoRoot, 'apps/brain-extraction'),
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      NEURODESK_E2E_SKIP_SLOW: '1',
+      PW_TEST_REPORTER: '',
+    },
+  });
+  assert.match(collected, /"title":\s*"synthstrip-nocsf on the T1 example matches the recorded browser reference"/);
+});
+
 for (const app of ['brain2print', 'white-matter-lesions', 'lcmodel', 'synthseg']) {
   test(`the pull request tier retains every completed scientific path in ${app}`, () => {
     const collect = (tier) => JSON.parse(execFileSync(process.execPath, [

@@ -3404,6 +3404,14 @@
       "contentType": "text/plain; charset=utf-8",
       "kind": "example",
       "dependencies": []
+    },
+    "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9b298dcfacc708cce6d79a6b6aa161a8acaefcf9/synthstrip/models/synthstrip-nocsf-browser.onnx": {
+      "sha256": "f60cbe2673325ba22b75cf40979cdff4236379c34892528d6185b6a592cc6da8",
+      "bytes": 10296357,
+      "contentType": "application/octet-stream",
+      "kind": "model",
+      "license": "Apache-2.0",
+      "dependencies": []
     }
   },
   "apps": {
@@ -3912,7 +3920,8 @@
     "brain-extraction": [
       "https://huggingface.co/datasets/sbollmann/neurodesk-webapps-assets/resolve/e0a056b3d6b2b075bab5b780281af17fc9d6421d/syncro/synthstrip-browser.onnx",
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/356a4adbce52cf9052d61ef90b14ba263e7c25e9/synthseg/validation/T1_head.nii.gz",
-      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz"
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/67c378c8f8ac5313e5dbeee4c8d95ebe2a2f79c9/reg/moving/chris_t2.nii.gz",
+      "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9b298dcfacc708cce6d79a6b6aa161a8acaefcf9/synthstrip/models/synthstrip-nocsf-browser.onnx"
     ],
     "disconnectome": [
       "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/251637c4e003d4841ea3e28a583bca7dc264a610/disconnectome/atlas/enigma_symmetric.tvx.gz",

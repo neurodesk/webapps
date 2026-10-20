@@ -10,6 +10,17 @@ test('the SynthStrip pin is the graph SYNcro publishes', async () => {
 });
 
 test('the no-CSF model is pinned to a Hugging Face commit', () => {
-  // Fails until the model's upload to neurodeskorg/webapps is pinned in src/model.js.
   assert.match(SYNTHSTRIP_NOCSF_MODEL.url, /^https:\/\/huggingface\.co\/datasets\/neurodeskorg\/webapps\/resolve\/[0-9a-f]{40}\/synthstrip\/models\/synthstrip-nocsf-browser\.onnx$/);
+});
+
+test('the offline brain extraction bundle includes the pinned no-CSF model', async () => {
+  const sources = JSON.parse(await readFile(new URL('../../../registry/offline-assets.sources.json', import.meta.url), 'utf8'));
+  const lock = JSON.parse(await readFile(new URL('../../../registry/offline-assets.lock.json', import.meta.url), 'utf8'));
+  const { url, bytes, sha256, license } = SYNTHSTRIP_NOCSF_MODEL;
+  assert.deepEqual(sources.apps['brain-extraction'].find(asset => asset.url === url), {
+    url, bytes, sha256, license, kind: 'model',
+  });
+  assert.ok(lock.apps['brain-extraction'].includes(url));
+  assert.equal(lock.assets[url].bytes, bytes);
+  assert.equal(lock.assets[url].sha256, sha256);
 });

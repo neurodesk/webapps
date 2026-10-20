@@ -207,7 +207,17 @@ export function registerAppAutomation({ app, operations, convertDicom, contractU
     if (command.startsWith('viewers.')) return viewers.dispatch(command, request);
     throw new Error(`Unknown automation command: ${command}`);
   }
-  const handle = { ready, dispatch, registerViewer: (id, adapter) => viewers.register(id, adapter) };
+  // A workspace may discard an examination without unloading the page. Release
+  // adopted inputs, completed artifacts and reports along with the visible UI.
+  function reset() {
+    active?.controller.abort(new DOMException('Examination cleared', 'AbortError'));
+    active = undefined;
+    adopted.clear();
+    artifacts.clear();
+    transfer.value = '';
+    snapshot = { schemaVersion: 2, app, appVersion: contract?.appVersion, runId: null, state: 'idle' };
+  }
+  const handle = { ready, dispatch, reset, registerViewer: (id, adapter) => viewers.register(id, adapter) };
   target.neurodeskAutomation = Object.freeze({ dispatch });
   pageRegistration = handle;
   return handle;

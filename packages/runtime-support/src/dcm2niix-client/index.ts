@@ -45,6 +45,8 @@ type FileWithRelativePath = File & { _webkitRelativePath?: string }
 /** Options for {@link runDcm2niix}. */
 export interface RunDcm2niixOptions {
   signal?: AbortSignal
+  /** Maximum init + conversion time. Large scanner exports can opt into a longer run. */
+  timeoutMs?: number
   /**
    * Filter the result list down to NIfTI outputs (`.nii` and `.nii.gz`).
    * BIDS sidecars and other dcm2niix outputs are dropped. Default: `true`.
@@ -87,6 +89,8 @@ async function convertDicom(
   configure: (processor: Dcm2niixProcessor) => Dcm2niixProcessor,
 ): Promise<File[]> {
   const { niftiOnly = true, signal } = options
+  const timeoutMs = options.timeoutMs ?? RUN_TIMEOUT_MS
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('Invalid dcm2niix timeout')
   signal?.throwIfAborted()
   if (!files || files.length === 0) return []
 
@@ -103,7 +107,7 @@ async function convertDicom(
         await dcm2niix.init()
         return configure(dcm2niix.input(files)).run()
       })(),
-      RUN_TIMEOUT_MS,
+      timeoutMs,
       'dcm2niix',
       signal,
     )) as File[]

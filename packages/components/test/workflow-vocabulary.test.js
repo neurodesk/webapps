@@ -313,3 +313,13 @@ test('dicompare compliance reports are styled from tokens alone', async () => {
   }
   assert.ok(rules.every((line) => !/#[0-9a-f]{3,8}\b|\brgba?\(/i.test(line)), 'no colour literals');
 });
+
+test('editable report forms share workflow field styling and phone control sizing', async () => {
+  const css = await readFile(new URL('../src/styles/imaging-workspace.css', import.meta.url), 'utf8');
+  const rules = css.split('}').filter(rule => rule.includes('.nd-report-form'));
+  assert.ok(rules.some(rule => rule.includes('min-height: 30px')));
+  assert.ok(rules.some(rule => rule.includes('min-height: 44px')));
+  assert.ok(rules.some(rule => rule.includes('font-size: 16px')));
+  assert.ok(rules.some(rule => rule.includes('border-color: var(--nd-color-primary)')));
+  assert.match(css, /\.nd-report-form \.nd-section-content\s*\{[^}]*gap:\s*var\(--nd-space-sm\)/);
+});

@@ -71,6 +71,12 @@ export function summarizeCountries(rows, limit = 5) {
     .slice(0, limit);
 }
 
+export function rankApps(apps) {
+  return [...apps].sort((left, right) => right.users - left.users
+    || right.pageViews - left.pageViews
+    || left.title.localeCompare(right.title));
+}
+
 export function emptyAnalytics(registry, generatedAt = null) {
   return {
     schemaVersion: 1,
@@ -196,7 +202,7 @@ export async function collectAnalytics({ registry, propertyId, serviceAccount })
     unavailable: false,
     totals: { users: totals.users, pageViews: totals.pageViews },
     countries: totals.countries,
-    apps,
+    apps: rankApps(apps),
   };
 }
 

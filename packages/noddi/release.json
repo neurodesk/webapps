@@ -1,0 +1,44 @@
+{
+  "repository": "neurodesk/webapps",
+  "tagPrefix": "noddi-v",
+  "displayName": "NODDI",
+  "app": "noddi",
+  "run": "dwi.nii.gz dwi.bval dwi.bvec results",
+  "readme": {
+    "run": "Fit the diffusion tensor and NODDI inside a MindGrab brain mask",
+    "notes": [
+      "Runs the web app's fit (the same noddi.wasm WebAssembly module) and writes",
+      "FA, MD, AD, RD, S0 and the principal direction, and with two or more shells",
+      "NODDI's ICVF, ISOVF, ODI and mean fibre direction, plus the brain mask.",
+      "MindGrab runs on the CPU and needs about 2.6 GB of memory. Give --mask FILE",
+      "to use your own brain mask, or --no-mask to fit every voxel. --threads N",
+      "sets the worker threads for the fit (default: one per core).",
+      "No network connection is required. Input is NIfTI with FSL bval/bvec files.",
+      "",
+      "Please cite: Zhang H, Schneider T, Wheeler-Kingshott CA, Alexander DC.",
+      "NODDI: practical in vivo neurite orientation dispersion and density imaging",
+      "of the human brain. NeuroImage. 2012;61(4):1000-1016.",
+      "Daducci A, Canales-Rodriguez EJ, Zhang H, Dyrby TB, Alexander DC, Thiran JP.",
+      "Accelerated Microstructure Imaging via Convex Optimization (AMICO) from",
+      "diffusion MRI data. NeuroImage. 2015;105:32-44."
+    ]
+  },
+  "validation": "validation/cli-check.mjs",
+  "targets": {
+    "linux-x64": {
+      "label": "Linux x64",
+      "archive": "tar.gz",
+      "executable": "noddi"
+    },
+    "windows-x64": {
+      "label": "Windows x64",
+      "archive": "zip",
+      "executable": "noddi.exe"
+    },
+    "macos-arm64": {
+      "label": "macOS Apple silicon",
+      "archive": "pkg",
+      "executable": "noddi"
+    }
+  }
+}

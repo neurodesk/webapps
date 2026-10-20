@@ -3,6 +3,9 @@
 //!
 //! [`clip`] is NiFreeze's intensity clip before registration, ported with its in-place quirk.
 //!
+//! [`gp_model`] is NiFreeze's GP DWI model: the leave-one-out fit and prediction of each
+//! diffusion-weighted volume, with its data mask, on the `dwi-gp` crate.
+//!
 //! The first part is [`ItkAffine`]: the ITK MATLAB transform file that `antsRegistration` writes
 //! (`*0GenericAffine.mat`). This is original code written from the file format, not a port. The
 //! layout was read from ITK 5.4's `itkMatlabTransformIO.cxx` and VNL's `vnl_matlab_write.cxx`, and
@@ -22,6 +25,7 @@
 
 pub mod bvec;
 pub mod clip;
+pub mod gp_model;
 pub mod motion;
 
 pub use bvec::{BvecRule, HmcGradients, rotate_gradients};

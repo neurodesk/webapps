@@ -1473,7 +1473,20 @@ importers:
         specifier: 1.3.2
         version: 1.3.2
 
-  packages/noddi: {}
+  packages/noddi:
+    dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
+      '@neurodesk/dwi2trx':
+        specifier: workspace:*
+        version: link:../dwi2trx
+      '@neurodesk/node-drivers':
+        specifier: workspace:*
+        version: link:../node-drivers
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../components
 
   packages/node-drivers:
     devDependencies:

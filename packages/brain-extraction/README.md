@@ -13,15 +13,17 @@ the input grid:
 
 ```sh
 brain-extraction head.nii.gz results                  # SynthStrip
+brain-extraction head.nii.gz no-csf-results --no-csf
 brain-extraction head.nii.gz results --method bet --fractional-intensity 0.4
 brain-extraction head.nii.gz results --method mindgrab
-brain-extraction download-models                      # SynthStrip model, once
+brain-extraction download-models                      # Both SynthStrip models, once
 brain-extraction self-check
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--method synthstrip\|bet\|mindgrab` | SynthStrip (default), BET or MindGrab. |
+| `--no-csf` | Exclude CSF from the SynthStrip mask, as `mri_synthstrip --no-csf`. Refused for other methods. |
 | `--fractional-intensity F` | BET threshold from 0 to 1, default 0.5 as in the web app. Lower values give larger masks. |
 | `--threads N` | SynthStrip ONNX Runtime threads, default `SLURM_CPUS_PER_TASK` or all cores. |
 | `--cache-dir DIR`, `--offline` | Model directory and no-download mode. |
@@ -31,6 +33,9 @@ writing into the same directory, and the brain and mask are staged before
 either is moved into place. The command prints a JSON report
 with the mask voxel count and the provenance, including the method, its
 settings and the model's SHA-256.
+
+A no-CSF run writes `INPUT_synthstrip-nocsf_brain.nii` and
+`INPUT_synthstrip-nocsf_mask.nii`, so its files can coexist with a default run.
 
 SynthStrip loads the browser graph the web app loads (`@neurodesk/synthstrip/model`)
 on ONNX Runtime Node, with the CPU memory arena off: the T1 example then peaks
@@ -47,7 +52,8 @@ comparison.
 
 The portable archives are built by `exes/node-cli` and
 `.github/workflows/brain-extraction-native.yml`. Each must pass
-`validation/cli-check.mjs`, which runs all three methods on the app's pinned T1
+`validation/cli-check.mjs`, which runs all three methods, including both
+SynthStrip models, on the app's pinned T1
 example and holds the files to the browser run recorded in
 `apps/brain-extraction/validation/browser-reference.json`: NIfTI headers, mask
 voxels, mask Dice and brain intensities. BET and MindGrab must match the

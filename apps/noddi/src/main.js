@@ -27,7 +27,7 @@ import { parseBvalBvec } from "@neurodesk/dwi2trx/gradients";
 import { loadNoddi } from "@neurodesk/noddi";
 import wasmUrl from "@neurodesk/noddi/wasm?url";
 import { APP } from "./config.js";
-import { MAPS, bidsStem, mapName, maskIndices, maskName, meanVolumes, stackFrames } from "./pipeline.js";
+import { bidsStem, maskIndices, meanVolumes, outputEntries } from "@neurodesk/noddi/pipeline";
 import { fitVolume } from "./fit-pool.js";
 import examples from "../examples.json";
 
@@ -263,22 +263,14 @@ async function fitModels(signal) {
     const dims = input.dims;
     const rows = {};
     const artifacts = [];
-    const add = async (stage, description, data, name, range, frames = 1) => {
-      const file = await niftiFile(createNiftiFromData(data, input.buffer, { dims: [...dims, frames] }), name);
+    for (const entry of outputEntries(fit, brain, stem)) {
+      const nifti = createNiftiFromData(entry.data, input.buffer, { dims: [...dims, entry.frames] });
+      const file = await niftiFile(nifti, entry.name);
       controller.signal.throwIfAborted();
-      rows[stage] = { description, file, range, viewable: frames === 1 };
-      artifacts.push({ role: stage, file });
-    };
-    for (const [model, maps] of [["tensor", fit.tensor], ["noddi", fit.noddi]]) {
-      if (!maps) continue;
-      for (const map of MAPS[model]) {
-        const stage = `${model}-${map.param}`;
-        const name = mapName(stem, model, map.param);
-        if (map.keys) await add(stage, map.label, stackFrames(maps, map.keys), name, undefined, 3);
-        else await add(stage, map.label, maps[map.key], name, rangeOf(model, map.param));
-      }
+      const range = entry.frames === 1 ? rangeOf(entry.model, entry.param) : undefined;
+      rows[entry.role] = { description: entry.label, file, range, viewable: entry.frames === 1 };
+      artifacts.push({ role: entry.role, file });
     }
-    await add("mask", "Brain mask", brain, maskName(stem), [0, 1]);
     const first = rows["noddi-icvf"] ?? rows["tensor-fa"];
     await showVolume(first.file, first.range);
     controller.signal.throwIfAborted();
@@ -301,9 +293,9 @@ async function fitModels(signal) {
   }
 }
 
-/** Display window per map: fractions on 0–1, diffusivities to 3e-3 mm²/s. */
+/** Display window per map: the mask and fractions on 0–1, diffusivities to 3e-3 mm²/s. */
 function rangeOf(model, param) {
-  if (model === "noddi" || param === "fa") return [0, 1];
+  if (model === "noddi" || param === "fa" || param === "mask") return [0, 1];
   if (param === "s0") return undefined;
   return [0, 3e-3];
 }

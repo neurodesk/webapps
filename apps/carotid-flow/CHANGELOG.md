@@ -4,13 +4,6 @@
 
 ### Patch Changes
 
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-  - @neurodesk/webapp-components@0.17.0
-  - @neurodesk/carotid-flow@0.4.20261020
-  - @neurodesk/runtime-support@0.8.1
 - Updated dependencies [ea2a6d2]
 - Updated dependencies [3f1d770]
 - Updated dependencies [14b8248]

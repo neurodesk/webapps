@@ -73,6 +73,7 @@ impact:
 | Viewer | `.nd-viewer-canvas-wrapper > canvas + p.nd-viewer-empty + p.nd-viewer-notice`, then `.nd-viewer-info` | |
 | Image comparison | `.nd-compare-grid[data-count] > .nd-compare-panel[aria-current] > button.nd-compare-title[aria-pressed] + canvas`, over the viewer wrapper; two columns, the active panel outlined | |
 | Report view | `section.nd-viewer-report[hidden]` inside the canvas wrapper, shown by its own view tab; `.nd-report-controls` (sticky row of `.nd-field`, `.nd-check`, `.nd-btn-sm`), `.nd-report-notes`, `.nd-table-scroll > table.nd-data-table` with `tr[data-flag]` for emphasis | |
+| Report metadata editor | `.nd-report-form` containing shared `.nd-field` controls and `.nd-sidebar-section` disclosures; uses sidebar field metrics and phone sizing | |
 | dicompare report | `.dicompare-*` markup from the renderer, token-styled in the shared sheet | `DicompareReportRenderer` |
 | Technical log | `.nd-console-container[data-disclosure].collapsed` with header, Copy, Clear | `createConsole()` |
 | Resizable log | `.nd-console-resizer[role=separator]` as the console's first child; the height is `--nd-console-height` on the container | `createConsole({ resizable: true })`, `<nd-console resizable>`, `bindConsoleResize()` for legacy `.console-container` markup |

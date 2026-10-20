@@ -118,3 +118,21 @@ test('derived big-endian images preserve geometry and write matching voxel byte 
   assert.deepEqual(rows(output.header.affine), rows(parseNiftiHeader(source).affine));
   assert.deepEqual(Array.from((await readNifti(createMaskNifti(values, header))).data), Array.from(values, v => v ? 1 : 0));
 });
+
+test('privacy export clears text and extensions while preserving independent image geometry and voxels', async () => {
+  const { clearNiftiText } = await import('../src/file-io/NiftiUtils.js');
+  const source = await decodeNiftiBuffer(await fixture('sform-int16-scaled.nii.gz'));
+  const original = new Uint8Array(source);
+  const privateImage = original.slice();
+  privateImage.set(new TextEncoder().encode('Private patient'), 148);
+  privateImage.set(new TextEncoder().encode('Private comment'), 228);
+  const output = clearNiftiText(privateImage);
+  const header = parseNiftiHeader(original);
+  assert.deepEqual(parseNiftiHeader(output), header);
+  assert.deepEqual(output.subarray(Math.ceil(header.voxOffset)), original.subarray(Math.ceil(header.voxOffset)));
+  assert.ok(output.subarray(148, 252).every(value => value === 0));
+  assert.ok(output.subarray(328, 344).every(value => value === 0));
+  assert.notEqual(privateImage[148], 0, 'the in-memory source is not changed');
+  new DataView(privateImage.buffer).setFloat32(108, privateImage.length + 1, header.littleEndian);
+  assert.throws(() => clearNiftiText(privateImage), /voxel offset/);
+});

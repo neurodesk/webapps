@@ -90,3 +90,5 @@ export function createMaskNifti(maskData: ArrayLike<number | boolean>, sourceHea
 export function createNiftiFromData(data: NiftiVoxelArray, sourceHeader: NiftiBytes, options?: NiftiFromDataOptions): ArrayBuffer;
 export function createNiftiHeaderFromVolume(volume: unknown): ArrayBuffer;
 export function createNiftiFromVolume(volume: unknown): ArrayBuffer;
+/** Copy an uncompressed NIfTI-1 image without free-text fields or extensions. */
+export function clearNiftiText(bufferLike: ArrayBuffer | ArrayBufferView): Uint8Array;

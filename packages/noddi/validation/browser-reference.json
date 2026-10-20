@@ -1,0 +1,317 @@
+{
+  "inputs": {
+    "example": {
+      "dwi.nii.gz": "9007c69e6f93b94fd57bf427415a7b4bd2c0822a6b5ee334cb561b8a6ebcd50f",
+      "dwi.bval": "5b7b0b81f43794445d5b12fb227a5f4ed838c9df384d9a639d47d18fb067118b",
+      "dwi.bvec": "709d68fced5a626dc8496cd0d2950efe18d29187f6aa028bd05551c69e0f6376"
+    },
+    "phantom": {
+      "sub-phantom_dwi.nii": "d4b93a1d23289b7ca9918c12da1a7fd7cbdd22e3f995e27eab8e48f5eae9a09d",
+      "sub-phantom_dwi.bval": "d3fe99a00a57b3aaa9a0af168dc537cc48d162a62a21d0a13e1a2f76d4cab5fb",
+      "sub-phantom_dwi.bvec": "98df914a683af55f2c3b6e508ce86ea7094078e5b858242dea34c855351a91f1"
+    }
+  },
+  "mask": {
+    "path": "noddi command line: MindGrab CPU modules on the mean b0",
+    "provenance": {
+      "model": "mindgrab",
+      "version": "0.1.20260925",
+      "backend": "cpu"
+    },
+    "name": "dwi_desc-brain_mask.nii.gz",
+    "decompressedSha256": "5e10ea425004791fadf7ee16120e096cc8e0367ac0ac02bb5b324dd4b38bc965",
+    "nonFinite": 0,
+    "nonzero": 48259,
+    "mean": 0.23869796612852168
+  },
+  "browser": {
+    "path": "apps/noddi/e2e/reference.spec.js: the app's fit automation with the mask input, fitting workers, built assets",
+    "app": "noddi 0.0.20261018",
+    "browser": "Chromium 156.0.8078.4",
+    "cases": {
+      "example": {
+        "parameters": {
+          "noddi": true,
+          "tensorFit": "wls"
+        },
+        "provenance": {
+          "method": "dti",
+          "tensorFit": "wls",
+          "maskVoxels": 48259,
+          "mask": "supplied",
+          "inputConversions": {
+            "image": {
+              "converter": null,
+              "candidates": [
+                {
+                  "filename": "dwi.nii.gz",
+                  "sha256": "9ecb22510ffab7fdcb534158b7652449e1d9f010b91fb3f3971622fbed339cb9",
+                  "dimensions": [
+                    72,
+                    72,
+                    39,
+                    21
+                  ],
+                  "metadata": {}
+                }
+              ],
+              "selected": [
+                "9ecb22510ffab7fdcb534158b7652449e1d9f010b91fb3f3971622fbed339cb9"
+              ]
+            }
+          }
+        },
+        "seconds": 1,
+        "outputs": {
+          "tensor-fa": {
+            "name": "dwi_model-tensor_param-fa_dwimap.nii.gz",
+            "decompressedSha256": "0f2b74157be74605b4a0ff2b42a60cce51e98bfed3bf130c6d85ef6dc31c4638",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 0.06065842882503538
+          },
+          "tensor-md": {
+            "name": "dwi_model-tensor_param-md_dwimap.nii.gz",
+            "decompressedSha256": "9bba0f0948b8199aa52632fd5ee3c408cc149e757cd4d3a689915b44985aa2f8",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 0.0001708167645615621
+          },
+          "tensor-ad": {
+            "name": "dwi_model-tensor_param-ad_dwimap.nii.gz",
+            "decompressedSha256": "c4c54ed6ee137d488a7362fcbc4ae092200bdaf6e66090706675e737384b5df0",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 0.00021595352168294325
+          },
+          "tensor-rd": {
+            "name": "dwi_model-tensor_param-rd_dwimap.nii.gz",
+            "decompressedSha256": "47778b096d5f3d9132810afd1facad0d321d977966c08d6724341ad8371ec7b9",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 0.0001482483859449413
+          },
+          "tensor-s0": {
+            "name": "dwi_model-tensor_param-s0_dwimap.nii.gz",
+            "decompressedSha256": "93529ee298f31ae7a30faeb4b1476ae6acc0a45844e0b1d415f7222a9d849c5f",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 123.15252552231719
+          },
+          "tensor-direction": {
+            "name": "dwi_model-tensor_param-direction_dwimap.nii.gz",
+            "decompressedSha256": "94e57d1b7b38e816fe372653f36abf2cb53e67880e41a153105db22ed3a1e6a2",
+            "nonFinite": 0,
+            "nonzero": 144777,
+            "mean": 0.06409991351870327
+          },
+          "mask": {
+            "name": "dwi_desc-brain_mask.nii.gz",
+            "decompressedSha256": "5e10ea425004791fadf7ee16120e096cc8e0367ac0ac02bb5b324dd4b38bc965",
+            "nonFinite": 0,
+            "nonzero": 48259,
+            "mean": 0.23869796612852168
+          }
+        }
+      },
+      "phantom": {
+        "parameters": {
+          "noddi": true,
+          "tensorFit": "wls"
+        },
+        "provenance": {
+          "method": "dti+noddi-amico",
+          "tensorFit": "wls",
+          "maskVoxels": 4096,
+          "mask": "supplied",
+          "inputConversions": {
+            "image": {
+              "converter": null,
+              "candidates": [
+                {
+                  "filename": "sub-phantom_dwi.nii",
+                  "sha256": "d4b93a1d23289b7ca9918c12da1a7fd7cbdd22e3f995e27eab8e48f5eae9a09d",
+                  "dimensions": [
+                    16,
+                    16,
+                    16,
+                    62
+                  ],
+                  "metadata": {}
+                }
+              ],
+              "selected": [
+                "d4b93a1d23289b7ca9918c12da1a7fd7cbdd22e3f995e27eab8e48f5eae9a09d"
+              ]
+            }
+          }
+        },
+        "seconds": 2,
+        "outputs": {
+          "tensor-fa": {
+            "name": "sub-phantom_model-tensor_param-fa_dwimap.nii.gz",
+            "decompressedSha256": "9858ed9590769b857cfccc44245f90d7ed39897d34bf0b4329e580ecc1bf8d1d",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.4688659001112683
+          },
+          "tensor-md": {
+            "name": "sub-phantom_model-tensor_param-md_dwimap.nii.gz",
+            "decompressedSha256": "c394a147e6ea19ff46f5f90742b0f71d798c3341ef303914f680cd949866f3ca",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.0006084848036636004
+          },
+          "tensor-ad": {
+            "name": "sub-phantom_model-tensor_param-ad_dwimap.nii.gz",
+            "decompressedSha256": "306d442b83b20edaf8a396ec463e8cdb5605b20fc6e7472a79c3951b779a8e49",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.0012051323025445981
+          },
+          "tensor-rd": {
+            "name": "sub-phantom_model-tensor_param-rd_dwimap.nii.gz",
+            "decompressedSha256": "414408f4594eda03818b4213ef4880e6e29656460d2319f37083ac4456196b32",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.000310161053707958
+          },
+          "tensor-s0": {
+            "name": "sub-phantom_model-tensor_param-s0_dwimap.nii.gz",
+            "decompressedSha256": "b5323ec782f993e8ecf95ffe28d27f247be79fc3f4a3be860b4677157892e866",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 670.1573573499918
+          },
+          "tensor-direction": {
+            "name": "sub-phantom_model-tensor_param-direction_dwimap.nii.gz",
+            "decompressedSha256": "60a67944e9cd352875b32106b6e88a6669ee7b51b300a27792ad0b9d0cedec0c",
+            "nonFinite": 0,
+            "nonzero": 8232,
+            "mean": 0.23446991521659677
+          },
+          "noddi-icvf": {
+            "name": "sub-phantom_model-noddi_param-icvf_dwimap.nii.gz",
+            "decompressedSha256": "157c9ecbe68cc3c68c164f42aa749e15893b6d736d7540abb5d4a4f5df506187",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.38205790828942554
+          },
+          "noddi-isovf": {
+            "name": "sub-phantom_model-noddi_param-isovf_dwimap.nii.gz",
+            "decompressedSha256": "4efc85d24cf358f1338712bb909f9ff69f8cadb77d5230c57ea2508d18394746",
+            "nonFinite": 0,
+            "nonzero": 2741,
+            "mean": 0.10747749826953168
+          },
+          "noddi-odi": {
+            "name": "sub-phantom_model-noddi_param-odi_dwimap.nii.gz",
+            "decompressedSha256": "3230736f730e5c5a5ebd18a929049d45a57e33eb5950e425243db0033856d5fd",
+            "nonFinite": 0,
+            "nonzero": 4096,
+            "mean": 0.3501786648939742
+          },
+          "noddi-direction": {
+            "name": "sub-phantom_model-noddi_param-direction_dwimap.nii.gz",
+            "decompressedSha256": "bbd08bf41f2b9cb6e1669196b0dcfd7b1b525d1e9bd0ba819712169c848e7d3e",
+            "nonFinite": 0,
+            "nonzero": 12288,
+            "mean": 0.3430276921673389
+          },
+          "mask": {
+            "name": "sub-phantom_desc-brain_mask.nii.gz",
+            "decompressedSha256": "a3fdd5da2d42e85e678c4cd1f2e52b4635a4383a1153ed25a2da17ce2eaa2777",
+            "nonFinite": 0,
+            "nonzero": 4096,
+            "mean": 1
+          }
+        }
+      },
+      "phantom-ols-tensor": {
+        "parameters": {
+          "noddi": false,
+          "tensorFit": "ols"
+        },
+        "provenance": {
+          "method": "dti",
+          "tensorFit": "ols",
+          "maskVoxels": 4096,
+          "mask": "supplied",
+          "inputConversions": {
+            "image": {
+              "converter": null,
+              "candidates": [
+                {
+                  "filename": "sub-phantom_dwi.nii",
+                  "sha256": "d4b93a1d23289b7ca9918c12da1a7fd7cbdd22e3f995e27eab8e48f5eae9a09d",
+                  "dimensions": [
+                    16,
+                    16,
+                    16,
+                    62
+                  ],
+                  "metadata": {}
+                }
+              ],
+              "selected": [
+                "d4b93a1d23289b7ca9918c12da1a7fd7cbdd22e3f995e27eab8e48f5eae9a09d"
+              ]
+            }
+          }
+        },
+        "seconds": 1,
+        "outputs": {
+          "tensor-fa": {
+            "name": "sub-phantom_model-tensor_param-fa_dwimap.nii.gz",
+            "decompressedSha256": "6d205485e39dc793e0f5f0f3180b6366a0a223a284165c6f33885fd4cae3d5aa",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.4672275365301175
+          },
+          "tensor-md": {
+            "name": "sub-phantom_model-tensor_param-md_dwimap.nii.gz",
+            "decompressedSha256": "b8b48e869ae1edf3c4459d52435ef46970881bff85cd40e259ee62d0a4999c75",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.0006110528524914116
+          },
+          "tensor-ad": {
+            "name": "sub-phantom_model-tensor_param-ad_dwimap.nii.gz",
+            "decompressedSha256": "e3750c74597744bcc631eee2a4c3f2bea7a6c2e7da704908f355169239cf7dbf",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.0012072464105585823
+          },
+          "tensor-rd": {
+            "name": "sub-phantom_model-tensor_param-rd_dwimap.nii.gz",
+            "decompressedSha256": "578ad4a0c1c5fc0dce5bf81c96b8dbd90186e40c7909811ecbe87335ee69cee8",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 0.00031295607379711043
+          },
+          "tensor-s0": {
+            "name": "sub-phantom_model-tensor_param-s0_dwimap.nii.gz",
+            "decompressedSha256": "bfd3d678a0017429bf4294795c3a28b41387ed0a9dc61ce13949830e6cc0df94",
+            "nonFinite": 0,
+            "nonzero": 2744,
+            "mean": 669.8827932327986
+          },
+          "tensor-direction": {
+            "name": "sub-phantom_model-tensor_param-direction_dwimap.nii.gz",
+            "decompressedSha256": "247bca44a740a2445615dfc4ec2e97b4ed8e8462aadcfcbed4040d0c35860dcb",
+            "nonFinite": 0,
+            "nonzero": 8232,
+            "mean": 0.23442038736541085
+          },
+          "mask": {
+            "name": "sub-phantom_desc-brain_mask.nii.gz",
+            "decompressedSha256": "a3fdd5da2d42e85e678c4cd1f2e52b4635a4383a1153ed25a2da17ce2eaa2777",
+            "nonFinite": 0,
+            "nonzero": 4096,
+            "mean": 1
+          }
+        }
+      }
+    }
+  }
+}

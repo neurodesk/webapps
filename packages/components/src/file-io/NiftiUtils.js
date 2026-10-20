@@ -72,6 +72,24 @@ export function parseNiftiHeader(headerBuffer) {
   };
 }
 
+/**
+ * Copy an uncompressed NIfTI-1 image without its free-text fields or extensions.
+ * Conversion exports use this with filtered JSON: those header regions may also
+ * contain patient text. Geometry, scaling, voxel order and voxel bytes stay intact.
+ */
+export function clearNiftiText(bufferLike) {
+  const bytes = new Uint8Array(toArrayBuffer(bufferLike)).slice();
+  const header = parseNiftiHeader(bytes);
+  const offset = Math.ceil(header.voxOffset);
+  if (!Number.isInteger(header.voxOffset) || offset < 352 || offset > bytes.length) {
+    throw new Error('Invalid NIfTI voxel offset.');
+  }
+  bytes.fill(0, 148, 252);
+  bytes.fill(0, 328, 344);
+  bytes.fill(0, 348, offset);
+  return bytes;
+}
+
 export function extractAffine(view) {
   const dataView = view instanceof DataView ? view : new DataView(toArrayBuffer(view));
   const littleEndian = headerIsLittleEndian(dataView);

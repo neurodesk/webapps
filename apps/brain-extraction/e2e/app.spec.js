@@ -238,6 +238,9 @@ test('Exclude CSF is a SynthStrip setting that survives switching methods', asyn
   await expect(page.locator('#synthstripSettings')).toBeVisible();
   await expect(page.locator('#noCsf')).not.toBeChecked();
   await page.getByLabel('Exclude CSF').check();
+  await page.locator('#advancedSettings summary').click();
+  await page.locator('#advancedSettings summary').click();
+  await expect(page.locator('#noCsf')).toBeChecked();
   await page.locator('#method').selectOption('bet');
   await expect(page.locator('#synthstripSettings')).toBeHidden();
   await page.locator('#method').selectOption('synthstrip');
@@ -264,13 +267,13 @@ const REAL_MODEL_MIN_DICE = { mindgrab: 0.96, synthstrip: 0.96 };
 // measurements, which re-record the reference when the pipeline changes on purpose.
 // MindGrab runs on its CPU backend, the modules the command line runs.
 const REFERENCE_CASES = [
-  { id: 'bet', method: 'bet' },
-  { id: 'synthstrip', method: 'synthstrip' },
+  { id: 'bet', method: 'bet', tag: '@slow' },
+  { id: 'synthstrip', method: 'synthstrip', tag: '@slow' },
   { id: 'synthstrip-nocsf', method: 'synthstrip', noCsf: true },
-  { id: 'mindgrab', method: 'mindgrab' },
+  { id: 'mindgrab', method: 'mindgrab', tag: '@slow' },
 ];
-for (const { id, method, noCsf } of REFERENCE_CASES) {
-  test(`${id} on the T1 example matches the recorded browser reference`, { tag: '@slow' }, async ({ page }, testInfo) => {
+for (const { id, method, noCsf, tag } of REFERENCE_CASES) {
+  test(`${id} on the T1 example matches the recorded browser reference`, { tag }, async ({ page }, testInfo) => {
     test.skip(!process.env.BRAIN_EXTRACTION_REAL_MODELS, 'Set BRAIN_EXTRACTION_REAL_MODELS=1 for the example download and inference.');
     test.setTimeout(1200000);
     const example = examples.find(({ id }) => id === browserReference.example);

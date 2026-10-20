@@ -83,6 +83,8 @@ export const provisioners = {
   },
   // The browser reference runs the app's 14 commands on both examples, about 3 min.
   niimath: { env: ['NIIMATH_BROWSER_REFERENCE'], provision: async () => ({ NIIMATH_BROWSER_REFERENCE: 'check' }) },
+  // The browser reference runs MindGrab on the CPU once and fits the example and the phantom, about 1 min.
+  noddi: { env: ['NODDI_BROWSER_REFERENCE'], provision: async () => ({ NODDI_BROWSER_REFERENCE: 'check' }) },
   syncro: {
     env: ['SYNCRO_SCIENTIFIC_TESTS', 'SYNCRO_AUTOMATION_IMAGE', 'SYNTHSR_MODEL'],
     provision: async (cache) => {

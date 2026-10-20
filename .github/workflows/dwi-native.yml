@@ -60,9 +60,13 @@ jobs:
         run: bash packages/noddi/scripts/build-wasm.sh --check
       - name: Rebuild and compare degibbs
         run: bash packages/degibbs/scripts/build-wasm.sh --check
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
+          cache: pnpm
+      - name: Install package test dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts --filter @neurodesk/noddi... --filter @neurodesk/degibbs...
       - name: noddi package tests on the committed module
         working-directory: packages/noddi
         run: node --test test/*.test.js

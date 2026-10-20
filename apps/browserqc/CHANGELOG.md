@@ -4,13 +4,6 @@
 
 ### Patch Changes
 
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-  - @neurodesk/webapp-components@0.17.0
-  - @neurodesk/browserqc@1.6.20261020
-  - @neurodesk/runtime-support@0.8.1
 - ea2a6d2: Deface and BrowserQC take the avg152 T1 2 mm template from the shared template
   catalogue (`registry/templates.json`) and download it with `fetchTemplateFile`,
   which checks its size and SHA-256 and caches it. Before, Deface fetched the template

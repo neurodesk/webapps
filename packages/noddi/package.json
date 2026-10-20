@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/noddi",
-  "version": "0.2.0",
+  "version": "0.3.20261020",
   "description": "Diffusion tensor and NODDI fitting for browsers and the command line",
   "type": "module",
   "private": true,
@@ -8,11 +8,19 @@
   "engines": {
     "node": ">=22"
   },
+  "bin": {
+    "noddi": "./bin/noddi.js"
+  },
   "exports": {
     ".": "./src/wasm.js",
-    "./wasm": "./src/noddi.wasm"
+    "./wasm": "./src/noddi.wasm",
+    "./pipeline": "./src/pipeline.js",
+    "./fit-pool": "./src/fit-pool.js",
+    "./fit-worker": "./src/fit-worker.js",
+    "./node": "./src/node.js"
   },
   "files": [
+    "bin",
     "src",
     "LICENSE",
     "NOTICE",
@@ -22,7 +30,13 @@
     "build:wasm": "bash scripts/build-wasm.sh",
     "check:wasm": "bash scripts/build-wasm.sh --check",
     "test": "node --test test/*.test.js",
-    "lint": "node --check src/wasm.js"
+    "lint": "node --check src/wasm.js && node --check src/pipeline.js && node --check src/fit-pool.js && node --check src/fit-worker.js && node --check src/phantom.js && node --check src/node.js && node --check src/node-worker.js && node --check bin/noddi.js"
+  },
+  "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260925",
+    "@neurodesk/dwi2trx": "workspace:*",
+    "@neurodesk/node-drivers": "workspace:*",
+    "@neurodesk/webapp-components": "workspace:*"
   },
   "repository": {
     "type": "git",

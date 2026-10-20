@@ -207,3 +207,17 @@ test('optional URL inputs and camelCase artifact roles preserve the contract sha
   assert.deepEqual(state.report.inputs.atlas, []);
   assert.equal(state.report.artifacts.labelMap.role, 'labelMap');
 });
+
+test('reset releases completed artifacts, reports and previously adopted inputs', async t => {
+  const f = fixture(t, async () => result());
+  await f.upload();
+  await f.dispatch('start');
+  assert.equal((await completed(f.dispatch)).state, 'succeeded');
+  await f.upload();
+  f.registration.reset();
+  assert.equal((await f.dispatch('snapshot')).state, 'idle');
+  assert.equal((await f.dispatch('snapshot')).report, undefined);
+  await assert.rejects(f.dispatch('download', { artifactId: 'labels' }), /unavailable/);
+  await f.dispatch('start');
+  assert.equal((await completed(f.dispatch)).state, 'failed');
+});

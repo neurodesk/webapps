@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- 4f11450: Add SynthStrip's no-CSF mode (`mri_synthstrip --no-csf`): an Exclude CSF setting in the brain extraction app and `--no-csf` on the `brain-extraction` command line. It runs FreeSurfer's `synthstrip.nocsf.1.pt` weights, converted to ONNX the same way as the default model, and names its outputs `_synthstrip-nocsf_brain.nii` and `_synthstrip-nocsf_mask.nii`.
+- Add SynthStrip no-CSF extraction to the browser and command line, with distinct output names and a checksum-pinned model included in offline bundles. Keep a completed no-CSF browser run in normal CI.
 
 ## 0.1.5
 

@@ -22,6 +22,8 @@ export type ViewerAdapter = {
 };
 export type AutomationHandle = {
   ready: Promise<object>;
+  /** Discard adopted inputs, artifacts and reports; abort an active operation. */
+  reset(): void;
   dispatch(command: string, request?: object): Promise<unknown>;
   registerViewer(id: string, adapter: ViewerAdapter): () => boolean;
 };

@@ -2,12 +2,14 @@
 name = "dwi-hmc"
 version.workspace = true
 edition.workspace = true
-license = "Apache-2.0 AND BSD-3-Clause AND BSD-2-Clause"
+license = "Apache-2.0 AND BSD-3-Clause"
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+dwi-gp = { path = "../gp" }
 dwi-gradients = { path = "../gradients" }
 
 [dev-dependencies]
+flate2 = "1"
 serde_json = { version = "1", features = ["float_roundtrip"] }

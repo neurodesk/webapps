@@ -151,11 +151,10 @@ CI uses cropped data. Native reference outputs go to the Hugging Face dataset at
 1. `exes/dwi` workspace, `gradients` and `tensor` crates, BIDS folder reader.
 2. `noddi` with DTI and AMICO.
 
-Status, 18 October 2026: the crates, the AMICO port and the `noddi` app are done. The first app slice reads NIfTI with bval and bvec, or DICOM (`readDiffusionSeries`), masks with MindGrab on the mean b0 or a supplied mask, and fits in Web Workers. These parts of steps 1 and 2 remain open:
+Status, 19 October 2026: the crates, the AMICO port, the `noddi` app and its command line are done. The first app slice reads NIfTI with bval and bvec, or DICOM (`readDiffusionSeries`), masks with MindGrab on the mean b0 or a supplied mask, and fits in Web Workers. These parts of steps 1 and 2 remain open:
 
 - the BIDS folder reader;
 - the niimath dtifit option (Q14 "allow both");
-- the `noddi` command line;
 - a CI workflow that runs the `exes/dwi` tests, `check:wasm` and `tests/oracle.rs` with a pinned oracle file (without it the oracle test skips, which the data-gated test rule forbids);
 - the ds005134 example, after its upload to Hugging Face;
 - a size limit for the input: `readNiftiFrames` holds the whole series as Float32, about 500 MB for a full-brain ds005134 DWI plus its decompressed data (dwi2trx's `input-limits.ts` is the pattern; the limit belongs in the shared package).

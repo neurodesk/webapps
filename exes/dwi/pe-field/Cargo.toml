@@ -1,0 +1,12 @@
+[package]
+name = "dwi-pe-field"
+version.workspace = true
+edition.workspace = true
+license = "Apache-2.0 AND BSD-3-Clause"
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+serde_json = "1"

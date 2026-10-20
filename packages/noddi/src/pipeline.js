@@ -1,5 +1,6 @@
-// DOM-free steps of the noddi workflow, shared by the page and its tests: the mean b0, voxel
-// chunks for the workers, and BIDS derivative names for the maps (BEP016 dwimap).
+// DOM-free steps of the noddi workflow, shared by the web app and the noddi command line: the
+// mean b0, voxel chunks for the workers, and the written maps with their BIDS derivative names
+// (BEP016 dwimap).
 
 /** The maps each model writes: BEP016 parameter label, worker output key, row label. */
 export const MAPS = Object.freeze({
@@ -52,6 +53,9 @@ export function maskIndices(mask) {
   return Uint32Array.from(indices);
 }
 
+/** Voxels per fitting job, in the browser's workers and the command line's threads alike. */
+export const CHUNK_VOXELS = 2048;
+
 /** Splits voxel indices into chunks of at most `size`. */
 export function chunks(indices, size) {
   const out = [];
@@ -94,4 +98,32 @@ export function stackFrames(maps, keys) {
   const out = new Float32Array(voxels * keys.length);
   keys.forEach((key, frame) => out.set(maps[key], frame * voxels));
   return out;
+}
+
+/**
+ * Every file a fit writes, in the order the web app lists them: each model's maps, then the brain
+ * mask. Each entry gives its automation role, row label, BIDS file name, voxel data and frame
+ * count (3 for a direction, 1 otherwise).
+ * @param fit.tensor tensor maps keyed by DTI output name
+ * @param fit.noddi NODDI maps keyed by NODDI output name, or null for a tensor-only fit
+ * @param mask the brain mask used, one value per voxel
+ */
+export function outputEntries({ tensor, noddi }, mask, stem) {
+  const entries = [];
+  for (const [model, maps] of [["tensor", tensor], ["noddi", noddi]]) {
+    if (!maps) continue;
+    for (const map of MAPS[model]) {
+      entries.push({
+        role: `${model}-${map.param}`,
+        model,
+        param: map.param,
+        label: map.label,
+        name: mapName(stem, model, map.param),
+        data: map.keys ? stackFrames(maps, map.keys) : maps[map.key],
+        frames: map.keys ? map.keys.length : 1,
+      });
+    }
+  }
+  entries.push({ role: "mask", model: null, param: "mask", label: "Brain mask", name: maskName(stem), data: mask, frames: 1 });
+  return entries;
 }

@@ -28,7 +28,7 @@ export const modules = [
     // The date arithmetic only: the rest of app-versions.mjs drives Changesets on a workspace.
     id: 'date-versions',
     file: 'scripts/lib/app-versions.mjs',
-    mutate: 'scripts/lib/app-versions.mjs:44-73',
+    mutate: 'scripts/lib/app-versions.mjs:45-74',
     files: ['scripts/lib/apps-registry.mjs', 'test/date-versions.test.mjs'],
     command: 'node --test test/date-versions.test.mjs',
   },

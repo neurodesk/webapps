@@ -310,7 +310,7 @@ nd-imaging-brand {
 /* --------------------------------------------------------------------------
    3. Fields (QSMbly: 0.8rem labels, 0.8rem controls, 0.7rem hints)
    -------------------------------------------------------------------------- */
-:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])), .nd-report-form :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) {
   width: 100%;
   min-height: 30px;
   margin: 0;
@@ -323,12 +323,12 @@ nd-imaging-brand {
   font-size: 0.8rem;
   transition: border-color var(--nd-transition-fast), box-shadow var(--nd-transition-fast);
 }
-:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input):focus {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input):focus, .nd-report-form :is(select, textarea, input):focus {
   outline: none;
   border-color: var(--nd-color-primary);
   box-shadow: 0 0 0 3px var(--nd-color-primary-glow);
 }
-:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) select {
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) select, .nd-report-form select {
   cursor: pointer;
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23858885' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
@@ -336,8 +336,8 @@ nd-imaging-brand {
   background-position: right 12px center;
   padding-right: 36px;
 }
-:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, input, button):disabled { opacity: 0.5; cursor: not-allowed; }
-:is(.nd-imaging-controls .nd-section-content, .nd-report-controls) input[type="range"] { width: 100%; margin: 0; accent-color: var(--nd-color-primary); }
+:is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, input, button):disabled, .nd-report-form :is(select, input, button):disabled { opacity: 0.5; cursor: not-allowed; }
+:is(.nd-imaging-controls .nd-section-content, .nd-report-controls) input[type="range"], .nd-report-form input[type="range"] { width: 100%; margin: 0; accent-color: var(--nd-color-primary); }
 
 .nd-field { display: grid; gap: 2px; min-width: 0; }
 .nd-field > :is(select, input) {
@@ -730,8 +730,8 @@ dialog.nd-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
 
 /* Touch targets: coarse pointers and phone widths (narrow windows are touch far more often than not). */
 @media (pointer: coarse), (max-width: 780px) {
-  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 44px; }
-  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
+  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])), .nd-report-form :is(button, select, .nd-btn, .nd-file, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 44px; }
+  :is(.nd-imaging-controls .nd-section-content, .nd-dialog-body, .nd-report-controls) :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])), .nd-report-form :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { font-size: 16px; }
   :is(.nd-viewer-toolbar, .nd-mask-editor) :is(button, select, .nd-view-tab) { min-height: 44px; min-width: 44px; }
   :is(.nd-viewer-toolbar, .nd-mask-editor) select { font-size: 16px; }
   .nd-btn-icon-sm { min-width: 44px; min-height: 44px; }
@@ -976,6 +976,8 @@ nd-result-list {
   font-size: 0.8rem;
 }
 .nd-viewer-report[hidden] { display: none; }
+/* Editable report forms use the same field spacing as the workflow sidebar. */
+.nd-report-form .nd-section-content { display: grid; gap: var(--nd-space-sm); }
 .nd-viewer-report p { margin: 0 0 var(--nd-space-xs); }
 .nd-report-lead { font-weight: 600; }
 .nd-report-notes { margin-top: var(--nd-space-md); color: var(--nd-color-text-muted); font-size: 0.7rem; }

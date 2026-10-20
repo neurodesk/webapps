@@ -4,13 +4,6 @@
 
 ### Patch Changes
 
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-- Updated dependencies
-  - @neurodesk/webapp-components@0.17.0
-  - @neurodesk/runtime-support@0.8.1
-  - @neurodesk/deface@1.4.20261020
 - d29c111: Start the image viewer with WebGL2 when a browser exposes WebGPU without a usable adapter.
 - ea2a6d2: Deface and BrowserQC take the avg152 T1 2 mm template from the shared template
   catalogue (`registry/templates.json`) and download it with `fetchTemplateFile`,

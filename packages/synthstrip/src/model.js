@@ -12,12 +12,10 @@ export const SYNTHSTRIP_MODEL = Object.freeze({
 // converted and rewritten exactly as SYNTHSTRIP_MODEL, which the same steps reproduce byte for byte.
 // mri_synthstrip --no-csf: the same network, trained to leave the surrounding CSF out of the brain.
 // The graph is SYNTHSTRIP_MODEL's with other weights, so the browser reuses its slice plan.
-// PENDING_UPLOAD: replace with the neurodeskorg/webapps main commit that merges its upload
-// (https://huggingface.co/datasets/neurodeskorg/webapps/discussions/2).
 export const SYNTHSTRIP_NOCSF_MODEL = Object.freeze({
   filename: 'synthstrip-nocsf-browser.onnx',
   bytes: 10296357,
   sha256: 'f60cbe2673325ba22b75cf40979cdff4236379c34892528d6185b6a592cc6da8',
   license: 'Apache-2.0',
-  url: 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/PENDING_UPLOAD/synthstrip/models/synthstrip-nocsf-browser.onnx',
+  url: 'https://huggingface.co/datasets/neurodeskorg/webapps/resolve/9b298dcfacc708cce6d79a6b6aa161a8acaefcf9/synthstrip/models/synthstrip-nocsf-browser.onnx',
 });

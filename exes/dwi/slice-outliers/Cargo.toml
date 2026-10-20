@@ -1,0 +1,12 @@
+[package]
+name = "dwi-slice-outliers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+dwi-shore = { path = "../shore" }

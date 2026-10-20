@@ -186,3 +186,18 @@ test('readDiffusionSeries leaves gradients unpaired when several volumes make th
   ]));
   assert.deepEqual(result.map(({ bval, bvec }) => [bval, bvec]), [[null, null], [null, null]]);
 });
+
+test('a stalled worker times out at the caller deadline and is terminated', async () => {
+  const OriginalWorker = globalThis.Worker;
+  let terminated = false;
+  globalThis.Worker = class {
+    terminate() { terminated = true; }
+  };
+  try {
+    await assert.rejects(runDcm2niix([file('IM0001')], { timeoutMs: 10 }), /timed out after 10 ms/);
+    assert.equal(terminated, true);
+    await assert.rejects(runDcm2niix([file('IM0001')], { timeoutMs: NaN }), /Invalid dcm2niix timeout/);
+  } finally {
+    globalThis.Worker = OriginalWorker;
+  }
+});
