@@ -5,6 +5,7 @@ import {
   dimensionFilter,
   emptyAnalytics,
   MIN_PUBLISHED_COUNTRY_USERS,
+  rankApps,
   summarizeCountries,
   summarizeMetrics,
 } from '../scripts/write-analytics.mjs';
@@ -61,4 +62,15 @@ test('placeholder analytics covers every registered app', async () => {
   const placeholder = emptyAnalytics(registry);
   assert.equal(placeholder.unavailable, true);
   assert.deepEqual(placeholder.apps.map(({ id }) => id), registry.apps.map(({ id }) => id));
+});
+
+test('ranks apps by visitors, then page views, then title', () => {
+  const apps = [
+    { title: 'Deface', users: 3, pageViews: 9 },
+    { title: 'CALMaR', users: 40, pageViews: 50 },
+    { title: 'SeedSeg', users: 3, pageViews: 12 },
+    { title: 'Brain2Print', users: 3, pageViews: 9 },
+  ];
+  assert.deepEqual(rankApps(apps).map(({ title }) => title), ['CALMaR', 'SeedSeg', 'Brain2Print', 'Deface']);
+  assert.equal(apps[0].title, 'Deface');
 });
