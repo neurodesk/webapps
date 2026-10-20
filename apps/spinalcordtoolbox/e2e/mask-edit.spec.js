@@ -6,8 +6,8 @@ import { readFile } from 'node:fs/promises';
 // and fills on the real canvas with its tools, and the downloaded mask must
 // hold exactly what was painted, in the original image geometry. Every image
 // here is anisotropic and stored in a permuted, flipped orientation
-// (i -> posterior, j -> inferior, k -> right), where NiiVue 1.0's own
-// loadDrawing does not round-trip; the shared drawing adapter corrects it.
+// (i -> posterior, j -> inferior, k -> right), where NiiVue 1.0 before rc.25
+// loaded drawings onto the wrong voxels (niivue/mono#251).
 
 const expect = baseExpect.configure({ timeout: 60000 });
 const poll = (read, options = {}) => expect.poll(read, { timeout: 60000, ...options });

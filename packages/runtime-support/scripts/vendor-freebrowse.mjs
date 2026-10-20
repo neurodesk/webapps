@@ -19,6 +19,8 @@ const COMMIT = 'eae80a127fdd99974c80952e890bf18aa6e9d5dd';
 const NIIVUE = '1.0.0-rc.17';
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+// The build runs on the NiiVue the host package pins, a later release than NIIVUE.
+const HOST_NIIVUE = JSON.parse(await readFile(join(packageRoot, 'package.json'), 'utf8')).dependencies['@niivue/niivue'];
 const destination = join(packageRoot, 'vendor', 'freebrowse');
 
 const run = (command, args, cwd) => execFileSync(command, args, { cwd, stdio: ['ignore', 'pipe', 'inherit'], encoding: 'utf8' });
@@ -58,7 +60,7 @@ const manifestPath = join(destination, 'package.json');
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
 // NiiVue stays external in dist-lib, so it is the host's peer only.
 delete manifest.dependencies['@niivue/niivue'];
-manifest.peerDependencies['@niivue/niivue'] = NIIVUE;
+manifest.peerDependencies['@niivue/niivue'] = HOST_NIIVUE;
 manifest.devDependencies = undefined;
 manifest.scripts = undefined;
 manifest.freebrowseSource = { repository: REPOSITORY, branch: BRANCH, commit: COMMIT, niivue: NIIVUE };
@@ -73,7 +75,8 @@ its library build. The shared viewer (\`src/freebrowse-viewer\`) imports it as
 - Source: ${REPOSITORY}
 - Branch: \`${BRANCH}\`
 - Commit: \`${COMMIT}\`
-- Built against \`@niivue/niivue@${NIIVUE}\`, the peer this package declares.
+- Built against \`@niivue/niivue@${NIIVUE}\`. It declares \`@niivue/niivue@${HOST_NIIVUE}\`,
+  the release \`@neurodesk/runtime-support\` pins, as its peer.
 
 ## Rebuild
 
@@ -91,9 +94,9 @@ the build scripts from \`package.json\`, and writes this README.
 
 ## Known gaps
 
-FreeBrowse's eye button sets a volume's \`visible\` flag (niivue/mono#224), which no NiiVue
-release supports yet. NiiVue stores the flag and keeps drawing the volume, so the shared viewer
-(\`src/freebrowse-viewer/volume-visibility.js\`) hides it through its opacity instead. The declaration
+FreeBrowse's eye button sets a volume's \`visible\` flag (niivue/mono#224), which NiiVue draws
+from rc.24 but not in the rc.17 this build compiles against. The shared viewer
+(\`src/freebrowse-viewer/volume-visibility.js\`) still hides the volume through its opacity. The declaration
 build reports that one type error; the script stops on any other.
 `);
 await rm(work, { recursive: true, force: true });

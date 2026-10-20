@@ -7,7 +7,8 @@ its library build. The shared viewer (`src/freebrowse-viewer`) imports it as
 - Source: https://github.com/pwighton/freebrowse.git
 - Branch: `20260929-niivue-mono-fixes-merged`
 - Commit: `eae80a127fdd99974c80952e890bf18aa6e9d5dd`
-- Built against `@niivue/niivue@1.0.0-rc.17`, the peer this package declares.
+- Built against `@niivue/niivue@1.0.0-rc.17`. It declares `@niivue/niivue@1.0.0-rc.26`,
+  the release `@neurodesk/runtime-support` pins, as its peer.
 
 ## Rebuild
 
@@ -25,7 +26,7 @@ the build scripts from `package.json`, and writes this README.
 
 ## Known gaps
 
-FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which no NiiVue
-release supports yet. NiiVue stores the flag and keeps drawing the volume, so the shared viewer
-(`src/freebrowse-viewer/volume-visibility.js`) hides it through its opacity instead. The declaration
+FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which NiiVue draws
+from rc.24 but not in the rc.17 this build compiles against. The shared viewer
+(`src/freebrowse-viewer/volume-visibility.js`) still hides the volume through its opacity. The declaration
 build reports that one type error; the script stops on any other.
