@@ -337,14 +337,14 @@ test('the Label select paints a named label in a multi-label stage; Cancel keeps
 
   // Cancel closes the layer and keeps the stage as it was; its overlay returns.
   await startEditing(page, 'TotalSpineSeg Labels (edited)');
-  await poll(() => page.evaluate(() => app.nv.volumes[1].opacity)).toBe(0);
+  await poll(() => page.evaluate(() => app.nv.volumes[1].visible !== false && app.nv.volumes[1].opacity > 0)).toBe(false);
   await page.evaluate(() => {
     app.nv.drawingVolume.img.fill(0);
   });
   await editorButton(page, 'Cancel').click();
   await poll(() => page.evaluate(() => app.manualEdits.isEditing())).toBe(false);
   expect(await page.evaluate(() => app.nv.drawingVolume)).toBeNull();
-  await poll(() => page.evaluate(() => app.nv.volumes[1].opacity)).toBeGreaterThan(0);
+  await poll(() => page.evaluate(() => app.nv.volumes[1].visible !== false && app.nv.volumes[1].opacity > 0)).toBe(true);
   const kept = await downloadStage(page, 'TotalSpineSeg Labels (edited)');
   expect(kept.bytes.equals(bytes)).toBe(true);
 });

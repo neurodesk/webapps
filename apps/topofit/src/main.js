@@ -387,7 +387,7 @@ function syncMeshControls() {
   if (displayedResult) {
     const files = displayedResult === 'qc' || displayedResult === 'patch-qc' ? viewer.volumes : viewer.meshes;
     const displayed = files.find((file) => file.name === outputs.get(displayedResult)?.name);
-    if (!displayed || displayed.opacity === 0) {
+    if (!displayed || displayed.opacity === 0 || displayed.visible === false) {
       showPatchMeasurements(null);
       displayedResult = null;
       $('imageLabel').textContent = 'VIEWER SCENE';

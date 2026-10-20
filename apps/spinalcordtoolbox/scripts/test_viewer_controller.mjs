@@ -28,7 +28,7 @@ class FakeNiiVue extends EventTarget {
   }
 
   makeVolume(options) {
-    return { id: `volume-${nextVolumeId++}`, name: options.name, url: options.url, opacity: options.opacity ?? 1, colormapLabel: null };
+    return { id: `volume-${nextVolumeId++}`, name: options.name, url: options.url, opacity: options.opacity ?? 1, visible: options.visible !== false, colormapLabel: null };
   }
 
   async attachToCanvas(canvas) {
@@ -219,21 +219,22 @@ await assert.rejects(
   await viewer.showVolumes(stack());
   assert.equal(nv.calls.length, before, 'an unchanged stack makes no NiiVue calls');
 
-  // Eye toggle: visibility is opacity on the loaded volume, never a reload.
+  // Eye toggle: NiiVue's visible flag on the loaded volume, never a reload.
   const hidden = stack();
   hidden[1].visible = false;
   await viewer.showVolumes(hidden);
-  assert.deepEqual(nv.calls.slice(before), [['setVolume', 1, { opacity: 0 }]], 'hiding a stage only changes its opacity');
+  assert.deepEqual(nv.calls.slice(before), [['setVolume', 1, { visible: false }]], 'hiding a stage only clears its visible flag');
+  assert.equal(nv.volumes[1].opacity, DEFAULT_OVERLAY_OPACITY, 'a hidden stage keeps its opacity');
   assert.equal(nv.volumes.length, 3);
   await viewer.showVolumes(stack());
-  assert.equal(nv.volumes[1].opacity, DEFAULT_OVERLAY_OPACITY, 'showing a stage restores its opacity');
+  assert.deepEqual([nv.volumes[1].visible, nv.volumes[1].opacity], [true, DEFAULT_OVERLAY_OPACITY], 'showing a stage restores it');
   assert.deepEqual(stageEvents, [], 'the viewer does not echo changes the app requested');
 
   // Hiding the input keeps it loaded as the base, so overlays stay aligned.
   const noInput = stack();
   noInput[0].visible = false;
   await viewer.showVolumes(noInput);
-  assert.equal(nv.volumes[0].opacity, 0);
+  assert.equal(nv.volumes[0].visible, false);
   assert.equal(nv.volumes[0].name, 'input.nii');
   assert.equal(nv.callsNamed('loadVolumes').length, 1, 'hiding the input never reloads it');
   await viewer.showVolumes(stack());
@@ -332,6 +333,13 @@ await assert.rejects(
   await nv.setVolume(1, { visible: false });
   await viewer.showVolumes(stack);
   assert.deepEqual([nv.volumes[1].visible, nv.volumes[1].opacity], [true, 0.6], 'the Results eye shows a stage FreeBrowse hid');
+
+  // FreeBrowse hides a stage, the app redraws the stack with it hidden, then FreeBrowse shows it again.
+  await nv.setVolume(1, { visible: false });
+  await viewer.showVolumes([stack[0], { ...stack[1], visible: false }]);
+  await nv.setVolume(1, { visible: true });
+  assert.deepEqual(stageEvents.at(-1), ['segmentation', true], 'FreeBrowse can show a stage the app hid');
+  assert.deepEqual([nv.volumes[1].visible, nv.volumes[1].opacity], [true, 0.6], 'the stage reappears at its own opacity');
 
   const count = stageEvents.length;
   await nv.setVolume(0, { colormap: 'Hot' });
@@ -448,13 +456,13 @@ await assert.rejects(
     assert.deepEqual(created[1].callsNamed('addVolume'), [['addVolume', 'post_seg.nii']], 'a new result is added to its own panel only');
     assert.deepEqual([...container.children].map(element => element.getAttribute('aria-current')), ['true', 'false'], 'the active marker follows the session');
 
-    // Eye toggles change opacity in place.
+    // Eye toggles change the visible flag in place.
     await viewer.showComparison([
       panel('session-1', pre, [{ ...cord(preSeg), visible: false }]),
       panel('session-2', post, [{ ...cord(postSeg), visible: false }])
     ], { container, activeSessionId: 'session-1' });
-    assert.deepEqual(created[0].callsNamed('setVolume').at(-1), ['setVolume', 1, { opacity: 0 }]);
-    assert.deepEqual(created[1].callsNamed('setVolume').at(-1), ['setVolume', 1, { opacity: 0 }]);
+    assert.deepEqual(created[0].callsNamed('setVolume').at(-1), ['setVolume', 1, { visible: false }]);
+    assert.deepEqual(created[1].callsNamed('setVolume').at(-1), ['setVolume', 1, { visible: false }]);
 
     // Unlinking clears NiiVue's sync on every panel; linking restores it and
     // lets the active panel lead.

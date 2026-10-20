@@ -64,7 +64,7 @@ async function deliverCord(page, grid) {
 
 const sessionId = (page, name) => page.evaluate(n => app.getInputSessions().find(session => session.name === n).id, name);
 const panel = (page, name) => page.locator('#comparisonGrid .nd-compare-panel', { has: page.locator('.nd-compare-title', { hasText: name }) });
-const panelVolumes = (page, id) => page.evaluate(i => app.viewer.getComparisonViewer(i)?.volumes.map(v => ({ name: v.name, opacity: v.opacity })) ?? null, id);
+const panelVolumes = (page, id) => page.evaluate(i => app.viewer.getComparisonViewer(i)?.volumes.map(v => ({ name: v.name, opacity: v.visible === false ? 0 : v.opacity })) ?? null, id);
 const resultNames = page => page.locator('#stageButtons .stage-label').allTextContents();
 
 // Records each panel's crosshair in world mm, as NiiVue reports it.

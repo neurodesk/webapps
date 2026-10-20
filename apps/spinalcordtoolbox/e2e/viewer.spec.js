@@ -191,7 +191,7 @@ test.describe('FreeBrowse viewer', () => {
 
     const state = () => page.evaluate(() => app.nv.volumes.map(volume => ({
       name: volume.name,
-      opacity: volume.opacity,
+      opacity: volume.visible === false ? 0 : volume.opacity,
       labels: volume.colormapLabel?.labels ?? null,
       colour: volume.colormapLabel ? Array.from(volume.colormapLabel.lut.slice(4, 8)) : null,
     })));
@@ -235,6 +235,12 @@ test.describe('FreeBrowse viewer', () => {
     await expect(viewer.locator('button[title="Edit as drawing"]')).toBeEnabled();
     await page.evaluate(() => app.nv.setVolume(1, { opacity: 0.4 }));
     await page.evaluate(() => app.nv.setVolume(1, { opacity: 0 }));
+    await expect(eye('segmentation')).not.toHaveClass(/active/);
+    await eye('segmentation').click();
+    await poll(async () => (await state())[1].opacity).toBe(0.4);
+    await expect(eye('segmentation')).toHaveClass(/active/);
+    // FreeBrowse's eye hides through NiiVue's visible flag; the Results eye follows and can undo it.
+    await page.evaluate(() => app.nv.setVolume(1, { visible: false }));
     await expect(eye('segmentation')).not.toHaveClass(/active/);
     await eye('segmentation').click();
     await poll(async () => (await state())[1].opacity).toBe(0.4);

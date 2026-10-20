@@ -95,7 +95,7 @@ the build scripts from \`package.json\`, and writes this README.
 ## Known gaps
 
 FreeBrowse's eye button sets a volume's \`visible\` flag (niivue/mono#224). NiiVue draws it from
-rc.24, which the host pins, but the rc.17 this build compiles against does not declare it, so the
+rc.24 on (the host pins rc.26), but the rc.17 this build compiles against does not declare it, so the
 declaration build reports that one type error; the script stops on any other.
 `);
 await rm(work, { recursive: true, force: true });

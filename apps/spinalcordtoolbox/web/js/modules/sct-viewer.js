@@ -173,11 +173,15 @@ export class SctViewer {
       }
 
       for (let index = 0; index < entries.length; index += 1) {
-        const opacity = this.entryOpacity(entries[index]);
+        // Hiding uses NiiVue's `visible` flag, as FreeBrowse's eye does, so the
+        // stage keeps its opacity and either eye can show what the other hid.
+        const entry = entries[index];
         const volume = nv.volumes[index];
-        const changes = volume.opacity === opacity ? {} : { opacity };
-        // FreeBrowse's eye hides through `visible`; showing the stage here clears it.
-        if (opacity > 0 && volume.visible === false) changes.visible = true;
+        const opacity = this.entryOpacity(entry);
+        const visible = entry.visible !== false;
+        const changes = {};
+        if (volume.opacity !== opacity) changes.opacity = opacity;
+        if ((volume.visible !== false) !== visible) changes.visible = visible;
         if (Object.keys(changes).length) await nv.setVolume(index, changes);
       }
       nv.drawScene();
@@ -191,11 +195,11 @@ export class SctViewer {
   }
 
   entryOpacity(entry) {
-    return entry.visible === false ? 0 : this.getStageOpacity(entry.stage, Boolean(entry.labelColormap));
+    return this.getStageOpacity(entry.stage, Boolean(entry.labelColormap));
   }
 
   volumeOptions(entry) {
-    return { url: entry.file, name: entry.file.name, opacity: this.entryOpacity(entry) };
+    return { url: entry.file, name: entry.file.name, opacity: this.entryOpacity(entry), visible: entry.visible !== false };
   }
 
   async trackVolume(target, index, entry) {
