@@ -34,7 +34,7 @@ run('npm', ['pkg', 'set', `peerDependencies.@niivue/niivue=${NIIVUE}`], frontend
 run('npm', ['install', '--no-audit', '--no-fund', '--loglevel=error', '--save-exact', `@niivue/niivue@${NIIVUE}`], frontend);
 run('npm', ['run', 'build:lib'], frontend);
 // FreeBrowse's declarations name the volume `visible` flag of niivue/mono#224,
-// which no NiiVue release has yet. tsc still emits; any other error stops here.
+// which rc.17 lacks (NiiVue has it from rc.24). tsc still emits; any other error stops here.
 const typeErrors = spawnSync('npx', ['tsc', '-p', 'tsconfig.lib.json'], { cwd: frontend, encoding: 'utf8' }).stdout.match(/error TS\d+.*/g) ?? [];
 const expected = /^error TS2353: .*'visible' does not exist in type 'VolumeUpdate'/;
 if (typeErrors.some((line) => !expected.test(line))) throw new Error(`Unexpected FreeBrowse type errors:\n${typeErrors.join('\n')}`);
@@ -94,10 +94,9 @@ the build scripts from \`package.json\`, and writes this README.
 
 ## Known gaps
 
-FreeBrowse's eye button sets a volume's \`visible\` flag (niivue/mono#224), which NiiVue draws
-from rc.24 but not in the rc.17 this build compiles against. The shared viewer
-(\`src/freebrowse-viewer/volume-visibility.js\`) still hides the volume through its opacity. The declaration
-build reports that one type error; the script stops on any other.
+FreeBrowse's eye button sets a volume's \`visible\` flag (niivue/mono#224). NiiVue draws it from
+rc.24, which the host pins, but the rc.17 this build compiles against does not declare it, so the
+declaration build reports that one type error; the script stops on any other.
 `);
 await rm(work, { recursive: true, force: true });
 console.log(`FreeBrowse ${COMMIT.slice(0, 10)} -> ${destination}`);

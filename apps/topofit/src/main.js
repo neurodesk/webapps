@@ -340,8 +340,8 @@ async function ensureViewer() {
         });
       }
       viewer.addEventListener('volumeUpdated', ({ detail: { volume, changes } }) => {
-        if (viewerBusy || busy || !viewer.meshes.length || volume.name !== source?.name || changes.opacity === undefined) return;
-        anatomyIn3D = changes.opacity > 0;
+        if (viewerBusy || busy || !viewer.meshes.length || volume.name !== source?.name || (changes.opacity === undefined && changes.visible === undefined)) return;
+        anatomyIn3D = volume.visible !== false && volume.opacity > 0;
         viewer.setClipPlane([anatomyIn3D ? 2 : -1, 0, 0]);
       });
       viewer.addEventListener('locationChange', (event) => {

@@ -320,6 +320,19 @@ await assert.rejects(
   await viewer.showVolumes(stack);
   assert.equal(nv.volumes[1].opacity, 0.3, 'the opacity the user chose in FreeBrowse survives an eye toggle');
 
+  // FreeBrowse's eye hides through NiiVue's `visible` flag, leaving the opacity alone.
+  await nv.setVolume(1, { opacity: 0.5 });
+  assert.deepEqual(stageEvents.at(-1), ['segmentation', true]);
+  await nv.setVolume(1, { visible: false });
+  assert.deepEqual(stageEvents.at(-1), ['segmentation', false], 'the FreeBrowse eye hiding a stage reaches the app');
+  await nv.setVolume(1, { opacity: 0.6 });
+  assert.deepEqual(stageEvents.at(-1), ['segmentation', false], 'moving the opacity slider of a hidden volume keeps it hidden');
+  await nv.setVolume(1, { visible: true });
+  assert.deepEqual(stageEvents.at(-1), ['segmentation', true], 'the FreeBrowse eye showing a stage reaches the app');
+  await nv.setVolume(1, { visible: false });
+  await viewer.showVolumes(stack);
+  assert.deepEqual([nv.volumes[1].visible, nv.volumes[1].opacity], [true, 0.6], 'the Results eye shows a stage FreeBrowse hid');
+
   const count = stageEvents.length;
   await nv.setVolume(0, { colormap: 'Hot' });
   assert.equal(stageEvents.length, count, 'non-opacity changes are not visibility changes');

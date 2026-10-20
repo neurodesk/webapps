@@ -174,7 +174,11 @@ export class SctViewer {
 
       for (let index = 0; index < entries.length; index += 1) {
         const opacity = this.entryOpacity(entries[index]);
-        if (nv.volumes[index].opacity !== opacity) await nv.setVolume(index, { opacity });
+        const volume = nv.volumes[index];
+        const changes = volume.opacity === opacity ? {} : { opacity };
+        // FreeBrowse's eye hides through `visible`; showing the stage here clears it.
+        if (opacity > 0 && volume.visible === false) changes.visible = true;
+        if (Object.keys(changes).length) await nv.setVolume(index, changes);
       }
       nv.drawScene();
       return true;
@@ -206,11 +210,11 @@ export class SctViewer {
   // FreeBrowse's own opacity slider and eye write straight to NiiVue. Mirror
   // them so the Results eye buttons and FreeBrowse never disagree.
   handleVolumeUpdated({ volume, changes } = {}) {
-    if (this.applying || changes?.opacity === undefined) return;
+    if (this.applying || (changes?.opacity === undefined && changes?.visible === undefined)) return;
     const entry = this.tracked.get(volume?.id);
     if (!entry?.stage) return;
     if (changes.opacity > 0) this.stageOpacity.set(entry.stage, changes.opacity);
-    this.onStageVisibilityChange(entry.stage, changes.opacity > 0);
+    this.onStageVisibilityChange(entry.stage, volume.visible !== false && volume.opacity > 0);
   }
 
   handleVolumeRemoved() {
