@@ -4,26 +4,106 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/easy-mp2rage@0.8.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/easy-mp2rage@0.8.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/easy-mp2rage@0.8.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/easy-mp2rage@0.8.20261020
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
   - @neurodesk/easy-mp2rage@0.8.20261020
 
 ## 0.8.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/easy-mp2rage@0.8.20261018
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
 - Updated dependencies [67a5a8f]
+
   - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/easy-mp2rage@0.8.20261018
+
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
   - @neurodesk/easy-mp2rage@0.8.20261018
 
 ## 0.8.20261017
@@ -39,10 +119,17 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/easy-mp2rage@0.8.20261016
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/easy-mp2rage@0.8.20261016
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
   - @neurodesk/easy-mp2rage@0.8.20261016
 
 ## 0.8.20261015
@@ -65,6 +152,7 @@
   restore loaded examples.
 
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
   - @neurodesk/easy-mp2rage@0.8.20261015
@@ -74,7 +162,9 @@
 ### Patch Changes
 
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
   - @neurodesk/easy-mp2rage@0.8.20261014
@@ -96,8 +186,14 @@
 ### Patch Changes
 
 - Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
+
   - @neurodesk/easy-mp2rage@0.8.20261010
+
 - Updated dependencies
+
+  - @neurodesk/easy-mp2rage@0.8.20261010
+
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
   - @neurodesk/easy-mp2rage@0.8.20261010
 
 ## 0.7.20261010
@@ -105,6 +201,7 @@
 ### Patch Changes
 
 - Align Rust/WASM with the Python reference: derive no-INV2 masks from absolute UNI contrast around its median, and use 0.35–1.7 for B1 extension fitting and extrapolation. Match the unregularized minimum-norm polynomial fit and even-sized median fallback. No-INV2 maps and optional extension results can change. Add independent Python goldens for both B1 sources, fallback, both clamp bounds, sparse samples and rank-deficient fits, and rebuild the shared WASM.
+
 - Updated dependencies
   - @neurodesk/easy-mp2rage@0.7.20261010
 
@@ -123,8 +220,11 @@
 ### Patch Changes
 
 - @neurodesk/easy-mp2rage@0.7.20261007
+
 - b7dd98f: The web app and the command line refuse INV1 or INV2 images that have UNI's dimensions but a different orientation, voxel size or origin, instead of combining them voxel for voxel with the wrong anatomy. `parameters.json` now records every setting that changes a result: the tfl reference angle, FOV extension, the uncorrected fallback and whether the mask came from INV2 or UNI. Each release archive is checked against Python pipeline outputs for every option, and the committed WebAssembly core is rebuilt from source and compared before packaging.
+
 - Updated dependencies [b7dd98f]
+
 - Updated dependencies [b7dd98f]
   - @neurodesk/easy-mp2rage@0.7.20261007
 
@@ -179,6 +279,7 @@
 ### Patch Changes
 
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.1
 

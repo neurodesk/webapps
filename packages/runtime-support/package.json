@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/runtime-support",
-  "version": "0.8.0",
+  "version": "0.9.5",
   "private": true,
   "type": "module",
   "description": "Canonical browser runtime wrappers and generated host support shared by Neurodesk webapps.",
@@ -26,7 +26,7 @@
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/dcm2niix": "^1.2.0",
-    "@niivue/niivue": "1.0.0-rc.17",
+    "@niivue/niivue": "1.0.0-rc.26",
     "freebrowse": "file:./vendor/freebrowse"
   },
   "scripts": {

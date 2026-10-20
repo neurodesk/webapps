@@ -30,7 +30,7 @@ const ID = /^[a-z][a-z0-9-]*$/;
 const DEFAULTS = {
   runtime: 'react-vite',
   shell: 'imaging-workspace',
-  category: 'data-preparation',
+  category: 'image-processing',
 };
 
 function usage() {
@@ -154,6 +154,12 @@ const entry = {
   description,
   categories: [category],
   keywords,
+  // The template reads DICOM or NIfTI and computes on the CPU; correct these
+  // facets when the app's pipeline differs.
+  anatomy: ['brain'],
+  modalities: ['mri'],
+  inputs: ['dicom', 'nifti'],
+  hardware: 'cpu',
   legacy_domain: null,
   runtime,
   model_manifest: null,

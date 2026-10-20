@@ -4,22 +4,92 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
+
+## 0.5.20261019
+
+## 0.5.20261018
+
+### Patch Changes
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+  - @neurodesk/webapp-components@0.16.1
 
 ## 0.4.20261018
 
 ### Patch Changes
 
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
+- Updated dependencies [67a5a8f]
+
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+
 - Updated dependencies [67a5a8f]
   - @neurodesk/webapp-components@0.14.4
 
@@ -35,15 +105,22 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
 
 ## 0.4.20261015
 
 ### Patch Changes
 
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
 
@@ -52,7 +129,9 @@
 ### Patch Changes
 
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
 
@@ -68,11 +147,18 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.12.2
+
 - Move caller-pinned MindGrab and niimath Node drivers and their independent browser parity validation to dependency-free `@neurodesk/node-drivers`. Migrate every command line and remove the old runtime-support exports. Keep SynthSR and SynthStrip browser runtimes out of production Node deployments so portable brain-extraction and BrowserQC archives omit browser dependencies.
+
 - Updated dependencies
+
   - @neurodesk/node-drivers@0.2.0
   - @neurodesk/webapp-components@0.12.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
 
 ## 0.4.20261009
 
@@ -83,7 +169,9 @@
 ### Patch Changes
 
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
+
 - Updated dependencies [64ffefa]
   - @neurodesk/webapp-components@0.12.0
   - @neurodesk/runtime-support@0.3.0

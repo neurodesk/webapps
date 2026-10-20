@@ -82,15 +82,24 @@ test('composite references shared runtimes from the root store', async () => {
 });
 
 
-test('no app loads threaded runtimes outside its service-worker scope', async () => {
+test('threaded modules stay in app scope and shared ORT references name only the pinned binary', async () => {
   const registry = await loadAppsRegistry();
+  const manifest = JSON.parse(await readFile(join(repoRoot, 'runtime-assets/manifest.json'), 'utf8'));
+  const binary = manifest.families.find(family => family.id === 'ort-web-asyncify-wasm');
+  assert.equal(binary.deduplicate, true);
+  assert.equal(binary.files.length, 1);
+  assert.equal(binary.files[0].name, 'ort-wasm-simd-threaded.asyncify-CsxMlmQ8.wasm');
+  const sharedBinary = `_runtime/${binary.target}/${binary.files[0].name}`;
+  const escapedBinary = sharedBinary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const exactBinaryReference = new RegExp(`${escapedBinary}(?=['"\x60])`, 'g');
   for (const app of registry.apps) {
     const directory = join(dist, app.path);
     for (const file of await readdir(directory, { recursive: true })) {
       if (!/\.(?:html|m?js)$/.test(file)) continue;
       const source = await readFile(join(directory, file), 'utf8');
-      assert.doesNotMatch(source, /_runtime\/(?:ort-web|mindgrab-cpu|dcm2niix)\//,
-        `${app.id}/${file}: threaded runtime escapes the app service-worker scope`);
+      assert.doesNotMatch(source.replace(exactBinaryReference, 'verified-shared-binary'),
+        /_runtime\/(?:ort-web|mindgrab-cpu|dcm2niix)\//,
+        `${app.id}/${file}: threaded module escapes the app service-worker scope`);
     }
   }
 });

@@ -74,11 +74,14 @@ test('standalone choices are ordered, omit technical clutter and never offer the
 // one (packages/<app>/release.json or a Rust release source) unless it is listed here with the reason.
 // Remove an entry in the change that adds its command line.
 const WITHOUT_COMMAND_LINE = {
+  dcm2niix: 'interactive BIDS curation: acquisition labels and fieldmap associations are user decisions; upstream dcm2niix supplies the converter command line',
   surfannotate: 'interactive surface annotation: every result is a manual choice in the viewer',
   zarro: 'interactive OME-Zarr viewer: it has no batch output',
   nesvor: 'needs CUDA; its standalone form is the neurodesk-compute server',
   dicomview: 'interactive DICOM browser: dcm2niix and dicompare already ship as command lines',
+  dwidenoise: 'the dwidenoise command line follows its app, as noddi\'s does (docs/architecture/dwi-microstructure-design.md)',
   degibbs: 'the degibbs command line follows its app, as noddi\'s does (docs/architecture/dwi-microstructure-design.md)',
+  n4: 'the n4 command line follows its app, as noddi\'s does (docs/architecture/dwi-microstructure-design.md)',
   fastprep: 'exes/fastprep drives separately installed niimath, brainchop, greedy-rs, synthsr, topofit and glm; a bundled release waits on packaging those (TopoFit licence pending)',
   'me-ica': 'its meica CLI is released from niivue/meica-rs; no release is tagged yet',
 };

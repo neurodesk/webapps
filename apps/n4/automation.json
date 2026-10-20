@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 2,
+  "app": "n4",
+  "title": "N4",
+  "description": "Bias-field correction with ANTs N4 (MRtrix dwibiascorrect ants procedure for a DWI).",
+  "defaultOperation": "correct",
+  "operations": {
+    "correct": {
+      "title": "Correct bias field",
+      "description": "Fit the N4 bias field to the mean b0 (or the image) inside a brain mask and divide it out.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "A 3D image or a DWI series, as NIfTI or DICOM",
+          "minimum": 1
+        },
+        "bval": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bval",
+            "bvals"
+          ],
+          "description": "Optional b-values; with them the field is fitted to the mean b0",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bvec": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bvec",
+            "bvecs"
+          ],
+          "description": "Optional gradient directions, passed through under the output name",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "mask": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "Optional brain mask on the image grid; replaces the MindGrab mask",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bias": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "mask": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bval": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bvec": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

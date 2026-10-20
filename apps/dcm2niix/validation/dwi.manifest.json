@@ -1,0 +1,31 @@
+{
+  "source": "neurolabusc/dcm_qa_philips_dwi",
+  "revision": "e0e84cfec036783de50469394b2b1864ec8a58ab",
+  "license": "BSD-2-Clause",
+  "files": [
+    {
+      "name": "IM_0001.gz",
+      "url": "https://raw.githubusercontent.com/neurolabusc/dcm_qa_philips_dwi/e0e84cfec036783de50469394b2b1864ec8a58ab/In/enh/DICOM/IM_0001.gz",
+      "bytes": 5243702,
+      "sha256": "5ec90a03fbce6f9bd50d235ef1b9949d4f44957d858143dbbda817021ff0c6f8"
+    },
+    {
+      "name": "701_DTI_Biobank_2mm_MB3S2_EPI_enh.bval",
+      "url": "https://raw.githubusercontent.com/neurolabusc/dcm_qa_philips_dwi/e0e84cfec036783de50469394b2b1864ec8a58ab/Ref/701_DTI_Biobank_2mm_MB3S2_EPI_enh.bval",
+      "bytes": 86,
+      "sha256": "0aa6c75ac93d3119e06f9ff4bbe37a577b6206adaa04b374fcdb7a3aa343bc3a"
+    },
+    {
+      "name": "701_DTI_Biobank_2mm_MB3S2_EPI_enh.bvec",
+      "url": "https://raw.githubusercontent.com/neurolabusc/dcm_qa_philips_dwi/e0e84cfec036783de50469394b2b1864ec8a58ab/Ref/701_DTI_Biobank_2mm_MB3S2_EPI_enh.bvec",
+      "bytes": 464,
+      "sha256": "da368146a0ab80dbb631f4cbc0fa9c1b4b83fd13302c8c38388fceb92800c64d"
+    },
+    {
+      "name": "701_DTI_Biobank_2mm_MB3S2_EPI_enh.nii",
+      "url": "https://raw.githubusercontent.com/neurolabusc/dcm_qa_philips_dwi/e0e84cfec036783de50469394b2b1864ec8a58ab/Ref/701_DTI_Biobank_2mm_MB3S2_EPI_enh.nii",
+      "bytes": 13648224,
+      "sha256": "611b6ea4e4393219d345aced30222202dd44af6adba9199dcced9d488652e84c"
+    }
+  ]
+}

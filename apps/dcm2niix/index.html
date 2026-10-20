@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dcm2niix — Neurodesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">DICOM examination</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose DICOM files or ZIP archives" />
+            <span>Choose DICOM files, a folder or ZIP</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <button id="retryButton" class="nd-btn nd-btn-secondary" type="button" hidden>Retry conversion</button>
+          <button id="clearButton" class="nd-btn nd-btn-secondary" type="button" disabled>Clear examination</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">BIDS export</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="datasetName">Dataset name</label>
+            <input id="datasetName" type="text" value="MRI examination" required />
+          </div>
+          <div class="nd-row">
+            <div class="nd-field">
+              <label for="subject">Subject label</label>
+              <input id="subject" type="text" pattern="[A-Za-z0-9]+" placeholder="01" required autocomplete="off" />
+            </div>
+            <div class="nd-field">
+              <label for="session">Session label</label>
+              <input id="session" type="text" pattern="[A-Za-z0-9]+" placeholder="01" required autocomplete="off" />
+            </div>
+          </div>
+          <p class="nd-hint">Enter labels without sub- or ses-. Any subset of supported scans is accepted.</p>
+          <div class="nd-field">
+            <label for="privacy">Identifying metadata</label>
+            <select id="privacy" required>
+              <option value="">Choose before exporting…</option>
+              <option value="omit">Omit identifiers and dates</option>
+              <option value="retain">Retain original metadata</option>
+            </select>
+            <p class="nd-hint">Images are not defaced. Subject/session labels appear in either export.</p>
+          </div>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Download BIDS ZIP</button>
+        </div>
+      </details>
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content"><div id="resultList"></div></div>
+      </details>
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <p id="emptyState" class="nd-viewer-empty">Choose one MRI examination to convert and review its series.</p>
+        <section id="seriesReport" class="nd-viewer-report" aria-label="Review converted series" hidden>
+          <div class="nd-table-scroll">
+            <table class="nd-data-table">
+              <caption>Confirm included acquisitions; exclude any series you do not need.</caption>
+              <thead><tr><th scope="col">Series</th><th scope="col">Volumes</th><th scope="col">Scan type</th><th scope="col">Confirmed</th><th scope="col">Metadata</th></tr></thead>
+              <tbody id="seriesRows"></tbody>
+            </table>
+          </div>
+          <div id="seriesEditor" class="nd-report-form"></div>
+        </section>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Conversion progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+    <template id="aboutContent">
+      <p>Convert one scanner MRI examination locally with dcm2niix, review its acquisitions and download a BIDS dataset. Supported types are T1w, T2w, FLAIR, DWI and reverse phase encoding EPI fieldmaps. Any subset is accepted.</p>
+      <p>Confirm suggested scan types and enter subject/session labels. Excluded acquisitions are omitted. Separate acquisitions remain separate runs. Full reverse diffusion acquisitions stay in dwi; reverse b=0 images use fmap and require an association with the DWI they serve. This app does not run TOPUP, eddy or other preprocessing.</p>
+      <p>Missing gradients can be supplied as bval/bvec files or pasted values. They must match the converted image and its NIfTI/FSL coordinate convention. Phase encoding direction uses NIfTI voxel axes, not patient AP/PA labels. Readout and echo times use seconds.</p>
+      <p>The exporter checks the supported BIDS 1.11.2 subset, labels, required fields, associations and gradient counts. It does not replace the official BIDS validator. Archives and inputs are limited to 2 GiB; browser memory can impose a lower limit.</p>
+    </template>
+    <template id="privacyContent">
+      <p>DICOM files, converted images, labels and metadata stay in browser memory. They are not uploaded, stored in browser databases or restored on reload. Clear examination removes the current files and results. Downloads are saved to your computer.</p>
+      <p>Choose an export policy explicitly. Omit mode keeps an allowlist of technical acquisition fields, removes identifiers, dates, protocol descriptions and unknown vendor metadata, and clears NIfTI text fields and extensions. Retain mode preserves the original converted metadata. Both modes use your subject/session labels.</p>
+      <p>Neither policy defaces anatomical images or guarantees complete de-identification. Inspect downloads before sharing them. Public examples may be cached by the shared example loader; your own scans are never added to that cache.</p>
+    </template>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

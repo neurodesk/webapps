@@ -1,16 +1,39 @@
+import { ANATOMY, HARDWARE, INPUT_FORMATS, MODALITIES } from './apps-registry.mjs';
+
 const escape = (value) => String(value)
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')
   .replaceAll('>', '&gt;')
   .replaceAll('"', '&quot;');
 
-function renderCard(app, category, categories) {
+// The facts a visitor needs to pick an app: what it reads, what it needs to
+// run, and whether it also ships as a command line.
+function cardFacts(app, standalone) {
+  const subject = [
+    ...app.anatomy.filter((id) => id !== 'any').map((id) => ANATOMY.get(id)),
+    app.modalities.map((id) => MODALITIES.get(id)).join(', '),
+  ].join(' · ');
+  const facts = [
+    { text: subject },
+    { text: app.inputs.map((id) => INPUT_FORMATS.get(id)).join(', ') },
+    { text: HARDWARE.get(app.hardware), hardware: app.hardware },
+  ];
+  if (app.remote_compute) facts.push({ text: 'Compute server option' });
+  const downloads = standalone?.apps?.[app.id]?.downloads ?? [];
+  if (downloads.some(({ kind }) => kind === 'cli')) facts.push({ text: 'Command line' });
+  return facts;
+}
+
+function renderCard(app, category, categories, standalone) {
   const categoryTitles = categories
     .filter(({ id }) => app.categories.includes(id))
     .map(({ title }) => title);
-  const searchText = [app.title, app.description, ...categoryTitles, ...app.keywords].join(' ');
-  const tags = app.keywords.slice(0, 3)
-    .map((keyword) => `<li>${escape(keyword)}</li>`)
+  const facts = cardFacts(app, standalone);
+  const searchText = [app.title, app.description, ...categoryTitles, ...facts.map(({ text }) => text), ...app.keywords].join(' ');
+  const tags = facts
+    .map(({ text, hardware }) => (hardware
+      ? `<li data-hardware="${escape(hardware)}">${escape(text)}</li>`
+      : `<li>${escape(text)}</li>`))
     .join('');
 
   return `
@@ -23,12 +46,12 @@ function renderCard(app, category, categories) {
               <span class="app-card__arrow" aria-hidden="true">↗</span>
             </span>
             <p>${escape(app.description)}</p>
-            <ul class="app-card__tags" aria-label="Search keywords">${tags}</ul>
+            <ul class="app-card__tags" aria-label="Data, hardware and command line">${tags}</ul>
           </a>`;
 }
 
-function renderCategory(category, apps, index, categories) {
-  const cards = apps.map((app) => renderCard(app, category, categories)).join('');
+function renderCategory(category, apps, index, categories, standalone) {
+  const cards = apps.map((app) => renderCard(app, category, categories, standalone)).join('');
   return `
       <section class="category-section" id="category-${escape(category.id)}" data-category-section="${escape(category.id)}" aria-labelledby="heading-${escape(category.id)}">
         <header class="category-section__header">
@@ -43,7 +66,7 @@ function renderCategory(category, apps, index, categories) {
       </section>`;
 }
 
-export function renderLandingPage(registry) {
+export function renderLandingPage(registry, standalone) {
   const totalApps = registry.apps.length;
   const totalCategories = registry.site.categories.length;
   const categoryButtons = registry.site.categories.map((category) => {
@@ -52,7 +75,7 @@ export function renderLandingPage(registry) {
   }).join('');
   const categorySections = registry.site.categories.map((category, index) => {
     const apps = registry.apps.filter((app) => app.categories.includes(category.id));
-    return renderCategory(category, apps, index, registry.site.categories);
+    return renderCategory(category, apps, index, registry.site.categories, standalone);
   }).join('');
 
   return `<!doctype html>

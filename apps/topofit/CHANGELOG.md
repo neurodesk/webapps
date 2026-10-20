@@ -4,38 +4,148 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/runtime-support@0.9.5
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/topofit@0.15.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/runtime-support@0.9.4
+  - @neurodesk/topofit@0.15.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [14b8248]
+
 - Updated dependencies [d9718cd]
-- Updated dependencies [c1a4dda]
-- Updated dependencies [1f4aecd]
-- Updated dependencies [3329c39]
-- Updated dependencies [46935f7]
+
 - Updated dependencies [d1fa022]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/runtime-support@0.9.3
+  - @neurodesk/topofit@0.15.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [c1a4dda]
+
+- Updated dependencies [1f4aecd]
+
+- Updated dependencies [3329c39]
+
+- Updated dependencies [46935f7]
+
+- Updated dependencies [d1fa022]
+
   - @neurodesk/webapp-components@0.16.0
   - @neurodesk/runtime-support@0.8.0
   - @neurodesk/topofit@0.15.20261020
+
+- Updated dependencies [d1fa022]
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/runtime-support@0.9.3
+  - @neurodesk/topofit@0.15.20261020
+
+## 0.15.20261019
+
+### Patch Changes
+
+- Updated dependencies [da2584b]
+  - @neurodesk/runtime-support@0.9.2
+  - @neurodesk/topofit@0.15.20261019
 
 ## 0.15.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/runtime-support@0.9.1
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/runtime-support@0.9.0
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [a07f659]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/runtime-support@0.7.2
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/topofit@0.15.20261018
+
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/runtime-support@0.7.1
   - @neurodesk/topofit@0.15.20261018
+
 - b8b37d6: DICOM View shows the selected series in FreeBrowse instead of a bare NiiVue canvas. Its Volumes panel sets the contrast range (window and level), opacity and colormap, and its header switches between axial, coronal, sagittal, 3D and multiplanar layouts and between contrast and pan for right-drag. The panel starts open where it leaves the image uncovered and closed on narrow screens. The Image, Header and Protocol tabs above the viewer replace the 3-Plane, Axial, Coronal and Sagittal tabs. The image is listed under its download name, which carries no study date.
 
   The shared FreeBrowse viewer now runs FreeBrowse's development build (commit eae80a127f, vendored because it is not on npm) on NiiVue 1.0.0-rc.17. Wand fills in the Drawing panel can be undone. A volume's name in the Volumes and Surfaces panels is a button that Enter or Space selects, and the contrast, opacity and frame sliders are named for assistive technology. The eye button still hides a volume through its opacity, and now restores the opacity it had, until NiiVue releases volume visibility (niivue/mono#224).
 
 - Updated dependencies [67a5a8f]
+
 - Updated dependencies [b8b37d6]
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
 - Updated dependencies [67a5a8f]
+
   - @neurodesk/runtime-support@0.7.0
   - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/runtime-support@0.9.1
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/runtime-support@0.9.0
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/runtime-support@0.7.2
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/topofit@0.15.20261018
+
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/runtime-support@0.7.1
   - @neurodesk/topofit@0.15.20261018
 
 ## 0.15.20261017
@@ -52,13 +162,22 @@
 ### Patch Changes
 
 - Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/runtime-support@0.6.3
   - @neurodesk/topofit@0.15.20261016
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
   - @neurodesk/runtime-support@0.6.2
+  - @neurodesk/topofit@0.15.20261016
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
   - @neurodesk/topofit@0.15.20261016
 
 ## 0.15.20261015
@@ -66,8 +185,10 @@
 ### Patch Changes
 
 - Updated dependencies [c74b26f]
+
   - @neurodesk/runtime-support@0.6.1
   - @neurodesk/topofit@0.15.20261015
+
 - dd65e6a: Visual refresh: Inter, neutral greys with the Neurodesk logo green for action,
   focus and selection only, a compact 48px app bar, sentence-case section titles
   and a quieter status bar. The example menu is now the input control: examples,
@@ -84,10 +205,17 @@
   restore loaded examples.
 
 - Updated dependencies [0569da8]
+
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
+
   - @neurodesk/runtime-support@0.6.0
   - @neurodesk/webapp-components@0.14.0
+  - @neurodesk/topofit@0.15.20261015
+
+- Updated dependencies [c74b26f]
+  - @neurodesk/runtime-support@0.6.1
   - @neurodesk/topofit@0.15.20261015
 
 ## 0.15.20261014
@@ -95,7 +223,9 @@
 ### Patch Changes
 
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/runtime-support@0.5.0
   - @neurodesk/webapp-components@0.13.0
@@ -115,12 +245,20 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.12.2
   - @neurodesk/runtime-support@0.4.2
   - @neurodesk/topofit@0.15.20261010
+
 - Updated dependencies
+
   - @neurodesk/runtime-support@0.4.1
   - @neurodesk/webapp-components@0.12.1
+  - @neurodesk/topofit@0.15.20261010
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
+  - @neurodesk/runtime-support@0.4.2
   - @neurodesk/topofit@0.15.20261010
 
 ## 0.15.20261009
@@ -134,7 +272,9 @@
 ### Patch Changes
 
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
+
 - Updated dependencies [64ffefa]
   - @neurodesk/topofit@0.15.20261009
   - @neurodesk/webapp-components@0.12.0
@@ -149,7 +289,9 @@
 ### Patch Changes
 
 - 273fab7: Make the deployed app cross-origin isolated through the shared service-worker fallback, as the other threaded apps are. GitHub Pages cannot send isolation headers, so TopoFit had always run ONNX Runtime on one thread there; it now gets the two-thread speedup. The processing manifest reports one thread when a browser cannot isolate the page.
+
 - Updated dependencies [f470c7b]
+
 - Updated dependencies [22aa4bf]
   - @neurodesk/topofit@0.14.20261007
   - @neurodesk/webapp-components@0.11.1
@@ -172,12 +314,21 @@
   The shared mask editor now edits results on the FreeBrowse viewer; edited files are named `_edited` and the approximate browser lesion metrics are withdrawn when a mask they used is edited. The vertebral-labeling port and its PAM50 templates are removed; TotalSpineSeg provides disc labels. The SCT app is prepared for the MS lesion model (`lesion_ms`), which stays unavailable until the converted model is hosted.
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.11.0
   - @neurodesk/runtime-support@0.2.0
   - @neurodesk/topofit@0.13.20261007
+
 - Updated dependencies [70f2770]
+
 - Updated dependencies [6be20aa]
+
   - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/topofit@0.13.20261007
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
   - @neurodesk/topofit@0.13.20261007
 
 ## 0.12.20261005
@@ -192,18 +343,41 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.10.1
   - @neurodesk/topofit@0.12.20261004
+
 - Updated dependencies [0204fe1]
+
 - Updated dependencies [ec85a09]
+
   - @neurodesk/webapp-components@0.10.0
   - @neurodesk/topofit@0.12.20261004
+
 - Restore upstream-compatible cubic preprocessing for cortical reconstruction. Preserve oblique rotation and shear, bypass identity 1 mm grids, and require passing numerical evidence when activating model releases. The production comparison improves mean anatomical vertex distance from 0.795–1.564 mm to 0.046–0.068 mm, below the 0.25 mm gate.
+
 - Updated dependencies [257192b]
+
   - @neurodesk/runtime-support@0.1.3
   - @neurodesk/topofit@0.12.20261004
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/topofit@0.12.20261004
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/topofit@0.12.20261004
+
+- Updated dependencies [ec85a09]
+
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/topofit@0.12.20261004
+
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
   - @neurodesk/topofit@0.12.20261004
 
 ## 0.12.20261003
@@ -219,19 +393,42 @@
 ### Patch Changes
 
 - Updated dependencies
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/topofit@0.12.20260930
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/topofit@0.12.20260930
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/webapp-components@0.7.0
   - @neurodesk/topofit@0.12.20260930
 
 ## 0.12.20260928
 
 ### Patch Changes
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.1
+  - @neurodesk/topofit@0.12.20260928
+
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
+- Updated dependencies
+
+- Updated dependencies [93381e8]
+
+- Updated dependencies [93381e8]
+
+  - @neurodesk/webapp-components@0.6.0
+  - @neurodesk/topofit@0.12.20260928
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.6.1
@@ -242,18 +439,6 @@
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
-
-  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
-
-- Updated dependencies
-- Updated dependencies [93381e8]
-- Updated dependencies [93381e8]
-  - @neurodesk/webapp-components@0.6.0
-  - @neurodesk/topofit@0.12.20260928
 
 ## 0.11.20260928
 
@@ -343,18 +528,24 @@
 ### Patch Changes
 
 - Style dialog inputs with the shared field controls and give them 44 px touch targets and 16 px text on phones. Verify TopoFit's STL settings at desktop and phone widths.
+
 - efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.2
   - @neurodesk/topofit@0.7.20260920
-
-### Patch Changes
 
 - a213c53: Export cortical surfaces as printable STL from TopoFit: a dialog sets the triangle fraction to keep (10 to 100%, default 25) and Humphrey smoothing iterations (0 to 20, default 0), niimath simplifies and smooths each surface, and the app writes a binary STL per surface.
 
   STL export uses the shared busy and cancellation controls so replacement input cannot receive stale downloads.
 
 - Updated dependencies [a213c53]
+
+  - @neurodesk/topofit@0.7.20260920
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.2
   - @neurodesk/topofit@0.7.20260920
 
 ## 0.7.20260919
@@ -375,6 +566,7 @@
   - @neurodesk/topofit@0.7.20260918
 
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.0
   - @neurodesk/topofit@0.7.20260918
@@ -384,6 +576,7 @@
 ### Patch Changes
 
 - Place Reconstruct cortex above the surface analysis settings. Allow flat-patch radii from 2 mm and up to 50 patches per hemisphere. Document that patches are ranked by flatness, not area.
+
 - Updated dependencies
   - @neurodesk/topofit@0.7.20260917
 
@@ -392,6 +585,7 @@
 ### Patch Changes
 
 - Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.0
   - @neurodesk/topofit@0.7.20260916
@@ -401,10 +595,24 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.2.2
   - @neurodesk/topofit@0.7.20260915
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.1
+  - @neurodesk/topofit@0.7.20260915
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.0
+  - @neurodesk/topofit@0.7.20260915
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.2
+  - @neurodesk/topofit@0.7.20260915
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.2.1
@@ -413,12 +621,6 @@
 ### Minor Changes
 
 - Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.2.0
-  - @neurodesk/topofit@0.7.20260915
 
 ## 0.6.20260914
 
@@ -429,6 +631,7 @@
 ### Patch Changes
 
 - Show selected flat patches as yellow, two-sided intersections in the three slice views. Preserve slice clipping so patches disappear when scrolling away from their location.
+
 - Updated dependencies
   - @neurodesk/topofit@0.6.20260914
 
@@ -437,8 +640,21 @@
 ### Patch Changes
 
 - 3cd773f: Greedy and EdgeReg show all three viewer panels on phones. TopoFit conforms axis-aligned and oblique scans through the pinned npm niimath WebAssembly worker. SYNcro now matches the native three-input workflow, offers four checksum-pinned tutorials, defaults to MindGrab and Greedy with SynthStrip and ANTs alternatives, uses niimath for lesion and masking operations, and switches one NiiVue viewer between images with automatic lesion overlays. SynthSR lets adapter limits govern its largest activation buffer, so validated 256×256×192 scans and larger volumes on capable GPUs are attempted while other shared U-Net callers retain their existing limit. Add the standalone ANTS registration demo.
+
 - 4add8da: Let TopoFit users show multiple cortical meshes together and reveal them inside the 3D volume with an adjustable X-ray control.
+
 - Updated dependencies [3cd773f]
+
+- Updated dependencies [4add8da]
+
+  - @neurodesk/topofit@0.5.20260914
+  - @neurodesk/webapp-components@0.1.5
+  - @neurodesk/runtime-support@0.1.2
+
+- Updated dependencies
+
+  - @neurodesk/topofit@0.5.20260914
+
 - Updated dependencies [4add8da]
   - @neurodesk/topofit@0.5.20260914
   - @neurodesk/webapp-components@0.1.5
@@ -447,11 +663,6 @@
 ### Minor Changes
 
 - Remove registration spheres from the browser output list and label cortical patches by side and number, such as "Left flat patch 1". Clip meshes to the current slice so scrolling away from a patch does not project it onto unrelated anatomy. Remove the motion-clearance and prescription wording from the application, processing manifest and QC image header.
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/topofit@0.5.20260914
 
 ## 0.4.20260914
 
@@ -494,7 +705,9 @@
 ### Patch Changes
 
 - Correct the TopoFit release-matrix toolchain declaration.
+
 - Harden public release verification, limit the UI to the validated model, and correct interface and conforming details.
+
 - Updated dependencies
   - @neurodesk/topofit@0.1.20260912
 

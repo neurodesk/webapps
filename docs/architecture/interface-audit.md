@@ -338,3 +338,29 @@ templates of `registry/templates.json`: FSL MNI152 1 mm brain and head, and the
 ICBM152 avg152 2 mm head. elastix offers them for 3D images only and disables the
 select for a 2D moving image. SYNcro's fixed card is the locked MNI152 template, and
 its scan is the moving image.
+
+## Catalog metadata, 18 October 2026
+
+The landing-page audit in [catalog-metadata-audit.md](catalog-metadata-audit.md)
+leaves these per-app changes open:
+
+- Resolved: Deface, BrowserQC, EdgeReg, Greedy, ANTs and Brain2Print now open
+  without WebGPU. The catalog marks EdgeReg "No GPU needed" and the other five
+  "WebGPU optional". Their browser suites exercise startup without WebGPU.
+- SeedSeg has no built-in example.
+
+## Diffusion viewer cancellation, 18 October 2026
+
+NODDI, Degibbs, N4 and Dwidenoise now use the shared volume-preview helper for
+input images, completed results and View actions. It serializes native viewer
+loads and restores the last committed source file and display range before a
+cancelled operation releases its controls. Cancelling the first image clears the
+viewer. Result controls remain inactive during loading and processing.
+
+The real viewer-worker probes reproduced all six initial/replacement failures in
+NODDI, Degibbs and N4. They pass after the shared migration, with the cancelled
+canvas matching the prior canvas exactly and a completed retry still producing
+the same distinct image as before. Dwidenoise retains its three production
+regressions for initial, replacement and result-preview cancellation. Shared
+unit tests cover queue recovery, rollback ordering, calibrated ranges and visible
+failure when restoration cannot complete.

@@ -254,3 +254,47 @@ test('a declared WASM runtime is shared across app-relative and root-relative wo
   apps[1].app_scoped_runtime_families.push('dcm2niix-jpeg');
   await assert.rejects(assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } }), /Cannot deduplicate scoped runtime dcm2niix-jpeg/);
 });
+
+test('asyncify shares its binary while keeping each pthread module in its app scope', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'runtime-asyncify-copies-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const siteDist = join(root, 'dist');
+  await prepareParameterRuntimeFixture(root);
+  await mkdir(join(root, 'runtime-assets'), { recursive: true });
+  const manifest = JSON.parse(await readFile(new URL('../runtime-assets/manifest.json', import.meta.url), 'utf8'));
+  const families = manifest.families.filter(family => family.id.startsWith('ort-web-asyncify'));
+  const wasm = families.flatMap(family => family.files).find(file => file.name.endsWith('.wasm'));
+  const module = families.flatMap(family => family.files).find(file => file.name.endsWith('.mjs'));
+  const binary = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
+  const moduleSource = 'export const pthreadEntry = import.meta.url;';
+  for (const family of families) {
+    for (const file of family.files) {
+      file.sha256 = createHash('sha256').update(file.name.endsWith('.wasm') ? binary : moduleSource).digest('hex');
+    }
+  }
+  await writeFile(join(root, 'runtime-assets/manifest.json'), JSON.stringify({ schema_version: 1, families }));
+  const apps = ['synthsr', 'fastprep'].map(id => ({ id, path: id, app_scoped_runtime_families: ['ort-web-asyncify'] }));
+  for (const app of apps) {
+    const assets = join(siteDist, app.path, 'assets');
+    await mkdir(assets, { recursive: true });
+    await writeFile(join(siteDist, app.path, 'index.html'), '<html><head></head></html>');
+    await writeFile(join(assets, wasm.name), binary);
+    await writeFile(join(assets, module.name), moduleSource);
+    await writeFile(join(assets, 'inference-worker.js'), `export const paths = { wasm: new URL("./${wasm.name}", import.meta.url).href, mjs: new URL("./${module.name}", import.meta.url).href }; export const bare = "/${app.path}/assets/${wasm.name}";`);
+  }
+  await assembleRuntimeAssetStore({ repoRoot: root, siteDist, registry: { apps } });
+  for (const app of apps) {
+    await assert.rejects(access(join(siteDist, app.path, 'assets', wasm.name)), { code: 'ENOENT' });
+    assert.equal(await readFile(join(siteDist, app.path, 'assets', module.name), 'utf8'), moduleSource);
+    const source = await readFile(join(siteDist, app.path, 'assets/inference-worker.js'), 'utf8');
+    const paths = [...source.matchAll(/new URL\("([^"]+)"/g)].map(match => match[1]);
+    const bare = source.match(/export const bare = "([^"]+)"/)[1];
+    for (const base of ['https://example.test/', 'https://example.test/webapps/']) {
+      const workerUrl = new URL(`${app.path}/assets/inference-worker.js`, base);
+      assert.equal(new URL(paths[0], workerUrl).href, new URL(`_runtime/ort-web/1.29.0-asyncify/${wasm.name}`, base).href);
+      assert.equal(new URL(paths[1], workerUrl).href, new URL(`${app.path}/assets/${module.name}`, base).href);
+      assert.equal(new URL(bare, workerUrl).href, new URL(`_runtime/ort-web/1.29.0-asyncify/${wasm.name}`, base).href);
+    }
+  }
+  assert.deepEqual(await readFile(join(siteDist, '_runtime/ort-web/1.29.0-asyncify', wasm.name)), binary);
+});

@@ -4,6 +4,7 @@ import NiiVueGPU, { SLICE_TYPE } from "@niivue/niivue";
 import { mountImagingWorkspace } from "@neurodesk/webapp-components/core/mount-imaging-workspace";
 import {
   createResultList,
+  createNiivueVolumePreview,
   bindFileDrop,
   createInfoDialog,
   createConsole,
@@ -72,16 +73,16 @@ function status(message, error = false) {
 const results = createResultList({
   element: $("resultList"),
   onView: (_stage, result) => {
-    void showVolume(result.file).catch((error) => status(error.message, true));
+    void showVolume({ file: result.file }).catch((error) => status(error.message, true));
   },
   onDownload: (_stage, result) => downloadFile(result.file),
 });
 
-async function showVolume(file) {
-  await viewerReady;
-  await viewer.loadVolumes([{ url: file, name: file.name, colormap: "gray" }]);
-  $("emptyState").hidden = true;
-}
+const showVolume = createNiivueVolumePreview({
+  viewer,
+  ready: viewerReady,
+  emptyState: $("emptyState"),
+});
 
 async function gzipFile(buffer, name) {
   const stream = new Blob([buffer]).stream().pipeThrough(new CompressionStream("gzip"));
@@ -95,6 +96,7 @@ function clearOutputs() {
 }
 
 function setBusy(busy) {
+  results.inert = busy;
   $("imageInput").disabled = busy;
   exampleControl?.setDisabled(busy);
   $("runButton").disabled = busy || !input;
@@ -121,7 +123,7 @@ async function loadFiles(filesPromise, signal) {
     controller.signal.throwIfAborted();
     const frames = readNiftiFrames(buffer);
     const axes = sliceAxes(sidecar?.SliceEncodingDirection);
-    await showVolume(new File([buffer], image.name.replace(/\.gz$/i, "")));
+    await showVolume({ file: image }, { signal: controller.signal });
     controller.signal.throwIfAborted();
     input = { name: image.name, buffer, ...frames, bval, bvec, sidecar };
     clearOutputs();
@@ -180,7 +182,7 @@ async function removeRinging(signal) {
     const sidecar = new File([`${JSON.stringify(derivativeSidecar(input.sidecar), null, 2)}\n`], names.sidecar, { type: "application/json" });
     rows.sidecar = { description: "Sidecar", file: sidecar, viewable: false };
     artifacts.push({ role: "sidecar", file: sidecar });
-    await showVolume(image);
+    await showVolume({ file: image }, { signal: controller.signal });
     controller.signal.throwIfAborted();
     outputs = rows;
     results.render(rows);

@@ -19,9 +19,12 @@ const information = await loadAppInformation(registry);
 // Methods each app implements, by DOI or URL. Add a line when an app gains a
 // method; the entry must then be cited in registry/app-information.yml.
 const REQUIRED_METHODS = {
+  dcm2niix: ['10.1016/j.jneumeth.2016.03.001', '10.1038/sdata.2016.44', '10.1038/s41597-021-01064-w', '10.7937/TCIA.9YTJ-5Q73'],
   'brain-extraction': ['10.1002/hbm.10062', 'arxiv.org/abs/2506.11860', '10.1016/j.neuroimage.2022.119474', 'github.com/niivue/niivue'],
   dwi2trx: ['10.1016/S0006-3495(94)80775-1', 'github.com/dipy/GPUStreamlines', 'PMC5381389', 'brainder.org/2025/05/05/15656/'],
+  dwidenoise: ['arxiv.org/abs/2011.01355', '10.3389/fninf.2014.00008', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   degibbs: ['10.1002/mrm.26054', '10.1016/j.neuroimage.2019.116137', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
+  n4: ['10.1109/TMI.2010.2046908', '10.1016/j.neuroimage.2010.09.025', '10.1016/j.neuroimage.2019.116137', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   noddi: ['10.1016/S0006-3495(94)80775-1', '10.1016/j.neuroimage.2012.03.072', '10.1016/j.neuroimage.2014.10.026', 'arxiv.org/abs/2506.11860', '10.21105/joss.05098', '10.1016/j.jneumeth.2016.03.001', 'github.com/niivue/niivue'],
   musclemap: ['10.3390/jimaging10110262', 'arxiv.org/abs/2211.02701', '10.1016/j.jneumeth.2016.03.001'],
   vesselboost: ['10.52294/001c.123217', '10.1109/TMI.2010.2046908', '10.1109/TMI.2007.906087', '10.1109/ICCV.1998.710815', '10.1002/hbm.10062', '10.1016/j.neuroimage.2022.119474'],
@@ -199,4 +202,12 @@ test('every page carries the site catalog, so one app can open another with its 
   }
   assert.equal(catalog.find(({ id }) => id === 'dicompare').receives, 'dicom');
   assert.ok(!catalog.some(({ id }) => id === 'zarro'), 'Zarro streams from URLs and takes no files');
+  assert.ok(!catalog.some(({ id }) => id === 'me-ica'), 'ME-ICA needs an echo bundle, not a single image');
+});
+
+test('DICOM handoff Privacy discloses unchanged scanner headers', () => {
+  const privacy = information.apps.dicomview.privacy;
+  assert.match(privacy, /Open in another webapp/);
+  assert.match(privacy, /Apps that read DICOM/);
+  assert.match(privacy, /headers do hold the patient/);
 });

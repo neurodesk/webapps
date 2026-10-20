@@ -1,0 +1,149 @@
+dcm2niix (Neurodesk app) third-party components
+
+The Neurodesk dcm2niix application runs dcm2niix to convert images and curates
+the result as BIDS. It uses the dcm2niix name with the permission of its author,
+Chris Rorden (https://github.com/neurodesk/webapps/pull/382).
+
+@niivue/dcm2niix 1.2.0 — BSD-2-Clause — https://github.com/niivue/niivue-dcm2niix
+  WebAssembly build of dcm2niix v1.0.20241231 with OpenJPEG and CharLS.
+dcm2niix — BSD licence below — https://github.com/rordenlab/dcm2niix
+OpenJPEG — BSD-2-Clause, text below — https://github.com/uclouvain/openjpeg
+CharLS — BSD-3-Clause, text below — https://github.com/team-charls/charls
+miniz — public domain (Unlicense) — https://github.com/richgel999/miniz
+nifti1_io — public domain — https://nifti.nimh.nih.gov
+fflate 0.8.2 — MIT, Copyright (c) 2023 Arjun Barrett — https://github.com/101arrowz/fflate
+@neurodesk/dicom2vid DICOM reader — BSD-3-Clause, Copyright (c) 2023 Thom Shaw
+  (packages/dicom2vid/LICENSE)
+
+Example data: series VS-SEG-001 of Vestibular-Schwannoma-SEG, The Cancer Imaging
+Archive, CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), unchanged.
+Shapey J, et al. (2021) https://doi.org/10.7937/TCIA.9YTJ-5Q73 and
+Scientific Data 8:286, https://doi.org/10.1038/s41597-021-01064-w.
+
+----------------------------------------------------------------------------
+dcm2niix licence, as published at v1.0.20241211
+(rordenlab/dcm2niix@98ecd0bec9a1dfabd77b2be8c54c3bae97b92a55, license.txt)
+----------------------------------------------------------------------------
+
+The following files are from different authors and have their own licenses
+
+nifti.h, nifti1_io.h/nifti1_io_core.cpp is public domain
+  http://niftilib.sourceforge.net
+  http://sourceforge.net/projects/niftilib/files/latest/download
+ujpeg.h/ujpeg.cpp uses the MIT license (see file for license text)
+  http://keyj.emphy.de/nanojpeg/
+miniz.c is optional, it is public domain (http://unlicense.org)
+ https://github.com/richgel999/miniz
+OpenJpeg is optional, it uses a BSD license
+ https://github.com/uclouvain/openjpeg/blob/master/LICENSE
+CharLS is optional, it uses a BSD license
+ https://github.com/team-charls/charls/blob/master/LICENSE.md
+zlib is optional and includes a simple license
+ https://www.zlib.net/zlib_license.html
+Jasper is optional and provides its own license
+ https://github.com/mdadams/jasper/blob/master/LICENSE
+
+---
+The Software has been developed for research purposes only and is not a clinical tool
+Copyright (c) 2014-2021 Chris Rorden. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. Neither the name of the copyright owner nor the name of this project
+   (dcm2niix) may be used to endorse or promote products derived from this
+   software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT OWNER ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
+EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+----------------------------------------------------------------------------
+OpenJPEG licence
+----------------------------------------------------------------------------
+
+/*
+ * The copyright in this software is being made available under the 2-clauses
+ * BSD License, included below. This software may be subject to other third
+ * party and contributor rights, including patent rights, and no such rights
+ * are granted under this license.
+ *
+ * Copyright (c) 2002-2014, Universite catholique de Louvain (UCL), Belgium
+ * Copyright (c) 2002-2014, Professor Benoit Macq
+ * Copyright (c) 2003-2014, Antonin Descampe
+ * Copyright (c) 2003-2009, Francois-Olivier Devaux
+ * Copyright (c) 2005, Herve Drolon, FreeImage Team
+ * Copyright (c) 2002-2003, Yannick Verschueren
+ * Copyright (c) 2001-2003, David Janssens
+ * Copyright (c) 2011-2012, Centre National d'Etudes Spatiales (CNES), France
+ * Copyright (c) 2012, CS Systemes d'Information, France
+ *
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS `AS IS'
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+----------------------------------------------------------------------------
+CharLS licence
+----------------------------------------------------------------------------
+
+BSD 3-Clause License
+
+Copyright (c) 2007, Jan de Vaan and Victor Derks
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

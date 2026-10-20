@@ -28,6 +28,9 @@ for each app are recorded in `registry/apps.yml`.
   `@libav.js/variant-vp9-opus`, is FFmpeg (LGPL-2.1-or-later) with libvpx and
   Opus (BSD-3-Clause), shipped unmodified as a separate replaceable module
   (`packages/dicom2vid/NOTICE`).
+- `apps/dcm2niix`: MIT (`apps/dcm2niix/LICENSE`); it runs the dcm2niix
+  WebAssembly build (BSD, with OpenJPEG and CharLS) and its example is CC BY 4.0
+  TCIA data. Notices are in `apps/dcm2niix/NOTICE`.
 - `apps/browserqc`: BSD-2-Clause (`apps/browserqc/LICENSE`)
 - `apps/surfannotate`: MIT (`apps/surfannotate/LICENSE`); bundled third-party
   notices in `apps/surfannotate/THIRD-PARTY.md`

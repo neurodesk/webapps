@@ -4,26 +4,106 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/seedseg@0.6.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/seedseg@0.6.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/seedseg@0.6.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/seedseg@0.6.20261020
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
   - @neurodesk/seedseg@0.6.20261020
 
 ## 0.6.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/seedseg@0.6.20261018
+
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/seedseg@0.6.20261018
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
 - Updated dependencies [67a5a8f]
+
   - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/seedseg@0.6.20261018
+
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
   - @neurodesk/seedseg@0.6.20261018
 
 ## 0.6.20261017
@@ -39,11 +119,19 @@
 ### Patch Changes
 
 - Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/seedseg@0.6.20261016
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/seedseg@0.6.20261016
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
   - @neurodesk/seedseg@0.6.20261016
 
 ## 0.6.20261015
@@ -66,6 +154,7 @@
   restore loaded examples.
 
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
   - @neurodesk/seedseg@0.6.20261015
@@ -76,8 +165,11 @@
 
 - 498263f: Cite always opens the shared citation list, which ends with the Neurodesk
   paper; the app's own Citations dialog is removed.
+
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
   - @neurodesk/seedseg@0.6.20261014
@@ -99,9 +191,16 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.12.2
   - @neurodesk/seedseg@0.6.20261010
+
 - Updated dependencies
+
+  - @neurodesk/seedseg@0.6.20261010
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
   - @neurodesk/seedseg@0.6.20261010
 
 ## 0.5.20261010
@@ -116,6 +215,7 @@
 ### Patch Changes
 
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
   - @neurodesk/webapp-components@0.12.0
 
@@ -124,25 +224,52 @@
 ### Patch Changes
 
 - Updated dependencies [22aa4bf]
+
   - @neurodesk/webapp-components@0.11.1
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.11.0
+
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+
+- Updated dependencies [70f2770]
+
+  - @neurodesk/webapp-components@0.10.2
+
+- Updated dependencies [22aa4bf]
+
+  - @neurodesk/webapp-components@0.11.1
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.11.0
-- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
-- Updated dependencies [70f2770]
-  - @neurodesk/webapp-components@0.10.2
 
 ## 0.5.20261004
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.10.1
+
 - 2e9d4ea: Correct the consensus marker mask in the viewer before downloading it. The Consensus result has an Edit button that opens the shared mask editor with Draw, Erase and Fill tools, Undo, Apply and Cancel. Apply replaces the result, which is then labelled `Consensus (edited)`, and Download returns the edited mask as a uint8 NIfTI with the same name. The automation report keeps the masks the pipeline computed. SeedSeg now loads NiiVue 0.68.2, whose drawing API has the brush size the editor needs.
+
 - Updated dependencies [0204fe1]
+
+- Updated dependencies [ec85a09]
+
+  - @neurodesk/webapp-components@0.10.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.9.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.10.1
+
 - Updated dependencies [ec85a09]
   - @neurodesk/webapp-components@0.10.0
-- Updated dependencies
-  - @neurodesk/webapp-components@0.9.0
 
 ## 0.5.20261003
 
@@ -156,17 +283,39 @@
 ### Patch Changes
 
 - Updated dependencies
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.7.0
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.2
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/webapp-components@0.7.0
 
 ## 0.5.20260928
 
 ### Patch Changes
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.1
+
+- 93381e8: Remove the static bottom bar (version, privacy sentence, duplicate More Apps and GitHub links) from the six inference-workspace apps. The shared app bar already shows the version and links, and Privacy has its own dialog. The unused `.app-footer` and `.nd-app-footer` rules leave the shared stylesheets and the hosted theme.
+
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
+- Updated dependencies
+
+- Updated dependencies [93381e8]
+
+- Updated dependencies [93381e8]
+
+  - @neurodesk/webapp-components@0.6.0
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.6.1
@@ -176,18 +325,6 @@
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- 93381e8: Remove the static bottom bar (version, privacy sentence, duplicate More Apps and GitHub links) from the six inference-workspace apps. The shared app bar already shows the version and links, and Privacy has its own dialog. The unused `.app-footer` and `.nd-app-footer` rules leave the shared stylesheets and the hosted theme.
-- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
-
-  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
-
-- Updated dependencies
-- Updated dependencies [93381e8]
-- Updated dependencies [93381e8]
-  - @neurodesk/webapp-components@0.6.0
 
 ## 0.4.20260928
 
@@ -220,17 +357,23 @@
 ### Patch Changes
 
 - Updated dependencies [4959500]
+
   - @neurodesk/webapp-components@0.4.4
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.3
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.2
+
+- Updated dependencies [4959500]
+
+  - @neurodesk/webapp-components@0.4.4
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.3
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.4.2
 
 ## 0.4.20260918
 
@@ -243,25 +386,32 @@
 ### Patch Changes
 
 - Remove the unsuitable synthetic example and its selector from SeedSeg. Load scans through the file picker or drag and drop.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.1
 
-### Patch Changes
-
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
 
   - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.3.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.1
 
 ## 0.3.20260916
 
 ### Patch Changes
 
 - Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 - Stage the ONNX JSEP runtime required by the inference worker so the hosted synthetic example can run all four models and download results.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.0
 
@@ -270,9 +420,20 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.2.2
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.1
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.2
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.2.1
@@ -281,23 +442,22 @@
 
 - Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
 
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.2.0
-
 ## 0.2.20260914
 
 ### Patch Changes
 
 - Updated dependencies [3cd773f]
+
 - Updated dependencies [4add8da]
+
   - @neurodesk/webapp-components@0.1.5
 
-### Patch Changes
-
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.1.4
+
+- Updated dependencies [4add8da]
+  - @neurodesk/webapp-components@0.1.5
 
 ## 0.2.20260910
 
@@ -316,6 +476,7 @@
 ### Patch Changes
 
 - Apply the shared design system and the registry-driven About and Cite dialogs. Every app now states that it is developed and hosted by the Neurodesk team, lists the packages under the hood, names the lightning.org ecosystem, and cites one paper per implemented method plus the Neurodesk platform paper. SynthSR, SYNcro, Deface, BrowserQC and NiiMath use the shared workspace vocabulary (compact sections, one scan picker, shared toolbar, status bar and dialogs).
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.1.3
 

@@ -18,6 +18,30 @@ export interface ImagingWorkspaceConfig {
 
 export function mountImagingWorkspace(config: ImagingWorkspaceConfig): HTMLElement;
 
+export interface VolumePreview {
+  readonly file: File;
+  readonly range?: readonly [minimum: number, maximum: number];
+}
+
+export interface NiivueVolumePreviewOptions {
+  readonly viewer: {
+    loadVolumes(options: Array<{
+      url: File;
+      name: string;
+      colormap: 'gray';
+      calMin?: number;
+      calMax?: number;
+    }>): Promise<unknown>;
+    removeAllVolumes(): Promise<void>;
+  };
+  readonly ready: Promise<unknown>;
+  readonly emptyState: HTMLElement;
+}
+
+/** Resolves after display commit; cancellation rejects after restoring the previous preview. */
+export function createNiivueVolumePreview(options: NiivueVolumePreviewOptions):
+  (preview: VolumePreview, options?: { signal?: AbortSignal }) => Promise<void>;
+
 // ---- Workflow vocabulary builders (ui) ----
 export function renderSidebarSection(config?: {
   id?: string;

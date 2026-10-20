@@ -181,8 +181,11 @@ try {
 
   await landing.locator('#app-search').fill('DICOM');
   const dicomMatches = await landing.locator('[data-app-card]:not([hidden])').count();
-  const expectedDicomMatches = registry.apps.filter((app) =>
-    [app.title, app.description, ...app.keywords].some((value) => /dicom/i.test(value))).length;
+  // Cards, not apps: an app with two categories has a card in each.
+  const expectedDicomMatches = registry.apps
+    .filter((app) => app.inputs.includes('dicom')
+      || [app.title, app.description, ...app.keywords].some((value) => /dicom/i.test(value)))
+    .reduce((count, app) => count + app.categories.length, 0);
   if (dicomMatches !== expectedDicomMatches) {
     failures.push(`landing search found ${dicomMatches} DICOM apps, expected ${expectedDicomMatches}`);
   }
@@ -202,16 +205,18 @@ try {
     if (JSON.stringify(visible) !== JSON.stringify(expected)) failures.push(`${category.id}: incorrect category membership`);
   }
   await landing.locator('[data-category-filter="all"]').click();
-  await landing.locator('#app-search').fill('TopoFit');
-  if (await landing.locator('[data-app-card]:visible').count() !== 2) failures.push('TopoFit must appear in Visualization and Surfaces');
+  await landing.locator('#app-search').fill('SurfAnnotate');
+  if (await landing.locator('[data-app-card]:visible').count() !== 2) failures.push('SurfAnnotate must appear in Surfaces and Visualization');
   if (await landing.locator('#result-summary').textContent() !== `Showing 1 of ${registry.apps.length} apps`) {
-    failures.push('search must count TopoFit once across its two categories');
+    failures.push('search must count SurfAnnotate once across its two categories');
   }
   await landing.locator('[data-category-filter="surfaces"]').click();
-  if (await landing.locator('[data-app-card]:visible').count() !== 1) failures.push('Surfaces filter must show only one TopoFit card');
+  if (await landing.locator('[data-app-card]:visible').count() !== 1) failures.push('Surfaces filter must show only one SurfAnnotate card');
   await landing.locator('#clear-search').click();
-  if (await landing.locator('#result-summary').textContent() !== `Showing 2 of ${registry.apps.length} apps in Surfaces`) {
-    failures.push('Surfaces summary must count its two apps');
+  const surfaces = registry.site.categories.find(({ id }) => id === 'surfaces');
+  const surfaceApps = registry.apps.filter(({ categories }) => categories.includes('surfaces')).length;
+  if (await landing.locator('#result-summary').textContent() !== `Showing ${surfaceApps} of ${registry.apps.length} apps in ${surfaces.title}`) {
+    failures.push(`Surfaces summary must count its ${surfaceApps} apps`);
   }
   await landing.locator('[data-category-filter="all"]').click();
   await landing.locator('#app-search').fill('no-such-neurodesk-app');

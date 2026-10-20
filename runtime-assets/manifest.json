@@ -54,19 +54,28 @@
       "id": "ort-web-asyncify",
       "version": "1.29.0",
       "target": "ort-web/1.29.0-asyncify",
-      "reason": "Keep threaded ORT workers inside each app service-worker scope on static hosts without response headers. The common store also pins and verifies this runtime version.",
+      "reason": "Keep the ORT module and pthread entry inside each app service-worker scope on static hosts without response headers. The identical WASM binary is shared separately.",
+      "files": [
+        {
+          "name": "ort-wasm-simd-threaded.asyncify-fW5LXAyG.mjs",
+          "source_app": "synthsr",
+          "source": "assets/ort-wasm-simd-threaded.asyncify-fW5LXAyG.mjs",
+          "sha256": "5d25483158d53d8f34d0e9c06a654d56c8dca4ebdf370ea0982ef11315a00e0e"
+        }
+      ]
+    },
+    {
+      "id": "ort-web-asyncify-wasm",
+      "version": "1.29.0",
+      "target": "ort-web/1.29.0-asyncify",
+      "deduplicate": true,
+      "reason": "Share only the verified WASM bytes; the ORT module that starts pthread workers remains inside each app service-worker scope.",
       "files": [
         {
           "name": "ort-wasm-simd-threaded.asyncify-CsxMlmQ8.wasm",
           "source_app": "synthsr",
           "source": "assets/ort-wasm-simd-threaded.asyncify-CsxMlmQ8.wasm",
           "sha256": "503d17cb7411b79781b9fad1cf0978f03cf06b050c7d399c730e914f473bf549"
-        },
-        {
-          "name": "ort-wasm-simd-threaded.asyncify-fW5LXAyG.mjs",
-          "source_app": "synthsr",
-          "source": "assets/ort-wasm-simd-threaded.asyncify-fW5LXAyG.mjs",
-          "sha256": "5d25483158d53d8f34d0e9c06a654d56c8dca4ebdf370ea0982ef11315a00e0e"
         }
       ]
     },

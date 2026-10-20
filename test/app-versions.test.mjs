@@ -120,6 +120,24 @@ test('a linked-package changeset releases the app, package and native versions t
   assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
 });
 
+test('diffusion app releases synchronize the app, package and embedded version without dating the shared Rust workspace', async (t) => {
+  for (const app of ['noddi', 'degibbs', 'n4', 'dwidenoise']) {
+    const { root, put, json } = await fixture(t);
+    await put(`apps/${app}/package.json`, JSON.stringify({ name: app, version: '0.1.20260930', private: true }));
+    await put(`packages/${app}/package.json`, JSON.stringify({ name: `@neurodesk/${app}`, version: '0.1.20260930', private: true }));
+    await put(`apps/${app}/src/config.js`, 'export const APP = { version: "0.1.20260930" };\n');
+    const rustWorkspace = '[workspace.package]\nversion = "0.1.0"\n';
+    await put('exes/dwi/Cargo.toml', rustWorkspace);
+    await put('.changeset/diffusion.md', `---\n"@neurodesk/${app}": minor\n---\n\nUpdated diffusion method.\n`);
+    await applyRelease(await planRelease(root, { date: '20261001' }));
+    assert.equal((await json(`apps/${app}`)).version, '0.2.20261001', app);
+    assert.equal((await json(`packages/${app}`)).version, '0.2.20261001', app);
+    assert.equal(await readFile(join(root, `apps/${app}/src/config.js`), 'utf8'), 'export const APP = { version: "0.2.20261001" };\n', app);
+    assert.equal(await readFile(join(root, 'exes/dwi/Cargo.toml'), 'utf8'), rustWorkspace);
+    assert.deepEqual(await embeddedVersionMismatches(await workspacePackages(root), root), []);
+  }
+});
+
 test('an app release leaves the desktop suite version unchanged', async (t) => {
   const { root, put, json } = await fixture(t);
   await put('packages/desktop/package.json', JSON.stringify({ name: '@neurodesk/desktop', version: '0.1.20260930', private: true }));

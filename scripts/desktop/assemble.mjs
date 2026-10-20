@@ -11,7 +11,7 @@ const argument = name => {
   return index >= 0 ? process.argv[index + 1] : undefined;
 };
 const registry = await loadAppsRegistry();
-await loadStandalone(registry);
+const standalone = await loadStandalone(registry);
 const ids = argument('--app')?.split(',');
 const unknown = ids?.filter(id => !registry.apps.some(app => app.id === id));
 if (unknown?.length) throw new Error(`Unknown app: ${unknown.join(', ')}`);
@@ -56,7 +56,7 @@ for (const entry of await readdir(join(repoRoot, 'dist'), { withFileTypes: true 
     await cp(join(repoRoot, 'dist', entry.name), join(destination, 'site', entry.name), { recursive: true });
   }
 }
-await writeFile(join(destination, 'site/index.html'), renderLandingPage({ ...registry, apps }));
+await writeFile(join(destination, 'site/index.html'), renderLandingPage({ ...registry, apps }, standalone));
 await stagePython({ destination, apps, sources, lock, cache });
 // Offline builds contain no analytics bootstrap or remote update checks.
 async function disableAnalytics(directory) {

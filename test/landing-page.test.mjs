@@ -3,10 +3,11 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 import { loadAppsRegistry, SUPPORT_STATUSES } from '../scripts/lib/apps-registry.mjs';
 import { renderLandingPage } from '../scripts/lib/landing-page.mjs';
+import { loadStandalone } from '../scripts/lib/standalone.mjs';
 
 test('landing page renders categorized, searchable app cards', async () => {
   const registry = await loadAppsRegistry();
-  const html = renderLandingPage(registry);
+  const html = renderLandingPage(registry, await loadStandalone(registry));
 
   assert.equal((html.match(/data-app-card/g) ?? []).length, registry.apps.reduce((count, app) => count + app.categories.length, 0));
   assert.equal((html.match(/data-category-section=/g) ?? []).length, registry.site.categories.length);
@@ -52,4 +53,25 @@ test('app cards omit experimental badges for every support status', async () => 
         'Remove the Experimental badge from app cards.');
     }
   }
+});
+
+test('app cards show data, hardware and command-line facts', async () => {
+  const registry = await loadAppsRegistry();
+  const html = renderLandingPage(registry, await loadStandalone(registry));
+  const card = (id) => html.match(new RegExp(`<a class="app-card"[^>]*data-app-id="${id}"[\\s\\S]*?</a>`))[0];
+
+  const synthseg = card('synthseg');
+  assert.match(synthseg, /<li>Brain · MRI, CT<\/li>/);
+  assert.match(synthseg, /<li>DICOM, NIfTI<\/li>/);
+  assert.match(synthseg, /<li data-hardware="webgpu-required">Needs WebGPU<\/li>/);
+  assert.match(synthseg, /<li>Command line<\/li>/);
+
+  const zarro = card('zarro');
+  assert.match(zarro, /<li>Microscopy<\/li>/, 'any anatomy is not shown');
+  assert.match(zarro, /<li data-hardware="cpu">No GPU needed<\/li>/);
+  assert.doesNotMatch(zarro, /Command line/, 'no CLI download is listed for ZARRo');
+
+  assert.match(card('nesvor'), /<li>Compute server option<\/li>/);
+  assert.match(card('lcmodel'), /data-search="[^"]*vendor mrs[^"]*"/, 'facet labels are searchable');
+  assert.match(card('brain-extraction'), /data-search="[^"]*skull stripping[^"]*"/, 'keywords stay searchable');
 });

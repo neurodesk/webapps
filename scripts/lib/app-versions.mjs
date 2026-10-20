@@ -17,10 +17,12 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/calmar': 'calmar',
   '@neurodesk/carotid-flow': 'carotid-flow',
   '@neurodesk/deface': 'deface',
+  '@neurodesk/degibbs': 'degibbs',
   '@neurodesk/dicompare': 'dicompare',
   '@neurodesk/nii2tvx': 'disconnectome',
   '@neurodesk/dicom2vid': 'dicom2vid',
   '@neurodesk/dwi2trx': 'dwi2trx',
+  '@neurodesk/dwidenoise': 'dwidenoise',
   '@neurodesk/easy-mp2rage': 'easy-mp2rage',
   '@neurodesk/edgereg': 'edgereg',
   '@neurodesk/elastix': 'elastix',
@@ -28,6 +30,7 @@ export const LINKED_PACKAGES = Object.freeze({
   '@neurodesk/greedy': 'greedy',
   '@neurodesk/lcmodel': 'lcmodel',
   '@neurodesk/musclemap': 'musclemap',
+  '@neurodesk/n4': 'n4',
   '@neurodesk/niimath': 'niimath',
   '@neurodesk/noddi': 'noddi',
   '@neurodesk/seedseg': 'seedseg',
@@ -183,6 +186,18 @@ export function mergeSameVersionSections(text, version) {
  * version registers a site here; test/app-versions.test.mjs checks they agree.
  */
 export const EMBEDDED_VERSION_SITES = Object.freeze({
+  dwidenoise: [
+    { file: 'apps/dwidenoise/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  degibbs: [
+    { file: 'apps/degibbs/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  n4: [
+    { file: 'apps/n4/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
+  noddi: [
+    { file: 'apps/noddi/src/config.js', pattern: /(version: ")[^"]+(")/, replace: '$1{version}$2' },
+  ],
   qsmbly: [
     { file: 'apps/qsmbly/js/app/config.js', pattern: /(export const VERSION = ')[^']+(')/, replace: '$1{version}$2' },
     { file: 'apps/qsmbly/rust-wasm/Cargo.toml', pattern: /(name = "qsm_wasm"\nversion = ")[^"]+("\n)/, replace: '$1{version}$2' },

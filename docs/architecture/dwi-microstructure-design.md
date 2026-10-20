@@ -24,13 +24,13 @@ A pipeline specification for all apps in this repository is a later, separate de
 | WebGPU U-Net inference | `packages/runtime-support/src/gpu-unet` (conv3d only) |
 | Nonlinear least squares | `exes/fida/src/ops/nlinfit.rs`, `exes/lcmodel/src/solve.rs` |
 
-The repository has no denoising, Gibbs unringing, motion correction, susceptibility correction, bias-field correction, b-vector rotation, multi-shell fit, NODDI or BIDS folder reader.
+Before this design, the repository had no denoising, Gibbs unringing, motion correction, susceptibility correction, bias-field correction, b-vector rotation, multi-shell fit, NODDI or BIDS folder reader.
 
 ## Apps
 
 | App | Methods | Reference | Gate on the app's validation data (see Data) |
 | --- | --- | --- | --- |
-| `dwidenoise` | MP-PCA | MRtrix `dwidenoise` | noise map median relative difference < 2 %, denoised NRMSE < 1 % |
+| `dwidenoise` | Patch2Self version 1 (patch radius 0, OLS), a port of DIPY 1.12.1 | DIPY 1.12.1 `patch2self` | denoised NRMSE ≤ 1e-6 against DIPY version 1 in float64 on the slab oracle; on the stage 1 simulation, RMSE / raw noise 0.38 (i.i.d. noise) and 0.39 (spatially correlated noise) |
 | `degibbs` | subvoxel shift | MRtrix `mrdegibbs` | NRMSE < 1 % |
 | `n4` | N4 | ANTs `N4BiasFieldCorrection` | field correlation > 0.99 in mask |
 | `hmc` | NiFreeze (default), SHORELine | NiFreeze, QSIPrep | motion parameters within 0.2 mm and 0.2° per volume |
@@ -78,7 +78,8 @@ These rules are in the `gradients` crate with tests:
 | NODDI toolbox 1.05 | Artistic License 2.0 | port for `noddi`; its bundled `erfi.m` has no licence and is not ported |
 | NiFreeze | Apache-2.0 | port for `hmc` |
 | QSIPrep (SHORELine) | BSD-3-Clause | port for `hmc` |
-| MRtrix3 | MPL-2.0 | port for `dwidenoise` and `degibbs`; these crates stay MPL-2.0 per file |
+| MRtrix3 | MPL-2.0 | port for `degibbs`; that crate stays MPL-2.0 per file. Its `dwidenoise` (MP-PCA) is not ported (see the denoising decision) |
+| DIPY 1.12.1 | BSD-3-Clause | port of Patch2Self version 1 for `dwidenoise` (`exes/dwi/denoise`) |
 | ANTs | Apache-2.0 | already built to WebAssembly; add an N4 entry point |
 | sdcflows 2.17.1 | Apache-2.0 | port for `sdc` (SyN-SDC field fit); see the [SDC plan](dwi-sdc-plan.md) |
 | Synb0-DisCo code and weights | MIT | later, for `sdc` |
@@ -129,6 +130,17 @@ Absolute differences from AMICO 1.5.4 with its default 32761-direction table:
 The port uses the exact fibre direction; AMICO uses the nearest table direction, about 1° away.
 With AMICO's table direction the port agrees to a median of 2e-7 (`tests/oracle.rs`), so the remaining difference is that rounding, not the fit.
 
+### Denoising decision, 18 October 2026 (Q49, Q56)
+
+`dwidenoise` uses Patch2Self (Fadnavis et al. 2020), not MP-PCA.
+
+- MP-PCA is rejected. US10698065B2 (NYU and the University of Antwerp, in force to 2036) covers noise estimation from the PCA eigenvalue spectrum, and the source file of MRtrix `dwidenoise` carries an NYU notice that limits its use to non-commercial research, separate from MRtrix's MPL-2.0. The port does not read or use either.
+- The patent search (Q49) found no patent on Patch2Self. DIPY is BSD-3-Clause.
+- The port is DIPY 1.12.1 `patch2self` version 1, patch radius 0, ordinary least squares: each volume is predicted from the other volumes of its group (b0 or diffusion-weighted) by one regression over all voxels. Version 1 is a linear method with one exact answer, so the port can be held to DIPY bit for bit. DIPY's default version 3 uses random subsets and does not repeat from run to run (NRMSE 0.016 between two runs on the simulation).
+- DIPY 1.12.1 `model="ols"` centres the regressors in place (`copy_X=False`) and then predicts from the centred values, which adds a constant error to each volume (RMSE / raw 5.4 on the simulation). The port applies the fit to the original values, as `copy_X=True` does.
+- On the stage 1 simulation, Patch2Self version 1 gave RMSE / raw noise 0.38 with i.i.d. noise, near MP-PCA (0.36 to 0.40), and 0.39 with spatially correlated noise, where MP-PCA gave 0.96 to 0.99.
+- The float32 WebAssembly output on the ds005134 slab (67 × 92 × 10 × 137) equals the DIPY reference (`dwidenoise/validation`, with `copy_X=True`) bit for bit; the float64 port differs by at most 3.05e-5, the reference's own float32 rounding.
+
 ## Data
 
 All datasets are OpenNeuro, CC0, one subject each. Decided 18 October 2026 after a search of about 120 OpenNeuro diffusion datasets.
@@ -158,8 +170,8 @@ Status, 19 October 2026: the crates, the AMICO port, the `noddi` app and its com
 - a CI workflow that runs the `exes/dwi` tests, `check:wasm` and `tests/oracle.rs` with a pinned oracle file (without it the oracle test skips, which the data-gated test rule forbids);
 - the ds005134 example, after its upload to Hugging Face;
 - a size limit for the input: `readNiftiFrames` holds the whole series as Float32, about 500 MB for a full-brain ds005134 DWI plus its decompressed data (dwi2trx's `input-limits.ts` is the pattern; the limit belongs in the shared package).
-3. `dwidenoise`.
-4. `degibbs`.
+3. `dwidenoise`: done. Patch2Self version 1 (`exes/dwi/denoise`, `packages/dwidenoise`, `apps/dwidenoise`). Open: the command line, and the upload of the slab oracle to the Hugging Face dataset so that CI runs `tests/oracle.rs`.
+4. `degibbs`: done. A port of MRtrix 3.0.8 `mrdegibbs` (`exes/dwi/degibbs`, `packages/degibbs`, `apps/degibbs`). Open: the command line.
 5. `n4`, with an N4 entry point in the ANTs WebAssembly build.
 6. `hmc`: NiFreeze, then SHORELine.
 7. `sdc` with SyN-SDC. The [SDC port and validation plan](dwi-sdc-plan.md) gives the sdcflows 2.17.1 facts, the reference runs, the gate and the milestones.

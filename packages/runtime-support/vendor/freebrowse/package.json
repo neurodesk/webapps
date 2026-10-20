@@ -53,7 +53,7 @@
   "peerDependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@niivue/niivue": "1.0.0-rc.17"
+    "@niivue/niivue": "1.0.0-rc.26"
   },
   "peerDependenciesMeta": {
     "react": {

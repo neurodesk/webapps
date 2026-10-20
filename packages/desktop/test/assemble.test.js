@@ -26,7 +26,8 @@ async function fixture(t) {
   }
   await symlink(join(repoRoot, 'node_modules'), join(root, 'node_modules'), 'junction');
   const registry = await loadAppsRegistry();
-  const apps = registry.apps.filter(app => ['dicom2vid', 'zarro'].includes(app.id));
+  const apps = registry.apps.filter(app => ['dicom2vid', 'zarro'].includes(app.id))
+    .map(app => ({ ...app, remote_compute: app.remote_compute || undefined }));
   const emptyAssets = Object.fromEntries(apps.map(app => [app.id, []]));
   const catalog = JSON.parse(await readFile(join(repoRoot, 'registry/standalone.json')));
   await mkdir(join(root, 'registry'));

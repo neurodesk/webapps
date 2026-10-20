@@ -1,0 +1,18 @@
+N4 bias-field correction library
+Copyright 2026 Neurodesk contributors
+
+wasm/n4-bias.wasm is ANTs N4BiasFieldCorrection compiled to WebAssembly.
+Advanced Normalization Tools (ANTs), Apache-2.0, ANTsX contributors.
+https://github.com/ANTsX/ANTs
+ANTs source: 52bc0ab588102682587303d31c720de94e6ef6c1 (2.6.2), as packages/registration.
+ITK: Insight Software Consortium / NumFOCUS, Apache-2.0.
+Build toolchain: itkwasm/emscripten@sha256:d6c35290a9f1c5cfeb8168c18bbf64d78394cd111b6a19c6091921e98a3aaa1d
+
+src/index.js follows the DWI procedure of MRtrix3 dwibiascorrect ants
+(lib/mrtrix3/dwibiascorrect/ants.py, Copyright (c) 2008-2025 the MRtrix3
+contributors, Mozilla Public License v. 2.0): N4 on the mean b0 with the
+brain mask as weights, a global rescaling of the field to keep the brain
+integral, and division of every volume by the field.
+
+Tustison NJ, Avants BB, Cook PA, et al. (2010). N4ITK: improved N3 bias
+correction. IEEE Trans Med Imaging 29(6):1310-1320.

@@ -4,34 +4,144 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/runtime-support@0.9.5
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/synthseg@0.11.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/runtime-support@0.9.4
+  - @neurodesk/synthseg@0.11.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [14b8248]
+
 - Updated dependencies [d9718cd]
-- Updated dependencies [c1a4dda]
-- Updated dependencies [1f4aecd]
-- Updated dependencies [3329c39]
-- Updated dependencies [46935f7]
+
 - Updated dependencies [d1fa022]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/runtime-support@0.9.3
+  - @neurodesk/synthseg@0.11.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [c1a4dda]
+
+- Updated dependencies [1f4aecd]
+
+- Updated dependencies [3329c39]
+
+- Updated dependencies [46935f7]
+
+- Updated dependencies [d1fa022]
+
   - @neurodesk/webapp-components@0.16.0
   - @neurodesk/runtime-support@0.8.0
   - @neurodesk/synthseg@0.11.20261020
+
+- Updated dependencies [d1fa022]
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/runtime-support@0.9.3
+  - @neurodesk/synthseg@0.11.20261020
+
+## 0.11.20261019
+
+### Patch Changes
+
+- Updated dependencies [da2584b]
+  - @neurodesk/runtime-support@0.9.2
+  - @neurodesk/synthseg@0.11.20261019
 
 ## 0.11.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/runtime-support@0.9.1
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/runtime-support@0.9.0
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [a07f659]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/runtime-support@0.7.2
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/synthseg@0.11.20261018
+
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/runtime-support@0.7.1
   - @neurodesk/synthseg@0.11.20261018
+
 - Updated dependencies [67a5a8f]
+
 - Updated dependencies [b8b37d6]
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
 - Updated dependencies [67a5a8f]
+
   - @neurodesk/runtime-support@0.7.0
   - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/runtime-support@0.9.1
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/runtime-support@0.9.0
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/runtime-support@0.7.2
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/synthseg@0.11.20261018
+
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/runtime-support@0.7.1
   - @neurodesk/synthseg@0.11.20261018
 
 ## 0.11.20261017
@@ -43,7 +153,9 @@
 ### Patch Changes
 
 - 38b2b4b: Keep the raw volume table visible and explain why when the population volume report cannot be computed or its reference cannot be loaded.
+
 - Updated dependencies [b547d52]
+
 - Updated dependencies [ad1a2ac]
   - @neurodesk/webapp-components@0.14.3
   - @neurodesk/synthseg@0.11.20261017
@@ -54,16 +166,27 @@
 ### Patch Changes
 
 - Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.14.2
+  - @neurodesk/runtime-support@0.6.3
+  - @neurodesk/synthseg@0.10.20261016
+
+- 6ec972a: Pin the IXI and AHEAD volume norms to neurocontainers commit 347cf6fb, the merge of the 7 T reference into main. The files are byte-identical to the previous pin, so every report is unchanged; only the population data version shown in the report and About changes.
+
+- Updated dependencies [7443048]
+
+- Updated dependencies [6ec972a]
+
+  - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/synthseg@0.10.20261016
+  - @neurodesk/runtime-support@0.6.2
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/runtime-support@0.6.3
   - @neurodesk/synthseg@0.10.20261016
-- 6ec972a: Pin the IXI and AHEAD volume norms to neurocontainers commit 347cf6fb, the merge of the 7 T reference into main. The files are byte-identical to the previous pin, so every report is unchanged; only the population data version shown in the report and About changes.
-- Updated dependencies [7443048]
-- Updated dependencies [6ec972a]
-  - @neurodesk/webapp-components@0.14.1
-  - @neurodesk/synthseg@0.10.20261016
-  - @neurodesk/runtime-support@0.6.2
 
 ## 0.10.20261015
 
@@ -78,10 +201,17 @@
 ### Patch Changes
 
 - Clarify that the volume report records the DICOM-derived scanner field strength and reference choice alongside age and sex. The Privacy dialog and README now describe these fields accurately; the original sidecar is not included in the downloaded report.
+
   - @neurodesk/synthseg@0.10.20261015
+
 - Updated dependencies [c74b26f]
+
 - Updated dependencies [03beb9e]
+
   - @neurodesk/runtime-support@0.6.1
+  - @neurodesk/synthseg@0.10.20261015
+
+- Clarify that the volume report records the DICOM-derived scanner field strength and reference choice alongside age and sex. The Privacy dialog and README now describe these fields accurately; the original sidecar is not included in the downloaded report.
   - @neurodesk/synthseg@0.10.20261015
 
 ## 0.9.20261015
@@ -125,9 +255,13 @@
   restore loaded examples.
 
 - e1643c5: The Windows command-line build keeps the population norms fixture byte for byte, so its checksum test passes and the Windows archive is published again.
+
 - Updated dependencies [0569da8]
+
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
+
 - Updated dependencies [db746d4]
   - @neurodesk/runtime-support@0.6.0
   - @neurodesk/webapp-components@0.14.0
@@ -163,7 +297,9 @@
 ### Patch Changes
 
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/synthseg@0.8.20261014
   - @neurodesk/runtime-support@0.5.0
@@ -180,6 +316,7 @@
 - Give the IXI population norms an explicit data version tied to their immutable
   source commit. Show the version above the volume charts and in About, and include
   it with the source URL and checksum in saved reports.
+
 - Updated dependencies
   - @neurodesk/synthseg@0.7.20261014
 
@@ -197,12 +334,20 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.12.2
   - @neurodesk/runtime-support@0.4.2
   - @neurodesk/synthseg@0.6.20261010
+
 - Updated dependencies
+
   - @neurodesk/runtime-support@0.4.1
   - @neurodesk/webapp-components@0.12.1
+  - @neurodesk/synthseg@0.6.20261010
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.12.2
+  - @neurodesk/runtime-support@0.4.2
   - @neurodesk/synthseg@0.6.20261010
 
 ## 0.6.20261009
@@ -214,8 +359,11 @@
 ### Patch Changes
 
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
+
 - Updated dependencies [64ffefa]
+
 - Updated dependencies [c86d242]
   - @neurodesk/webapp-components@0.12.0
   - @neurodesk/runtime-support@0.3.0
@@ -226,16 +374,33 @@
 ### Patch Changes
 
 - Updated dependencies [16041b5]
+
 - Updated dependencies [22aa4bf]
+
   - @neurodesk/synthseg@0.5.20261007
   - @neurodesk/webapp-components@0.11.1
   - @neurodesk/runtime-support@0.2.1
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.11.0
   - @neurodesk/runtime-support@0.2.0
   - @neurodesk/synthseg@0.5.20261007
+
 - Updated dependencies [70f2770]
+
   - @neurodesk/webapp-components@0.10.2
+  - @neurodesk/synthseg@0.5.20261007
+
+- Updated dependencies [22aa4bf]
+
+  - @neurodesk/synthseg@0.5.20261007
+  - @neurodesk/webapp-components@0.11.1
+  - @neurodesk/runtime-support@0.2.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.11.0
+  - @neurodesk/runtime-support@0.2.0
   - @neurodesk/synthseg@0.5.20261007
 
 ## 0.5.20261005
@@ -243,6 +408,7 @@
 ### Patch Changes
 
 - Share native result publication between SynthSR and SynthSeg. Clean up newly created temporary files after failed writes while preserving each caller’s publication order and overwrite policy. Keep native path bytes when naming sibling temporaries.
+
 - Updated dependencies
   - @neurodesk/synthseg@0.5.20261005
 
@@ -252,25 +418,57 @@
 
 - Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
   including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+
 - Updated dependencies
+
   - @neurodesk/synthseg@0.5.20261004
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.10.1
   - @neurodesk/synthseg@0.5.20261004
+
 - c164941: Correct the FreeSurfer labels in the viewer before downloading them. Edit on the result row opens the shared mask editor with a Label select that names each FreeSurfer structure, such as `17 — Left-Hippocampus`. Apply marks the row as edited, and Download then saves the edited labels as a uint8 NIfTI on SynthSeg's grid. The JSON report keeps the pipeline's labels and volumes. When the input image is not on SynthSeg's 1 mm grid, the editor shows the input resampled to that grid and the status bar says so. The overlay opacity slider no longer throws. It called `setOpacity`, which NiiVue 1.0 does not have, and now uses `setVolume`.
+
 - Updated dependencies [0204fe1]
+
 - Updated dependencies [ec85a09]
+
   - @neurodesk/webapp-components@0.10.0
   - @neurodesk/synthseg@0.5.20261004
+
 - Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
   SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
   scaling and geometry rules.
+
 - Updated dependencies [257192b]
+
   - @neurodesk/runtime-support@0.1.3
   - @neurodesk/synthseg@0.5.20261004
+
 - Share SynthSR and SynthSeg worker model acquisition through fetchModel. Verify cached and downloaded weights before use, reject oversized streams early, and replace corrupt cached weights within the same run. Preserve SynthSR local model files, pinned hashes, progress allocation and worker cancellation. Restore app-specific connection and recovery guidance when model requests fail.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.9.0
+  - @neurodesk/synthseg@0.5.20261004
+
+- Updated dependencies
+
+  - @neurodesk/synthseg@0.5.20261004
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.10.1
+  - @neurodesk/synthseg@0.5.20261004
+
+- Updated dependencies [ec85a09]
+
+  - @neurodesk/webapp-components@0.10.0
+  - @neurodesk/synthseg@0.5.20261004
+
+- Updated dependencies [257192b]
+  - @neurodesk/runtime-support@0.1.3
   - @neurodesk/synthseg@0.5.20261004
 
 ## 0.5.20261003
@@ -286,15 +484,21 @@
 ### Patch Changes
 
 - Updated dependencies
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.7.0
   - @neurodesk/synthseg@0.5.20260930
 
-### Patch Changes
-
 - 3fb0b87: One click on the labels Download button saved the file twice: the result list's download callback and a second `saveBtn.onclick` handler both fired. The button now downloads once, and batch jobs no longer fail with "Duplicate output".
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/synthseg@0.5.20260930
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.7.0
   - @neurodesk/synthseg@0.5.20260930
 
 ## 0.5.20260928
@@ -306,6 +510,21 @@
   Resolve QSM voxel-dependent defaults for supplied masks before reconstruction, so generated-mask and supplied-mask runs produce the same output. Add complete Mac scientific validation commands and evidence checks. The SynthSeg GPU buffer ceiling remains unchanged.
 
 - 3fb0b87: One click on the labels Download button saved the file twice: the result list's download callback and a second `saveBtn.onclick` handler both fired. The button now downloads once, and batch jobs no longer fail with "Duplicate output".
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.1
+  - @neurodesk/synthseg@0.5.20260928
+
+- Updated dependencies
+
+- Updated dependencies [93381e8]
+
+- Updated dependencies [93381e8]
+
+  - @neurodesk/webapp-components@0.6.0
+  - @neurodesk/synthseg@0.5.20260928
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.6.1
   - @neurodesk/synthseg@0.5.20260928
@@ -315,14 +534,6 @@
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- Updated dependencies
-- Updated dependencies [93381e8]
-- Updated dependencies [93381e8]
-  - @neurodesk/webapp-components@0.6.0
-  - @neurodesk/synthseg@0.5.20260928
 
 ## 0.4.20260928
 
@@ -362,20 +573,29 @@
 ### Patch Changes
 
 - Updated dependencies [4959500]
+
   - @neurodesk/webapp-components@0.4.4
   - @neurodesk/synthseg@0.3.20260920
 
-### Patch Changes
-
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.3
   - @neurodesk/synthseg@0.3.20260920
 
-### Patch Changes
-
 - efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.2
+  - @neurodesk/synthseg@0.3.20260920
+
+- Updated dependencies [4959500]
+
+  - @neurodesk/webapp-components@0.4.4
+  - @neurodesk/synthseg@0.3.20260920
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.3
   - @neurodesk/synthseg@0.3.20260920
 
 ## 0.3.20260918
@@ -389,6 +609,7 @@
   - @neurodesk/synthseg@0.3.20260918
 
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.0
   - @neurodesk/synthseg@0.3.20260918
@@ -398,6 +619,7 @@
 ### Patch Changes
 
 - Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.0
   - @neurodesk/synthseg@0.3.20260916
@@ -407,10 +629,24 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.2.2
   - @neurodesk/synthseg@0.3.20260915
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.1
+  - @neurodesk/synthseg@0.3.20260915
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.0
+  - @neurodesk/synthseg@0.3.20260915
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.2
+  - @neurodesk/synthseg@0.3.20260915
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.2.1
@@ -420,26 +656,26 @@
 
 - Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
 
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.2.0
-  - @neurodesk/synthseg@0.3.20260915
-
 ## 0.2.20260914
 
 ### Patch Changes
 
 - Updated dependencies [3cd773f]
+
 - Updated dependencies [4add8da]
+
   - @neurodesk/webapp-components@0.1.5
   - @neurodesk/runtime-support@0.1.2
   - @neurodesk/synthseg@0.2.20260914
 
-### Patch Changes
-
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.1.4
+  - @neurodesk/synthseg@0.2.20260914
+
+- Updated dependencies [4add8da]
+  - @neurodesk/webapp-components@0.1.5
+  - @neurodesk/runtime-support@0.1.2
   - @neurodesk/synthseg@0.2.20260914
 
 ## 0.2.20260910
@@ -447,6 +683,7 @@
 ### Minor Changes
 
 - Release the complete application catalog after integrating BrowserQC, dwi2trx and SynthSeg. Preserve shared interface behavior and publish bundles with synchronized date versions.
+
 - 3fe15c3: Add SynthSeg brain segmentation in the browser and native executable. Pin model assets, preserve oblique NIfTI geometry, and protect cancelled processing from stale results. Share GPU inference and the standard imaging workspace.
 
 ### Patch Changes

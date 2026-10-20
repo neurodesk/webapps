@@ -6,33 +6,33 @@ site:
     measurement_id: G-4Z9774J59Y
     period_days: 30
   categories:
-    - id: segmentation-analysis
-      title: Segmentation & Analysis
-      description: Identify anatomy and pathology, then turn images into useful measurements.
-    - id: quantitative-imaging
-      title: Quantitative Imaging
-      description: Create maps, derived images, and reproducible quantitative results.
+    - id: segmentation
+      title: Segmentation
+      description: Label anatomy and pathology, then measure what you labelled.
+    - id: lesion-mapping
+      title: Lesion Mapping
+      description: Place lesions in a standard space and find the regions, networks and tracts they affect.
+    - id: quantitative-mri
+      title: Quantitative MRI & Spectroscopy
+      description: Compute physical maps, flow curves and metabolite concentrations.
     - id: diffusion-imaging
-      title: Diffusion Imaging
+      title: Diffusion & Tractography
       description: Fit diffusion models and reconstruct white-matter pathways.
-    - id: image-processing
-      title: Image Processing
-      description: Transform images and apply image maths and statistical operations.
     - id: registration
-      title: Registration
-      description: Align images with each other.
-    - id: normalization
-      title: Normalization
-      description: Normalize scans and aligned maps to a standard reference space.
-    - id: data-preparation
-      title: Data Preparation & Privacy
-      description: Convert images, improve resolution, and remove identifying facial features.
+      title: Registration & Normalization
+      description: Align images with each other or with a standard template.
+    - id: reconstruction
+      title: Reconstruction & Synthesis
+      description: Build new images from motion-corrupted stacks or scans of another contrast.
+    - id: surfaces
+      title: Surfaces & Meshes
+      description: Reconstruct, annotate and 3D-print cortical surfaces and brain meshes.
+    - id: image-processing
+      title: Processing & Privacy
+      description: Apply image maths, extract the brain and remove identifying facial features.
     - id: visualization
       title: Visualization
-      description: Explore volumes and surfaces and create videos and printable views.
-    - id: surfaces
-      title: Surfaces
-      description: Reconstruct cortical surfaces and annotate surface regions.
+      description: Explore large volumes and surfaces and make slice videos.
     - id: quality-control
       title: Quality Control
       description: Check image quality and compare acquisition protocols.
@@ -41,9 +41,13 @@ apps:
   - id: musclemap
     path: musclemap
     title: MuscleMap
-    description: Browser-based muscle segmentation and fat metrics.
-    categories: [segmentation-analysis]
-    keywords: [muscle, MRI, segmentation, fat, Dixon, IMF, body composition]
+    description: Segment muscles in MRI or CT and measure fat.
+    categories: [segmentation]
+    keywords: [muscle, body composition, fat fraction, intramuscular fat, IMF, Dixon, whole body, MuscleMap]
+    anatomy: [whole-body]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: musclemap.neurodesk.org
     runtime: static-esm
     model_manifest: models/musclemap.manifest.json
@@ -63,9 +67,13 @@ apps:
   - id: vesselboost
     path: vesselboost
     title: VesselBoost
-    description: Browser-based blood-vessel segmentation.
-    categories: [segmentation-analysis]
-    keywords: [blood vessels, vasculature, MRI, segmentation, vessel enhancement]
+    description: Segment brain blood vessels in TOF or SWI images.
+    categories: [segmentation]
+    keywords: [blood vessels, vasculature, angiography, TOF MRA, SWI, vessel enhancement, VesselBoost]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: vesselboost.neurodesk.org
     runtime: static-esm-rust
     model_manifest: models/vesselboost.manifest.json
@@ -84,9 +92,14 @@ apps:
   - id: spinalcordtoolbox
     path: sct
     title: Spinal Cord Toolbox
-    description: Browser-native spinal cord MRI segmentation workflows.
-    categories: [segmentation-analysis]
-    keywords: [spinal cord, MRI, segmentation, anatomy, SCT]
+    description: Segment and measure the spinal cord, lesions and vertebrae.
+    categories: [segmentation]
+    keywords: [spinal cord, gray matter, multiple sclerosis, spinal cord injury, vertebrae, morphometry, TotalSpineSeg, SCT]
+    anatomy: [spinal-cord]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    remote_compute: true
     legacy_domain: sct.neurodesk.org
     runtime: static-esm
     model_manifest: models/spinalcordtoolbox.manifest.json
@@ -106,9 +119,13 @@ apps:
   - id: calmar
     path: calmar
     title: CALMaR
-    description: Co-designed Automated Lesion Mapping and Reporting.
-    categories: [segmentation-analysis]
-    keywords: [lesion, mapping, reporting, MRI, segmentation]
+    description: Map a stroke lesion to the brain networks it affects.
+    categories: [lesion-mapping]
+    keywords: [stroke, lesion, lesion network mapping, connectivity, Schaefer, Yeo networks, SynthStroke, DeepISLES, SynthMorph, MNI]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: calmar.neurodesk.org
     runtime: static-esm
     model_manifest: apps/calmar/web/models/manifest.json
@@ -127,9 +144,14 @@ apps:
   - id: qsmbly
     path: qsmbly
     title: QSMbly
-    description: Quantitative Susceptibility Mapping in the browser.
-    categories: [quantitative-imaging]
-    keywords: [QSM, susceptibility, phase, MRI, quantitative mapping]
+    description: Make QSM, R2* and SWI maps from multi-echo MRI.
+    categories: [quantitative-mri]
+    keywords: [QSM, susceptibility, phase, R2*, T2*, SWI, multi-echo, phase unwrapping, iron, rodent]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    handoff: dicom
     legacy_domain: qsmbly.neurodesk.org
     runtime: rust-wasm
     model_manifest: models/qsmbly.manifest.json
@@ -138,7 +160,6 @@ apps:
     license: MIT
     maintainers: [astewartau]
     support_status: active
-    handoff: dicom
     shell: static-html
     app_scoped_runtime_families: [dcm2niix]
     ci:
@@ -149,9 +170,13 @@ apps:
   - id: seedseg
     path: seedseg
     title: SeedSeg
-    description: Prostate fiducial-marker segmentation in the browser.
-    categories: [segmentation-analysis]
-    keywords: [prostate, fiducial marker, segmentation, MRI, radiotherapy]
+    description: Find gold fiducial markers in prostate MRI.
+    categories: [segmentation]
+    keywords: [prostate, fiducial marker, gold seed, radiotherapy, T1-weighted]
+    anatomy: [prostate]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: seedseg.neurodesk.org
     runtime: static-esm
     model_manifest: models/seedseg.manifest.json
@@ -170,9 +195,14 @@ apps:
   - id: dicompare
     path: dicompare
     title: dicompare
-    description: DICOM protocol comparison, validation, and schema tooling.
+    description: Check DICOM acquisitions against a reference protocol.
     categories: [quality-control]
-    keywords: [DICOM, protocol, comparison, validation, schema, metadata]
+    keywords: [protocol, compliance, harmonization, schema, metadata, acquisition parameters, multi-site]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [dicom]
+    hardware: cpu
+    handoff: dicom
     legacy_domain: dicompare.neurodesk.org
     runtime: react-vite
     model_manifest: null
@@ -181,7 +211,6 @@ apps:
     license: NOASSERTION
     maintainers: [astewartau]
     support_status: active
-    handoff: dicom
     shell: react
     ci:
       toolchains: [node]
@@ -191,9 +220,13 @@ apps:
   - id: deface
     path: deface
     title: Deface
-    description: Privacy-preserving MRI defacing entirely in the browser.
-    categories: [data-preparation]
-    keywords: [defacing, anonymisation, anonymization, privacy, MRI, de-identification]
+    description: Remove facial features from head MRI for sharing.
+    categories: [image-processing]
+    keywords: [defacing, anonymisation, anonymization, de-identification, privacy, data sharing, MindGrab]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: niivue.github.io/deface
     runtime: vite-webgpu
     app_scoped_runtime_families: [mindgrab-20260925]
@@ -212,9 +245,13 @@ apps:
   - id: easy-mp2rage
     path: easy-mp2rage
     title: Easy MP2RAGE T1 Map
-    description: MP2RAGE T1 mapping, B1 correction and denoising.
-    categories: [quantitative-imaging]
-    keywords: [MP2RAGE, T1 mapping, B1 correction, UNI, denoising, MRI]
+    description: Make B1-corrected T1 maps and denoised MP2RAGE images.
+    categories: [quantitative-mri]
+    keywords: [MP2RAGE, T1 mapping, relaxometry, B1 correction, SA2RAGE, UNI denoising, 7T]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: thomshaw92.github.io/Easy-MP2RAGE-T1-Map
     runtime: rust-wasm
     app_scoped_runtime_families: [dcm2niix]
@@ -233,9 +270,13 @@ apps:
   - id: niimath
     path: niimath
     title: NiiMath
-    description: Interactive neuroimaging maths and visualization.
+    description: Apply image maths, filters and meshing with niimath.
     categories: [image-processing]
-    keywords: [NIfTI, image maths, image processing, visualization, MRI, statistics]
+    keywords: [image maths, fslmaths, filtering, thresholding, smoothing, statistics, mesh, niimath]
+    anatomy: [any]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: niivue.github.io/niivue-niimath
     runtime: vite-wasm
     model_manifest: models/niimath.manifest.json
@@ -255,7 +296,11 @@ apps:
     title: MRI2VID
     description: Convert DICOM, NIfTI or MGZ volumes into scrolling videos.
     categories: [visualization]
-    keywords: [DICOM, NIfTI, MGZ, video, conversion, volume]
+    keywords: [video, MP4, WebM, slices, teaching, presentation, conversion]
+    anatomy: [any]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti, mgz]
+    hardware: cpu
     legacy_domain: thomshaw92.github.io/DICOM2Vid
     runtime: static-esm
     model_manifest: null
@@ -273,9 +318,13 @@ apps:
   - id: browserqc
     path: browserqc
     title: BrowserQC
-    description: Automated MRI segmentation and image-quality metrics.
+    description: Measure MRIQC-style quality metrics on T1-weighted MRI.
     categories: [quality-control]
-    keywords: [quality control, QC, MRI, segmentation, metrics, review]
+    keywords: [quality control, QC, MRIQC, SNR, CNR, image quality metrics, manual rating, tissue segmentation]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: neurolabusc.github.io/BrowserQC
     runtime: vite-webgpu
     app_scoped_runtime_families: [mindgrab-20260925]
@@ -295,9 +344,14 @@ apps:
   - id: surfannotate
     path: surfannotate
     title: SurfAnnotate
-    description: Cortical surface viewer for ROI and vertex annotation.
-    categories: [visualization, surfaces]
-    keywords: [cortical surface, annotation, ROI, mesh, vertex, FreeSurfer]
+    description: View cortical surfaces and draw regions of interest.
+    categories: [surfaces, visualization]
+    keywords: [cortical surface, annotation, ROI, label, parcellation, vertex, retinotopy, FreeSurfer, GIfTI, CIFTI]
+    anatomy: [brain]
+    modalities: [surface]
+    inputs: [freesurfer, gifti, mesh]
+    hardware: cpu
+    handoff: none
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -306,7 +360,6 @@ apps:
     license: MIT
     maintainers: [felenitaribeiro]
     support_status: active
-    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -316,9 +369,14 @@ apps:
   - id: zarro
     path: zarro
     title: ZARRo
-    description: Stream and explore multiscale OME-Zarr volumes.
+    description: Stream, view and measure large OME-Zarr images.
     categories: [visualization]
-    keywords: [OME-Zarr, Zarr, microscopy, DANDI, multiscale, volume, visualization, measurement]
+    keywords: [OME-Zarr, Zarr, microscopy, DANDI, multiscale, streaming, measurement, large volumes]
+    anatomy: [any]
+    modalities: [microscopy]
+    inputs: [ome-zarr]
+    hardware: cpu
+    handoff: none
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -327,7 +385,6 @@ apps:
     license: BSD-2-Clause
     maintainers: [neurodesk]
     support_status: active
-    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -338,8 +395,12 @@ apps:
     path: synthsr
     title: SynthSR
     description: Synthesize a 1 mm T1-weighted image from brain MRI or CT.
-    categories: [data-preparation]
-    keywords: [SynthSR, MRI, CT, super-resolution, T1]
+    categories: [reconstruction]
+    keywords: [image synthesis, super-resolution, contrast conversion, T1-weighted, clinical scans, SynthSR]
+    anatomy: [brain]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: models/synthsr.manifest.json
@@ -360,9 +421,13 @@ apps:
   - id: synthseg
     path: synthseg
     title: SynthSeg
-    description: Segment brain MRI into FreeSurfer labels.
-    categories: [segmentation-analysis]
-    keywords: [SynthSeg, MRI, CT, segmentation, FreeSurfer, WebGPU]
+    description: Label brain structures in MRI or CT of any contrast.
+    categories: [segmentation]
+    keywords: [brain segmentation, parcellation, volumetry, brain volumes, FreeSurfer labels, normative, SynthSeg]
+    anatomy: [brain]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-required
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: models/synthseg.manifest.json
@@ -382,9 +447,13 @@ apps:
   - id: syncro
     path: syncro
     title: SYNcro
-    description: Normalize brain scans and aligned lesion maps to MNI space.
-    categories: [normalization]
-    keywords: [SYNcro, SynthSR, MindGrab, Brainchop, SynthStrip, ANTs, MNI, registration]
+    description: Normalize brain scans and lesion masks to MNI space.
+    categories: [registration, lesion-mapping]
+    keywords: [normalization, spatial normalization, MNI, template, stroke, lesion, SynthSR, MindGrab, SynthStrip, Greedy, ANTs]
+    anatomy: [brain]
+    modalities: [mri, ct]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: models/syncro.manifest.json
@@ -404,9 +473,14 @@ apps:
   - id: dwi2trx
     path: dwi2trx
     title: dwi2trx
-    description: Diffusion tensor fitting and GPU streamline tractography.
+    description: Fit diffusion tensors and track white-matter streamlines.
     categories: [diffusion-imaging]
-    keywords: [diffusion MRI, DTI, tractography, TRX, WebGPU, DICOM]
+    keywords: [diffusion MRI, DTI, tensor, FA, MD, tractography, streamlines, white matter, TRX, gradient scheme]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-required
+    handoff: dicom
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -415,7 +489,6 @@ apps:
     license: NOASSERTION
     maintainers: [neurodesk]
     support_status: active
-    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -426,9 +499,13 @@ apps:
   - id: edgereg
     path: edgereg
     title: EdgeReg
-    description: Affine MRI registration in the browser with niimath.
+    description: Align two brain images with fast affine registration.
     categories: [registration]
-    keywords: [registration, affine, NIfTI, niimath, NiiVue]
+    keywords: [registration, alignment, affine, niimath, allineate]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -446,9 +523,13 @@ apps:
   - id: disconnectome
     path: disconnectome
     title: Disconnectome
-    description: Score which white-matter bundles a lesion disconnects.
-    categories: [segmentation-analysis]
-    keywords: [lesion, disconnection, tractography, white matter, ENIGMA, HCP1065, stroke]
+    description: Find which white-matter bundles a lesion disconnects.
+    categories: [lesion-mapping, diffusion-imaging]
+    keywords: [disconnection, lesion, stroke, white matter, tractography, bundles, ENIGMA, HCP1065]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: models/disconnectome.manifest.json
@@ -468,7 +549,11 @@ apps:
     title: Greedy
     description: Affine and deformable MRI registration with Greedy.
     categories: [registration]
-    keywords: [registration, affine, deformable, NIfTI, Greedy]
+    keywords: [registration, alignment, affine, deformable, nonlinear, warp, Greedy]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -489,7 +574,11 @@ apps:
     title: ANTs
     description: Affine and SyN diffeomorphic MRI registration with ANTs.
     categories: [registration]
-    keywords: [registration, SyN, diffeomorphic, affine, NIfTI, ANTs]
+    keywords: [registration, alignment, affine, SyN, diffeomorphic, nonlinear, warp, ANTs]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -508,9 +597,13 @@ apps:
   - id: brain2print
     path: brain2print
     title: Brain2Print
-    description: Create printable brain meshes from NIfTI or DICOM scans.
-    categories: [visualization]
-    keywords: [brain, mri, segmentation, mesh, 3d-printing]
+    description: Make a 3D-printable brain model from an MRI scan.
+    categories: [surfaces]
+    keywords: [3D printing, mesh, STL, OBJ, brain model, segmentation, MindGrab]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -529,9 +622,13 @@ apps:
   - id: topofit
     path: topofit
     title: TopoFit
-    description: Reconstruct cortical white, pial and registration surfaces.
-    categories: [visualization, surfaces]
-    keywords: [TopoFit, cortical surface, MRI, FreeSurfer, BrainNet, ONNX]
+    description: Reconstruct white and pial cortical surfaces from T1 MRI.
+    categories: [surfaces]
+    keywords: [cortical surface, surface reconstruction, pial, white matter surface, cortical thickness, FreeSurfer, TopoFit]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: packages/topofit/model.manifest.json
@@ -552,7 +649,11 @@ apps:
     title: FireANTs
     description: Register brain images with CPU or WebGPU FireANTs.
     categories: [registration]
-    keywords: [FireANTs, registration, SyN, greedy, WebGPU, MRI, NIfTI]
+    keywords: [registration, alignment, affine, deformable, SyN, greedy, GPU, FireANTs]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -571,9 +672,13 @@ apps:
   - id: brain-extraction
     path: brain-extraction
     title: Brain extraction
-    description: Brain extraction with BET, MindGrab or SynthStrip.
-    categories: [segmentation-analysis, data-preparation]
-    keywords: [brain, skull-stripping, BET, MindGrab, SynthStrip]
+    description: Remove the skull with BET, MindGrab or SynthStrip.
+    categories: [segmentation, image-processing]
+    keywords: [skull stripping, brain extraction, brain mask, BET, MindGrab, SynthStrip]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null
@@ -592,9 +697,14 @@ apps:
   - id: carotid-flow
     path: carotid-flow
     title: Carotid Flow
-    description: Carotid artery flow curves from phase-contrast MRI.
-    categories: [quantitative-imaging]
-    keywords: [phase contrast, carotid, blood flow, PC-MRI, pulsatility, cardiac gating]
+    description: Measure carotid blood flow from phase-contrast MRI.
+    categories: [quantitative-mri]
+    keywords: [phase contrast, PC-MRI, carotid, blood flow, velocity, pulsatility, cardiac gating]
+    anatomy: [neck]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    handoff: dicom
     legacy_domain: null
     runtime: react-vite
     model_manifest: null
@@ -603,7 +713,6 @@ apps:
     license: NOASSERTION
     maintainers: [neurodesk]
     support_status: experimental
-    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -613,9 +722,14 @@ apps:
   - id: lcmodel
     path: lcmodel
     title: LCModel
-    description: Single-voxel MRS quantification with FID-A and LCModel.
-    categories: [quantitative-imaging]
-    keywords: [MRS, spectroscopy, LCModel, FID-A, metabolites, NAA, creatine, basis set, quantification]
+    description: Measure brain metabolites from single-voxel MRS.
+    categories: [quantitative-mri]
+    keywords: [MRS, spectroscopy, metabolites, LCModel, FID-A, MEGA-PRESS, GABA, NAA, basis set, twix, SPAR/SDAT, P-file]
+    anatomy: [brain]
+    modalities: [mrs]
+    inputs: [dicom, nifti, mrs-raw]
+    hardware: cpu
+    handoff: none
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: models/lcmodel.manifest.json
@@ -624,7 +738,6 @@ apps:
     license: BSD-3-Clause
     maintainers: [neurodesk]
     support_status: experimental
-    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node, rust-wasm]
@@ -635,8 +748,12 @@ apps:
     path: white-matter-lesions
     title: White matter lesions
     description: Segment white matter lesions on FLAIR with FLAMeS.
-    categories: [segmentation-analysis]
-    keywords: [FLAIR, white matter hyperintensities, WMH, multiple sclerosis, lesion segmentation, FLAMeS, nnU-Net]
+    categories: [segmentation, lesion-mapping]
+    keywords: [FLAIR, white matter hyperintensities, WMH, multiple sclerosis, small vessel disease, lesion segmentation, FLAMeS, nnU-Net]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: models/white-matter-lesions.manifest.json
@@ -656,8 +773,13 @@ apps:
     path: nesvor
     title: NeSVoR
     description: Reconstruct a 3D fetal or neonatal brain from 2D MRI stacks.
-    categories: [data-preparation]
-    keywords: [NeSVoR, SVoRT, fetal MRI, slice-to-volume reconstruction, motion correction, neonatal MRI]
+    categories: [reconstruction]
+    keywords: [fetal MRI, neonatal, slice-to-volume reconstruction, motion correction, super-resolution, SVoRT, NeSVoR]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    remote_compute: true
     legacy_domain: null
     runtime: static-esm
     model_manifest: null
@@ -679,7 +801,11 @@ apps:
     title: elastix
     description: Rigid, affine and B-spline registration with elastix.
     categories: [registration]
-    keywords: [registration, elastix, affine, B-spline, OME-Zarr, TIFF, microscopy]
+    keywords: [registration, alignment, rigid, affine, B-spline, deformable, microscopy, OME-Zarr, TIFF, elastix]
+    anatomy: [any]
+    modalities: [mri, ct, microscopy]
+    inputs: [dicom, nifti, ome-zarr, tiff, itk]
+    hardware: cpu
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null
@@ -698,8 +824,12 @@ apps:
     path: dicomview
     title: DICOM View
     description: Browse DICOM series, images, headers and protocol.
-    categories: [visualization]
-    keywords: [DICOM, viewer, header, series, metadata, protocol, dcm2niix]
+    categories: [visualization, quality-control]
+    keywords: [DICOM, viewer, header, series, metadata, protocol, acquisition parameters, dcm2niix]
+    anatomy: [any]
+    modalities: [mri, ct]
+    inputs: [dicom]
+    hardware: cpu
     legacy_domain: null
     runtime: react-vite
     model_manifest: null
@@ -717,9 +847,14 @@ apps:
   - id: fastprep
     path: fastprep
     title: fastprep
-    description: fMRIPrep-style BOLD preprocessing in the browser.
+    description: Preprocess fMRI BOLD runs in the style of fMRIPrep.
     categories: [image-processing]
-    keywords: [fMRI, BOLD, preprocessing, fMRIPrep, BIDS, motion correction, distortion correction]
+    keywords: [fMRI, functional MRI, BOLD, preprocessing, fMRIPrep, BIDS, motion correction, distortion correction, task activation, GLM]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: webgpu-optional
+    handoff: none
     legacy_domain: null
     runtime: vite-webgpu
     model_manifest: null
@@ -728,7 +863,6 @@ apps:
     license: Apache-2.0
     maintainers: [neurodesk]
     support_status: experimental
-    handoff: none
     shell: imaging-workspace
     app_scoped_runtime_families: [ort-web-asyncify]
     ci:
@@ -740,9 +874,14 @@ apps:
   - id: noddi
     path: noddi
     title: NODDI
-    description: Diffusion tensor and NODDI maps from DWI in the browser.
+    description: Fit diffusion tensor and NODDI maps from diffusion MRI.
     categories: [diffusion-imaging]
     keywords: [diffusion MRI, DTI, NODDI, AMICO, FA, ICVF, ODI, WebAssembly]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    handoff: dicom
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null
@@ -751,7 +890,6 @@ apps:
     license: Apache-2.0 AND BSD-3-Clause
     maintainers: [neurodesk]
     support_status: experimental
-    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -761,9 +899,13 @@ apps:
   - id: degibbs
     path: degibbs
     title: Degibbs
-    description: Gibbs-ringing removal for MRI in the browser.
+    description: Remove Gibbs ringing from MRI scans.
     categories: [image-processing, diffusion-imaging]
     keywords: [Gibbs ringing, mrdegibbs, MRtrix, diffusion MRI, preprocessing, WebAssembly]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null
@@ -778,12 +920,93 @@ apps:
       shared_runtime: false
       browser_test: true
       release: false
+
+  - id: n4
+    path: n4
+    title: N4
+    description: Correct intensity bias fields in MRI scans.
+    categories: [image-processing, diffusion-imaging]
+    keywords: [bias field, N4, ANTs, dwibiascorrect, diffusion MRI, preprocessing, WebAssembly]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: webgpu-optional
+    legacy_domain: null
+    runtime: vite-wasm
+    app_scoped_runtime_families: [mindgrab-20260925]
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: Apache-2.0 AND MPL-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: dcm2niix
+    path: dcm2niix
+    title: dcm2niix
+    description: Convert scanner DICOM exports to anatomical and DWI BIDS.
+    categories: [image-processing]
+    keywords: [DICOM, NIfTI, BIDS, MRI, diffusion, conversion, dcm2niix]
+    anatomy: [any]
+    modalities: [mri]
+    inputs: [dicom]
+    hardware: cpu
+    handoff: dicom
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: MIT
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: dwidenoise
+    path: dwidenoise
+    title: Dwidenoise
+    description: Denoise diffusion MRI with Patch2Self.
+    categories: [image-processing, diffusion-imaging]
+    keywords: [denoising, Patch2Self, DIPY, diffusion MRI, preprocessing, WebAssembly]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [dicom, nifti]
+    hardware: cpu
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: BSD-3-Clause
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+
   - id: me-ica
     path: me-ica
     title: ME-ICA
     description: Multi-echo fMRI denoising with tedana's ME-ICA.
     categories: [image-processing]
     keywords: [multi-echo, fMRI, denoising, ICA, tedana, T2*, BOLD]
+    anatomy: [brain]
+    modalities: [mri]
+    inputs: [nifti]
+    hardware: cpu
+    handoff: none
     legacy_domain: null
     runtime: vite-wasm
     model_manifest: null

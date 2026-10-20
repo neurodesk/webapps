@@ -4,33 +4,128 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+- 14db080: DICOM View's "Open in White matter lesions" button is now an "Open in another webapp"
+  menu that lists every app of the site from the registry. Most apps receive the converted
+  NIfTI image; apps the registry marks `handoff: dicom` (dicompare, QSMbly, dwi2trx, NODDI,
+  Carotid Flow) receive the series' DICOM files, and `handoff: none` keeps an app that cannot
+  use a single series (Zarro, FastPrep, SurfAnnotate, LCModel) out of the menu. The shared shell
+  receives a handoff for every app the way a page drop opens files, through the app's own
+  inputs; dicompare opens the files as reference acquisitions, and White matter lesions
+  keeps its own receiver.
+
+  A multiframe DICOM whose frames lie in different planes, such as a scanner's MPR head
+  scout, which dcm2niix refuses, now shows each frame as its own correctly placed slice
+  instead of failing with exit code 2. `readDicomFrames` in `@neurodesk/dicom2vid` reads a
+  file's frames with their own position, orientation and pixel spacing.
+
+  Dropping files or a folder on the image now opens them. FreeBrowse draws NiiVue inside a
+  shadow root, so the page drop never saw the canvas and NiiVue swallowed the drop; the page
+  drop now reads the event's composed path. It also no longer routes files to the
+  automation contract's hidden input.
+
+  DICOM View opens series in the ACS layout, without the 3D render, with FreeBrowse's
+  panel closed.
+
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
 
 ## 0.15.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+
+- 6e46e80: Restore schema catalog and detail URLs on direct entry and reload on the composite GitHub Pages site, including browser-local schema IDs and external schema query URLs.
+
+- 45ae49a: Remove verified dead code from the unused-code report (#256): dicompare's unused technical-log helpers, QSMbly's duplicate `QsmEchoViewer` export and Deface's unused `@neurodesk/webapp-components` devDependency. The calmar and SCT task tests now import the modules they check by literal path.
+
+- Updated dependencies [2ae93ae]
+
+- Updated dependencies [ccb2970]
+
+- Updated dependencies [67a5a8f]
+
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+
 - Updated dependencies [b68209b]
   - @neurodesk/webapp-components@0.15.0
-- 6e46e80: Restore schema catalog and detail URLs on direct entry and reload on the composite GitHub Pages site, including browser-local schema IDs and external schema query URLs.
-- 45ae49a: Remove verified dead code from the unused-code report (#256): dicompare's unused technical-log helpers, QSMbly's duplicate `QsmEchoViewer` export and Deface's unused `@neurodesk/webapp-components` devDependency. The calmar and SCT task tests now import the modules they check by literal path.
-- Updated dependencies [2ae93ae]
-- Updated dependencies [ccb2970]
-- Updated dependencies [67a5a8f]
-  - @neurodesk/webapp-components@0.14.4
 
 ## 0.15.20261017
 
 ### Patch Changes
 
 - 5b32319: Keep the schema catalog and read-only viewer technical log reachable above the status footer, including multiline clipboard errors.
+
 - 0ca8624: Preserve empty contains constraints and arbitrary acquisition names in browser schema downloads. Report clipboard failures through the status footer and technical log on both workspace and schema viewer pages.
+
 - Report asynchronous UI failures through the status footer and technical log, retain awaited session loading, and allow failed thumbnail preparation to retry.
 
   Retain the command line's schema-generation Python after upstream moved web schema exports to JavaScript. Its generated schema and reference outputs are unchanged.
@@ -63,9 +158,15 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
 
 ## 0.15.20261015
 
@@ -79,6 +180,7 @@
 ### Patch Changes
 
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
 
@@ -87,7 +189,9 @@
 ### Patch Changes
 
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
 
@@ -103,18 +207,28 @@
 ### Patch Changes
 
 - Preserve original operation failures while draining GPU error scopes and reject failed DICOM field fallback tasks without hanging. Resolve correctness findings with switch scopes, safe own-property checks, equivalent regular expressions and documented optional cleanup/cache behavior. Surface actionable release, filesystem and schema preload failures; retain scientific literals and arithmetic.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.12.2
+
+- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.12.1
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.2
-- Declare workspace dependencies without expanding SYNcro portable runtime installations. Mark dicompare type imports explicitly and separate the unchanged NeSVoR reference validator from worker orchestration to remove dependency cycles.
-- Updated dependencies
-  - @neurodesk/webapp-components@0.12.1
 
 ## 0.14.20261009
 
 ### Patch Changes
 
 - 777c39f: State what dicompare actually requests in Privacy: on the website, the Pyodide runtime from cdn.jsdelivr.net, Python packages from PyPI, and Cloudflare Web Analytics page views, none carrying data from your files; the desktop and Standalone versions make none of these requests. Previously the app's own Privacy text said it used no analytics or external services.
+
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
   - @neurodesk/webapp-components@0.12.0
 
@@ -133,23 +247,48 @@
   - The worker rejects requests after five minutes of silence and recovers from a crashed worker; dialogs share one accessible modal with focus trapping; tooltips render above sticky table headers.
 
 - Updated dependencies [22aa4bf]
+
   - @neurodesk/webapp-components@0.11.1
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.11.0
+
+- Updated dependencies [70f2770]
+
+  - @neurodesk/webapp-components@0.10.2
+
+- Updated dependencies [22aa4bf]
+
+  - @neurodesk/webapp-components@0.11.1
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.11.0
-- Updated dependencies [70f2770]
-  - @neurodesk/webapp-components@0.10.2
 
 ## 0.14.20261004
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.10.1
+
 - Updated dependencies [0204fe1]
+
+- Updated dependencies [ec85a09]
+
+  - @neurodesk/webapp-components@0.10.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.9.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.10.1
+
 - Updated dependencies [ec85a09]
   - @neurodesk/webapp-components@0.10.0
-- Updated dependencies
-  - @neurodesk/webapp-components@0.9.0
 
 ## 0.14.20261003
 
@@ -163,13 +302,17 @@
 ### Patch Changes
 
 - Updated dependencies
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.7.0
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.2
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/webapp-components@0.7.0
 
 ## 0.14.20260929
 
@@ -183,7 +326,21 @@
 
 - ccece98: Keep populated reference and test-data controls from overlapping on narrow screens.
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.1
+
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
+- Updated dependencies
+
+- Updated dependencies [93381e8]
+
+- Updated dependencies [93381e8]
+
+  - @neurodesk/webapp-components@0.6.0
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.6.1
@@ -193,17 +350,6 @@
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
-
-  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
-
-- Updated dependencies
-- Updated dependencies [93381e8]
-- Updated dependencies [93381e8]
-  - @neurodesk/webapp-components@0.6.0
 
 ## 0.13.20260928
 
@@ -236,17 +382,23 @@
 ### Patch Changes
 
 - Updated dependencies [4959500]
+
   - @neurodesk/webapp-components@0.4.4
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.3
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.2
+
+- Updated dependencies [4959500]
+
+  - @neurodesk/webapp-components@0.4.4
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.3
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.4.2
 
 ## 0.13.20260918
 
@@ -258,6 +410,7 @@
   - @neurodesk/webapp-components@0.4.1
 
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.0
 
@@ -266,6 +419,7 @@
 ### Patch Changes
 
 - Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.0
 

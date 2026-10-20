@@ -9,10 +9,11 @@ import { injectCompositeTheme } from './lib/composite-theme.mjs';
 import { renderLandingPage } from './lib/landing-page.mjs';
 import { assembleRuntimeAssetStore } from './lib/runtime-assets.mjs';
 import { headersFile } from './lib/vite-app-config.mjs';
-import { stageStandaloneAssets } from './lib/standalone.mjs';
+import { loadStandalone, stageStandaloneAssets } from './lib/standalone.mjs';
 
 const registry = await loadAppsRegistry();
 const information = await loadAppInformation(registry);
+const standalone = await loadStandalone(registry);
 const siteDist = join(repoRoot, 'dist');
 const siteOrigin = `https://${registry.site.domain}`;
 
@@ -64,7 +65,7 @@ await cp(join(repoRoot, 'site/easter-eggs/vessel-surfer/dist'), join(siteDist, '
 
 await assembleRuntimeAssetStore({ repoRoot, siteDist, registry });
 
-await writeFile(join(siteDist, 'index.html'), renderLandingPage(registry));
+await writeFile(join(siteDist, 'index.html'), renderLandingPage(registry, standalone));
 await cp(join(repoRoot, 'site', 'landing.css'), join(siteDist, 'landing.css'));
 await cp(join(repoRoot, 'site', 'landing.js'), join(siteDist, 'landing.js'));
 for (const [name, sharedSource] of sharedSiteAssets) {

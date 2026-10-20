@@ -1,0 +1,15 @@
+# The dwidenoise app's WebAssembly module: a plain C ABI over dwi-denoise, no wasm-bindgen.
+# packages/dwidenoise/src/wasm.js drives it; packages/dwidenoise/scripts/build-wasm.sh builds it.
+[package]
+name = "denoise-wasm"
+version.workspace = true
+edition.workspace = true
+license = "BSD-3-Clause"
+rust-version.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+dwi-denoise = { path = "../denoise" }

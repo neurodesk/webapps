@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dwidenoise — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Input image</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose a DWI with its bval, optional bvec and sidecar, or DICOM files" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop NIfTI with bval, or DICOM files or folder</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Patch2Self denoising</summary>
+        <div class="nd-section-content">
+          <p class="nd-hint">Denoise before degibbs and motion correction.
+            <span class="nd-info-icon" tabindex="0" aria-label="About the volume groups">i<span class="nd-info-tooltip">Each volume is predicted from the other volumes of its group. Volumes with b below 50 s/mm² form the b0 group; the rest form the diffusion-weighted group, which needs at least 2 volumes. A single b0 is kept unchanged.</span></span>
+          </p>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Denoise</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <div id="resultList"></div>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop an image anywhere, or choose an example.</p>
+      </div>
+      <div class="nd-viewer-info"><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Denoising progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel denoising" aria-label="Cancel denoising" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>Dwidenoise removes noise from diffusion MRI in this browser with Patch2Self (Fadnavis et al. 2020), a self-supervised method that needs no noise model. Each volume is predicted by a linear regression on the other volumes of its group, b0 or diffusion-weighted, fitted over all voxels; noise that is independent between volumes cannot be predicted and so is removed. It is a port of DIPY 1.12.1 Patch2Self version 1 (patch radius 0, ordinary least squares); on a 137-volume test slab its float32 output equals DIPY's bit for bit, with DIPY's in-place centring defect corrected. There is no mask input: as in DIPY, every voxel is fitted. Denoise first, before Gibbs-ringing removal and before registration interpolates the data. The bval is required; a bvec and sidecar chosen with the image are passed through under the output's name.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

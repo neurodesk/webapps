@@ -6,6 +6,12 @@
 
 - d1fa022: SynthSR no longer runs on a software WebGPU adapter. fastprep chooses WebAssembly when the adapter is a fallback (SwiftShader on a VM or a hosted runner) or cannot bind the volume's largest buffer, and the SynthSR app starts on CPU there. The GPU buffer-limit message gives both sizes in MiB, so a need just above the limit no longer reads as "1.0 GiB but this device allows 1.0 GiB".
 
+## 0.6.20261019
+
+### Patch Changes
+
+- da2584b: SynthSR no longer runs on a software WebGPU adapter. fastprep chooses WebAssembly when the adapter is a fallback (SwiftShader on a VM or a hosted runner) or cannot bind the volume's largest buffer, and the SynthSR app starts on CPU there. The GPU buffer-limit message gives both sizes in MiB, so a need just above the limit no longer reads as "1.0 GiB but this device allows 1.0 GiB".
+
 ## 0.6.20261018
 
 ## 0.6.20261017
@@ -56,9 +62,15 @@
 ### Patch Changes
 
 - Updated dependencies [22aa4bf]
+
   - @neurodesk/runtime-support@0.2.1
+
 - Updated dependencies
+
   - @neurodesk/runtime-support@0.2.0
+
+- Updated dependencies [22aa4bf]
+  - @neurodesk/runtime-support@0.2.1
 
 ## 0.6.20261005
 
@@ -76,9 +88,11 @@
 
 - Share native affine inversion and RAS axis selection between SynthSR and SynthSeg,
   including SynthSeg WASM, while preserving each method's preprocessing and outputs.
+
 - Share raw NIfTI-1 header and scalar decoding between native SynthSR, native
   SynthSeg and SynthSeg WASM while preserving each reader's validation, precision,
   scaling and geometry rules.
+
 - Updated dependencies [257192b]
   - @neurodesk/runtime-support@0.1.3
 

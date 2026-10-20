@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 2,
+  "app": "dwidenoise",
+  "title": "Dwidenoise",
+  "description": "Patch2Self denoising of diffusion MRI (DIPY 1.12.1 version 1 port).",
+  "defaultOperation": "denoise",
+  "operations": {
+    "denoise": {
+      "title": "Denoise",
+      "description": "Predict every volume from the other volumes of its b0 or diffusion-weighted group.",
+      "mode": "batch",
+      "inputs": {
+        "image": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti",
+            "dicom"
+          ],
+          "description": "A 4D diffusion-weighted image, as NIfTI or DICOM",
+          "minimum": 1
+        },
+        "bval": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bval",
+            "bvals"
+          ],
+          "description": "FSL b-values; required for NIfTI input",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bvec": {
+          "source": "files",
+          "type": "neuro:gradients",
+          "formats": [
+            "bvec",
+            "bvecs"
+          ],
+          "description": "Optional gradient directions, passed through under the output's name",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {},
+      "artifacts": {
+        "image": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "space": "input",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bval": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "bvec": {
+          "type": "neuro:gradients",
+          "mediaType": "text/plain",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "sidecar": {
+          "type": "neuro:metadata",
+          "mediaType": "application/json",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

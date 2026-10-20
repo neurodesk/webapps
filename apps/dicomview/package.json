@@ -1,6 +1,6 @@
 {
   "name": "dicomview",
-  "version": "0.3.20261020",
+  "version": "0.4.20261020",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -16,7 +16,7 @@
     "@neurodesk/dicom2vid": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
-    "@niivue/niivue": "1.0.0-rc.17",
+    "@niivue/niivue": "1.0.0-rc.26",
     "dcmjs": "0.52.0"
   },
   "devDependencies": {

@@ -1,0 +1,31 @@
+{
+  "name": "@neurodesk/n4",
+  "version": "0.3.20261020",
+  "description": "ANTs N4 bias-field correction in WebAssembly, with MRtrix dwibiascorrect's DWI procedure",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0 AND MPL-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./module": "./wasm/n4-bias.mjs",
+    "./wasm": "./wasm/n4-bias.wasm"
+  },
+  "files": [
+    "src/*.js",
+    "wasm",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/n4"
+  }
+}

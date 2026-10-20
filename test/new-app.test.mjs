@@ -60,7 +60,9 @@ test('default invocation (pnpm new-app <name>) scaffolds and validates', async (
   assert.equal(app.title, 'demo-app');
   assert.equal(app.runtime, 'react-vite');
   assert.equal(app.shell, 'imaging-workspace');
-  assert.deepEqual(app.categories, ['data-preparation']);
+  assert.deepEqual(app.categories, ['image-processing']);
+  assert.deepEqual([...app.inputs], ['dicom', 'nifti']);
+  assert.equal(app.hardware, 'cpu');
   assert.equal(app.support_status, 'experimental');
   assert.equal(app.source, 'neurodesk/webapps@local');
   assert.deepEqual([...app.keywords], ['TODO']);
@@ -166,7 +168,7 @@ test('invalid --shell and --category are rejected against the loader enums', asy
   const category = await newApp(root, ['demo-app', '--category', 'bogus']);
   assert.notEqual(category.code, 0);
   assert.match(category.stderr, /Invalid --category 'bogus'/);
-  assert.match(category.stderr, /data-preparation/);
+  assert.match(category.stderr, /image-processing/);
   assert.equal(await exists(join(root, 'apps', 'demo-app')), false);
 });
 

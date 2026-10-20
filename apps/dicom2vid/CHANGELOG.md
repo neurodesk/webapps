@@ -4,28 +4,109 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/dicom2vid@0.5.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/dicom2vid@0.5.20261020
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
   - @neurodesk/dicom2vid@0.5.20261020
 
 ## 0.5.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [67a5a8f]
+
+- Updated dependencies [2ae93ae]
+
+- Updated dependencies [ccb2970]
+
+- Updated dependencies [67a5a8f]
+
+  - @neurodesk/dicom2vid@0.5.20261018
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/dicom2vid@0.5.20261018
+
 - Updated dependencies [b68209b]
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/dicom2vid@0.5.20261018
-- Updated dependencies [67a5a8f]
-- Updated dependencies [2ae93ae]
-- Updated dependencies [ccb2970]
-- Updated dependencies [67a5a8f]
-  - @neurodesk/dicom2vid@0.5.20261018
-  - @neurodesk/webapp-components@0.14.4
 
 ## 0.5.20261017
 
@@ -40,10 +121,17 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/dicom2vid@0.5.20261016
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/dicom2vid@0.5.20261016
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
   - @neurodesk/dicom2vid@0.5.20261016
 
 ## 0.5.20261015
@@ -76,9 +164,13 @@
   restore loaded examples.
 
 - 744ecdf: Preserve distinct DICOM records with identical file names. Verify browser MP4 frame content and download checksummed video references from pinned Hugging Face URLs.
+
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [bf4a4ae]
+
 - Updated dependencies [744ecdf]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
   - @neurodesk/dicom2vid@0.5.20261015
@@ -91,8 +183,11 @@
   repository-wide reference searches. The shared preview module no longer carries
   a second NIfTI parser and writer; NiftiUtils remains the only one. Outputs and
   behaviour are unchanged.
+
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
 
@@ -115,17 +210,15 @@
 
 - Publish the current automation contract and JSON Schema at both static build URLs, including clean builds without a prior development session. Refresh cached builds when the shared automation contract or browser adapter changes.
 
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
 ### Minor Changes
 
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
-
-  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
 
 ## 0.3.20260923
 

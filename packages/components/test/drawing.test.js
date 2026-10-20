@@ -72,17 +72,14 @@ test('editedFileName keeps NIfTI names and makes others NIfTI', () => {
   assert.equal(editedFileName('lesions'), 'lesions.nii');
 });
 
-// A stand-in for NiiVue's drawing layer: a save returns what was loaded, read
-// through `scramble` (voxel i comes from voxel scramble(i)) to mimic a bad load.
-function drawingLayer(scramble = (i) => i) {
+// A stand-in for NiiVue's drawing layer: a save returns what was loaded.
+function drawingLayer() {
   return {
     loads: 0,
     stored: null,
     put(bytes) {
       this.loads++;
-      const offset = parseNiftiHeader(bytes.buffer).voxOffset;
       this.stored = bytes.slice();
-      for (let i = 0; i < bytes.length - offset; i++) this.stored[offset + i] = bytes[offset + scramble(i)];
     },
   };
 }
@@ -169,7 +166,6 @@ test('legacy adapter drives NiiVue 0.x drawing calls', async () => {
   const save = ['saveImage', { filename: '', isSaveDrawing: true }];
   assert.deepEqual(nv.calls, [
     ['loadDrawingFromUrl', 2, false],
-    save,
     ['setDrawingEnabled', true],
     ['setPenValue', 3, false, 25],
     ['setPenValue', 0, false, 1],
@@ -216,26 +212,8 @@ test('1.0 adapter sets drawing properties and loads a uint8 File', async () => {
   assert.deepEqual(labelBytes(await drawing.export()), await expectedLabels());
   drawing.close();
   assert.equal(drawing.enabled, false);
-  assert.deepEqual(nv.calls, [['saveDrawing', ''], ['setVolume', 1, { opacity: 0 }], ['saveDrawing', ''], ['closeDrawing']]);
-  assert.equal(nv.layer.loads, 1, 'a load that round-trips is not measured');
-});
-
-test('a load that misplaces voxels is measured and undone', async () => {
-  // 1.0 rc.11 to rc.14 reorder a drawing on a permuted background; any bijection stands in for it.
-  const layer = drawingLayer((i) => (i * 5) % 24);
-  const nv = currentNv({ layer });
-  const drawing = createDrawingAdapter(nv);
-  assert.equal(await drawing.open(float32Mask()), true);
-  assert.deepEqual(labelBytes(await drawing.export()), await expectedLabels());
-  assert.equal(layer.loads, 3, 'the first load, one probe for 24 voxels, and the compensated load');
-});
-
-test('a load that cannot be undone closes the drawing and says why', async () => {
-  const nv = currentNv({ layer: drawingLayer(() => 0) });
-  const drawing = createDrawingAdapter(nv);
-  await assert.rejects(drawing.open(float32Mask()), /wrong voxels/);
-  assert.equal(drawing.enabled, false);
-  assert.deepEqual(nv.calls.at(-1), ['closeDrawing']);
+  assert.deepEqual(nv.calls, [['setVolume', 1, { opacity: 0 }], ['saveDrawing', ''], ['closeDrawing']]);
+  assert.equal(nv.layer.loads, 1);
 });
 
 test('a mask on another grid or one NiiVue refuses is not opened', async () => {

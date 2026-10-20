@@ -18,6 +18,39 @@ export const RUNTIMES = new Set([
 export const MAX_DESCRIPTION_LENGTH = 60;
 export const SHELLS = new Set(['static-html', 'imaging-workspace', 'react']);
 export const SUPPORT_STATUSES = new Set(['active', 'experimental', 'maintenance', 'retired']);
+// Landing-page facets. Labels are what the app cards show.
+export const ANATOMY = new Map([
+  ['brain', 'Brain'],
+  ['spinal-cord', 'Spinal cord'],
+  ['whole-body', 'Whole body'],
+  ['prostate', 'Prostate'],
+  ['neck', 'Neck'],
+  ['any', 'Any anatomy'],
+]);
+export const MODALITIES = new Map([
+  ['mri', 'MRI'],
+  ['ct', 'CT'],
+  ['mrs', 'MRS'],
+  ['microscopy', 'Microscopy'],
+  ['surface', 'Surfaces'],
+]);
+export const INPUT_FORMATS = new Map([
+  ['dicom', 'DICOM'],
+  ['nifti', 'NIfTI'],
+  ['mgz', 'MGZ'],
+  ['ome-zarr', 'OME-Zarr'],
+  ['tiff', 'TIFF'],
+  ['itk', 'NRRD/MHA/MINC'],
+  ['gifti', 'GIfTI'],
+  ['freesurfer', 'FreeSurfer'],
+  ['mesh', 'STL/OBJ/PLY'],
+  ['mrs-raw', 'Vendor MRS'],
+]);
+export const HARDWARE = new Map([
+  ['cpu', 'No GPU needed'],
+  ['webgpu-optional', 'WebGPU optional'],
+  ['webgpu-required', 'Needs WebGPU'],
+]);
 // What another app sends this one (packages/components/src/handoff): the converted NIfTI
 // image by default, the DICOM files it came from, or nothing for an app that cannot use a
 // single series (a URL-streaming viewer, a surface editor, a BIDS dataset pipeline).
@@ -73,6 +106,20 @@ export async function loadAppsRegistry(path = registryPath) {
     if (!Array.isArray(app.keywords) || app.keywords.length === 0
       || app.keywords.some((keyword) => typeof keyword !== 'string' || !keyword.trim())) {
       errors.push(`keywords must be a non-empty string array for ${app.id}`);
+    }
+    for (const [field, values] of [['anatomy', ANATOMY], ['modalities', MODALITIES], ['inputs', INPUT_FORMATS]]) {
+      const list = app[field];
+      if (!Array.isArray(list) || list.length === 0
+          || list.some((value) => !values.has(value))
+          || new Set(list).size !== list.length) {
+        errors.push(`${field} for ${app.id} must be a non-empty array of unique values from: ${[...values.keys()].join(', ')}`);
+      }
+    }
+    if (!HARDWARE.has(app.hardware)) {
+      errors.push(`hardware for ${app.id} must be one of: ${[...HARDWARE.keys()].join(', ')}`);
+    }
+    if (app.remote_compute !== undefined && app.remote_compute !== true) {
+      errors.push(`remote_compute for ${app.id} must be true or absent`);
     }
     if (!RUNTIMES.has(app.runtime)) errors.push(`invalid runtime for ${app.id}: ${app.runtime}`);
     if (!SHELLS.has(app.shell)) errors.push(`invalid shell for ${app.id}: ${app.shell}`);
@@ -156,6 +203,10 @@ export async function loadAppsRegistry(path = registryPath) {
       ci: Object.freeze({ browser_test: false, hardware_gpu: false, ...app.ci }),
       keywords: Object.freeze([...app.keywords]),
       categories: Object.freeze([...app.categories]),
+      anatomy: Object.freeze([...app.anatomy]),
+      modalities: Object.freeze([...app.modalities]),
+      inputs: Object.freeze([...app.inputs]),
+      remote_compute: app.remote_compute === true,
       app_scoped_runtime_families: Object.freeze([...(app.app_scoped_runtime_families ?? [])]),
     }))),
   });

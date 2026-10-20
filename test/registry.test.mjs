@@ -186,18 +186,48 @@ test('pnpm is the only workspace lockfile authority', async () => {
 });
 
 
-test('catalog assigns task categories and shares surface apps with Visualization', async () => {
+test('catalog assigns task categories and shares apps across related categories', async () => {
   const registry = await loadAppsRegistry();
   const expected = {
     dwi2trx: ['diffusion-imaging'],
     niimath: ['image-processing'],
-    syncro: ['normalization'],
+    syncro: ['registration', 'lesion-mapping'],
+    disconnectome: ['lesion-mapping', 'diffusion-imaging'],
     dicom2vid: ['visualization'],
-    surfannotate: ['visualization', 'surfaces'],
-    topofit: ['visualization', 'surfaces'],
+    surfannotate: ['surfaces', 'visualization'],
+    topofit: ['surfaces'],
+    lcmodel: ['quantitative-mri'],
   };
   for (const [id, categories] of Object.entries(expected)) {
     assert.deepEqual(registry.apps.find((app) => app.id === id).categories, categories);
+  }
+  for (const category of registry.site.categories) {
+    const count = registry.apps.filter((app) => app.categories.includes(category.id)).length;
+    assert.ok(count >= 2, `${category.id} must hold at least two apps`);
+  }
+});
+
+test('catalog descriptions do not repeat where apps run', async () => {
+  const registry = await loadAppsRegistry();
+  for (const app of registry.apps) {
+    assert.doesNotMatch(app.description, /browser|locally/i, `${app.id}: the site already says every app runs locally`);
+  }
+});
+
+test('registry rejects unknown or missing facets', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-facets-')), 'apps.yml');
+  for (const [field, value, message] of [
+    ['inputs', ['png'], /inputs for musclemap must be a non-empty array of unique values/],
+    ['anatomy', [], /anatomy for musclemap must be a non-empty array/],
+    ['modalities', ['mri', 'mri'], /modalities for musclemap must be a non-empty array of unique values/],
+    ['hardware', 'gpu', /hardware for musclemap must be one of/],
+    ['remote_compute', 'yes', /remote_compute for musclemap must be true or absent/],
+  ]) {
+    const copy = structuredClone(raw);
+    copy.apps[0][field] = value;
+    await writeFile(path, stringify(copy));
+    await assert.rejects(loadAppsRegistry(path), message);
   }
 });
 

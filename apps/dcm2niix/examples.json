@@ -1,0 +1,850 @@
+[
+  {
+    "id": "t1-mprage-dicom",
+    "label": "T1 MRI series (120 DICOM slices)",
+    "description": "Public Siemens Avanto T1 MRI examination with 120 DICOM slices.",
+    "expectedResult": "Review the T1w assignment, enter subject/session labels, choose a metadata policy and download an anatomical BIDS dataset.",
+    "files": [
+      {
+        "role": "dicom",
+        "name": "1-001.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-001.dcm",
+        "sha256": "14d312bef9406d07f6e68b644b89a7a3b320457e4c6a5e29e385a6c2e3b1bbd7",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-002.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-002.dcm",
+        "sha256": "1d249ccba0759e835e96f4a6afa35d66da09191ea67932ff9ed41eafd04a8819",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-003.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-003.dcm",
+        "sha256": "e8a5705fdbb8c9dbbd3ca1f9a17beeb2ebb20500bfbae36413c956aaf2706932",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-004.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-004.dcm",
+        "sha256": "f1abc4d98237af20df0cf9a97acba2fdb7270cd019f00b232f29ab29193eb9f3",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-005.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-005.dcm",
+        "sha256": "18c93213aaa663de49567edb98c04aeb068b1f2ea3139abc5bfb5193a8389446",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-006.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-006.dcm",
+        "sha256": "8434549c42397db2cb572a102f24e73fa9305f45885a5b8540c4b1ccf14b54ad",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-007.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-007.dcm",
+        "sha256": "1cd4fcfb83083fa922b6af9eff8c8e5c5b4488db2264211ac3cd90238ba13b3b",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-008.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-008.dcm",
+        "sha256": "80ed84ebc7c9c9f1ff5639ab6dc57e4f0cfbba1c40427b382e6e5a01df499667",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-009.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-009.dcm",
+        "sha256": "056196b51933a6a3ca5f312e75aa45e06297a2a8391bdbca548537be7139d074",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-010.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-010.dcm",
+        "sha256": "7bb692a3cbb9eb3398ec0e354a94a856522e62bce57fa798dc64d9fac9f2bdc9",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-011.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-011.dcm",
+        "sha256": "274f0506e7d7a891fa05e56c0b3d73d74bedca6308d2618f387fe6acf3cdd65e",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-012.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-012.dcm",
+        "sha256": "6eeb27d3542ae8418c7825890cbdd47458d2f48c438e1a6740ecaaca62d968aa",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-013.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-013.dcm",
+        "sha256": "939b416b9d0ff87ac55d451de4ec88cd026553d7bcb5e8eb6630406a77d55b7e",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-014.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-014.dcm",
+        "sha256": "efd71f81605f9254e3881df69724645f55e0dbbc79a24fa07c7b4dcd97e930d2",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-015.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-015.dcm",
+        "sha256": "5d80a36e4353a03775fbdf4a0344f66ee07894c671ca90c5adf60d4d5a5c092f",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-016.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-016.dcm",
+        "sha256": "4ea191c1b1f813b4ebd8bee4422fbe1855a9495cf339dfd80a707084ce26c10e",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-017.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-017.dcm",
+        "sha256": "fb6fec4646f04a2a36391c8ad0d5d9e9097799104adac4745f2a0382ed980bb4",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-018.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-018.dcm",
+        "sha256": "3d94f181cc8441b799b4b5f383dbb15c17166d3928ab8aaf08c6cb0545c9d00d",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-019.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-019.dcm",
+        "sha256": "09219639b9a7f8cc8d9ffa2a7b2d18dd8e409a9d7c9cf46eb1faa31b2f9fd634",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-020.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-020.dcm",
+        "sha256": "b41ff8f916657a4e15405cb3345e28f1be2e71503654253f7442436357baf08b",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-021.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-021.dcm",
+        "sha256": "da38f1aa570ccb1d5e0630ffdf72e2521636428564ac952d7de09fc8411d33fa",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-022.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-022.dcm",
+        "sha256": "a9cb16f1dbbef36f4de71d70983baf1b9f27dbbbc887eba09a0b1a15d38054cb",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-023.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-023.dcm",
+        "sha256": "c9df7fe3d812ffaaf62a8c9348653bd24b35ce60adcca38f7fd165f478a3ded5",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-024.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-024.dcm",
+        "sha256": "3d473858793a5ed2f918705ed0bc650735c06195bc42b9aa997fc416ec886e88",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-025.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-025.dcm",
+        "sha256": "cf23344e9a49ef3106efb0af9ee09d8f9f8e9410cc3e6caa85763bc2ee8cfbe8",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-026.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-026.dcm",
+        "sha256": "bffc91e64e369ea0b0f279858c6fa4760cb7376b585a8e3c30f7efa1b4805b86",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-027.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-027.dcm",
+        "sha256": "5463b78b850229dc0ab6607f9361b278e1d964757ab161525f78b87092a00ae9",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-028.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-028.dcm",
+        "sha256": "3d2fa54dbd60e621154cf8b65fe92130503b8d77b26171d0d4687265732093bc",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-029.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-029.dcm",
+        "sha256": "807ffc9ff5c18e7f8726ab5e00571b7b01b581a5ff8ba7112fa966ad87106ded",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-030.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-030.dcm",
+        "sha256": "2fc87389ff647f5a5fa529fb713be316a6523bf4bf98ad515ddd8086b6e30e31",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-031.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-031.dcm",
+        "sha256": "57cd60592d1636bcebaf8f5dcd56e80f9e324d0ccbc165be6716227ae943995a",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-032.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-032.dcm",
+        "sha256": "c6b53ffe2f96a17d57b3674b044e6cbd2f7975f7665cf13b3a714a9f6a765612",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-033.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-033.dcm",
+        "sha256": "3de1970a445357fb984cdecc4840fc4694e3fb7196180fe2006232ef4338bc9b",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-034.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-034.dcm",
+        "sha256": "ad8698ea39a4f7f3cceaa8247b101eb4833f1be33dc30e665a255c6f29fa3c08",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-035.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-035.dcm",
+        "sha256": "fb9d74ee96321a1f16b5b8973c6d68860878efc062a5e2f08ee2ff7606174f7d",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-036.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-036.dcm",
+        "sha256": "60cc7f9c0fe761f2c98f5329c119756317d8d71fa47986de45aae001a0d73261",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-037.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-037.dcm",
+        "sha256": "98027779fc9955297d7aadf027bf26449d35a1ef0a2af9e69ef4e4ae3851f14c",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-038.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-038.dcm",
+        "sha256": "60ea649044a0dd273bdd1c4e151fbb5b983f692f31dc8a98a2390f29e3de52ea",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-039.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-039.dcm",
+        "sha256": "db1707ea3cd75d3eeaf8d91913173f0e40fa3bbe300fc389a60ae01ff1b47d4f",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-040.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-040.dcm",
+        "sha256": "0082e0475308dea5f399c000bf5d8eddf040dffbfda4f2bd78abf988d140c7e3",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-041.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-041.dcm",
+        "sha256": "d9431fff4707f34862ef316cdd82200d879dc8f2609677414875a83af5e6c529",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-042.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-042.dcm",
+        "sha256": "70e966bef508bdcd3c61db50c670c96ff212c77d81f127005423e4d4cba01f11",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-043.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-043.dcm",
+        "sha256": "650c7d291ce86f3b19a27d5d4834c40a6ca42bce50527bc314b3985d379415ca",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-044.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-044.dcm",
+        "sha256": "1864a6bf5313db9d22b1459a8f7425c09bc3f65a9d92694324bd01e0e5652894",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-045.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-045.dcm",
+        "sha256": "ccf63e43bb914ca49233c7ca8b9c638e7d47f459f875a9701f50f3cf803dd177",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-046.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-046.dcm",
+        "sha256": "7f7055a3ac2fd5be4ffcd7c073e91ca4f74b3957a6a6fb2c220a5be953a9c35b",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-047.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-047.dcm",
+        "sha256": "8b334b97c8c4865b1a53c777260e3033196ce4d3f69d496cd31dcc70eb1df0da",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-048.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-048.dcm",
+        "sha256": "fd585b98cd7445f836843e5768a7452445ec73630502f6770963a26dd11d3c71",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-049.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-049.dcm",
+        "sha256": "983b61eb432b66191f912225b4f1c935dd1fb1fa80ca178e1f9eabf6831fbd24",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-050.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-050.dcm",
+        "sha256": "9c6365e283ed18d2cfdc71bc28edf537508e2fe76083fb1fcfb88645ec05b216",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-051.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-051.dcm",
+        "sha256": "8c416ab31ca26f10fde7602f19e73f3b83d0dbc62ab394b0054f63ba44f24380",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-052.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-052.dcm",
+        "sha256": "1e6f89834669ba420e261d4284d217e65f4a344d08b687056a080ef107d1e8ba",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-053.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-053.dcm",
+        "sha256": "c9d1299d9cc9ab5ba22d90050562083a5eec8752a494e94ecf85f961478aeb72",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-054.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-054.dcm",
+        "sha256": "12e740f7b1be118f50b348916da272c82eec88b008b507dbe46ef7542c732306",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-055.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-055.dcm",
+        "sha256": "c6a79639813e7343fbb1dbd66bc312e4c752acb4d1e90351887e8debc073e362",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-056.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-056.dcm",
+        "sha256": "ad333f12ed199f6c4f6e2810c2e399ebd41d0f78d8b405bd74f9c06c9a253638",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-057.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-057.dcm",
+        "sha256": "79ccd2b0afca8213c71e50b6380e17f2684afa14ce7fb399456e578da5275256",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-058.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-058.dcm",
+        "sha256": "f773601130d5e305c57c3af6c249f21ec4813bf57d2fdb6a480eee1d9a457059",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-059.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-059.dcm",
+        "sha256": "482a070f49d0db561af8e2c35320216465d1c02b2c8d27e0a7facaeffd02499f",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-060.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-060.dcm",
+        "sha256": "991e40788abd9bda1cd52128b8e51081389b67d1c98162ea365d8876fdb55f8e",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-061.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-061.dcm",
+        "sha256": "b9a3d378bd9454aa2e151315da916493abfdac45e6b4999e038dcdeb26858253",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-062.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-062.dcm",
+        "sha256": "8403e7ccc9fcc146264be910745d8053b99c10d0364c1a1dbc01ef7859f84ce9",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-063.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-063.dcm",
+        "sha256": "84571cc608d7c115c8097f01ad4ea439ff8350f8f4f5cdab64e75674e94dc5be",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-064.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-064.dcm",
+        "sha256": "49fae63fd19c0f3f873fe536a21b27d84ceae69c481f1ea6caa1439bf3b157a7",
+        "bytes": 527990
+      },
+      {
+        "role": "dicom",
+        "name": "1-065.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-065.dcm",
+        "sha256": "c90939cbc51a6623a672acef0ec4154ee143b1fbf2fb2c92e2e87a250eb74122",
+        "bytes": 527990
+      },
+      {
+        "role": "dicom",
+        "name": "1-066.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-066.dcm",
+        "sha256": "0b6a232a207248dcc3e1d863641d8721056a7c5b36d6ff4ac94fc94343f4ad8f",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-067.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-067.dcm",
+        "sha256": "6475c78b31fdf8a660cecf33ecba1dff484dadd7698b4ceaf0f4056c23d79438",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-068.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-068.dcm",
+        "sha256": "d610026e8b15067f30911ff5e666e6fcf16c7f4a62c46855c5f1bc8d5722d6ad",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-069.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-069.dcm",
+        "sha256": "d9acf0a23373be84a54ba322b1f8a2c5e9e0464abfff93351a421b13b1469901",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-070.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-070.dcm",
+        "sha256": "59e2e6ee645859f35eae44ba141902d98cda77b5f39075c43e89f8bc527b4338",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-071.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-071.dcm",
+        "sha256": "3c3c9c1ecc3eec6a182fc638a1167f5c7eba78c973605c191fdcdeb9c45daf85",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-072.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-072.dcm",
+        "sha256": "ecaae1f9c2b5fd2b0f24e33394803dfb3f439dc5422342abdb8802cdcba7451e",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-073.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-073.dcm",
+        "sha256": "b226cd60662d0c6736d4d8478b284b77c4e47bdf21b6fd125385fe01dda1fdc5",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-074.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-074.dcm",
+        "sha256": "5dd96c1fa62477c63c48038d67c1fdafba85ee23ea69885176772d54613bb10d",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-075.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-075.dcm",
+        "sha256": "2720109b8355b217e9e13e990c842c095ee73a00b75846a068aff71c9bd820e2",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-076.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-076.dcm",
+        "sha256": "db223dbc0ddab2899050e1e16ddb5f95d3e5eddc9d9b08c3ed401edfc6ead283",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-077.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-077.dcm",
+        "sha256": "b3e216ab7fd10256abb69c3cbd630d63dc27bc10398e5363d1a19171d35dc2d8",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-078.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-078.dcm",
+        "sha256": "eb0acea1205fb1577ceb406f5e6a4b076f744eb679b96c787e10fd89bf08c6a6",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-079.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-079.dcm",
+        "sha256": "0f0f269228a5e56e5ff8b07a6883275660b2e3fb6d39aeb65b245d5b3fd2c50d",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-080.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-080.dcm",
+        "sha256": "2741b751b39466854f0ed85856b638d079de46698435eb4feb71230b374d4114",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-081.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-081.dcm",
+        "sha256": "674b17458d6ac3d029ecad8dad74053bddb310a993d8e47542f02f2b22865e07",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-082.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-082.dcm",
+        "sha256": "1edf946db05439977a9af191a0462c5f7686228ed2baa290e980b0f83084c9fe",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-083.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-083.dcm",
+        "sha256": "72626a84c832733b06eb6c8b973f3a30d79ba2019d4e3b435dbe99adfcac98e0",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-084.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-084.dcm",
+        "sha256": "235adfa5a4ac5c03c439adbcfc9b3ddb59318eac7ec0cb06a23a25e35c64da67",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-085.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-085.dcm",
+        "sha256": "96e3105dd57a3a98f9cbd14c131367a309e2a88ce2b8a85e945da188927396cc",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-086.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-086.dcm",
+        "sha256": "17be5172cc41910fd4d44920eb5d8b08ff5e1ae8d8929df29e4f37671eff1c46",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-087.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-087.dcm",
+        "sha256": "42d90c496aa8a217de565774518d131e6d81044b3b242af97a5c36a77af92ba6",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-088.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-088.dcm",
+        "sha256": "059b3e5dc9e832dfaf607c39f0bc2f87b4756785de13b5f8c4a8bed05b9c0cdd",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-089.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-089.dcm",
+        "sha256": "8b787f366f4611b9686579f6f4cfa050744c6b19ac05e658ddad8e4b3200113a",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-090.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-090.dcm",
+        "sha256": "a1c8bf173d6be2dc44b3ff88d82182dcda7ac6c9299db7e36ea0312cc0817104",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-091.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-091.dcm",
+        "sha256": "b15ecc8228b8f32f928714328ac52ea7f4860432c74992fa2b3ae469ff8efa88",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-092.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-092.dcm",
+        "sha256": "41f11c532eacf68499144725c0fbf9f9fcf9cf3ea86ea2a2a50e991ca2549480",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-093.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-093.dcm",
+        "sha256": "d0acf3152f40452ab3ae34611ed0058e145abd6fa6047a572759e636c02211b8",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-094.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-094.dcm",
+        "sha256": "f73713c318294d133c9fcd11efd7aff9aa12527ec0d687b0cbd58f4819258633",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-095.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-095.dcm",
+        "sha256": "a0fa7c84f545c290752f4cdb0e491ccc39842b916b41bb213777b193774a6590",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-096.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-096.dcm",
+        "sha256": "2a02c866e910476df606b8f662b8d849981ff5ee55b9ded90d8cec8a722fb59c",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-097.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-097.dcm",
+        "sha256": "8aaa78a420f2abac0cb7b8c27119c4443c28ad0779e9995d5699ab5ad9b11d18",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-098.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-098.dcm",
+        "sha256": "16a0fd1a691e17ee49d804cd77236171df88e84557e3b0b2a1d896290e154b7e",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-099.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-099.dcm",
+        "sha256": "90ff49bff1b24e4c4b93f3fafa9c31a1a0d3887b5600fdb74d99ebf3dd13b1e6",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-100.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-100.dcm",
+        "sha256": "8e38fa62f66e1eb0dc39e7b85f463541beeb05da7f5e26f4530cfe58e962773d",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-101.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-101.dcm",
+        "sha256": "2a23480ef51ff26b1558f0d7c1c6514c78c8eb60d75e1c109250684ea6a2aff2",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-102.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-102.dcm",
+        "sha256": "188fcf0d606bdbcd48545fda4124280bb487dc7c7fd3470bf425589e05d56fb2",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-103.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-103.dcm",
+        "sha256": "ea1dcb02501fb50cd6c2f52d1a643bff4d420dccf9a5db6b2dbc5cb14f9ad359",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-104.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-104.dcm",
+        "sha256": "73cb8bf9c1781a4dafe2a3c41339154432c075800a29ab9bebc5523c41a27b7f",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-105.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-105.dcm",
+        "sha256": "7e29e540c5ae73fa402da2b1c91fa2c71605c8341d9e8e76aed6c455ac1555f1",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-106.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-106.dcm",
+        "sha256": "78df6fed7a214cd17a30e51ab9162372909e9641e54da98ba651c91de0e2c0d5",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-107.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-107.dcm",
+        "sha256": "97892bfa790cbf90ef3c838124953ed375391bb8994ba0db40a37d5d799eeee0",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-108.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-108.dcm",
+        "sha256": "c30056c7222b534e1a7ad6d0e35df4b1dbd2617f572bca38c2c2e860add6f4c5",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-109.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-109.dcm",
+        "sha256": "eca68ec282d15ce8fd3e2d442aef4612096ba85b731e8068a28d880636aac0a0",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-110.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-110.dcm",
+        "sha256": "9a2b3de14a6ca99a3ae63ee3c86b257c68c8d1b30d84762e3a5934182be23f38",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-111.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-111.dcm",
+        "sha256": "af766cb0afdd218460a41e2d4325f491d5a187d38216d2739b7c1c825660ac71",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-112.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-112.dcm",
+        "sha256": "bfe4ed8e55f9107edccb823bb60dd82deea10b66e79c8626324504df12630cd9",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-113.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-113.dcm",
+        "sha256": "4b7eefd2fef0ea84b3ffccc6ee09284c4848fc8aa46b0be353360d9ced47ea45",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-114.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-114.dcm",
+        "sha256": "305ec00c1bbf1e1785fac89771171f8fbd430618954aaeeb58aeac4abc36cd25",
+        "bytes": 527996
+      },
+      {
+        "role": "dicom",
+        "name": "1-115.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-115.dcm",
+        "sha256": "6b103befa8fb8f2a63b6cba3472587a05eefe5fcca2c49e22914aae10f08eed4",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-116.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-116.dcm",
+        "sha256": "50583fbada5c6418caf112d31a1fff37ccb9fd87d345108eff8462e62fd1f4a9",
+        "bytes": 528000
+      },
+      {
+        "role": "dicom",
+        "name": "1-117.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-117.dcm",
+        "sha256": "c42381cce09db14042fb0ba12a3b134d90f60a7125878d0769eb675f70eec493",
+        "bytes": 527994
+      },
+      {
+        "role": "dicom",
+        "name": "1-118.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-118.dcm",
+        "sha256": "d4cb4d94d2aaf8547eb781639f40b73084d821471159c8ab7cf5e612b5659b9d",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-119.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-119.dcm",
+        "sha256": "4c0568f73954c7c18bd0741652f66172897540276cc5b8f9b9c0e95a9260d465",
+        "bytes": 527998
+      },
+      {
+        "role": "dicom",
+        "name": "1-120.dcm",
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/560955bf9a1a669bbf2a89709b64f3e64eefe008/examples/dicompare/t1-dicom-protocol/1-120.dcm",
+        "sha256": "8f838c0b3689997b0e9f82585ce04abac36f13395705ee55ebc9587266b75e75",
+        "bytes": 527994
+      }
+    ]
+  }
+]

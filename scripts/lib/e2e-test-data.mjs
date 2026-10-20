@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { fetchPinnedExample } from '../desktop/scientific-evidence.mjs';
 
@@ -39,6 +40,19 @@ function synthsrModels() {
 const flag = (name) => ({ env: [name], provision: async () => ({ [name]: '1' }) });
 
 export const provisioners = {
+  // Public enhanced Philips DWI and native dcm2niix references, pinned by commit
+  // and checksum. No image data is committed to the source repository.
+  dcm2niix: {
+    env: ['DCM2NIIX_DWI_DIR'],
+    provision: async (cache) => {
+      const directory = join(cache, 'dcm2niix-dwi');
+      await mkdir(directory, { recursive: true });
+      const manifest = JSON.parse(await readFile(join(root, 'apps/dcm2niix/validation/dwi.manifest.json'), 'utf8'));
+      for (const file of manifest.files) await fetchChecked(file.url, join(directory, file.name), file);
+      await writeFile(join(directory, 'IM_0001.dcm'), gunzipSync(await readFile(join(directory, 'IM_0001.gz'))));
+      return { DCM2NIIX_DWI_DIR: directory };
+    },
+  },
   // The browser reference registers the 1 mm example once, about 3 min on a 4-core runner.
   ants: { env: ['ANTS_LIVE_DATA', 'ANTS_BROWSER_REFERENCE'], provision: async () => ({ ANTS_LIVE_DATA: '1', ANTS_BROWSER_REFERENCE: 'check' }) },
   'brain-extraction': flag('BRAIN_EXTRACTION_REAL_MODELS'),

@@ -1,0 +1,32 @@
+{
+  "name": "@neurodesk/dwidenoise",
+  "version": "0.2.20261020",
+  "description": "Patch2Self diffusion MRI denoising (DIPY version 1 port) for browsers and the command line",
+  "type": "module",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": "./src/wasm.js",
+    "./wasm": "./src/dwidenoise.wasm"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "check:wasm": "bash scripts/build-wasm.sh --check",
+    "test": "node --test test/*.test.js",
+    "lint": "node --check src/wasm.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/neurodesk/webapps.git",
+    "directory": "packages/dwidenoise"
+  }
+}

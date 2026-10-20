@@ -37,6 +37,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "denoise-wasm"
+version = "0.1.0"
+dependencies = [
+ "dwi-denoise",
+]
+
+[[package]]
 name = "dwi-amico"
 version = "0.1.0"
 dependencies = [
@@ -51,6 +58,15 @@ name = "dwi-degibbs"
 version = "0.1.0"
 dependencies = [
  "rustfft",
+]
+
+[[package]]
+name = "dwi-denoise"
+version = "0.1.0"
+dependencies = [
+ "dwi-gradients",
+ "flate2",
+ "serde_json",
 ]
 
 [[package]]

@@ -127,7 +127,7 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
 ## FreeBrowse viewer (topofit, spinalcordtoolbox, dicomview)
 
 - `packages/runtime-support` pins `freebrowse` to the vendored `file:./vendor/freebrowse` build of FreeBrowse's development branch, which is not on npm. Rebuild it only with `node packages/runtime-support/scripts/vendor-freebrowse.mjs` (the vendor README names the commit). Return to a registry pin once upstream publishes that code.
-- The branch builds against an unreleased niivue-mono checkout; the vendored build uses `@niivue/niivue` `1.0.0-rc.17`, the first release with the drawing undo snapshot its wand calls. Every app that mounts the viewer pins that same NiiVue. FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which no release draws yet; `src/freebrowse-viewer/volume-visibility.js` maps it to opacity. Delete that module once the pinned NiiVue renders `visible`.
+- The branch builds against an unreleased niivue-mono checkout; the vendored build was made against `@niivue/niivue` `1.0.0-rc.17`, the first release with the drawing undo snapshot its wand calls, and runs on the `1.0.0-rc.26` that `packages/runtime-support` pins (rc.25 fixed `loadDrawing` on permuted images, which SCT's mask editing needs). Every app that mounts the viewer pins that same NiiVue. FreeBrowse's eye button sets a volume's `visible` flag (niivue/mono#224), which NiiVue draws from rc.24; `src/freebrowse-viewer/volume-visibility.js` still maps it to opacity. Delete that module once a browser check shows the pinned NiiVue hides the volume without it.
 
 ## topofit
 

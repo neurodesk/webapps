@@ -1,0 +1,12 @@
+Patch2Self denoising library
+Copyright 2026 Neurodesk contributors
+
+The WebAssembly module src/dwidenoise.wasm is built from the Rust crates
+exes/dwi/denoise and exes/dwi/denoise-wasm by scripts/build-wasm.sh. They port
+dipy/denoise/patch2self.py of DIPY 1.12.1 (https://github.com/dipy/dipy),
+Copyright (c) 2008-2026, dipy developers, under the BSD 3-Clause licence
+(LICENSE).
+
+Fadnavis S, Batson J, Garyfallidis E (2020). Patch2Self: Denoising Diffusion
+MRI with Self-Supervised Learning. Advances in Neural Information Processing
+Systems 33.

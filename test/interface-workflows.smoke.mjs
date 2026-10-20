@@ -62,6 +62,23 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('dcm2niix', async page => {
+    await page.locator('#subject').fill('subject01');
+    await page.locator('#session').fill('baseline');
+    await page.locator('#taskSection > summary').tap();
+    await page.locator('#taskSection > summary').tap();
+    await expect(page.locator('#subject')).toHaveValue('subject01');
+    await expect(page.locator('#session')).toHaveValue('baseline');
+    await page.locator('#imageInput').setInputFiles(dicomSeries());
+    await expect(page.locator('#seriesRows tr')).toHaveCount(1, { timeout: 120000 });
+    await page.locator('#seriesRows select').selectOption('T1w');
+    await page.locator('#seriesRows input[type=checkbox]').check();
+    await page.locator('#privacy').selectOption('omit');
+    const pending = page.waitForEvent('download');
+    await page.locator('#runButton').tap();
+    await pending;
+    await expect(page.locator('#statusText')).toHaveText('BIDS dataset ready');
+  });
   await check('me-ica', async page => {
     await page.locator('#advancedSettings > summary').tap();
     await page.locator('#seed').fill('17');

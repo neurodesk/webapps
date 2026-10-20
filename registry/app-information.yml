@@ -526,7 +526,7 @@ apps:
         doi: 10.1098/rstb.2001.0915
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: Brain extraction
         title: Brainchop
@@ -733,7 +733,7 @@ apps:
         code: https://github.com/BBillot/SynthSR
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: Brain extraction
         title: Brainchop
@@ -807,7 +807,7 @@ apps:
         code: https://github.com/rordenlab/niimath
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and
           accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: DICOM conversion
@@ -925,7 +925,7 @@ apps:
         code: https://github.com/pyushkevich/greedy
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: Brain extraction
         title: Brainchop
@@ -1077,7 +1077,7 @@ apps:
         code: https://github.com/rohitrango/FireANTs
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: Brain extraction
         title: Brainchop
@@ -1125,7 +1125,7 @@ apps:
       code: https://github.com/Bostrix/FSL-BET2
     - group: Brain extraction
       title: MindGrab
-      reference: 'Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv.
+      reference: 'Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv.
         2025.'
       url: https://arxiv.org/abs/2506.11860
     - group: Brain extraction
@@ -1500,7 +1500,7 @@ apps:
     citations:
       - group: Brain extraction
         title: MindGrab
-        reference: "Fani A, Nassar M, Ghosh S, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
         url: https://arxiv.org/abs/2506.11860
       - group: Brain extraction
         title: Brainchop
@@ -1559,6 +1559,119 @@ apps:
           framework for medical image processing and visualisation. NeuroImage. 2019;202:116137."
         doi: 10.1016/j.neuroimage.2019.116137
         code: https://github.com/MRtrix3/mrtrix3
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for
+          neuroimaging data analysis: DICOM to NIfTI conversion. Journal of
+          Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  n4:
+    packages:
+      - name: ANTs N4BiasFieldCorrection (WebAssembly)
+        url: https://github.com/ANTsX/ANTs
+        role: bias-field estimation, at the ANTs commit SYNcro uses
+      - name: MRtrix3 dwibiascorrect ants
+        url: https://github.com/MRtrix3/mrtrix3
+        role: the DWI procedure around N4 (MPL-2.0)
+      - name: MindGrab (brainchop)
+        url: https://github.com/neuroneural/brainchop
+        role: default brain extraction from the mean b0 or the image, on the GPU or CPU
+      - name: NiiVue
+        url: https://github.com/niivue/niivue
+        role: image viewer
+      - name: dcm2niix (WebAssembly)
+        url: https://github.com/rordenlab/dcm2niix
+        role: DICOM to NIfTI conversion
+    citations:
+      - group: Bias-field correction
+        title: N4 bias field correction
+        reference: "Tustison NJ, Avants BB, Cook PA, et al. N4ITK: improved N3 bias correction. IEEE Transactions on Medical Imaging. 2010;29(6):1310–1320."
+        doi: 10.1109/TMI.2010.2046908
+      - group: Bias-field correction
+        title: ANTs evaluation
+        reference: "Avants BB, Tustison NJ, Song G, Cook PA, Klein A, Gee JC. A reproducible evaluation of ANTs similarity metric performance in brain image registration. NeuroImage. 2011;54(3):2033–2044."
+        doi: 10.1016/j.neuroimage.2010.09.025
+        code: https://github.com/ANTsX/ANTs
+      - group: Bias-field correction
+        title: MRtrix3
+        reference: "Tournier JD, Smith R, Raffelt D, et al. MRtrix3: A fast, flexible and open software
+          framework for medical image processing and visualisation. NeuroImage. 2019;202:116137."
+        doi: 10.1016/j.neuroimage.2019.116137
+        code: https://github.com/MRtrix3/mrtrix3
+      - group: Brain extraction
+        title: MindGrab
+        reference: "Fani A, Doan M, Le I, et al. MindGrab for BrainChop: fast and accurate skull stripping for command line and browser. arXiv. 2025."
+        url: https://arxiv.org/abs/2506.11860
+      - group: Brain extraction
+        title: Brainchop
+        reference: "Masoud M, Hu F, Plis S. Brainchop: in-browser MRI volumetric segmentation and rendering. Journal of Open Source Software. 2023;8(83):5098."
+        doi: 10.21105/joss.05098
+        code: https://github.com/neuroneural/brainchop
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for
+          neuroimaging data analysis: DICOM to NIfTI conversion. Journal of
+          Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  dcm2niix:
+    about:
+      - Convert one MRI scanner examination into a reviewed BIDS dataset, entirely in the browser. Supported acquisitions are T1w, T2w, FLAIR, diffusion MRI and reverse phase encoding EPI fieldmaps.
+    packages:
+      - { name: "@niivue/dcm2niix (WebAssembly)", url: https://github.com/rordenlab/dcm2niix, role: DICOM image and gradient conversion }
+      - { name: BIDS, url: https://bids-specification.readthedocs.io/en/v1.11.2/, role: anatomical, diffusion and fieldmap dataset organization }
+      - { name: fflate, url: https://github.com/101arrowz/fflate, role: local archive extraction and export }
+    citations:
+      - group: DICOM conversion
+        title: dcm2niix
+        reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for neuroimaging data analysis: DICOM to NIfTI conversion. Journal of Neuroscience Methods. 2016;264:47–56."
+        doi: 10.1016/j.jneumeth.2016.03.001
+        code: https://github.com/rordenlab/dcm2niix
+      - group: Dataset organization
+        title: Brain Imaging Data Structure
+        reference: "Gorgolewski KJ, Auer T, Calhoun VD, et al. The brain imaging data structure, a format for organizing and describing outputs of neuroimaging experiments. Scientific Data. 2016;3:160044."
+        doi: 10.1038/sdata.2016.44
+      - group: Example data
+        title: Vestibular-Schwannoma-SEG
+        reference: "Shapey J, Kujawa A, Dorent R, et al. Segmentation of vestibular schwannoma from MRI, an open annotated dataset and baseline algorithm. Scientific Data. 2021;8:286."
+        doi: 10.1038/s41597-021-01064-w
+      - group: Example data
+        title: Vestibular-Schwannoma-SEG (The Cancer Imaging Archive, CC BY 4.0)
+        reference: "Shapey J, Kujawa A, Dorent R, et al. Segmentation of Vestibular Schwannoma from Magnetic Resonance Imaging: An Open Annotated Dataset and Baseline Algorithm (Version 2) [Data set]. The Cancer Imaging Archive. 2021."
+        doi: 10.7937/TCIA.9YTJ-5Q73
+
+  dwidenoise:
+    packages:
+      - name: DIPY 1.12.1 Patch2Self version 1 (Rust and WebAssembly port)
+        url: https://github.com/dipy/dipy
+        role: denoising, ported under the BSD-3-Clause licence
+      - name: NiiVue
+        url: https://github.com/niivue/niivue
+        role: image viewer
+      - name: dcm2niix (WebAssembly)
+        url: https://github.com/rordenlab/dcm2niix
+        role: DICOM to NIfTI conversion
+    citations:
+      - group: Denoising
+        title: Patch2Self
+        reference: "Fadnavis S, Batson J, Garyfallidis E. Patch2Self: Denoising Diffusion MRI with
+          Self-Supervised Learning. Advances in Neural Information Processing Systems 33 (NeurIPS 2020). 2020."
+        url: https://arxiv.org/abs/2011.01355
+      - group: Denoising
+        title: DIPY
+        reference: "Garyfallidis E, Brett M, Amirbekian B, et al. Dipy, a library for the analysis of
+          diffusion MRI data. Frontiers in Neuroinformatics. 2014;8:8."
+        doi: 10.3389/fninf.2014.00008
+        code: https://github.com/dipy/dipy
       - group: DICOM conversion
         title: dcm2niix
         reference: "Li X, Morgan PS, Ashburner J, Smith J, Rorden C. The first step for

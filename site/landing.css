@@ -349,6 +349,11 @@ h1 {
   color: var(--green-dark);
   font-size: 0.68rem;
 }
+.app-card__tags li[data-hardware="webgpu-required"] {
+  padding: calc(0.28rem - 1px) calc(0.48rem - 1px);
+  border: 1px solid var(--green-dark);
+  background: transparent;
+}
 
 .no-results { padding: 7rem 1rem 10rem; color: var(--text); text-align: center; }
 .no-results > div { width: 4rem; margin: 0 auto 1.25rem; color: var(--green-dark); font-size: 3rem; }

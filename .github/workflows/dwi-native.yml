@@ -8,6 +8,7 @@ on:
       - 'exes/dwi/**'
       - 'packages/noddi/**'
       - 'packages/degibbs/**'
+      - 'packages/dwidenoise/**'
   push:
     branches: [main]
     paths:
@@ -16,6 +17,7 @@ on:
       - 'exes/dwi/**'
       - 'packages/noddi/**'
       - 'packages/degibbs/**'
+      - 'packages/dwidenoise/**'
   workflow_dispatch:
 
 concurrency:
@@ -60,6 +62,8 @@ jobs:
         run: bash packages/noddi/scripts/build-wasm.sh --check
       - name: Rebuild and compare degibbs
         run: bash packages/degibbs/scripts/build-wasm.sh --check
+      - name: Rebuild and compare dwidenoise
+        run: bash packages/dwidenoise/scripts/build-wasm.sh --check
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -72,4 +76,7 @@ jobs:
         run: node --test test/*.test.js
       - name: degibbs package tests on the committed module
         working-directory: packages/degibbs
+        run: node --test test/*.test.js
+      - name: dwidenoise package tests on the committed module
+        working-directory: packages/dwidenoise
         run: node --test test/*.test.js

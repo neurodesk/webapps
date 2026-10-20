@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 2,
+  "app": "dcm2niix",
+  "title": "dcm2niix",
+  "description": "Convert one DICOM MRI examination to a reviewed BIDS dataset.",
+  "defaultOperation": "convert-bids",
+  "operations": {
+    "convert-bids": {
+      "title": "Convert to BIDS",
+      "description": "Convert DICOM files and apply explicit per-acquisition BIDS assignments.",
+      "mode": "batch",
+      "inputs": {
+        "dicom": {
+          "source": "files",
+          "type": "neuro:dicom-series",
+          "formats": ["dicom", "zip"],
+          "description": "One examination as DICOM files or ZIP archives.",
+          "minimum": 1
+        }
+      },
+      "parameters": {
+        "name": { "type": "string", "description": "Dataset name.", "default": "MRI examination" },
+        "subject": { "type": "string", "description": "Alphanumeric subject label without sub-." },
+        "session": { "type": "string", "description": "Alphanumeric session label without ses-." },
+        "privacy": { "type": "string", "enum": ["omit", "retain"], "description": "Explicit identifying metadata export policy." },
+        "assignments": { "type": "string", "description": "JSON array in converted acquisition order: type (T1w, T2w, FLAIR, dwi, epi or exclude), optional acquisition/direction/metadata, and fieldmap targets as series IDs (series1, series2, ...)." }
+      },
+      "artifacts": {
+        "bids": { "type": "neuro:archive", "mediaType": "application/zip", "minimum": 1, "maximum": 1 }
+      },
+      "engines": ["browser"]
+    }
+  }
+}

@@ -122,8 +122,8 @@ async function removeAppCopies(siteDist, registry) {
   }
 }
 
-// Single-file runtimes can move to the shared store. Threaded worker families
-// retain their existing app scope policy and must not opt into this operation.
+// Runtime binaries can move to the shared store independently of their worker
+// modules. Worker families retain their app scope policy and cannot opt in.
 async function deduplicateSources({ manifest, files, siteDist, registry }) {
   for (const family of manifest.families.filter(family => family.deduplicate)) {
     for (const asset of family.files) {

@@ -4,24 +4,95 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
+
+## 0.8.20261019
 
 ## 0.8.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+
+- Updated dependencies [b68209b]
+
+  - @neurodesk/webapp-components@0.15.0
+
+- Updated dependencies [2ae93ae]
+
+- Updated dependencies [ccb2970]
+
+- Updated dependencies [67a5a8f]
+
+  - @neurodesk/webapp-components@0.14.4
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+
 - Updated dependencies [b68209b]
   - @neurodesk/webapp-components@0.15.0
-- Updated dependencies [2ae93ae]
-- Updated dependencies [ccb2970]
-- Updated dependencies [67a5a8f]
-  - @neurodesk/webapp-components@0.14.4
 
 ## 0.8.20261017
 
@@ -35,9 +106,15 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
 
 ## 0.8.20261015
 
@@ -51,6 +128,7 @@
   protocol-matching heuristic; the site's private acquisition has not been tested.
 
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
 
@@ -59,8 +137,11 @@
 ### Patch Changes
 
 - fc978bd: A user's basis file without a field strength or echo time is now named as the file missing it, instead of saying the data do not record it.
+
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
 
@@ -91,6 +172,7 @@
     the browser and WebGPU adapter, and why a large T1 goes to the CPU.
 
 - Reject fit requests without spectroscopy from the supplied inputs before changing a loaded session. Preserve editing overrides and acquisition metadata when adding RAW water references. Keep invalid or cancelled interactive uploads and automation requests from replacing resident inputs, settings or downloads. Display anatomy and tissue images from the Results sidebar and retain independent voxel visibility.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.3
 
@@ -99,9 +181,11 @@
 ### Patch Changes
 
 - Cache Siemens DICOM study and patient identifiers once per dataset during water pairing. Repeated subject names keep the same identity checks without reparsing spectroscopy data for every candidate.
+
 - b968db1: Siemens VE spectroscopy DICOMs whose `(7FE1,1010)` element has no
   `SIEMENS CSA NON-IMAGE` private-creator label are recognised as spectra
   again, as the reader always accepted them.
+
 - 8321cb9: Tissue correction now works for GE P-files and for high-resolution T1 images.
 
   - GE P-files record the voxel: its centre and size (`user8-13`) and the
@@ -120,7 +204,9 @@
     tissue-corrected.
 
 - Reject named Siemens DICOM water candidates when recorded study or patient identifiers conflict. Explicit filename matches remain available when identifiers are absent; arbitrary-series fallback still requires the same nonempty StudyInstanceUID. Limit the GE residual-water phasing description to multi-coil, unedited data processed by the PRESS pipeline.
+
 - Classify Philips SDAT water references with the shared naming rule. `_water_off`, `_nows`, `_wref` and `_h2o` now pair with their spectrum instead of being loaded as additional metabolite datasets.
+
 - 1ce9fe7: Fix three failures reported from multi-site data:
 
   - Water references pair with `<stem>_act` and `<stem>_ws` spectra in every format, not only SDAT/SPAR, so spec2nii's conversions of Philips data (`_act`/`_ref`) are water-scaled. `_water_off` and `_nows` name a water reference. Unmatched Siemens DICOM series pair only when there is one spectrum and one water series in the folder, their nonempty StudyInstanceUIDs match, and their recorded PatientIDs do not disagree. Unmatched single-file inputs stay separate. DICOM series without spectroscopy data are skipped instead of counted as datasets.

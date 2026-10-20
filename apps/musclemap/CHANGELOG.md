@@ -4,26 +4,106 @@
 
 ### Patch Changes
 
-- Updated dependencies [ea2a6d2]
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.1
+  - @neurodesk/musclemap@1.5.20261020
+- Updated dependencies [14db080]
+
+- Updated dependencies [03261d0]
+
+- Updated dependencies [c865c0c]
+
+- Updated dependencies [4b40da1]
+
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/musclemap@1.5.20261020
+
 - Updated dependencies [3f1d770]
+
 - Updated dependencies [d9718cd]
+
+  - @neurodesk/webapp-components@0.16.3
+  - @neurodesk/musclemap@1.5.20261020
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [d9718cd]
+
 - Updated dependencies [c1a4dda]
+
 - Updated dependencies [3329c39]
+
 - Updated dependencies [46935f7]
+
   - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/musclemap@1.5.20261020
+
+- Updated dependencies [d9718cd]
+  - @neurodesk/webapp-components@0.16.3
   - @neurodesk/musclemap@1.5.20261020
 
 ## 1.5.20261018
 
 ### Patch Changes
 
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [ea2a6d2]
+
+- Updated dependencies [0511cd7]
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/musclemap@1.5.20261018
+
 - Updated dependencies [b68209b]
+
   - @neurodesk/webapp-components@0.15.0
   - @neurodesk/musclemap@1.5.20261018
+
 - Updated dependencies [2ae93ae]
+
 - Updated dependencies [ccb2970]
+
 - Updated dependencies [67a5a8f]
+
   - @neurodesk/webapp-components@0.14.4
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [7c0d201]
+
+  - @neurodesk/webapp-components@0.16.2
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [46935f7]
+
+  - @neurodesk/webapp-components@0.16.1
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [3329c39]
+
+  - @neurodesk/webapp-components@0.16.0
+
+- Updated dependencies [b67e4e9]
+
+  - @neurodesk/webapp-components@0.15.1
+  - @neurodesk/musclemap@1.5.20261018
+
+- Updated dependencies [b68209b]
+  - @neurodesk/webapp-components@0.15.0
   - @neurodesk/musclemap@1.5.20261018
 
 ## 1.5.20261017
@@ -39,11 +119,19 @@
 ### Patch Changes
 
 - Persist checksum-verified model and example caches across browser restarts. Bind runtime caches to each document’s checksum manifest to avoid reusing bytes from a different deployment.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.14.2
   - @neurodesk/musclemap@1.5.20261016
+
 - Updated dependencies [7443048]
+
   - @neurodesk/webapp-components@0.14.1
+  - @neurodesk/musclemap@1.5.20261016
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.14.2
   - @neurodesk/musclemap@1.5.20261016
 
 ## 1.5.20261015
@@ -70,8 +158,11 @@
 - 48a61b7: Keep a command-line package on its application's declared release series when
   applying changesets, so MuscleMap's app and portable package retain identical
   date versions.
+
 - Updated dependencies [dd65e6a]
+
 - Updated dependencies [48a61b7]
+
 - Updated dependencies [dcc74e7]
   - @neurodesk/webapp-components@0.14.0
   - @neurodesk/musclemap@1.5.20261015
@@ -84,14 +175,19 @@
   viewer canvas and the technical log, now becomes the segmentation input. Cite
   always opens the shared citation list, which ends with the Neurodesk paper; the
   app's own Citations modal is removed.
+
 - 313275d: The offline bundle no longer downloads the retired compressed whole-body v1.3
   model, which no MuscleMap version loads.
+
 - 850e642: Remove code that nothing calls, found by the unused-code report and checked by
   repository-wide reference searches. The shared preview module no longer carries
   a second NIfTI parser and writer; NiftiUtils remains the only one. Outputs and
   behaviour are unchanged.
+
 - Updated dependencies [27c9549]
+
 - Updated dependencies [850e642]
+
 - Updated dependencies [ad92e2f]
   - @neurodesk/webapp-components@0.13.0
   - @neurodesk/musclemap@1.5.20261014
@@ -113,11 +209,42 @@
 ### Patch Changes
 
 - Preserve original operation failures while draining GPU error scopes and reject failed DICOM field fallback tasks without hanging. Resolve correctness findings with switch scopes, safe own-property checks, equivalent regular expressions and documented optional cleanup/cache behavior. Surface actionable release, filesystem and schema preload failures; retain scientific literals and arithmetic.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.12.2
+  - @neurodesk/musclemap@1.5.20261010
+
+- Updated dependencies [98eb502]
+
+  - @neurodesk/musclemap@1.5.20261010
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.12.2
   - @neurodesk/musclemap@1.5.20261010
-- Updated dependencies [98eb502]
-  - @neurodesk/musclemap@1.5.20261010
+
+## 1.5.20260914
+
+### Patch Changes
+
+- Updated dependencies [3cd773f]
+
+- Updated dependencies [4add8da]
+
+  - @neurodesk/webapp-components@0.1.5
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.1.4
+
+- Updated dependencies [4add8da]
+  - @neurodesk/webapp-components@0.1.5
+
+## 1.5.20260910
+
+### Minor Changes
+
+- Release the complete application catalog after integrating BrowserQC, dwi2trx and SynthSeg. Preserve shared interface behavior and publish bundles with synchronized date versions.
 
 ## 1.4.20261010
 
@@ -131,7 +258,9 @@
 ### Patch Changes
 
 - 77ec69f: Whole-body v1.4 segmentation now has to match upstream MuscleMap's labels label by label, not only overall. On the body MRI test slab the app reproduces upstream's label map voxel for voxel, and the browser test fails if any of its 26 muscles drops below Dice 0.95. The 10 muscles that once fell short came from cropping every nonzero voxel instead of MONAI's positive ones; a unit test now checks the crop against MONAI.
+
 - Updated dependencies [66bf9e9]
+
 - Updated dependencies [501ea0c]
   - @neurodesk/webapp-components@0.12.0
 
@@ -140,28 +269,58 @@
 ### Patch Changes
 
 - Updated dependencies [22aa4bf]
+
   - @neurodesk/webapp-components@0.11.1
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.11.0
+
+- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
+
+- dd05e46: Ship whole-body v1.3 and the regional models as FP32 exports, which match upstream MuscleMap voxel for voxel on public parity cases. The previous Q8 exports could drop a whole label on partial-coverage scans. Each regional model download grows from about 39 MB to 104 MB.
+
+- 03a9e8c: Run every model, including whole-body v1.3 and the regional models, through the upstream MONAI pipeline, and pad slices to upstream's 256 x 256 before 128 x 128 sliding windows. Remove the slice-thickness and low-res controls and their automation parameters, which only that older path used.
+
+- Updated dependencies [70f2770]
+
+  - @neurodesk/webapp-components@0.10.2
+
+- Updated dependencies [22aa4bf]
+
+  - @neurodesk/webapp-components@0.11.1
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.11.0
-- 70f2770: Space the technical log's Copy and Clear buttons apart by grouping them in the shared `nd-console-actions` row; they had run together as "CopyClear". Remove the unused legacy `.console-clear` styles.
-- dd05e46: Ship whole-body v1.3 and the regional models as FP32 exports, which match upstream MuscleMap voxel for voxel on public parity cases. The previous Q8 exports could drop a whole label on partial-coverage scans. Each regional model download grows from about 39 MB to 104 MB.
-- 03a9e8c: Run every model, including whole-body v1.3 and the regional models, through the upstream MONAI pipeline, and pad slices to upstream's 256 x 256 before 128 x 128 sliding windows. Remove the slice-thickness and low-res controls and their automation parameters, which only that older path used.
-- Updated dependencies [70f2770]
-  - @neurodesk/webapp-components@0.10.2
 
 ## 1.4.20261004
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.10.1
+
 - e6baa09: Correct a segmentation in the viewer before downloading it. Generated, consolidated and uploaded label maps whose display copy shares their voxel grid show Edit in the Results list, which opens the shared mask editor with the muscle names in its Label select. Apply replaces the result, labels it `(edited)`, reloads the overlay and makes Download return the edited uint8 class-index map under the same file name; Calculate Metrics then reads the edited labels. A new run, new input, consolidation or Clear All closes an open edit without applying it.
+
 - Updated dependencies [0204fe1]
+
+- Updated dependencies [ec85a09]
+
+  - @neurodesk/webapp-components@0.10.0
+
+- Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage with MONAI float64 decoding. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons, prevent stale passing reports, and use portable CI scratch directories. Document the isolated inference-runtime boundary differences.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.9.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.10.1
+
 - Updated dependencies [ec85a09]
   - @neurodesk/webapp-components@0.10.0
-- Match upstream positive foreground cropping, MONAI and PyTorch grid arithmetic, and integer temporary-chunk storage with MONAI float64 decoding. Keep the per-label Dice gate and add upstream-derived regression fixtures, checksummed public full-volume references, browser parity CI, and explicit WebGPU execution evidence. Retain provenance for failed comparisons, prevent stale passing reports, and use portable CI scratch directories. Document the isolated inference-runtime boundary differences.
-- Updated dependencies
-  - @neurodesk/webapp-components@0.9.0
 
 ## 1.4.20261003
 
@@ -175,43 +334,56 @@
 ### Patch Changes
 
 - Updated dependencies
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.7.0
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.2
 
 - Updated dependencies
-  - @neurodesk/webapp-components@0.6.2
+  - @neurodesk/webapp-components@0.7.0
 
 ## 1.4.20260928
 
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.6.1
+
+- 93381e8: Remove the static bottom bar (version, privacy sentence, duplicate More Apps and GitHub links) from the six inference-workspace apps. The shared app bar already shows the version and links, and Privacy has its own dialog. The unused `.app-footer` and `.nd-app-footer` rules leave the shared stylesheets and the hosted theme.
+
+- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
+
+  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
+
+- Updated dependencies
+
+- Updated dependencies [93381e8]
+
+- Updated dependencies [93381e8]
+
+  - @neurodesk/webapp-components@0.6.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.5.0
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.6.1
+
+- Updated dependencies [93381e8]
+  - @neurodesk/webapp-components@0.6.0
 
 ### Minor Changes
 
 - Expose typed operations across the application catalog, including multiple inputs, DICOM series selection, variable artifacts and viewer workflows. Share awaited processing and cancellation between each app and its agent adapter. Publish verified result reports and scientific provenance.
 
   Add bounded desktop viewer sessions and MCP controls using public viewer APIs. Native SynthSeg now reports per-label counts and physical volumes. Include real-model CPU checks and a Mac runner for Metal, WebGPU and buffer-planning evidence without raising the validated SynthSeg limit.
-
-### Patch Changes
-
-- 93381e8: Remove the static bottom bar (version, privacy sentence, duplicate More Apps and GitHub links) from the six inference-workspace apps. The shared app bar already shows the version and links, and Privacy has its own dialog. The unused `.app-footer` and `.nd-app-footer` rules leave the shared stylesheets and the hosted theme.
-- 93381e8: Every app now opens on its workspace and shows live status only in the bottom bar: a short message, a progress bar, elapsed time and a cancel × that appears while a run can be cancelled. Start pages, landing overlays and welcome modals are gone, and their copy moved to About. Every app has a technical log below the viewer that starts collapsed. Sidebar help longer than 90 characters moved into info tooltips or About, and each sidebar has one primary action. `ProgressManager` now drives the design-system footer, including the elapsed counter and the cancel button.
-
-  The shared example selector shows one short line once an example loads; the description and expected result moved to a tooltip beside the Example label. NiiMath gained the shared layout tabs and About dialog and no longer ships app CSS.
-
-- Updated dependencies
-- Updated dependencies [93381e8]
-- Updated dependencies [93381e8]
-  - @neurodesk/webapp-components@0.6.0
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.5.0
 
 ## 1.4.20260924
 
@@ -237,42 +409,55 @@
 ### Patch Changes
 
 - Updated dependencies [4959500]
+
   - @neurodesk/webapp-components@0.4.4
 
-### Patch Changes
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.3
+
+- efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.4.2
+
+- Updated dependencies [4959500]
+
+  - @neurodesk/webapp-components@0.4.4
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.4.3
-
-### Patch Changes
-
-- efd8af3: Show the Example control before the file picker in every app, replace the registration apps' stale "Loading the default images" empty state, give FireANTs a CPU time budget and progress messages, ship BrowserQC's CPU MindGrab bundle with a longer segmentation budget, select CPU processing in SynthSR and brain extraction when no WebGPU adapter exists, start MuscleMap at 50 % overlap without WebGPU, and run VesselBoost's hosted example workflow in its browser tests.
-- Updated dependencies
-  - @neurodesk/webapp-components@0.4.2
 
 ## 1.4.20260918
 
 ### Patch Changes
 
 - Clarify that each input's image type describes the uploaded file. Rename View to Preview file and the per-file checkbox to Include in segmentation.
+
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.4.1
 
-### Patch Changes
-
 - Replace shared UI builders with light-DOM custom elements for consoles, file fields, result lists, viewer toolbars and example selectors. Migrate app callers, isolate control IDs and upload scopes, and preserve state while cleaning up listeners and cancelled downloads across component removal.
+
 - Updated dependencies
 
   - @neurodesk/webapp-components@0.4.0
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.3.1
+
+- Updated dependencies
+  - @neurodesk/webapp-components@0.4.1
 
 ## 1.4.20260916
 
 ### Patch Changes
 
 - Standardize example selection across the app catalog with complete scientific input bundles, shared cancellation and retry, and explicit processing. Add missing examples, curate existing datasets, fix QSMbly retry and TopoFit cancellation, and require example manifests and browser coverage for every app and the generator.
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.3.0
 
@@ -281,45 +466,35 @@
 ### Patch Changes
 
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.2.2
 
-### Patch Changes
-
 - Updated dependencies
+
   - @neurodesk/webapp-components@0.2.1
 
-### Minor Changes
+- Updated dependencies
 
-- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
+  - @neurodesk/webapp-components@0.2.0
 
-### Patch Changes
+- Add Run offline instructions through the shared Standalone action, linking the MuscleMap 1.4 Neurodesk container on Zenodo with its checksum, setup guidance and copyable CPU segmentation command.
+
+- Restore the 1.4 model release series after the catalog-wide release incorrectly advanced it to 1.5. Pin the series in the release planner so webapp and shared dependency changes only advance the UTC date. Synchronize the application and generated model catalog versions.
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.2
+
+- Updated dependencies
+
+  - @neurodesk/webapp-components@0.2.1
 
 - Updated dependencies
   - @neurodesk/webapp-components@0.2.0
 
-### Patch Changes
-
-- Add Run offline instructions through the shared Standalone action, linking the MuscleMap 1.4 Neurodesk container on Zenodo with its checksum, setup guidance and copyable CPU segmentation command.
-- Restore the 1.4 model release series after the catalog-wide release incorrectly advanced it to 1.5. Pin the series in the release planner so webapp and shared dependency changes only advance the UTC date. Synchronize the application and generated model catalog versions.
-
-## 1.5.20260914
-
-### Patch Changes
-
-- Updated dependencies [3cd773f]
-- Updated dependencies [4add8da]
-  - @neurodesk/webapp-components@0.1.5
-
-### Patch Changes
-
-- Updated dependencies
-  - @neurodesk/webapp-components@0.1.4
-
-## 1.5.20260910
-
 ### Minor Changes
 
-- Release the complete application catalog after integrating BrowserQC, dwi2trx and SynthSeg. Preserve shared interface behavior and publish bundles with synchronized date versions.
+- Add a shared Standalone action and offline desktop packaging with included, checksum-verified models and runtime dependencies. Remove the lightNIIng topbar link while retaining its About statement.
 
 ## 1.4.20260910
 
@@ -332,6 +507,7 @@
 ### Patch Changes
 
 - Apply the shared design system and the registry-driven About and Cite dialogs. Every app now states that it is developed and hosted by the Neurodesk team, lists the packages under the hood, names the lightning.org ecosystem, and cites one paper per implemented method plus the Neurodesk platform paper. SynthSR, SYNcro, Deface, BrowserQC and NiiMath use the shared workspace vocabulary (compact sections, one scan picker, shared toolbar, status bar and dialogs).
+
 - Updated dependencies
   - @neurodesk/webapp-components@0.1.3
 
@@ -370,11 +546,17 @@
 ### Patch Changes
 
 - Prepare the official whole-body MuscleMap v1.4 model as a gated release. Canonical upstream model contracts now generate all runtime and registry metadata.
+
 - Preserve official sparse anatomical labels in downloaded NIfTI files and require explicit label-space attribution for imported segmentations.
+
 - Verify remote model bytes by SHA-256 and replace the large-slice centered fallback with bounded full-coverage accumulation.
+
 - Add reproducible conversion, MR/CT fidelity validation, atomic publication, anonymous verification, activation, and rollback-friendly v1.3 retirement tooling.
+
 - Match v1.4 upstream inference with affine-aware MONAI geometry, source-axis preprocessing chunks, logit-space inverse transforms, Gaussian scan intervals, and 6-connected component cleanup; gate release on a full browser-to-upstream volume comparison.
+
 - Analyze uploaded segmentation NIfTI files without model inference, auto-detect browser, official, and OpenRecon int12 label encodings, and provide normalized official-label downloads.
+
 - Make the validated FP32 whole-body v1.4 model the default selectable model.
 
 ## 1.2.43
