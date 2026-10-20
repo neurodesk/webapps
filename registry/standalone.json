@@ -2,8 +2,8 @@
   "schema_version": 1,
   "repository": "neurodesk/webapps",
   "suite": {
-    "version": "0.30.20261019",
-    "revision": "afda9fd8a5993f1f5defd5dde91081af92073581",
+    "version": "0.30.20261020",
+    "revision": "b35c9824623b15686db969b3395335b7b6b48435",
     "apps": [
       {
         "id": "musclemap",
@@ -150,38 +150,38 @@
       {
         "kind": "desktop",
         "platform": "macos-arm64",
-        "version": "0.30.20261019",
-        "bytes": 1129465607,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261019/webapps-0.30.20261019-mac-arm64.zip",
-        "sha256": "061c6d1da7913be7277b349f8bac6c5fab5bd656c63eebc224f9777ba8d596f6",
-        "command": "unzip webapps-0.30.20261019-mac-arm64.zip"
+        "version": "0.30.20261020",
+        "bytes": 1129485483,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261020/webapps-0.30.20261020-mac-arm64.zip",
+        "sha256": "b8b7d6d2ff4a2056150dddf64fd2fd49c985e725b9deac42cde89d8b98f58935",
+        "command": "unzip webapps-0.30.20261020-mac-arm64.zip"
       },
       {
         "kind": "desktop",
         "platform": "linux-x64",
-        "version": "0.30.20261019",
-        "bytes": 1145482777,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261019/webapps-0.30.20261019-linux-x64.tar.gz",
-        "sha256": "d101a43380d7f2b8670277250d5d71c186f64cbb60e5bdb98e84c6c19485cfd5",
-        "command": "tar -xzf webapps-0.30.20261019-linux-x64.tar.gz"
+        "version": "0.30.20261020",
+        "bytes": 1145507210,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261020/webapps-0.30.20261020-linux-x64.tar.gz",
+        "sha256": "9a56cc4f135f054797cbfd025d03bec898ca1d8f81d8eeec797a7e6ab43c62ab",
+        "command": "tar -xzf webapps-0.30.20261020-linux-x64.tar.gz"
       },
       {
         "kind": "desktop",
         "platform": "windows-x64",
-        "version": "0.30.20261019",
-        "bytes": 1169685745,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261019/webapps-0.30.20261019-win-x64.zip",
-        "sha256": "403326a6dc41f3460762d23df3bf67559be9d4c1121b3828c3c96a9dec02c33c",
-        "command": "Expand-Archive webapps-0.30.20261019-win-x64.zip -DestinationPath NeurodeskWebapps"
+        "version": "0.30.20261020",
+        "bytes": 1169706109,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261020/webapps-0.30.20261020-win-x64.zip",
+        "sha256": "0bbc0a84a8af7383760f700ea53dff823d4036ae5b3e054d6ae6a215b55d1aa1",
+        "command": "Expand-Archive webapps-0.30.20261020-win-x64.zip -DestinationPath NeurodeskWebapps"
       },
       {
         "kind": "container",
         "platform": "linux-x64-apptainer",
-        "version": "0.30.20261019",
-        "bytes": 1087467520,
-        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261019/webapps-0.30.20261019-linux-x64.sif",
-        "sha256": "e9bad4b107db840e50ded764bb27438dd87436fb539e102fd32edfe7b3c41c79",
-        "command": "apptainer run webapps-0.30.20261019-linux-x64.sif --verify"
+        "version": "0.30.20261020",
+        "bytes": 1087475712,
+        "url": "https://github.com/neurodesk/webapps/releases/download/webapps-v0.30.20261020/webapps-0.30.20261020-linux-x64.sif",
+        "sha256": "eac40dfb89851dfabf5782cc96e0638f5082b7fbf239a541a3563f65360d8ae2",
+        "command": "apptainer run webapps-0.30.20261020-linux-x64.sif --verify"
       }
     ],
     "models": {
@@ -835,8 +835,8 @@
           "label": "freesurfer 8.2.0 (20261005)",
           "url": "https://hub.docker.com/r/vnmd/freesurfer_8.2.0",
           "dockerImage": "vnmd/freesurfer_8.2.0:20261005",
-          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/freesurfer_8.2.0_20261005.simg",
-          "apptainerName": "freesurfer_8.2.0_20261005"
+          "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/freesurfer_8.2.0_20261019.simg",
+          "apptainerName": "freesurfer_8.2.0_20261019"
         }
       ]
     },
@@ -1558,6 +1558,13 @@
       "containers": []
     },
     "degibbs": {
+      "desktop": true,
+      "profile": "interactive",
+      "assets": [],
+      "downloads": [],
+      "containers": []
+    },
+    "me-ica": {
       "desktop": true,
       "profile": "interactive",
       "assets": [],

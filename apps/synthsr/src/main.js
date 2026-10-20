@@ -5,6 +5,7 @@ import { mountImagingWorkspace } from '@neurodesk/webapp-components/core/mount-i
 import { bindFileDrop, createInfoDialog, createConsole, createViewerToolbar } from '@neurodesk/webapp-components/ui';
 import { readImageFiles, runDcm2niix } from '@neurodesk/runtime-support/dcm2niix-client';
 import { registerAppAutomation, registerViewer, createNiivueAdapter } from '@neurodesk/webapp-components/automation';
+import { chooseBrowserBackend } from '@neurodesk/synthsr/browser';
 import { readVolume } from './volume.js';
 import { configureNativeDownloads, nativeDownloads } from './native-release.js';
 import manifest from '../../../models/synthsr.manifest.json';
@@ -338,10 +339,10 @@ $('reportBtn').onclick = () => provenance && download(new Blob([JSON.stringify(p
 
 const initialization = (async () => {
   // navigator.gpu can exist without a usable adapter (headless or blocklisted GPUs); check the adapter, not the API.
-  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter().catch(() => null) : null;
-  if (adapter) return;
+  const adapter = navigator.gpu ? await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' }).catch(() => null) : null;
+  if (chooseBrowserBackend(adapter) === 'webgpu') return;
   $('backend').value = 'wasm';
-  status('Ready · WebGPU unavailable; CPU processing selected');
+  status('Ready · WebGPU unavailable or software-only; CPU processing selected');
 })();
 window.addEventListener('pagehide', () => { exampleControl.cancel(); importAbort?.abort(); processingAbort?.abort(); worker?.terminate(); clearInterval(timer); });
 

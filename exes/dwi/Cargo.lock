@@ -33,8 +33,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "dwi-gp"
+version = "0.1.0"
+dependencies = [
+ "libm",
+ "serde_json",
+]
+
+[[package]]
 name = "dwi-gradients"
 version = "0.1.0"
+
+[[package]]
+name = "dwi-hmc"
+version = "0.1.0"
+dependencies = [
+ "dwi-gradients",
+ "serde_json",
+]
 
 [[package]]
 name = "dwi-tensor"

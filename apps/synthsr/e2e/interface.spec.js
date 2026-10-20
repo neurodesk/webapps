@@ -112,7 +112,12 @@ test('shared examples load through the image workflow and preserve input on fail
   new DataView(bytes).setFloat32(116,-1024,true); // Header scaling makes unsigned-looking samples negative HU.
   await page.goto('./');
   await page.locator('#processingSettings > summary').click();
-  await expect(page.locator('#backend')).toHaveValue('webgpu');
+  // A software adapter (SwiftShader on CI) starts on CPU; hardware keeps the WebGPU default.
+  const software = await page.evaluate(async () => {
+    const adapter = await navigator.gpu?.requestAdapter();
+    return !adapter || (adapter.info?.isFallbackAdapter ?? adapter.isFallbackAdapter) === true;
+  });
+  await expect(page.locator('#backend')).toHaveValue(software ? 'wasm' : 'webgpu');
   await expect(page.locator('#outputTab')).toBeHidden();
   await page.locator('#imageInput').setInputFiles({name:'scan.nii',mimeType:'application/octet-stream',buffer:Buffer.from(bytes)});
   await expect(page.locator('#processButton')).toBeEnabled();

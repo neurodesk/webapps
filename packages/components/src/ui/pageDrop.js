@@ -14,14 +14,21 @@ const UNDO_MS = 8000;
 const HIDE_MS = 150;
 const SCAN_FILE = /\.(nii(?:\.gz)?|mgz|mgh)$/i;
 
-const usable = input => !input.disabled && !input.hasAttribute('webkitdirectory') && !input.closest('[inert], dialog:not([open])');
+// The automation contract's hidden input (automation/app-automation.js) takes runs, not people's files.
+const AUTOMATION_INPUT = 'neurodesk-input-transfer';
+const usable = input => input.id !== AUTOMATION_INPUT && !input.disabled && !input.hasAttribute('webkitdirectory') && !input.closest('[inert], dialog:not([open])');
+
+/** The classified file inputs that can take files now. */
+export function classifiedInputs(scope) {
+  return [...(scope?.querySelectorAll('input[type="file"][data-neurodesk-input]') ?? [])].filter(usable);
+}
 
 /**
  * The input a session starts from: the first classified file input that is not
  * auxiliary (a model, parameters, gradients or metadata), else the first one.
  */
 export function primaryInput(scope) {
-  const inputs = [...(scope?.querySelectorAll('input[type="file"][data-neurodesk-input]') ?? [])].filter(usable);
+  const inputs = classifiedInputs(scope);
   return inputs.find(input => !AUXILIARY.has(input.dataset.neurodeskInput)) ?? inputs[0] ?? null;
 }
 
@@ -87,8 +94,11 @@ export function bindPageDrop(doc = globalThis.document) {
   let hideTimer;
 
   const carriesFiles = event => event.dataTransfer?.types?.includes('Files');
-  // NiiVue loads canvas drops itself, behind the app; capture takes those first.
-  const unownedCanvas = event => event.target instanceof view.HTMLCanvasElement && !event.target.closest(OWNED);
+  // NiiVue loads canvas drops itself, behind the app; capture takes those first. A viewer in a
+  // shadow root (FreeBrowse) retargets its canvas's events to the host, so read the composed path.
+  const path = event => event.composedPath?.() ?? [event.target];
+  const unownedCanvas = event => path(event)[0] instanceof view.HTMLCanvasElement
+    && !path(event).some(node => node instanceof view.Element && node.matches(OWNED));
   // Capture handles unowned canvases; bubble handles whatever no app handler took.
   const ours = event => (event.eventPhase === view.Event.CAPTURING_PHASE ? unownedCanvas(event) : !event.defaultPrevented && !unownedCanvas(event));
 

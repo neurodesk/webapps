@@ -5,10 +5,11 @@ import { readVolume, writeVolume } from '@neurodesk/synthsr';
 const asBuffer = bytes => bytes instanceof ArrayBuffer
   ? bytes
   : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+const defaultRuntime = { segment, version: mindgrabPackage.version };
 
-export async function runMindgrab({ volume, assetPath, backend = 'auto', segmenter = segment, onProgress = () => {}, onLog = () => {} }) {
+export async function runMindgrab({ volume, assetPath, backend = 'auto', runtime = defaultRuntime, onProgress = () => {}, onLog = () => {} }) {
   onProgress(0, 'Extracting brain with MindGrab…');
-  const result = await segmenter(writeVolume(volume, 'MindGrab input'), {
+  const result = await runtime.segment(writeVolume(volume, 'MindGrab input'), {
     model: 'mindgrab',
     mask: true,
     gzipOutput: false,
@@ -28,7 +29,7 @@ export async function runMindgrab({ volume, assetPath, backend = 'auto', segment
     provenance: {
       method: 'MindGrab',
       package: '@brainchop/mindgrab',
-      version: mindgrabPackage.version,
+      version: runtime.version,
       model: 'mindgrab',
       backend: result.backend,
       elapsedMs: result.elapsedMs,

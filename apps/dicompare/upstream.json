@@ -15,6 +15,7 @@
     "Keep the bundled DICOM field dictionary and metaschema, concurrent dictionary import coalescing, rejection/retry tests, switch-local declaration scopes and actionable schema preload warnings.",
     "Keep explicit import type for ProcessingProgress in useFileProcessing.ts, UnifiedSchema in schemaToAcquisition.ts and WorkspaceItem in workspaceHelpers.ts; these interfaces are erased imports, avoiding runtime context/hook cycles.",
     "Keep `@playwright/test` declared as exact devDependencies for the monorepo e2e suite; the dependency checker rejects tooling resolved through another workspace's or the root's node_modules.",
-    "Keep server.open out of vite.config.mts: vite preview inherits it, so every smoke and e2e run opened a tab in the developer's default browser."
+    "Keep server.open out of vite.config.mts: vite preview inherits it, so every smoke and e2e run opened a tab in the developer's default browser.",
+    "Keep the handoff receiver in ExampleInput.tsx and data-neurodesk-handoff-receiver on index.html's body: DICOM files another app of the site sends open as reference acquisitions, claimed once per page."
   ]
 }

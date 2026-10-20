@@ -1,6 +1,6 @@
 {
   "name": "fastprep",
-  "version": "0.1.20261018",
+  "version": "0.1.20261020",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.44.0",
+    "esbuild": "0.28.1",
     "vite": "^5.0.0"
   },
   "neurodeskWebapp": {

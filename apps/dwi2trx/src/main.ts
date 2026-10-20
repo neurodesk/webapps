@@ -34,7 +34,7 @@ import {
   generateSchemeInWorker,
 } from './dwi2trx/genvectors-worker-client'
 import { collectFiles, readNiftiHeader, type ResolvedInput, resolveInput, resolveExplicitInput } from './dwi2trx/input'
-import { assertInputSize, formatBytes, InputTooLargeError } from './dwi2trx/input-limits'
+import { assertInputSize, formatBytes, InputTooLargeError } from '@neurodesk/webapp-components/file-io/input-limits'
 import {
   type InputSource,
   type Step,

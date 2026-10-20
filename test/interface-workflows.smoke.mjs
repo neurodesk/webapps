@@ -15,6 +15,31 @@ function nifti(name, value = 20) {
   buffer.fill(value,352);
   return { name, mimeType:'application/octet-stream', buffer };
 }
+// A 16^3 float32 DWI of 13 volumes with its bval and bvec: one b0, then the same six unit
+// directions at b = 1000 and 2000, the smallest table noddi fits both a tensor and NODDI to.
+function dwiSeries(stem = 'interface-dwi') {
+  const voxels = 16 * 16 * 16;
+  const directions = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [Math.SQRT1_2, Math.SQRT1_2, 0], [Math.SQRT1_2, 0, Math.SQRT1_2], [0, Math.SQRT1_2, Math.SQRT1_2]];
+  const bvals = [0, ...directions.map(() => 1000), ...directions.map(() => 2000)];
+  const bvecs = [[0, 0, 0], ...directions, ...directions];
+  const buffer = Buffer.alloc(352 + voxels * bvals.length * 4, 0);
+  buffer.writeInt32LE(348, 0);
+  [4, 16, 16, 16, bvals.length, 1, 1, 1].forEach((n, i) => buffer.writeInt16LE(n, 40 + i * 2));
+  buffer.writeInt16LE(16, 70);
+  buffer.writeInt16LE(32, 72);
+  for (let i = 0; i < 8; i++) buffer.writeFloatLE(1, 76 + i * 4);
+  buffer.writeFloatLE(352, 108);
+  buffer.writeFloatLE(1, 112);
+  buffer.write('n+1\0', 344);
+  bvals.forEach((b, volume) => {
+    for (let v = 0; v < voxels; v++) buffer.writeFloatLE(b ? 400 : 1000, 352 + (volume * voxels + v) * 4);
+  });
+  return [
+    { name: `${stem}.nii`, mimeType: 'application/octet-stream', buffer },
+    { name: `${stem}.bval`, mimeType: 'text/plain', buffer: Buffer.from(`${bvals.join(' ')}\n`) },
+    { name: `${stem}.bvec`, mimeType: 'text/plain', buffer: Buffer.from(`${[0, 1, 2].map(axis => bvecs.map(g => g[axis]).join(' ')).join('\n')}\n`) },
+  ];
+}
 const apps = (await loadAppsRegistry()).apps;
 const site = await serveSite(join(repoRoot, 'dist'));
 const browser = await chromium.launch({ args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader'] });
@@ -37,6 +62,27 @@ async function check(id, workflow) {
   finally { await page.close(); }
 }
 try {
+  await check('me-ica', async page => {
+    await page.locator('#advancedSettings > summary').tap();
+    await page.locator('#seed').fill('17');
+    await page.locator('#tedpca').selectOption('kic');
+    await page.locator('#advancedSettings > summary').tap();
+    await expect(page.locator('#seed')).toBeHidden();
+    const echoes = [1, 2, 3].flatMap(index => [
+      nifti(`echo-${index}.nii`),
+      { name: `echo-${index}.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ EchoTime: index * 0.015 })) },
+    ]);
+    await page.locator('#imageInput').setInputFiles(echoes);
+    await expect(page.locator('#runButton')).toBeEnabled();
+    await expect(page.locator('#imageLabel')).toContainText('echo-1.nii');
+    await page.locator('#inputSection > summary').tap();
+    await expect(page.locator('#echoTimes')).toBeHidden();
+    await page.locator('#inputSection > summary').tap();
+    await expect(page.locator('#echoTimes')).toHaveValue('15 30 45');
+    await page.locator('#advancedSettings > summary').tap();
+    await expect(page.locator('#seed')).toHaveValue('17');
+    await expect(page.locator('#tedpca')).toHaveValue('kic');
+  });
   await check('lcmodel', async page => {
     await page.locator('#waterSection > summary').tap();
     await expect(page.locator('#waterInput')).toBeDisabled();
@@ -346,6 +392,38 @@ try {
     const toggle = page.locator('#stepInferenceSection [data-disclosure-toggle]');
     await toggle.tap(); await expect(page.locator('#thresholdInput')).toBeHidden();
     await toggle.tap(); await expect(page.locator('#thresholdInput')).toHaveValue('0.2');
+  });
+  await check('degibbs', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(dwiSeries());
+    await expect(page.locator('#fileInfo')).toContainText('interface-dwi.nii');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    // Without a sidecar the load sets the default plane; the choice made after it must survive.
+    await expect(page.locator('#sliceAxes')).toHaveValue('0,1');
+    await page.locator('#sliceAxes').selectOption('0,2');
+    const task = page.locator('#taskSection > summary');
+    await task.tap();
+    await expect(page.locator('#sliceAxes')).toBeHidden();
+    await task.tap();
+    await expect(page.locator('#sliceAxes')).toHaveValue('0,2');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
+  });
+  await check('noddi', async page => {
+    await expect(page.locator('#statusText')).toHaveText('Drag and drop files', { timeout: 60000 });
+    await expect(page.locator('#technicalLog')).toHaveClass(/collapsed/);
+    await page.locator('#imageInput').setInputFiles(dwiSeries());
+    await expect(page.locator('#fileInfo')).toContainText('1×b0, 6×b1000, 6×b2000');
+    await expect(page.locator('#noddiNote')).toHaveText('');
+    await expect(page.locator('#runButton')).toBeEnabled();
+    const advanced = page.locator('#advancedSettings > summary');
+    await advanced.tap();
+    await page.locator('#tensorFit').selectOption('ols');
+    await advanced.tap();
+    await expect(page.locator('#tensorFit')).toBeHidden();
+    await advanced.tap();
+    await expect(page.locator('#tensorFit')).toHaveValue('ols');
+    await expect(page.locator('#outputSection')).not.toHaveAttribute('open', '');
   });
 } finally { await browser.close(); await site.close(); }
 if (failures.length) throw new Error(failures.join('\n'));

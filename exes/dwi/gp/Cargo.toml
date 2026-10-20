@@ -1,0 +1,13 @@
+[package]
+name = "dwi-gp"
+version.workspace = true
+edition.workspace = true
+license = "BSD-3-Clause AND Apache-2.0 AND MIT"
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+libm = "0.2"
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["float_roundtrip"] }

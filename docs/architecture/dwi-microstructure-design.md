@@ -80,6 +80,7 @@ These rules are in the `gradients` crate with tests:
 | QSIPrep (SHORELine) | BSD-3-Clause | port for `hmc` |
 | MRtrix3 | MPL-2.0 | port for `dwidenoise` and `degibbs`; these crates stay MPL-2.0 per file |
 | ANTs | Apache-2.0 | already built to WebAssembly; add an N4 entry point |
+| sdcflows 2.17.1 | Apache-2.0 | port for `sdc` (SyN-SDC field fit); see the [SDC plan](dwi-sdc-plan.md) |
 | Synb0-DisCo code and weights | MIT | later, for `sdc` |
 | FSL (topup, eddy, dtifit) | FSL licence, no port | reference outputs only; topup is a clean-room implementation |
 
@@ -162,13 +163,13 @@ Status, 18 October 2026: the crates, the AMICO port and the `noddi` app are done
 4. `degibbs`.
 5. `n4`, with an N4 entry point in the ANTs WebAssembly build.
 6. `hmc`: NiFreeze, then SHORELine.
-7. `sdc` with SyN-SDC.
+7. `sdc` with SyN-SDC. The [SDC port and validation plan](dwi-sdc-plan.md) gives the sdcflows 2.17.1 facts, the reference runs, the gate and the milestones.
 8. NODDI toolbox and nonlinear methods in `noddi`.
 9. Later: reverse-PE topup, then Synb0-DisCo.
 
 ## Deferred, and why
 
-- **Topup.** FSL's licence does not permit a port. A clean-room implementation from Andersson et al. 2003 is a large separate project.
+- **Topup.** FSL's licence does not permit a port. A clean-room implementation from Andersson et al. 2003 is a large separate project. [Reverse-PE options](dwi-reverse-pe-options.md) compares the alternatives: DR-BUDDI is the closest to topup, and PyHySCO is the first method that `apps/sdc` ships.
 - **Synb0-DisCo.** Its only use is as the second image for topup. It needs ConvTranspose3d and InstanceNorm3d kernels in `gpu-unet` and fp16 weights converted from the MIT `.pth` files. Its preprocessing uses N4 with WM scaling, MindGrab and EdgeReg. EdgeReg first needs a matrix output from niimath `-allineate`; greedy is the temporary replacement. Outputs are expected to be close to, not equal to, the original pipeline.
 - **Eddy-style slice outlier replacement, slice-to-volume motion and least-squares reconstruction of blip-up/down data.** NiFreeze and SHORELine do not have them. FSL eddy cannot be ported.
 - **Joint resampling across `hmc` and `sdc`.** It belongs to the pipeline specification.

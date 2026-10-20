@@ -67,6 +67,8 @@ SCT 7.3.3 uses Docker build `20260902` and Apptainer build `20260904`. They are 
 
 Neurocontainers removes a superseded `.simg` when it rebuilds the same version. By 14 October 2026 the ANTs `20260602`, FreeSurfer `20260818` and SynthSeg `20260902` downloads returned 404, so the catalog moved to the rebuilds the CVMFS log lists (`20261012`, `20261005`, `20261010`), with the matching Docker tags and digests. The nightly `standalone-links` workflow (`scripts/check-standalone-links.mjs`) checks every Standalone link so the next removal is reported.
 
+On 20 October 2026, the nightly link check reported HTTP 403 for FreeSurfer's `20261005` Apptainer image. The [accepted release record](https://github.com/neurodesk/neurocontainers/blob/fb9a89efab423871fed6e081d1b9fcf34ffa80e6/releases/freesurfer/8.2.0.json) and CVMFS log identify `freesurfer_8.2.0_20261019.simg`; its download returned HTTP 200 to HEAD and HTTP 206 to a one-byte range GET. SynthSR's Apptainer URL and filename now use that build. The Docker tag, digest and associated build metadata remain at `20261005`, which still resolves. These checks establish download availability only: the full image was not downloaded or executed, and no numerical parity or offline-runtime validation is claimed.
+
 TopoFit's official `topofit_0.5.1_20260905.simg` download is now verified. Docker Hub publishes only `candidate-1c960cec82947541d270e06099ab415933c9ea07` for that version; its link explicitly says candidate build. Earlier Python URL checks returned 403, while the supported curl method succeeds.
 
 The historical assignment discussion above describes implementation differences. The download dialog presents the direct choices without that research and preparation text.

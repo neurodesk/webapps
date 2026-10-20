@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { dicomSeries } from '../../../test-utils/dicom-fixture.mjs';
+import { dicomSeries, localizerFile } from '../../../test-utils/dicom-fixture.mjs';
 import { PREFIX_BYTES } from '../src/dicom-index.js';
 
 const [example] = JSON.parse(readFileSync(new URL('../examples.json', import.meta.url), 'utf8'));
@@ -467,18 +467,21 @@ function storedHandoffs(page) {
 }
 
 const fixtureFiles = (options) => dicomSeries(options).map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }));
-const handoffButton = (page) => page.getByRole('button', { name: 'Open in White matter lesions', exact: true });
+const handoffMenu = (page) => page.getByRole('combobox', { name: 'Open in another webapp', exact: true });
+const lesionsOption = (page) => handoffMenu(page).locator('option[value="white-matter-lesions"]');
+const sendTo = (page, path = 'white-matter-lesions') => handoffMenu(page).selectOption(path);
 
 test('a converted 3D image goes to White matter lesions alone, under its download name', async ({ page }) => {
   // The standalone preview serves dicomview alone; stand in for the receiving app on the same origin.
   await page.context().route('**/white-matter-lesions/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>receiver</title>' }));
   await page.goto('./');
-  await expect(handoffButton(page)).toBeDisabled();
+  await expect(handoffMenu(page)).toBeDisabled();
   await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4, patient: { birthDate: '19800101', studyDate: '20240102' } }));
   await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
-  await expect(handoffButton(page)).toBeEnabled();
+  await expect(handoffMenu(page)).toBeEnabled();
+  await expect(lesionsOption(page)).toBeEnabled();
   await expect(page.locator('#handoffNote')).toBeHidden();
-  await handoffButton(page).click();
+  await sendTo(page);
   await page.waitForURL(/\/white-matter-lesions\/#handoff=[0-9a-f-]{36}$/);
   const entries = await storedHandoffs(page);
   expect(entries).toHaveLength(1);
@@ -505,9 +508,9 @@ async function heldSend(page) {
   await page.locator('#dicomInput').setInputFiles([...fixtureFiles({ series: 7, slices: 4 }), ...fixtureFiles({ series: 3, slices: 4 })]);
   await expect(status(page)).toHaveText('Series 3: test_scan_3 · 1 image', { timeout: 60000 });
   const before = page.url();
-  await handoffButton(page).click();
+  await sendTo(page);
   await checked;
-  await expect(handoffButton(page), 'disabled while the send is in flight').toBeDisabled();
+  await expect(handoffMenu(page), 'disabled while the send is in flight').toBeDisabled();
   return { before, release: () => release() };
 }
 
@@ -522,7 +525,7 @@ test('choosing another series while a send checks its target cancels the send', 
   await page.locator('#seriesList .nd-volume-toggle', { hasText: 'test_scan_7' }).getByRole('button', { name: 'View' }).click();
   await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
   release();
-  await expect(handoffButton(page)).toBeEnabled();
+  await expect(handoffMenu(page)).toBeEnabled();
   await expectStayed(page, before);
 });
 
@@ -556,10 +559,10 @@ test('a page restored from the back-forward cache after a send can send again', 
   await page.goto('./');
   await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4 }));
   await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
-  await handoffButton(page).click();
+  await sendTo(page);
   await expect.poll(async () => (await storedHandoffs(page)).length, 'the send completed').toBe(1);
   // Locators wait for the cancelled navigation to finish, which it never does; read the page directly.
-  const shown = () => page.evaluate(() => ({ disabled: document.getElementById('handoffButton').disabled, status: document.getElementById('statusText').textContent }));
+  const shown = () => page.evaluate(() => ({ disabled: document.getElementById('handoffSelect').disabled, status: document.getElementById('statusText').textContent }));
   expect((await shown()).disabled, 'disabled while the page navigates away').toBe(true);
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true })));
   await expect.poll(shown).toEqual({ disabled: false, status: 'Sent series7_test_scan_7.nii to White matter lesions' });
@@ -572,16 +575,17 @@ test('the footer × cancels a send while it checks its target', async ({ page })
   await expect(status(page)).toHaveText('Opening series3_test_scan_3.nii in White matter lesions cancelled');
   await expect(status(page)).not.toHaveClass(/error/);
   release();
-  await expect(handoffButton(page)).toBeEnabled();
+  await expect(handoffMenu(page)).toBeEnabled();
   await expectStayed(page, before);
 });
 
-test('a time series cannot be sent, and says why', async ({ page }) => {
+test('a time series cannot be sent to White matter lesions, and says why', async ({ page }) => {
   await page.goto('./');
   await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 8, slices: 4, volumes: 3 }));
   await expect(status(page)).toHaveText('Series 8: test_scan_8 · 1 image', { timeout: 60000 });
   await expect(page.locator('#handoffNote')).toHaveText('White matter lesions takes one 3D image; this one has 3 volumes.');
-  await expect(handoffButton(page)).toBeDisabled();
+  await expect(lesionsOption(page)).toBeDisabled();
+  await expect(handoffMenu(page), 'other apps still take it').toBeEnabled();
 });
 
 test('sending from the standalone app, where White matter lesions is not served, stays put and says so', async ({ page }) => {
@@ -589,10 +593,73 @@ test('sending from the standalone app, where White matter lesions is not served,
   await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4 }));
   await expect(status(page)).toHaveText('Series 7: test_scan_7 · 1 image', { timeout: 60000 });
   const before = page.url();
-  await handoffButton(page).click();
+  await sendTo(page);
   await expect(status(page)).toHaveText('/white-matter-lesions/ is not served beside this app. Download the image instead.');
   await expect(status(page)).toHaveClass(/error/);
   expect(page.url()).toBe(before);
-  await expect(handoffButton(page)).toBeEnabled();
+  await expect(handoffMenu(page)).toBeEnabled();
   expect(await page.evaluate(async () => (await indexedDB.databases()).map(({ name }) => name))).not.toContain('neurodesk-handoff');
+});
+
+test('the menu lists every app of the site that takes a series, from the registry', async ({ page }) => {
+  const { loadAppsRegistry } = await import('../../../scripts/lib/apps-registry.mjs');
+  const registry = await loadAppsRegistry();
+  const expected = registry.apps
+    .filter((app) => app.id !== 'dicomview' && app.support_status !== 'retired' && app.handoff !== 'none')
+    .map((app) => app.title)
+    .sort((a, b) => a.localeCompare(b));
+  await page.goto('./');
+  const titles = await handoffMenu(page).locator('option').evaluateAll((options) => options.slice(1).map((option) => option.textContent));
+  expect(titles).toEqual(expected);
+  await expect(handoffMenu(page).locator('option').first()).toHaveText('Open in another webapp…');
+});
+
+test('an app that reads DICOM receives the series files, before any conversion', async ({ page }) => {
+  await page.context().route('**/dicompare/', (route) => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>receiver</title>' }));
+  await page.goto('./');
+  const files = fixtureFiles({ series: 7, slices: 4 });
+  await page.locator('#dicomInput').setInputFiles(files);
+  await expect(handoffMenu(page).locator('option[value="dicompare"]')).toBeEnabled();
+  await sendTo(page, 'dicompare');
+  await page.waitForURL(/\/dicompare\/#handoff=[0-9a-f-]{36}$/);
+  const [entry] = await storedHandoffs(page);
+  expect(entry.target).toBe('dicompare');
+  expect(entry.files.map(({ name }) => name).sort()).toEqual(files.map(({ name }) => name).sort());
+});
+
+test('a DICOM send survives its series finishing conversion meanwhile', async ({ page }) => {
+  let releaseTarget;
+  const checked = new Promise((resolve) => {
+    page.context().route('**/dicompare/', async (route) => {
+      // Only the check of the target waits; the navigation that follows does not.
+      if (!releaseTarget) {
+        resolve();
+        await new Promise((go) => { releaseTarget = go; });
+      }
+      await route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>receiver</title>' }).catch(() => {});
+    });
+  });
+  // Hold dcm2niix's worker, so the conversion finishes only once the send is under way.
+  const heldWorkers = [];
+  await page.context().route('**/assets/worker.jpeg-*.js', (route) => { heldWorkers.push(route); });
+  await page.goto('./');
+  await page.locator('#dicomInput').setInputFiles(fixtureFiles({ series: 7, slices: 4 }));
+  await expect(handoffMenu(page).locator('option[value="dicompare"]')).toBeEnabled();
+  await sendTo(page, 'dicompare');
+  await checked;
+  await expect.poll(() => heldWorkers.length).toBeGreaterThan(0);
+  await page.context().unroute('**/assets/worker.jpeg-*.js');
+  for (const route of heldWorkers) await route.continue();
+  await expect(page.locator('#outputSelect option')).toHaveCount(1, { timeout: 60000 });
+  releaseTarget();
+  await page.waitForURL(/\/dicompare\/#handoff=[0-9a-f-]{36}$/);
+});
+
+test('a localizer whose frames lie in different planes shows each frame', async ({ page }) => {
+  await page.goto('./');
+  const { name, mimeType, buffer } = localizerFile();
+  await page.locator('#dicomInput').setInputFiles([{ name, mimeType, buffer }]);
+  await expect(status(page)).toHaveText('Series 9: localizer_9 · 3 images', { timeout: 60000 });
+  await expect(page.locator('#outputSelect option')).toHaveText(['frame1.nii', 'frame2.nii', 'frame3.nii']);
+  await expect(page.locator('#technicalLog')).toContainText('each of its 3 frames is shown as its own slice');
 });

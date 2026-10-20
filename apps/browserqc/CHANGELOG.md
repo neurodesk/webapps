@@ -1,5 +1,39 @@
 # browserqc
 
+## 1.6.20261020
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/browserqc@1.6.20261020
+  - @neurodesk/runtime-support@0.8.1
+- ea2a6d2: Deface and BrowserQC take the avg152 T1 2 mm template from the shared template
+  catalogue (`registry/templates.json`) and download it with `fetchTemplateFile`,
+  which checks its size and SHA-256 and caches it. Before, Deface fetched the template
+  and its face mask with no checksum; the face mask now goes through `fetchModel` with
+  its manifest checksum too. BrowserQC's air template, its manifest and Deface's
+  manifest name the catalogue URL, so the offline bundle carries one copy of the file
+  instead of three. BrowserQC cites the ICBM152 template paper. `fetchTemplateFile`
+  names the template when its bytes do not match the pin.
+- ac01831: These apps no longer refuse to start in a browser without WebGPU. NiiVue falls back to WebGL2 when WebGPU is absent, and MindGrab falls back to WebGL2 or the threaded CPU, so the viewers, defacing, registration, brain extraction, quality control and meshing now run in browsers such as Firefox on Linux. When the browser offers neither WebGPU nor WebGL2, the app says that the image viewer cannot start.
+- 14b8248: MindGrab's automatic backend no longer runs WebGL2 on a software renderer (SwiftShader, llvmpipe), which returned a blank brain mask without WebGPU; the threaded CPU module runs instead. The choice and MindGrab's own output appear in the technical log.
+- Updated dependencies [ea2a6d2]
+- Updated dependencies [3f1d770]
+- Updated dependencies [14b8248]
+- Updated dependencies [d9718cd]
+- Updated dependencies [c1a4dda]
+- Updated dependencies [1f4aecd]
+- Updated dependencies [3329c39]
+- Updated dependencies [46935f7]
+- Updated dependencies [d1fa022]
+  - @neurodesk/browserqc@1.6.20261020
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+
 ## 1.6.20261018
 
 ### Patch Changes

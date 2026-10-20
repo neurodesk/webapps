@@ -28,7 +28,10 @@ test('the example image can be windowed from the keyboard in FreeBrowse', async 
   await expect(canvas).toBeVisible();
   await expect(page.locator('#emptyState')).toBeHidden();
 
+  // The Volumes panel starts closed, leaving the image the whole viewer.
   const volume = viewer.getByRole('button', { name: 'series2_t1_mpr_tra_gk_v4.nii', exact: true });
+  await expect(volume).toBeHidden();
+  await viewer.getByRole('button', { name: 'Show sidebar' }).click();
   await expect(volume, 'FreeBrowse lists the volume under its date-free name').toHaveAttribute('aria-pressed', 'false');
   await volume.focus();
   await page.keyboard.press('Enter');
@@ -76,6 +79,7 @@ test('a drawing made on one series is closed when another series opens', async (
   await page.locator('#dicomInput').setInputFiles(files);
   await expect(page.locator('#statusText')).toHaveText(/1 image/, { timeout: 60000 });
   const viewer = page.locator('#freebrowseViewer');
+  await viewer.getByRole('button', { name: 'Show sidebar' }).click();
   await viewer.getByRole('button', { name: /Create empty drawing layer/ }).click();
   await expect(viewer.getByText('Save Drawing')).toBeVisible();
   await page.locator('#seriesList .nd-view-btn').nth(1).click();

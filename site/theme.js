@@ -1,3 +1,19 @@
+// A page opened with a handoff from another app notes where change listeners are bound, so the
+// shell's receiver (handoff/receive.js) puts the files on an input only once its app handles
+// them. It lives here because this is the one classic script on every page: it runs while the
+// page is parsed, before any module, the app's own included.
+(() => {
+  if (!/[#&]handoff=/.test(window.location.hash)) return;
+  const bound = new WeakSet();
+  window[Symbol.for('neurodesk.changeListeners')] = bound;
+  const add = window.EventTarget.prototype.addEventListener;
+  window.EventTarget.prototype.addEventListener = function addEventListener(type, listener, options) {
+    // The shell's own page drop listens in the capture phase; an app's handler does not.
+    if (type === 'change' && listener && !(options === true || options?.capture)) bound.add(this);
+    return add.call(this, type, listener, options);
+  };
+})();
+
 (() => {
   const storageKey = 'neurodesk-theme';
   const root = document.documentElement;

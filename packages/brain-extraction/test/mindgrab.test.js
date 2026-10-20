@@ -14,22 +14,25 @@ const volume = {
   data: Float32Array.from([0, 1, 2, 3, 4, 5, 6, 7]),
 };
 
-test("MindGrab adapter requests the mask and records the selected backend", async () => {
+test("MindGrab adapter requests the mask and records its injected runtime and backend", async () => {
   let options;
   const mask = { ...volume, data: Uint8Array.from([0, 1, 1, 1, 1, 1, 1, 0]) };
   const result = await runMindgrab({
     volume,
     assetPath: "https://example.test/syncro/mindgrab/",
-    segmenter: async (input, received) => {
-      options = received;
-      assert.ok(input.byteLength > 352);
-      return {
-        image: writeVolume(volume),
-        mask: writeVolume(mask),
-        elapsedMs: 123,
-        backend: "webgl2",
-        ranInWorker: false,
-      };
+    runtime: {
+      version: "0.1.20260813",
+      segment: async (input, received) => {
+        options = received;
+        assert.ok(input.byteLength > 352);
+        return {
+          image: writeVolume(volume),
+          mask: writeVolume(mask),
+          elapsedMs: 123,
+          backend: "webgl2",
+          ranInWorker: false,
+        };
+      },
     },
   });
   const { onLog, ...comparable } = options;
@@ -45,4 +48,5 @@ test("MindGrab adapter requests the mask and records the selected backend", asyn
   assert.deepEqual([...result.mask.data], [0, 1, 1, 1, 1, 1, 1, 0]);
   assert.equal(result.provenance.backend, "webgl2");
   assert.equal(result.provenance.package, "@brainchop/mindgrab");
+  assert.equal(result.provenance.version, "0.1.20260813");
 });

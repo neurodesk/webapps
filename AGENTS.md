@@ -26,6 +26,7 @@ Before changing UI, adding controls, or scaffolding an app, read [the design sys
 - Give each sidebar one `.nd-btn-primary`. Every other action, including per-step Run buttons, is secondary; the footer × is the only cancel.
 - `test/design-system.test.mjs` checks these rules in source for every app, whatever its shell; `pnpm audit:interfaces` checks them in the rendered page on desktop and phone.
 - Do not write drop code. The shell's page drop (`bindPageDrop`) sets the primary input's files and fires `change`; an app whose viewer loads drops itself marks it `data-drop-target`, and an input that appends to a list carries `data-appends`, clears on `nd-replace` and fires `nd-files` (`detail.files`) when its app removes entries, so Undo restores the list as it was.
+- Do not write handoff code either. DICOM View's "Open in another webapp" menu lists the registry's apps, and the shell opens what it sends through the receiving app's inputs as a page drop would. `handoff` in `registry/apps.yml` says what an app receives: the NIfTI image (default), `dicom` (the series' files) or `none` (left out of the menu). An app that cannot take files through a classified input receives them itself (`takeHandoff`) and marks its body `data-neurodesk-handoff-receiver`, as dicompare and White matter lesions do.
 - Reuse shared layout, spacing and control components. Preserve input values when sections close.
 - Before completing UI work, run `pnpm audit:interfaces`, `pnpm test:mobile` and `pnpm test:interface-workflows` against a fresh production build. Review desktop and phone screenshots and exercise the changed workflow. The interface standard defines the review criteria and the audit's limits.
 
@@ -293,6 +294,16 @@ An app can set `ci.e2e_shards` to 2-4 in `registry/apps.yml`. The CPU browser jo
   exec node validation/browser-reference.mjs` and commit the new references; `node-drivers.yml` checks
   them on Linux, Windows and macOS. A command line's own release check still needs its own independent
   reference.
+
+## me-ica
+
+- The engine is `@niivue/meica` from [niivue/meica-rs](https://github.com/niivue/meica-rs) (Rust port of tedana; its `DEVELOPMENT.md` and `AGENTS.md` hold the equivalence tests and numerics). `package.json` pins the exact npm version. Before a PR, after that version is on npm, run `pnpm install` so `pnpm-lock.yaml` resolves it from the registry, not a local `link:`. `apps/me-ica` stages only the package's `dist/single` (`scripts/copy-runtime.mjs` → ignored `public/meica-wasm/`) and runs it single-threaded in `src/worker.js`; cancelling terminates that worker. Never deploy `dist/threaded`: it links Apache-2.0 wasm-bindgen-rayon, pending a legal determination (meica-rs `AGENTS.md`).
+- `e2e/expected.json` pins the sha256 of key outputs recorded from the native `meica` CLI on the examples; the browser must reproduce them. Re-record when a meica release changes outputs. `ME_ICA_EXAMPLE_DIR` serves the first example locally instead of HF. `playwright.config.js` always blocks service workers: the coi worker hides requests from `page.route`, and the preview server sends COOP/COEP itself.
+- The examples (`examples.json`) are on HF dataset `neurodeskorg/webapps`, `me-ica/motor-3echo{,-moco}/example/`, pinned with both offline inventories (`scripts/lock-example-assets.mjs`).
+- T2* uses a fixed 0–0.1 s window (`T2STAR_WINDOW`, `src/main.js`): tedana caps fits at 10× the 99.5th percentile, so outliers to ~600 s wash out NiiVue's auto window.
+- The component "stat-z" maps are tedana's standardized regression weights (mostly within ±0.7), not z statistics; the viewer overlays them on S0 from |0.3| to 0.7.
+- Needs 3+ echoes (`MIN_ECHOES`; tedana's PCA fails with 2).
+- The regressors TSV comes from the dropped files (`*_desc-confounds_timeseries.tsv`, else a single non-events TSV; `src/inputs.js`) and is sent only for trees in the "Needs a confounds TSV" menu group. The moco example ships its confounds; e2e checks motion_aroma against native hashes.
 
 ## Native executables (exes/)
 

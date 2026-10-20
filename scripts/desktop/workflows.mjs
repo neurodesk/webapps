@@ -10,7 +10,7 @@ import { expect } from '@playwright/test';
 import { verifyMuscleMapFullPipeline, createSyntheticMuscleMapNifti } from '../../test/musclemap-full-pipeline-smoke.mjs';
 import { startReferenceServer } from '../../test-utils/compute-reference-server.mjs';
 
-export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'noddi', 'degibbs'];
+export const workflowApps = ['nesvor', 'musclemap', 'vesselboost', 'spinalcordtoolbox', 'calmar', 'qsmbly', 'seedseg', 'dicompare', 'deface', 'easy-mp2rage', 'niimath', 'dicom2vid', 'browserqc', 'surfannotate', 'zarro', 'synthsr', 'synthseg', 'syncro', 'dwi2trx', 'edgereg', 'greedy', 'ants', 'brain2print', 'topofit', 'fireants', 'brain-extraction', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'elastix', 'dicomview', 'fastprep', 'noddi', 'degibbs', 'me-ica'];
 
 /**
  * Anything a workflow needs before the desktop app starts. NeSVoR computes on a
@@ -38,9 +38,9 @@ async function verifyLesionHandoff(page, filename) {
       }
     };
   });
-  const send = page.getByRole('button', { name: 'Open in White matter lesions', exact: true });
-  await expect(send).toBeEnabled({ timeout: 60000 });
-  await send.click();
+  const menu = page.getByRole('combobox', { name: 'Open in another webapp', exact: true });
+  await expect(menu.locator('option[value="white-matter-lesions"]')).toBeEnabled({ timeout: 60000 });
+  await menu.selectOption('white-matter-lesions');
   await page.waitForURL(/\/white-matter-lesions\/$/, { timeout: 60000 });
   const loaded = `Loaded ${filename} from DICOM View`;
   await expect(page.locator('#statusText')).toHaveText(loaded, { timeout: 60000 });
@@ -98,7 +98,7 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     assert.ok(bytes.length > 352, 'Output must contain image data');
     return { filename: data.filename, bytes: data.bytes.length };
   };
-  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'dicomview', 'fastprep', 'noddi', 'degibbs'].includes(id)) {
+  if (['deface', 'brain2print', 'dwi2trx', 'ants', 'greedy', 'edgereg', 'fireants', 'elastix', 'disconnectome', 'carotid-flow', 'white-matter-lesions', 'lcmodel', 'dicomview', 'fastprep', 'noddi', 'degibbs', 'me-ica'].includes(id)) {
     const examples = JSON.parse(await readFile(join(root, 'apps', id, 'examples.json')));
     const selector = page.getByRole('combobox', { name: 'Input', exact: true });
     await expect(selector).toBeEnabled({ timeout: 120000 });
@@ -168,6 +168,13 @@ export async function verifyWorkflow(id, page, { root, resources, desktop, compu
     await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
     await page.locator('#runButton').click();
     await expect(page.locator('#statusText')).toContainText('Registration complete', { timeout: 900000 });
+    return nifti(await download('#resultList button:has-text("Download") >> nth=0'));
+  }
+  if (id === 'me-ica') {
+    // The example's expectedResult: tedana_orig keeps 7 of 13 components.
+    await expect(page.locator('#runButton')).toBeEnabled({ timeout: 120000 });
+    await page.locator('#runButton').click();
+    await expect(page.locator('#statusText')).toContainText('7 accepted, 6 rejected', { timeout: 900000 });
     return nifti(await download('#resultList button:has-text("Download") >> nth=0'));
   }
   if (id === 'dicompare') {

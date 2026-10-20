@@ -3,4 +3,7 @@ reviews:
   # No "Draft PR not reviewed" / "Review skipped" comments.
   review_status: false
   auto_review:
+    # Only review when explicitly requested with "@coderabbitai review".
+    enabled: false
+    auto_incremental_review: false
     drafts: false

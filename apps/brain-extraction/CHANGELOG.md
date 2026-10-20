@@ -1,5 +1,46 @@
 # brain-extraction
 
+## 0.5.20261020
+
+### Minor Changes
+
+- 4f11450: Add SynthStrip's no-CSF mode (`mri_synthstrip --no-csf`): an Exclude CSF setting in the brain extraction app and `--no-csf` on the `brain-extraction` command line. It runs FreeSurfer's `synthstrip.nocsf.1.pt` weights, converted to ONNX the same way as the default model, and names its outputs `_synthstrip-nocsf_brain.nii` and `_synthstrip-nocsf_mask.nii`.
+
+### Patch Changes
+
+- Record the injected MindGrab runtime's actual version in brain extraction provenance, including SYNcro's separately pinned build.
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [4f11450]
+  - @neurodesk/webapp-components@0.17.0
+  - @neurodesk/brain-extraction@0.5.20261020
+  - @neurodesk/synthstrip@0.2.0
+  - @neurodesk/runtime-support@0.8.1
+  - @neurodesk/synthsr@0.6.20261020
+
+## 0.4.20261020
+
+### Patch Changes
+
+- 14b8248: MindGrab's automatic backend no longer runs WebGL2 on a software renderer (SwiftShader, llvmpipe), which returned a blank brain mask without WebGPU; the threaded CPU module runs instead. The choice and MindGrab's own output appear in the technical log.
+- Updated dependencies [ea2a6d2]
+- Updated dependencies [3f1d770]
+- Updated dependencies [14b8248]
+- Updated dependencies [d9718cd]
+- Updated dependencies [c1a4dda]
+- Updated dependencies [1f4aecd]
+- Updated dependencies [3329c39]
+- Updated dependencies [46935f7]
+- Updated dependencies [d1fa022]
+  - @neurodesk/webapp-components@0.16.0
+  - @neurodesk/runtime-support@0.8.0
+  - @neurodesk/synthsr@0.6.20261020
+  - @neurodesk/synthstrip@0.1.5
+  - @neurodesk/brain-extraction@0.4.20261020
+
 ## 0.4.20261018
 
 ### Patch Changes

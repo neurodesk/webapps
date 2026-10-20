@@ -214,3 +214,11 @@ test('registry rejects missing, unknown, repeated, and legacy categories', async
   await writeFile(path, stringify(raw));
   await assert.rejects(loadAppsRegistry(path), /use categories instead of category/);
 });
+
+test('registry validation rejects a handoff form apps cannot receive', async () => {
+  const raw = parse(await readFile(join(repoRoot, 'registry', 'apps.yml'), 'utf8'));
+  raw.apps[0].handoff = 'mgz';
+  const path = join(await mkdtemp(join(tmpdir(), 'apps-registry-')), 'apps.yml');
+  await writeFile(path, stringify(raw));
+  await assert.rejects(loadAppsRegistry(path), /handoff for .* must be one of nifti, dicom, none/);
+});

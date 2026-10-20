@@ -60,6 +60,8 @@ for (const file of assets) {
 }
 for (const file of assets) {
   const asset = lock.assets[file.url];
+  sources.apps[file.app] ??= [];
+  lock.apps[file.app] ??= [];
   const entry = sources.apps[file.app].find(item => item.url === file.url);
   if (entry) Object.assign(entry, { sha256: asset.sha256, bytes: asset.bytes }, file.kind === 'template' ? { kind: file.kind, license: file.license } : {});
   else sources.apps[file.app].push({ url: file.url, sha256: asset.sha256, bytes: asset.bytes, kind: file.kind, ...(file.license ? { license: file.license } : {}) });

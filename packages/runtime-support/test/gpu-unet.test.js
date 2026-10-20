@@ -49,7 +49,7 @@ test('caller ceilings are optional and adapter buffer limits always apply', () =
   const limits = { maxStorageBufferBindingSize: 4 * 2 ** 30, maxBufferSize: 4 * 2 ** 30 };
   assert.throws(
     () => assertGpuBufferSupported(2.25 * 2 ** 30, limits, { label: 'SynthSeg' }),
-    /above the validated 2\.0 GiB limit for SynthSeg.*native SynthSeg/s,
+    /needs a 2,304 MiB GPU buffer, above the validated 2,047 MiB limit for SynthSeg.*native SynthSeg/s,
   );
   assert.doesNotThrow(() => assertGpuBufferSupported(2.8 * 2 ** 30, limits, {
     label: 'SynthSR',
@@ -60,7 +60,7 @@ test('caller ceilings are optional and adapter buffer limits always apply', () =
       label: 'Limited U-Net',
       maxValidatedBufferSize: 2.25 * 2 ** 30,
     }),
-    /above the validated 2\.3 GiB limit for Limited U-Net/,
+    /above the validated 2,304 MiB limit for Limited U-Net/,
   );
   assert.throws(
     () => assertGpuBufferSupported(2.8 * 2 ** 30, { maxStorageBufferBindingSize: 2.5 * 2 ** 30, maxBufferSize: 4 * 2 ** 30 }, {
@@ -68,7 +68,20 @@ test('caller ceilings are optional and adapter buffer limits always apply', () =
       maxValidatedBufferSize: Number.POSITIVE_INFINITY,
       bufferLimitHelp: 'Choose tiled mode.',
     }),
-    /device allows 2\.5 GiB.*Choose tiled mode/s,
+    /needs a 2,868 MiB GPU buffer but this device allows 2,560 MiB.*Choose tiled mode/s,
+  );
+});
+
+// SwiftShader allows 1 GiB; a volume just above it must not read as "1.0 GiB but allows 1.0 GiB".
+test('the buffer-limit message keeps the need and the limit apart', () => {
+  const limits = { maxStorageBufferBindingSize: 2 ** 30, maxBufferSize: 2 ** 30 };
+  assert.throws(
+    () => assertGpuBufferSupported(2 ** 30 + 2 ** 20, limits, { label: 'SynthSR', maxValidatedBufferSize: Number.POSITIVE_INFINITY }),
+    /needs a 1,025 MiB GPU buffer but this device allows 1,024 MiB/,
+  );
+  assert.throws(
+    () => assertGpuBufferSupported(2 ** 30 + 1, limits, { label: 'SynthSR', maxValidatedBufferSize: Number.POSITIVE_INFINITY }),
+    /needs a 1,025 MiB GPU buffer but this device allows 1,024 MiB/,
   );
 });
 

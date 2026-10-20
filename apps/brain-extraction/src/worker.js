@@ -1,5 +1,6 @@
 import { readVolume } from '@neurodesk/synthsr';
 import { writeOutputs } from '@neurodesk/brain-extraction/outputs';
+import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
 
 self.onmessage = async ({ data: job }) => {
   const onProgress = (value, message) => self.postMessage({ type: 'progress', value, message });
@@ -16,8 +17,13 @@ self.onmessage = async ({ data: job }) => {
       }
       result = runBet({ volume, runtime, fractionalIntensity: job.fractionalIntensity, onProgress });
     } else if (job.method === 'mindgrab') {
-      const { runMindgrab } = await import('@neurodesk/brain-extraction/mindgrab');
-      result = await runMindgrab({ volume, backend: job.backend, assetPath: new URL('mindgrab/', job.assetBase).href, onProgress, onLog });
+      const [{ runMindgrab }, mindgrab, { withBackendChoice }] = await Promise.all([
+        import('@neurodesk/brain-extraction/mindgrab'),
+        import('@brainchop/mindgrab'),
+        import('@neurodesk/runtime-support/mindgrab/backend'),
+      ]);
+      const { segment } = withBackendChoice(mindgrab);
+      result = await runMindgrab({ volume, backend: job.backend, runtime: { segment, version: mindgrabPackage.version }, assetPath: new URL('mindgrab/', job.assetBase).href, onProgress, onLog });
     } else if (job.method === 'synthstrip') {
       const { extractSynthstrip } = await import('./synthstrip.js');
       result = await extractSynthstrip({ volume, noCsf: job.noCsf, onProgress });

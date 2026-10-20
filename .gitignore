@@ -16,6 +16,7 @@ playwright-report/
 test-results/
 apps/*/public/brainchop/
 apps/*/public/greedy-wasm/
+apps/me-ica/public/meica-wasm/
 apps/*/public/cfireants/
 apps/syncro/public/mindgrab/
 apps/dicomview/src/vendor/

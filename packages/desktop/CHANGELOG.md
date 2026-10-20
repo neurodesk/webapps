@@ -1,5 +1,28 @@
 # @neurodesk/desktop
 
+## 0.31.20261020
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @neurodesk/webapp-components@0.17.0
+
+## 0.30.20261020
+
+### Patch Changes
+
+- 2d3e637: The macOS release retries Apple stapling when `xcrun stapler` fails on a transient transport error (`NSURLErrorDomain` connection lost, timed out, offline or cannot connect, or stapler code 68), up to four attempts with a 15 s, 30 s, 60 s backoff, each retry logged. `@electron/notarize` staples once and never retries, so one dropped connection to api.apple-cloudkit.com failed the nightly desktop release. The app is notarized once; a notarization failure, a certificate-trust error or an invalid signature still fails at once.
+- Updated dependencies [ea2a6d2]
+- Updated dependencies [3f1d770]
+- Updated dependencies [d9718cd]
+- Updated dependencies [c1a4dda]
+- Updated dependencies [3329c39]
+- Updated dependencies [46935f7]
+  - @neurodesk/webapp-components@0.16.0
+
 ## 0.30.20261018
 
 ### Patch Changes

@@ -142,12 +142,20 @@ export function assertGpuBufferSupported(largest, limits, {
   bufferLimitHelp = `Use native ${label} or another device for full-volume processing.`,
 } = {}) {
   if (largest > maxValidatedBufferSize) {
-    throw new Error(`This volume needs a ${(largest / 2 ** 30).toFixed(1)} GiB GPU buffer, above the validated ${(maxValidatedBufferSize / 2 ** 30).toFixed(1)} GiB limit for ${label}. ${bufferLimitHelp}`);
+    throw new Error(`This volume needs a ${mib(largest, Math.ceil)} GPU buffer, above the validated ${mib(maxValidatedBufferSize, Math.floor)} limit for ${label}. ${bufferLimitHelp}`);
   }
-  const allowed = Math.min(limits.maxStorageBufferBindingSize, limits.maxBufferSize);
+  const allowed = gpuBufferLimit(limits);
   if (largest > allowed) {
-    throw new Error(`This volume needs a ${(largest / 2 ** 30).toFixed(1)} GiB GPU buffer but this device allows ${(allowed / 2 ** 30).toFixed(1)} GiB. ${bufferLimitHelp}`);
+    throw new Error(`This volume needs a ${mib(largest, Math.ceil)} GPU buffer but this device allows ${mib(allowed, Math.floor)}. ${bufferLimitHelp}`);
   }
+}
+
+// The need rounds up and the limit down, so the two never print the same number when they differ.
+const mib = (bytes, round) => `${round(bytes / 2 ** 20).toLocaleString('en-US')} MiB`;
+
+/** The largest buffer an adapter or device with `limits` can bind. */
+export function gpuBufferLimit(limits) {
+  return Math.min(limits.maxStorageBufferBindingSize, limits.maxBufferSize);
 }
 
 export async function createGpuSession(bytes, dims, {

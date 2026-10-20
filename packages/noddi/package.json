@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/noddi",
-  "version": "0.1.20261018",
+  "version": "0.2.0",
   "description": "Diffusion tensor and NODDI fitting for browsers and the command line",
   "type": "module",
   "private": true,

@@ -12,4 +12,6 @@ dwi-tensor = { path = "../tensor" }
 libm = "0.2"
 
 [dev-dependencies]
-serde_json = "1"
+# float_roundtrip as in dwi-gp, so `-p dwi-amico` and `--workspace` parse the
+# fixtures the same way (Cargo unifies the features of one build).
+serde_json = { version = "1", features = ["float_roundtrip"] }

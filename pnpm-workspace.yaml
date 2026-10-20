@@ -18,6 +18,7 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - '@dipy/gpu-streamlines@0.1.0'
   - '@niivue/niimath@1.4.20260909'
+  - '@niivue/meica@0.1.20261018'
   - '@fireants/fireants@0.1.20260913'
   - '@brainchop/mindgrab@0.1.20260923'
   - '@niivue/niivue@1.0.0-rc.14'

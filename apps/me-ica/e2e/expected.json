@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "n_components": 13,
+    "accepted": 7,
+    "rejected": 6,
+    "seed": 42,
+    "n_iter": 35
+  },
+  "sha256": {
+    "desc-denoised_bold.nii.gz": "c71aafe5984b5282011e2f6dff300a96e783a963fe624d96d8f2c6e2ba7a62d3",
+    "desc-optcom_bold.nii.gz": "f77abca40afa2478e470bc95461c6c33ebceef9530fc4296d0237e286be8ed0e",
+    "T2starmap.nii.gz": "653b23ab54a0e6ef879fa90c9b06c8c7d9bf8786df8df04f0e8810d74c582043",
+    "desc-tedana_metrics.tsv": "6d2487907e900eae4c0a8dc32b2979d686ff003c3c5312ea86d04977e1bdcf1b",
+    "desc-ICA_status_table.tsv": "dbca51a251566454e2d1aad86546a853867cdb0294b60c86c614a50122379dbc"
+  },
+  "motion_aroma": {
+    "example": "motor-3echo-moco",
+    "summary": {
+      "n_components": 13,
+      "accepted": 1,
+      "rejected": 12,
+      "seed": 42
+    },
+    "sha256": {
+      "desc-denoised_bold.nii.gz": "691a5919e0cb102222aa4be1ccfcfdd7ca0eb6e72c7344f197e22f1be314e605",
+      "desc-tedana_metrics.tsv": "8a8219243daf293778f8df1b92274f679b7c4719f9ae74a2274b68ff02baf4c1"
+    }
+  }
+}

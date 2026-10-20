@@ -46,7 +46,7 @@ test('documented runtime roots stay registered as Knip entries', () => {
     'packages/components': ['web/js/showcase.js'],
     'packages/desktop': ['src/main.js', 'neuroflow/runtime/neurodesk.mjs'],
     'site/easter-eggs/vessel-surfer-leaderboard': ['src/worker.js'],
-    '.': ['site/app-shell.js', 'site/landing.js', 'site/theme.js', 'exes/nii2tvx/wasm_demo.mjs'],
+    '.': ['site/app-shell.js', 'site/landing.js', 'site/theme.js', 'exes/nii2tvx/wasm_demo.mjs', 'docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs'],
   };
   for (const [workspace, entries] of Object.entries(roots)) {
     for (const entry of entries) assert.ok(config.workspaces[workspace].entry.includes(entry), `${workspace}/${entry}`);

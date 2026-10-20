@@ -68,6 +68,8 @@ test('every production Playwright server omits its build only in prebuilt mode',
     const files = await readdir(join(root, 'apps', app));
     for (const file of files.filter(name => /^playwright\.config\./.test(name))) configs.push(join(root, 'apps', app, file));
   }
+  // `pnpm new-app` copies the template's config to the same depth, so its relative imports hold.
+  configs.push(join(root, 'templates/app-template/playwright.config.js'));
   const script = `
     const commands = [];
     for (const file of ${JSON.stringify(configs)}) {

@@ -82,8 +82,8 @@
       "url": "https://hub.docker.com/r/vnmd/freesurfer_8.2.0",
       "source": "https://raw.githubusercontent.com/neurodesk/neurocontainers/0ae4124fbe1a77b13fc32306f8ad1f371b504232/recipes/freesurfer/build.yaml",
       "dockerImage": "vnmd/freesurfer_8.2.0:20261005",
-      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/freesurfer_8.2.0_20261005.simg",
-      "apptainerName": "freesurfer_8.2.0_20261005",
+      "apptainerUrl": "https://neurocontainers.neurodesk.workers.dev/freesurfer_8.2.0_20261019.simg",
+      "apptainerName": "freesurfer_8.2.0_20261019",
       "apptainerSource": "https://raw.githubusercontent.com/neurodesk/neurocommand/main/cvmfs/log.txt"
     },
     "synthseg": {

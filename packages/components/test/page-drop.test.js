@@ -7,12 +7,13 @@ const file = name => ({ name });
 
 test('the primary input skips auxiliary kinds and disabled or folder inputs', () => {
   const { document } = new JSDOM(`<body>
+    <input type="file" data-neurodesk-input="dataset" id="neurodesk-input-transfer" hidden>
     <input type="file" data-neurodesk-input="model" id="model">
     <input type="file" data-neurodesk-input="image" id="off" disabled>
     <input type="file" data-neurodesk-input="image" id="folder" webkitdirectory>
     <input type="file" data-neurodesk-input="dataset" id="spectra">
     <input type="file" data-neurodesk-input="image" id="t1"></body>`).window;
-  assert.equal(primaryInput(document).id, 'spectra', 'LCModel: spectra, not the tissue T1');
+  assert.equal(primaryInput(document).id, 'spectra', 'LCModel: spectra, not the tissue T1 nor the automation input');
   document.getElementById('spectra').remove();
   assert.equal(primaryInput(document).id, 't1');
 });
@@ -188,4 +189,22 @@ test('promise-valued nd-file-field events do not become appending-input snapshot
   undo().click();
   assert.deepEqual([...input.files].map(f => f.name), ['original.nii']);
   assert.deepEqual(errors, []);
+});
+
+test('a drop on a canvas inside a shadow root, as FreeBrowse renders NiiVue, opens through the inputs', async t => {
+  const { window, input } = dropSession('<input type="file" data-neurodesk-input="image"><div id="viewer"></div>', t);
+  const canvas = window.document.createElement('canvas');
+  window.document.getElementById('viewer').attachShadow({ mode: 'open' }).append(canvas);
+  // NiiVue takes canvas drops itself, even with its own loading switched off.
+  let reachedCanvas = false;
+  canvas.addEventListener('drop', event => {
+    reachedCanvas = true;
+    event.preventDefault();
+  });
+  const event = new window.Event('drop', { bubbles: true, cancelable: true, composed: true });
+  event.dataTransfer = { types: ['Files'], items: [{ getAsFile: () => new window.File([], 'scan.dcm') }] };
+  canvas.dispatchEvent(event);
+  await new Promise(resolve => setTimeout(resolve));
+  assert.equal(reachedCanvas, false, 'the page drop takes it in the capture phase');
+  assert.deepEqual([...input.files].map(f => f.name), ['scan.dcm']);
 });

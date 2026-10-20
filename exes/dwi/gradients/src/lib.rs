@@ -256,3 +256,6 @@ mod tests {
         assert!(Gradients::new(vec![1000.0], vec![[f64::NAN, 0.0, 1.0]]).is_err());
     }
 }
+
+mod rules;
+pub use rules::*;

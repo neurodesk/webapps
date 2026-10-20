@@ -4332,6 +4332,86 @@
         "bytes": 535,
         "kind": "example"
       }
+    ],
+    "me-ica": [
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-1_bold.nii.gz",
+        "sha256": "5681230e0cc3388f04547f457440ad5e9d3075158e3a501ebe395ee4790ed123",
+        "bytes": 27666520,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-1_bold.json",
+        "sha256": "4924b4c11afc13299cabc4160eba9159f75b440ee8ee7c84afc1bf8848594826",
+        "bytes": 883,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-2_bold.nii.gz",
+        "sha256": "891ec11d19ddb3270d0a464bb1d81e2d237c361bc2ea2982d42f1c885a29bb6f",
+        "bytes": 26169843,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-2_bold.json",
+        "sha256": "62fd413566bc4db93648edef6dba9ea365d0a2336c0d19273e1888cd4305cde1",
+        "bytes": 886,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-3_bold.nii.gz",
+        "sha256": "f523bf5ef8c543c54cb51107b45dcea1d27841cb12d55ff082a6afd88b7010e0",
+        "bytes": 25122688,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/593b67f03290e7fc1c95b0ea5e58d83d9cdfcdc3/me-ica/motor-3echo/example/sub-01_task-motor_echo-3_bold.json",
+        "sha256": "d66a304a9a7242b65fd0a6229a785ee6e115fe995ca69bdd4e5b4a0f4ae54a3f",
+        "bytes": 882,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-1_bold.nii.gz",
+        "sha256": "67395a75c04df6472589c4e0bd79851dd5865de58d0ae7c5d2c0356dc9a884df",
+        "bytes": 27223335,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-1_bold.json",
+        "sha256": "4924b4c11afc13299cabc4160eba9159f75b440ee8ee7c84afc1bf8848594826",
+        "bytes": 883,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-2_bold.nii.gz",
+        "sha256": "0f7c061c5004ed9dfc4b9c2fb85a4d9eef5648347655e222913b0af87dadbfa6",
+        "bytes": 25783474,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-2_bold.json",
+        "sha256": "62fd413566bc4db93648edef6dba9ea365d0a2336c0d19273e1888cd4305cde1",
+        "bytes": 886,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-3_bold.nii.gz",
+        "sha256": "24f6997cd2c1a866c7c0fe172a3e45555485d08888341a848fa49e14b5a04d5b",
+        "bytes": 24774193,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_echo-3_bold.json",
+        "sha256": "d66a304a9a7242b65fd0a6229a785ee6e115fe995ca69bdd4e5b4a0f4ae54a3f",
+        "bytes": 882,
+        "kind": "example"
+      },
+      {
+        "url": "https://huggingface.co/datasets/neurodeskorg/webapps/resolve/b97f8e10ff81a7cca7963a71422740d016059f77/me-ica/motor-3echo-moco/example/sub-01_task-motor_desc-confounds_timeseries.tsv",
+        "sha256": "c428c20f417dc358b90b77f3a1de5cc8c864d30ddf4da9e2f6535f60119ddc77",
+        "bytes": 38818,
+        "kind": "example"
+      }
     ]
   },
   "exclusions": [],

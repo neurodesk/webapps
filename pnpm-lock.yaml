@@ -126,6 +126,9 @@ importers:
 
   apps/brain-extraction:
     dependencies:
+      '@brainchop/mindgrab':
+        specifier: 0.1.20260925
+        version: 0.1.20260925
       '@neurodesk/brain-extraction':
         specifier: workspace:*
         version: link:../../packages/brain-extraction
@@ -670,6 +673,9 @@ importers:
       '@playwright/test':
         specifier: 1.64.0
         version: 1.64.0
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
       vite:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
@@ -747,6 +753,25 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.64.0
+        version: 1.64.0
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@24.13.3)(lightningcss@1.32.0)
+
+  apps/me-ica:
+    dependencies:
+      '@neurodesk/webapp-components':
+        specifier: workspace:*
+        version: link:../../packages/components
+      '@niivue/meica':
+        specifier: 0.1.20261018
+        version: 0.1.20261018
+      '@niivue/niivue':
+        specifier: 1.0.0-rc.13
+        version: 1.0.0-rc.13
     devDependencies:
       '@playwright/test':
         specifier: 1.64.0
@@ -3540,6 +3565,10 @@ packages:
 
   '@niivue/dcm2niix@1.2.0':
     resolution: {integrity: sha512-wGontzVdVvLzeptZvJCcCQfpneoCme+9oCl82USjWMuer048+ZByO3b4FhbGnyEVQPh7hVgDA7A2+l6vW29bDg==}
+
+  '@niivue/meica@0.1.20261018':
+    resolution: {integrity: sha512-DMaKBQNeT/XJ4rkbUJfCZ5QBeQHEL5xnHeytPeNf2cotZsnb+fhDoUvp3Gqrm7jzYstyWq8atIs4kDf8daq3hw==}
+    engines: {node: '>=22'}
 
   '@niivue/niimath@1.3.2':
     resolution: {integrity: sha512-mQ4O67leukvO7binFvqNDhMj+sJnVG43rzqQhpQTKHTadRGvU6I0UNyzAnfFlYbyiYX7yO2Ek718JkShxTRoVA==}
@@ -10853,6 +10882,8 @@ snapshots:
     optional: true
 
   '@niivue/dcm2niix@1.2.0': {}
+
+  '@niivue/meica@0.1.20261018': {}
 
   '@niivue/niimath@1.3.2': {}
 

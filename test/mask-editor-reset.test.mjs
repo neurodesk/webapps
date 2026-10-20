@@ -110,8 +110,7 @@ for (const app of ['brain-extraction', 'white-matter-lesions']) {
       },
       readImageFiles: async files => files,
       readVolume: () => ({ dims: [1, 1, 1] }),
-      decodeNiftiBuffer: async () => new ArrayBuffer(0),
-      parseNiftiHeader: () => ({ nx: 1, ny: 1, nz: 1 }),
+      readNiftiHeader: async () => ({ nx: 1, ny: 1, nz: 1 }),
       MAX_INPUT_VOXELS: 1,
       show: () => { loads.push(file); },
       files: Promise.resolve([file]),
@@ -124,7 +123,7 @@ for (const app of ['brain-extraction', 'white-matter-lesions']) {
     vm.runInContext(`let source, editing, outputs = {}, viewRevision = 0;
       let state = { phase: 'idle' }, job;
       ${functions}`, context);
-    const loading = vm.runInContext(app === 'brain-extraction' ? 'importImages(files)' : 'loadFiles(files)', context);
+    const loading = vm.runInContext(app === 'brain-extraction' ? 'importImages(files)' : 'loadFiles(() => files)', context);
     await tick();
     assert.equal(loads.length, 0, 'replacement reached viewer before editor cleanup settled');
     pending.resolve();

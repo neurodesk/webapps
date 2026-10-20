@@ -138,6 +138,7 @@ apps:
     license: MIT
     maintainers: [astewartau]
     support_status: active
+    handoff: dicom
     shell: static-html
     app_scoped_runtime_families: [dcm2niix]
     ci:
@@ -180,6 +181,7 @@ apps:
     license: NOASSERTION
     maintainers: [astewartau]
     support_status: active
+    handoff: dicom
     shell: react
     ci:
       toolchains: [node]
@@ -304,6 +306,7 @@ apps:
     license: MIT
     maintainers: [felenitaribeiro]
     support_status: active
+    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -324,6 +327,7 @@ apps:
     license: BSD-2-Clause
     maintainers: [neurodesk]
     support_status: active
+    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -411,6 +415,7 @@ apps:
     license: NOASSERTION
     maintainers: [neurodesk]
     support_status: active
+    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -598,6 +603,7 @@ apps:
     license: NOASSERTION
     maintainers: [neurodesk]
     support_status: experimental
+    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -618,6 +624,7 @@ apps:
     license: BSD-3-Clause
     maintainers: [neurodesk]
     support_status: experimental
+    handoff: none
     shell: imaging-workspace
     ci:
       toolchains: [node, rust-wasm]
@@ -721,6 +728,7 @@ apps:
     license: Apache-2.0
     maintainers: [neurodesk]
     support_status: experimental
+    handoff: none
     shell: imaging-workspace
     app_scoped_runtime_families: [ort-web-asyncify]
     ci:
@@ -743,6 +751,7 @@ apps:
     license: Apache-2.0 AND BSD-3-Clause
     maintainers: [neurodesk]
     support_status: experimental
+    handoff: dicom
     shell: imaging-workspace
     ci:
       toolchains: [node]
@@ -761,6 +770,26 @@ apps:
     asset_manifest_schema: null
     source: neurodesk/webapps@local
     license: MPL-2.0
+    maintainers: [neurodesk]
+    support_status: experimental
+    shell: imaging-workspace
+    ci:
+      toolchains: [node]
+      shared_runtime: false
+      browser_test: true
+      release: false
+  - id: me-ica
+    path: me-ica
+    title: ME-ICA
+    description: Multi-echo fMRI denoising with tedana's ME-ICA.
+    categories: [image-processing]
+    keywords: [multi-echo, fMRI, denoising, ICA, tedana, T2*, BOLD]
+    legacy_domain: null
+    runtime: vite-wasm
+    model_manifest: null
+    asset_manifest_schema: null
+    source: neurodesk/webapps@local
+    license: LGPL-2.1-only
     maintainers: [neurodesk]
     support_status: experimental
     shell: imaging-workspace

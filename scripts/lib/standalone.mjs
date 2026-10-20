@@ -39,7 +39,7 @@ function validateDownloads(downloads, id) {
 }
 
 // Shared modules the app shell imports at run time (Standalone dialog, page-wide drop, handoff sweep).
-export const SHELL_COMPONENTS = ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'handoff/index.js', 'styles/imaging-workspace.css', 'styles/base.css'];
+export const SHELL_COMPONENTS = ['core/dom.js', 'ui/renderInfoDialog.js', 'ui/renderStandalone.js', 'ui/pageDrop.js', 'file-io/detectFiles.js', 'handoff/index.js', 'handoff/receive.js', 'styles/imaging-workspace.css', 'styles/base.css'];
 
 export async function stageStandaloneAssets(destination) {
   await loadStandalone(await loadAppsRegistry());

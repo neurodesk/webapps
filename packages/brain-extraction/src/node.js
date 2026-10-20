@@ -7,6 +7,7 @@ import { readVolume } from '@neurodesk/synthsr';
 import { runSynthstrip } from '@neurodesk/synthstrip';
 import { SYNTHSTRIP_MODEL, SYNTHSTRIP_NOCSF_MODEL } from '@neurodesk/synthstrip/model';
 import { loadMindgrabCpu } from '@neurodesk/node-drivers/mindgrab';
+import mindgrabPackage from '@brainchop/mindgrab/package.json' with { type: 'json' };
 import packageJson from '../package.json' with { type: 'json' };
 import { runBet } from './bet.js';
 import { betRuntime } from './bet-runtime.js';
@@ -63,7 +64,7 @@ const METHODS = {
     models: () => [],
     async extract({ volume, onProgress }) {
       const { segment } = await loadMindgrab();
-      const result = await runMindgrab({ volume, backend: 'cpu', segmenter: segment, onProgress });
+      const result = await runMindgrab({ volume, backend: 'cpu', runtime: { segment, version: mindgrabPackage.version }, onProgress });
       return { ...result, provenance: { ...result.provenance, runtime: 'WebAssembly with Node worker threads' } };
     },
   },

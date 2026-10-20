@@ -1,6 +1,6 @@
 [package]
 name = "synthsr"
-version = "0.6.20261018"
+version = "0.6.20261020"
 edition = "2021"
 license = "Apache-2.0"
 description = "SynthSR v2 brain image synthesis with ONNX Runtime"

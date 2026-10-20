@@ -13,6 +13,7 @@ import {
   ProgressManager,
 } from "@neurodesk/webapp-components/ui";
 import {
+  assertNiftiDecodedSize,
   createNiftiFromData,
   decodeNiftiBuffer,
   downloadFile,
@@ -115,6 +116,7 @@ async function readDwi(files, signal) {
   if (!series.length) throw new Error("Choose a DWI with its .bval and .bvec files, or a DICOM diffusion series.");
   if (series.length > 1) throw new Error(`Choose one diffusion series; this selection has ${series.length}.`);
   const [{ image, bval, bvec }] = series;
+  await assertNiftiDecodedSize(image);
   const buffer = await decodeNiftiBuffer(await image.arrayBuffer());
   signal?.throwIfAborted();
   const { bvals, bvecs } = parseBvalBvec(await bval.text(), await bvec.text());

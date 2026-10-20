@@ -1,5 +1,11 @@
 # @neurodesk/synthstrip
 
+## 0.2.0
+
+### Minor Changes
+
+- 4f11450: Add SynthStrip's no-CSF mode (`mri_synthstrip --no-csf`): an Exclude CSF setting in the brain extraction app and `--no-csf` on the `brain-extraction` command line. It runs FreeSurfer's `synthstrip.nocsf.1.pt` weights, converted to ONNX the same way as the default model, and names its outputs `_synthstrip-nocsf_brain.nii` and `_synthstrip-nocsf_mask.nii`.
+
 ## 0.1.5
 
 ### Patch Changes

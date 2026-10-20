@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
-import { handoffImage, lesionHandoffBlocker } from '../src/handoff.js';
+import { handoffBlocker, handoffFiles, handoffImage, lesionHandoffBlocker } from '../src/handoff.js';
 
 function niftiBytes(dims) {
   const bytes = new Uint8Array(352 + 64);
@@ -63,4 +63,22 @@ test('the chosen image goes alone, under its download name', async () => {
   const image = handoffImage(series, outputs, 1, [series]);
   assert.equal(image.name, 'series4_FLAIR_sag_2.nii');
   assert.equal(await image.text(), 'nifti');
+});
+
+test('only White matter lesions refuses an image before it is sent', async () => {
+  const timeSeries = nifti([4, 64, 64, 40, 3, 1, 1, 1]);
+  const lesions = { path: 'white-matter-lesions', title: 'White matter lesions', receives: 'nifti' };
+  assert.match(await handoffBlocker(lesions, timeSeries), /3 volumes/);
+  assert.equal(await handoffBlocker({ path: 'niimath', title: 'NiiMath', receives: 'nifti' }, timeSeries), null);
+  assert.equal(await handoffBlocker({ path: 'dicompare', title: 'dicompare', receives: 'dicom' }, timeSeries), null);
+});
+
+test('an app that reads DICOM receives the series files as opened, any other the image', () => {
+  const series = { uid: '1.2.3', number: 4, description: 'FLAIR sag', files: [{ file: new File(['a'], '1.dcm') }, { file: new File(['b'], '2.dcm') }] };
+  const outputs = [{ image: new File(['nifti'], 'Doe_Jane_FLAIR_20240102_4.nii'), sidecar: null }];
+  const dicom = handoffFiles({ path: 'dicompare', receives: 'dicom' }, series, outputs, 0, [series]);
+  assert.deepEqual(dicom, series.files.map((record) => record.file));
+  const image = handoffFiles({ path: 'niimath', receives: 'nifti' }, series, outputs, 0, [series]);
+  assert.deepEqual(image.map((file) => file.name), ['series4_FLAIR_sag.nii']);
+  assert.deepEqual(handoffFiles({ path: 'dicompare', receives: 'dicom' }, series, null, 0, [series]).length, 2, 'DICOM needs no conversion');
 });

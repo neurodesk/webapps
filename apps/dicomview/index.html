@@ -36,7 +36,11 @@
             </label>
             <select id="outputSelect"></select>
           </div>
-          <button id="handoffButton" class="nd-btn nd-btn-secondary" type="button" disabled>Open in White matter lesions</button>
+          <div class="nd-field">
+            <select id="handoffSelect" aria-label="Open in another webapp" disabled>
+              <option value="">Open in another webapp…</option>
+            </select>
+          </div>
           <p id="handoffNote" class="nd-hint" hidden></p>
         </div>
       </details>
@@ -118,7 +122,7 @@
     </template>
     <template id="privacyContent">
       <p>Files are read and converted in this browser and are never uploaded. The converted images and their anonymised sidecars are stored in this browser, on this device, until you choose Clear saved or clear the site’s data; anyone using this browser profile can open them. Python and dicompare download from their public package hosts the first time a protocol is summarised; your files are not sent. The example is downloaded from Hugging Face at a pinned revision.</p>
-      <p>Open in White matter lesions keeps the converted image in this browser&rsquo;s storage so that app can open it within 2 minutes; it is deleted once that app opens it. It is the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient&rsquo;s name or birth date. If the browser closes first, the image can no longer be opened, but its bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open it within the 2 minutes.</p>
+      <p>Open in another webapp keeps the selected series in this browser&rsquo;s storage so the chosen app on this site can open it within 2 minutes; it is deleted once that app opens it, and nothing is uploaded. Most apps receive the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient&rsquo;s name or birth date. Apps that read DICOM, such as dicompare, receive the series&rsquo; DICOM files unchanged, and those headers do hold the patient&rsquo;s details. If the browser closes first, the files can no longer be opened, but their bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open them within the 2 minutes.</p>
     </template>
 
     <script type="module" src="/src/main.js"></script>

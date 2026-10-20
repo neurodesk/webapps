@@ -1,6 +1,6 @@
 {
   "name": "@neurodesk/dicompare",
-  "version": "0.15.20261018",
+  "version": "0.15.20261020",
   "description": "dicompare DICOM protocol analysis and compliance checks on the command line, with the web app's Pyodide build and dicompare wheel",
   "type": "module",
   "license": "MIT",

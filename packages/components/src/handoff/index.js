@@ -39,6 +39,18 @@ export function appPath(baseURI) {
   return new URL('.', baseURI).pathname.split('/').filter(Boolean).at(-1) ?? '';
 }
 
+// The apps of the site another app can open with its data, in title order, without the page's
+// own: the shell's app information lists them from the registry. `receives` is the form an app
+// takes, 'nifti' or 'dicom'.
+export function handoffTargets(document = globalThis.document) {
+  let catalog = [];
+  try {
+    catalog = JSON.parse(document.querySelector('script[data-neurodesk-app-information]')?.textContent || '{}').catalog ?? [];
+  } catch { /* no catalog: nothing to offer */ }
+  const own = appPath(document.baseURI);
+  return catalog.filter((app) => app.path !== own).sort((a, b) => a.title.localeCompare(b.title));
+}
+
 function openDatabase() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE, 1);
@@ -180,13 +192,22 @@ async function claim(id, app, proof) {
 // refers to them, so the receiver works on copies that outlive the entry. For a 1 GB image,
 // WebKit holds a streamed copy whole in memory (4.6 GB at peak) and copying in 64 MB pieces
 // keeps it near 2 GB, while Chromium and Firefox stream the copy to disk (under 0.6 GB) but
-// would hold the pieces in memory. A wrong guess costs memory, never the image.
-const COPY_IN_PIECES = /AppleWebKit/.test(globalThis.navigator?.userAgent) && !/Chrome\/|Chromium\//.test(globalThis.navigator?.userAgent);
+// would hold the pieces in memory. A wrong guess costs memory, never the image. Chromium-based
+// browsers also say AppleWebKit, so they are told apart by their own name.
+export function copiesInPieces(userAgent) {
+  return /AppleWebKit/.test(userAgent) && !/Chrome\/|Chromium\//.test(userAgent);
+}
+const COPY_IN_PIECES = copiesInPieces(globalThis.navigator?.userAgent ?? '');
 const COPY_PIECE = 64 * 1024 * 1024;
-async function copyOut({ name, type, blob }) {
-  if (!COPY_IN_PIECES) return new File([await new Response(blob.stream()).blob()], name, { type });
+// An abort stops the copy: the streamed one cancels its pipe, the pieced one stops after the piece in flight.
+async function copyOut({ name, type, blob }, signal) {
+  if (!COPY_IN_PIECES) {
+    const stream = blob.stream().pipeThrough(new TransformStream(), { signal });
+    return new File([await new Response(stream).blob()], name, { type });
+  }
   const pieces = [];
   for (let offset = 0; offset < blob.size; offset += COPY_PIECE) {
+    signal?.throwIfAborted();
     pieces.push(new Blob([await blob.slice(offset, offset + COPY_PIECE).arrayBuffer()]));
   }
   return new File(pieces, name, { type });
@@ -205,8 +226,9 @@ async function pageStays(window) {
 
 // Claims the handoff in the page's hash and returns its files, copied out of storage. A load
 // that fails afterwards is not retried; the user sends again. Returns null when the page
-// carries no handoff or is about to reload.
-export async function takeHandoff({ document = globalThis.document } = {}) {
+// carries no handoff or is about to reload. An abort during the copy rejects with the
+// signal's reason, and the entry is deleted as after any failure.
+export async function takeHandoff({ document = globalThis.document, signal } = {}) {
   const { location, defaultView: window } = document;
   const id = handoffId(location.hash);
   if (!id) return null;
@@ -230,8 +252,11 @@ export async function takeHandoff({ document = globalThis.document } = {}) {
     throw new Error(`The image sent from ${entry?.source.title ?? 'another app'} is no longer available. Send it again.`);
   }
   try {
-    return { source: entry.source, files: await Promise.all(entry.files.map(copyOut)) };
+    const files = await Promise.all(entry.files.map((file) => copyOut(file, signal)));
+    signal?.throwIfAborted();
+    return { source: entry.source, files };
   } catch (error) {
+    if (signal?.aborted) throw signal.reason;
     throw unreadable(error);
   } finally {
     // An entry left claimed is never handed out again, and the next sweep after expiry removes it.

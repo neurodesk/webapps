@@ -12,7 +12,7 @@ import {
   assertInputSize,
   InputTooLargeError,
   MAX_INPUT_BYTES,
-} from './input-limits.ts'
+} from '@neurodesk/webapp-components/file-io/input-limits'
 import type { DwiInput } from './state.ts'
 import { isValidNifti1, parseNiftiHeader } from '@neurodesk/webapp-components/file-io/nifti'
 import { countDirections } from '@neurodesk/dwi2trx/gradients'
@@ -27,7 +27,7 @@ import {
 
 // Sanity cap so a stray huge folder can't be walked into memory before we refuse.
 // Generous — real DWI studies are well under it. The companion BYTE cap now lives
-// in `input-limits.ts` (`assertInputSize`), which every entry path calls.
+// in `@neurodesk/webapp-components/file-io/input-limits` (`assertInputSize`), which every entry path calls.
 const MAX_FILES = 20000
 
 /** Resolved, fully-validated triple (volume count already cross-checked). */

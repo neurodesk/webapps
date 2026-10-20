@@ -40,6 +40,9 @@ workspaces['packages/components'].entry.push('web/js/showcase.js', 'templates/*/
 workspaces['packages/desktop'].entry.push('src/main.js', 'neuroflow/runtime/neurodesk.mjs');
 workspaces['apps/dicompare'].entry.push('electron/main.ts');
 workspaces['site/easter-eggs/vessel-surfer-leaderboard'].entry.push('src/worker.js');
+// The reverse-PE validation shell invokes this checked-in Node command by filename.
+workspaces['.'].entry.push('docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs');
+workspaces['.'].project.push('docs/architecture/dwi-reverse-pe-options/mindgrab-mask.mjs');
 
 for (const app of ['seedseg', 'musclemap', 'vesselboost', 'spinalcordtoolbox']) {
   workspaces[`apps/${app}`].entry.push('web/js/inference-worker.js');

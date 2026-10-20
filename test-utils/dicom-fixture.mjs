@@ -109,3 +109,54 @@ export const uint16 = (value) => {
 export function arrayBuffer(buffer) {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 }
+
+// One enhanced MR file whose three frames lie in three planes, axial, coronal and sagittal
+// through one point, as a scanner's MPR localizer does: dcm2niix refuses it. Frame f holds
+// (f + 1) * 100 + pixel index.
+export const LOCALIZER_PLANES = [
+  { position: [-16, -16, 0], orientation: [1, 0, 0, 0, 1, 0] },
+  { position: [-16, 0, 16], orientation: [1, 0, 0, 0, 0, -1] },
+  { position: [0, -16, 16], orientation: [0, 1, 0, 0, 0, -1] },
+];
+export function localizerFile({ series = 9 } = {}) {
+  const uid = `1.2.826.0.1.3680043.10.543.99.${series}`;
+  const sopClass = '1.2.840.10008.5.1.4.1.1.4.1';
+  const ds = (values) => values.join('\\');
+  const pixels = Buffer.alloc(16 * 16 * 2 * LOCALIZER_PLANES.length);
+  for (let i = 0; i < 16 * 16 * LOCALIZER_PLANES.length; i++) pixels.writeUInt16LE((Math.floor(i / 256) + 1) * 100 + (i % 256), i * 2);
+  const frames = LOCALIZER_PLANES.map(({ position, orientation }) => item(Buffer.concat([
+    explicit(0x20, 0x9113, 'SQ', item(explicit(0x20, 0x32, 'DS', ds(position)))),
+    explicit(0x20, 0x9116, 'SQ', item(explicit(0x20, 0x37, 'DS', ds(orientation)))),
+  ])));
+  const shared = item(explicit(0x28, 0x9110, 'SQ', item(Buffer.concat([
+    explicit(0x18, 0x50, 'DS', '2'),
+    explicit(0x28, 0x30, 'DS', '2\\2'),
+  ]))));
+  const buffer = dicomFile('1.2.840.10008.1.2.1', [
+    explicit(2, 2, 'UI', sopClass),
+    explicit(2, 3, 'UI', `${uid}.1`),
+    explicit(8, 8, 'CS', 'DERIVED\\PRIMARY\\MPR'),
+    explicit(8, 0x16, 'UI', sopClass),
+    explicit(8, 0x18, 'UI', `${uid}.1`),
+    explicit(8, 0x60, 'CS', 'MR'),
+    explicit(8, 0x103e, 'LO', `localizer_${series}`),
+    explicit(0x10, 0x10, 'PN', 'Synthetic^Phantom'),
+    explicit(0x20, 0x0d, 'UI', '1.2.826.0.1.3680043.10.543.99'),
+    explicit(0x20, 0x0e, 'UI', uid),
+    explicit(0x20, 0x11, 'IS', series),
+    explicit(0x20, 0x13, 'IS', 1),
+    explicit(0x28, 2, 'US', uint16(1)),
+    explicit(0x28, 4, 'CS', 'MONOCHROME2'),
+    explicit(0x28, 8, 'IS', LOCALIZER_PLANES.length),
+    explicit(0x28, 0x10, 'US', uint16(16)),
+    explicit(0x28, 0x11, 'US', uint16(16)),
+    explicit(0x28, 0x100, 'US', uint16(16)),
+    explicit(0x28, 0x101, 'US', uint16(16)),
+    explicit(0x28, 0x102, 'US', uint16(15)),
+    explicit(0x28, 0x103, 'US', uint16(0)),
+    explicit(0x5200, 0x9229, 'SQ', shared),
+    explicit(0x5200, 0x9230, 'SQ', Buffer.concat(frames)),
+    explicit(0x7fe0, 0x10, 'OW', pixels),
+  ]);
+  return { name: `localizer${series}.dcm`, mimeType: 'application/dicom', buffer };
+}

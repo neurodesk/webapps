@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ME-ICA — NeuroDesk</title>
+  </head>
+  <body>
+    <header id="controls">
+      <details class="nd-sidebar-section" id="inputSection" open>
+        <summary class="nd-section-title">Echoes</summary>
+        <div class="nd-section-content">
+          <div id="exampleControl"></div>
+          <label class="nd-file" id="dropZone">
+            <input id="imageInput" type="file" data-neurodesk-input="image" multiple aria-label="Choose echo NIfTI files, JSON sidecars and an optional confounds TSV" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span>Drop echo NIfTI files with their JSON sidecars (and optionally a confounds TSV)</span>
+          </label>
+          <p id="fileInfo" class="nd-file-info" hidden></p>
+          <div class="nd-field">
+            <label for="echoTimes">Echo times (ms)
+              <span class="nd-info-icon" tabindex="0" aria-label="About echo times">i<span class="nd-info-tooltip">Filled from the sidecars' EchoTime when present. One value per echo, in echo order; seconds (below 1) also work.</span></span>
+            </label>
+            <input id="echoTimes" type="text" inputmode="decimal" placeholder="15.2 35.32 55.42" />
+          </div>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="taskSection" open>
+        <summary class="nd-section-title">Denoising</summary>
+        <div class="nd-section-content">
+          <div class="nd-field">
+            <label for="tree">Decision tree
+              <span class="nd-info-icon" tabindex="0" aria-label="About the decision tree">i<span class="nd-info-tooltip">tedana_orig is tedana's default. meica follows ME-ICA v2.5; minimal is simpler and more conservative. The regressor trees also reject components that fit a confounds TSV: the motion trees read fMRIPrep's trans_* and rot_* columns, tedana's demo trees expect Mot_*, csf and signal_* columns.</span></span>
+            </label>
+            <select id="tree">
+              <option value="tedana_orig">tedana_orig</option>
+              <option value="meica">meica</option>
+              <option value="minimal">minimal</option>
+              <optgroup label="Needs a confounds TSV">
+                <option value="motion_aroma">motion_aroma (fMRIPrep motion, AROMA criteria)</option>
+                <option value="motion_f">motion_f (fMRIPrep motion, F test)</option>
+                <option value="demo_external_aroma">demo_external_aroma</option>
+                <option value="demo_external_regressors_single_model">demo_external_regressors_single_model</option>
+                <option value="demo_external_regressors_motion_task_models">demo_external_regressors_motion_task_models</option>
+              </optgroup>
+            </select>
+          </div>
+          <details class="nd-sidebar-section" id="advancedSettings">
+            <summary class="nd-section-title">Advanced settings</summary>
+            <div class="nd-section-content">
+              <div class="nd-field">
+                <label for="tedpca">PCA dimension
+                  <span class="nd-info-icon" tabindex="0" aria-label="About the PCA dimension">i<span class="nd-info-tooltip">Moving-average PCA criterion (Li et al. 2007): AIC keeps the most components, MDL the fewest.</span></span>
+                </label>
+                <select id="tedpca">
+                  <option value="aic">AIC</option>
+                  <option value="kic">KIC</option>
+                  <option value="mdl">MDL</option>
+                </select>
+              </div>
+              <div class="nd-field">
+                <label for="seed">ICA seed</label>
+                <input id="seed" type="number" min="0" step="1" value="42" />
+              </div>
+              <div class="nd-field">
+                <label for="maxit">ICA iterations</label>
+                <input id="maxit" type="number" min="1" step="1" value="500" />
+              </div>
+              <div class="nd-field">
+                <label for="maxrestart">ICA restarts</label>
+                <input id="maxrestart" type="number" min="0" step="1" value="10" />
+              </div>
+            </div>
+          </details>
+          <button id="runButton" class="nd-btn nd-btn-primary" type="button" disabled>Run ME-ICA</button>
+        </div>
+      </details>
+
+      <details class="nd-sidebar-section" id="outputSection">
+        <summary class="nd-section-title">Output</summary>
+        <div class="nd-section-content">
+          <p id="summary" class="nd-file-info"></p>
+          <div id="resultList"></div>
+          <button id="zipButton" class="nd-btn" type="button" disabled>Download all outputs (.zip)</button>
+        </div>
+      </details>
+
+      <button id="aboutBtn" type="button" hidden>About</button>
+      <button id="privacyBtn" type="button" hidden>Privacy</button>
+    </header>
+
+    <main id="viewer">
+      <div class="nd-viewer-canvas-wrapper">
+        <canvas id="gl1" aria-label="Image viewer"></canvas>
+        <p id="emptyState" class="nd-viewer-empty">Drop echo images anywhere, or choose an example.</p>
+        <section id="componentReport" class="nd-viewer-report" aria-label="ICA components" hidden></section>
+      </div>
+      <div class="nd-viewer-info"><span id="imageLabel" class="nd-viewer-info-label"></span><span id="location" class="nd-viewer-info-primary"></span></div>
+    </main>
+
+    <footer id="status">
+      <span class="nd-status-label">Status</span>
+      <span id="statusText" class="nd-status-text" role="status" aria-live="polite">Drag and drop files</span>
+      <span id="elapsed" class="nd-status-elapsed"></span>
+      <progress id="progress" max="1" value="0" aria-label="Processing progress"></progress>
+      <button id="cancelButton" class="nd-btn-cancel" type="button" title="Cancel processing" aria-label="Cancel processing" hidden>×</button>
+    </footer>
+
+    <template id="aboutContent">
+      <p>ME-ICA separates BOLD signal from noise in multi-echo fMRI. Signal that scales with echo time (T2*) is kept; components whose amplitude does not depend on echo time (head motion, physiology, scanner drift) are removed. This app runs <a href="https://github.com/ME-ICA/tedana">tedana</a>'s default workflow, ported to Rust and WebAssembly: an EPI brain mask, an adaptive mask of good echoes, a log-linear T2*/S0 fit, T2*-weighted optimal combination, moving-average PCA, FastICA, kappa/rho metrics and a decision tree. On the example its outputs match tedana e07066c file for file.</p>
+      <p>Inputs are the echoes of one run, motion corrected but not otherwise processed, with their BIDS sidecars or typed echo times, plus a confounds TSV (tedana's <code>--external</code>) for the regressor trees. Outputs use tedana's BIDS names; the denoised series is <code>desc-denoised_bold</code>. tedana's HTML report and figures are not produced, and options that select other tedana code (curve fitting, robustICA, masks) are not available.</p>
+    </template>
+    <template id="privacyContent"><p>Images are processed locally in this browser and are never uploaded.</p></template>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

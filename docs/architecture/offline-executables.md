@@ -31,6 +31,7 @@ Paths in this table are relative to the repository root. Existing implementation
 | App | Useful batch operation | Existing code and next work |
 | --- | --- | --- |
 | `greedy` | Affine/deformable registration and reslicing | `exes/greedy` has the Rust CLI. This change adds native release CI and the bundled npm command. macOS signing and target-runner verification remain release gates. |
+| `me-ica` | Multi-echo fMRI denoising (tedana's workflow) | The engine and its `meica` CLI live in [niivue/meica-rs](https://github.com/niivue/meica-rs), which builds native release archives; list them as the Standalone download once the first release is tagged. |
 | `easy-mp2rage` | T1 mapping, B1 correction, UNI denoising | `apps/easy-mp2rage/crates/mp2rage-cli` and `mp2rage_t1/cli.py` already provide CLIs. Package the Rust binary and synchronize its version. |
 | `fastprep` | fMRIPrep-style preprocessing of a BIDS subject | `exes/fastprep` (Rust CLI, needs niimath, brainchop, greedy-rs, synthsr, topofit and glm on `PATH` or in `bin/`) and `exes/glm`. Add native release packaging that bundles or pins those tools and the MNI template. |
 | `synthsr` | Super-resolution image synthesis | `exes/synthsr`, `packages/synthsr` and `.github/workflows/synthsr-native.yml` provide native target packaging, Apple notarization and a Node CLI. Audit published assets and offline model provisioning. |

@@ -68,6 +68,10 @@ export async function loadAppInformation(registry, path = appInformationPath) {
   return Object.freeze({
     shared: deepFreeze(shared),
     apps: deepFreeze(apps),
+    // Every app of the site, so one can open another with its data (the handoff menu).
+    catalog: deepFreeze(registry.apps
+      .filter((app) => app.support_status !== 'retired' && app.handoff !== 'none')
+      .map((app) => ({ id: app.id, path: app.path, title: app.title, receives: app.handoff ?? 'nifti' }))),
   });
 }
 
@@ -101,5 +105,6 @@ export function appInformationPayload(information, appId) {
     about: info.about ?? [],
     packages: info.packages,
     citations: info.citations,
+    catalog: information.catalog ?? [],
   };
 }

@@ -1,6 +1,6 @@
 {
   "name": "brain-extraction",
-  "version": "0.4.20261018",
+  "version": "0.5.20261020",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "lint": "node ../../scripts/lint.mjs --workspace"
   },
   "dependencies": {
+    "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/webapp-components": "workspace:*",
     "@neurodesk/brain-extraction": "workspace:*",
     "@neurodesk/runtime-support": "workspace:*",

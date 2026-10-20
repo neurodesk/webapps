@@ -9,6 +9,7 @@ import { BET_MIN_DICE, loadHeadReference } from '../../../packages/brain-extract
 import { SYNTHSTRIP_MODEL } from '@neurodesk/synthstrip/model';
 import { outputNames } from '@neurodesk/brain-extraction/outputs';
 import { browserReference, compareWithBrowser, measure } from '../validation/browser-reference.mjs';
+import { mindgrabAutoOnSoftwareRenderer } from './mindgrab-auto.mjs';
 
 const fixture = new URL('../../calmar/tests/fixtures/synthstrip-mini/T1.nii.gz', import.meta.url).pathname;
 const examples = JSON.parse(await readFile(new URL('../examples.json', import.meta.url), 'utf8'));
@@ -354,3 +355,8 @@ for (const method of ['mindgrab', 'synthstrip']) {
     console.log(JSON.stringify({ method, comparedVoxels: mask.data.length, provenance: report.provenance, inputSha256: input.sha256, outputSha256: artifact.sha256 }));
   });
 }
+
+// This suite's browser has SwiftShader WebGL2 and no WebGPU adapter (neurodesk/webapps#394).
+test('MindGrab auto on a software renderer runs the CPU module and returns a brain mask', async ({ page }) => {
+  await mindgrabAutoOnSoftwareRenderer(page, 'no WebGPU adapter');
+});

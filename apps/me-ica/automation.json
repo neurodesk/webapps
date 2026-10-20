@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 2,
+  "app": "me-ica",
+  "title": "ME-ICA",
+  "description": "Denoise multi-echo fMRI with tedana's default ME-ICA workflow.",
+  "defaultOperation": "denoise",
+  "operations": {
+    "denoise": {
+      "title": "Denoise multi-echo fMRI",
+      "description": "Optimal combination, PCA, FastICA and TE-dependence decision tree, optionally with external regressors; returns the denoised series and maps.",
+      "mode": "batch",
+      "inputs": {
+        "echoes": {
+          "source": "files",
+          "type": "neuro:volume",
+          "formats": [
+            "nifti"
+          ],
+          "description": "One 4D NIfTI per echo of the same run",
+          "minimum": 3,
+          "maximum": 12
+        },
+        "sidecars": {
+          "source": "files",
+          "type": "neuro:metadata",
+          "formats": [
+            "json"
+          ],
+          "description": "Optional BIDS sidecars with EchoTime, named as their images",
+          "minimum": 0,
+          "maximum": 12
+        },
+        "regressors": {
+          "source": "files",
+          "type": "neuro:table",
+          "formats": [
+            "tsv"
+          ],
+          "description": "Optional confounds TSV (tedana --external), e.g. fMRIPrep's desc-confounds_timeseries.tsv; required by the regressor trees",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "parameters": {
+        "echoTimes": {
+          "type": "string",
+          "description": "Echo times in ms (or s), space separated, in echo order; read from sidecars when omitted"
+        },
+        "tree": {
+          "type": "string",
+          "enum": [
+            "tedana_orig",
+            "meica",
+            "minimal",
+            "motion_aroma",
+            "motion_f",
+            "demo_external_aroma",
+            "demo_external_regressors_single_model",
+            "demo_external_regressors_motion_task_models"
+          ],
+          "default": "tedana_orig",
+          "description": "Component decision tree"
+        },
+        "tedpca": {
+          "type": "string",
+          "enum": [
+            "aic",
+            "kic",
+            "mdl"
+          ],
+          "default": "aic",
+          "description": "Moving-average PCA dimension criterion"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 42,
+          "description": "FastICA random seed"
+        }
+      },
+      "artifacts": {
+        "denoised": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "optcom": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "t2star": {
+          "type": "neuro:volume",
+          "mediaType": "application/gzip",
+          "minimum": 1,
+          "maximum": 1
+        },
+        "metrics": {
+          "type": "neuro:table",
+          "mediaType": "text/tab-separated-values",
+          "minimum": 1,
+          "maximum": 1
+        }
+      },
+      "engines": [
+        "browser"
+      ]
+    }
+  }
+}

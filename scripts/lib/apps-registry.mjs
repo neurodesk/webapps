@@ -18,6 +18,10 @@ export const RUNTIMES = new Set([
 export const MAX_DESCRIPTION_LENGTH = 60;
 export const SHELLS = new Set(['static-html', 'imaging-workspace', 'react']);
 export const SUPPORT_STATUSES = new Set(['active', 'experimental', 'maintenance', 'retired']);
+// What another app sends this one (packages/components/src/handoff): the converted NIfTI
+// image by default, the DICOM files it came from, or nothing for an app that cannot use a
+// single series (a URL-streaming viewer, a surface editor, a BIDS dataset pipeline).
+export const HANDOFF_FORMS = new Set(['nifti', 'dicom', 'none']);
 const TOOLCHAINS = new Set(['node', 'rust-wasm', 'python-reference']);
 const ASSET_MANIFEST_SCHEMAS = new Set(['scientific-assets-v1', 'pipeline-assets-v1']);
 const PINNED_SOURCE = /^[^/\s]+\/[^@\s]+@[0-9a-f]{40}$/;
@@ -74,6 +78,9 @@ export async function loadAppsRegistry(path = registryPath) {
     if (!SHELLS.has(app.shell)) errors.push(`invalid shell for ${app.id}: ${app.shell}`);
     if (!SUPPORT_STATUSES.has(app.support_status)) {
       errors.push(`invalid support status for ${app.id}: ${app.support_status}`);
+    }
+    if (app.handoff !== undefined && !HANDOFF_FORMS.has(app.handoff)) {
+      errors.push(`handoff for ${app.id} must be one of ${[...HANDOFF_FORMS].join(', ')}`);
     }
     if (!Array.isArray(app.maintainers) || app.maintainers.length === 0) {
       errors.push(`maintainers are required for ${app.id}`);

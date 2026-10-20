@@ -1,0 +1,38 @@
+The M0 gradient patch of scikit-learn 1.9.1 (BSD-3-Clause, LICENSE-SCIKIT-LEARN).
+It sums over the targets before the trace, so the gradient needs no
+(n, n, targets) array. Apply it in site-packages with: patch -p1 < this-file
+Before: sha256 d135acc1e3b186f0b0829a6fe38ec1877d104f9b997edafb330a21626bdd5f4d
+After:  sha256 1cc5c15e120b5b1ae5707389e92d93e8ad21c5bf4d4d280bf6ecfa3926dae9da
+
+--- a/sklearn/gaussian_process/_gpr.py
++++ b/sklearn/gaussian_process/_gpr.py
+@@ -626,14 +626,11 @@
+             # for output_idx in range(n_outputs):
+             #     output_alpha = alpha[:, [output_idx]]
+             #     inner_term[..., output_idx] = output_alpha @ output_alpha.T
+-            inner_term = np.einsum("ik,jk->ijk", alpha, alpha)
+-            # compute K^-1 of shape (n_samples, n_samples)
++            # dwi-hmc M0 patch: sum over outputs first (O(n^2) memory).
+             K_inv = cho_solve(
+                 (L, GPR_CHOLESKY_LOWER), np.eye(K.shape[0]), check_finite=False
+             )
+-            # create a new axis to use broadcasting between inner_term and
+-            # K_inv
+-            inner_term -= K_inv[..., np.newaxis]
++            inner_sum = alpha @ alpha.T - alpha.shape[1] * K_inv
+             # Since we are interested about the trace of
+             # inner_term @ K_gradient, we don't explicitly compute the
+             # matrix-by-matrix operation and instead use an einsum. Therefore
+@@ -644,11 +641,7 @@
+             #             inner_term[..., output_idx] @
+             #             K_gradient[..., param_idx]
+             #         )
+-            log_likelihood_gradient_dims = 0.5 * np.einsum(
+-                "ijl,jik->kl", inner_term, K_gradient
+-            )
+-            # the log likelihood gradient is the sum-up across the outputs
+-            log_likelihood_gradient = log_likelihood_gradient_dims.sum(axis=-1)
++            log_likelihood_gradient = 0.5 * np.einsum("ij,jik->k", inner_sum, K_gradient)
+ 
+         if eval_gradient:
+             return log_likelihood, log_likelihood_gradient

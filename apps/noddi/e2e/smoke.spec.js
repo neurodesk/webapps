@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { readNiftiFrames } from "@neurodesk/webapp-components/file-io";
-import { syntheticDwi, syntheticMask } from "./fixtures.mjs";
+import { oversizedHeaderDwi, syntheticDwi, syntheticMask } from "./fixtures.mjs";
 
 const examples = JSON.parse(readFileSync(new URL("../examples.json", import.meta.url), "utf8"));
 const dwiUrl = examples[0].files.find((file) => file.role === "image").url;
@@ -66,6 +66,24 @@ test("shared app bar owns information actions and theme", async ({ page }) => {
 test("page is cross-origin isolated (COOP/COEP active)", async ({ page }) => {
   await page.goto("/");
   expect(await page.evaluate(() => self.crossOriginIsolated === true)).toBe(true);
+});
+
+test("a header whose decoded image passes the limit is refused before the image is read", async ({ page }) => {
+  await page.addInitScript(() => {
+    const read = Blob.prototype.arrayBuffer;
+    window.wholeImageReads = 0;
+    Blob.prototype.arrayBuffer = function arrayBuffer() {
+      if (this instanceof File && /\.nii(\.gz)?$/.test(this.name)) window.wholeImageReads++;
+      return read.call(this);
+    };
+  });
+  await page.goto("/");
+  await page.locator("#imageInput").setInputFiles(oversizedHeaderDwi());
+  await expect(page.locator("footer#status #statusText")).toHaveText("Decoded image too large (2.68 GB; browser limit 2.00 GB).");
+  await expect(page.locator("#statusText")).toHaveClass(/error/);
+  expect(await page.evaluate(() => window.wholeImageReads)).toBe(0);
+  await expect(page.locator("#runButton")).toBeDisabled();
+  await expect(page.locator("#fileInfo")).toBeHidden();
 });
 
 test("a two-shell DWI gives tensor and NODDI maps with the known fibre direction", async ({ page }) => {

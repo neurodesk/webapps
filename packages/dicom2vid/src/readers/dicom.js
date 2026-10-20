@@ -37,6 +37,7 @@ const T = {
   FrameContentSequence: 0x00209111,
   PlanePositionSequence: 0x00209113,
   PlaneOrientationSequence: 0x00209116,
+  PixelMeasuresSequence: 0x00289110,
   // Siemens private: how many real slices are tiled into one mosaic frame.
   NumberOfImagesInMosaic: 0x0019100a,
   SamplesPerPixel: 0x00280002,
@@ -85,6 +86,7 @@ const IMPLICIT_VR = new Map([
   [T.ImagePositionPatient, 'DS'], [T.ImageOrientationPatient, 'DS'],
   [T.FrameContentSequence, 'SQ'], [T.PlanePositionSequence, 'SQ'],
   [T.PlaneOrientationSequence, 'SQ'], [T.PixelValueTransformationSequence, 'SQ'],
+  [T.PixelMeasuresSequence, 'SQ'],
   [T.SharedFunctionalGroupsSequence, 'SQ'], [T.PerFrameFunctionalGroupsSequence, 'SQ'],
   [T.SamplesPerPixel, 'US'], [T.PhotometricInterpretation, 'CS'],
   [T.PlanarConfiguration, 'US'], [T.NumberOfFrames, 'IS'],
@@ -405,6 +407,8 @@ function frameMeta(map, perFrameItem, sharedItem, frameIndex) {
 
   let ipp = fromGroups(T.PlanePositionSequence, T.ImagePositionPatient) || elNumbers(map, T.ImagePositionPatient);
   let iop = fromGroups(T.PlaneOrientationSequence, T.ImageOrientationPatient) || elNumbers(map, T.ImageOrientationPatient);
+  const spacing = fromGroups(T.PixelMeasuresSequence, T.PixelSpacing) || elNumbers(map, T.PixelSpacing);
+  const thickness = fromGroups(T.PixelMeasuresSequence, T.SliceThickness)?.[0] ?? elNumber(map, T.SliceThickness, null);
 
   let slope = 1.0;
   let intercept = 0.0;
@@ -432,7 +436,7 @@ function frameMeta(map, perFrameItem, sharedItem, frameIndex) {
     instanceNumber = n === null ? null : readNumberSafe(n, null);
   }
 
-  return { ipp, iop, slope, intercept, instanceNumber };
+  return { ipp, iop, spacing, thickness, slope, intercept, instanceNumber };
 }
 
 // Decode raw pixels of one frame into a typed array of length rows*cols*spp.
@@ -521,10 +525,18 @@ function datasetToSlices(parsed, name) {
       name, frameIndex: f, rows, cols, spp, photometric, isColor,
       slope: meta.slope, intercept: meta.intercept,
       ipp: meta.ipp, iop: meta.iop, instanceNumber: meta.instanceNumber,
+      spacing: meta.spacing, thickness: meta.thickness,
       pixels,
     });
   }
   return { slices, multiframe: nFrames > 1 };
+}
+
+// Every frame of one file as a slice record, each with its own position, orientation,
+// pixel spacing and rescale, in file order: for frames that share no plane, such as the
+// differently oriented slices of an MPR localizer, which no single volume can hold.
+export function readDicomFrames(buffer, name) {
+  return datasetToSlices(parseDicom(buffer), name).slices;
 }
 
 // Sort slice records like load_and_sort_dicoms.

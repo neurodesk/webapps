@@ -1,9 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { createExampleSelector, renderSidebarSection } from '@neurodesk/webapp-components/ui';
+import { handoffId, takeHandoff } from '@neurodesk/webapp-components/handoff';
 import '@neurodesk/webapp-components/styles/imaging-workspace.css';
 import examples from '../../../examples.json';
 import { useWorkspace } from '../../contexts/WorkspaceContext';
 import { log } from '../../utils/technicalLog';
+
+// Claimed once per page, whatever React does with effects.
+let handoffOpened = handoffId(location.hash) ? takeHandoff() : null;
 
 export default function ExampleInput() {
   const host = useRef<HTMLDivElement>(null);
@@ -44,6 +48,21 @@ export default function ExampleInput() {
   }, []);
 
   useEffect(() => selector.current?.setDisabled(isProcessing), [isProcessing]);
+
+  // DICOM files another app sent here (index.html marks this page as their receiver) open
+  // as reference acquisitions, as files chosen under From data would.
+  useEffect(() => {
+    if (!handoffOpened) return;
+    const received = handoffOpened;
+    handoffOpened = null;
+    void received.then(async (handoff) => {
+      if (!handoff) return;
+      const transfer = new DataTransfer();
+      for (const file of handoff.files) transfer.items.add(file);
+      log(`Opening ${handoff.files.length} DICOM file${handoff.files.length === 1 ? '' : 's'} from ${handoff.source.title}`);
+      await actions.current.addFromData(transfer.files, 'schema-template');
+    }).catch((error: unknown) => log(error instanceof Error ? error.message : String(error), 'error'));
+  }, []);
 
   return <div ref={host} className="nd-imaging-controls" />;
 }

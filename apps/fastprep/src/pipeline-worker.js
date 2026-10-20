@@ -5,8 +5,9 @@ import { runFastprep } from "@neurodesk/fastprep";
 import { fetchModel } from "@neurodesk/webapp-components/worker";
 import { loadGreedy } from "@neurodesk/greedy";
 import { runSynthsr } from "@neurodesk/synthsr";
-import { createBrowserSession } from "@neurodesk/synthsr/browser";
-import { segment, segmentTissues } from "@brainchop/mindgrab";
+import { chooseBrowserBackend, createBrowserSession } from "@neurodesk/synthsr/browser";
+import * as mindgrab from "@brainchop/mindgrab";
+import { withBackendChoice } from "@neurodesk/runtime-support/mindgrab/backend";
 import * as ort from "onnxruntime-web/webgpu";
 import ortWasm from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import ortMjs from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
@@ -28,13 +29,16 @@ let model;
 async function synthsr(bytes) {
   const asset = synthsrManifest.assets.find((a) => a.filename === "synthsr-v2.onnx");
   model ??= fetchAsset(synthsrManifest, asset).then((b) => ({ bytes: b, hash: asset.sha256 }));
-  const backend = navigator.gpu && (await navigator.gpu.requestAdapter()) ? "webgpu" : "wasm";
   const { buffer } = await runSynthsr({
     buffer: bytes.slice().buffer,
-    options: { backend },
     Tensor: ort.Tensor,
     loadModel: () => model,
-    createSession: (b, be, shape) => createBrowserSession(ort, b, be, shape),
+    createSession: async (b, _requested, shape) => {
+      const adapter = await navigator.gpu?.requestAdapter({ powerPreference: "high-performance" }).catch(() => null);
+      const backend = chooseBrowserBackend(adapter, shape);
+      post({ log: `SynthSR on ${backend}` });
+      return createBrowserSession(ort, b, backend, shape);
+    },
   });
   return buffer;
 }
@@ -54,7 +58,7 @@ self.onmessage = async ({ data }) => {
       templates: tpl,
       runtimes: {
         niimath,
-        mindgrab: { segment, segmentTissues },
+        mindgrab: withBackendChoice(mindgrab),
         mindgrabOptions: { backend: "auto", worker: false, timeoutMs: 900_000, onLog: (line) => post({ log: line }) },
         greedy,
         synthsr,

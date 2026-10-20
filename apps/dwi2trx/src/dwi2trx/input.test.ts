@@ -4,7 +4,7 @@ import {
   formatBytes,
   InputTooLargeError,
   MAX_INPUT_BYTES,
-} from './input-limits.ts'
+} from '@neurodesk/webapp-components/file-io/input-limits'
 import { resolveInput } from './input.ts'
 
 const sizedFile = (size: number): File => ({ size }) as File

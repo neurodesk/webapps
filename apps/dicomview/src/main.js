@@ -13,19 +13,21 @@ import {
 } from '@neurodesk/webapp-components/ui';
 import { downloadBlob, downloadFile } from '@neurodesk/webapp-components/file-io';
 import { registerAppAutomation } from '@neurodesk/webapp-components/automation';
-import { sendHandoff } from '@neurodesk/webapp-components/handoff';
+import { handoffTargets, sendHandoff } from '@neurodesk/webapp-components/handoff';
 import { readImageSeries } from '@neurodesk/runtime-support/dcm2niix-client';
 import { mountViewer } from '@neurodesk/runtime-support/freebrowse-viewer';
+import { SHOW_RENDER } from '@niivue/niivue';
 import { parseDicomHeader } from '@neurodesk/dicom2vid/readers/dicom.js';
 import { APP } from './config.js';
 import { ConversionStore } from './conversions.js';
+import { frameImages } from './frame-images.js';
 import { indexFiles } from './dicom-index.js';
 import { createDictionary, filterRows, headerRows, rowsToCsv, sidecarRows } from './header-rows.js';
 import { ProtocolSession, SCHEMAS } from './protocol-session.js';
 import { checkOutcome, protocolTables } from './protocol-table.js';
 import { openSavedConversions, seriesFingerprint } from './saved-conversions.js';
 import { describeSeries, downloadFiles, seriesLabel, seriesSummary } from './series-text.js';
-import { LESIONS, handoffImage, lesionHandoffBlocker } from './handoff.js';
+import { handoffBlocker, handoffFiles } from './handoff.js';
 import examples from '../examples.json';
 
 const $ = (id) => document.getElementById(id);
@@ -149,18 +151,20 @@ $('cancelButton').onclick = () => {
 };
 
 // FreeBrowse's header holds the layouts and the right-drag mode; its Volumes panel holds
-// contrast (window and level), colormap and opacity. Below 700 px that panel covers the
-// image (imaging-workspace.css), so it starts closed there; the header button opens it.
+// contrast (window and level), colormap and opacity. The panel starts closed, leaving the
+// image the whole viewer; the header button opens it. Series open in the three planes
+// (ACS), without the 3D render.
 const embed = mountViewer($('freebrowseViewer'), {
   isDragDropEnabled: false,
   backgroundColor: [0, 0, 0, 1],
   backend: 'webgl2',
-}, { canvasLabel: 'Image of the selected series', sidebar: $('freebrowseViewer').clientWidth > 700 });
+}, { canvasLabel: 'Image of the selected series', sidebar: false });
 const viewer = embed.nv;
 let viewerReady = false;
 const initialized = (async () => {
   try {
     await embed.ready;
+    viewer.showRender = SHOW_RENDER.NEVER;
     viewer.addEventListener('locationChange', (event) => { $('location').textContent = event.detail?.string ?? ''; });
     viewerReady = true;
   } catch (error) {
@@ -229,7 +233,21 @@ const conversions = new ConversionStore({
       return null;
     }
   },
-  convert: (series, signal) => readImageSeries(series.files.map((record) => record.file), { signal, anonymizeSidecar: true }),
+  convert: async (series, signal) => {
+    try {
+      return await readImageSeries(series.files.map((record) => record.file), { signal, anonymizeSidecar: true });
+    } catch (error) {
+      // dcm2niix refuses a multiframe file whose frames lie in different planes, such as an MPR localizer.
+      if (signal?.aborted || series.files.length !== 1) throw error;
+      try {
+        const outputs = await frameImages(series.files[0].file);
+        log.log(`${describeSeries(series)}: dcm2niix could not convert it (${error.message}); each of its ${outputs.length} frames is shown as its own slice`, 'warning');
+        return outputs;
+      } catch {
+        throw error;
+      }
+    }
+  },
   save: async (series, outputs) => {
     const store = await savedConversions;
     if (store) await store.save(await fingerprint(series), outputs);
@@ -417,45 +435,73 @@ $('outputSelect').addEventListener('change', () => {
   void showOutput().catch((error) => status(error.message, true));
 });
 
-// Enabled for the image now chosen once its header shows a 3D volume. Sending is the
-// 'handoff' job lane: new input, the footer × and a later choice of image all cancel it, so
-// an earlier image never opens over the one now chosen.
+// Every other app of the site, from the registry. An app that takes NIfTI is offered once the
+// chosen image is converted; one that takes DICOM once a series is chosen. Sending is the
+// 'handoff' job lane: new input, the footer × and a later choice of image all cancel it, so an
+// earlier image never opens over the one now chosen.
+const targets = handoffTargets(document);
+const targetOptions = new Map(targets.map((target) => [target.path, new Option(target.title, target.path)]));
+$('handoffSelect').append(...targetOptions.values());
+// A page served without the site's catalog has no app to open.
+$('handoffSelect').closest('.nd-field').hidden = !targets.length;
+
 let handoffCheck = 0;
+// What the send in flight carries: a DICOM send stays valid while its series' conversion finishes.
+let sending = null;
+const stillSending = ({ target, series, outputs, output }) => series === currentSeries()
+  && (target.receives === 'dicom' || (outputs === state.outputs && output === state.output));
+
 async function syncHandoff() {
   const check = ++handoffCheck;
-  jobs.get('handoff')?.controller.abort();
+  if (sending && !stillSending(sending)) jobs.get('handoff')?.controller.abort();
+  const series = currentSeries();
   const output = state.outputs?.[state.output];
-  $('handoffButton').disabled = true;
+  $('handoffSelect').disabled = true;
   $('handoffNote').hidden = true;
-  if (!output) return;
-  let reason;
-  try {
-    reason = await lesionHandoffBlocker(output.image);
-  } catch (error) {
-    reason = 'This image cannot be checked for White matter lesions.';
-    log.log(`Reading ${output.image.name} for White matter lesions: ${error.message}`, 'error');
+  const notes = [];
+  for (const target of targets) {
+    let reason = null;
+    if (!series || (target.receives !== 'dicom' && !output)) reason = 'Not ready';
+    else if (output) {
+      try {
+        reason = await handoffBlocker(target, output.image);
+      } catch (error) {
+        reason = `This image cannot be checked for ${target.title}.`;
+        log.log(`Reading ${output.image.name} for ${target.title}: ${error.message}`, 'error');
+      }
+    }
+    if (check !== handoffCheck) return;
+    targetOptions.get(target.path).disabled = Boolean(reason);
+    if (reason && reason !== 'Not ready') notes.push(reason);
   }
-  if (check !== handoffCheck) return;
-  $('handoffButton').disabled = Boolean(reason) || jobs.has('handoff');
-  $('handoffNote').hidden = !reason;
-  $('handoffNote').textContent = reason ?? '';
+  $('handoffSelect').disabled = !targets.some((target) => !targetOptions.get(target.path).disabled) || jobs.has('handoff');
+  $('handoffNote').hidden = !notes.length;
+  $('handoffNote').textContent = notes.join(' ');
 }
 
-$('handoffButton').addEventListener('click', async () => {
-  const image = handoffImage(currentSeries(), state.outputs, state.output, state.index.series);
-  const message = `Opening ${image.name} in ${LESIONS.title}`;
+$('handoffSelect').addEventListener('change', async () => {
+  const target = targets.find(({ path }) => path === $('handoffSelect').value);
+  $('handoffSelect').value = '';
+  if (!target) return;
+  const series = currentSeries();
+  const files = handoffFiles(target, series, state.outputs, state.output, state.index.series);
+  const what = target.receives === 'dicom' ? `${describeSeries(series)} (${files.length} DICOM file${files.length === 1 ? '' : 's'})` : files[0].name;
+  const message = `Opening ${what} in ${target.title}`;
   const controller = begin('handoff', `${message}…`);
-  $('handoffButton').disabled = true;
+  sending = { target, series, outputs: state.outputs, output: state.output };
+  $('handoffSelect').disabled = true;
   try {
-    await sendHandoff({ target: LESIONS.path, source: { app: APP.id, title: APP.title }, files: [image], signal: controller.signal });
+    await sendHandoff({ target: target.path, source: { app: APP.id, title: APP.title }, files, signal: controller.signal });
     // Ending the job now would let a second send start while the page navigates away; end it
-    // only if the back-forward cache brings this page back, or the button stays disabled.
+    // only if the back-forward cache brings this page back, or the menu stays disabled.
     window.addEventListener('pageshow', (event) => {
       if (!event.persisted) return;
-      finish('handoff', controller, `Sent ${image.name} to ${LESIONS.title}`);
+      sending = null;
+      finish('handoff', controller, `Sent ${what} to ${target.title}`);
       void syncHandoff();
     }, { once: true });
   } catch (error) {
+    sending = null;
     finish('handoff', controller, message, { error });
     void syncHandoff();
   }

@@ -1409,7 +1409,7 @@ apps:
         doi: 10.1098/rstb.2001.0915
 
   dicomview:
-    privacy: Your DICOM files and their headers stay on your computer. Converted images are saved in the browser's own storage on this device until you choose Clear saved or clear the site's data. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests. Open in White matter lesions keeps the converted image in this browser’s storage so that app can open it within 2 minutes; it is deleted once that app opens it. It is the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient’s name or birth date. If the browser closes first, the image can no longer be opened, but its bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open it within the 2 minutes.
+    privacy: Your DICOM files and their headers stay on your computer. Converted images are saved in the browser's own storage on this device until you choose Clear saved or clear the site's data. On the website, a protocol summary downloads the Pyodide runtime from cdn.jsdelivr.net and Python packages from PyPI the first time it runs; these requests contain no data from your files. The offline Standalone version bundles Pyodide and its packages and makes none of these requests. Open in another webapp keeps the selected series in this browser’s storage so the chosen app on this site can open it within 2 minutes; it is deleted once that app opens it, and nothing is uploaded. Most apps receive the NIfTI image dcm2niix made, named after the series number and description; its header keeps acquisition details such as echo and acquisition time, not the patient’s name or birth date. Apps that read DICOM, such as dicompare, receive the series’ DICOM files unchanged, and those headers do hold the patient’s details. If the browser closes first, the files can no longer be opened, but their bytes stay in browser storage until an app on this site is next opened after those 2 minutes. A browser that restores its previous session may still open them within the 2 minutes.
     packages:
       - { name: dcm2niix (WebAssembly), url: https://github.com/rordenlab/dcm2niix, role: DICOM to NIfTI conversion and BIDS sidecars }
       - { name: FreeBrowse, url: https://github.com/pwighton/freebrowse/tree/eae80a127fdd99974c80952e890bf18aa6e9d5dd, role: interactive viewer with window and level, layouts and colormaps }
@@ -1565,6 +1565,48 @@ apps:
           neuroimaging data analysis: DICOM to NIfTI conversion. Journal of
           Neuroscience Methods. 2016;264:47–56."
         doi: 10.1016/j.jneumeth.2016.03.001
+      - group: Visualization
+        title: NiiVue
+        reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
+        url: https://github.com/niivue/niivue
+
+  me-ica:
+    about:
+      - ME-ICA denoises multi-echo fMRI locally in the browser with tedana's default workflow (optimal combination, moving-average PCA, FastICA and a TE-dependence decision tree), ported to Rust and WebAssembly. Its outputs match tedana's on the example file for file.
+    packages:
+      - { name: meica-rs (Rust → WebAssembly), url: https://github.com/niivue/meica-rs, role: port of tedana and mapca }
+      - { name: NiiVue, url: https://github.com/niivue/niivue, role: image viewer }
+    citations:
+      - group: Multi-echo denoising
+        title: tedana
+        reference: "DuPre E, Salo T, Ahmed Z, et al. TE-dependent analysis of multi-echo fMRI with tedana. Journal of Open Source Software. 2021;6(66):3669."
+        doi: 10.21105/joss.03669
+        code: https://github.com/ME-ICA/tedana
+      - group: Multi-echo denoising
+        title: ME-ICA
+        reference: "Kundu P, Inati SJ, Evans JW, Luh WM, Bandettini PA. Differentiating BOLD and non-BOLD signals in fMRI time series using multi-echo EPI. NeuroImage. 2012;60(3):1759–1770."
+        doi: 10.1016/j.neuroimage.2011.12.028
+      - group: Multi-echo denoising
+        title: ME-ICA (integrated)
+        reference: "Kundu P, Brenowitz ND, Voon V, et al. Integrated strategy for improving functional connectivity mapping using multiecho fMRI. Proceedings of the National Academy of Sciences. 2013;110(40):16187–16192."
+        doi: 10.1073/pnas.1301725110
+      - group: Optimal combination
+        title: T2*-weighted combination
+        reference: "Posse S, Wiese S, Gembris D, et al. Enhancement of BOLD-contrast sensitivity by single-shot multi-echo functional MR imaging. Magnetic Resonance in Medicine. 1999;42(1):87–97."
+        doi: 10.1002/(SICI)1522-2594(199907)42:1<87::AID-MRM13>3.0.CO;2-O
+      - group: Dimensionality estimation
+        title: Moving-average PCA (mapca)
+        reference: "Li YO, Adalı T, Calhoun VD. Estimating the number of independent components for functional magnetic resonance imaging data. Human Brain Mapping. 2007;28(11):1251–1266."
+        doi: 10.1002/hbm.20359
+        code: https://github.com/ME-ICA/mapca
+      - group: Decision tree
+        title: Component selection
+        reference: "Olafsson V, Kundu P, Wong EC, Bandettini PA, Liu TT. Enhanced identification of BOLD-like components with multi-echo simultaneous multi-slice (MESMS) fMRI and multi-echo ICA. NeuroImage. 2015;112:43–51."
+        doi: 10.1016/j.neuroimage.2015.02.052
+      - group: ICA
+        title: FastICA
+        reference: "Hyvärinen A. Fast and robust fixed-point algorithms for independent component analysis. IEEE Transactions on Neural Networks. 1999;10(3):626–634."
+        doi: 10.1109/72.761722
       - group: Visualization
         title: NiiVue
         reference: "NiiVue Contributors. NiiVue: a WebGL2 medical image viewer [Computer software]."
