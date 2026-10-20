@@ -17,7 +17,7 @@
     "@neurodesk/synthstrip": "workspace:*",
     "@neurodesk/webapp-components": "workspace:*",
     "@neurodesk/white-matter-lesions": "workspace:*",
-    "@niivue/niivue": "1.0.0-rc.11",
+    "@niivue/niivue": "1.0.0-rc.26",
     "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {

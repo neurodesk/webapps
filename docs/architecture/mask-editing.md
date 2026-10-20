@@ -82,15 +82,12 @@ during cancellation does not allow a new drawing to open before cleanup ends.
   to any other.
 - Both generations' save returns the drawing on the base image's native grid,
   uncompressed; 0.x reorients in `toUint8Array`, so the adapter needs no
-  `drawBitmap` arithmetic. NiiVue 1.0 rc.11 to rc.14 `loadDrawing`, however,
-  reorders the drawing with the base's RAS extents instead of its native ones.
-  On an image whose axes are permuted and of unequal size, such as a sagittal
-  acquisition, the mask lands on the wrong voxels. `open()` therefore checks
-  that the loaded mask saves back unchanged. If it does not, `open()` measures
-  where the round trip sends each voxel, with one probe load per byte of the
-  voxel index. It then loads the layout that undoes the round trip and checks
-  again. A NiiVue that loads correctly passes the first check, so a fixed
-  release needs no change here. Before loading, `sameVoxelGrid` compares the
+  `drawBitmap` arithmetic. NiiVue 1.0 before rc.25 `loadDrawing` reordered the
+  drawing with the base's RAS extents instead of its native ones, so on a
+  sagittal or otherwise permuted image with unequal axes the mask landed on
+  the wrong voxels (niivue/mono#251). Every app that edits on NiiVue 1.0 pins
+  rc.25 or later; do not move one back. 0.x loads correctly.
+  Before loading, `sameVoxelGrid` compares the
   dimensions and all voxel-to-world affine coefficients with the base image.
   It permits an absolute rounding error of 1e-5 per coefficient and refuses
   missing or nonfinite geometry. The source parser resolves sform or qform;

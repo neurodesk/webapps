@@ -26,7 +26,7 @@
     "@brainchop/mindgrab": "0.1.20260925",
     "@neurodesk/webapp-components": "workspace:*",
     "@niivue/dcm2niix": "^1.2.0",
-    "@niivue/niivue": "1.0.0-rc.17",
+    "@niivue/niivue": "1.0.0-rc.26",
     "freebrowse": "file:./vendor/freebrowse"
   },
   "scripts": {

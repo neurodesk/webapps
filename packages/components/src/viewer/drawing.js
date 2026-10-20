@@ -47,7 +47,6 @@ export function createDrawingAdapter(nv) {
       } else {
         const nifti = await maskToUint8Nifti(source);
         if (!sameVoxelGrid(parseNiftiHeader(nifti), nv.volumes?.[0]?.hdr) || !await api.load(nifti)) return false;
-        await placeVerified(api, nifti);
         sourceHeader = extractNiftiHeader(nifti);
       }
       api.enable(true);
@@ -81,47 +80,10 @@ export function createDrawingAdapter(nv) {
   };
 }
 
-// NiiVue 1.0 (rc.11 to rc.14) loads a drawing with the background's RAS extents in
-// place of its native ones, so on a background whose axes are permuted and unequal
-// (a sagittal acquisition) the drawing lands on the wrong voxels; its save is right.
-// Measure what the load and save round trip does to each voxel and load the layout
-// that undoes it, so a NiiVue that loads correctly takes the first branch.
-async function placeVerified(api, nifti) {
-  const offset = voxOffset(nifti);
-  const labels = nifti.subarray(offset);
-  if (equalBytes(await savedVoxels(api), labels)) return;
-  const source = await measureRoundTrip(api, nifti, offset);
-  const compensated = nifti.slice();
-  for (let i = 0; i < labels.length; i++) compensated[offset + source[i]] = labels[i];
-  if (await api.load(compensated) && equalBytes(await savedVoxels(api), labels)) return;
-  api.enable(false);
-  api.close();
-  throw new Error('NiiVue placed the mask on the wrong voxels of the viewed image');
-}
-
-// source[i] is the voxel whose loaded value comes back at voxel i, read one byte of the index at a time.
-async function measureRoundTrip(api, nifti, offset) {
-  const count = nifti.length - offset;
-  const source = new Uint32Array(count);
-  for (let shift = 0; 2 ** shift < count; shift += 8) {
-    const probe = nifti.slice();
-    for (let i = 0; i < count; i++) probe[offset + i] = (i >>> shift) & 255;
-    if (!await api.load(probe)) throw new Error('NiiVue refused the drawing it had just loaded');
-    const saved = await savedVoxels(api);
-    for (let i = 0; i < count; i++) source[i] |= saved[i] << shift;
-  }
-  return source;
-}
-
 async function savedNifti(api) {
   const bytes = await api.save();
   if (!(bytes instanceof Uint8Array)) throw new Error('NiiVue returned no drawing to export');
   return bytes;
-}
-
-async function savedVoxels(api) {
-  const bytes = await savedNifti(api);
-  return nativeVoxels(bytes);
 }
 
 function voxOffset(nifti) {
@@ -134,12 +96,6 @@ function nativeVoxels(nifti, header = parseNiftiHeader(nifti)) {
     throw new Error('NiiVue drawing voxel count does not match the mask');
   }
   return labels;
-}
-
-function equalBytes(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
 }
 
 function legacyApi(nv) {
