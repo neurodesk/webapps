@@ -1463,17 +1463,11 @@ async fn tree_takes_regressors<H: Host>(c: &Ctx<H>, tree: &str) -> Result<bool, 
     if !c.h.exists(tree) {
         return Ok(false);
     }
-    let config = c
-        .json(tree)
+    // meica's own rule: the key is present and not null
+    Ok(c.json(tree)
         .await?
         .get("external_regressor_config")
-        .cloned();
-    Ok(config.is_some_and(|v| match v {
-        Value::Null => false,
-        Value::Array(a) => !a.is_empty(),
-        Value::Object(o) => !o.is_empty(),
-        _ => true,
-    }))
+        .is_some_and(|v| !v.is_null()))
 }
 
 /// ME-ICA (meica: tedana's workflow in Rust) after bold_apply, for runs with >= 3 echoes. Components are classified
@@ -1487,11 +1481,11 @@ pub async fn bold_meica<H: Host>(
     mode: &str,
     tree: &str,
 ) -> Result<(), String> {
-    if bold.echoes.is_empty() {
-        return Ok(());
-    }
     let w = join(&c.sub_work(bold), &bold.name());
     let status_file = join(&w, "meica.json");
+    if bold.echoes.is_empty() && !c.h.exists(&status_file) {
+        return Ok(());
+    }
     let old = if c.h.exists(&status_file) {
         c.json(&status_file).await?
     } else {
@@ -1509,6 +1503,13 @@ pub async fn bold_meica<H: Host>(
             .iter()
             .map(|(k, _)| join(&w, &format!("tstat_{k}_denoised_on_t1w.nii.zst"))),
     );
+    if bold.echoes.is_empty() {
+        // an earlier multi-echo run of this name: its ME-ICA files no longer apply
+        for f in made.iter().chain([&status_file]) {
+            c.h.remove(f);
+        }
+        return Ok(());
+    }
     let n = bold.hdr.shape.get(3).copied().unwrap_or(1);
     let nss = c.json(&fit.nss).await?["dummy_scans"].clone();
     let usable = n.saturating_sub(nss.as_u64().unwrap_or(0) as usize);
@@ -1541,7 +1542,7 @@ pub async fn bold_meica<H: Host>(
     for ch in tree.chars() {
         if ch.is_ascii_alphanumeric() {
             slug.push(ch);
-        } else if !slug.ends_with('_') || slug.is_empty() {
+        } else if !slug.ends_with('_') {
             slug.push('_');
         }
     }
@@ -1712,10 +1713,13 @@ pub async fn bold_meica<H: Host>(
     .await;
     let status = match result {
         Ok(s) => s,
-        Err(e) if mode == "on" => return Err(e),
         Err(e) => {
             for f in &made {
                 c.h.remove(f);
+            }
+            if mode == "on" {
+                c.h.remove(&status_file);
+                return Err(e);
             }
             // the failing tool's last line (its error), not the command line before it
             let reason: String = e

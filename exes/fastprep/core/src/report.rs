@@ -867,7 +867,7 @@ async fn meica_section<H: Host>(
     }
     let span = qc["span"].as_object().cloned().unwrap_or_default();
     let warn = if conds.is_empty() {
-        "<p class=\"mut\">Task correlation unavailable: this run has no events file.</p>"
+        "<p class=\"mut\">Task correlation unavailable: no events file or no trial types.</p>"
             .to_string()
     } else {
         let mut w = String::new();
@@ -875,7 +875,7 @@ async fn meica_section<H: Host>(
             let v = num(&v["rejected"]);
             if v >= 0.3 {
                 w += &format!(
-                    "<p class=\"warn\"><b>The rejected components span {:.0} % of the <i>{}</i> regressor's variance</b> (chance {:.0} %): denoising removes that much of the task design. Compare the original and ME-ICA denoised task maps.</p>",
+                    "<p class=\"warn\"><b>The rejected components' time courses span {:.0} % of the <i>{}</i> regressor's variance</b> (chance {:.0} %): denoising can remove task signal where these components load. Compare the original and ME-ICA denoised task maps.</p>",
                     100.0 * v,
                     esc(&label(t)),
                     100.0 * chance
@@ -887,7 +887,7 @@ async fn meica_section<H: Host>(
             .map(|(t, v)| format!("{} {:.0} %", esc(&label(t)), 100.0 * num(&v["rejected"])))
             .collect();
         w + &format!(
-            "<p class=\"mut\">Share of each task regressor's variance in the rejected components (chance {:.0} %): {}. Rejected components with |r| ≥ 0.3 to a task regressor are highlighted below.</p>",
+            "<p class=\"mut\">Temporal overlap of each task regressor with the rejected components (share of its variance; chance {:.0} %): {}. Rejected components with |r| ≥ 0.3 to a task regressor are highlighted below.</p>",
             100.0 * chance,
             shares.join(", ")
         )
@@ -1058,7 +1058,11 @@ async fn task_page<H: Host>(
     let conf = c.deriv(bold, "timeseries", ".tsv", &[("desc", Some("confounds"))])?;
     let mut series = vec![("", preproc, maps, join(w, "task_glm.json"))];
     let mp = meica_paths(c, bold)?;
-    if c.h.exists(&mp.denoised[0].1) {
+    let status = join(w, "meica.json");
+    if c.h.exists(&mp.denoised[0].1)
+        && c.h.exists(&status)
+        && c.json(&status).await?["status"] == "ran"
+    {
         // ME-ICA ran: the same GLM on the denoised series, beside the original
         series.push((
             "denoised",

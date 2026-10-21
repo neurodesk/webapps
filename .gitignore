@@ -108,3 +108,4 @@ apps/*/web/examples.json
 quality-artifacts/
 .stryker-tmp/
 apps/fastprep/public/niimath/
+apps/fastprep/public/meica/

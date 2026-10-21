@@ -196,7 +196,7 @@ export function meicaDriver(api) {
       i = j;
     }
     const one = (k) => opts.get(k)?.[0];
-    const dummyScans = Number(one('--dummy-scans') ?? 0);
+    const dummyScans = Number(one('--dummy-scans'));
     if (opts.has('--denoise')) {
       const out = one('-o');
       files.put(out, denoiseMeica({
@@ -205,13 +205,13 @@ export function meicaDriver(api) {
       }));
       return { code: 0, stdout: '', stderr: '' };
     }
-    const tree = one('--tree') ?? 'tedana_orig';
+    const tree = one('--tree');
     const options = { tree: files.has(tree) ? await files.text(tree) : tree, dummy_scans: dummyScans };
     if (opts.has('--external')) options.external = await files.text(one('--external'));
     const echoes = [];
-    for (const p of opts.get('-d') ?? []) echoes.push({ name: p, bytes: await files.bytes(p) });
+    for (const p of opts.get('-d')) echoes.push({ name: p, bytes: await files.bytes(p) });
     const mask = opts.has('--mask') ? await files.bytes(one('--mask')) : undefined;
-    const { files: outs } = runMeica({ api, echoes, tes: (opts.get('-e') ?? []).map(Number), options, mask });
+    const { files: outs } = runMeica({ api, echoes, tes: opts.get('-e').map(Number), options, mask });
     for (const { name, bytes } of outs) files.put(`${one('--out-dir')}/${name}`, bytes);
     return { code: 0, stdout: '', stderr: '' };
   };

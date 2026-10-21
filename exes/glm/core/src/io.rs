@@ -444,7 +444,12 @@ pub fn meica_qc(
     let side: Map<String, Value> =
         serde_json::from_str(sidecar).map_err(|e| format!("sidecar: {e}"))?;
     let mut regs: Vec<(String, Vec<f64>)> = vec![];
-    if let Some(ev) = events_tsv {
+    // BIDS trial_type is optional: without it there is no task design to relate to
+    if let Some(ev) = events_tsv.filter(|t| {
+        columns(t)
+            .iter()
+            .any(|(k, v)| k == "trial_type" && !v.is_empty())
+    }) {
         let ev = events(ev)?;
         let mut conds: Vec<&str> = ev.iter().map(|e| e.trial_type.as_str()).collect();
         conds.sort_unstable();
